@@ -799,6 +799,16 @@ function ZeroPointFootprint() {
           0%, 100% { box-shadow: 0 0 0 0 rgba(126,184,218,0); }
           50% { box-shadow: 0 0 12px 3px rgba(126,184,218,0.35); }
         }
+        @media (max-width: 768px) {
+          .detail-panel {
+            background-color: #0a0a0c !important;
+            border-color: #222228 !important;
+          }
+          .stat-card {
+            background-color: #0a0a0c !important;
+            border-color: #222228 !important;
+          }
+        }
       `}</style>
 
       <div style={{ marginBottom: 24 }}>
@@ -838,7 +848,7 @@ function ZeroPointFootprint() {
           { n: totals.y, l: "partial", col: THEME.yellow },
           { n: totals.r, l: "outside scope", col: THEME.red },
         ].map((s, i) => (
-          <div key={i} style={{
+          <div key={i} className="stat-card" style={{
             flex: "1 1 120px", padding: "14px 16px",
             backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: 8,
           }}>
@@ -907,7 +917,7 @@ function ZeroPointFootprint() {
         <div style={{ flex: "1.5 1 500px", display: "flex", justifyContent: "center" }}>
           <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} narrating={narrator.enabled} />
         </div>
-        <div style={{
+        <div className="detail-panel" style={{
           flex: "1 1 340px", minWidth: 300, maxHeight: 700, overflowY: "auto",
           backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`,
           borderRadius: 8, padding: 16,
