@@ -142,6 +142,116 @@ footer {
 
 <div id="footprint-root"></div>
 
+<noscript>
+<div style="max-width: 900px; margin: 6rem auto 3rem; padding: 0 2rem; color: #e8e6e3; font-family: 'Inter', sans-serif; line-height: 1.7;">
+
+<h1 style="font-size: 1.8rem; font-weight: 300; margin-bottom: 1rem;">ZeroPoint AI Security Landscape Footprint</h1>
+<p style="color: #8a8a8e; margin-bottom: 2rem;">
+  ZeroPoint's coverage across 51 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.
+  Overall weighted coverage: approximately 68%.
+  Green = directly addressed, Yellow = partially addressed, Red = outside scope.
+</p>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Identity &amp; Access <span style="color: #8a8a8e; font-weight: 400;">(NIST AI RMF · GOVERN)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Cryptographic identity and scoped authorization for every participant</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #34d399;">Agent Authentication</strong> — Ed25519 keypair identity; every request signed</li>
+  <li><strong style="color: #34d399;">Dynamic Authorization</strong> — PolicyContext + TrustTier evaluation per-request</li>
+  <li><strong style="color: #34d399;">Credential Vault</strong> — ChaCha20-Poly1305 encrypted storage (zp-trust)</li>
+  <li><strong style="color: #34d399;">Scoped Capability Grants</strong> — Read/Write/Execute/ApiCall scoped per-agent</li>
+  <li><strong style="color: #34d399;">Least-Privilege Enforcement</strong> — Scoped fields + expiry + delegation depth limits</li>
+  <li><strong style="color: #34d399;">Credential Rotation</strong> — Dynamic keypair lifecycle; zero static secrets</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Governance &amp; Policy <span style="color: #8a8a8e; font-weight: 400;">(NIST AI RMF · GOVERN + MAP)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Constitutional rules and automated policy enforcement pipeline</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #34d399;">AI Gateway / Firewall</strong> — GovernanceGate: Guard → Policy → Execute → Audit</li>
+  <li><strong style="color: #34d399;">Constitutional Rules</strong> — HarmPrincipleRule (non-removable) + SovereigntyRule</li>
+  <li><strong style="color: #34d399;">Content Policy Screening</strong> — Policy rules evaluate actions before execution</li>
+  <li><strong style="color: #34d399;">Human Override</strong> — SovereigntyRule: human is always root authority</li>
+  <li><strong style="color: #34d399;">Responsible AI Tenets</strong> — Four Tenets enforced at protocol level</li>
+  <li><strong style="color: #34d399;">Regulatory Compliance</strong> — Immutable audit trail satisfies audit requirements</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Audit &amp; Traceability <span style="color: #8a8a8e; font-weight: 400;">(NIST AI RMF · MEASURE)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Tamper-evident, hash-chained record of every action</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #34d399;">Immutable Audit Trail</strong> — Hash-chained receipt chain; tamper-evident</li>
+  <li><strong style="color: #34d399;">Non-repudiation</strong> — Ed25519-signed receipts prove who did what</li>
+  <li><strong style="color: #34d399;">Chain Verification</strong> — AuditStore with cryptographic chain checks</li>
+  <li><strong style="color: #34d399;">Forensic Record</strong> — Complete action history for incident response</li>
+  <li><strong style="color: #fb923c;">Behavioral Analytics</strong> — Audit data enables analytics; detection ML not built-in</li>
+  <li><strong style="color: #fb923c;">Posture Assessment</strong> — Framework provides data; assessment is human process</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Agentic Threats <span style="color: #8a8a8e; font-weight: 400;">(OWASP Agentic Top 10)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Threats unique to autonomous AI agents in production</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #fb923c;">Agent Goal Hijack</strong> — GovernanceGate screens; policy rules constrain goals</li>
+  <li><strong style="color: #34d399;">Tool Misuse</strong> — zp-skills: verified registry + sandboxed execution</li>
+  <li><strong style="color: #34d399;">Rogue Agents</strong> — Kill switch (SovereigntyRule) + capability revocation</li>
+  <li><strong style="color: #34d399;">Insecure Inter-Agent Comms</strong> — zp-mesh: Ed25519-signed messages</li>
+  <li><strong style="color: #fb923c;">Cascading Hallucinations</strong> — Receipt chain traces provenance across chains</li>
+  <li><strong style="color: #34d399;">Excessive Agency</strong> — Scoped capabilities + delegation depth limits</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">LLM Threats <span style="color: #8a8a8e; font-weight: 400;">(OWASP LLM Top 10, 2025)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Top risks for applications built on large language models</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #fb923c;">Prompt Injection</strong> — GovernanceGate pipeline screens; not a dedicated WAF</li>
+  <li><strong style="color: #34d399;">Sensitive Info Disclosure</strong> — Scoped capability grants control data access</li>
+  <li><strong style="color: #34d399;">Insecure Plugin Design</strong> — zp-skills: verified registry + sandboxed execution</li>
+  <li><strong style="color: #fb923c;">Supply Chain Vulns</strong> — Rust memory safety; plugin verification in registry</li>
+  <li><strong style="color: #f87171;">Data Poisoning</strong> — Training-time concern; outside runtime governance</li>
+  <li><strong style="color: #f87171;">Model Theft</strong> — Model security; outside governance scope</li>
+  <li><strong style="color: #fb923c;">Prompt Leakage</strong> — Policy rules can enforce output screening</li>
+  <li><strong style="color: #34d399;">Unbounded Consumption</strong> — Capability grants with rate/scope limits</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Adversarial ML <span style="color: #8a8a8e; font-weight: 400;">(MITRE ATLAS)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Adversarial techniques targeting ML across the attack lifecycle</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #fb923c;">Reconnaissance</strong> — Audit trail detects anomalous probing</li>
+  <li><strong style="color: #f87171;">Resource Development</strong> — Attacker infrastructure; outside scope</li>
+  <li><strong style="color: #34d399;">Initial Access (API)</strong> — Ed25519 identity + capability grants</li>
+  <li><strong style="color: #fb923c;">ML Attack Staging</strong> — GovernanceGate screens suspicious patterns</li>
+  <li><strong style="color: #34d399;">Exfiltration</strong> — Scoped access + audit trail detects extraction</li>
+  <li><strong style="color: #fb923c;">Impact / Disruption</strong> — Kill switch + blast radius minimization</li>
+  <li><strong style="color: #f87171;">Evasion</strong> — Model-layer evasion; outside scope</li>
+  <li><strong style="color: #fb923c;">Persistence</strong> — Capability expiry + revocation</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Data Protection <span style="color: #8a8a8e; font-weight: 400;">(NIST AI RMF · MANAGE)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Protecting data at rest, in transit, and during AI processing</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #34d399;">Encryption at Rest</strong> — CredentialVault: ChaCha20-Poly1305</li>
+  <li><strong style="color: #34d399;">Access Controls</strong> — Capability grants govern who reads/writes what</li>
+  <li><strong style="color: #fb923c;">Data Loss Prevention</strong> — GovernanceGate enforces content policies</li>
+  <li><strong style="color: #f87171;">Training Data Security</strong> — Training-time concern</li>
+  <li><strong style="color: #fb923c;">Privacy Preservation</strong> — Scoped access + audit enables compliance</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Infrastructure <span style="color: #8a8a8e; font-weight: 400;">(NIST CSF · Protect)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Network, endpoint, and deployment infrastructure</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #f87171;">Network Segmentation</strong> — Network infrastructure concern</li>
+  <li><strong style="color: #fb923c;">TLS / Transport</strong> — Transport-agnostic; TLS is deployment config</li>
+  <li><strong style="color: #f87171;">Firewalls &amp; IDPS</strong> — Network layer</li>
+  <li><strong style="color: #f87171;">Endpoint Protection</strong> — OS / infrastructure concern</li>
+  <li><strong style="color: #f87171;">Runtime Model Protection</strong> — Model hosting concern</li>
+  <li><strong style="color: #f87171;">Canary Deployments</strong> — Deployment infrastructure concern</li>
+</ul>
+
+<p style="color: #5a5a5e; font-size: 0.85rem; margin-top: 2rem; border-top: 1px solid #222228; padding-top: 1.5rem;">
+  Coverage key: <span style="color: #34d399;">Green</span> = directly addressed by ZeroPoint primitives.
+  <span style="color: #fb923c;">Yellow</span> = partially addressed or enabled by framework data.
+  <span style="color: #f87171;">Red</span> = outside ZeroPoint's governance scope (infrastructure, model-layer, or training-time concerns).
+</p>
+
+</div>
+</noscript>
+
 <footer>
   <div style="max-width: 1080px; margin: 0 auto; padding: 0 2rem;">
     <div class="footer-links">
@@ -307,6 +417,7 @@ function useNarrator() {
   const [enabled, setEnabled] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef(null);
+  const onEndedRef = useRef(null);
 
   const stop = () => {
     if (audioRef.current) {
@@ -316,22 +427,33 @@ function useNarrator() {
     setSpeaking(false);
   };
 
-  const play = (domainId, force) => {
+  const play = (domainId, force, onEnded) => {
     if (!enabled && !force) return;
     stop();
+    if (onEnded) onEndedRef.current = onEnded;
     const audio = new Audio(`${NARRATION_BASE}/${domainId}.mp3`);
     audio.onplay = () => setSpeaking(true);
-    audio.onended = () => setSpeaking(false);
-    audio.onerror = () => setSpeaking(false);
+    audio.onended = () => {
+      setSpeaking(false);
+      if (onEndedRef.current) onEndedRef.current(domainId);
+    };
+    audio.onerror = () => {
+      setSpeaking(false);
+      // Still advance on error so narration chain continues
+      if (onEndedRef.current) onEndedRef.current(domainId);
+    };
     audioRef.current = audio;
-    audio.play().catch(() => setSpeaking(false));
+    audio.play().catch(() => {
+      setSpeaking(false);
+      if (onEndedRef.current) onEndedRef.current(domainId);
+    });
   };
 
   useEffect(() => {
     return () => stop();
   }, []);
 
-  return { enabled, setEnabled, speaking, play, stop };
+  return { enabled, setEnabled, speaking, play, stop, onEndedRef };
 }
 
 // ─── Framework Badge ───
@@ -525,6 +647,7 @@ function ZeroPointFootprint() {
   const [selected, setSelected] = useState(null);
   const containerRef = useRef(null);
   const [svgSize, setSvgSize] = useState(600);
+  const [zoom, setZoom] = useState(1);
   const [pulsing, setPulsing] = useState(true);
   const narrator = useNarrator();
   const branch = landscape.find(b => b.id === selected);
@@ -534,9 +657,27 @@ function ZeroPointFootprint() {
     return () => clearTimeout(t);
   }, []);
 
+  const advanceNarration = (finishedId) => {
+    const idx = landscape.findIndex(b => b.id === finishedId);
+    const nextIdx = idx + 1;
+    if (nextIdx < landscape.length) {
+      const nextId = landscape[nextIdx].id;
+      setSelected(nextId);
+      narrator.play(nextId, true, advanceNarration);
+    } else {
+      // Finished all sections
+      narrator.setEnabled(false);
+      narrator.onEndedRef.current = null;
+    }
+  };
+
   const handleSelect = (id) => {
     setSelected(id);
-    if (id) {
+    if (id && narrator.enabled) {
+      // User clicked out of progression — play just this one, stop chaining
+      narrator.onEndedRef.current = null;
+      narrator.play(id, true);
+    } else if (id) {
       narrator.play(id);
     } else {
       narrator.stop();
@@ -641,16 +782,19 @@ function ZeroPointFootprint() {
             const next = !narrator.enabled;
             narrator.setEnabled(next);
             if (next) {
-              const firstId = landscape[0].id;
-              setSelected(firstId);
-              narrator.play(firstId, true);
+              const startId = selected || landscape[0].id;
+              setSelected(startId);
+              narrator.play(startId, true, advanceNarration);
             } else {
               narrator.stop();
+              narrator.onEndedRef.current = null;
             }
           }}
           style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "5px 12px", borderRadius: 4, fontSize: 12, fontWeight: 500,
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 500,
+            fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', monospace",
+            letterSpacing: "0.05em",
             border: `1px solid ${narrator.enabled ? THEME.accent : THEME.border}`,
             backgroundColor: narrator.enabled ? "rgba(126,184,218,0.1)" : "transparent",
             color: narrator.enabled ? THEME.accent : THEME.textMuted,
@@ -658,14 +802,48 @@ function ZeroPointFootprint() {
             animation: pulsing && !narrator.enabled ? "narratePulse 1.5s ease-in-out 3" : "none",
           }}
         >
-          <span style={{ fontSize: 15 }}>{narrator.speaking ? "\u{1F50A}" : narrator.enabled ? "\u{1F508}" : "\u{1F507}"}</span>
-          {narrator.enabled ? "Narration on" : "Narrate"}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            {narrator.enabled
+              ? <>{/* Pause icon */}<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/></>
+              : <>{/* Play triangle */}<polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></>
+            }
+          </svg>
+          {narrator.enabled ? "Narrating" : "Narrate"}
         </button>
       </div>
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 400px", display: "flex", justifyContent: "center" }}>
-          <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} />
+        <div style={{ flex: "1 1 400px", position: "relative" }}>
+          <div style={{ overflow: "hidden", display: "flex", justifyContent: "center" }}>
+            <div style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "center center",
+              transition: "transform 0.2s ease",
+            }}>
+              <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} />
+            </div>
+          </div>
+          <div style={{
+            position: "absolute", bottom: 12, right: 12,
+            display: "flex", gap: 4, zIndex: 5,
+          }}>
+            {[
+              { label: "\u2212", action: () => setZoom(z => Math.max(0.6, z - 0.15)) },
+              { label: "\u25CB", action: () => setZoom(1) },
+              { label: "+", action: () => setZoom(z => Math.min(2, z + 0.15)) },
+            ].map((btn, i) => (
+              <button key={i} onClick={btn.action} style={{
+                width: 28, height: 28, borderRadius: 4,
+                border: `1px solid ${THEME.border}`, backgroundColor: THEME.surface,
+                color: THEME.textDim, fontSize: 14, fontWeight: 600,
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "border-color 0.2s, color 0.2s",
+              }} onMouseEnter={e => { e.target.style.borderColor = THEME.accent; e.target.style.color = THEME.text; }}
+                 onMouseLeave={e => { e.target.style.borderColor = THEME.border; e.target.style.color = THEME.textDim; }}>
+                {btn.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div style={{
           flex: "1 1 340px", minWidth: 300,
