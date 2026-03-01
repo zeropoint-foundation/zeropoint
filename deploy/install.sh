@@ -32,6 +32,8 @@ header(){ echo ""; echo -e "${BOLD}$1${NC}"; echo "─────────�
 # --- Config ---
 REPO="https://github.com/zeropoint-foundation/zeropoint.git"
 INSTALL_DIR="${ZP_INSTALL_DIR:-$HOME/zeropoint}"
+ZP_HOME="$HOME/.zeropoint"
+ZP_BIN="$ZP_HOME/bin"
 ZP_PORT="${ZP_PORT:-3000}"
 
 header "ZeroPoint v2 — Install"
@@ -62,7 +64,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # ============================================================================
 header "Step 2: Clone Repository"
 
-if [ -d "$INSTALL_DIR/v2/Cargo.toml" ] || [ -f "$INSTALL_DIR/v2/Cargo.toml" ]; then
+if [ -f "$INSTALL_DIR/Cargo.toml" ]; then
     info "Repository already exists at $INSTALL_DIR"
     info "Pulling latest changes..."
     cd "$INSTALL_DIR"
@@ -80,20 +82,66 @@ ok "Repository ready at $INSTALL_DIR"
 # ============================================================================
 header "Step 3: Build Workspace"
 
-cd "$INSTALL_DIR/v2"
+cd "$INSTALL_DIR"
 info "Building all crates (release mode)... this may take a few minutes on first run."
 cargo build --workspace --release 2>&1 | tail -5
 ok "Build complete"
 
 # Verify binaries
 [ -f target/release/zp-server ] || fail "zp-server binary not found"
-[ -f target/release/zp-cli ]    || fail "zp-cli binary not found"
-ok "Binaries: zp-server, zp-cli"
+[ -f target/release/zp ]        || fail "zp binary not found"
+ok "Binaries: zp-server, zp"
 
 # ============================================================================
-# Step 4: Run Tests
+# Step 4: Install to PATH
 # ============================================================================
-header "Step 4: Test Suite"
+header "Step 4: Install Binaries"
+
+mkdir -p "$ZP_BIN"
+mkdir -p "$ZP_HOME/data"
+
+info "Installing binaries to $ZP_BIN..."
+cp target/release/zp "$ZP_BIN/zp"
+cp target/release/zp-server "$ZP_BIN/zp-server"
+chmod 755 "$ZP_BIN/zp" "$ZP_BIN/zp-server"
+ok "Binaries installed"
+
+# Add to PATH if not already there
+if ! echo "$PATH" | grep -q "$ZP_BIN"; then
+    SHELL_NAME=$(basename "$SHELL")
+    case "$SHELL_NAME" in
+        zsh)
+            RC_FILE="$HOME/.zshrc"
+            ;;
+        bash)
+            RC_FILE="$HOME/.bashrc"
+            [ -f "$HOME/.bash_profile" ] && RC_FILE="$HOME/.bash_profile"
+            ;;
+        fish)
+            RC_FILE="$HOME/.config/fish/config.fish"
+            ;;
+        *)
+            RC_FILE=""
+            ;;
+    esac
+
+    if [ -n "$RC_FILE" ] && ! grep -q ".zeropoint/bin" "$RC_FILE" 2>/dev/null; then
+        echo "" >> "$RC_FILE"
+        echo "# ZeroPoint" >> "$RC_FILE"
+        echo 'export PATH="$HOME/.zeropoint/bin:$PATH"' >> "$RC_FILE"
+        ok "Added $ZP_BIN to PATH in $RC_FILE"
+        info "Run 'source $RC_FILE' or open a new terminal to use 'zp' command"
+    fi
+
+    export PATH="$ZP_BIN:$PATH"
+fi
+
+ok "'zp' command available"
+
+# ============================================================================
+# Step 5: Run Tests
+# ============================================================================
+header "Step 5: Test Suite"
 
 info "Running workspace tests..."
 TEST_OUTPUT=$(cargo test --workspace --release 2>&1)
@@ -112,9 +160,9 @@ else
 fi
 
 # ============================================================================
-# Step 5: Lint Check
+# Step 6: Lint Check
 # ============================================================================
-header "Step 5: Lint & Format"
+header "Step 6: Lint & Format"
 
 info "Running clippy..."
 if cargo clippy --workspace -- -D warnings 2>&1 | tail -3; then
@@ -131,13 +179,13 @@ else
 fi
 
 # ============================================================================
-# Step 6: Quick Smoke Test
+# Step 7: Quick Smoke Test
 # ============================================================================
-header "Step 6: Smoke Test"
+header "Step 7: Smoke Test"
 
 info "Starting zp-server on port $ZP_PORT..."
-ZP_DATA_DIR="$INSTALL_DIR/data" RUST_LOG=error \
-    target/release/zp-server &
+ZP_DATA_DIR="$ZP_HOME/data" ZP_BIND=127.0.0.1 ZP_PORT=$ZP_PORT RUST_LOG=error \
+    "$ZP_BIN/zp-server" &
 SERVER_PID=$!
 
 # Wait for server to start
@@ -183,8 +231,7 @@ fi
 # Audit trail check
 AUDIT=$(curl -sf "http://localhost:$ZP_PORT/api/v1/audit/entries" 2>/dev/null || echo "{}")
 if echo "$AUDIT" | grep -q "entries"; then
-    ENTRY_COUNT=$(echo "$AUDIT" | grep -o '"entry_count":[0-9]*' | grep -o '[0-9]*' || echo "0")
-    ok "Audit trail: $ENTRY_COUNT entries recorded"
+    ok "Audit trail: entries recorded"
 fi
 
 # Verify chain integrity
@@ -198,15 +245,15 @@ kill $SERVER_PID 2>/dev/null || true
 wait $SERVER_PID 2>/dev/null || true
 
 # ============================================================================
-# Step 7: CLI Check
+# Step 8: CLI Check
 # ============================================================================
-header "Step 7: CLI"
+header "Step 8: CLI"
 
-CLI_VERSION=$(target/release/zp-cli --help 2>&1 | head -1 || echo "unknown")
+CLI_VERSION=$("$ZP_BIN/zp" --help 2>&1 | head -1 || echo "unknown")
 ok "CLI available: $CLI_VERSION"
 
 # Guard a command via CLI
-CLI_GUARD=$(target/release/zp-cli guard "rm -rf /" 2>&1 || true)
+CLI_GUARD=$("$ZP_BIN/zp" guard "rm -rf /" 2>&1 || true)
 if echo "$CLI_GUARD" | grep -qi "block\|deny\|dangerous\|harm"; then
     ok "CLI guard: dangerous command detected"
 else
@@ -220,29 +267,27 @@ header "Install Complete"
 
 echo ""
 echo -e "  ${GREEN}ZeroPoint v2 is installed at:${NC} $INSTALL_DIR"
+echo -e "  ${GREEN}Binaries:${NC} $ZP_BIN/zp"
 echo ""
-echo "  Quick start:"
+echo "  Next step — launch the verification surface:"
 echo ""
-echo -e "    ${CYAN}# Start the server${NC}"
-echo "    cd $INSTALL_DIR/v2"
-echo "    cargo run --release --bin zp-server"
+echo -e "    ${CYAN}zp serve${NC}"
 echo ""
-echo -e "    ${CYAN}# Or run the binary directly${NC}"
-echo "    $INSTALL_DIR/v2/target/release/zp-server"
+echo "  This performs the Genesis ceremony (first run),"
+echo "  starts the governance server, and opens the"
+echo "  verification dashboard in your browser."
 echo ""
-echo -e "    ${CYAN}# Guard a command via CLI${NC}"
-echo "    $INSTALL_DIR/v2/target/release/zp-cli guard \"rm -rf /\""
+echo "  Other commands:"
 echo ""
-echo -e "    ${CYAN}# Interactive chat (requires LLM config)${NC}"
-echo "    ZP_LLM_ENABLED=true cargo run --release --bin zp-cli -- chat"
-echo ""
-echo -e "    ${CYAN}# Open the playground${NC}"
-echo "    open http://localhost:$ZP_PORT"
-echo "    # Or visit https://zeropoint.global/playground"
+echo -e "    ${CYAN}zp guard \"rm -rf /\"${NC}        Evaluate a command"
+echo -e "    ${CYAN}zp audit verify${NC}            Verify chain integrity"
+echo -e "    ${CYAN}zp serve --no-open${NC}         Start without browser"
+echo -e "    ${CYAN}zp health${NC}                  System health check"
 echo ""
 echo "  Environment variables:"
 echo "    ZP_PORT=3000          Server port"
-echo "    ZP_DATA_DIR=./data    Persistent data directory"
+echo "    ZP_BIND=127.0.0.1    Bind address"
+echo "    ZP_DATA_DIR=~/.zeropoint/data    Data directory"
 echo "    RUST_LOG=info         Log level"
 echo ""
 echo -e "  ${BOLD}Your keys. Your chain. Your trust.${NC}"

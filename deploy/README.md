@@ -15,7 +15,7 @@ Two static sites + one Rust API server. Total cost: ~$5/month.
                                               │
                     Cloudflare Pages (free)    │    Hetzner CX22 (~€4/mo)
                     ┌──────────────────────┐  │    ┌─────────────────────┐
-thinkstreamlabs.ai ─┤  Static HTML/CSS/JS  │  └───▶│  zp-server :8080    │
+thinkstreamlabs.ai ─┤  Static HTML/CSS/JS  │  └───▶│  zp-server :3000    │
                     └──────────────────────┘       │  Caddy reverse proxy│
                                                    └─────────────────────┘
 ```
@@ -71,7 +71,7 @@ sudo apt update && sudo apt install caddy
 
 ```bash
 git clone https://github.com/zeropoint-foundation/zeropoint.git
-cd zeropoint/v2
+cd zeropoint
 cargo build --release -p zp-server
 ```
 
@@ -79,7 +79,7 @@ cargo build --release -p zp-server
 
 ```ini
 [Unit]
-Description=ZeroPoint v2 API Server
+Description=ZeroPoint API Server
 After=network.target
 
 [Service]
@@ -147,9 +147,8 @@ sudo cp -r thinkstreamlabs.ai/* /var/www/thinkstreamlabs.ai/
 ## Option C: Docker (for either host)
 
 ```bash
-cd v2
 docker build -t zp-server .
-docker run -d --name zp-server -p 8080:8080 --restart unless-stopped zp-server
+docker run -d --name zp-server -p 3000:3000 --restart unless-stopped zp-server
 ```
 
 ---
@@ -160,7 +159,7 @@ docker run -d --name zp-server -p 8080:8080 --restart unless-stopped zp-server
 cd zeropoint && git pull
 
 # Rebuild server
-cd v2 && cargo build --release -p zp-server
+cargo build --release -p zp-server
 sudo cp target/release/zp-server /opt/zeropoint/
 sudo systemctl restart zp-server
 

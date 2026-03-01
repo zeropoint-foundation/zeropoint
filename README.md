@@ -14,18 +14,17 @@ ZeroPoint provides the cryptographic primitives that let any participant — hum
 ## Quick Start
 
 ```bash
-# Clone
+# Clone and build
 git clone https://github.com/zeropoint-foundation/zeropoint.git
-cd zeropoint/v2
-
-# Build
+cd zeropoint
 cargo build --workspace
 
-# Test (623 tests across 13 crates)
+# Test (699 tests across 13 crates)
 cargo test --workspace
 
-# Run the API server
-cargo run -p zp-server
+# Install and launch
+bash deploy/install.sh
+zp serve
 ```
 
 The server starts on `http://localhost:3000`. Try:
@@ -43,7 +42,7 @@ curl -X POST http://localhost:3000/api/v1/guard/evaluate \
 ## Project Structure
 
 ```
-v2/
+zeropoint/
 ├── crates/
 │   ├── zp-core       # Identity, receipts, capabilities, trust tiers
 │   ├── zp-audit       # Hash-chained audit trail
@@ -81,7 +80,7 @@ The [zeropoint.global](https://zeropoint.global) site includes two interactive d
 
 ## Architecture
 
-ZeroPoint v2 is a Rust workspace of 13 crates, designed to be transport-agnostic (HTTP, TCP, UDP, mesh) and participant-agnostic (same primitives for humans, agents, services, devices).
+ZeroPoint is a Rust workspace of 13 crates, designed to be transport-agnostic (HTTP, TCP, UDP, mesh) and participant-agnostic (same primitives for humans, agents, services, devices).
 
 The governance pipeline follows a strict sequence: **Guard → Policy → Execute → Audit**. Constitutional rules (HarmPrincipleRule, SovereigntyRule) are non-removable — they cannot be overridden by any policy or configuration.
 

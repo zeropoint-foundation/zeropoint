@@ -8,7 +8,7 @@ Clone the repository and get up to speed quickly:
 
 ```bash
 git clone https://github.com/zeropoint-foundation/zeropoint.git
-cd zeropoint/v2
+cd zeropoint
 cargo test --workspace
 cargo clippy
 ```
@@ -17,7 +17,7 @@ If all tests pass and clippy is quiet, your environment is set up correctly.
 
 ## Where to Contribute
 
-ZeroPoint v2 is organized into 13 focused crates:
+ZeroPoint is organized into 13 focused crates:
 
 - **zp-core**: The foundational types, cryptographic primitives, and the Four Tenets model
 - **zp-audit**: Comprehensive audit logging and forensics
@@ -89,7 +89,7 @@ ZeroPoint is built on four foundational commitments:
 3. **Integrity First**: Everything is auditable and verifiable. Our discussions should be honest and evidence-based.
 4. **Transparency**: The mechanisms and reasoning should be understandable. We explain our decisions clearly.
 
-These principles apply to how we build together. Refer to the [ZeroPoint Whitepaper](./v2/docs/whitepaper.md) for the complete vision.
+These principles apply to how we build together. Refer to the [ZeroPoint Whitepaper](./docs/whitepaper.md) for the complete vision.
 
 ## Security Issues
 

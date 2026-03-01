@@ -1,0 +1,40 @@
+[package]
+name = "zp-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "ZeroPoint v2 CLI — primary interface for developers"
+
+[[bin]]
+name = "zp"
+path = "src/main.rs"
+
+[dependencies]
+# Local workspace crates
+zp-core = { path = "../zp-core" }
+zp-mesh = { path = "../zp-mesh" }
+zp-pipeline = { path = "../zp-pipeline" }
+zp-trust = { path = "../zp-trust" }
+zp-receipt = { path = "../zp-receipt" }
+zp-server = { path = "../zp-server" }
+
+# Workspace dependencies
+clap.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Additional dependencies
+anyhow.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+regex.workspace = true
+
+[dev-dependencies]

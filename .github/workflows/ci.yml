@@ -30,19 +30,19 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            v2/target
-          key: ${{ runner.os }}-cargo-v2-${{ hashFiles('v2/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-v2-
+            ${{ runner.os }}-cargo-
 
       - name: Build
-        run: cd v2 && cargo build --workspace
+        run: cargo build --workspace
 
       - name: Test
-        run: cd v2 && cargo test --workspace
+        run: cargo test --workspace
 
       - name: Clippy
-        run: cd v2 && cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace -- -D warnings
 
       - name: Format check
-        run: cd v2 && cargo fmt --all --check
+        run: cargo fmt --all --check

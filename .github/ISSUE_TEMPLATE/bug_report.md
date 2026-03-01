@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in ZeroPoint v2
+about: Report a bug in ZeroPoint
 title: '[BUG] '
 labels: bug
 ---
