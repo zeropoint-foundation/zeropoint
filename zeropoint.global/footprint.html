@@ -488,7 +488,12 @@ function FrameworkBadge({ tag, tip }) {
 
 // ─── Radial SVG Mindmap ───
 
-function RadialMap({ selected, onSelect, dims }) {
+function RadialMap({ selected, onSelect, dims, narrating }) {
+  const [hovered, setHovered] = useState(null);
+  const svgRef = useRef(null);
+  const viewBoxRef = useRef(null);
+  const animRef = useRef(null);
+
   const pad = dims * 0.18;
   const vw = dims + pad * 2;
   const vh = dims + pad * 2;
@@ -503,14 +508,98 @@ function RadialMap({ selected, onSelect, dims }) {
     return { ...b, angle, bx: cx + Math.cos(angle) * R1, by: cy + Math.sin(angle) * R1 };
   });
 
+  // Full (default) viewBox
+  const fullVB = { x: 0, y: 0, w: vw, h: vh };
+
+  // Compute a focused viewBox centered on a branch and its leaves
+  const focusedVB = (branchId) => {
+    const b = branches.find(br => br.id === branchId);
+    if (!b) return fullVB;
+    const n = b.items.length;
+    const spread = 0.38;
+    const pts = b.items.map((_, j) => {
+      const a = n > 1 ? b.angle - spread / 2 + (j / (n - 1)) * spread : b.angle;
+      return { x: cx + Math.cos(a) * R2, y: cy + Math.sin(a) * R2 };
+    });
+    // Include branch node and center
+    pts.push({ x: b.bx, y: b.by });
+    pts.push({ x: cx, y: cy });
+
+    const xs = pts.map(p => p.x);
+    const ys = pts.map(p => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    // Add generous padding and ensure square-ish aspect ratio
+    const padding = dims * 0.12;
+    const rawW = maxX - minX + padding * 2;
+    const rawH = maxY - minY + padding * 2;
+    const size = Math.max(rawW, rawH, dims * 0.55);
+    const fcx = (minX + maxX) / 2;
+    const fcy = (minY + maxY) / 2;
+
+    return { x: fcx - size / 2, y: fcy - size / 2, w: size, h: size };
+  };
+
+  // Initialize viewBox ref
+  if (!viewBoxRef.current) viewBoxRef.current = { ...fullVB };
+
+  // Smooth viewBox animation
+  useEffect(() => {
+    const target = (narrating && selected) ? focusedVB(selected) : fullVB;
+    const start = { ...viewBoxRef.current };
+    const duration = 600; // ms
+    const startTime = performance.now();
+
+    const ease = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOut
+
+    const animate = (now) => {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const e = ease(t);
+
+      const cur = {
+        x: start.x + (target.x - start.x) * e,
+        y: start.y + (target.y - start.y) * e,
+        w: start.w + (target.w - start.w) * e,
+        h: start.h + (target.h - start.h) * e,
+      };
+      viewBoxRef.current = cur;
+
+      if (svgRef.current) {
+        svgRef.current.setAttribute("viewBox", `${cur.x} ${cur.y} ${cur.w} ${cur.h}`);
+      }
+
+      if (t < 1) {
+        animRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    animRef.current = requestAnimationFrame(animate);
+
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [selected, narrating, dims]);
+
+  // Determine active state: narrating overrides hover for focus
+  const focusId = narrating ? selected : hovered;
+
   return (
-    <svg width="100%" viewBox={`0 0 ${vw} ${vh}`} style={{ display: "block" }}>
+    <svg ref={svgRef} width="100%" viewBox={`0 0 ${vw} ${vh}`} style={{ display: "block" }}>
+      <style>{`
+        .branch-group { transition: opacity 0.4s ease; }
+      `}</style>
       <circle cx={cx} cy={cy} r={R1} fill="none" stroke={THEME.border} strokeWidth={0.5} strokeDasharray="4 6" opacity={0.4} />
       <circle cx={cx} cy={cy} r={R2} fill="none" stroke={THEME.border} strokeWidth={0.5} strokeDasharray="2 8" opacity={0.25} />
 
       {branches.map((b) => {
         const c = counts(b.items);
         const isSel = selected === b.id;
+        const isHov = hovered === b.id;
+        const isActive = isSel || isHov;
+        const isDimmed = focusId && focusId !== b.id;
         const n = b.items.length;
         const spread = 0.38;
         const leaves = b.items.map((item, j) => {
@@ -532,33 +621,36 @@ function RadialMap({ selected, onSelect, dims }) {
         const anchor = nearVert ? "middle" : isLeft ? "end" : "start";
 
         return (
-          <g key={b.id}>
+          <g key={b.id} className="branch-group"
+            style={{ opacity: isDimmed ? 0.2 : 1 }}
+            onMouseEnter={() => !narrating && setHovered(b.id)}
+            onMouseLeave={() => !narrating && setHovered(null)}>
             <line x1={cx} y1={cy} x2={b.bx} y2={b.by}
-              stroke={isSel ? THEME.accent : THEME.border} strokeWidth={isSel ? 1.5 : 1} opacity={isSel ? 0.8 : 0.35} />
+              stroke={isActive ? THEME.accent : THEME.border} strokeWidth={isActive ? 1.5 : 1} opacity={isActive ? 0.8 : 0.35} />
             {leaves.map((l, j) => (
               <line key={j} x1={b.bx} y1={b.by} x2={l.lx} y2={l.ly}
-                stroke={l.col} strokeWidth={0.6} opacity={isSel ? 0.35 : 0.12} />
+                stroke={l.col} strokeWidth={isActive ? 0.8 : 0.6} opacity={isActive ? 0.5 : 0.12} />
             ))}
             {leaves.map((l, j) => (
               <g key={j}>
-                <circle cx={l.lx} cy={l.ly} r={isSel ? 5 : 3.5} fill={l.col} opacity={isSel ? 0.9 : 0.5} />
-                {isSel && <circle cx={l.lx} cy={l.ly} r={8} fill={l.col} opacity={0.1} />}
+                <circle cx={l.lx} cy={l.ly} r={isActive ? 5 : 3.5} fill={l.col} opacity={isActive ? 0.9 : 0.5} />
+                {isActive && <circle cx={l.lx} cy={l.ly} r={8} fill={l.col} opacity={0.1} />}
               </g>
             ))}
             <g onClick={() => onSelect(b.id === selected ? null : b.id)} style={{ cursor: "pointer" }}>
-              {isSel && <circle cx={b.bx} cy={b.by} r={34} fill={THEME.accent} opacity={0.06} />}
+              {isActive && <circle cx={b.bx} cy={b.by} r={34} fill={THEME.accent} opacity={0.06} />}
               <circle cx={b.bx} cy={b.by} r={26}
-                fill={isSel ? THEME.surface2 : THEME.surface}
-                stroke={isSel ? THEME.accent : THEME.border}
-                strokeWidth={isSel ? 2 : 1} />
+                fill={isActive ? THEME.surface2 : THEME.surface}
+                stroke={isActive ? THEME.accent : THEME.border}
+                strokeWidth={isActive ? 2 : 1} />
               <text x={b.bx} y={b.by + 1} textAnchor="middle" dominantBaseline="central"
-                fill={isSel ? THEME.accent : THEME.textDim} fontSize={12} fontWeight="700">
+                fill={isActive ? THEME.accent : THEME.textDim} fontSize={12} fontWeight="700">
                 {c.pct}%
               </text>
             </g>
             <text x={lx} y={ly} textAnchor={anchor} dominantBaseline="central"
-              fill={isSel ? THEME.text : THEME.textDim}
-              fontSize={13} fontWeight={isSel ? 700 : 500}
+              fill={isActive ? THEME.text : THEME.textDim}
+              fontSize={13} fontWeight={isActive ? 700 : 500}
               style={{ cursor: "pointer" }}
               onClick={() => onSelect(b.id === selected ? null : b.id)}>
               {b.name}
@@ -646,8 +738,7 @@ function DetailPanel({ branch, narrating }) {
 function ZeroPointFootprint() {
   const [selected, setSelected] = useState(null);
   const containerRef = useRef(null);
-  const [svgSize, setSvgSize] = useState(600);
-  const [zoom, setZoom] = useState(1);
+  const [svgSize, setSvgSize] = useState(800);
   const [pulsing, setPulsing] = useState(true);
   const narrator = useNarrator();
   const branch = landscape.find(b => b.id === selected);
@@ -689,7 +780,7 @@ function ZeroPointFootprint() {
     if (!el) return;
     const measure = () => {
       const w = el.getBoundingClientRect().width;
-      setSvgSize(Math.min(Math.max(w * 0.55, 380), 780));
+      setSvgSize(Math.min(Math.max(w * 0.75, 500), 1000));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -813,40 +904,11 @@ function ZeroPointFootprint() {
       </div>
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 400px", position: "relative" }}>
-          <div style={{ overflow: "hidden", display: "flex", justifyContent: "center" }}>
-            <div style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: "center center",
-              transition: "transform 0.2s ease",
-            }}>
-              <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} />
-            </div>
-          </div>
-          <div style={{
-            position: "absolute", bottom: 12, right: 12,
-            display: "flex", gap: 4, zIndex: 5,
-          }}>
-            {[
-              { label: "\u2212", action: () => setZoom(z => Math.max(0.6, z - 0.15)) },
-              { label: "\u25CB", action: () => setZoom(1) },
-              { label: "+", action: () => setZoom(z => Math.min(2, z + 0.15)) },
-            ].map((btn, i) => (
-              <button key={i} onClick={btn.action} style={{
-                width: 28, height: 28, borderRadius: 4,
-                border: `1px solid ${THEME.border}`, backgroundColor: THEME.surface,
-                color: THEME.textDim, fontSize: 14, fontWeight: 600,
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "border-color 0.2s, color 0.2s",
-              }} onMouseEnter={e => { e.target.style.borderColor = THEME.accent; e.target.style.color = THEME.text; }}
-                 onMouseLeave={e => { e.target.style.borderColor = THEME.border; e.target.style.color = THEME.textDim; }}>
-                {btn.label}
-              </button>
-            ))}
-          </div>
+        <div style={{ flex: "1.5 1 500px", display: "flex", justifyContent: "center" }}>
+          <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} narrating={narrator.enabled} />
         </div>
         <div style={{
-          flex: "1 1 340px", minWidth: 300,
+          flex: "1 1 340px", minWidth: 300, maxHeight: 700, overflowY: "auto",
           backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`,
           borderRadius: 8, padding: 16,
         }}>
