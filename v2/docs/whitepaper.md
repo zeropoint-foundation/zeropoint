@@ -99,7 +99,7 @@ The antidote to platform-captured trust is not better platforms. It is protocol-
 
 ZeroPoint is to agentic and networked computing what SSL/TLS was to e-commerce: a trust primitive that makes the ecosystem work without trusting any single platform. It is not a governance framework you comply with. It is a governance protocol you build on.
 
-The tool is never neutral. We chose to make trust portable.
+Trust is infrastructure.
 
 ---
 
@@ -294,7 +294,7 @@ This is not a moral statement alone. It is a technical property: constitutional 
 
 The constitutional rules implement ZeroPoint's Four Tenets, which are embedded in the protocol, expressed in the documentation, and enforced in the code:
 
-**I. Do No Harm.** ZeroPoint shall not operate in systems designed to harm humans. The `HarmPrincipleRule` is a non-removable rule in the PolicyEngine. It exists because architecture is politics, and we choose the politics of life.
+**I. Do No Harm.** ZeroPoint shall not operate in systems designed to harm humans. The `HarmPrincipleRule` is a non-removable rule in the PolicyEngine. It exists because architecture shapes outcomes, and we choose to make trust verifiable.
 
 **II. Sovereignty Is Sacred.** Every participant has the right to refuse any action. Every human has the right to disconnect any agent. No agent may acquire capabilities it was not granted. Coercion is architecturally impossible — the Guard enforces this locally, before every action, without consulting any external authority. This applies equally to humans and agents: a human participant operating within ZeroPoint exercises the same sovereign refusal as an agent.
 
@@ -492,7 +492,7 @@ It does not solve AI safety. It does not solve trust generally. It makes trust p
 
 Make trust portable, and you make exit real. Make exit real, and you make extraction optional.
 
-The tool is never neutral. We have chosen our side.
+Trust is infrastructure.
 
 > Power will diffuse. Accountability must diffuse with it.
 
@@ -589,7 +589,7 @@ This creates a bidirectional, evidence-based trust relationship that operates ov
 
 *ZeroPoint v2 is maintained by ThinkStream AI Labs.*
 *Contact: ken@thinkstreamlabs.ai*
-*Repository: https://github.com/thinkstreamlabs/zeropoint*
+*Repository: https://github.com/zeropoint-foundation/zeropoint*
 *Website: https://zeropoint.global*
 
 ---

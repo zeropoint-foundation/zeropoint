@@ -28,14 +28,14 @@ cargo test --workspace
 cargo run -p zp-server
 ```
 
-The server starts on `http://localhost:8080`. Try:
+The server starts on `http://localhost:3000`. Try:
 
 ```bash
 # Health check
-curl http://localhost:8080/health
+curl http://localhost:3000/health
 
 # Evaluate a governance guard
-curl -X POST http://localhost:8080/api/v1/guard/evaluate \
+curl -X POST http://localhost:3000/api/v1/guard/evaluate \
   -H "Content-Type: application/json" \
   -d '{"action": "deploy surveillance toolkit", "trust_tier": "Tier1"}'
 ```
@@ -50,11 +50,13 @@ v2/
 │   ├── zp-policy      # Policy engine + constitutional rules
 │   ├── zp-trust       # Trust scoring and reputation
 │   ├── zp-pipeline    # GovernanceGate: Guard → Policy → Execute → Audit
-│   ├── zp-server      # Axum HTTP API (13 endpoints)
+│   ├── zp-server      # Axum HTTP API (15 endpoints)
 │   ├── zp-llm         # LLM integration layer
 │   ├── zp-skills      # Skill/capability registry
 │   ├── zp-learning    # Adaptive learning
 │   ├── zp-mesh        # Mesh networking primitives
+│   ├── zp-receipt     # Receipt building, signing, hashing, verification
+│   ├── execution-engine # Sandboxed command execution
 │   └── zp-cli         # Command-line interface
 ├── policies/          # Default governance gate policies
 └── Dockerfile         # Multi-stage production build
@@ -79,7 +81,7 @@ The [zeropoint.global](https://zeropoint.global) site includes two interactive d
 
 ## Architecture
 
-ZeroPoint v2 is a Rust workspace of 11 crates, designed to be transport-agnostic (HTTP, TCP, UDP, mesh) and participant-agnostic (same primitives for humans, agents, services, devices).
+ZeroPoint v2 is a Rust workspace of 13 crates, designed to be transport-agnostic (HTTP, TCP, UDP, mesh) and participant-agnostic (same primitives for humans, agents, services, devices).
 
 The governance pipeline follows a strict sequence: **Guard → Policy → Execute → Audit**. Constitutional rules (HarmPrincipleRule, SovereigntyRule) are non-removable — they cannot be overridden by any policy or configuration.
 

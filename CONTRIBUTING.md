@@ -7,7 +7,7 @@ Welcome. ZeroPoint is a trust infrastructure project, and that means something i
 Clone the repository and get up to speed quickly:
 
 ```bash
-git clone https://github.com/thinkstreamlabs/zeropoint.git
+git clone https://github.com/zeropoint-foundation/zeropoint.git
 cd zeropoint/v2
 cargo test --workspace
 cargo clippy
@@ -17,18 +17,20 @@ If all tests pass and clippy is quiet, your environment is set up correctly.
 
 ## Where to Contribute
 
-ZeroPoint v2 is organized into 11 focused crates:
+ZeroPoint v2 is organized into 13 focused crates:
 
 - **zp-core**: The foundational types, cryptographic primitives, and the Four Tenets model
-- **zp-policy**: The policy engine that evaluates rules against constitutional constraints
-- **zp-chain**: The immutable ledger implementation for integrity and auditability
-- **zp-wasm**: The sandbox runtime and module management system
-- **zp-transport**: Abstract transport layer for distributed communication
-- **zp-attestation**: Cryptographic attestation and verification
-- **zp-governance**: Governance and consensus mechanisms
 - **zp-audit**: Comprehensive audit logging and forensics
-- **zp-crypto**: Cryptographic operations and key management
-- **zp-hcs**: Hedera Consensus Service integration (optional)
+- **zp-policy**: The policy engine that evaluates rules against constitutional constraints
+- **zp-trust**: Trust scoring and reputation mechanisms
+- **zp-pipeline**: GovernanceGate: Guard → Policy → Execute → Audit sequence
+- **zp-server**: Axum HTTP API server
+- **zp-llm**: LLM integration layer
+- **zp-skills**: Skill/capability registry and management
+- **zp-learning**: Adaptive learning and feedback mechanisms
+- **zp-mesh**: Mesh networking primitives and distributed communication
+- **zp-receipt**: Receipt building, signing, hashing, and verification
+- **execution-engine**: Sandboxed command execution environment
 - **zp-cli**: Command-line interface and user-facing tools
 
 Each crate has clear boundaries and responsibilities. When you're considering a contribution, understand which crate owns the concern you're addressing.
@@ -87,7 +89,7 @@ ZeroPoint is built on four foundational commitments:
 3. **Integrity First**: Everything is auditable and verifiable. Our discussions should be honest and evidence-based.
 4. **Transparency**: The mechanisms and reasoning should be understandable. We explain our decisions clearly.
 
-These principles apply to how we build together. Refer to the [ZeroPoint Whitepaper](./WHITEPAPER.md) for the complete vision.
+These principles apply to how we build together. Refer to the [ZeroPoint Whitepaper](./v2/docs/whitepaper.md) for the complete vision.
 
 ## Security Issues
 

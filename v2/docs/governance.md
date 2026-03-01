@@ -18,9 +18,9 @@ These four tenets are constitutional. They are embedded in the protocol, express
 
 ZeroPoint shall not operate in systems designed to harm humans.
 
-This is not a policy preference. It is a structural commitment encoded as a non-removable rule in the PolicyEngine. The `HarmPrincipleRule` cannot be bypassed, overridden, or removed at runtime. It exists because architecture is politics, and we choose the politics of life.
+This is not a policy preference. It is a structural commitment encoded as a non-removable rule in the PolicyEngine. The `HarmPrincipleRule` cannot be bypassed, overridden, or removed at runtime. It exists because architecture shapes outcomes, and we choose to make trust verifiable.
 
-This tenet is inspired directly by Reticulum's Harm Principle: that the builders of a tool bear responsibility for the uses their architecture enables, and that protective constraints are an act of conscience, not a limitation of capability.
+This tenet is inspired directly by Reticulum's Harm Principle: that the builders of a tool bear responsibility for the uses their architecture enables, and that protective constraints are an act of conscience, not a limitation of capability. It exists because architecture shapes outcomes, and we choose to make trust verifiable.
 
 ### II. Sovereignty Is Sacred
 
@@ -282,4 +282,4 @@ There are no trust scores to game. There are no committees to lobby. There are n
 
 Governance in ZeroPoint is not a layer on top of the protocol. It is the protocol. Every packet is signed. Every action produces a receipt. Every receipt joins a chain. The chain is the truth — whether the actor is a human, an agent, or a machine.
 
-The tool is never neutral. We have chosen our side.
+Trust is infrastructure.

@@ -148,7 +148,7 @@ The complete governance framework — tenets, principles, architecture, mechanis
 
 ZeroPoint is built as a citizen of the [Reticulum Network Stack](https://reticulum.network) created by [Mark Qvist](https://unsigned.io). Reticulum proved that encrypted, uncentralizable networking requires no central authority — only cryptographic proof, personal sovereignty, and a refusal to build tools of harm. ZeroPoint carries these commitments into the domain of accountable digital action — for agents, humans, and every system where trust cannot be left to good faith.
 
-The tool is never neutral. We have chosen our side.
+Trust is infrastructure.
 
 ## License
 

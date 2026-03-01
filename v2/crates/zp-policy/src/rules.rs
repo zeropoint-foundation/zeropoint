@@ -183,7 +183,7 @@ impl PolicyRule for DefaultAllowRule {
 // They are loaded first and evaluated first.
 //
 // Inspired by the Harm Principle from Reticulum's Zen:
-// "architecture is politics" and "a tool is never neutral."
+// "Trust is infrastructure." — every action gets a receipt.
 
 /// **Tenet I: Do No Harm.**
 ///

@@ -16,7 +16,7 @@ Why do you need this feature? What problem does it solve?
 ## Crate(s) Affected
 
 Which ZeroPoint crate or crates does this relate to?
-(e.g., zp-policy, zp-transport, zp-attestation)
+(e.g., zp-policy, zp-mesh, zp-receipt)
 
 ## Relation to the Four Tenets
 

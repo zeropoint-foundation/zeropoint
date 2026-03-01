@@ -2,9 +2,7 @@
   <rect width="1920" height="1080" fill="#0A0A0C"/>
 
   <!-- Closing quote — center screen, maximum stillness -->
-  <text x="960" y="420" font-family="Inter, sans-serif" font-size="32" fill="#E8E6E3" text-anchor="middle" font-weight="300" font-style="italic">The tool is never neutral.</text>
-
-  <text x="960" y="490" font-family="Inter, sans-serif" font-size="32" fill="#E8E6E3" text-anchor="middle" font-weight="300" font-style="italic">We have chosen our side.</text>
+  <text x="960" y="420" font-family="Inter, sans-serif" font-size="32" fill="#E8E6E3" text-anchor="middle" font-weight="300" font-style="italic">Trust is infrastructure.</text>
 
   <!-- Subtle separator -->
   <line x1="880" y1="550" x2="1040" y2="550" stroke="#333338" stroke-width="0.5"/>

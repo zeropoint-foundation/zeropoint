@@ -36,7 +36,7 @@ ZP_PORT="${ZP_PORT:-3000}"
 
 header "ZeroPoint v2 — Install"
 echo ""
-echo "  The tool is never neutral. We have chosen our side."
+echo "  Trust is infrastructure."
 echo ""
 
 # ============================================================================

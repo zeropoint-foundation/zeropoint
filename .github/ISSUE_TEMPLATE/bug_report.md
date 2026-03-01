@@ -26,7 +26,7 @@ What actually happened instead.
 
 ## Crate Affected
 
-Which ZeroPoint crate is affected? (e.g., zp-policy, zp-chain, zp-transport)
+Which ZeroPoint crate is affected? (e.g., zp-policy, zp-audit, zp-mesh)
 
 ## Environment
 

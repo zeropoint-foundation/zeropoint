@@ -70,7 +70,7 @@ sudo apt update && sudo apt install caddy
 3. **Clone and build:**
 
 ```bash
-git clone https://github.com/thinkstreamlabs/zeropoint.git
+git clone https://github.com/zeropoint-foundation/zeropoint.git
 cd zeropoint/v2
 cargo build --release -p zp-server
 ```

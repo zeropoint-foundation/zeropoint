@@ -169,9 +169,7 @@ This is the big-picture moment. The network should feel alive but governed. The 
 ## Scene 7: THE CLOSE (2:10 – 2:20)
 
 ### Narration
-*The tool is never neutral.*
-
-*We have chosen our side.*
+*Trust is infrastructure.*
 
 zeropoint.global
 

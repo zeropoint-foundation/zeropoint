@@ -81,7 +81,7 @@ A typical timeline is 90 days from initial report to public disclosure, but we'l
 
 ## Threat Model
 
-ZeroPoint's threat model and security assumptions are detailed in the [ZeroPoint Whitepaper](./WHITEPAPER.md), Section 6: Threat Model and Guarantees.
+ZeroPoint's threat model and security assumptions are detailed in the [ZeroPoint Whitepaper](./v2/docs/whitepaper.md), Section 6: Threat Model and Guarantees.
 
 Refer to this before reporting to ensure the issue is within our scope of protection.
 
