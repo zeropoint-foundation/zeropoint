@@ -684,7 +684,7 @@
         <a href="/#architecture">Architecture</a>
         <a href="/footprint.html">Footprint</a>
         <a href="/playground.html">Playground</a>
-        <a href="/for-agents.html">For Agents</a>
+        <a href="/for-agents.html">Governing Agents</a>
         <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
         <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -704,7 +704,7 @@
     <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
     <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
     <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
-    <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">For Agents</a>
+    <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
     <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
     <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
   </div>
@@ -714,15 +714,9 @@
       <h1>Receipt Chain Visualizer</h1>
       <p>Every action produces a signed receipt. Every receipt links to its predecessor. The chain becomes proof.</p>
 
-      <div class="mode-toggle">
-        <div class="toggle-switch">
-          <button id="live-mode-btn" class="active">Live Server</button>
-          <button id="sim-mode-btn">Simulation</button>
-        </div>
-        <div class="mode-status">
-          <span class="status-indicator connected" id="status-indicator"></span>
-          <span id="status-text">Checking server...</span>
-        </div>
+      <div class="mode-status" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 1rem;">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span id="status-text" style="font-size: 0.85rem; color: var(--text-muted);">Checking server...</span>
       </div>
     </section>
 
@@ -756,7 +750,7 @@
           </div>
           <div class="stat-row">
             <span class="stat-label">Connection</span>
-            <span class="stat-value unverified" id="stat-connection">Offline</span>
+            <span class="stat-value unverified" id="stat-connection">Checking...</span>
           </div>
           <div class="verification-report" id="verification-report"></div>
         </div>
@@ -770,7 +764,7 @@
         <a href="https://github.com/zeropoint-foundation/zeropoint" style="font-size: 0.8rem; color: var(--text-dim);">GitHub</a>
         <a href="/whitepaper.html" style="font-size: 0.8rem; color: var(--text-dim);">Whitepaper</a>
         <a href="/playground.html" style="font-size: 0.8rem; color: var(--text-dim);">Playground</a>
-        <a href="/for-agents.html" style="font-size: 0.8rem; color: var(--text-dim);">For Agents</a>
+        <a href="/for-agents.html" style="font-size: 0.8rem; color: var(--text-dim);">Governing Agents</a>
         <a href="/footprint.html" style="font-size: 0.8rem; color: var(--text-dim);">Footprint</a>
         <a href="/demo-chain.html" style="font-size: 0.8rem; color: var(--text-dim);">Chain Demo</a>
       </div>
@@ -802,7 +796,7 @@
     ];
 
     // ===== Global State =====
-    let mode = 'live'; // 'live' or 'simulation'
+    let mode = 'simulation';
     let receipts = [];
     let serverAvailable = false;
     let chainIntegrity = 'unverified';
@@ -811,6 +805,12 @@
     // ===== Initialization =====
     async function init() {
       await checkServerAvailability();
+      if (serverAvailable) {
+        mode = 'live';
+      } else {
+        mode = 'simulation';
+      }
+      updateStatusUI();
       await loadChain();
       setupEventListeners();
     }
@@ -826,45 +826,25 @@
       } catch (e) {
         serverAvailable = false;
       }
-      updateModeUI();
     }
 
-    // ===== Mode Management =====
-    function switchMode(newMode) {
-      mode = newMode;
-      receipts = [];
-      chainIntegrity = 'unverified';
-      loadChain();
-      updateModeUI();
-      updateControlPanel();
-    }
-
-    function updateModeUI() {
-      const liveBtn = document.getElementById('live-mode-btn');
-      const simBtn = document.getElementById('sim-mode-btn');
+    // ===== Status UI =====
+    function updateStatusUI() {
       const indicator = document.getElementById('status-indicator');
       const statusText = document.getElementById('status-text');
       const tamperBtn = document.getElementById('tamper-btn');
 
-      if (mode === 'live') {
-        liveBtn.classList.add('active');
-        simBtn.classList.remove('active');
-        if (serverAvailable) {
-          indicator.classList.add('connected');
-          statusText.textContent = 'Connected to server';
-          document.getElementById('stat-connection').textContent = 'Connected';
-        } else {
-          indicator.classList.remove('connected');
-          statusText.textContent = 'No server detected — switch to Simulation';
-          document.getElementById('stat-connection').textContent = 'No server';
-        }
+      if (mode === 'live' && serverAvailable) {
+        indicator.classList.add('connected');
+        statusText.textContent = 'Connected to live server';
+        document.getElementById('stat-connection').textContent = 'Live';
+        document.getElementById('stat-connection').className = 'stat-value verified';
         tamperBtn.style.display = 'none';
       } else {
-        liveBtn.classList.remove('active');
-        simBtn.classList.add('active');
-        indicator.classList.add('connected');
-        statusText.textContent = 'Running simulation mode';
-        document.getElementById('stat-connection').textContent = 'Simulated';
+        indicator.classList.remove('connected');
+        statusText.textContent = 'Simulation — run zp-server locally to connect';
+        document.getElementById('stat-connection').textContent = 'Simulation';
+        document.getElementById('stat-connection').className = 'stat-value unverified';
         tamperBtn.style.display = 'block';
       }
     }
@@ -886,7 +866,12 @@
           receipts = data.receipts || [];
         } catch (e) {
           console.error('Failed to load live chain:', e);
-          switchMode('simulation');
+          mode = 'simulation';
+          serverAvailable = false;
+          updateStatusUI();
+          receipts = generateSimulationChain();
+          renderChain();
+          updateControlPanel();
           return;
         }
       } else {
@@ -1067,7 +1052,9 @@
           receipts.unshift(receipt);
         } catch (e) {
           console.error('Failed to generate action:', e);
-          alert('Failed to generate action. Check server connection.');
+          mode = 'simulation';
+          serverAvailable = false;
+          updateStatusUI();
         }
       } else {
         // Simulation mode
@@ -1240,17 +1227,8 @@
 
     // ===== Event Listeners =====
     function setupEventListeners() {
-      document.getElementById('live-mode-btn').addEventListener('click', () => {
-        if (serverAvailable) {
-          switchMode('live');
-        } else {
-          alert('Server is not available. Staying in simulation mode.');
-        }
-      });
-
-      document.getElementById('sim-mode-btn').addEventListener('click', () => {
-        switchMode('simulation');
-      });
+      // Auto-fallback mode: no toggle buttons needed.
+      // Generate and Verify listeners are set up via DOMContentLoaded above.
     }
 
     // ===== Start =====

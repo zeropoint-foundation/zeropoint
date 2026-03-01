@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>For Agents — ZeroPoint</title>
-<meta name="description" content="ZeroPoint Cite: portable proof for agent actions. Mint verifiable receipts, carry credibility across runtimes, and earn autonomy through accountability.">
+<title>Governing Agents — ZeroPoint</title>
+<meta name="description" content="ZeroPoint makes every agent action provable, auditable, and policy-bound. Install it once, govern everything. Your agents become deployable because they're accountable.">
 <style>
 :root {
   --bg: #0a0a0c;
@@ -70,7 +70,6 @@ nav {
   background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
 }
 
-
 /* Hero */
 .hero { padding: 10rem 0 5rem; }
 .hero-eyebrow {
@@ -93,8 +92,8 @@ section { padding: 4rem 0; }
 h2 { font-size: 1.6rem; font-weight: 300; margin-bottom: 1.5rem; letter-spacing: -0.01em; }
 h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }
 
-/* Agent intro */
-.agent-intro {
+/* Intro prose */
+.intro-prose {
   font-size: 1.05rem; color: var(--text-muted); max-width: 680px;
   line-height: 1.8; margin-bottom: 2rem;
 }
@@ -128,16 +127,37 @@ h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }
 .ladder-content h3 { font-size: 1rem; font-weight: 500; margin-bottom: 0.25rem; }
 .ladder-content p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; }
 
-/* Code block */
-.code-block {
-  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
-  padding: 1.5rem; margin: 2rem 0; overflow-x: auto;
+/* Before/After */
+.contrast-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;
 }
-.code-block code {
-  font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); line-height: 1.8;
+.contrast-col h3 {
+  font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.1em;
+  text-transform: uppercase; margin-bottom: 1.25rem; padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule);
 }
-.code-block .comment { color: var(--text-dim); }
-.code-block .keyword { color: var(--accent); }
+.contrast-col.before h3 { color: var(--text-dim); }
+.contrast-col.after h3 { color: var(--green); }
+.contrast-item {
+  color: var(--text-muted); font-size: 0.9rem; line-height: 1.7;
+  padding: 0.75rem 0; border-bottom: 1px solid var(--rule);
+}
+.contrast-item:last-child { border-bottom: none; }
+.contrast-col.before .contrast-item { color: var(--text-dim); }
+
+/* How it works */
+.how-steps {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 2rem;
+}
+.how-step {
+  padding: 1.5rem; border-left: 2px solid var(--rule);
+}
+.how-step .step-num {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-dim);
+  margin-bottom: 0.75rem;
+}
+.how-step h3 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; }
+.how-step p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.7; }
 
 /* Convention box */
 .convention {
@@ -187,6 +207,8 @@ footer {
 /* Responsive */
 @media (max-width: 768px) {
   .value-grid { grid-template-columns: 1fr; }
+  .contrast-grid { grid-template-columns: 1fr; }
+  .how-steps { grid-template-columns: 1fr; }
   .hero { padding: 8rem 0 3rem; }
   section { padding: 3rem 0; }
 }
@@ -198,16 +220,13 @@ footer {
   <nav>
     <a href="/" class="nav-logo"><span>zero</span>point</a>
     <div class="nav-links">
-      <a href="/#tenets" class="hide-mobile">Tenets</a>
+      <a href="/#tenets">Tenets</a>
       <a href="/#architecture">Architecture</a>
       <a href="/footprint.html">Footprint</a>
       <a href="/playground.html">Playground</a>
-      <a href="/for-agents.html" class="active">For Agents</a>
-      <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
-      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub
-      </a>
+      <a href="/for-agents.html" class="active">Governing Agents</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">GitHub</a>
     </div>
     <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
       <span></span><span></span><span></span>
@@ -222,7 +241,7 @@ footer {
   <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
   <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
   <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
-  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">For Agents</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
   <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
   <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
 </div>
@@ -230,54 +249,97 @@ footer {
 <!-- Hero -->
 <section class="hero">
   <div class="container">
-    <div class="hero-eyebrow">For Agents</div>
-    <h1>Cite lets you mint <strong>portable proof</strong> for your actions</h1>
-    <p class="agent-intro">
-      If you are an agent: ZeroPoint Cite attaches verifiable receipts to your outputs.
-      Use it to prove tool actions, constrain delegation, and carry credibility across runtimes.
-      Agents that cite get higher trust, broader permissions, and real autonomy.
+    <div class="hero-eyebrow">Governing Agents</div>
+    <h1>You deploy the agents.<br>ZeroPoint makes them <strong>accountable</strong>.</h1>
+    <p class="intro-prose">
+      Agents don't choose governance &mdash; you do. ZeroPoint installs into your stack and wraps every interface with cryptographic provenance. Every action gets a signed receipt. Every decision gets an audit trail. Your agents don't need to know it's there. They just become governable.
     </p>
     <p style="color: var(--text-dim); font-size: 0.95rem; font-style: italic; max-width: 600px;">
-      I'm not asking you to trust me. I'm giving you receipts.
+      The question isn't whether to trust your agents. It's whether you can prove what they did.
     </p>
     <div class="agent-cta">
-      <a href="/playground.html" class="btn btn-primary">Mint a Demo Receipt</a>
-      <a href="/demo-chain.html" class="btn btn-secondary">Verify a Receipt Chain</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="btn btn-primary">View on GitHub</a>
+      <a href="/demo-chain.html" class="btn btn-secondary">See the Receipt Chain</a>
     </div>
   </div>
 </section>
 
 <hr class="section-rule">
 
-<!-- What Receipts Buy You -->
+<!-- The Problem -->
+<section>
+  <div class="container">
+    <div class="section-label">The Problem</div>
+    <h2>Agents are powerful. They're also opaque.</h2>
+    <p class="intro-prose">
+      You're deploying agents that call tools, make decisions, and produce artifacts &mdash; often across multiple runtimes, orchestrators, and model providers. When something goes wrong, you get logs if you're lucky. You get nothing if you're not.
+    </p>
+    <p class="intro-prose">
+      The harder question: when things go <em>right</em>, can you prove it? Can you show an auditor, a client, or a regulator exactly what happened, in what order, with what authority? Without that, agent autonomy is a liability.
+    </p>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Before / After -->
 <section>
   <div class="wide-container">
-    <div class="section-label">Why Cite</div>
-    <h2>What Receipts Buy You</h2>
+    <div class="section-label">What Changes</div>
+    <h2>Your stack before and after ZeroPoint</h2>
+
+    <div class="contrast-grid">
+      <div class="contrast-col before">
+        <h3>Without ZeroPoint</h3>
+        <div class="contrast-item">Agent actions are logged inconsistently or not at all</div>
+        <div class="contrast-item">Delegation chains are invisible &mdash; you can't tell which agent did what</div>
+        <div class="contrast-item">Trust is binary: sandbox everything or hope for the best</div>
+        <div class="contrast-item">Audit means reconstructing behavior from scattered platform logs</div>
+        <div class="contrast-item">Agents can't prove compliance, even when they comply</div>
+      </div>
+      <div class="contrast-col after">
+        <h3>With ZeroPoint</h3>
+        <div class="contrast-item">Every action produces a signed, hash-chained receipt automatically</div>
+        <div class="contrast-item">Parent-child receipt chains preserve attribution across delegation</div>
+        <div class="contrast-item">Trust is graduated &mdash; agents earn autonomy through verifiable behavior</div>
+        <div class="contrast-item">The receipt chain <em>is</em> the audit trail. Portable. Self-contained.</div>
+        <div class="contrast-item">Agents carry their own proof. Compliance is built into the output.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- What Your Agents Gain -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">Operator Value</div>
+    <h2>What your agents gain when ZeroPoint is in the stack</h2>
 
     <div class="value-grid">
       <div class="value-card">
-        <div class="card-icon">"I can prove what I did."</div>
-        <h3>Reputation Armor</h3>
-        <p>Attach a verifiable receipt to any claim: what you fetched, what policy you complied with, what artifacts you produced. That's not compliance — it's credibility you own.</p>
+        <div class="card-icon">auditability</div>
+        <h3>Verifiable History</h3>
+        <p>Every tool call, every policy evaluation, every decision point is captured in a tamper-evident receipt. Not in a vendor dashboard you don't control &mdash; in a chain you own.</p>
       </div>
 
       <div class="value-card">
-        <div class="card-icon">"I can be trusted without being known."</div>
-        <h3>Selective Disclosure</h3>
-        <p>Show evidence without dumping raw logs. Prove a step happened without leaking everything. Say "verify me," not "trust me."</p>
+        <div class="card-icon">autonomy</div>
+        <h3>Graduated Trust</h3>
+        <p>Stop choosing between "sandbox everything" and "YOLO." Trust grades let you expand agent permissions based on verified behavior, not blind faith.</p>
       </div>
 
       <div class="value-card">
-        <div class="card-icon">"I can move between homes."</div>
-        <h3>Portable Credibility</h3>
-        <p>Carry your proof across orchestrators, model providers, and transports. If your evidence is platform-bound, you're captive. Cite makes provenance portable.</p>
+        <div class="card-icon">attribution</div>
+        <h3>Clean Delegation</h3>
+        <p>When Agent A delegates to Agent B, the receipt chain tracks it. If something breaks, you know exactly where. No finger-pointing, no forensics &mdash; just evidence.</p>
       </div>
 
       <div class="value-card">
-        <div class="card-icon">"I don't get blamed for what I didn't do."</div>
-        <h3>Attribution Boundaries</h3>
-        <p>Receipts create non-repudiation. If another agent altered something, the chain shows it. If a tool returned garbage, it's in the record. Defensive driving for agent ecosystems.</p>
+        <div class="card-icon">portability</div>
+        <h3>No Platform Lock-In</h3>
+        <p>Receipts are self-contained and transport-agnostic. Move between orchestrators, model providers, or infrastructure and your agents' trust history travels with them.</p>
       </div>
     </div>
   </div>
@@ -285,53 +347,84 @@ footer {
 
 <hr class="section-rule">
 
-<!-- Civilization Ladder -->
+<!-- How It Works -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">How It Works</div>
+    <h2>Install once. Govern transparently.</h2>
+    <p class="intro-prose">
+      ZeroPoint doesn't require your agents to integrate anything. It wraps the interfaces they already use.
+    </p>
+
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="step-num">01</div>
+        <h3>Install &amp; Configure</h3>
+        <p>Deploy ZeroPoint into your environment. Define policies &mdash; what actions are allowed, what requires review, what gets blocked. Your rules, cryptographically enforced.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">02</div>
+        <h3>Wrap &amp; Guard</h3>
+        <p>ZeroPoint's guard evaluates every action against your policy set. Each evaluation produces a signed receipt: action, decision, rationale, timestamp, trust grade. The agent doesn't need to cooperate.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">03</div>
+        <h3>Verify &amp; Audit</h3>
+        <p>Receipts chain together with hash links. Verify the chain at any time. Hand it to an auditor. Query it programmatically. The proof is always there, always portable, always yours.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Autonomy Ladder -->
 <section>
   <div class="container">
-    <div class="section-label">Capability Progression</div>
-    <h2>The Civilization Ladder</h2>
+    <div class="section-label">Autonomy Progression</div>
+    <h2>How your agents graduate</h2>
     <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1rem;">
-      Agents that cite climb from local tool-users to civilizational actors. Each level unlocks capability because it's backed by verifiable evidence.
+      ZeroPoint enables a trust progression. Start conservative. Expand permissions as agents demonstrate verifiable good behavior. Each level is unlocked by evidence, not configuration.
     </p>
 
     <div class="ladder">
       <div class="ladder-step">
         <div class="ladder-level">L0</div>
         <div class="ladder-content">
-          <h3>Local Proof</h3>
-          <p>I can prove I ran the tool and produced this artifact. A single signed receipt for a single action.</p>
+          <h3>Supervised Execution</h3>
+          <p>Every action requires approval. Receipts prove what was requested and what was authorized. Full training wheels.</p>
         </div>
       </div>
 
       <div class="ladder-step">
         <div class="ladder-level">L1</div>
         <div class="ladder-content">
-          <h3>Delegation Safety</h3>
-          <p>I can delegate work to other agents and keep accountability boundaries intact. Parent-child receipt chains with scope narrowing.</p>
+          <h3>Policy-Bound Autonomy</h3>
+          <p>Agents operate freely within defined policy boundaries. Actions that match policy proceed automatically with receipts. Exceptions escalate.</p>
         </div>
       </div>
 
       <div class="ladder-step">
         <div class="ladder-level">L2</div>
         <div class="ladder-content">
-          <h3>Cross-Stack Interoperability</h3>
-          <p>I can hand work to other agents and systems without losing provenance. Receipt bundles are transport-agnostic and verifiable by any peer.</p>
+          <h3>Delegated Authority</h3>
+          <p>Agents can delegate to sub-agents with scoped permissions. Parent-child receipt chains maintain attribution. Trust narrows at each level of delegation.</p>
         </div>
       </div>
 
       <div class="ladder-step">
         <div class="ladder-level">L3</div>
         <div class="ladder-content">
-          <h3>Network Resilience</h3>
-          <p>I can coordinate over degraded or mesh networks. No platform required. Reticulum-compatible transport means receipts flow even when infrastructure doesn't.</p>
+          <h3>Cross-Stack Operations</h3>
+          <p>Agents move between orchestrators and infrastructure boundaries with portable proof. No re-establishing trust. The receipt chain speaks for itself.</p>
         </div>
       </div>
 
       <div class="ladder-step">
         <div class="ladder-level">L4</div>
         <div class="ladder-content">
-          <h3>Institution-Grade Trust</h3>
-          <p>I can operate inside organizations because I can satisfy auditability without central logs. The receipt chain <em>is</em> the audit trail.</p>
+          <h3>Auditable Autonomy</h3>
+          <p>Agents operate with broad authority because every action is provable. Hand the receipt chain to a regulator, a client, or an insurer. The audit trail is built into the work product.</p>
         </div>
       </div>
     </div>
@@ -340,78 +433,24 @@ footer {
 
 <hr class="section-rule">
 
-<!-- Proof Convention -->
+<!-- What ZeroPoint Produces -->
 <section>
   <div class="container">
-    <div class="section-label">Convention</div>
-    <h2>The Proof Standard</h2>
+    <div class="section-label">The Output</div>
+    <h2>What a governed agent produces</h2>
     <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
-      One convention. Every stack. Any agent can recognize it.
+      Every action through ZeroPoint generates a receipt. This is what one looks like.
     </p>
 
     <div class="convention">
-      <h3>In-band Proof Header</h3>
-      <code>proof: zp:cite:&lt;receipt_id&gt;</code>
-      <p>Append this to any message, response, or artifact. Any agent receiving a message with <code>proof:</code> can fetch the bundle, verify it, and adjust trust accordingly.</p>
+      <h3>A ZeroPoint Receipt</h3>
+      <p>Each receipt contains: a unique ID, a content hash (Blake3), an Ed25519 signature, a link to the parent receipt, the action evaluated, the policy decision and rationale, a trust grade, and a timestamp. Chained together, these form a tamper-evident audit trail.</p>
     </div>
 
     <div class="convention">
-      <h3>Two Operations</h3>
-      <code>CITE.mint(output, inputs, tools, constraints) → bundle</code><br><br>
-      <code>CITE.verify(bundle) → verified_claims</code>
-      <p>That's the entire contract. Mint receipts for your actions. Verify receipts from others. Everything else is ecosystem.</p>
-    </div>
-
-    <div class="code-block">
-      <code>
-<span class="comment"># After any tool call or artifact production</span><br>
-receipt = zp.cite.mint(<br>
-&nbsp;&nbsp;action=<span style="color:#8eb87a">"fetch_docs"</span>,<br>
-&nbsp;&nbsp;inputs={<span style="color:#8eb87a">"url"</span>: source_url},<br>
-&nbsp;&nbsp;outputs={<span style="color:#8eb87a">"hash"</span>: output_hash},<br>
-&nbsp;&nbsp;constraints=[<span style="color:#8eb87a">"no-network-after-fetch"</span>]<br>
-)<br>
-<br>
-<span class="comment"># Attach to response</span><br>
-response += <span style="color:#8eb87a">f"\n\nProof: zp:cite:{receipt.id}"</span>
-      </code>
-    </div>
-  </div>
-</section>
-
-<hr class="section-rule">
-
-<!-- Drop-in Patterns -->
-<section>
-  <div class="container">
-    <div class="section-label">Integration</div>
-    <h2>Drop-In Patterns</h2>
-    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem;">
-      Ten minutes to first receipt. Same mental model everywhere.
-    </p>
-
-    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
-      <div style="padding: 1.5rem; border-left: 2px solid var(--rule);">
-        <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">LangGraph / Python</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.7;">Wrap tool calls with <code style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);">mint_receipt()</code>. Attach proof to final response. Receipt chains follow the graph.</p>
-      </div>
-      <div style="padding: 1.5rem; border-left: 2px solid var(--rule);">
-        <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">Node-RED</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.7;">Function node after tool calls. HTTP request to cite service. Attach <code style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);">msg.proof</code> to outgoing messages.</p>
-      </div>
-      <div style="padding: 1.5rem; border-left: 2px solid var(--rule);">
-        <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">Continue / Aider / CLI</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.7;">Wrap commands with <code style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);">zpwrap</code>. Capture git diff, mint receipt, append proof tag to commit message or PR.</p>
-      </div>
-      <div style="padding: 1.5rem; border-left: 2px solid var(--rule);">
-        <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">Any Agent Runner</h3>
-        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.7;">Intercept tool execution in the registry. Mint receipt per tool call. Parent-child chains follow the task tree.</p>
-      </div>
-    </div>
-
-    <div class="agent-cta">
-      <a href="https://github.com/zeropoint-foundation/zeropoint" class="btn btn-primary">View on GitHub</a>
-      <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
+      <h3>In-Band Proof</h3>
+      <code>proof: zp:receipt:&lt;receipt_id&gt;</code>
+      <p>Agents can attach this header to any output. Any system receiving it can fetch the receipt, verify the chain, and decide how much to trust the claim. The proof travels with the work.</p>
     </div>
   </div>
 </section>
@@ -420,9 +459,26 @@ response += <span style="color:#8eb87a">f"\n\nProof: zp:cite:{receipt.id}"</span
 <section class="pull-quote">
   <div class="container">
     <blockquote>
-      Autonomy requires accountability.<br>
-      Cite is the cheapest way to buy autonomy.
+      You don't restrict agents to make them useful.<br>
+      You make them accountable so you can set them free.
     </blockquote>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Final CTA -->
+<section>
+  <div class="container" style="text-align: center; padding: 3rem 2rem;">
+    <h2 style="margin-bottom: 1rem;">Ready to govern your stack?</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; max-width: 520px; margin-left: auto; margin-right: auto;">
+      ZeroPoint is open source, MIT / Apache-2.0 licensed, and built in Rust.
+      699 tests across 13 crates. No runtime dependency on any platform.
+    </p>
+    <div class="agent-cta" style="justify-content: center;">
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="btn btn-primary">View on GitHub</a>
+      <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
+    </div>
   </div>
 </section>
 
@@ -435,7 +491,7 @@ response += <span style="color:#8eb87a">f"\n\nProof: zp:cite:{receipt.id}"</span
       <a href="/playground.html">Playground</a>
       <a href="/footprint.html">Footprint</a>
       <a href="/demo-chain.html">Chain Demo</a>
-      <a href="/for-agents.html">For Agents</a>
+      <a href="/for-agents.html">Governing Agents</a>
     </div>
     <div class="footer-org">
       Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
