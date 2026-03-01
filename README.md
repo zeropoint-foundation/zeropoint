@@ -21,7 +21,7 @@ cd zeropoint/v2
 # Build
 cargo build --workspace
 
-# Test (623 tests across 11 crates)
+# Test (623 tests across 13 crates)
 cargo test --workspace
 
 # Run the API server
