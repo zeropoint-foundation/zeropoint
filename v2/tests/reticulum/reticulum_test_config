@@ -1,0 +1,33 @@
+# ============================================================================
+# ZeroPoint × Reticulum Test Configuration
+# ============================================================================
+#
+# This configuration sets up Reticulum for local testing over TCP loopback.
+# No radio hardware required — agents communicate over 127.0.0.1:4242.
+#
+# Usage: Both rns_echo_node.py and zp_agent_bridge.py will auto-discover
+#        this config, or pass it with -c flag.
+
+[reticulum]
+  enable_transport = False
+  share_instance = Yes
+  shared_instance_port = 37428
+  instance_control_port = 37429
+  panic_on_interface_error = No
+
+[logging]
+  loglevel = 4
+
+# TCP loopback interface — both sides connect here
+[[interfaces]]
+  [[TCP Server Interface]]
+    type = TCPServerInterface
+    enabled = yes
+    listen_ip = 127.0.0.1
+    listen_port = 4242
+
+  [[TCP Client Interface]]
+    type = TCPClientInterface
+    enabled = yes
+    target_host = 127.0.0.1
+    target_port = 4242

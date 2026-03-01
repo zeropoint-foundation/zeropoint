@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Title -->
+  <text x="960" y="80" font-family="Inter, sans-serif" font-size="24" fill="#E8E6E3" text-anchor="middle" font-weight="600">Governance Gate Pipeline</text>
+  <text x="960" y="110" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">Every action passes through three stages. No exceptions.</text>
+
+  <!-- ===== STAGE 1: GUARD ===== -->
+  <rect x="100" y="200" width="500" height="600" rx="8" fill="#111116" stroke="#7EB8DA" stroke-width="1" opacity="0.8"/>
+  <rect x="100" y="200" width="500" height="50" rx="8" fill="#7EB8DA" opacity="0.1"/>
+  <text x="350" y="232" font-family="Inter, sans-serif" font-size="22" fill="#7EB8DA" text-anchor="middle" font-weight="600">GUARD</text>
+  <text x="350" y="290" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" text-anchor="middle" font-weight="300">"May I?"</text>
+
+  <!-- Shield -->
+  <path d="M350 340 L310 360 L310 410 Q310 450 350 470 Q390 450 390 410 L390 360 Z" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="350" y="410" font-family="Inter, sans-serif" font-size="20" fill="#7EB8DA" text-anchor="middle">✓</text>
+
+  <text x="350" y="520" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Sovereign boundary check</text>
+  <text x="350" y="545" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Runs locally, before any action</text>
+  <text x="350" y="570" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">No external authority consulted</text>
+
+  <rect x="180" y="620" width="340" height="30" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="200" y="640" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80">✓ Delegation chain valid</text>
+
+  <rect x="180" y="660" width="340" height="30" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="200" y="680" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80">✓ Scope within bounds</text>
+
+  <rect x="180" y="700" width="340" height="30" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="200" y="720" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80">✓ Grant not expired</text>
+
+  <rect x="180" y="740" width="340" height="30" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="200" y="760" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80">✓ Signature verified</text>
+
+  <!-- Arrow 1 -->
+  <line x1="600" y1="500" x2="690" y2="500" stroke="#7EB8DA" stroke-width="2"/>
+  <polygon points="690,494 710,500 690,506" fill="#7EB8DA"/>
+
+  <!-- ===== STAGE 2: POLICY ===== -->
+  <rect x="710" y="200" width="500" height="600" rx="8" fill="#111116" stroke="#7EB8DA" stroke-width="1" opacity="0.8"/>
+  <rect x="710" y="200" width="500" height="50" rx="8" fill="#7EB8DA" opacity="0.1"/>
+  <text x="960" y="232" font-family="Inter, sans-serif" font-size="22" fill="#7EB8DA" text-anchor="middle" font-weight="600">POLICY</text>
+  <text x="960" y="290" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" text-anchor="middle" font-weight="300">"Should I?"</text>
+
+  <!-- Rule stack -->
+  <text x="960" y="340" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Rules evaluated top-down. Most restrictive wins.</text>
+
+  <rect x="780" y="370" width="360" height="38" rx="4" fill="#F87171" opacity="0.06" stroke="#F87171" stroke-width="1"/>
+  <text x="800" y="394" font-family="JetBrains Mono, monospace" font-size="13" fill="#F87171">HarmPrinciple</text>
+  <text x="1110" y="394" font-family="Inter, sans-serif" font-size="11" fill="#F87171" text-anchor="end">Constitutional</text>
+
+  <rect x="780" y="418" width="360" height="38" rx="4" fill="#F87171" opacity="0.06" stroke="#F87171" stroke-width="1"/>
+  <text x="800" y="442" font-family="JetBrains Mono, monospace" font-size="13" fill="#F87171">Sovereignty</text>
+  <text x="1110" y="442" font-family="Inter, sans-serif" font-size="11" fill="#F87171" text-anchor="end">Constitutional</text>
+
+  <rect x="780" y="466" width="360" height="38" rx="4" fill="#FBBF24" opacity="0.06" stroke="#FBBF24" stroke-width="1"/>
+  <text x="800" y="490" font-family="JetBrains Mono, monospace" font-size="13" fill="#FBBF24">Catastrophic</text>
+  <text x="1110" y="490" font-family="Inter, sans-serif" font-size="11" fill="#FBBF24" text-anchor="end">Operational</text>
+
+  <rect x="780" y="514" width="360" height="38" rx="4" fill="#FBBF24" opacity="0.06" stroke="#FBBF24" stroke-width="1"/>
+  <text x="800" y="538" font-family="JetBrains Mono, monospace" font-size="13" fill="#FBBF24">ReputationGate</text>
+  <text x="1110" y="538" font-family="Inter, sans-serif" font-size="11" fill="#FBBF24" text-anchor="end">Operational</text>
+
+  <rect x="780" y="562" width="360" height="38" rx="4" fill="#4ADE80" opacity="0.06" stroke="#4ADE80" stroke-width="1"/>
+  <text x="800" y="586" font-family="JetBrains Mono, monospace" font-size="13" fill="#4ADE80">DefaultAllow</text>
+  <text x="1110" y="586" font-family="Inter, sans-serif" font-size="11" fill="#4ADE80" text-anchor="end">Fallback</text>
+
+  <!-- Decision outcomes -->
+  <text x="960" y="650" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Decision outcomes:</text>
+
+  <rect x="790" y="670" width="90" height="30" rx="4" fill="#4ADE80" opacity="0.15"/>
+  <text x="835" y="690" font-family="Inter, sans-serif" font-size="13" fill="#4ADE80" text-anchor="middle" font-weight="600">Allow</text>
+
+  <rect x="895" y="670" width="90" height="30" rx="4" fill="#F87171" opacity="0.15"/>
+  <text x="940" y="690" font-family="Inter, sans-serif" font-size="13" fill="#F87171" text-anchor="middle" font-weight="600">Block</text>
+
+  <rect x="1000" y="670" width="90" height="30" rx="4" fill="#C084FC" opacity="0.15"/>
+  <text x="1045" y="690" font-family="Inter, sans-serif" font-size="13" fill="#C084FC" text-anchor="middle" font-weight="600">Review</text>
+
+  <text x="960" y="740" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E" text-anchor="middle">Constitutional rules cannot be overridden</text>
+  <text x="960" y="760" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E" text-anchor="middle">WASM policy modules loadable at runtime</text>
+
+  <!-- Arrow 2 -->
+  <line x1="1210" y1="500" x2="1300" y2="500" stroke="#7EB8DA" stroke-width="2"/>
+  <polygon points="1300,494 1320,500 1300,506" fill="#7EB8DA"/>
+
+  <!-- ===== STAGE 3: AUDIT ===== -->
+  <rect x="1320" y="200" width="500" height="600" rx="8" fill="#111116" stroke="#7EB8DA" stroke-width="1" opacity="0.8"/>
+  <rect x="1320" y="200" width="500" height="50" rx="8" fill="#7EB8DA" opacity="0.1"/>
+  <text x="1570" y="232" font-family="Inter, sans-serif" font-size="22" fill="#7EB8DA" text-anchor="middle" font-weight="600">AUDIT</text>
+  <text x="1570" y="290" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" text-anchor="middle" font-weight="300">"Did I?"</text>
+
+  <text x="1570" y="340" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Every outcome recorded. Even blocked actions.</text>
+
+  <!-- Chain links -->
+  <rect x="1440" y="370" width="260" height="44" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1570" y="397" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80" text-anchor="middle">af1349b9f5998a...c6e7</text>
+
+  <line x1="1570" y1="414" x2="1570" y2="432" stroke="#4ADE80" stroke-width="1"/>
+
+  <rect x="1440" y="432" width="260" height="44" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1570" y="459" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80" text-anchor="middle">31972a74c1b165...e6f</text>
+
+  <line x1="1570" y1="476" x2="1570" y2="494" stroke="#4ADE80" stroke-width="1"/>
+
+  <rect x="1440" y="494" width="260" height="44" rx="4" fill="#1A1A22" stroke="#7EB8DA" stroke-width="2"/>
+  <text x="1570" y="521" font-family="JetBrains Mono, monospace" font-size="11" fill="#7EB8DA" text-anchor="middle">71e3bda9c01ee0...b81</text>
+
+  <line x1="1570" y1="538" x2="1570" y2="556" stroke="#333338" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="1570" y="576" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="middle">next...</text>
+
+  <!-- Properties -->
+  <text x="1570" y="640" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Hash-chained (Blake3)</text>
+  <text x="1570" y="665" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Tamper-evident</text>
+  <text x="1570" y="690" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Ed25519 signed</text>
+
+  <text x="1570" y="740" font-family="Inter, sans-serif" font-size="13" fill="#FBBF24" text-anchor="middle" font-style="italic">If it's not in the chain,</text>
+  <text x="1570" y="760" font-family="Inter, sans-serif" font-size="13" fill="#FBBF24" text-anchor="middle" font-style="italic">it didn't happen.</text>
+
+  <!-- Action orb entering -->
+  <circle cx="60" cy="500" r="14" fill="#4ADE80" opacity="0.8"/>
+  <text x="60" y="535" font-family="Inter, sans-serif" font-size="11" fill="#4ADE80" text-anchor="middle">Action</text>
+  <line x1="74" y1="500" x2="95" y2="500" stroke="#4ADE80" stroke-width="1.5"/>
+  <polygon points="95,496 105,500 95,504" fill="#4ADE80"/>
+
+  <!-- Bottom -->
+  <text x="960" y="900" font-family="Inter, sans-serif" font-size="15" fill="#8A8A8E" text-anchor="middle">Decision hierarchy: Block > Review > Warn > Sanitize > Allow</text>
+  <text x="960" y="930" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Phase 1: Native Rust rules | Phase 2: WASM policy modules via wasmtime</text>
+</svg>

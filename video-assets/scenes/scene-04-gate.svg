@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Title -->
+  <text x="960" y="100" font-family="Inter, sans-serif" font-size="18" fill="#8A8A8E" text-anchor="middle" letter-spacing="4">THE GOVERNANCE GATE</text>
+
+  <!-- Pipeline containers -->
+  <!-- Guard -->
+  <rect x="180" y="320" width="400" height="380" rx="8" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="380" y="370" font-family="Inter, sans-serif" font-size="24" fill="#7EB8DA" text-anchor="middle" font-weight="600">GUARD</text>
+  <text x="380" y="400" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">"May I?"</text>
+  <!-- Guard icon: shield -->
+  <path d="M380 460 L340 480 L340 530 Q340 570 380 590 Q420 570 420 530 L420 480 Z" fill="none" stroke="#7EB8DA" stroke-width="2"/>
+  <text x="380" y="530" font-family="Inter, sans-serif" font-size="16" fill="#7EB8DA" text-anchor="middle">✓</text>
+  <text x="380" y="640" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Sovereign boundary</text>
+  <text x="380" y="660" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Local-first check</text>
+  <text x="380" y="680" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">No external authority</text>
+
+  <!-- Arrow 1 -->
+  <line x1="580" y1="510" x2="680" y2="510" stroke="#333338" stroke-width="2"/>
+  <polygon points="680,505 695,510 680,515" fill="#333338"/>
+
+  <!-- Policy -->
+  <rect x="700" y="320" width="500" height="380" rx="8" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="950" y="370" font-family="Inter, sans-serif" font-size="24" fill="#7EB8DA" text-anchor="middle" font-weight="600">POLICY</text>
+  <text x="950" y="400" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">"Should I?"</text>
+
+  <!-- Rule stack -->
+  <rect x="780" y="440" width="340" height="34" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="800" y="462" font-family="JetBrains Mono, monospace" font-size="13" fill="#F87171">HarmPrinciple</text>
+  <text x="1090" y="462" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="end">Constitutional</text>
+
+  <rect x="780" y="482" width="340" height="34" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="800" y="504" font-family="JetBrains Mono, monospace" font-size="13" fill="#F87171">Sovereignty</text>
+  <text x="1090" y="504" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="end">Constitutional</text>
+
+  <rect x="780" y="524" width="340" height="34" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="800" y="546" font-family="JetBrains Mono, monospace" font-size="13" fill="#FBBF24">Catastrophic</text>
+  <text x="1090" y="546" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="end">Operational</text>
+
+  <rect x="780" y="566" width="340" height="34" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="800" y="588" font-family="JetBrains Mono, monospace" font-size="13" fill="#FBBF24">ReputationGate</text>
+  <text x="1090" y="588" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="end">Operational</text>
+
+  <rect x="780" y="608" width="340" height="34" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="800" y="630" font-family="JetBrains Mono, monospace" font-size="13" fill="#4ADE80">DefaultAllow</text>
+  <text x="1090" y="630" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="end">Fallback</text>
+
+  <text x="950" y="680" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Most restrictive decision wins</text>
+
+  <!-- Arrow 2 -->
+  <line x1="1200" y1="510" x2="1300" y2="510" stroke="#333338" stroke-width="2"/>
+  <polygon points="1300,505 1315,510 1300,515" fill="#333338"/>
+
+  <!-- Audit -->
+  <rect x="1320" y="320" width="400" height="380" rx="8" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="1520" y="370" font-family="Inter, sans-serif" font-size="24" fill="#7EB8DA" text-anchor="middle" font-weight="600">AUDIT</text>
+  <text x="1520" y="400" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">"Did I?"</text>
+
+  <!-- Chain links -->
+  <rect x="1420" y="440" width="200" height="40" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1520" y="465" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80" text-anchor="middle">af1349b9...c6e7</text>
+
+  <line x1="1520" y1="480" x2="1520" y2="495" stroke="#333338" stroke-width="1"/>
+
+  <rect x="1420" y="495" width="200" height="40" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1520" y="520" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80" text-anchor="middle">31972a74...e6f</text>
+
+  <line x1="1520" y1="535" x2="1520" y2="550" stroke="#333338" stroke-width="1"/>
+
+  <rect x="1420" y="550" width="200" height="40" rx="4" fill="#1A1A22" stroke="#7EB8DA" stroke-width="2"/>
+  <text x="1520" y="575" font-family="JetBrains Mono, monospace" font-size="11" fill="#7EB8DA" text-anchor="middle">71e3bda9...b81</text>
+
+  <text x="1520" y="640" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Hash-chained</text>
+  <text x="1520" y="660" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Tamper-evident</text>
+  <text x="1520" y="680" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Ed25519 signed</text>
+
+  <!-- Action orb (allowed) -->
+  <circle cx="100" cy="510" r="16" fill="#4ADE80" opacity="0.8"/>
+  <text x="100" y="545" font-family="Inter, sans-serif" font-size="11" fill="#4ADE80" text-anchor="middle">Action</text>
+
+  <!-- Decision badges -->
+  <rect x="870" y="780" width="80" height="30" rx="4" fill="#4ADE80" opacity="0.15"/>
+  <text x="910" y="800" font-family="Inter, sans-serif" font-size="13" fill="#4ADE80" text-anchor="middle" font-weight="600">Allow</text>
+
+  <rect x="960" y="780" width="80" height="30" rx="4" fill="#F87171" opacity="0.15"/>
+  <text x="1000" y="800" font-family="Inter, sans-serif" font-size="13" fill="#F87171" text-anchor="middle" font-weight="600">Block</text>
+
+  <rect x="1050" y="780" width="80" height="30" rx="4" fill="#C084FC" opacity="0.15"/>
+  <text x="1090" y="800" font-family="Inter, sans-serif" font-size="13" fill="#C084FC" text-anchor="middle" font-weight="600">Review</text>
+
+  <!-- Bottom tagline -->
+  <text x="960" y="960" font-family="Inter, sans-serif" font-size="16" fill="#5A5A5E" text-anchor="middle" font-style="italic">"If it's not in the chain, it didn't happen."</text>
+</svg>

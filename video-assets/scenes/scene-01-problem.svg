@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Agent dots scattered across the canvas -->
+  <!-- Agent 1 -->
+  <circle cx="320" cy="280" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="328" y1="280" x2="420" y2="310" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="320" y1="288" x2="290" y2="380" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="312" y1="276" x2="240" y2="230" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 2 -->
+  <circle cx="580" cy="200" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="588" y1="200" x2="680" y2="260" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="572" y1="204" x2="420" y2="310" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="580" y1="208" x2="610" y2="340" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 3 -->
+  <circle cx="420" cy="450" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="428" y1="450" x2="580" y2="500" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="412" y1="446" x2="290" y2="380" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 4 -->
+  <circle cx="780" cy="360" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="780" y1="368" x2="750" y2="480" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="788" y1="356" x2="900" y2="300" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="772" y1="364" x2="680" y2="260" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 5 -->
+  <circle cx="1050" cy="250" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="1050" y1="258" x2="1020" y2="380" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1058" y1="250" x2="1200" y2="280" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1042" y1="254" x2="900" y2="300" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 6 -->
+  <circle cx="1300" cy="340" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="1300" y1="348" x2="1280" y2="480" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1308" y1="336" x2="1450" y2="280" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1292" y1="344" x2="1200" y2="280" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 7 -->
+  <circle cx="1550" cy="220" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="1550" y1="228" x2="1500" y2="380" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1558" y1="224" x2="1650" y2="300" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1542" y1="216" x2="1450" y2="280" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 8 -->
+  <circle cx="240" cy="600" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="248" y1="600" x2="380" y2="580" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="240" y1="608" x2="300" y2="720" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 9 -->
+  <circle cx="650" cy="640" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="650" y1="648" x2="700" y2="750" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="642" y1="636" x2="580" y2="500" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 10 -->
+  <circle cx="1100" cy="550" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="1108" y1="550" x2="1280" y2="480" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1092" y1="554" x2="1020" y2="380" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1100" y1="558" x2="1050" y2="680" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 11 -->
+  <circle cx="1500" cy="500" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="1500" y1="508" x2="1450" y2="620" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1508" y1="496" x2="1650" y2="300" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Agent 12 -->
+  <circle cx="1680" cy="500" r="8" fill="#7EB8DA" opacity="0.7"/>
+  <line x1="1680" y1="508" x2="1620" y2="620" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+  <line x1="1672" y1="496" x2="1500" y2="500" stroke="#7EB8DA" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Red pulse ripple — the incident -->
+  <circle cx="900" cy="440" r="30" fill="none" stroke="#F87171" stroke-width="2" opacity="0.6"/>
+  <circle cx="900" cy="440" r="60" fill="none" stroke="#F87171" stroke-width="1.5" opacity="0.35"/>
+  <circle cx="900" cy="440" r="100" fill="none" stroke="#F87171" stroke-width="1" opacity="0.2"/>
+  <circle cx="900" cy="440" r="150" fill="none" stroke="#F87171" stroke-width="0.5" opacity="0.1"/>
+
+  <!-- Red question marks scattered near the pulse -->
+  <text x="840" y="380" font-family="Inter, sans-serif" font-size="18" fill="#F87171" opacity="0.5">?</text>
+  <text x="970" y="420" font-family="Inter, sans-serif" font-size="18" fill="#F87171" opacity="0.5">?</text>
+  <text x="880" y="520" font-family="Inter, sans-serif" font-size="18" fill="#F87171" opacity="0.5">?</text>
+  <text x="950" y="490" font-family="Inter, sans-serif" font-size="14" fill="#F87171" opacity="0.4">?</text>
+  <text x="820" y="470" font-family="Inter, sans-serif" font-size="14" fill="#F87171" opacity="0.4">?</text>
+
+  <!-- Action labels floating near agents — tangled, no structure -->
+  <text x="380" y="300" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">booking_flight</text>
+  <text x="640" y="250" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">transfer_$4200</text>
+  <text x="1020" y="240" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">deploy_v3.2.1</text>
+  <text x="1350" y="320" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">send_email</text>
+  <text x="1560" y="210" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">modify_db</text>
+  <text x="380" y="570" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">write_config</text>
+  <text x="700" y="630" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">execute_trade</text>
+  <text x="1130" y="540" font-family="JetBrains Mono, monospace" font-size="10" fill="#5A5A5E" opacity="0.6">revoke_access</text>
+
+  <!-- Bottom text -->
+  <text x="960" y="820" font-family="Inter, sans-serif" font-size="28" fill="#E8E6E3" text-anchor="middle" font-weight="300" letter-spacing="1">No proof. No accountability. No trust.</text>
+
+  <!-- Subtitle -->
+  <text x="960" y="870" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">Which agent acted? Who authorized it? What went wrong?</text>
+
+  <!-- Three problem indicators -->
+  <rect x="560" y="920" width="200" height="36" rx="4" fill="#F87171" opacity="0.08"/>
+  <text x="660" y="943" font-family="JetBrains Mono, monospace" font-size="12" fill="#F87171" text-anchor="middle">No provenance</text>
+
+  <rect x="860" y="920" width="200" height="36" rx="4" fill="#F87171" opacity="0.08"/>
+  <text x="960" y="943" font-family="JetBrains Mono, monospace" font-size="12" fill="#F87171" text-anchor="middle">No audit trail</text>
+
+  <rect x="1160" y="920" width="200" height="36" rx="4" fill="#F87171" opacity="0.08"/>
+  <text x="1260" y="943" font-family="JetBrains Mono, monospace" font-size="12" fill="#F87171" text-anchor="middle">No authority chain</text>
+</svg>

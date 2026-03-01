@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Title -->
+  <text x="960" y="60" font-family="Inter, sans-serif" font-size="18" fill="#8A8A8E" text-anchor="middle" letter-spacing="4">THE AGENTIC INTERNET</text>
+
+  <!-- ===== MESH NETWORK ===== -->
+
+  <!-- Human nodes (gold) -->
+  <circle cx="480" cy="300" r="18" fill="none" stroke="#FBBF24" stroke-width="1.5"/>
+  <text x="480" y="306" font-family="Inter, sans-serif" font-size="12" fill="#FBBF24" text-anchor="middle">H</text>
+
+  <circle cx="1440" cy="300" r="18" fill="none" stroke="#FBBF24" stroke-width="1.5"/>
+  <text x="1440" y="306" font-family="Inter, sans-serif" font-size="12" fill="#FBBF24" text-anchor="middle">H</text>
+
+  <circle cx="960" cy="700" r="18" fill="none" stroke="#FBBF24" stroke-width="1.5"/>
+  <text x="960" y="706" font-family="Inter, sans-serif" font-size="12" fill="#FBBF24" text-anchor="middle">H</text>
+
+  <!-- Agent nodes (green) -->
+  <circle cx="700" cy="220" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="700" y="225" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A1</text>
+
+  <circle cx="600" cy="480" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="600" y="485" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A2</text>
+
+  <circle cx="960" cy="380" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="960" y="385" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A3</text>
+
+  <circle cx="1200" cy="220" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="1200" y="225" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A4</text>
+
+  <circle cx="1320" cy="520" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="1320" y="525" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A5</text>
+
+  <circle cx="780" cy="600" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="780" y="605" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A6</text>
+
+  <circle cx="1140" cy="620" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="1140" y="625" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A7</text>
+
+  <!-- Service nodes (blue) -->
+  <circle cx="340" cy="440" r="14" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="340" y="445" font-family="Inter, sans-serif" font-size="10" fill="#7EB8DA" text-anchor="middle">S1</text>
+
+  <circle cx="1600" cy="440" r="14" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="1600" y="445" font-family="Inter, sans-serif" font-size="10" fill="#7EB8DA" text-anchor="middle">S2</text>
+
+  <circle cx="960" cy="160" r="14" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="960" y="165" font-family="Inter, sans-serif" font-size="10" fill="#7EB8DA" text-anchor="middle">S3</text>
+
+  <!-- ===== CONNECTIONS WITH TRANSPORT LABELS ===== -->
+
+  <!-- H1 → A1 (HTTP) -->
+  <line x1="496" y1="288" x2="688" y2="228" stroke="#333338" stroke-width="1"/>
+  <text x="590" y="248" font-family="JetBrains Mono, monospace" font-size="9" fill="#5A5A5E" text-anchor="middle">HTTP</text>
+
+  <!-- H1 → S1 -->
+  <line x1="466" y1="314" x2="350" y2="428" stroke="#333338" stroke-width="1"/>
+
+  <!-- H1 → A2 -->
+  <line x1="488" y1="316" x2="596" y2="468" stroke="#333338" stroke-width="1"/>
+
+  <!-- A1 → S3 -->
+  <line x1="712" y1="210" x2="948" y2="168" stroke="#333338" stroke-width="1"/>
+
+  <!-- A1 → A3 -->
+  <line x1="712" y1="230" x2="948" y2="372" stroke="#333338" stroke-width="1"/>
+  <text x="840" y="290" font-family="JetBrains Mono, monospace" font-size="9" fill="#5A5A5E" text-anchor="middle">Mesh</text>
+
+  <!-- S3 → A4 -->
+  <line x1="972" y1="168" x2="1188" y2="214" stroke="#333338" stroke-width="1"/>
+
+  <!-- A4 → H2 -->
+  <line x1="1212" y1="228" x2="1428" y2="290" stroke="#333338" stroke-width="1"/>
+  <text x="1320" y="248" font-family="JetBrains Mono, monospace" font-size="9" fill="#5A5A5E" text-anchor="middle">HTTP</text>
+
+  <!-- H2 → A5 -->
+  <line x1="1432" y1="316" x2="1328" y2="510" stroke="#333338" stroke-width="1"/>
+
+  <!-- H2 → S2 -->
+  <line x1="1456" y1="312" x2="1592" y2="430" stroke="#333338" stroke-width="1"/>
+
+  <!-- A3 → A5 -->
+  <line x1="974" y1="386" x2="1308" y2="514" stroke="#333338" stroke-width="1"/>
+  <text x="1150" y="440" font-family="JetBrains Mono, monospace" font-size="9" fill="#5A5A5E" text-anchor="middle">LoRa</text>
+
+  <!-- A2 → A6 -->
+  <line x1="610" y1="492" x2="770" y2="592" stroke="#333338" stroke-width="1"/>
+
+  <!-- A3 → A6 -->
+  <line x1="950" y1="392" x2="788" y2="592" stroke="#333338" stroke-width="1"/>
+
+  <!-- A6 → H3 -->
+  <line x1="792" y1="610" x2="946" y2="694" stroke="#333338" stroke-width="1"/>
+  <text x="870" y="642" font-family="JetBrains Mono, monospace" font-size="9" fill="#5A5A5E" text-anchor="middle">Encrypted</text>
+
+  <!-- H3 → A7 -->
+  <line x1="976" y1="696" x2="1130" y2="628" stroke="#333338" stroke-width="1"/>
+
+  <!-- A7 → A5 -->
+  <line x1="1148" y1="610" x2="1312" y2="530" stroke="#333338" stroke-width="1"/>
+
+  <!-- ===== RECEIPT EXCHANGE CLUSTER (zoom detail) ===== -->
+  <rect x="140" y="650" width="320" height="200" rx="6" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="300" y="680" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E" text-anchor="middle">Receipt Exchange</text>
+
+  <!-- Mini nodes exchanging -->
+  <circle cx="220" cy="740" r="10" fill="none" stroke="#4ADE80" stroke-width="1"/>
+  <circle cx="380" cy="740" r="10" fill="none" stroke="#4ADE80" stroke-width="1"/>
+
+  <!-- Bidirectional receipt arrows -->
+  <line x1="232" y1="734" x2="366" y2="734" stroke="#4ADE80" stroke-width="1"/>
+  <polygon points="366,730 376,734 366,738" fill="#4ADE80"/>
+  <line x1="368" y1="746" x2="234" y2="746" stroke="#7EB8DA" stroke-width="1"/>
+  <polygon points="234,742 224,746 234,750" fill="#7EB8DA"/>
+
+  <!-- Mini receipt labels -->
+  <text x="300" y="726" font-family="JetBrains Mono, monospace" font-size="8" fill="#4ADE80" text-anchor="middle">receipt_014</text>
+  <text x="300" y="760" font-family="JetBrains Mono, monospace" font-size="8" fill="#7EB8DA" text-anchor="middle">receipt_015</text>
+
+  <text x="300" y="800" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">Peer-to-peer consensus</text>
+  <text x="300" y="816" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">through receipt exchange</text>
+
+  <!-- ===== FRAMEWORK BADGES ===== -->
+  <rect x="1460" y="650" width="320" height="200" rx="6" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="1620" y="680" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E" text-anchor="middle">Framework Coverage</text>
+
+  <rect x="1490" y="700" width="140" height="26" rx="4" fill="#7EB8DA" opacity="0.08"/>
+  <text x="1560" y="718" font-family="JetBrains Mono, monospace" font-size="10" fill="#7EB8DA" text-anchor="middle">NIST AI RMF</text>
+
+  <rect x="1650" y="700" width="110" height="26" rx="4" fill="#7EB8DA" opacity="0.08"/>
+  <text x="1705" y="718" font-family="JetBrains Mono, monospace" font-size="10" fill="#7EB8DA" text-anchor="middle">OWASP</text>
+
+  <rect x="1490" y="736" width="140" height="26" rx="4" fill="#7EB8DA" opacity="0.08"/>
+  <text x="1560" y="754" font-family="JetBrains Mono, monospace" font-size="10" fill="#7EB8DA" text-anchor="middle">MITRE ATLAS</text>
+
+  <rect x="1650" y="736" width="110" height="26" rx="4" fill="#7EB8DA" opacity="0.08"/>
+  <text x="1705" y="754" font-family="JetBrains Mono, monospace" font-size="10" fill="#7EB8DA" text-anchor="middle">EU AI Act</text>
+
+  <text x="1620" y="800" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">Native compliance coverage</text>
+  <text x="1620" y="816" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">across major frameworks</text>
+
+  <!-- ===== LEGEND ===== -->
+  <circle cx="680" cy="920" r="8" fill="none" stroke="#FBBF24" stroke-width="1.5"/>
+  <text x="700" y="925" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">Human</text>
+
+  <circle cx="820" cy="920" r="8" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="840" y="925" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">Agent</text>
+
+  <circle cx="960" cy="920" r="8" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="980" y="925" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">Service</text>
+
+  <text x="1160" y="925" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">All first-class peers</text>
+
+  <!-- Bottom tagline -->
+  <text x="960" y="1010" font-family="Inter, sans-serif" font-size="16" fill="#5A5A5E" text-anchor="middle" font-style="italic">"Identity is a keypair. Authentication is a signature."</text>
+  <text x="960" y="1040" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">The same protocol over fiber at a gigabit or LoRa at 300 baud.</text>
+</svg>

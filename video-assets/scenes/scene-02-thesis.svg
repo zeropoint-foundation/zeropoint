@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Geometric frame — order imposed on chaos -->
+  <rect x="260" y="140" width="1400" height="800" rx="2" fill="none" stroke="#333338" stroke-width="1"/>
+  <rect x="280" y="160" width="1360" height="760" rx="2" fill="none" stroke="#222228" stroke-width="0.5"/>
+
+  <!-- Residual chaos nodes (faint, pushed to edges) -->
+  <circle cx="180" cy="200" r="4" fill="#7EB8DA" opacity="0.15"/>
+  <circle cx="140" cy="400" r="3" fill="#7EB8DA" opacity="0.1"/>
+  <circle cx="1780" cy="300" r="4" fill="#7EB8DA" opacity="0.15"/>
+  <circle cx="1800" cy="600" r="3" fill="#7EB8DA" opacity="0.1"/>
+  <circle cx="200" cy="800" r="3" fill="#7EB8DA" opacity="0.1"/>
+  <circle cx="1760" cy="850" r="4" fill="#7EB8DA" opacity="0.12"/>
+
+  <!-- Ordered nodes inside the frame — structured, geometric -->
+  <!-- Row 1 -->
+  <circle cx="480" cy="320" r="6" fill="#7EB8DA" opacity="0.5"/>
+  <circle cx="720" cy="320" r="6" fill="#4ADE80" opacity="0.5"/>
+  <circle cx="960" cy="320" r="6" fill="#7EB8DA" opacity="0.5"/>
+  <circle cx="1200" cy="320" r="6" fill="#4ADE80" opacity="0.5"/>
+  <circle cx="1440" cy="320" r="6" fill="#7EB8DA" opacity="0.5"/>
+
+  <!-- Structured connections -->
+  <line x1="486" y1="320" x2="714" y2="320" stroke="#333338" stroke-width="0.8"/>
+  <line x1="726" y1="320" x2="954" y2="320" stroke="#333338" stroke-width="0.8"/>
+  <line x1="966" y1="320" x2="1194" y2="320" stroke="#333338" stroke-width="0.8"/>
+  <line x1="1206" y1="320" x2="1434" y2="320" stroke="#333338" stroke-width="0.8"/>
+
+  <!-- Row 2 -->
+  <circle cx="600" cy="440" r="6" fill="#4ADE80" opacity="0.5"/>
+  <circle cx="840" cy="440" r="6" fill="#7EB8DA" opacity="0.5"/>
+  <circle cx="1080" cy="440" r="6" fill="#7EB8DA" opacity="0.5"/>
+  <circle cx="1320" cy="440" r="6" fill="#4ADE80" opacity="0.5"/>
+
+  <line x1="606" y1="440" x2="834" y2="440" stroke="#333338" stroke-width="0.8"/>
+  <line x1="846" y1="440" x2="1074" y2="440" stroke="#333338" stroke-width="0.8"/>
+  <line x1="1086" y1="440" x2="1314" y2="440" stroke="#333338" stroke-width="0.8"/>
+
+  <!-- Vertical links -->
+  <line x1="720" y1="326" x2="600" y2="434" stroke="#333338" stroke-width="0.5"/>
+  <line x1="960" y1="326" x2="840" y2="434" stroke="#333338" stroke-width="0.5"/>
+  <line x1="960" y1="326" x2="1080" y2="434" stroke="#333338" stroke-width="0.5"/>
+  <line x1="1200" y1="326" x2="1320" y2="434" stroke="#333338" stroke-width="0.5"/>
+
+  <!-- ZeroPoint wordmark -->
+  <text x="960" y="580" font-family="Inter, sans-serif" font-size="48" fill="#E8E6E3" text-anchor="middle" font-weight="300" letter-spacing="8">ZEROPOINT</text>
+
+  <!-- Subtitle line -->
+  <line x1="760" y1="600" x2="1160" y2="600" stroke="#333338" stroke-width="0.5"/>
+
+  <!-- Three pillars appearing one at a time -->
+  <text x="660" y="660" font-family="Inter, sans-serif" font-size="18" fill="#7EB8DA" text-anchor="middle" letter-spacing="3">PROVABLE</text>
+  <text x="960" y="660" font-family="Inter, sans-serif" font-size="18" fill="#7EB8DA" text-anchor="middle" letter-spacing="3">TRACEABLE</text>
+  <text x="1260" y="660" font-family="Inter, sans-serif" font-size="18" fill="#7EB8DA" text-anchor="middle" letter-spacing="3">AUDITABLE</text>
+
+  <!-- Separator dots -->
+  <circle cx="810" cy="654" r="2" fill="#5A5A5E"/>
+  <circle cx="1110" cy="654" r="2" fill="#5A5A5E"/>
+
+  <!-- Description -->
+  <text x="960" y="730" font-family="Inter, sans-serif" font-size="15" fill="#8A8A8E" text-anchor="middle">Portable trust infrastructure. Cryptographic primitives that make</text>
+  <text x="960" y="752" font-family="Inter, sans-serif" font-size="15" fill="#8A8A8E" text-anchor="middle">every action provable, every authority traceable, and every exit real.</text>
+
+  <!-- Tagline -->
+  <text x="960" y="830" font-family="Inter, sans-serif" font-size="20" fill="#E8E6E3" text-anchor="middle" font-weight="300" font-style="italic">Your keys. Your chain. Your trust.</text>
+
+  <!-- Corner accents — structural marks -->
+  <line x1="260" y1="140" x2="290" y2="140" stroke="#7EB8DA" stroke-width="2"/>
+  <line x1="260" y1="140" x2="260" y2="170" stroke="#7EB8DA" stroke-width="2"/>
+
+  <line x1="1660" y1="140" x2="1630" y2="140" stroke="#7EB8DA" stroke-width="2"/>
+  <line x1="1660" y1="140" x2="1660" y2="170" stroke="#7EB8DA" stroke-width="2"/>
+
+  <line x1="260" y1="940" x2="290" y2="940" stroke="#7EB8DA" stroke-width="2"/>
+  <line x1="260" y1="940" x2="260" y2="910" stroke="#7EB8DA" stroke-width="2"/>
+
+  <line x1="1660" y1="940" x2="1630" y2="940" stroke="#7EB8DA" stroke-width="2"/>
+  <line x1="1660" y1="940" x2="1660" y2="910" stroke="#7EB8DA" stroke-width="2"/>
+
+  <!-- Bottom text -->
+  <text x="960" y="1010" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">No platform required. No central authority.</text>
+</svg>

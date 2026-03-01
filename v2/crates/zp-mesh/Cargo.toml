@@ -1,0 +1,48 @@
+[package]
+name = "zp-mesh"
+description = "Sovereign mesh transport for ZeroPoint agents — Reticulum-compatible cryptographic networking"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Local workspace crates
+zp-core = { path = "../zp-core" }
+zp-trust = { path = "../zp-trust" }
+zp-receipt = { path = "../zp-receipt" }
+zp-audit = { path = "../zp-audit" }
+
+# Workspace dependencies
+tokio.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+hex.workspace = true
+rand.workspace = true
+blake3.workspace = true
+
+# Cryptography — Ed25519 signing + X25519 key exchange (Reticulum-compatible)
+ed25519-dalek.workspace = true
+x25519-dalek.workspace = true
+sha2.workspace = true
+hkdf.workspace = true
+aes.workspace = true
+cbc.workspace = true
+hmac.workspace = true
+
+# Serialization — msgpack for Reticulum wire format
+rmp-serde.workspace = true
+
+# Database — persistent mesh state
+rusqlite.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true
+tempfile = "3"

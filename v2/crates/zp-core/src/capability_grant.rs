@@ -1,0 +1,1758 @@
+//! Capability grants — signed, portable capability tokens for ZeroPoint v2 governance.
+//!
+//! This module implements the core authorization mechanism for ZeroPoint. Capabilities are
+//! granted at link establishment time and enforced locally by the Guard. They travel with
+//! the agent across the mesh, signed and verifiable.
+//!
+//! From the governance framework: "Agents operate within capability envelopes — sets of
+//! allowed actions with constraints. Capabilities are granted at link establishment time
+//! and enforced locally by the Guard."
+
+use chrono::{DateTime, Timelike, Utc};
+use ed25519_dalek::{Signer as DalekSigner, SigningKey, VerifyingKey};
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
+use crate::policy::{ActionType, TrustTier};
+
+/// A signed, portable capability grant — the unit of authorization in ZeroPoint.
+///
+/// Capabilities are granted at link establishment time and enforced locally by the Guard.
+/// They travel with the agent across the mesh, carrying proof of who granted them and
+/// what constraints apply.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityGrant {
+    /// Unique grant identifier, prefixed with "grant-"
+    pub id: String,
+
+    /// What capability is being granted
+    pub capability: GrantedCapability,
+
+    /// Limits on how this capability can be exercised
+    pub constraints: Vec<Constraint>,
+
+    /// DestinationHash hex of who granted this capability
+    pub grantor: String,
+
+    /// DestinationHash hex of who received this capability
+    pub grantee: String,
+
+    /// Minimum trust tier required to exercise this capability
+    pub trust_tier: TrustTier,
+
+    /// Timestamp when this grant was created
+    pub created_at: DateTime<Utc>,
+
+    /// Optional expiration time. If None, the grant never expires.
+    pub expires_at: Option<DateTime<Utc>>,
+
+    /// Proof of grant — references a signed receipt that authorized this grant
+    pub receipt_id: String,
+
+    /// Ed25519 signature over the canonical form of this grant
+    pub signature: Option<String>,
+
+    /// Public key of the signer, in hex format
+    pub signer_public_key: Option<String>,
+
+    // --- Phase 3: Delegation Chain fields ---
+    /// If this grant was delegated from another, the parent grant's ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_grant_id: Option<String>,
+
+    /// How many hops from the original grant (0 = original, 1 = first delegation, etc.)
+    #[serde(default)]
+    pub delegation_depth: u8,
+
+    /// Maximum allowed delegation depth. Delegated grants cannot exceed this.
+    #[serde(default = "default_max_delegation_depth")]
+    pub max_delegation_depth: u8,
+}
+
+fn default_max_delegation_depth() -> u8 {
+    3
+}
+
+impl CapabilityGrant {
+    /// Create a new capability grant with a builder-style constructor.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let grant = CapabilityGrant::new(
+    ///     "grantor_hash",
+    ///     "grantee_hash",
+    ///     GrantedCapability::Read { scope: vec!["data/*".to_string()] },
+    ///     "receipt_123",
+    /// )
+    /// .with_constraint(Constraint::MaxCost(10.0))
+    /// .with_expiration(chrono::Utc::now() + chrono::Duration::hours(24));
+    /// ```
+    pub fn new(
+        grantor: String,
+        grantee: String,
+        capability: GrantedCapability,
+        receipt_id: String,
+    ) -> Self {
+        let id = format!("grant-{}", uuid::Uuid::now_v7());
+
+        Self {
+            id,
+            capability,
+            constraints: Vec::new(),
+            grantor,
+            grantee,
+            trust_tier: TrustTier::Tier0,
+            created_at: Utc::now(),
+            expires_at: None,
+            receipt_id,
+            signature: None,
+            signer_public_key: None,
+            parent_grant_id: None,
+            delegation_depth: 0,
+            max_delegation_depth: 3,
+        }
+    }
+
+    /// Add a constraint to this grant (builder pattern).
+    pub fn with_constraint(mut self, constraint: Constraint) -> Self {
+        self.constraints.push(constraint);
+        self
+    }
+
+    /// Add multiple constraints at once (builder pattern).
+    pub fn with_constraints(mut self, constraints: Vec<Constraint>) -> Self {
+        self.constraints.extend(constraints);
+        self
+    }
+
+    /// Set the trust tier required for this grant (builder pattern).
+    pub fn with_trust_tier(mut self, tier: TrustTier) -> Self {
+        self.trust_tier = tier;
+        self
+    }
+
+    /// Set the expiration time for this grant (builder pattern).
+    pub fn with_expiration(mut self, expires_at: DateTime<Utc>) -> Self {
+        self.expires_at = Some(expires_at);
+        self
+    }
+
+    /// Set the expiration time to a relative duration from now (builder pattern).
+    pub fn with_expiration_duration(mut self, duration: Duration) -> Self {
+        self.expires_at =
+            Some(Utc::now() + chrono::Duration::from_std(duration).unwrap_or_default());
+        self
+    }
+
+    /// Set the signature and signer's public key (builder pattern).
+    pub fn with_signature(mut self, signature: String, signer_public_key: String) -> Self {
+        self.signature = Some(signature);
+        self.signer_public_key = Some(signer_public_key);
+        self
+    }
+
+    /// Set the maximum delegation depth (builder pattern).
+    pub fn with_max_delegation_depth(mut self, depth: u8) -> Self {
+        self.max_delegation_depth = depth;
+        self
+    }
+
+    /// Delegate this grant to another agent, producing a child grant.
+    ///
+    /// The child grant:
+    /// - Has a new ID and the delegator as grantor
+    /// - References this grant as `parent_grant_id`
+    /// - Has `delegation_depth = self.delegation_depth + 1`
+    /// - Inherits `max_delegation_depth` from the parent
+    /// - Must have equal or narrower scope (enforced by `narrow_capability`)
+    /// - Inherits all parent constraints plus any additional ones
+    /// - Inherits expiration: uses the earlier of parent's expiration or requested expiration
+    /// - Trust tier is max(parent_tier, requested_tier) — never lower than parent
+    ///
+    /// Returns `Err` if delegation depth would exceed `max_delegation_depth`,
+    /// or if the requested capability is not a subset of the parent's.
+    pub fn delegate(
+        &self,
+        delegatee: String,
+        capability: GrantedCapability,
+        receipt_id: String,
+    ) -> Result<Self, DelegationError> {
+        // Check depth limit
+        let new_depth = self.delegation_depth + 1;
+        if new_depth > self.max_delegation_depth {
+            return Err(DelegationError::DepthExceeded {
+                current: self.delegation_depth,
+                max: self.max_delegation_depth,
+            });
+        }
+
+        // Verify the requested capability is a subset of the parent's
+        if !self.capability.contains(&capability) {
+            return Err(DelegationError::ScopeNotSubset {
+                parent: self.capability.name().to_string(),
+                requested: capability.name().to_string(),
+            });
+        }
+
+        // Check the grant is still valid
+        if self.is_expired() {
+            return Err(DelegationError::ParentExpired);
+        }
+
+        let mut child = CapabilityGrant::new(
+            self.grantee.clone(), // delegator becomes the grantor
+            delegatee,
+            capability,
+            receipt_id,
+        );
+
+        child.parent_grant_id = Some(self.id.clone());
+        child.delegation_depth = new_depth;
+        child.max_delegation_depth = self.max_delegation_depth;
+
+        // Inherit parent constraints
+        child.constraints = self.constraints.clone();
+
+        // Inherit trust tier (child can never be lower/more permissive than parent)
+        child.trust_tier = self.trust_tier;
+
+        // Inherit expiration (child can never outlive parent)
+        child.expires_at = self.expires_at;
+
+        Ok(child)
+    }
+
+    /// Check if this grant is a delegated grant (not an original).
+    pub fn is_delegated(&self) -> bool {
+        self.parent_grant_id.is_some()
+    }
+
+    /// Check if this grant can still be delegated further.
+    pub fn can_delegate(&self) -> bool {
+        self.delegation_depth < self.max_delegation_depth && !self.is_expired()
+    }
+
+    /// Check if this grant has expired.
+    pub fn is_expired(&self) -> bool {
+        if let Some(expires) = self.expires_at {
+            Utc::now() > expires
+        } else {
+            false
+        }
+    }
+
+    /// Check if this grant is still valid (not expired).
+    pub fn is_valid(&self) -> bool {
+        !self.is_expired()
+    }
+
+    /// Check if this grant covers a given action type.
+    ///
+    /// Returns true if the granted capability matches the action, false otherwise.
+    /// This does not check constraints — see `check_constraints()` for that.
+    pub fn matches_action(&self, action: &ActionType) -> bool {
+        match (&self.capability, action) {
+            // Read grant matches Read actions
+            (GrantedCapability::Read { scope: grant_scope }, ActionType::Read { target }) => {
+                self.path_matches_scope(target, grant_scope)
+            }
+
+            // Write grant matches Write actions
+            (GrantedCapability::Write { scope: grant_scope }, ActionType::Write { target }) => {
+                self.path_matches_scope(target, grant_scope)
+            }
+
+            // Execute grant matches Execute actions
+            (
+                GrantedCapability::Execute {
+                    languages: granted_langs,
+                },
+                ActionType::Execute { language },
+            ) => granted_langs.contains(language) || granted_langs.contains(&"*".to_string()),
+
+            // CredentialAccess grant matches CredentialAccess actions
+            (
+                GrantedCapability::CredentialAccess {
+                    credential_refs: granted_refs,
+                },
+                ActionType::CredentialAccess { credential_ref },
+            ) => granted_refs.contains(credential_ref) || granted_refs.contains(&"*".to_string()),
+
+            // ApiCall grant matches ApiCall actions
+            (
+                GrantedCapability::ApiCall {
+                    endpoints: granted_endpoints,
+                },
+                ActionType::ApiCall { endpoint },
+            ) => self.endpoint_matches_scope(endpoint, granted_endpoints),
+
+            // ConfigChange grant matches ConfigChange actions
+            (
+                GrantedCapability::ConfigChange {
+                    settings: granted_settings,
+                },
+                ActionType::ConfigChange { setting },
+            ) => granted_settings.contains(setting) || granted_settings.contains(&"*".to_string()),
+
+            // MeshSend grant doesn't directly match ActionType (it's a custom capability)
+            // but we include it for completeness
+            (GrantedCapability::MeshSend { .. }, _) => false,
+
+            // Custom capability requires explicit name matching
+            (
+                GrantedCapability::Custom {
+                    name: _grant_name, ..
+                },
+                _,
+            ) => {
+                // Custom capabilities don't match standard ActionTypes
+                false
+            }
+
+            // All other combinations don't match
+            _ => false,
+        }
+    }
+
+    /// Check if all constraints are satisfied for a given action context.
+    ///
+    /// Returns a list of constraint violations. Empty list means all constraints are satisfied.
+    pub fn check_constraints(&self, context: &ConstraintContext) -> Vec<ConstraintViolation> {
+        let mut violations = Vec::new();
+
+        for constraint in &self.constraints {
+            if let Some(violation) = constraint.check(context) {
+                violations.push(violation);
+            }
+        }
+
+        violations
+    }
+
+    /// Serialize this grant to canonical bytes for signing.
+    ///
+    /// Uses deterministic JSON serialization (sorted keys) to ensure that the same grant
+    /// always produces the same bytes, regardless of field order. This is essential for
+    /// signature verification.
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        // Create a version without signature for canonicalization
+        let canonical = CanonicalForm {
+            id: self.id.clone(),
+            capability: self.capability.clone(),
+            constraints: self.constraints.clone(),
+            grantor: self.grantor.clone(),
+            grantee: self.grantee.clone(),
+            trust_tier: self.trust_tier,
+            created_at: self.created_at,
+            expires_at: self.expires_at,
+            receipt_id: self.receipt_id.clone(),
+            parent_grant_id: self.parent_grant_id.clone(),
+            delegation_depth: self.delegation_depth,
+            max_delegation_depth: self.max_delegation_depth,
+        };
+
+        // Serialize to JSON with sorted keys
+        serde_json::to_vec(&canonical).unwrap_or_default()
+    }
+
+    /// Sign this grant with an Ed25519 signing key.
+    ///
+    /// Computes the signature over `canonical_bytes()` and stores both the
+    /// hex-encoded signature and the hex-encoded public key on the grant.
+    pub fn sign(&mut self, signing_key: &SigningKey) {
+        let canonical = self.canonical_bytes();
+        let signature = signing_key.sign(&canonical);
+        self.signature = Some(hex::encode(signature.to_bytes()));
+        self.signer_public_key = Some(hex::encode(signing_key.verifying_key().to_bytes()));
+    }
+
+    /// Verify the Ed25519 signature on this grant.
+    ///
+    /// Returns true if the signature is valid against the stored public key
+    /// and the canonical bytes of this grant. Returns false if no signature
+    /// is present, or if verification fails.
+    pub fn verify_signature(&self) -> bool {
+        match (&self.signature, &self.signer_public_key) {
+            (Some(sig_hex), Some(pubkey_hex)) => {
+                // Parse the public key from hex
+                let pubkey_bytes = match hex::decode(pubkey_hex) {
+                    Ok(b) if b.len() == 32 => b,
+                    _ => return false,
+                };
+                let mut key_array = [0u8; 32];
+                key_array.copy_from_slice(&pubkey_bytes);
+
+                let verifying_key = match VerifyingKey::from_bytes(&key_array) {
+                    Ok(k) => k,
+                    Err(_) => return false,
+                };
+
+                // Parse the signature from hex
+                let sig_bytes = match hex::decode(sig_hex) {
+                    Ok(b) if b.len() == 64 => b,
+                    _ => return false,
+                };
+                let mut sig_array = [0u8; 64];
+                sig_array.copy_from_slice(&sig_bytes);
+                let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
+
+                // Verify against canonical bytes (excludes signature itself)
+                let canonical = self.canonical_bytes();
+                verifying_key.verify_strict(&canonical, &signature).is_ok()
+            }
+            _ => false,
+        }
+    }
+
+    /// Helper: check if a path matches any glob pattern in scope.
+    fn path_matches_scope(&self, path: &str, scope: &[String]) -> bool {
+        if scope.contains(&"*".to_string()) {
+            return true;
+        }
+
+        // Simple glob matching: "data/*" matches "data/foo" and "data/bar"
+        scope.iter().any(|pattern| {
+            if let Some(prefix) = pattern.strip_suffix("/*") {
+                path.starts_with(prefix)
+            } else {
+                pattern == path
+            }
+        })
+    }
+
+    /// Helper: check if an endpoint matches any pattern in scope.
+    fn endpoint_matches_scope(&self, endpoint: &str, scope: &[String]) -> bool {
+        if scope.contains(&"*".to_string()) {
+            return true;
+        }
+
+        scope.iter().any(|pattern| {
+            if let Some(prefix) = pattern.strip_suffix("/*") {
+                endpoint.starts_with(prefix)
+            } else {
+                pattern == endpoint
+            }
+        })
+    }
+}
+
+/// What capability is being granted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GrantedCapability {
+    /// Read files/data within scope
+    Read { scope: Vec<String> },
+
+    /// Write/modify files/data within scope
+    Write { scope: Vec<String> },
+
+    /// Execute code in specified languages
+    Execute { languages: Vec<String> },
+
+    /// Access specific credentials (by reference, not value)
+    CredentialAccess { credential_refs: Vec<String> },
+
+    /// Make API calls to specified endpoints
+    ApiCall { endpoints: Vec<String> },
+
+    /// System configuration changes
+    ConfigChange { settings: Vec<String> },
+
+    /// Send messages to specified destinations
+    MeshSend { destinations: Vec<String> },
+
+    /// Custom capability (for extensibility)
+    Custom {
+        name: String,
+        parameters: serde_json::Value,
+    },
+}
+
+impl GrantedCapability {
+    /// Human-readable name for this capability.
+    pub fn name(&self) -> &str {
+        match self {
+            GrantedCapability::Read { .. } => "read",
+            GrantedCapability::Write { .. } => "write",
+            GrantedCapability::Execute { .. } => "execute",
+            GrantedCapability::CredentialAccess { .. } => "credential_access",
+            GrantedCapability::ApiCall { .. } => "api_call",
+            GrantedCapability::ConfigChange { .. } => "config_change",
+            GrantedCapability::MeshSend { .. } => "mesh_send",
+            GrantedCapability::Custom { name, .. } => name,
+        }
+    }
+
+    /// Check if `other` is a subset of (or equal to) this capability.
+    ///
+    /// Used during delegation to ensure the child grant doesn't exceed
+    /// the parent's scope. A wildcard scope (`"*"`) contains everything.
+    pub fn contains(&self, other: &GrantedCapability) -> bool {
+        match (self, other) {
+            (
+                GrantedCapability::Read { scope: parent },
+                GrantedCapability::Read { scope: child },
+            ) => scope_contains(parent, child),
+            (
+                GrantedCapability::Write { scope: parent },
+                GrantedCapability::Write { scope: child },
+            ) => scope_contains(parent, child),
+            (
+                GrantedCapability::Execute { languages: parent },
+                GrantedCapability::Execute { languages: child },
+            ) => set_contains(parent, child),
+            (
+                GrantedCapability::CredentialAccess {
+                    credential_refs: parent,
+                },
+                GrantedCapability::CredentialAccess {
+                    credential_refs: child,
+                },
+            ) => set_contains(parent, child),
+            (
+                GrantedCapability::ApiCall { endpoints: parent },
+                GrantedCapability::ApiCall { endpoints: child },
+            ) => scope_contains(parent, child),
+            (
+                GrantedCapability::ConfigChange { settings: parent },
+                GrantedCapability::ConfigChange { settings: child },
+            ) => set_contains(parent, child),
+            (
+                GrantedCapability::MeshSend {
+                    destinations: parent,
+                },
+                GrantedCapability::MeshSend {
+                    destinations: child,
+                },
+            ) => set_contains(parent, child),
+            (
+                GrantedCapability::Custom { name: pn, .. },
+                GrantedCapability::Custom { name: cn, .. },
+            ) => pn == cn, // Custom capabilities must match by name; parameters not checked
+            _ => false, // Different capability types are never subsets
+        }
+    }
+}
+
+/// Check if `parent_scope` contains every entry in `child_scope`.
+/// Supports glob patterns: `"data/*"` contains `"data/foo"`, and `"*"` contains everything.
+fn scope_contains(parent: &[String], child: &[String]) -> bool {
+    // Wildcard parent contains everything
+    if parent.contains(&"*".to_string()) {
+        return true;
+    }
+    // Every child entry must be covered by at least one parent entry
+    child.iter().all(|c| {
+        parent.iter().any(|p| {
+            if p == c {
+                true
+            } else if let Some(prefix) = p.strip_suffix("/*") {
+                c.starts_with(prefix)
+            } else {
+                false
+            }
+        })
+    })
+}
+
+/// Check if `parent_set` contains every entry in `child_set`.
+/// A wildcard (`"*"`) in parent means "everything is allowed".
+fn set_contains(parent: &[String], child: &[String]) -> bool {
+    if parent.contains(&"*".to_string()) {
+        return true;
+    }
+    child.iter().all(|c| parent.contains(c))
+}
+
+/// Constraints that limit how a capability can be exercised.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Constraint {
+    /// Maximum cost per action (in currency units)
+    MaxCost(f64),
+
+    /// Rate limit: max actions within a time window
+    RateLimit { max_actions: u32, window_secs: u64 },
+
+    /// Scope restriction: allowed/denied paths
+    ScopeRestriction {
+        allowed: Vec<String>,
+        denied: Vec<String>,
+    },
+
+    /// Every action must produce a receipt
+    RequireReceipt,
+
+    /// Must escalate to this actor type before executing
+    RequireEscalation(String), // Actor type as string for serialization
+
+    /// Time-of-day restriction
+    TimeWindow { start_hour: u8, end_hour: u8 },
+
+    /// Custom constraint
+    Custom {
+        name: String,
+        value: serde_json::Value,
+    },
+}
+
+impl Constraint {
+    /// Check if this constraint is violated in the given context.
+    /// Returns Some(violation) if violated, None if satisfied.
+    pub fn check(&self, context: &ConstraintContext) -> Option<ConstraintViolation> {
+        match self {
+            Constraint::MaxCost(max) => {
+                if context.estimated_cost > *max {
+                    Some(ConstraintViolation {
+                        constraint_name: "MaxCost".to_string(),
+                        reason: format!(
+                            "Estimated cost {} exceeds maximum {}",
+                            context.estimated_cost, max
+                        ),
+                    })
+                } else {
+                    None
+                }
+            }
+
+            Constraint::RateLimit {
+                max_actions,
+                window_secs,
+            } => {
+                if context.recent_action_count >= *max_actions {
+                    Some(ConstraintViolation {
+                        constraint_name: "RateLimit".to_string(),
+                        reason: format!(
+                            "Rate limit exceeded: {} actions in last {} seconds, max allowed: {}",
+                            context.recent_action_count, window_secs, max_actions
+                        ),
+                    })
+                } else {
+                    None
+                }
+            }
+
+            Constraint::ScopeRestriction { allowed, denied } => {
+                let path = &context.resource_path;
+
+                // Check denied list first (deny wins over allow)
+                for denied_pattern in denied {
+                    if Self::pattern_matches(path, denied_pattern) {
+                        return Some(ConstraintViolation {
+                            constraint_name: "ScopeRestriction".to_string(),
+                            reason: format!("Path {} is in denied list", path),
+                        });
+                    }
+                }
+
+                // If allowed list is non-empty, path must match one of them
+                if !allowed.is_empty() {
+                    let is_allowed = allowed.iter().any(|p| Self::pattern_matches(path, p));
+                    if !is_allowed {
+                        return Some(ConstraintViolation {
+                            constraint_name: "ScopeRestriction".to_string(),
+                            reason: format!("Path {} is not in allowed list", path),
+                        });
+                    }
+                }
+
+                None
+            }
+
+            Constraint::RequireReceipt => {
+                // This constraint is satisfied if we're tracking receipt generation
+                // In the context of constraint checking, we assume this is satisfied
+                // unless the runtime explicitly marks it as pending
+                if context.receipt_id.is_none() {
+                    Some(ConstraintViolation {
+                        constraint_name: "RequireReceipt".to_string(),
+                        reason: "This action requires a receipt but none is being generated"
+                            .to_string(),
+                    })
+                } else {
+                    None
+                }
+            }
+
+            Constraint::RequireEscalation(actor_type) => {
+                if Some(actor_type.clone()) != context.escalation_to {
+                    Some(ConstraintViolation {
+                        constraint_name: "RequireEscalation".to_string(),
+                        reason: format!("This action requires escalation to {}", actor_type),
+                    })
+                } else {
+                    None
+                }
+            }
+
+            Constraint::TimeWindow {
+                start_hour,
+                end_hour,
+            } => {
+                let now = Utc::now();
+                let current_hour = now.hour() as u8;
+
+                let is_within_window = if start_hour < end_hour {
+                    current_hour >= *start_hour && current_hour < *end_hour
+                } else {
+                    // Wraps around midnight
+                    current_hour >= *start_hour || current_hour < *end_hour
+                };
+
+                if !is_within_window {
+                    Some(ConstraintViolation {
+                        constraint_name: "TimeWindow".to_string(),
+                        reason: format!(
+                            "Current time {} is outside allowed window {}:00 to {}:00",
+                            current_hour, start_hour, end_hour
+                        ),
+                    })
+                } else {
+                    None
+                }
+            }
+
+            Constraint::Custom { name: _, .. } => {
+                // Custom constraints are not evaluated here
+                None
+            }
+        }
+    }
+
+    /// Helper: check if a path matches a glob pattern.
+    fn pattern_matches(path: &str, pattern: &str) -> bool {
+        if pattern == "*" {
+            return true;
+        }
+
+        if let Some(prefix) = pattern.strip_suffix("/*") {
+            return path.starts_with(prefix);
+        }
+
+        path == pattern
+    }
+}
+
+/// Context for evaluating constraints.
+#[derive(Debug, Clone)]
+pub struct ConstraintContext {
+    /// Estimated cost of this action
+    pub estimated_cost: f64,
+
+    /// Number of similar actions performed recently
+    pub recent_action_count: u32,
+
+    /// Resource path being accessed
+    pub resource_path: String,
+
+    /// Optional receipt ID if being generated
+    pub receipt_id: Option<String>,
+
+    /// Actor type if escalation is in progress
+    pub escalation_to: Option<String>,
+}
+
+impl ConstraintContext {
+    /// Create a new constraint context.
+    pub fn new(resource_path: String) -> Self {
+        Self {
+            estimated_cost: 0.0,
+            recent_action_count: 0,
+            resource_path,
+            receipt_id: None,
+            escalation_to: None,
+        }
+    }
+
+    /// Builder: set estimated cost
+    pub fn with_cost(mut self, cost: f64) -> Self {
+        self.estimated_cost = cost;
+        self
+    }
+
+    /// Builder: set recent action count
+    pub fn with_recent_actions(mut self, count: u32) -> Self {
+        self.recent_action_count = count;
+        self
+    }
+
+    /// Builder: set receipt ID
+    pub fn with_receipt_id(mut self, receipt_id: String) -> Self {
+        self.receipt_id = Some(receipt_id);
+        self
+    }
+
+    /// Builder: set escalation
+    pub fn with_escalation(mut self, actor_type: String) -> Self {
+        self.escalation_to = Some(actor_type);
+        self
+    }
+}
+
+/// A constraint violation — indicates why a constraint check failed.
+#[derive(Debug, Clone)]
+pub struct ConstraintViolation {
+    /// Name of the constraint that was violated
+    pub constraint_name: String,
+
+    /// Human-readable reason for the violation
+    pub reason: String,
+}
+
+/// Error type for delegation failures.
+#[derive(Debug, Clone)]
+pub enum DelegationError {
+    /// Delegation depth would exceed the maximum allowed.
+    DepthExceeded { current: u8, max: u8 },
+    /// Requested capability is not a subset of the parent's scope.
+    ScopeNotSubset { parent: String, requested: String },
+    /// Parent grant has expired.
+    ParentExpired,
+}
+
+impl std::fmt::Display for DelegationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DelegationError::DepthExceeded { current, max } => {
+                write!(
+                    f,
+                    "delegation depth {} would exceed max {}",
+                    current + 1,
+                    max
+                )
+            }
+            DelegationError::ScopeNotSubset { parent, requested } => {
+                write!(
+                    f,
+                    "requested capability '{}' is not a subset of parent '{}'",
+                    requested, parent
+                )
+            }
+            DelegationError::ParentExpired => write!(f, "parent grant has expired"),
+        }
+    }
+}
+
+impl std::error::Error for DelegationError {}
+
+/// Internal type for canonical serialization (excludes signature).
+#[derive(Debug, Serialize, Deserialize)]
+struct CanonicalForm {
+    id: String,
+    capability: GrantedCapability,
+    constraints: Vec<Constraint>,
+    grantor: String,
+    grantee: String,
+    trust_tier: TrustTier,
+    created_at: DateTime<Utc>,
+    expires_at: Option<DateTime<Utc>>,
+    receipt_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_grant_id: Option<String>,
+    delegation_depth: u8,
+    max_delegation_depth: u8,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_grant_creation() {
+        let grant = CapabilityGrant::new(
+            "grantor_hash".to_string(),
+            "grantee_hash".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "receipt_123".to_string(),
+        );
+
+        assert!(grant.id.starts_with("grant-"));
+        assert_eq!(grant.grantor, "grantor_hash");
+        assert_eq!(grant.grantee, "grantee_hash");
+        assert_eq!(grant.trust_tier, TrustTier::Tier0);
+        assert!(grant.is_valid());
+    }
+
+    #[test]
+    fn test_grant_builder_pattern() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Write {
+                scope: vec!["logs/*".to_string()],
+            },
+            "receipt_456".to_string(),
+        )
+        .with_constraint(Constraint::MaxCost(5.0))
+        .with_trust_tier(TrustTier::Tier1)
+        .with_expiration(Utc::now() + chrono::Duration::hours(24));
+
+        assert_eq!(grant.constraints.len(), 1);
+        assert_eq!(grant.trust_tier, TrustTier::Tier1);
+        assert!(grant.expires_at.is_some());
+    }
+
+    #[test]
+    fn test_grant_expiration() {
+        let mut grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        assert!(!grant.is_expired());
+
+        // Set expiration to the past
+        grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
+        assert!(grant.is_expired());
+
+        // Set expiration to the future
+        grant.expires_at = Some(Utc::now() + chrono::Duration::hours(1));
+        assert!(!grant.is_expired());
+    }
+
+    #[test]
+    fn test_action_matching_read() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/config".to_string(), "data/logs/*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        // Should match exact path
+        assert!(grant.matches_action(&ActionType::Read {
+            target: "data/config".to_string(),
+        }));
+
+        // Should match glob pattern
+        assert!(grant.matches_action(&ActionType::Read {
+            target: "data/logs/app.log".to_string(),
+        }));
+
+        // Should not match outside scope
+        assert!(!grant.matches_action(&ActionType::Read {
+            target: "other/file".to_string(),
+        }));
+
+        // Should not match different action type
+        assert!(!grant.matches_action(&ActionType::Write {
+            target: "data/config".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_action_matching_execute() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Execute {
+                languages: vec!["python".to_string(), "bash".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        assert!(grant.matches_action(&ActionType::Execute {
+            language: "python".to_string(),
+        }));
+
+        assert!(grant.matches_action(&ActionType::Execute {
+            language: "bash".to_string(),
+        }));
+
+        assert!(!grant.matches_action(&ActionType::Execute {
+            language: "javascript".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_action_matching_wildcard() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        assert!(grant.matches_action(&ActionType::Read {
+            target: "any/path".to_string(),
+        }));
+
+        assert!(grant.matches_action(&ActionType::Read {
+            target: "another/file".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_constraint_max_cost() {
+        let constraint = Constraint::MaxCost(10.0);
+
+        let ctx = ConstraintContext::new("path".to_string()).with_cost(5.0);
+        assert!(constraint.check(&ctx).is_none());
+
+        let ctx = ConstraintContext::new("path".to_string()).with_cost(15.0);
+        assert!(constraint.check(&ctx).is_some());
+    }
+
+    #[test]
+    fn test_constraint_rate_limit() {
+        let constraint = Constraint::RateLimit {
+            max_actions: 5,
+            window_secs: 60,
+        };
+
+        let ctx = ConstraintContext::new("path".to_string()).with_recent_actions(3);
+        assert!(constraint.check(&ctx).is_none());
+
+        let ctx = ConstraintContext::new("path".to_string()).with_recent_actions(5);
+        assert!(constraint.check(&ctx).is_some());
+
+        let ctx = ConstraintContext::new("path".to_string()).with_recent_actions(10);
+        assert!(constraint.check(&ctx).is_some());
+    }
+
+    #[test]
+    fn test_constraint_scope_restriction() {
+        let constraint = Constraint::ScopeRestriction {
+            allowed: vec!["data/*".to_string()],
+            denied: vec!["data/secret".to_string()],
+        };
+
+        // Within allowed scope, not denied
+        let ctx = ConstraintContext::new("data/public".to_string());
+        assert!(constraint.check(&ctx).is_none());
+
+        // Denied path
+        let ctx = ConstraintContext::new("data/secret".to_string());
+        assert!(constraint.check(&ctx).is_some());
+
+        // Outside allowed scope
+        let ctx = ConstraintContext::new("other/data".to_string());
+        assert!(constraint.check(&ctx).is_some());
+    }
+
+    #[test]
+    fn test_constraint_require_receipt() {
+        let constraint = Constraint::RequireReceipt;
+
+        let ctx =
+            ConstraintContext::new("path".to_string()).with_receipt_id("receipt_123".to_string());
+        assert!(constraint.check(&ctx).is_none());
+
+        let ctx = ConstraintContext::new("path".to_string());
+        assert!(constraint.check(&ctx).is_some());
+    }
+
+    #[test]
+    fn test_constraint_time_window() {
+        let constraint = Constraint::TimeWindow {
+            start_hour: 9,
+            end_hour: 17,
+        };
+
+        // We can't easily test specific hours without mocking time,
+        // but we can verify the logic doesn't panic
+        let ctx = ConstraintContext::new("path".to_string());
+        let _ = constraint.check(&ctx);
+    }
+
+    #[test]
+    fn test_check_constraints_empty() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        let ctx = ConstraintContext::new("path".to_string());
+        let violations = grant.check_constraints(&ctx);
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn test_check_constraints_multiple() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Write {
+                scope: vec!["logs/*".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_constraint(Constraint::MaxCost(1.0))
+        .with_constraint(Constraint::RateLimit {
+            max_actions: 5,
+            window_secs: 60,
+        })
+        .with_constraint(Constraint::RequireReceipt);
+
+        // Violate multiple constraints
+        let ctx = ConstraintContext::new("logs/app.log".to_string())
+            .with_cost(5.0)
+            .with_recent_actions(10);
+
+        let violations = grant.check_constraints(&ctx);
+        assert!(violations.len() >= 2);
+    }
+
+    #[test]
+    fn test_canonical_bytes_deterministic() {
+        let grant1 = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_constraint(Constraint::MaxCost(10.0));
+
+        let grant2 = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_constraint(Constraint::MaxCost(10.0));
+
+        // Force the same ID and timestamp for comparison —
+        // two grants created at different instants will naturally
+        // have different created_at values.
+        let mut grant2 = grant2;
+        grant2.id = grant1.id.clone();
+        grant2.created_at = grant1.created_at;
+
+        let bytes1 = grant1.canonical_bytes();
+        let bytes2 = grant2.canonical_bytes();
+
+        assert_eq!(bytes1, bytes2);
+    }
+
+    #[test]
+    fn test_canonical_bytes_excludes_signature() {
+        let grant1 = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        let mut grant2 = grant1.clone();
+
+        // Add signature to grant2
+        grant2.signature = Some("signature_abc".to_string());
+        grant2.signer_public_key = Some("pubkey_xyz".to_string());
+
+        // Canonical bytes should be the same (signatures don't affect them)
+        let bytes1 = grant1.canonical_bytes();
+        let bytes2 = grant2.canonical_bytes();
+
+        assert_eq!(bytes1, bytes2);
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Write {
+                scope: vec!["logs/*".to_string()],
+            },
+            "receipt_123".to_string(),
+        )
+        .with_constraint(Constraint::MaxCost(5.0))
+        .with_trust_tier(TrustTier::Tier1)
+        .with_expiration(Utc::now() + chrono::Duration::hours(24));
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&grant).expect("serialization failed");
+
+        // Deserialize back
+        let restored: CapabilityGrant =
+            serde_json::from_str(&json).expect("deserialization failed");
+
+        assert_eq!(grant.id, restored.id);
+        assert_eq!(grant.grantor, restored.grantor);
+        assert_eq!(grant.grantee, restored.grantee);
+        assert_eq!(grant.trust_tier, restored.trust_tier);
+        assert_eq!(grant.constraints.len(), restored.constraints.len());
+    }
+
+    #[test]
+    fn test_granted_capability_names() {
+        let read_cap = GrantedCapability::Read {
+            scope: vec!["*".to_string()],
+        };
+        assert_eq!(read_cap.name(), "read");
+
+        let write_cap = GrantedCapability::Write {
+            scope: vec!["*".to_string()],
+        };
+        assert_eq!(write_cap.name(), "write");
+
+        let exec_cap = GrantedCapability::Execute {
+            languages: vec!["python".to_string()],
+        };
+        assert_eq!(exec_cap.name(), "execute");
+
+        let custom_cap = GrantedCapability::Custom {
+            name: "my_capability".to_string(),
+            parameters: serde_json::json!({}),
+        };
+        assert_eq!(custom_cap.name(), "my_capability");
+    }
+
+    // ====================================================================
+    // Ed25519 Signature Tests (Phase 2 Step 1)
+    // ====================================================================
+
+    #[test]
+    fn test_sign_and_verify_roundtrip() {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "receipt_123".to_string(),
+        )
+        .with_constraint(Constraint::MaxCost(10.0));
+
+        // Before signing — no signature
+        assert!(!grant.verify_signature());
+
+        // Sign
+        grant.sign(&signing_key);
+        assert!(grant.signature.is_some());
+        assert!(grant.signer_public_key.is_some());
+
+        // Verify
+        assert!(
+            grant.verify_signature(),
+            "Signature should verify after signing"
+        );
+    }
+
+    #[test]
+    fn test_verify_rejects_unsigned_grant() {
+        let grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+        assert!(!grant.verify_signature());
+    }
+
+    #[test]
+    fn test_verify_rejects_tampered_grant() {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Write {
+                scope: vec!["logs/*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        grant.sign(&signing_key);
+        assert!(grant.verify_signature());
+
+        // Tamper with the grant after signing
+        grant.grantee = "attacker".to_string();
+        assert!(
+            !grant.verify_signature(),
+            "Tampered grant should fail verification"
+        );
+    }
+
+    #[test]
+    fn test_verify_rejects_wrong_key() {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let wrong_key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Execute {
+                languages: vec!["python".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        grant.sign(&signing_key);
+
+        // Swap the public key to a different key
+        grant.signer_public_key = Some(hex::encode(wrong_key.verifying_key().to_bytes()));
+        assert!(
+            !grant.verify_signature(),
+            "Should fail with wrong public key"
+        );
+    }
+
+    #[test]
+    fn test_verify_rejects_invalid_hex_signature() {
+        let mut grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        grant.signature = Some("not_valid_hex!!!".to_string());
+        grant.signer_public_key = Some("also_not_hex".to_string());
+        assert!(!grant.verify_signature());
+    }
+
+    #[test]
+    fn test_verify_rejects_wrong_length_key() {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        grant.sign(&signing_key);
+
+        // Truncate the public key to wrong length
+        grant.signer_public_key = Some(hex::encode([0u8; 16])); // 16 bytes, not 32
+        assert!(!grant.verify_signature());
+    }
+
+    #[test]
+    fn test_sign_preserves_grant_fields() {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut grant = CapabilityGrant::new(
+            "grantor_hash".to_string(),
+            "grantee_hash".to_string(),
+            GrantedCapability::ApiCall {
+                endpoints: vec!["api/v1/*".to_string()],
+            },
+            "receipt_456".to_string(),
+        )
+        .with_constraint(Constraint::RateLimit {
+            max_actions: 60,
+            window_secs: 60,
+        })
+        .with_trust_tier(TrustTier::Tier1);
+
+        let id_before = grant.id.clone();
+        let grantor_before = grant.grantor.clone();
+
+        grant.sign(&signing_key);
+
+        // Signing should not alter any field except signature and signer_public_key
+        assert_eq!(grant.id, id_before);
+        assert_eq!(grant.grantor, grantor_before);
+        assert_eq!(grant.trust_tier, TrustTier::Tier1);
+        assert!(grant.verify_signature());
+    }
+
+    #[test]
+    fn test_signed_grant_survives_serialization() {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut grant = CapabilityGrant::new(
+            "grantor".to_string(),
+            "grantee".to_string(),
+            GrantedCapability::MeshSend {
+                destinations: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+
+        grant.sign(&signing_key);
+        assert!(grant.verify_signature());
+
+        // Serialize → deserialize
+        let json = serde_json::to_string(&grant).unwrap();
+        let restored: CapabilityGrant = serde_json::from_str(&json).unwrap();
+
+        // Signature should still verify after round-trip
+        assert!(
+            restored.verify_signature(),
+            "Signature should survive serialization round-trip"
+        );
+    }
+
+    // ====================================================================
+    // Phase 3 Step 2: Capability Delegation Chain Tests
+    // ====================================================================
+
+    #[test]
+    fn test_delegate_basic() {
+        let parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "receipt_1".to_string(),
+        );
+
+        let child = parent
+            .delegate(
+                "charlie".to_string(),
+                GrantedCapability::Read {
+                    scope: vec!["data/public".to_string()],
+                },
+                "receipt_2".to_string(),
+            )
+            .unwrap();
+
+        assert!(child.id.starts_with("grant-"));
+        assert_eq!(child.grantor, "bob"); // delegator becomes grantor
+        assert_eq!(child.grantee, "charlie");
+        assert_eq!(child.parent_grant_id, Some(parent.id.clone()));
+        assert_eq!(child.delegation_depth, 1);
+        assert_eq!(child.max_delegation_depth, 3);
+        assert!(child.is_delegated());
+    }
+
+    #[test]
+    fn test_delegate_chain_depth() {
+        let g0 = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r0".to_string(),
+        )
+        .with_max_delegation_depth(2);
+
+        let g1 = g0
+            .delegate(
+                "charlie".to_string(),
+                GrantedCapability::Read {
+                    scope: vec!["*".to_string()],
+                },
+                "r1".to_string(),
+            )
+            .unwrap();
+        assert_eq!(g1.delegation_depth, 1);
+
+        let g2 = g1
+            .delegate(
+                "dave".to_string(),
+                GrantedCapability::Read {
+                    scope: vec!["*".to_string()],
+                },
+                "r2".to_string(),
+            )
+            .unwrap();
+        assert_eq!(g2.delegation_depth, 2);
+
+        // Depth 3 would exceed max of 2
+        let err = g2.delegate(
+            "eve".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r3".to_string(),
+        );
+        assert!(err.is_err());
+        assert!(matches!(
+            err.unwrap_err(),
+            DelegationError::DepthExceeded { .. }
+        ));
+    }
+
+    #[test]
+    fn test_delegate_scope_narrowing() {
+        let parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "r".to_string(),
+        );
+
+        // Narrower scope: OK
+        let narrow = parent.delegate(
+            "charlie".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/public".to_string()],
+            },
+            "r2".to_string(),
+        );
+        assert!(narrow.is_ok());
+
+        // Wider scope: should fail
+        let wide = parent.delegate(
+            "charlie".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["other/*".to_string()],
+            },
+            "r3".to_string(),
+        );
+        assert!(wide.is_err());
+        assert!(matches!(
+            wide.unwrap_err(),
+            DelegationError::ScopeNotSubset { .. }
+        ));
+    }
+
+    #[test]
+    fn test_delegate_wrong_capability_type() {
+        let parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r".to_string(),
+        );
+
+        // Can't delegate a Write from a Read grant
+        let err = parent.delegate(
+            "charlie".to_string(),
+            GrantedCapability::Write {
+                scope: vec!["*".to_string()],
+            },
+            "r2".to_string(),
+        );
+        assert!(err.is_err());
+        assert!(matches!(
+            err.unwrap_err(),
+            DelegationError::ScopeNotSubset { .. }
+        ));
+    }
+
+    #[test]
+    fn test_delegate_inherits_constraints() {
+        let parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Execute {
+                languages: vec!["python".to_string(), "bash".to_string()],
+            },
+            "r".to_string(),
+        )
+        .with_constraint(Constraint::MaxCost(10.0))
+        .with_constraint(Constraint::RequireReceipt);
+
+        let child = parent
+            .delegate(
+                "charlie".to_string(),
+                GrantedCapability::Execute {
+                    languages: vec!["python".to_string()],
+                },
+                "r2".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(child.constraints.len(), 2);
+    }
+
+    #[test]
+    fn test_delegate_inherits_expiration() {
+        let parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r".to_string(),
+        )
+        .with_expiration(Utc::now() + chrono::Duration::hours(1));
+
+        let child = parent
+            .delegate(
+                "charlie".to_string(),
+                GrantedCapability::Read {
+                    scope: vec!["*".to_string()],
+                },
+                "r2".to_string(),
+            )
+            .unwrap();
+
+        // Child inherits parent's expiration
+        assert!(child.expires_at.is_some());
+        assert_eq!(child.expires_at, parent.expires_at);
+    }
+
+    #[test]
+    fn test_delegate_expired_parent_fails() {
+        let mut parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r".to_string(),
+        );
+        parent.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
+
+        let err = parent.delegate(
+            "charlie".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r2".to_string(),
+        );
+        assert!(err.is_err());
+        assert!(matches!(err.unwrap_err(), DelegationError::ParentExpired));
+    }
+
+    #[test]
+    fn test_can_delegate() {
+        let grant = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r".to_string(),
+        )
+        .with_max_delegation_depth(1);
+
+        assert!(grant.can_delegate());
+        assert!(!grant.is_delegated());
+
+        let child = grant
+            .delegate(
+                "charlie".to_string(),
+                GrantedCapability::Read {
+                    scope: vec!["*".to_string()],
+                },
+                "r2".to_string(),
+            )
+            .unwrap();
+
+        // child is at depth 1, max is 1 — can't delegate further
+        assert!(!child.can_delegate());
+        assert!(child.is_delegated());
+    }
+
+    #[test]
+    fn test_capability_contains_wildcard() {
+        let parent = GrantedCapability::Read {
+            scope: vec!["*".to_string()],
+        };
+        let child = GrantedCapability::Read {
+            scope: vec!["data/foo".to_string()],
+        };
+        assert!(parent.contains(&child));
+    }
+
+    #[test]
+    fn test_capability_contains_glob() {
+        let parent = GrantedCapability::ApiCall {
+            endpoints: vec!["api/v1/*".to_string(), "api/v2/*".to_string()],
+        };
+        let child = GrantedCapability::ApiCall {
+            endpoints: vec!["api/v1/users".to_string()],
+        };
+        assert!(parent.contains(&child));
+
+        let outside = GrantedCapability::ApiCall {
+            endpoints: vec!["api/v3/admin".to_string()],
+        };
+        assert!(!parent.contains(&outside));
+    }
+
+    #[test]
+    fn test_capability_contains_different_types() {
+        let read = GrantedCapability::Read {
+            scope: vec!["*".to_string()],
+        };
+        let write = GrantedCapability::Write {
+            scope: vec!["*".to_string()],
+        };
+        assert!(!read.contains(&write));
+    }
+
+    #[test]
+    fn test_delegate_signed_chain() {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let child_key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "r1".to_string(),
+        );
+        parent.sign(&signing_key);
+        assert!(parent.verify_signature());
+
+        let mut child = parent
+            .delegate(
+                "charlie".to_string(),
+                GrantedCapability::Read {
+                    scope: vec!["data/public".to_string()],
+                },
+                "r2".to_string(),
+            )
+            .unwrap();
+        child.sign(&child_key);
+        assert!(child.verify_signature());
+
+        // Both are independently verifiable
+        assert!(parent.verify_signature());
+        assert!(child.verify_signature());
+        assert_eq!(child.parent_grant_id, Some(parent.id.clone()));
+    }
+
+    #[test]
+    fn test_delegated_grant_serialization_roundtrip() {
+        let parent = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "r".to_string(),
+        );
+
+        let child = parent
+            .delegate(
+                "charlie".to_string(),
+                GrantedCapability::Read {
+                    scope: vec!["*".to_string()],
+                },
+                "r2".to_string(),
+            )
+            .unwrap();
+
+        let json = serde_json::to_string(&child).unwrap();
+        let restored: CapabilityGrant = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.parent_grant_id, child.parent_grant_id);
+        assert_eq!(restored.delegation_depth, 1);
+        assert_eq!(restored.max_delegation_depth, 3);
+    }
+}

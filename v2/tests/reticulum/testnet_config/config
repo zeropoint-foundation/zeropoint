@@ -1,0 +1,12 @@
+# ZeroPoint Reticulum Test Configuration
+# Uses shared instance for local loopback — no multicast needed
+
+[reticulum]
+  enable_transport = No
+  share_instance   = Yes
+  shared_instance_port = 37428
+  instance_control_port = 37429
+  panic_on_interface_error = No
+
+[logging]
+  loglevel = 5

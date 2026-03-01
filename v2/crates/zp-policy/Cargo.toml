@@ -1,0 +1,25 @@
+[package]
+name = "zp-policy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "ZeroPoint Policy Engine - native Rust rules + WASM policy module runtime"
+
+[dependencies]
+zp-core = { path = "../zp-core" }
+
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+blake3.workspace = true
+wasmtime.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

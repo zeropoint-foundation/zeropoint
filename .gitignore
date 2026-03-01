@@ -1,0 +1,90 @@
+# === Year Zero: Public release includes v2/ crates, docs, CI, deploy ===
+
+# Rust build artifacts
+target/
+
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Logs
+*.log
+
+# Certificates
+certs/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# FUSE mount artifacts
+.fuse_hidden*
+
+# === Excluded from public release ===
+
+# Website (keep private to prevent impersonation)
+zeropoint.global/
+
+# Experimental / legacy projects
+clawd/
+openclaw/
+reticulum-meshchat/
+miniCPM-o-4_5/
+models/
+sandbox/
+server/
+zeropoint-server/
+core/
+webui-next/
+graph-viz-wasm/
+third_party/
+
+# Build outputs & release packages
+build-output/
+release_pkg/
+test-outputs/
+
+# Audio/binary files
+*.wav
+
+# Misc experimental files
+*.jsx
+*.html
+INPUT/
+logs/
+.pids/
+.ui-serve/
+.zp-bare-process/
+.zeropoint/
+.cargo/
+catalog-latest.json
+rustup-init.sh
+test_write
+test_abacus_models.sh
+generate_whitepaper_pdf.py
+m0_homepage_copy.md
+mindmap-prompt.md
+DATABASE_*.txt

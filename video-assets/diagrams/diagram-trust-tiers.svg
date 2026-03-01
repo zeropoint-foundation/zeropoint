@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Title -->
+  <text x="960" y="70" font-family="Inter, sans-serif" font-size="24" fill="#E8E6E3" text-anchor="middle" font-weight="600">Trust Tier Hierarchy</text>
+  <text x="960" y="100" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">Graduated trust model. Capabilities unlocked by demonstrated behavior, not declared intent.</text>
+
+  <!-- ===== TIER PYRAMID ===== -->
+
+  <!-- Tier 4 (top) — Autonomous -->
+  <rect x="660" y="180" width="600" height="120" rx="6" fill="#111116" stroke="#4ADE80" stroke-width="2"/>
+  <rect x="660" y="180" width="600" height="40" rx="6" fill="#4ADE80" opacity="0.08"/>
+  <text x="700" y="208" font-family="JetBrains Mono, monospace" font-size="20" fill="#4ADE80" font-weight="600">TIER 4</text>
+  <text x="900" y="208" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" font-weight="300">Autonomous</text>
+
+  <text x="700" y="248" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Execute without pre-approval within granted scope</text>
+  <text x="700" y="268" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Full delegation rights to sub-agents</text>
+  <text x="700" y="288" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Real-time action with post-hoc audit</text>
+
+  <!-- Tier level indicator -->
+  <rect x="1180" y="230" width="60" height="24" rx="4" fill="#4ADE80" opacity="0.15"/>
+  <text x="1210" y="247" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80" text-anchor="middle">High</text>
+
+  <!-- Tier 3 — Supervised -->
+  <rect x="660" y="320" width="600" height="120" rx="6" fill="#111116" stroke="#7EB8DA" stroke-width="1.5"/>
+  <rect x="660" y="320" width="600" height="40" rx="6" fill="#7EB8DA" opacity="0.08"/>
+  <text x="700" y="348" font-family="JetBrains Mono, monospace" font-size="20" fill="#7EB8DA" font-weight="600">TIER 3</text>
+  <text x="900" y="348" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" font-weight="300">Supervised</text>
+
+  <text x="700" y="388" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Execute with periodic human review</text>
+  <text x="700" y="408" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Limited delegation (one level)</text>
+  <text x="700" y="428" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Batch audit with sampling</text>
+
+  <rect x="1180" y="370" width="60" height="24" rx="4" fill="#7EB8DA" opacity="0.15"/>
+  <text x="1210" y="387" font-family="JetBrains Mono, monospace" font-size="11" fill="#7EB8DA" text-anchor="middle">Med</text>
+
+  <!-- Tier 2 — Restricted -->
+  <rect x="660" y="460" width="600" height="120" rx="6" fill="#111116" stroke="#FBBF24" stroke-width="1.5"/>
+  <rect x="660" y="460" width="600" height="40" rx="6" fill="#FBBF24" opacity="0.08"/>
+  <text x="700" y="488" font-family="JetBrains Mono, monospace" font-size="20" fill="#FBBF24" font-weight="600">TIER 2</text>
+  <text x="900" y="488" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" font-weight="300">Restricted</text>
+
+  <text x="700" y="528" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Execute only pre-approved action types</text>
+  <text x="700" y="548" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">No delegation rights</text>
+  <text x="700" y="568" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Every action individually audited</text>
+
+  <rect x="1180" y="510" width="60" height="24" rx="4" fill="#FBBF24" opacity="0.15"/>
+  <text x="1210" y="527" font-family="JetBrains Mono, monospace" font-size="11" fill="#FBBF24" text-anchor="middle">Low</text>
+
+  <!-- Tier 1 — Quarantined -->
+  <rect x="660" y="600" width="600" height="120" rx="6" fill="#111116" stroke="#F87171" stroke-width="1.5"/>
+  <rect x="660" y="600" width="600" height="40" rx="6" fill="#F87171" opacity="0.08"/>
+  <text x="700" y="628" font-family="JetBrains Mono, monospace" font-size="20" fill="#F87171" font-weight="600">TIER 1</text>
+  <text x="900" y="628" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" font-weight="300">Quarantined</text>
+
+  <text x="700" y="668" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">Read-only access, no execution</text>
+  <text x="700" y="688" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">No delegation, no network access</text>
+  <text x="700" y="708" font-family="Inter, sans-serif" font-size="13" fill="#8A8A8E">All actions require human approval</text>
+
+  <rect x="1180" y="650" width="60" height="24" rx="4" fill="#F87171" opacity="0.15"/>
+  <text x="1210" y="667" font-family="JetBrains Mono, monospace" font-size="11" fill="#F87171" text-anchor="middle">None</text>
+
+  <!-- ===== PROMOTION/DEMOTION ARROWS ===== -->
+
+  <!-- Up arrow (promotion) -->
+  <line x1="620" y1="680" x2="620" y2="220" stroke="#4ADE80" stroke-width="1.5"/>
+  <polygon points="614,220 620,200 626,220" fill="#4ADE80"/>
+  <text x="600" y="450" font-family="Inter, sans-serif" font-size="12" fill="#4ADE80" text-anchor="end" transform="rotate(-90, 600, 450)">Promotion (earned)</text>
+
+  <!-- Down arrow (demotion) -->
+  <line x1="1300" y1="220" x2="1300" y2="680" stroke="#F87171" stroke-width="1.5"/>
+  <polygon points="1294,680 1300,700 1306,680" fill="#F87171"/>
+  <text x="1320" y="450" font-family="Inter, sans-serif" font-size="12" fill="#F87171" text-anchor="start" transform="rotate(90, 1320, 450)">Demotion (violation)</text>
+
+  <!-- ===== RIGHT: KEY PROPERTIES ===== -->
+  <rect x="1400" y="180" width="420" height="540" rx="8" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="1610" y="220" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" text-anchor="middle" font-weight="600">Key Properties</text>
+
+  <!-- Property 1 -->
+  <text x="1440" y="270" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">Monotonic in chains</text>
+  <text x="1440" y="290" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">Trust tier can only decrease</text>
+  <text x="1440" y="306" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">along a delegation chain.</text>
+
+  <!-- Property 2 -->
+  <text x="1440" y="350" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">Reputation-linked</text>
+  <text x="1440" y="370" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">Tier adjusts based on</text>
+  <text x="1440" y="386" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">verifiable track record.</text>
+
+  <!-- Property 3 -->
+  <text x="1440" y="430" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">Scope-bound</text>
+  <text x="1440" y="450" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">Higher tiers unlock broader</text>
+  <text x="1440" y="466" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">scope, not bypass rules.</text>
+
+  <!-- Property 4 -->
+  <text x="1440" y="510" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">Auditable transitions</text>
+  <text x="1440" y="530" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">Every promotion/demotion</text>
+  <text x="1440" y="546" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">produces a receipt.</text>
+
+  <!-- Property 5 -->
+  <text x="1440" y="590" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">Constitutional floor</text>
+  <text x="1440" y="610" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">No tier bypasses the four</text>
+  <text x="1440" y="626" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">constitutional commitments.</text>
+
+  <!-- Reputation Gate callout -->
+  <text x="1610" y="680" font-family="Inter, sans-serif" font-size="13" fill="#FBBF24" text-anchor="middle" font-style="italic">ReputationGateRule evaluates</text>
+  <text x="1610" y="700" font-family="Inter, sans-serif" font-size="13" fill="#FBBF24" text-anchor="middle" font-style="italic">tier at every Policy stage.</text>
+
+  <!-- ===== LEFT: EXAMPLE ===== -->
+  <rect x="100" y="180" width="420" height="540" rx="8" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="310" y="220" font-family="Inter, sans-serif" font-size="16" fill="#E8E6E3" text-anchor="middle" font-weight="600">Example Flow</text>
+
+  <!-- New agent arrives -->
+  <circle cx="200" cy="280" r="14" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="200" y="285" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A</text>
+  <text x="230" y="285" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">New agent onboarded</text>
+  <text x="230" y="302" font-family="JetBrains Mono, monospace" font-size="11" fill="#F87171">→ Tier 1 (Quarantined)</text>
+
+  <!-- Arrow down -->
+  <line x1="200" y1="310" x2="200" y2="340" stroke="#333338" stroke-width="1"/>
+  <polygon points="196,340 200,350 204,340" fill="#333338"/>
+
+  <!-- Passes audit -->
+  <text x="230" y="375" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">50 successful actions</text>
+  <text x="230" y="392" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">Zero violations</text>
+  <text x="230" y="409" font-family="JetBrains Mono, monospace" font-size="11" fill="#FBBF24">→ Promoted to Tier 2</text>
+
+  <line x1="200" y1="420" x2="200" y2="450" stroke="#333338" stroke-width="1"/>
+  <polygon points="196,450 200,460 204,450" fill="#333338"/>
+
+  <!-- Continued good behavior -->
+  <text x="230" y="485" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">200 successful actions</text>
+  <text x="230" y="502" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">Consistent, scoped behavior</text>
+  <text x="230" y="519" font-family="JetBrains Mono, monospace" font-size="11" fill="#7EB8DA">→ Promoted to Tier 3</text>
+
+  <line x1="200" y1="530" x2="200" y2="560" stroke="#333338" stroke-width="1"/>
+  <polygon points="196,560 200,570 204,560" fill="#333338"/>
+
+  <!-- Violation -->
+  <text x="230" y="595" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">Scope violation detected</text>
+  <text x="230" y="612" font-family="Inter, sans-serif" font-size="12" fill="#8A8A8E">Attempted unauthorized write</text>
+  <text x="230" y="629" font-family="JetBrains Mono, monospace" font-size="11" fill="#F87171">→ Demoted to Tier 1</text>
+
+  <text x="310" y="690" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E" text-anchor="middle">Trust is earned, not declared.</text>
+
+  <!-- Bottom -->
+  <text x="960" y="820" font-family="Inter, sans-serif" font-size="16" fill="#8A8A8E" text-anchor="middle">Trust tiers integrate with the Policy stage of the Governance Gate.</text>
+  <text x="960" y="850" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">ReputationGateRule | TrustTier | CapabilityGrant.trust_tier</text>
+
+  <!-- Bottom tagline -->
+  <text x="960" y="960" font-family="Inter, sans-serif" font-size="16" fill="#5A5A5E" text-anchor="middle" font-style="italic">"No agent starts trusted. Every agent can earn trust. Any agent can lose it."</text>
+</svg>

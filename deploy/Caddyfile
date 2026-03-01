@@ -1,0 +1,80 @@
+# ZeroPoint Deployment — Caddyfile
+#
+# Serves both static sites and reverse-proxies the API.
+# Caddy handles HTTPS automatically via Let's Encrypt.
+#
+# Usage:
+#   caddy run --config /path/to/Caddyfile
+#
+# Prerequisites:
+#   - DNS A records for all three domains pointing to this server
+#   - Ports 80 and 443 open
+#   - Static site files deployed to /var/www/zeropoint.global and /var/www/thinkstreamlabs.ai
+#   - zp-server running on localhost:8080
+
+# --- zeropoint.global ---
+# Main project site + interactive demos
+zeropoint.global {
+	root * /var/www/zeropoint.global
+	file_server
+
+	# Reverse proxy API requests to zp-server
+	handle /api/* {
+		reverse_proxy localhost:8080
+	}
+
+	# Clean URLs — try file, then file.html, then 404
+	try_files {path} {path}.html {path}/index.html
+
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# CSP: allow self + Google Fonts + inline styles/scripts (needed for demos)
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self'"
+	}
+
+	# Cache static assets
+	@static path *.css *.js *.woff2 *.png *.svg *.ico
+	header @static Cache-Control "public, max-age=86400"
+
+	# Gzip
+	encode gzip
+}
+
+# --- thinkstreamlabs.ai ---
+# Company site
+thinkstreamlabs.ai {
+	root * /var/www/thinkstreamlabs.ai
+	file_server
+
+	try_files {path} {path}.html {path}/index.html
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'"
+	}
+
+	@static path *.css *.js *.woff2 *.png *.svg *.ico
+	header @static Cache-Control "public, max-age=86400"
+
+	encode gzip
+}
+
+# --- api.zeropoint.global (optional) ---
+# Dedicated API subdomain — useful if you want the playground
+# to call api.zeropoint.global instead of zeropoint.global/api
+# Uncomment if desired:
+#
+# api.zeropoint.global {
+# 	reverse_proxy localhost:8080
+#
+# 	header {
+# 		Access-Control-Allow-Origin https://zeropoint.global
+# 		Access-Control-Allow-Methods "GET, POST, OPTIONS"
+# 		Access-Control-Allow-Headers "Content-Type"
+# 	}
+# }

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Closing quote — center screen, maximum stillness -->
+  <text x="960" y="420" font-family="Inter, sans-serif" font-size="32" fill="#E8E6E3" text-anchor="middle" font-weight="300" font-style="italic">The tool is never neutral.</text>
+
+  <text x="960" y="490" font-family="Inter, sans-serif" font-size="32" fill="#E8E6E3" text-anchor="middle" font-weight="300" font-style="italic">We have chosen our side.</text>
+
+  <!-- Subtle separator -->
+  <line x1="880" y1="550" x2="1040" y2="550" stroke="#333338" stroke-width="0.5"/>
+
+  <!-- ZeroPoint wordmark -->
+  <text x="960" y="630" font-family="Inter, sans-serif" font-size="28" fill="#7EB8DA" text-anchor="middle" font-weight="300" letter-spacing="6">ZEROPOINT</text>
+
+  <!-- URL -->
+  <text x="960" y="680" font-family="Inter, sans-serif" font-size="16" fill="#5A5A5E" text-anchor="middle" letter-spacing="2">zeropoint.global</text>
+
+  <!-- Minimal accent — two thin lines framing the content -->
+  <line x1="600" y1="360" x2="600" y2="700" stroke="#222228" stroke-width="0.5"/>
+  <line x1="1320" y1="360" x2="1320" y2="700" stroke="#222228" stroke-width="0.5"/>
+</svg>

@@ -1,0 +1,30 @@
+[package]
+name = "zp-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zp-core = { path = "../zp-core" }
+zp-pipeline = { path = "../zp-pipeline" }
+zp-policy = { path = "../zp-policy" }
+zp-audit = { path = "../zp-audit" }
+zp-trust = { path = "../zp-trust" }
+
+axum = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]

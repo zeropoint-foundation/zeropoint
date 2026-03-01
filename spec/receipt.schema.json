@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zeropoint.dev/schemas/receipt/v1",
+  "title": "ZeroPoint Receipt",
+  "description": "Portable, cryptographically verifiable proof that an action was executed. The fundamental trust primitive of the ZeroPoint protocol.",
+  "type": "object",
+  "required": ["id", "version", "receipt_type", "status", "content_hash", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(rcpt|intn|dsgn|appr)-[a-f0-9]{8,}$",
+      "description": "Unique receipt identifier. Prefixed by type: rcpt- (execution), intn- (intent), dsgn- (design), appr- (approval)."
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for forward compatibility."
+    },
+    "receipt_type": {
+      "type": "string",
+      "enum": ["intent", "design", "approval", "execution", "payment", "access"],
+      "description": "The stage in the provenance chain this receipt represents. 'payment' and 'access' extend the chain for the agent web."
+    },
+    "parent_receipt_id": {
+      "type": ["string", "null"],
+      "description": "ID of the parent receipt in the provenance chain. Null for intent receipts (root). Required for all other types."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed", "denied", "timeout", "pending"],
+      "description": "Outcome of the action this receipt covers."
+    },
+    "content_hash": {
+      "type": "string",
+      "description": "Blake3 hash of the canonical JSON representation of the receipt body (all fields except signature). Hex-encoded."
+    },
+    "signature": {
+      "type": ["string", "null"],
+      "description": "Ed25519 signature over content_hash, base64-encoded. Null if unsigned."
+    },
+    "signer_public_key": {
+      "type": ["string", "null"],
+      "description": "Ed25519 public key of the signer, hex-encoded. Required when signature is present."
+    },
+    "trust_grade": {
+      "type": "string",
+      "enum": ["D", "C", "B", "A"],
+      "description": "Assurance level. D=signed only, C=sandboxed execution, B=hardware key + OS integrity, A=TEE with hardware root of trust."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp when this receipt was created."
+    },
+    "executor": {
+      "$ref": "#/$defs/executor",
+      "description": "Identity of the entity that performed the action."
+    },
+    "action": {
+      "$ref": "#/$defs/action",
+      "description": "What was actually done."
+    },
+    "timing": {
+      "$ref": "#/$defs/timing",
+      "description": "Execution timing information."
+    },
+    "resources": {
+      "$ref": "#/$defs/resources",
+      "description": "Resource consumption during execution."
+    },
+    "outputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/output_artifact" },
+      "description": "Artifacts produced by the action."
+    },
+    "io_hashes": {
+      "$ref": "#/$defs/io_hashes",
+      "description": "Hashes of input/output streams for determinism verification."
+    },
+    "policy": {
+      "$ref": "#/$defs/policy_decision",
+      "description": "The policy evaluation that authorized (or denied) this action."
+    },
+    "error": {
+      "$ref": "#/$defs/error_detail",
+      "description": "Error information if status is failed/denied/timeout."
+    },
+    "redactions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/redaction" },
+      "description": "Fields that were redacted for privacy/security, with hashes of original values."
+    },
+    "chain": {
+      "$ref": "#/$defs/chain_metadata",
+      "description": "Metadata for hash-chain linkage (audit trail position)."
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Vendor-specific or domain-specific extensions. Use reverse-domain keys (e.g., 'dev.zeropoint.execution_engine')."
+    }
+  },
+  "$defs": {
+    "executor": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the executor (agent ID, service ID, role ID)."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["agent", "human", "service", "pipeline", "role"],
+          "description": "What kind of entity executed the action."
+        },
+        "runtime": {
+          "type": "string",
+          "description": "Runtime environment (e.g., 'python-3.11', 'node-20', 'shell-bash')."
+        },
+        "platform": {
+          "type": "string",
+          "description": "Platform identifier (e.g., 'linux-x86_64', 'macos-aarch64')."
+        },
+        "framework": {
+          "type": "string",
+          "description": "Agent framework if applicable (e.g., 'claude-code', 'openai-agents', 'langraph')."
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "code_execution", "shell_command", "tool_call", "api_request",
+            "file_operation", "payment", "content_access", "delegation",
+            "policy_evaluation", "plan_creation", "approval_decision"
+          ],
+          "description": "Category of action performed."
+        },
+        "name": {
+          "type": "string",
+          "description": "Specific action name (e.g., tool name, command, endpoint)."
+        },
+        "input_hash": {
+          "type": "string",
+          "description": "Blake3 hash of the action input/arguments."
+        },
+        "output_hash": {
+          "type": "string",
+          "description": "Blake3 hash of the action output/result."
+        },
+        "exit_code": {
+          "type": ["integer", "null"],
+          "description": "Process exit code for execution actions."
+        },
+        "detail": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Action-specific detail (e.g., payment amount, API endpoint, file path)."
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "queued_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time spent waiting before execution started."
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "cpu_seconds": { "type": "number" },
+        "memory_peak_bytes": { "type": "integer" },
+        "disk_written_bytes": { "type": "integer" },
+        "network_bytes_sent": { "type": "integer" },
+        "network_bytes_received": { "type": "integer" },
+        "tokens_input": { "type": "integer", "description": "LLM input tokens consumed." },
+        "tokens_output": { "type": "integer", "description": "LLM output tokens generated." },
+        "cost_usd": { "type": "number", "description": "Monetary cost of this action, if known." }
+      }
+    },
+    "output_artifact": {
+      "type": "object",
+      "required": ["path", "hash", "size_bytes"],
+      "properties": {
+        "path": { "type": "string" },
+        "hash": { "type": "string", "description": "Blake3 hash of file contents." },
+        "size_bytes": { "type": "integer" },
+        "mime_type": { "type": "string" }
+      }
+    },
+    "io_hashes": {
+      "type": "object",
+      "properties": {
+        "stdin_hash": { "type": "string" },
+        "stdout_hash": { "type": "string" },
+        "stderr_hash": { "type": "string" },
+        "stdout_size": { "type": "integer" },
+        "stderr_size": { "type": "integer" }
+      }
+    },
+    "policy_decision": {
+      "type": "object",
+      "required": ["decision"],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["allow", "deny", "escalate", "audit_only"]
+        },
+        "policy_id": {
+          "type": "string",
+          "description": "Which policy rule was evaluated."
+        },
+        "trust_tier": {
+          "type": "string",
+          "enum": ["tier0", "tier1", "tier2"],
+          "description": "Trust tier under which the action was evaluated."
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    },
+    "error_detail": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "recoverable": { "type": "boolean" }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["target", "reason"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["credential", "pii", "secret", "sensitive_output"]
+        },
+        "target": { "type": "string", "description": "Which field or path was redacted." },
+        "reason": { "type": "string" },
+        "original_hash": { "type": "string", "description": "Blake3 hash of the original value before redaction." }
+      }
+    },
+    "chain_metadata": {
+      "type": "object",
+      "properties": {
+        "prev_hash": {
+          "type": "string",
+          "description": "Blake3 hash of the previous entry in the audit chain."
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Position in the hash chain."
+        },
+        "chain_id": {
+          "type": "string",
+          "description": "Identifier for the audit chain this receipt belongs to."
+        }
+      }
+    }
+  }
+}

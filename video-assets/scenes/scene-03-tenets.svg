@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Title -->
+  <text x="960" y="80" font-family="Inter, sans-serif" font-size="18" fill="#8A8A8E" text-anchor="middle" letter-spacing="4">CONSTITUTIONAL COMMITMENTS</text>
+  <text x="960" y="115" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">Embedded in the protocol. Cannot be removed. Ever.</text>
+
+  <!-- Pillar I -->
+  <rect x="120" y="180" width="380" height="700" rx="6" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <rect x="120" y="180" width="380" height="60" rx="6" fill="#7EB8DA" opacity="0.12"/>
+  <text x="310" y="218" font-family="Inter, sans-serif" font-size="32" fill="#7EB8DA" text-anchor="middle" font-weight="300">I</text>
+  <text x="310" y="280" font-family="Inter, sans-serif" font-size="20" fill="#E8E6E3" text-anchor="middle" font-weight="600">Do No Harm</text>
+
+  <!-- Shield icon -->
+  <path d="M310 340 L270 360 L270 410 Q270 450 310 470 Q350 450 350 410 L350 360 Z" fill="none" stroke="#F87171" stroke-width="1.5"/>
+  <line x1="295" y1="400" x2="325" y2="400" stroke="#F87171" stroke-width="1.5"/>
+
+  <text x="310" y="530" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">ZeroPoint shall not operate</text>
+  <text x="310" y="550" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">in systems designed to</text>
+  <text x="310" y="570" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">harm humans.</text>
+
+  <!-- Rejected terms -->
+  <rect x="190" y="620" width="240" height="28" rx="4" fill="#F87171" opacity="0.08"/>
+  <text x="205" y="639" font-family="JetBrains Mono, monospace" font-size="11" fill="#F87171">surveillance ✕</text>
+  <rect x="190" y="656" width="240" height="28" rx="4" fill="#F87171" opacity="0.08"/>
+  <text x="205" y="675" font-family="JetBrains Mono, monospace" font-size="11" fill="#F87171">weapons ✕</text>
+  <rect x="190" y="692" width="240" height="28" rx="4" fill="#F87171" opacity="0.08"/>
+  <text x="205" y="711" font-family="JetBrains Mono, monospace" font-size="11" fill="#F87171">deepfake ✕</text>
+
+  <text x="310" y="800" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="middle">HarmPrincipleRule</text>
+  <text x="310" y="820" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">Evaluated before every action</text>
+
+  <!-- Pillar II -->
+  <rect x="530" y="180" width="380" height="700" rx="6" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <rect x="530" y="180" width="380" height="60" rx="6" fill="#7EB8DA" opacity="0.12"/>
+  <text x="720" y="218" font-family="Inter, sans-serif" font-size="32" fill="#7EB8DA" text-anchor="middle" font-weight="300">II</text>
+  <text x="720" y="280" font-family="Inter, sans-serif" font-size="20" fill="#E8E6E3" text-anchor="middle" font-weight="600">Sovereignty Is Sacred</text>
+
+  <!-- Two nodes, refusal -->
+  <circle cx="670" cy="380" r="20" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="670" y="386" font-family="Inter, sans-serif" font-size="12" fill="#7EB8DA" text-anchor="middle">A</text>
+  <circle cx="770" cy="380" r="20" fill="none" stroke="#4ADE80" stroke-width="1.5"/>
+  <text x="770" y="386" font-family="Inter, sans-serif" font-size="12" fill="#4ADE80" text-anchor="middle">B</text>
+  <!-- Request arrow -->
+  <line x1="690" y1="380" x2="745" y2="380" stroke="#7EB8DA" stroke-width="1" stroke-dasharray="4,3"/>
+  <polygon points="745,376 755,380 745,384" fill="#7EB8DA"/>
+  <!-- Refusal -->
+  <line x1="770" y1="405" x2="770" y2="440" stroke="#F87171" stroke-width="1.5"/>
+  <text x="770" y="460" font-family="Inter, sans-serif" font-size="13" fill="#F87171" text-anchor="middle" font-weight="600">REFUSED</text>
+
+  <text x="720" y="530" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Every participant has the</text>
+  <text x="720" y="550" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">right to refuse any action.</text>
+  <text x="720" y="590" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Every human has the right</text>
+  <text x="720" y="610" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">to disconnect any agent.</text>
+
+  <text x="720" y="700" font-family="Inter, sans-serif" font-size="15" fill="#FBBF24" text-anchor="middle" font-style="italic">Coercion is architecturally</text>
+  <text x="720" y="720" font-family="Inter, sans-serif" font-size="15" fill="#FBBF24" text-anchor="middle" font-style="italic">impossible.</text>
+
+  <text x="720" y="800" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="middle">SovereigntyRule</text>
+  <text x="720" y="820" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">Non-removable at runtime</text>
+
+  <!-- Pillar III -->
+  <rect x="940" y="180" width="380" height="700" rx="6" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <rect x="940" y="180" width="380" height="60" rx="6" fill="#7EB8DA" opacity="0.12"/>
+  <text x="1130" y="218" font-family="Inter, sans-serif" font-size="32" fill="#7EB8DA" text-anchor="middle" font-weight="300">III</text>
+  <text x="1130" y="280" font-family="Inter, sans-serif" font-size="18" fill="#E8E6E3" text-anchor="middle" font-weight="600">Action Without Evidence</text>
+  <text x="1130" y="302" font-family="Inter, sans-serif" font-size="18" fill="#E8E6E3" text-anchor="middle" font-weight="600">Is No Action</text>
+
+  <!-- Chain links growing -->
+  <rect x="1060" y="350" width="140" height="32" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1130" y="371" font-family="JetBrains Mono, monospace" font-size="10" fill="#4ADE80" text-anchor="middle">receipt_001</text>
+  <line x1="1130" y1="382" x2="1130" y2="398" stroke="#4ADE80" stroke-width="1"/>
+
+  <rect x="1060" y="398" width="140" height="32" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1130" y="419" font-family="JetBrains Mono, monospace" font-size="10" fill="#4ADE80" text-anchor="middle">receipt_002</text>
+  <line x1="1130" y1="430" x2="1130" y2="446" stroke="#4ADE80" stroke-width="1"/>
+
+  <rect x="1060" y="446" width="140" height="32" rx="4" fill="#1A1A22" stroke="#7EB8DA" stroke-width="2"/>
+  <text x="1130" y="467" font-family="JetBrains Mono, monospace" font-size="10" fill="#7EB8DA" text-anchor="middle">receipt_003</text>
+
+  <text x="1130" y="540" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Every action produces</text>
+  <text x="1130" y="560" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">a receipt. Every receipt</text>
+  <text x="1130" y="580" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">joins a chain.</text>
+
+  <text x="1130" y="660" font-family="Inter, sans-serif" font-size="15" fill="#FBBF24" text-anchor="middle" font-style="italic">"If it's not in the chain,</text>
+  <text x="1130" y="680" font-family="Inter, sans-serif" font-size="15" fill="#FBBF24" text-anchor="middle" font-style="italic">it didn't happen."</text>
+
+  <text x="1130" y="800" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="middle">AuditChain</text>
+  <text x="1130" y="820" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">Hash-chained, receipt-native</text>
+
+  <!-- Pillar IV -->
+  <rect x="1350" y="180" width="380" height="700" rx="6" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <rect x="1350" y="180" width="380" height="60" rx="6" fill="#7EB8DA" opacity="0.12"/>
+  <text x="1540" y="218" font-family="Inter, sans-serif" font-size="32" fill="#7EB8DA" text-anchor="middle" font-weight="300">IV</text>
+  <text x="1540" y="280" font-family="Inter, sans-serif" font-size="20" fill="#E8E6E3" text-anchor="middle" font-weight="600">The Human Is The Root</text>
+
+  <!-- Human at base of tree -->
+  <circle cx="1540" cy="380" r="22" fill="none" stroke="#FBBF24" stroke-width="1.5"/>
+  <text x="1540" y="386" font-family="Inter, sans-serif" font-size="14" fill="#FBBF24" text-anchor="middle">H</text>
+
+  <!-- Delegation lines down -->
+  <line x1="1520" y1="402" x2="1490" y2="445" stroke="#333338" stroke-width="1"/>
+  <line x1="1560" y1="402" x2="1590" y2="445" stroke="#333338" stroke-width="1"/>
+
+  <circle cx="1490" cy="460" r="14" fill="none" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1490" y="465" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A1</text>
+  <circle cx="1590" cy="460" r="14" fill="none" stroke="#4ADE80" stroke-width="1"/>
+  <text x="1590" y="465" font-family="Inter, sans-serif" font-size="10" fill="#4ADE80" text-anchor="middle">A2</text>
+
+  <line x1="1490" y1="474" x2="1470" y2="510" stroke="#333338" stroke-width="1"/>
+  <line x1="1490" y1="474" x2="1510" y2="510" stroke="#333338" stroke-width="1"/>
+
+  <circle cx="1470" cy="524" r="10" fill="none" stroke="#7EB8DA" stroke-width="1"/>
+  <circle cx="1510" cy="524" r="10" fill="none" stroke="#7EB8DA" stroke-width="1"/>
+
+  <text x="1540" y="590" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">Every delegation chain</text>
+  <text x="1540" y="610" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">terminates at a</text>
+  <text x="1540" y="630" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">human-held key.</text>
+
+  <text x="1540" y="700" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">No agent may</text>
+  <text x="1540" y="720" font-family="Inter, sans-serif" font-size="14" fill="#8A8A8E" text-anchor="middle">self-authorize.</text>
+
+  <text x="1540" y="800" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="middle">DelegationChain</text>
+  <text x="1540" y="820" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E" text-anchor="middle">Genesis key held by human</text>
+
+  <!-- Bottom baseline -->
+  <line x1="120" y1="920" x2="1730" y2="920" stroke="#222228" stroke-width="1"/>
+  <text x="960" y="970" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">These are protocol-level rules. No vote, no override, no exception can remove them.</text>
+</svg>

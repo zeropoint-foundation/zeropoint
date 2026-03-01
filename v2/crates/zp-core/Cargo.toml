@@ -1,0 +1,24 @@
+[package]
+name = "zp-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "ZeroPoint v2 — shared types, traits, and error definitions"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+semver = { workspace = true }
+blake3 = { workspace = true }
+anyhow = { workspace = true }
+rusqlite = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
+zp-receipt = { path = "../zp-receipt" }
+
+[dev-dependencies]
+rand = { workspace = true }
