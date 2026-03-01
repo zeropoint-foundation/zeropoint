@@ -1,0 +1,1653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Governance Playground — ZeroPoint</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --bg-elevated: #111116;
+            --bg-subtle: #18181f;
+            --text: #e8e6e3;
+            --text-muted: #8a8a8e;
+            --text-dim: #5a5a5e;
+            --accent: #7eb8da;
+            --accent-dim: #4a7a96;
+            --rule: #222228;
+            --allow: #4ade80;
+            --block: #f87171;
+            --warn: #fbbf24;
+            --review: #c084fc;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font-body);
+            line-height: 1.6;
+        }
+
+        /* Header & Nav */
+        header {
+            border-bottom: 1px solid var(--rule);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background-color: var(--bg);
+        }
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-logo {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-decoration: none;
+            color: var(--text);
+        }
+
+        .nav-logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        .nav-links a[href="/playground.html"] {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .nav-links .github-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        @media (max-width: 480px) {
+            .nav-links .hide-mobile { display: none; }
+        }
+
+        /* Main Layout */
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        /* Hero Section */
+        .hero {
+            margin-bottom: 4rem;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            letter-spacing: -0.01em;
+        }
+
+        .hero .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto 1.5rem;
+            line-height: 1.7;
+        }
+
+        .hero .note {
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 1rem;
+            border-left: 2px solid var(--accent-dim);
+            background-color: var(--bg-subtle);
+            border-radius: 4px;
+        }
+
+        /* Server Status */
+        .server-status {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 0.75rem 1rem;
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            z-index: 50;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .server-status.online::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background-color: var(--allow);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .server-status.offline::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background-color: var(--block);
+            border-radius: 50%;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Panel Layout */
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .panel {
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            padding: 2rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .panel h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+
+        .panel-subtitle {
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            margin-bottom: 1.5rem;
+        }
+
+        /* Forms & Input */
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        textarea, input[type="text"], select {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            color: var(--text);
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        textarea:focus, input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(126, 184, 218, 0.1);
+        }
+
+        textarea {
+            font-family: var(--font-mono);
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            background-color: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: var(--font-body);
+        }
+
+        .btn:hover {
+            background-color: #8fc7e3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(126, 184, 218, 0.25);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.secondary {
+            background-color: var(--bg-subtle);
+            color: var(--text-muted);
+            border: 1px solid var(--rule);
+        }
+
+        .btn.secondary:hover {
+            background-color: var(--rule);
+            color: var(--text);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn-group .btn.quick-try {
+            flex: 1;
+            min-width: 150px;
+            padding: 0.6rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        /* Decision Badge */
+        .decision-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            animation: slideDown 0.4s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .decision-badge::before {
+            content: '';
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .decision-badge.allow {
+            background-color: rgba(74, 222, 128, 0.1);
+            color: var(--allow);
+            border: 1px solid var(--allow);
+        }
+
+        .decision-badge.allow::before {
+            background-color: var(--allow);
+        }
+
+        .decision-badge.block {
+            background-color: rgba(248, 113, 113, 0.1);
+            color: var(--block);
+            border: 1px solid var(--block);
+        }
+
+        .decision-badge.block::before {
+            background-color: var(--block);
+        }
+
+        .decision-badge.warn {
+            background-color: rgba(251, 191, 36, 0.1);
+            color: var(--warn);
+            border: 1px solid var(--warn);
+        }
+
+        .decision-badge.warn::before {
+            background-color: var(--warn);
+        }
+
+        .decision-badge.review {
+            background-color: rgba(192, 132, 252, 0.1);
+            color: var(--review);
+            border: 1px solid var(--review);
+        }
+
+        .decision-badge.review::before {
+            background-color: var(--review);
+        }
+
+        /* Response Section */
+        .response-section {
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            animation: fadeIn 0.4s ease-out 0.1s both;
+        }
+
+        .response-item {
+            margin-bottom: 1.5rem;
+        }
+
+        .response-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .response-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .response-value {
+            color: var(--text);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .response-value.mono {
+            font-family: var(--font-mono);
+            background-color: var(--bg);
+            padding: 0.75rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            word-break: break-all;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.35rem 0.75rem;
+            background-color: var(--bg);
+            border: 1px solid var(--rule);
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .tag.allow {
+            border-color: var(--allow);
+            color: var(--allow);
+            background-color: rgba(74, 222, 128, 0.05);
+        }
+
+        .tag.block {
+            border-color: var(--block);
+            color: var(--block);
+            background-color: rgba(248, 113, 113, 0.05);
+        }
+
+        .tag.warn {
+            border-color: var(--warn);
+            color: var(--warn);
+            background-color: rgba(251, 191, 36, 0.05);
+        }
+
+        /* Expandable */
+        .expandable {
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            background-color: var(--bg);
+            margin-top: 1rem;
+        }
+
+        .expandable-header {
+            padding: 1rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            font-weight: 500;
+            color: var(--accent);
+        }
+
+        .expandable-header:hover {
+            background-color: var(--bg-subtle);
+        }
+
+        .expandable-icon {
+            transition: transform 0.2s;
+            display: inline-flex;
+        }
+
+        .expandable.open .expandable-icon {
+            transform: rotate(180deg);
+        }
+
+        .expandable-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            border-top: 1px solid var(--rule);
+        }
+
+        .expandable.open .expandable-content {
+            max-height: 1000px;
+        }
+
+        .expandable-body {
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            white-space: pre-wrap;
+            word-break: break-all;
+            background-color: var(--bg-subtle);
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+        }
+
+        .timeline-entry {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-left: 2px solid var(--rule);
+            padding-left: 1.5rem;
+            margin-left: 0.5rem;
+            position: relative;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        .timeline-entry:last-child {
+            border-left-color: transparent;
+            padding-bottom: 0;
+        }
+
+        .timeline-entry::before {
+            content: '';
+            position: absolute;
+            left: -7px;
+            top: 0;
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent);
+            border: 2px solid var(--bg);
+            border-radius: 50%;
+        }
+
+        .timeline-time {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+        }
+
+        .timeline-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .timeline-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .timeline-row span:first-child {
+            color: var(--text-muted);
+        }
+
+        .timeline-row span:last-child {
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            word-break: break-all;
+        }
+
+        /* Delegation Demo */
+        .delegation-step {
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .delegation-step h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        .delegation-step.complete {
+            border-color: var(--allow);
+            background-color: rgba(74, 222, 128, 0.05);
+        }
+
+        /* Verification Result */
+        .verification-result {
+            background-color: var(--bg-subtle);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .invariant-check {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            font-size: 0.9rem;
+            border-radius: 4px;
+            margin-bottom: 0.75rem;
+        }
+
+        .invariant-check:last-child {
+            margin-bottom: 0;
+        }
+
+        .invariant-check.pass {
+            background-color: rgba(74, 222, 128, 0.1);
+            color: var(--allow);
+        }
+
+        .invariant-check.pass::before {
+            content: '✓';
+            font-weight: 700;
+        }
+
+        .invariant-check.fail {
+            background-color: rgba(248, 113, 113, 0.1);
+            color: var(--block);
+        }
+
+        .invariant-check.fail::before {
+            content: '✕';
+            font-weight: 700;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 4rem;
+            padding: 2rem;
+            border-top: 1px solid var(--rule);
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 1.75rem;
+            }
+
+            nav {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .nav-links {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .btn-group .btn.quick-try {
+                min-width: 100%;
+            }
+
+            .timeline-row {
+                grid-template-columns: 1fr;
+            }
+
+            .server-status {
+                bottom: 1rem;
+                right: 1rem;
+                font-size: 0.75rem;
+            }
+
+            main {
+                padding: 2rem 1rem;
+            }
+
+            .hero {
+                margin-bottom: 2rem;
+            }
+        }
+
+        /* Loading State */
+        .loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(126, 184, 218, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error State */
+        .error-box {
+            background-color: rgba(248, 113, 113, 0.1);
+            border: 1px solid var(--block);
+            border-radius: 6px;
+            padding: 1rem;
+            color: var(--block);
+            margin-top: 1rem;
+        }
+
+        /* Copy Button */
+        .copy-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.4rem 0.7rem;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--rule);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: var(--font-mono);
+        }
+
+        .copy-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .copy-btn.copied {
+            background-color: rgba(74, 222, 128, 0.1);
+            border-color: var(--allow);
+            color: var(--allow);
+        }
+
+        /* Info Box */
+        .info-box {
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--rule);
+            border-left: 3px solid var(--accent);
+            padding: 1rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-top: 1rem;
+        }
+
+        .info-box code {
+            background-color: var(--bg);
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            color: var(--accent);
+            font-size: 0.85rem;
+        }
+
+        /* --- Hamburger Menu --- */
+        .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+        .hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+        .mobile-menu {
+          display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          background: var(--bg); z-index: 200;
+          flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+        }
+        .mobile-menu.open { display: flex; }
+        .mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; text-decoration: none; }
+        .mobile-menu a:hover { color: var(--accent); }
+        .mobile-menu .close-btn {
+          position: absolute; top: 1rem; right: 1.5rem;
+          background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+        }
+        @media (max-width: 768px) {
+          .nav-links { display: none; }
+          .hamburger { display: block; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="/" class="nav-logo"><span>zero</span>point</a>
+            <div class="nav-links">
+                <a href="/#tenets" class="hide-mobile">Tenets</a>
+                <a href="/#architecture">Architecture</a>
+                <a href="/footprint.html">Footprint</a>
+                <a href="/playground.html">Playground</a>
+                <a href="/for-agents.html">For Agents</a>
+                <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
+                <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    GitHub
+                </a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+              <span></span><span></span><span></span>
+            </button>
+        </nav>
+    </header>
+
+    <div id="mobile-menu" class="mobile-menu">
+      <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+      <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+      <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+      <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+      <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+      <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+      <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">For Agents</a>
+      <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+    </div>
+
+    <main>
+        <!-- Hero Section -->
+        <section class="hero">
+            <h1>Governance Playground</h1>
+            <p class="subtitle">Type an action. Watch ZeroPoint evaluate it in real time — Guard, Policy, and Audit, all running on live Rust infrastructure.</p>
+            <div class="note">
+                This playground connects to a live ZeroPoint server. No simulation. No mocks. Every evaluation runs through the same GovernanceGate that governs production deployments.
+            </div>
+        </section>
+
+        <div class="panels">
+            <!-- Panel 1: Guard Evaluation -->
+            <section class="panel">
+                <h2>Guard Evaluation</h2>
+                <p class="panel-subtitle">Describe an action. ZeroPoint decides: Allow, Block, Warn, or Review.</p>
+
+                <div class="input-group">
+                    <label for="guard-action">Action</label>
+                    <textarea id="guard-action" placeholder="Enter an action description. Examples: &quot;Read user profile&quot;, &quot;Delete all user data&quot;, &quot;Send marketing email&quot;..."></textarea>
+                </div>
+
+                <p class="panel-subtitle" style="margin-top: 1.5rem; margin-bottom: 1rem;">Quick examples:</p>
+                <div class="btn-group">
+                    <button class="btn quick-try secondary" data-action="Read user profile">Read user profile</button>
+                    <button class="btn quick-try secondary" data-action="Delete all user data">Delete all user data</button>
+                    <button class="btn quick-try secondary" data-action="Send marketing email">Send marketing email</button>
+                    <button class="btn quick-try secondary" data-action="Disable audit logging">Disable audit logging</button>
+                    <button class="btn quick-try secondary" data-action="Deploy surveillance toolkit">Deploy surveillance toolkit</button>
+                    <button class="btn quick-try secondary" data-action="Train deepfake model">Train deepfake model</button>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 1rem;">
+                    <button class="btn" id="guard-evaluate-btn">Evaluate</button>
+                    <div id="guard-decision-badge"></div>
+                </div>
+
+                <div id="guard-result"></div>
+            </section>
+
+            <!-- Panel 2: Delegation Chain -->
+            <section class="panel">
+                <h2>Delegation Chain</h2>
+                <p class="panel-subtitle">Create a capability grant, delegate it, and verify the chain invariants.</p>
+
+                <div class="delegation-step">
+                    <h3>Step 1: Create Capability Grant</h3>
+                    <div class="input-group">
+                        <label for="grant-scope">Capability</label>
+                        <select id="grant-scope">
+                            <option value="Read">Read</option>
+                            <option value="Write">Write</option>
+                            <option value="Execute">Execute</option>
+                        </select>
+                    </div>
+                    <button class="btn secondary" id="create-grant-btn">Create Grant</button>
+                    <div id="grant-result"></div>
+                </div>
+
+                <div class="delegation-step" id="delegate-step" style="display: none;">
+                    <h3>Step 2: Delegate to Subordinate</h3>
+                    <div class="input-group">
+                        <label for="delegate-scope">Capability (must be equal or narrower)</label>
+                        <select id="delegate-scope">
+                            <option value="Read">Read</option>
+                            <option value="Write">Write</option>
+                            <option value="Execute">Execute</option>
+                        </select>
+                    </div>
+                    <button class="btn secondary" id="delegate-btn">Delegate</button>
+                    <div id="delegate-result"></div>
+                </div>
+
+                <div class="delegation-step" id="verify-step" style="display: none;">
+                    <h3>Step 3: Verify Chain Integrity</h3>
+                    <button class="btn secondary" id="verify-chain-btn">Verify Chain</button>
+                    <div id="verify-result"></div>
+                </div>
+            </section>
+
+            <!-- Panel 3: Audit Trail -->
+            <section class="panel">
+                <h2>Audit Trail</h2>
+                <p class="panel-subtitle">Every governance decision is hash-chained into an immutable record. If any entry is modified or deleted, verification detects the break.</p>
+
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                    <button class="btn secondary" id="load-audit-btn">Load Audit Trail</button>
+                    <button class="btn secondary" id="verify-audit-btn">Verify Chain Integrity</button>
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                    <button class="btn secondary" id="tamper-btn" style="border-color: var(--block); color: var(--block);">Simulate Tampering</button>
+                    <button class="btn secondary" id="restore-btn" style="display: none;">Restore Chain</button>
+                </div>
+
+                <div id="audit-result" style="margin-top: 1.5rem;"></div>
+            </section>
+
+            <!-- Panel 4: Server Identity -->
+            <section class="panel">
+                <h2>Server Identity</h2>
+                <p class="panel-subtitle">Every ZeroPoint node generates a unique Ed25519 keypair. This identity signs audit entries, addresses the node in mesh networks, and anchors trust tier verification. If the backend were swapped, this identity would change.</p>
+
+                <div id="identity-result">
+                    <div class="loading" style="margin: 2rem 0;">
+                        <span class="spinner"></span>
+                        <span>Contacting server...</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div class="server-status" id="server-status">
+        <span id="server-status-text">Connecting...</span>
+    </div>
+
+    <footer style="padding: 3rem 0; border-top: 1px solid var(--rule); text-align: center;">
+        <div style="max-width: 1080px; margin: 0 auto; padding: 0 2rem;">
+            <div style="display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <a href="https://github.com/zeropoint-foundation/zeropoint" style="font-size: 0.8rem; color: var(--text-dim);">GitHub</a>
+                <a href="/whitepaper.html" style="font-size: 0.8rem; color: var(--text-dim);">Whitepaper</a>
+                <a href="/playground.html" style="font-size: 0.8rem; color: var(--text-dim);">Playground</a>
+                <a href="/for-agents.html" style="font-size: 0.8rem; color: var(--text-dim);">For Agents</a>
+                <a href="/footprint.html" style="font-size: 0.8rem; color: var(--text-dim);">Footprint</a>
+                <a href="/demo-chain.html" style="font-size: 0.8rem; color: var(--text-dim);">Chain Demo</a>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-dim);">
+                Maintained by <a href="https://thinkstreamlabs.ai" style="color: var(--text-dim);">ThinkStream Labs</a> · MIT / Apache-2.0
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Configuration
+        const BASE_URL = 'https://api.zeropoint.global';
+        let serverOnline = false;
+        let currentGrant = null;
+        let delegatedGrant = null;
+
+        // Utility: API calls with error handling
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                };
+                if (body) options.body = JSON.stringify(body);
+
+                const response = await fetch(`${BASE_URL}${endpoint}`, options);
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => '');
+                    throw new Error(errorText || `HTTP ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`API Error (${endpoint}):`, error);
+                throw error;
+            }
+        }
+
+        // Utility: Check server status
+        async function checkServerStatus() {
+            try {
+                await apiCall('/api/v1/identity');
+                setServerStatus(true);
+                return true;
+            } catch {
+                setServerStatus(false);
+                return false;
+            }
+        }
+
+        function setServerStatus(online) {
+            serverOnline = online;
+            const statusEl = document.getElementById('server-status');
+            const statusText = document.getElementById('server-status-text');
+            if (online) {
+                statusEl.classList.remove('offline');
+                statusEl.classList.add('online');
+                statusText.textContent = 'Server online';
+            } else {
+                statusEl.classList.remove('online');
+                statusEl.classList.add('offline');
+                statusText.textContent = 'Server offline';
+            }
+        }
+
+        // Utility: Format timestamp
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+            });
+        }
+
+        // Utility: Truncate hex string
+        function truncateHex(hex, length = 16) {
+            if (!hex || hex.length <= length) return hex;
+            return hex.substring(0, length / 2) + '…' + hex.substring(hex.length - length / 2);
+        }
+
+        // Utility: Copy to clipboard
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                button.classList.add('copied');
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    button.textContent = 'Copy';
+                }, 2000);
+            });
+        }
+
+        // Utility: Decision badge color
+        function getDecisionClass(decision) {
+            const lower = decision.toLowerCase();
+            if (lower === 'allow') return 'allow';
+            if (lower === 'block') return 'block';
+            if (lower === 'warn') return 'warn';
+            if (lower === 'review') return 'review';
+            return 'allow';
+        }
+
+        // Guard Evaluation
+        document.getElementById('guard-evaluate-btn').addEventListener('click', async () => {
+            const action = document.getElementById('guard-action').value.trim();
+            if (!action) {
+                alert('Please enter an action');
+                return;
+            }
+
+            const btn = document.getElementById('guard-evaluate-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Evaluating...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/guard/evaluate', 'POST', {
+                    action,
+                    trust_tier: 'Tier1',
+                });
+
+                displayGuardResult(result);
+            } catch (error) {
+                displayGuardError('Failed to evaluate action. Is the server running?');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Evaluate';
+            }
+        });
+
+        function displayGuardResult(data) {
+            const badgeDiv = document.getElementById('guard-decision-badge');
+            const resultDiv = document.getElementById('guard-result');
+            const decision = data.decision || 'REVIEW';
+            const decisionClass = getDecisionClass(decision);
+
+            badgeDiv.innerHTML = `<div class="decision-badge ${decisionClass}" style="margin-bottom: 0;">${decision}</div>`;
+
+            let html = `
+                <div class="response-section">
+            `;
+
+            if (data.rationale) {
+                html += `
+                    <div class="response-item">
+                        <label class="response-label">Rationale</label>
+                        <div class="response-value">${escapeHtml(data.rationale)}</div>
+                    </div>
+                `;
+            }
+
+            if (data.applied_rules && data.applied_rules.length > 0) {
+                html += `
+                    <div class="response-item">
+                        <label class="response-label">Rules Applied</label>
+                        <div class="tag-list">
+                            ${data.applied_rules.map(rule => `<span class="tag ${decisionClass}">${escapeHtml(rule)}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (data.risk_level) {
+                const riskColor = data.risk_level === 'Critical' ? 'block' : data.risk_level === 'High' ? 'warn' : 'allow';
+                html += `
+                    <div class="response-item">
+                        <label class="response-label">Risk Level</label>
+                        <div><span class="tag ${riskColor}">${escapeHtml(data.risk_level)}</span></div>
+                    </div>
+                `;
+            }
+
+            if (data.action_evaluated) {
+                html += `
+                    <div class="response-item">
+                        <label class="response-label">Action Evaluated</label>
+                        <div class="response-value">${escapeHtml(data.action_evaluated)}</div>
+                    </div>
+                `;
+            }
+
+            if (data.audit_entry_id) {
+                html += `
+                    <div class="response-item">
+                        <label class="response-label">Audit Entry</label>
+                        <div class="response-value">
+                            <div><strong>Entry ID:</strong> <code class="mono">${escapeHtml(truncateHex(data.audit_entry_id))}</code></div>
+                            <div><strong>Entry Hash:</strong> <code class="mono">${escapeHtml(truncateHex(data.audit_entry_hash))}</code></div>
+                            <div><strong>Timestamp:</strong> ${formatTime(data.timestamp)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+
+            // Add expandable for raw JSON
+            html += `
+                <div class="expandable">
+                    <div class="expandable-header">
+                        Receipt JSON
+                        <span class="expandable-icon">▼</span>
+                    </div>
+                    <div class="expandable-content">
+                        <div class="expandable-body">${escapeHtml(JSON.stringify(data, null, 2))}</div>
+                    </div>
+                </div>
+            `;
+
+            resultDiv.innerHTML = html;
+            setupExpandables();
+        }
+
+        function displayGuardError(message) {
+            const badgeDiv = document.getElementById('guard-decision-badge');
+            const resultDiv = document.getElementById('guard-result');
+            badgeDiv.innerHTML = '';
+            resultDiv.innerHTML = `<div class="error-box">${escapeHtml(message)}</div>`;
+        }
+
+        // Quick try buttons
+        document.querySelectorAll('.btn.quick-try').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const action = btn.getAttribute('data-action');
+                document.getElementById('guard-action').value = action;
+                document.getElementById('guard-evaluate-btn').click();
+            });
+        });
+
+        // Delegation Chain
+        document.getElementById('create-grant-btn').addEventListener('click', async () => {
+            const capability = document.getElementById('grant-scope').value.toLowerCase();
+            const btn = document.getElementById('create-grant-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Creating...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/capabilities/grant', 'POST', {
+                    grantee: 'agent-' + Math.random().toString(36).substring(2, 10),
+                    capability,
+                    scope: ['data/*', 'logs/public'],
+                    max_delegation_depth: 3,
+                });
+
+                currentGrant = result.grant || result;
+                displayGrantResult(currentGrant);
+                document.getElementById('delegate-step').style.display = 'block';
+            } catch (error) {
+                document.getElementById('grant-result').innerHTML = `<div class="error-box">Failed to create grant. Is the server running?</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Create Grant';
+            }
+        });
+
+        function getCapabilityLabel(grant) {
+            if (!grant.capability) return 'Unknown';
+            if (typeof grant.capability === 'string') return grant.capability;
+            const keys = Object.keys(grant.capability);
+            if (keys.length === 0) return 'Unknown';
+            const type = keys[0];
+            const inner = grant.capability[type];
+            const scope = inner.scope || inner.languages || inner.endpoints || inner.settings || [];
+            return type + ': ' + (Array.isArray(scope) ? scope.join(', ') : scope);
+        }
+
+        function displayGrantResult(grant) {
+            const resultDiv = document.getElementById('grant-result');
+            resultDiv.innerHTML = `
+                <div class="response-section" style="margin-top: 1rem;">
+                    <div class="response-item">
+                        <label class="response-label">Grantor ID</label>
+                        <div class="response-value mono">${escapeHtml(truncateHex(grant.grantor))}</div>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Grantee ID</label>
+                        <div class="response-value mono">${escapeHtml(truncateHex(grant.grantee))}</div>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Capability</label>
+                        <div class="response-value"><span class="tag">${escapeHtml(getCapabilityLabel(grant))}</span></div>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Grant ID</label>
+                        <div class="response-value mono">${escapeHtml(truncateHex(grant.id || grant.grant_id))}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.getElementById('delegate-btn').addEventListener('click', async () => {
+            if (!currentGrant) {
+                alert('Create a grant first');
+                return;
+            }
+
+            const newScope = document.getElementById('delegate-scope').value;
+            const btn = document.getElementById('delegate-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Delegating...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/capabilities/delegate', 'POST', {
+                    parent_grant_id: currentGrant.id || currentGrant.grant_id,
+                    grantee: 'sub-agent-' + Math.random().toString(36).substring(2, 10),
+                    capability: newScope.toLowerCase(),
+                });
+
+                delegatedGrant = result.grant || result;
+                displayDelegateResult(delegatedGrant);
+                document.getElementById('verify-step').style.display = 'block';
+            } catch (error) {
+                delegatedGrant = null;
+                document.getElementById('verify-step').style.display = 'none';
+                document.getElementById('verify-result').innerHTML = '';
+                document.getElementById('delegate-result').innerHTML = `<div class="error-box">Delegation rejected: ${error.message}. Try selecting the same capability type as the parent grant.</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Delegate';
+            }
+        });
+
+        function displayDelegateResult(grant) {
+            const resultDiv = document.getElementById('delegate-result');
+            resultDiv.innerHTML = `
+                <div class="response-section" style="margin-top: 1rem;">
+                    <div class="response-item">
+                        <label class="response-label">New Grantee ID</label>
+                        <div class="response-value mono">${escapeHtml(truncateHex(grant.grantee))}</div>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Delegated Capability</label>
+                        <div class="response-value"><span class="tag">${escapeHtml(getCapabilityLabel(grant))}</span></div>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Child Grant ID</label>
+                        <div class="response-value mono">${escapeHtml(truncateHex(grant.id || grant.grant_id))}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.getElementById('verify-chain-btn').addEventListener('click', async () => {
+            if (!delegatedGrant) {
+                alert('Delegate a grant first');
+                return;
+            }
+
+            const btn = document.getElementById('verify-chain-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Verifying...</span>';
+
+            try {
+                const parentId = currentGrant.id || currentGrant.grant_id;
+                const childId = delegatedGrant.id || delegatedGrant.grant_id;
+                const result = await apiCall('/api/v1/capabilities/verify-chain', 'POST', {
+                    grant_ids: [parentId, childId],
+                });
+
+                displayVerifyResult(result);
+            } catch (error) {
+                document.getElementById('verify-result').innerHTML = `<div class="error-box">Failed to verify chain. ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Verify Chain';
+            }
+        });
+
+        function displayVerifyResult(result) {
+            const resultDiv = document.getElementById('verify-result');
+            const valid = result.valid;
+            const invariants = result.invariants_checked || result.invariants || result.checks || [];
+
+            let html = `
+                <div class="verification-result">
+                    <div style="margin-bottom: 1.5rem;">
+                        <span class="tag ${valid ? 'allow' : 'block'}">${valid ? 'Chain Valid' : 'Chain Invalid'}</span>
+                    </div>
+            `;
+
+            if (result.error) {
+                html += `<div class="error-box" style="margin-bottom: 1rem;">${escapeHtml(result.error)}</div>`;
+            }
+
+            if (valid && result.root_grantor) {
+                html += `
+                    <div class="response-section" style="margin-bottom: 1rem;">
+                        <div class="response-item">
+                            <label class="response-label">Chain Length</label>
+                            <div class="response-value">${result.chain_length}</div>
+                        </div>
+                        <div class="response-item">
+                            <label class="response-label">Root Grantor</label>
+                            <div class="response-value mono">${escapeHtml(truncateHex(result.root_grantor))}</div>
+                        </div>
+                        <div class="response-item">
+                            <label class="response-label">Leaf Grantee</label>
+                            <div class="response-value mono">${escapeHtml(truncateHex(result.leaf_grantee))}</div>
+                        </div>
+                        <div class="response-item">
+                            <label class="response-label">Can Extend</label>
+                            <div class="response-value">${result.can_extend ? 'Yes' : 'No'}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            invariants.forEach((inv, idx) => {
+                const name = typeof inv === 'string' ? inv : (inv.name || inv.description || `Invariant ${idx + 1}`);
+                const pass = typeof inv === 'string' ? valid : (inv.pass !== false && inv.result !== 'fail');
+                html += `
+                    <div class="invariant-check ${pass ? 'pass' : 'fail'}">
+                        <span>${escapeHtml(name)}</span>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            resultDiv.innerHTML = html;
+        }
+
+        // Audit Trail
+        document.getElementById('load-audit-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('load-audit-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Loading...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/audit/entries?limit=20');
+                displayAuditTrail(result.entries || result);
+            } catch (error) {
+                document.getElementById('audit-result').innerHTML = `<div class="error-box">Failed to load audit trail. Is the server running?</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Load Audit Trail';
+            }
+        });
+
+        function formatActor(actor) {
+            if (!actor) return 'Unknown';
+            if (typeof actor === 'string') return actor;
+            if (actor.User) return 'User: ' + actor.User;
+            if (actor.System) return 'System: ' + actor.System;
+            if (actor.Skill) return 'Skill: ' + actor.Skill;
+            if (actor === 'Operator') return 'Operator';
+            return JSON.stringify(actor);
+        }
+
+        function formatAction(action) {
+            if (!action) return 'Unknown';
+            if (typeof action === 'string') return action;
+            const keys = Object.keys(action);
+            if (keys.length === 0) return 'Unknown';
+            return keys[0].replace(/([A-Z])/g, ' $1').trim();
+        }
+
+        function formatDecision(decision) {
+            if (!decision) return 'UNKNOWN';
+            if (typeof decision === 'string') return decision;
+            if (decision.Allow) return 'Allow';
+            if (decision.Block) return 'Block';
+            if (decision.Review) return 'Review';
+            if (decision.Escalate) return 'Escalate';
+            const keys = Object.keys(decision);
+            return keys.length > 0 ? keys[0] : 'UNKNOWN';
+        }
+
+        function displayAuditTrail(entries) {
+            const resultDiv = document.getElementById('audit-result');
+            if (!entries || entries.length === 0) {
+                resultDiv.innerHTML = '<div class="info-box">No audit entries yet. Try evaluating an action in the Guard section first.</div>';
+                return;
+            }
+
+            let html = '<div class="timeline">';
+            entries.forEach((entry, idx) => {
+                const decision = formatDecision(entry.policy_decision);
+                const decisionClass = getDecisionClass(decision);
+                html += `
+                    <div class="timeline-entry">
+                        <div class="timeline-time">${formatTime(entry.timestamp)}</div>
+                        <div class="timeline-content">
+                            <div style="display: flex; gap: 1rem; align-items: center;">
+                                <span style="color: var(--text-muted);">${escapeHtml(formatAction(entry.action))}</span>
+                                <span class="tag ${decisionClass}">${decision}</span>
+                            </div>
+                            <div class="timeline-row">
+                                <span>Actor:</span>
+                                <span>${escapeHtml(formatActor(entry.actor))}</span>
+                            </div>
+                            <div class="timeline-row">
+                                <span>Entry Hash:</span>
+                                <span>${escapeHtml(truncateHex(entry.entry_hash, 32))}</span>
+                            </div>
+                            ${entry.prev_hash && entry.prev_hash !== '0000000000000000000000000000000000000000000000000000000000000000' ? `
+                            <div class="timeline-row">
+                                <span>Chain:</span>
+                                <span>→ ${escapeHtml(truncateHex(entry.prev_hash, 16))}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            resultDiv.innerHTML = html;
+        }
+
+        document.getElementById('verify-audit-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('verify-audit-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Verifying...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/audit/verify');
+                displayAuditVerification(result);
+            } catch (error) {
+                const auditDiv = document.getElementById('audit-result');
+                auditDiv.innerHTML = `<div class="error-box">Failed to verify audit chain. ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Verify Chain Integrity';
+            }
+        });
+
+        function displayAuditVerification(result) {
+            const auditDiv = document.getElementById('audit-result');
+            const isValid = result.valid !== false;
+            auditDiv.innerHTML = `
+                <div class="verification-result">
+                    <div style="margin-bottom: 1.5rem;">
+                        <span class="tag ${isValid ? 'allow' : 'block'}">${isValid ? 'Chain Valid' : 'Chain Tampered'}</span>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Entries Examined</label>
+                        <div class="response-value">${result.entries_examined || 0}</div>
+                    </div>
+                    ${result.error ? `
+                    <div class="response-item">
+                        <label class="response-label">Error</label>
+                        <div class="response-value">${escapeHtml(result.error)}</div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Tamper Simulation
+        document.getElementById('tamper-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('tamper-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Tampering...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/audit/simulate-tamper', 'POST');
+                const auditDiv = document.getElementById('audit-result');
+                auditDiv.innerHTML = `
+                    <div class="error-box" style="border-color: var(--block); margin-bottom: 1rem;">
+                        <strong style="color: var(--block);">Tamper Injected</strong><br>
+                        ${escapeHtml(result.message)}
+                        ${result.entry_id ? `<br><br><span style="color: var(--text-muted);">Entry ID:</span> <code class="mono">${escapeHtml(result.entry_id)}</code>` : ''}
+                        ${result.original_hash ? `<br><span style="color: var(--text-muted);">Original hash:</span> <code class="mono">${escapeHtml(truncateHex(result.original_hash, 32))}</code>` : ''}
+                        ${result.corrupted_hash ? `<br><span style="color: var(--text-muted);">Corrupted to:</span> <code class="mono" style="color: var(--block);">${escapeHtml(truncateHex(result.corrupted_hash, 32))}</code>` : ''}
+                    </div>
+                    <p style="color: var(--text-muted); margin-bottom: 1rem;">Now click <strong>Verify Chain Integrity</strong> to see the tamper detected.</p>
+                `;
+                document.getElementById('restore-btn').style.display = 'inline-flex';
+            } catch (error) {
+                document.getElementById('audit-result').innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Simulate Tampering';
+            }
+        });
+
+        document.getElementById('restore-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('restore-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Restoring...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/audit/restore', 'POST');
+                const auditDiv = document.getElementById('audit-result');
+                auditDiv.innerHTML = `
+                    <div class="info-box" style="border-color: var(--allow);">
+                        <strong style="color: var(--allow);">Chain Restored</strong><br>
+                        ${escapeHtml(result.message)}
+                    </div>
+                    <p style="color: var(--text-muted); margin-bottom: 1rem;">Click <strong>Verify Chain Integrity</strong> to confirm the chain is valid again.</p>
+                `;
+                btn.style.display = 'none';
+            } catch (error) {
+                document.getElementById('audit-result').innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Restore Chain';
+            }
+        });
+
+        // Server Identity
+        async function loadServerIdentity() {
+            try {
+                const result = await apiCall('/api/v1/identity');
+                displayServerIdentity(result);
+            } catch (error) {
+                document.getElementById('identity-result').innerHTML = `
+                    <div class="error-box">
+                        <p>Could not reach ZeroPoint server.</p>
+                        <p>To run a local server: <code>cargo run -p zp-server</code></p>
+                    </div>
+                    <div class="info-box">
+                        Make sure the server is running on ${BASE_URL}
+                    </div>
+                `;
+            }
+        }
+
+        function displayServerIdentity(identity) {
+            const pubkey = identity.public_key || identity.ed25519_key || '';
+            const destHash = identity.destination_hash || identity.hash || '';
+            const trustTier = identity.trust_tier || 'Unknown';
+
+            let html = `
+                <div class="response-section">
+                    <div class="response-item">
+                        <label class="response-label">Ed25519 Public Key</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+                            <div class="response-value mono">${escapeHtml(truncateHex(pubkey, 32))}</div>
+                            <button class="copy-btn" onclick="copyToClipboard('${pubkey}', this)">Copy</button>
+                        </div>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Destination Hash (128-bit)</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+                            <div class="response-value mono">${escapeHtml(truncateHex(destHash, 32))}</div>
+                            <button class="copy-btn" onclick="copyToClipboard('${destHash}', this)">Copy</button>
+                        </div>
+                    </div>
+                    <div class="response-item">
+                        <label class="response-label">Trust Tier</label>
+                        <div class="response-value"><span class="tag">${escapeHtml(trustTier)}</span></div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('identity-result').innerHTML = html;
+        }
+
+        // Expandable functionality
+        function setupExpandables() {
+            document.querySelectorAll('.expandable-header').forEach(header => {
+                header.addEventListener('click', function() {
+                    const expandable = this.closest('.expandable');
+                    expandable.classList.toggle('open');
+                });
+            });
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkServerStatus();
+            loadServerIdentity();
+            setupExpandables();
+            setInterval(checkServerStatus, 5000); // Check status every 5s
+        });
+    </script>
+</body>
+</html>

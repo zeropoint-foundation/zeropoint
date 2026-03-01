@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — AI Security Landscape Footprint</title>
+<meta name="description" content="ZeroPoint's coverage across 51 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #a8d4ee; }
+
+header {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+nav {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nav-logo {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--text);
+  letter-spacing: 0.05em;
+}
+.nav-logo span { color: var(--accent); }
+.nav-links { display: flex; gap: 2rem; align-items: center; }
+.nav-links a {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-links a.active { color: var(--text); }
+.nav-links .github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+footer {
+  padding: 3rem 0;
+  border-top: 1px solid var(--rule);
+  text-align: center;
+}
+.footer-links {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+.footer-links a {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.footer-links a:hover { color: var(--text-muted); }
+.footer-org {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+
+#footprint-root {
+  padding-top: 5rem;
+}
+
+@media (max-width: 768px) {
+  .nav-links { gap: 1rem; }
+}
+
+/* --- Hamburger Menu --- */
+.hamburger { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; text-decoration: none; }
+.mobile-menu a:hover { color: var(--accent); }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .hamburger { display: block; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/#tenets" class="hide-mobile">Tenets</a>
+      <a href="/#architecture">Architecture</a>
+      <a href="/footprint.html" class="active">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">For Agents</a>
+      <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">For Agents</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<div id="footprint-root"></div>
+
+<footer>
+  <div style="max-width: 1080px; margin: 0 auto; padding: 0 2rem;">
+    <div class="footer-links">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">For Agents</a>
+      <a href="/demo-chain.html">Chain Demo</a>
+      <a href="/footprint.html">Footprint</a>
+    </div>
+    <div class="footer-org">
+      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// ═══════════════════════════════════════════════════════════════
+// ZeroPoint AI Security Landscape — Radial Footprint Diagram
+// ═══════════════════════════════════════════════════════════════
+
+const THEME = {
+  bg: "#0a0a0c",
+  surface: "#111116",
+  surface2: "#18181f",
+  border: "#222228",
+  text: "#e8e6e3",
+  textDim: "#8a8a8e",
+  textMuted: "#5a5a5e",
+  accent: "#7eb8da",
+  green: "#34d399",
+  greenDim: "rgba(52,211,153,0.15)",
+  yellow: "#fb923c",
+  yellowDim: "rgba(251,146,60,0.15)",
+  red: "#f87171",
+  redDim: "rgba(248,113,113,0.12)",
+};
+
+const landscape = [
+  {
+    id: "identity", name: "Identity & Access", source: "NIST AI RMF · GOVERN",
+    desc: "Cryptographic identity and scoped authorization for every participant",
+    items: [
+      { name: "Agent Authentication", c: "green", zp: "Ed25519 keypair identity — every request signed" },
+      { name: "Dynamic Authorization", c: "green", zp: "PolicyContext + TrustTier evaluation per-request" },
+      { name: "Credential Vault", c: "green", zp: "ChaCha20-Poly1305 encrypted storage (zp-trust)" },
+      { name: "Scoped Capability Grants", c: "green", zp: "Read/Write/Execute/ApiCall scoped per-agent" },
+      { name: "Least-Privilege Enforcement", c: "green", zp: "Scoped fields + expiry + delegation depth limits" },
+      { name: "Credential Rotation", c: "green", zp: "Dynamic keypair lifecycle — zero static secrets" },
+    ],
+  },
+  {
+    id: "governance", name: "Governance & Policy", source: "NIST AI RMF · GOVERN + MAP",
+    desc: "Constitutional rules and automated policy enforcement pipeline",
+    items: [
+      { name: "AI Gateway / Firewall", c: "green", zp: "GovernanceGate: Guard → Policy → Execute → Audit" },
+      { name: "Constitutional Rules", c: "green", zp: "HarmPrincipleRule (non-removable) + SovereigntyRule" },
+      { name: "Content Policy Screening", c: "green", zp: "Policy rules evaluate actions before execution" },
+      { name: "Human Override", c: "green", zp: "SovereigntyRule — human is always root authority" },
+      { name: "Responsible AI Tenets", c: "green", zp: "Four Tenets enforced at protocol level" },
+      { name: "Regulatory Compliance", c: "green", zp: "Immutable audit trail satisfies audit requirements" },
+    ],
+  },
+  {
+    id: "audit", name: "Audit & Traceability", source: "NIST AI RMF · MEASURE",
+    desc: "Tamper-evident, hash-chained record of every action",
+    items: [
+      { name: "Immutable Audit Trail", c: "green", zp: "Hash-chained receipt chain — tamper-evident" },
+      { name: "Non-repudiation", c: "green", zp: "Ed25519-signed receipts prove who did what" },
+      { name: "Chain Verification", c: "green", zp: "AuditStore with cryptographic chain checks" },
+      { name: "Forensic Record", c: "green", zp: "Complete action history for incident response" },
+      { name: "Behavioral Analytics", c: "yellow", zp: "Audit data enables analytics — detection ML not built-in" },
+      { name: "Posture Assessment", c: "yellow", zp: "Framework provides data; assessment is human process" },
+    ],
+  },
+  {
+    id: "agentic", name: "Agentic Threats", source: "OWASP Agentic Top 10",
+    desc: "Threats unique to autonomous AI agents in production",
+    items: [
+      { name: "Agent Goal Hijack", c: "yellow", zp: "GovernanceGate screens; policy rules constrain goals" },
+      { name: "Tool Misuse", c: "green", zp: "zp-skills: verified registry + sandboxed execution" },
+      { name: "Rogue Agents", c: "green", zp: "Kill switch (SovereigntyRule) + capability revocation" },
+      { name: "Insecure Inter-Agent Comms", c: "green", zp: "zp-mesh: Ed25519-signed messages" },
+      { name: "Cascading Hallucinations", c: "yellow", zp: "Receipt chain traces provenance across chains" },
+      { name: "Excessive Agency", c: "green", zp: "Scoped capabilities + delegation depth limits" },
+    ],
+  },
+  {
+    id: "llm", name: "LLM Threats", source: "OWASP LLM Top 10 (2025)",
+    desc: "Top risks for applications built on large language models",
+    items: [
+      { name: "Prompt Injection", c: "yellow", zp: "GovernanceGate pipeline screens — not a dedicated WAF" },
+      { name: "Sensitive Info Disclosure", c: "green", zp: "Scoped capability grants control data access" },
+      { name: "Insecure Plugin Design", c: "green", zp: "zp-skills: verified registry + sandboxed execution" },
+      { name: "Supply Chain Vulns", c: "yellow", zp: "Rust memory safety; plugin verification in registry" },
+      { name: "Data Poisoning", c: "red", zp: "Training-time concern — outside runtime governance" },
+      { name: "Model Theft", c: "red", zp: "Model security — outside governance scope" },
+      { name: "Prompt Leakage", c: "yellow", zp: "Policy rules can enforce output screening" },
+      { name: "Unbounded Consumption", c: "green", zp: "Capability grants with rate/scope limits" },
+    ],
+  },
+  {
+    id: "atlas", name: "Adversarial ML", source: "MITRE ATLAS",
+    desc: "Adversarial techniques targeting ML across the attack lifecycle",
+    items: [
+      { name: "Reconnaissance", c: "yellow", zp: "Audit trail detects anomalous probing" },
+      { name: "Resource Development", c: "red", zp: "Attacker infrastructure — outside scope" },
+      { name: "Initial Access (API)", c: "green", zp: "Ed25519 identity + capability grants" },
+      { name: "ML Attack Staging", c: "yellow", zp: "GovernanceGate screens suspicious patterns" },
+      { name: "Exfiltration", c: "green", zp: "Scoped access + audit trail detects extraction" },
+      { name: "Impact / Disruption", c: "yellow", zp: "Kill switch + blast radius minimization" },
+      { name: "Evasion", c: "red", zp: "Model-layer evasion — outside scope" },
+      { name: "Persistence", c: "yellow", zp: "Capability expiry + revocation" },
+    ],
+  },
+  {
+    id: "data", name: "Data Protection", source: "NIST AI RMF · MANAGE",
+    desc: "Protecting data at rest, in transit, and during AI processing",
+    items: [
+      { name: "Encryption at Rest", c: "green", zp: "CredentialVault: ChaCha20-Poly1305" },
+      { name: "Access Controls", c: "green", zp: "Capability grants govern who reads/writes what" },
+      { name: "Data Loss Prevention", c: "yellow", zp: "GovernanceGate enforces content policies" },
+      { name: "Training Data Security", c: "red", zp: "Training-time concern" },
+      { name: "Privacy Preservation", c: "yellow", zp: "Scoped access + audit enables compliance" },
+    ],
+  },
+  {
+    id: "infra", name: "Infrastructure", source: "NIST CSF · Protect",
+    desc: "Network, endpoint, and deployment infrastructure",
+    items: [
+      { name: "Network Segmentation", c: "red", zp: "Network infrastructure concern" },
+      { name: "TLS / Transport", c: "yellow", zp: "Transport-agnostic; TLS is deployment config" },
+      { name: "Firewalls & IDPS", c: "red", zp: "Network layer" },
+      { name: "Endpoint Protection", c: "red", zp: "OS / infrastructure concern" },
+      { name: "Runtime Model Protection", c: "red", zp: "Model hosting concern" },
+      { name: "Canary Deployments", c: "red", zp: "Deployment infrastructure concern" },
+    ],
+  },
+];
+
+function counts(items) {
+  const g = items.filter(i => i.c === "green").length;
+  const y = items.filter(i => i.c === "yellow").length;
+  const r = items.filter(i => i.c === "red").length;
+  const t = g + y + r;
+  return { g, y, r, t, pct: t > 0 ? Math.round(((g + y * 0.5) / t) * 100) : 0 };
+}
+
+const allItems = landscape.flatMap(d => d.items);
+const totals = counts(allItems);
+
+// ─── Audio Narration ───
+
+const NARRATION_BASE = "/assets/narration";
+
+function useNarrator() {
+  const [enabled, setEnabled] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef(null);
+
+  const stop = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setSpeaking(false);
+  };
+
+  const play = (domainId, force) => {
+    if (!enabled && !force) return;
+    stop();
+    const audio = new Audio(`${NARRATION_BASE}/${domainId}.mp3`);
+    audio.onplay = () => setSpeaking(true);
+    audio.onended = () => setSpeaking(false);
+    audio.onerror = () => setSpeaking(false);
+    audioRef.current = audio;
+    audio.play().catch(() => setSpeaking(false));
+  };
+
+  useEffect(() => {
+    return () => stop();
+  }, []);
+
+  return { enabled, setEnabled, speaking, play, stop };
+}
+
+// ─── Framework Badge ───
+
+function FrameworkBadge({ tag, tip }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      style={{ position: "relative", cursor: "help" }}
+    >
+      <span style={{
+        fontSize: 11, padding: "3px 10px", borderRadius: 4,
+        backgroundColor: THEME.surface, border: `1px solid ${show ? THEME.accent : THEME.border}`,
+        color: show ? THEME.text : THEME.textDim, letterSpacing: 0.3,
+        transition: "border-color 0.2s, color 0.2s",
+      }}>{tag}</span>
+      {show && (
+        <span style={{
+          position: "absolute", bottom: "calc(100% + 8px)", left: "50%",
+          transform: "translateX(-50%)", whiteSpace: "nowrap",
+          fontSize: 12, padding: "6px 12px", borderRadius: 6,
+          backgroundColor: THEME.surface2, border: `1px solid ${THEME.border}`,
+          color: THEME.text, boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+          zIndex: 10, pointerEvents: "none",
+        }}>{tip}</span>
+      )}
+    </span>
+  );
+}
+
+// ─── Radial SVG Mindmap ───
+
+function RadialMap({ selected, onSelect, dims }) {
+  const pad = dims * 0.18;
+  const vw = dims + pad * 2;
+  const vh = dims + pad * 2;
+  const cx = vw / 2;
+  const cy = vh / 2;
+  const R0 = dims * 0.09;
+  const R1 = dims * 0.24;
+  const R2 = dims * 0.42;
+
+  const branches = landscape.map((b, i) => {
+    const angle = (i / landscape.length) * Math.PI * 2 - Math.PI / 2;
+    return { ...b, angle, bx: cx + Math.cos(angle) * R1, by: cy + Math.sin(angle) * R1 };
+  });
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${vw} ${vh}`} style={{ display: "block" }}>
+      <circle cx={cx} cy={cy} r={R1} fill="none" stroke={THEME.border} strokeWidth={0.5} strokeDasharray="4 6" opacity={0.4} />
+      <circle cx={cx} cy={cy} r={R2} fill="none" stroke={THEME.border} strokeWidth={0.5} strokeDasharray="2 8" opacity={0.25} />
+
+      {branches.map((b) => {
+        const c = counts(b.items);
+        const isSel = selected === b.id;
+        const n = b.items.length;
+        const spread = 0.38;
+        const leaves = b.items.map((item, j) => {
+          const a = n > 1 ? b.angle - spread / 2 + (j / (n - 1)) * spread : b.angle;
+          return {
+            ...item,
+            lx: cx + Math.cos(a) * R2,
+            ly: cy + Math.sin(a) * R2,
+            col: item.c === "green" ? THEME.green : item.c === "yellow" ? THEME.yellow : THEME.red,
+          };
+        });
+
+        const labelR = R1 * 1.45;
+        const lx = cx + Math.cos(b.angle) * labelR;
+        const ly = cy + Math.sin(b.angle) * labelR;
+        const normA = ((b.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        const nearVert = Math.abs(Math.sin(normA)) > 0.88;
+        const isLeft = normA > Math.PI / 2 && normA < Math.PI * 1.5;
+        const anchor = nearVert ? "middle" : isLeft ? "end" : "start";
+
+        return (
+          <g key={b.id}>
+            <line x1={cx} y1={cy} x2={b.bx} y2={b.by}
+              stroke={isSel ? THEME.accent : THEME.border} strokeWidth={isSel ? 1.5 : 1} opacity={isSel ? 0.8 : 0.35} />
+            {leaves.map((l, j) => (
+              <line key={j} x1={b.bx} y1={b.by} x2={l.lx} y2={l.ly}
+                stroke={l.col} strokeWidth={0.6} opacity={isSel ? 0.35 : 0.12} />
+            ))}
+            {leaves.map((l, j) => (
+              <g key={j}>
+                <circle cx={l.lx} cy={l.ly} r={isSel ? 5 : 3.5} fill={l.col} opacity={isSel ? 0.9 : 0.5} />
+                {isSel && <circle cx={l.lx} cy={l.ly} r={8} fill={l.col} opacity={0.1} />}
+              </g>
+            ))}
+            <g onClick={() => onSelect(b.id === selected ? null : b.id)} style={{ cursor: "pointer" }}>
+              {isSel && <circle cx={b.bx} cy={b.by} r={34} fill={THEME.accent} opacity={0.06} />}
+              <circle cx={b.bx} cy={b.by} r={26}
+                fill={isSel ? THEME.surface2 : THEME.surface}
+                stroke={isSel ? THEME.accent : THEME.border}
+                strokeWidth={isSel ? 2 : 1} />
+              <text x={b.bx} y={b.by + 1} textAnchor="middle" dominantBaseline="central"
+                fill={isSel ? THEME.accent : THEME.textDim} fontSize={12} fontWeight="700">
+                {c.pct}%
+              </text>
+            </g>
+            <text x={lx} y={ly} textAnchor={anchor} dominantBaseline="central"
+              fill={isSel ? THEME.text : THEME.textDim}
+              fontSize={13} fontWeight={isSel ? 700 : 500}
+              style={{ cursor: "pointer" }}
+              onClick={() => onSelect(b.id === selected ? null : b.id)}>
+              {b.name}
+            </text>
+          </g>
+        );
+      })}
+
+      <circle cx={cx} cy={cy} r={R0 + 8} fill={THEME.accent} opacity={0.04} />
+      <circle cx={cx} cy={cy} r={R0} fill={THEME.surface} stroke={THEME.accent} strokeWidth={1.5} />
+      <text x={cx} y={cy - 8} textAnchor="middle" fill={THEME.accent} fontSize={13} fontWeight="700">
+        {totals.pct}%
+      </text>
+      <text x={cx} y={cy + 8} textAnchor="middle" fill={THEME.textMuted} fontSize={9} fontWeight="500">
+        COVERAGE
+      </text>
+    </svg>
+  );
+}
+
+// ─── Detail Panel ───
+
+function DetailPanel({ branch, narrating }) {
+  if (!branch) return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      height: "100%", color: THEME.textMuted, fontSize: 13,
+      fontStyle: "italic", padding: 32, textAlign: "center",
+    }}>
+      {narrating
+        ? "Select a domain to hear about ZeroPoint coverage"
+        : "Select a domain to explore ZeroPoint coverage"}
+    </div>
+  );
+
+  const c = counts(branch.items);
+
+  return (
+    <div style={{ padding: "4px 0" }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: THEME.text }}>{branch.name}</div>
+        <div style={{ fontSize: 11, color: THEME.textMuted, marginTop: 2, letterSpacing: 0.5 }}>{branch.source}</div>
+        <div style={{ fontSize: 13, color: THEME.textDim, marginTop: 8, lineHeight: 1.5 }}>{branch.desc}</div>
+        <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 12 }}>
+          {c.g > 0 && <span style={{ color: THEME.green }}>{c.g} built-in</span>}
+          {c.y > 0 && <span style={{ color: THEME.yellow }}>{c.y} partial</span>}
+          {c.r > 0 && <span style={{ color: THEME.red }}>{c.r} outside</span>}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {branch.items.map((item, i) => {
+          const col = item.c === "green" ? THEME.green : item.c === "yellow" ? THEME.yellow : THEME.red;
+          const bg = item.c === "green" ? THEME.greenDim : item.c === "yellow" ? THEME.yellowDim : THEME.redDim;
+          const tag = item.c === "green" ? "BUILT-IN" : item.c === "yellow" ? "PARTIAL" : "N/A";
+          return (
+            <div key={i} style={{
+              display: "flex", alignItems: "flex-start", gap: 10,
+              padding: "10px 12px", borderRadius: 6, backgroundColor: bg,
+              border: `1px solid ${col}15`,
+            }}>
+              <div style={{
+                width: 7, height: 7, borderRadius: "50%", backgroundColor: col,
+                marginTop: 5, flexShrink: 0, boxShadow: `0 0 6px ${col}40`,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: THEME.text }}>{item.name}</div>
+                <div style={{ fontSize: 12, color: THEME.textDim, marginTop: 2, lineHeight: 1.4 }}>{item.zp}</div>
+              </div>
+              <span style={{
+                fontSize: 10, padding: "2px 7px", borderRadius: 3, fontWeight: 600,
+                backgroundColor: `${col}20`, color: col, whiteSpace: "nowrap",
+                alignSelf: "center", letterSpacing: 0.5,
+              }}>{tag}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main ───
+
+function ZeroPointFootprint() {
+  const [selected, setSelected] = useState(null);
+  const containerRef = useRef(null);
+  const [svgSize, setSvgSize] = useState(600);
+  const [pulsing, setPulsing] = useState(true);
+  const narrator = useNarrator();
+  const branch = landscape.find(b => b.id === selected);
+
+  useEffect(() => {
+    const t = setTimeout(() => setPulsing(false), 4000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleSelect = (id) => {
+    setSelected(id);
+    if (id) {
+      narrator.play(id);
+    } else {
+      narrator.stop();
+    }
+  };
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      setSvgSize(Math.min(Math.max(w * 0.55, 380), 780));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      color: THEME.text,
+      maxWidth: 1200, margin: "0 auto", padding: "32px 24px 64px",
+    }}>
+      <style>{`
+        @keyframes narratePulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(126,184,218,0); }
+          50% { box-shadow: 0 0 12px 3px rgba(126,184,218,0.35); }
+        }
+      `}</style>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{
+          fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', monospace",
+          fontSize: "0.75rem", color: "#4a7a96",
+          letterSpacing: "0.15em", textTransform: "uppercase",
+          marginBottom: "1rem",
+        }}>AI Security Coverage</div>
+        <h1 style={{
+          fontSize: "clamp(1.6rem, 4vw, 2.4rem)", fontWeight: 300, margin: 0,
+          letterSpacing: "-0.02em", lineHeight: 1.2,
+        }}>
+          <strong style={{ fontWeight: 600, color: THEME.accent }}>ZeroPoint</strong>{" "}
+          <span style={{ color: THEME.textDim }}>in the</span>{" "}
+          AI Security Landscape
+        </h1>
+        <div style={{ fontSize: 14, color: THEME.textDim, marginTop: 12, lineHeight: 1.7, maxWidth: 720 }}>
+          ZeroPoint is a cryptographic trust, security, and governance framework for AI agents.
+          This map shows where ZeroPoint sits across {totals.t} capabilities drawn from four
+          authoritative AI security frameworks.
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+          {[
+            { tag: "NIST AI RMF", tip: "National Institute of Standards & Technology — AI Risk Management Framework" },
+            { tag: "OWASP LLM Top 10", tip: "Open Worldwide Application Security Project — Top 10 risks for Large Language Model applications" },
+            { tag: "OWASP Agentic Top 10", tip: "Open Worldwide Application Security Project — Top 10 risks for autonomous AI agents" },
+            { tag: "MITRE ATLAS", tip: "MITRE Adversarial Threat Landscape for AI Systems — tactics & techniques targeting ML" },
+          ].map(f => <FrameworkBadge key={f.tag} tag={f.tag} tip={f.tip} />)}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        {[
+          { n: `${totals.pct}%`, l: "overall coverage", col: THEME.accent },
+          { n: totals.g, l: "built-in", col: THEME.green },
+          { n: totals.y, l: "partial", col: THEME.yellow },
+          { n: totals.r, l: "outside scope", col: THEME.red },
+        ].map((s, i) => (
+          <div key={i} style={{
+            flex: "1 1 120px", padding: "14px 16px",
+            backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: 8,
+          }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: s.col, lineHeight: 1 }}>{s.n}</div>
+            <div style={{ fontSize: 11, color: THEME.textMuted, marginTop: 4 }}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", height: 4, borderRadius: 2, overflow: "hidden", marginBottom: 24, backgroundColor: THEME.surface }}>
+        <div style={{ width: `${(totals.g / totals.t) * 100}%`, backgroundColor: THEME.green }} />
+        <div style={{ width: `${(totals.y / totals.t) * 100}%`, backgroundColor: THEME.yellow }} />
+        <div style={{ width: `${(totals.r / totals.t) * 100}%`, backgroundColor: THEME.red }} />
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          {[
+            { c: THEME.green, l: "ZeroPoint built-in" },
+            { c: THEME.yellow, l: "Partially enabled" },
+            { c: THEME.red, l: "Outside scope" },
+          ].map((lg, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: THEME.textDim }}>
+              <div style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: lg.c }} />
+              {lg.l}
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => {
+            setPulsing(false);
+            const next = !narrator.enabled;
+            narrator.setEnabled(next);
+            if (next) {
+              const firstId = landscape[0].id;
+              setSelected(firstId);
+              narrator.play(firstId, true);
+            } else {
+              narrator.stop();
+            }
+          }}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "5px 12px", borderRadius: 4, fontSize: 12, fontWeight: 500,
+            border: `1px solid ${narrator.enabled ? THEME.accent : THEME.border}`,
+            backgroundColor: narrator.enabled ? "rgba(126,184,218,0.1)" : "transparent",
+            color: narrator.enabled ? THEME.accent : THEME.textMuted,
+            cursor: "pointer", transition: "all 0.2s",
+            animation: pulsing && !narrator.enabled ? "narratePulse 1.5s ease-in-out 3" : "none",
+          }}
+        >
+          <span style={{ fontSize: 15 }}>{narrator.speaking ? "\u{1F50A}" : narrator.enabled ? "\u{1F508}" : "\u{1F507}"}</span>
+          {narrator.enabled ? "Narration on" : "Narrate"}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 400px", display: "flex", justifyContent: "center" }}>
+          <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} />
+        </div>
+        <div style={{
+          flex: "1 1 340px", minWidth: 300,
+          backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`,
+          borderRadius: 8, padding: 16,
+        }}>
+          <DetailPanel branch={branch} narrating={narrator.enabled} />
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 40, paddingTop: 20, borderTop: `1px solid ${THEME.border}`,
+        display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
+        fontSize: 11, color: THEME.textMuted,
+      }}>
+        <span>Coverage = (built-in + 0.5 × partial) ÷ total per domain</span>
+        <a href="https://github.com/zeropoint-foundation/zeropoint" target="_blank" rel="noopener"
+          style={{ color: THEME.accent, textDecoration: "none" }}>
+          github.com/zeropoint-foundation/zeropoint
+        </a>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("footprint-root")).render(<ZeroPointFootprint />);
+</script>
+
+</body>
+</html>

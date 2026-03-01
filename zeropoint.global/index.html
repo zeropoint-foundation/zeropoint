@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — Portable Trust for the Post-Platform Internet</title>
+<meta name="description" content="Portable trust infrastructure — cryptographic governance primitives that make actions provable, auditable, and policy-bound. No platform required. No central authority. Your keys, your chain, your trust.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #a8d4ee; }
+
+/* --- Layout --- */
+
+.container {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.wide-container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* --- Header / Nav --- */
+
+header {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+
+nav {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-logo {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--text);
+  letter-spacing: 0.05em;
+}
+
+.nav-logo span { color: var(--accent); }
+
+.nav-links { display: flex; gap: 2rem; align-items: center; }
+
+.nav-links a {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  transition: color 0.2s;
+}
+
+.nav-links a:hover { color: var(--text); }
+
+.nav-links .github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* --- Hero --- */
+
+.hero {
+  padding: 10rem 0 6rem;
+  text-align: center;
+}
+
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent-dim);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 300;
+  line-height: 1.2;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+h1 strong {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.hero-sub {
+  font-size: 1.15rem;
+  color: var(--text-muted);
+  max-width: 600px;
+  margin: 0 auto 2.5rem;
+  line-height: 1.7;
+}
+
+.hero-cta {
+  display: inline-flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn {
+  display: inline-block;
+  padding: 0.75rem 1.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.btn-primary:hover {
+  background: #a8d4ee;
+  color: var(--bg);
+}
+
+.btn-secondary {
+  border: 1px solid var(--rule);
+  color: var(--text-muted);
+}
+
+.btn-secondary:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+/* --- Sections --- */
+
+section { padding: 5rem 0; }
+
+.section-rule {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 0;
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-dim);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 1.8rem;
+  font-weight: 300;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+/* --- Tenets --- */
+
+.tenets {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.tenet {
+  padding: 2.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tenet:last-child { border-bottom: none; }
+
+.tenet-number {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-dim);
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+}
+
+.tenet h3 {
+  font-size: 1.2rem;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+}
+
+.tenet p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.8;
+}
+
+/* --- Architecture --- */
+
+.pillars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.pillar {
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 2rem 1.5rem;
+}
+
+.pillar-question {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.pillar h3 { margin-bottom: 1rem; }
+
+.pillar p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.pillar-tags {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pillar-tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  background: var(--bg-subtle);
+  padding: 0.25rem 0.6rem;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+}
+
+/* --- Pipeline --- */
+
+.pipeline-flow {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1.5rem 2rem;
+  text-align: center;
+  margin: 2rem 0;
+  letter-spacing: 0.02em;
+  overflow-x: auto;
+}
+
+.pipeline-flow span { color: var(--accent); }
+
+/* --- Capabilities --- */
+
+.capabilities {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.capability {
+  padding: 1.5rem;
+  border-left: 2px solid var(--rule);
+}
+
+.capability:hover { border-left-color: var(--accent-dim); }
+
+.capability h3 {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.capability p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+/* --- Code Block --- */
+
+.code-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 2rem 0;
+  overflow-x: auto;
+}
+
+.code-block code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.8;
+}
+
+.code-block .comment { color: var(--text-dim); }
+.code-block .keyword { color: var(--accent); }
+
+/* --- Mesh --- */
+
+.mesh-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.mesh-stat {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+.mesh-stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.mesh-stat-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+}
+
+/* --- Reticulum --- */
+
+.reticulum-section {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.reticulum-section p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.8;
+  margin-bottom: 1rem;
+}
+
+.reticulum-section p:last-child { margin-bottom: 0; }
+
+/* --- Footer --- */
+
+footer {
+  padding: 3rem 0;
+  border-top: 1px solid var(--rule);
+  text-align: center;
+}
+
+.footer-logo {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.footer-links a {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.footer-links a:hover { color: var(--text-muted); }
+
+.footer-org {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+
+/* --- Definition Block --- */
+
+.definition-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 2.5rem;
+  max-width: 680px;
+  margin: 2.5rem auto 0;
+}
+
+.definition-block .def-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.definition-block p {
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+/* --- Flow --- */
+
+.flow-section {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.flow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.flow-step {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  position: relative;
+}
+
+.flow-step-number {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 500;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+
+.flow-step h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.flow-step p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.flow-arrow {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .flow-step:not(:last-child)::after {
+    content: '\2192';
+    position: absolute;
+    right: -1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent-dim);
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .flow-steps { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 480px) {
+  .flow-steps { grid-template-columns: 1fr; }
+}
+
+/* --- Closing Quote --- */
+
+.closing {
+  text-align: center;
+  padding: 5rem 0;
+}
+
+.closing blockquote {
+  font-size: 1.15rem;
+  font-style: italic;
+  color: var(--text-muted);
+  max-width: 500px;
+  margin: 0 auto 1rem;
+  line-height: 1.7;
+}
+
+.closing .attribution {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 768px) {
+  .pillars { grid-template-columns: 1fr; }
+  .capabilities { grid-template-columns: 1fr; }
+  .mesh-stats { grid-template-columns: repeat(2, 1fr); }
+  .nav-links { gap: 1rem; }
+  .hero { padding: 8rem 0 4rem; }
+  section { padding: 3.5rem 0; }
+}
+
+@media (max-width: 480px) {
+  .mesh-stats { grid-template-columns: 1fr; }
+}
+
+/* --- Hamburger Menu --- */
+
+.hamburger { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; text-decoration: none; }
+.mobile-menu a:hover { color: var(--accent); }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .hamburger { display: block; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="#tenets" class="hide-mobile">Tenets</a>
+      <a href="#architecture">Architecture</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">For Agents</a>
+      <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">For Agents</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">Portable Trust Infrastructure</div>
+    <h1><strong>Portable trust</strong> for the<br>post-platform internet</h1>
+    <p class="hero-sub">
+      Cryptographic governance primitives that make actions provable, authority traceable, and exit real — for any participant, over any transport, without any central authority.
+    </p>
+    <div class="hero-cta">
+      <a href="/playground.html" class="btn btn-primary">Try the Playground</a>
+      <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
+    </div>
+
+    <div class="definition-block">
+      <div class="def-label">What "portable trust" means</div>
+      <p>Any third party can verify what happened using receipts alone — without trusting your servers, your platform, or your claims. The evidence travels with the work, not with a vendor.</p>
+    </div>
+  </div>
+</section>
+
+<!-- End-to-End Flow -->
+<section class="flow-section">
+  <div class="wide-container" style="padding-top: 4rem; padding-bottom: 4rem;">
+    <div class="section-label">How It Works</div>
+    <h2>One Flow, Portable Proof</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; max-width: 680px; margin-bottom: 0.5rem;">
+      An agent delegates a task. A receipt is produced. A third party verifies the chain. The network can disappear — the evidence remains.
+    </p>
+
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-step-number">1</div>
+        <h3>Action Requested</h3>
+        <p>A human or agent requests an action. The request hits the Guard — the local sovereignty boundary.</p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-step-number">2</div>
+        <h3>Policy Evaluated</h3>
+        <p>Constitutional rules (non-removable) and operational rules evaluate the request. Most restrictive decision wins.</p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-step-number">3</div>
+        <h3>Receipt Produced</h3>
+        <p>If allowed, the action executes. A signed, hash-chained receipt records what happened, who authorized it, and what constraints applied.</p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-step-number">4</div>
+        <h3>Chain Verified</h3>
+        <p>Any peer can verify the receipt chain independently. No platform access needed. The proof is the product.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Tenets -->
+<section class="tenets" id="tenets">
+  <div class="container">
+    <div class="section-label">Constitutional Commitments</div>
+    <h2>The Four Tenets</h2>
+    <p style="color: var(--text-muted); margin-bottom: 2rem; font-size: 0.95rem;">
+      Embedded in the protocol. Enforced in the code. No capability grant, no policy rule, no consensus vote can override them.
+    </p>
+
+    <div class="tenet">
+      <div class="tenet-number">Tenet I</div>
+      <h3>Do No Harm</h3>
+      <p>ZeroPoint shall not operate in systems designed to harm humans. The <code style="font-family: var(--font-mono); color: var(--accent); font-size: 0.85em;">HarmPrincipleRule</code> is a non-removable policy rule evaluated before every action. It cannot be bypassed, overridden, or removed at runtime.</p>
+    </div>
+
+    <div class="tenet">
+      <div class="tenet-number">Tenet II</div>
+      <h3>Sovereignty Is Sacred</h3>
+      <p>Every participant has the right to refuse any action. Every human has the right to disconnect any agent. No participant may acquire capabilities it was not granted. Coercion is architecturally impossible.</p>
+    </div>
+
+    <div class="tenet">
+      <div class="tenet-number">Tenet III</div>
+      <h3>Action Without Evidence Is No Action</h3>
+      <p>Every action produces a receipt. Every receipt joins a chain. No participant may act without leaving a cryptographic trace. If it's not in the chain, it didn't happen.</p>
+    </div>
+
+    <div class="tenet">
+      <div class="tenet-number">Tenet IV</div>
+      <h3>The Human Is The Root</h3>
+      <p>Every delegation chain terminates at a human-held key. No agent may self-authorize. The genesis key is always held by flesh, blood, and soul. A human root can be a quorum (multisig) or an org-held key under policy — still human-accountable, never a single point of failure.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+  <div class="wide-container">
+    <div class="section-label">Architecture</div>
+    <h2>Three Pillars of Governance</h2>
+
+    <div class="pillars">
+      <div class="pillar">
+        <div class="pillar-question">"May I?"</div>
+        <h3>Guard</h3>
+        <p>The participant's sovereign boundary. Runs locally, before any action, without consulting external authority. A peer can request. A peer cannot compel.</p>
+        <div class="pillar-tags">
+          <span class="pillar-tag">local-first</span>
+          <span class="pillar-tag">actor-aware</span>
+          <span class="pillar-tag">pre-action</span>
+        </div>
+      </div>
+
+      <div class="pillar">
+        <div class="pillar-question">"Should I?"</div>
+        <h3>Policy</h3>
+        <p>Composable rules evaluated during every decision. Constitutional rules are loaded first and cannot be overridden. The most restrictive decision wins.</p>
+        <div class="pillar-tags">
+          <span class="pillar-tag">rule-composed</span>
+          <span class="pillar-tag">graduated</span>
+          <span class="pillar-tag">WASM-extensible</span>
+        </div>
+      </div>
+
+      <div class="pillar">
+        <div class="pillar-question">"Did I?"</div>
+        <h3>Audit</h3>
+        <p>Hash-chained, receipt-native, immutable. Every outcome joins the chain. Peers can challenge each other's chains and produce signed attestations.</p>
+        <div class="pillar-tags">
+          <span class="pillar-tag">hash-chained</span>
+          <span class="pillar-tag">receipt-native</span>
+          <span class="pillar-tag">collective</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline-flow">
+      Request → <span>Guard</span> (pre-action) → <span>Policy</span> (decision) → Execute → <span>Audit</span> (post-action) → <span>Receipt</span>
+    </div>
+
+    <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">
+      Nothing executes without passing through the gate. Nothing passes through the gate without joining the audit chain.
+    </p>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Capabilities -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">Capabilities</div>
+    <h2>What ZeroPoint Provides</h2>
+
+    <div class="capabilities">
+      <div class="capability">
+        <h3>Signed Capability Grants</h3>
+        <p>Portable, cryptographic authorization tokens. Scoped by action type, constrained by cost ceilings, rate limits, time windows, and scope restrictions. Delegatable with depth controls.</p>
+      </div>
+
+      <div class="capability">
+        <h3>Delegation Chains</h3>
+        <p>Tier 2 participants delegate sub-capabilities to others — human to agent, agent to agent, or human to human. Eight invariants enforced: parent-child linkage, scope narrowing, depth limits, expiration inheritance, and signature verification.</p>
+      </div>
+
+      <div class="capability">
+        <h3>Multi-Dimensional Reputation</h3>
+        <p>Four signal categories — audit attestation, delegation chain, policy compliance, receipt exchange — weighted and time-decayed into a composite score. Reputation gates policy decisions.</p>
+      </div>
+
+      <div class="capability">
+        <h3>WASM Policy Modules</h3>
+        <p>Sandboxed, fuel-limited policy rules exchanged between peers over the mesh. Compiled with wasmtime, hash-verified on receipt, evaluated alongside native rules.</p>
+      </div>
+
+      <div class="capability">
+        <h3>Distributed Consensus</h3>
+        <p>Receipt-based multi-peer voting. Configurable thresholds: Unanimous, Majority, or K-of-N. No central coordinator. Only signed receipts flowing through the mesh.</p>
+      </div>
+
+      <div class="capability">
+        <h3>Collective Audit Verification</h3>
+        <p>Peers challenge each other's audit chains, verify integrity, and produce signed attestations. Broken chains generate negative reputation signals.</p>
+      </div>
+
+      <div class="capability">
+        <h3>Persistent Mesh State</h3>
+        <p>SQLite-backed storage for peers, reputation signals, delegation chains, audit attestations, and policy agreements. Save and restore across node restarts.</p>
+      </div>
+
+      <div class="capability">
+        <h3>CLI Tooling</h3>
+        <p>Interactive chat, command security evaluation (Guard), mesh status and peer management, audit chain challenge, capability delegation, and state persistence — all from the terminal.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Mesh -->
+<section id="mesh">
+  <div class="wide-container">
+    <div class="section-label">Transport</div>
+    <h2>Sovereign Mesh Networking</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; max-width: 680px; margin-bottom: 2rem;">
+      ZeroPoint participants communicate over a Reticulum-compatible encrypted mesh — or HTTP, TCP, UDP, or any combination. No DNS, no certificate authorities, no cloud infrastructure required. Identity is a keypair. Authentication is a signature. The same protocol runs over LoRa at 300 baud or fiber at 1 Gbps. Agents, humans, and services are all first-class peers.
+    </p>
+
+    <div class="mesh-stats">
+      <div class="mesh-stat">
+        <div class="mesh-stat-value">128</div>
+        <div class="mesh-stat-label">bit destination hash</div>
+      </div>
+      <div class="mesh-stat">
+        <div class="mesh-stat-value">500</div>
+        <div class="mesh-stat-label">byte default MTU</div>
+      </div>
+      <div class="mesh-stat">
+        <div class="mesh-stat-value">Ed25519</div>
+        <div class="mesh-stat-label">signing + X25519 ECDH</div>
+      </div>
+      <div class="mesh-stat">
+        <div class="mesh-stat-value">HDLC</div>
+        <div class="mesh-stat-label">wire-compatible framing</div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <code>
+<span class="comment">// Create a sovereign identity (agent, human, or service)</span><br>
+<span class="keyword">let</span> identity = MeshIdentity::generate();<br>
+<span class="keyword">let</span> node = MeshNode::new(identity);<br>
+<br>
+<span class="comment">// Attach any physical medium</span><br>
+<span class="keyword">let</span> tcp = TcpClientInterface::connect(<span style="color:#8eb87a">"127.0.0.1:4242"</span>).<span class="keyword">await</span>?;<br>
+node.attach_interface(Arc::new(tcp)).<span class="keyword">await</span>;<br>
+<br>
+<span class="comment">// Start the mesh runtime</span><br>
+<span class="keyword">let</span> runtime = MeshRuntime::start_default(Arc::new(node));<br>
+<br>
+<span class="comment">// Every action produces a receipt. Every receipt joins the chain.</span>
+      </code>
+    </div>
+  </div>
+</section>
+
+<!-- Reticulum -->
+<section class="reticulum-section" id="reticulum">
+  <div class="container" style="padding-top: 4rem; padding-bottom: 4rem;">
+    <div class="section-label">Foundation</div>
+    <h2>Built on Reticulum</h2>
+    <p>
+      ZeroPoint is built as a citizen of the <a href="https://reticulum.network">Reticulum Network Stack</a>,
+      created by <a href="https://unsigned.io">Mark Qvist</a>. Reticulum proved that encrypted, uncentralizable
+      networking requires no central authority — only cryptographic proof, personal sovereignty, and a refusal
+      to build tools of harm.
+    </p>
+    <p>
+      The ZeroPoint Tenets draw directly from Reticulum's Harm Principle, its concept of cryptographic sovereignty,
+      and its insistence that architecture embodies values. We build on Reticulum's wire protocol as citizens
+      of its mesh, and we carry forward its philosophical commitments into the domain of accountable digital action — for agents, humans, and every system in between.
+    </p>
+    <p style="color: var(--text-dim); font-style: italic;">
+      The <a href="https://reticulum.network/manual/zen.html">Zen of Reticulum</a> is required reading.
+    </p>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Getting Started -->
+<section id="start">
+  <div class="container">
+    <div class="section-label">Get Started</div>
+    <h2>Try It Now</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem;">
+      ZeroPoint is open source, technically complete, and ready for early adopters.
+    </p>
+
+    <div class="code-block">
+      <code>
+<span class="comment"># Clone the repository</span><br>
+git clone https://github.com/zeropoint-foundation/zeropoint.git<br>
+<span class="keyword">cd</span> zeropoint<br>
+<br>
+<span class="comment"># Run all 699 tests across 13 crates</span><br>
+cargo test --workspace<br>
+<br>
+<span class="comment"># Start the governance server</span><br>
+cargo run -p zp-server<br>
+<br>
+<span class="comment"># Open the playground</span><br>
+open http://localhost:3000
+      </code>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 2rem;">
+      <div style="padding: 1.5rem; border-left: 2px solid var(--rule);">
+        <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">Interactive Demos</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; line-height: 1.7;">
+          <a href="/playground.html">Governance Playground</a> — type an action, watch ZeroPoint evaluate it live.<br>
+          <a href="/demo-chain.html">Chain Visualizer</a> — see receipt chains form and verify integrity.
+        </p>
+      </div>
+      <div style="padding: 1.5rem; border-left: 2px solid var(--rule);">
+        <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">Read the Docs</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; line-height: 1.7;">
+          <a href="/whitepaper.html">Whitepaper</a> — the full technical overview and portable trust thesis.<br>
+          <a href="https://github.com/zeropoint-foundation/zeropoint/blob/main/docs/governance.md">Governance Framework</a> — protocol constraints and tenets.
+        </p>
+      </div>
+      <div style="padding: 1.5rem; border-left: 2px solid var(--rule);">
+        <h3 style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">Contribute</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; line-height: 1.7;">
+          <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a> — 13 crates, 699 tests, MIT/Apache-2.0.<br>
+          <a href="https://github.com/zeropoint-foundation/zeropoint/blob/main/CONTRIBUTING.md">Contributing Guide</a> — how to get involved.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Closing -->
+<section class="closing">
+  <div class="container">
+    <blockquote>
+      Trust is infrastructure.
+    </blockquote>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/demo-chain.html">Chain Demo</a>
+      <a href="/for-agents.html">For Agents</a>
+    </div>
+    <div class="footer-org">
+      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
