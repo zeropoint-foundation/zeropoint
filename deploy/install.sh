@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# ZeroPoint v2 — Single-Command Install
+# ZeroPoint — Single-Command Install
 # ============================================================================
 #
 # Usage:
@@ -36,7 +36,7 @@ ZP_HOME="$HOME/.zeropoint"
 ZP_BIN="$ZP_HOME/bin"
 ZP_PORT="${ZP_PORT:-3000}"
 
-header "ZeroPoint v2 — Install"
+header "ZeroPoint — Install"
 echo ""
 echo "  Trust is infrastructure."
 echo ""
@@ -266,13 +266,19 @@ echo "  Your shell, tools, and files are untouched."
 echo ""
 
 # Tell the user how to activate PATH
-if [ -n "${PATH_ADDED_TO:-}" ]; then
-echo -e "  ${BOLD}To activate the zp command, run:${NC}"
+# The export PATH in this script only affects the subprocess.
+# The user's parent shell needs to source the rc file.
+SHELL_NAME=$(basename "$SHELL")
+case "$SHELL_NAME" in
+    zsh)  ACTIVATE_FILE="$HOME/.zshrc" ;;
+    bash) ACTIVATE_FILE="$HOME/.bashrc"; [ -f "$HOME/.bash_profile" ] && ACTIVATE_FILE="$HOME/.bash_profile" ;;
+    *)    ACTIVATE_FILE="" ;;
+esac
+
+if [ -n "$ACTIVATE_FILE" ]; then
+echo -e "  ${BOLD}To start using zp, run:${NC}"
 echo ""
-echo -e "    ${CYAN}source $PATH_ADDED_TO${NC}"
-echo ""
-else
-echo -e "  The ${CYAN}zp${NC} command is available in your PATH."
+echo -e "    ${CYAN}source $ACTIVATE_FILE${NC}"
 echo ""
 fi
 
