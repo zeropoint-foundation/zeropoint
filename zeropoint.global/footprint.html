@@ -137,6 +137,7 @@ footer {
   <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
   <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
   <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
   <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
   <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
 </div>
@@ -147,7 +148,12 @@ footer {
 <div style="max-width: 900px; margin: 6rem auto 3rem; padding: 0 2rem; color: #e8e6e3; font-family: 'Inter', sans-serif; line-height: 1.7;">
 
 <h1 style="font-size: 1.8rem; font-weight: 300; margin-bottom: 1rem;">ZeroPoint AI Security Landscape Footprint</h1>
-<p style="color: #8a8a8e; margin-bottom: 2rem;">
+<p style="color: #8a8a8e; margin-bottom: 1rem;">
+  <span style="color: #7eb8da; font-weight: 600;">Footprint = Authority Surface + Coverage Map.</span>
+  Autonomous systems don't just "run workflows" — they make determinations that the rest of the system treats as legitimate. That's authority.
+  ZeroPoint's approach is to make authority <span style="color: #e8e6e3;">explicit</span>, <span style="color: #e8e6e3;">enforceable at the point of action</span>, <span style="color: #e8e6e3;">observable by default</span>, and <span style="color: #e8e6e3;">terminable by design</span>.
+</p>
+<p style="color: #5a5a5e; margin-bottom: 2rem; font-size: 0.9rem;">
   ZeroPoint's coverage across 51 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.
   Overall weighted coverage: approximately 68%.
   Green = directly addressed, Yellow = partially addressed, Red = outside scope.
@@ -244,7 +250,16 @@ footer {
   <li><strong style="color: #f87171;">Canary Deployments</strong> — Deployment infrastructure concern</li>
 </ul>
 
-<p style="color: #5a5a5e; font-size: 0.85rem; margin-top: 2rem; border-top: 1px solid #222228; padding-top: 1.5rem;">
+<div style="margin-top: 2rem; padding: 1.25rem 1.5rem; background-color: #111114; border: 1px solid #222228; border-radius: 8px;">
+  <p style="color: #7eb8da; font-weight: 600; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase; margin: 0 0 0.5rem 0;">Next</p>
+  <p style="color: #e8e6e3; font-weight: 500; font-size: 0.95rem; margin: 0 0 0.25rem 0;">Authority Graph</p>
+  <p style="color: #8a8a8e; font-size: 0.85rem; line-height: 1.6; margin: 0;">
+    A live view that makes delegation chains and arbitration surfaces visible — not implicit.
+    Who authorized what, through whom, and where disputes resolve.
+  </p>
+</div>
+
+<p style="color: #5a5a5e; font-size: 0.85rem; margin-top: 1.25rem; border-top: 1px solid #222228; padding-top: 1.5rem;">
   Coverage key: <span style="color: #34d399;">Green</span> = directly addressed by ZeroPoint primitives.
   <span style="color: #fb923c;">Yellow</span> = partially addressed or enabled by framework data.
   <span style="color: #f87171;">Red</span> = outside ZeroPoint's governance scope (infrastructure, model-layer, or training-time concerns).
@@ -262,6 +277,7 @@ footer {
       <a href="/for-agents.html">Governing Agents</a>
       <a href="/demo-chain.html">Chain Demo</a>
       <a href="/footprint.html">Footprint</a>
+      <a href="/setup.html">Setup</a>
       <a href="/letter.html">Letter</a>
     </div>
     <div class="footer-org">
@@ -829,7 +845,15 @@ function ZeroPointFootprint() {
           AI Security Landscape
         </h1>
         <div style={{ fontSize: 14, color: THEME.textDim, marginTop: 12, lineHeight: 1.7, maxWidth: 720 }}>
-          ZeroPoint is a cryptographic trust, security, and governance framework for AI agents.
+          <span style={{ color: THEME.accent, fontWeight: 600 }}>Footprint = Authority Surface + Coverage Map.</span>{" "}
+          Autonomous systems don't just "run workflows" — they make determinations that the rest of the system
+          treats as legitimate. That's authority. ZeroPoint's approach is to make authority{" "}
+          <em style={{ color: THEME.text, fontStyle: "normal" }}>explicit</em>,{" "}
+          <em style={{ color: THEME.text, fontStyle: "normal" }}>enforceable at the point of action</em>,{" "}
+          <em style={{ color: THEME.text, fontStyle: "normal" }}>observable by default</em>, and{" "}
+          <em style={{ color: THEME.text, fontStyle: "normal" }}>terminable by design</em>.
+        </div>
+        <div style={{ fontSize: 13, color: THEME.textMuted, marginTop: 8, lineHeight: 1.7, maxWidth: 720 }}>
           This map shows where ZeroPoint sits across {totals.t} capabilities drawn from four
           authoritative AI security frameworks.
         </div>
@@ -928,8 +952,26 @@ function ZeroPointFootprint() {
         </div>
       </div>
 
+      {/* Next step */}
       <div style={{
-        marginTop: 40, paddingTop: 20, borderTop: `1px solid ${THEME.border}`,
+        marginTop: 40, padding: "20px 24px",
+        backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: 8,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 13, color: THEME.accent, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>Next</span>
+          <div style={{ flex: 1, height: 1, backgroundColor: THEME.border }} />
+        </div>
+        <div style={{ fontSize: 15, color: THEME.text, fontWeight: 500, marginBottom: 6 }}>
+          Authority Graph
+        </div>
+        <div style={{ fontSize: 13, color: THEME.textDim, lineHeight: 1.6 }}>
+          A live view that makes delegation chains and arbitration surfaces visible — not implicit.
+          Who authorized what, through whom, and where disputes resolve.
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 20, paddingTop: 20, borderTop: `1px solid ${THEME.border}`,
         display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
         fontSize: 11, color: THEME.textMuted,
       }}>

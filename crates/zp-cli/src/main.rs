@@ -4,6 +4,7 @@ mod chat;
 mod commands;
 mod guard;
 mod mesh_commands;
+mod secure;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -83,6 +84,26 @@ enum Commands {
         #[arg(long, default_value = "human")]
         actor: String,
     },
+    /// Secure your compute space — guided setup wizard
+    Secure {
+        /// Accept smart defaults without prompting
+        #[arg(long)]
+        accept_defaults: bool,
+
+        /// Run in wizard mode (customize every choice)
+        #[arg(long)]
+        wizard: bool,
+
+        /// Governance posture: permissive, balanced, strict
+        #[arg(long, default_value = "balanced")]
+        posture: String,
+
+        /// Skip specific phases (comma-separated: shell,ai,network,filesystem)
+        #[arg(long)]
+        skip: Option<String>,
+    },
+    /// Show current governance status
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -168,6 +189,38 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    // Secure runs the guided setup wizard — no pipeline needed
+    if let Some(Commands::Secure {
+        accept_defaults,
+        wizard,
+        posture,
+        skip,
+    }) = &args.command
+    {
+        let skip_phases: Vec<String> = skip
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim().to_lowercase())
+            .collect();
+
+        let config = secure::SecureConfig {
+            accept_defaults: *accept_defaults,
+            wizard: *wizard,
+            posture: posture.parse().unwrap_or(secure::Posture::Balanced),
+            skip_phases,
+        };
+        let exit_code = secure::run(&config);
+        std::process::exit(exit_code);
+    }
+
+    // Status shows current governance state — no pipeline needed
+    if matches!(&args.command, Some(Commands::Status)) {
+        let exit_code = secure::status();
+        std::process::exit(exit_code);
+    }
+
     let trust_tier = match args.trust_tier.as_str() {
         "tier0" => TrustTier::Tier0,
         "tier1" => TrustTier::Tier1,
@@ -220,8 +273,10 @@ async fn main() -> anyhow::Result<()> {
         None | Some(Commands::Chat) => chat::run(&pipeline).await?,
         Some(Commands::Health) => commands::health(&pipeline).await?,
         Some(Commands::Audit(AuditCmd::Verify)) => commands::audit_verify(&pipeline).await?,
-        Some(Commands::Guard { .. }) => unreachable!(), // handled above
-        Some(Commands::Serve { .. }) => unreachable!(), // handled above
+        Some(Commands::Guard { .. }) => unreachable!(),  // handled above
+        Some(Commands::Serve { .. }) => unreachable!(),  // handled above
+        Some(Commands::Secure { .. }) => unreachable!(), // handled above
+        Some(Commands::Status) => unreachable!(),        // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,

@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup — ZeroPoint</title>
+<meta name="description" content="Secure your compute space in one command. ZeroPoint discovers your environment, wraps every interface, and fades into the background — guardian until needed.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --green: #4ade80;
+  --yellow: #fb923c;
+  --red: #f87171;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #a8d4ee; }
+
+.container { max-width: 820px; margin: 0 auto; padding: 0 2rem; }
+.wide-container { max-width: 1080px; margin: 0 auto; padding: 0 2rem; }
+
+/* Nav */
+header {
+  position: fixed; top: 0; width: 100%; z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+nav {
+  max-width: 1080px; margin: 0 auto; padding: 1rem 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  font-family: var(--font-mono); font-weight: 500; font-size: 1rem;
+  color: var(--text); letter-spacing: 0.05em;
+}
+.nav-logo span { color: var(--accent); }
+.nav-links { display: none; }
+
+/* Hamburger */
+.hamburger { display: block; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; text-decoration: none; }
+.mobile-menu a:hover { color: var(--accent); }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+
+/* Hero */
+.hero { padding: 10rem 0 5rem; }
+.hero-eyebrow {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.5rem;
+}
+h1 {
+  font-size: clamp(2rem, 5vw, 3rem); font-weight: 300; line-height: 1.2;
+  margin-bottom: 1.5rem; letter-spacing: -0.02em;
+}
+h1 strong { font-weight: 600; color: var(--accent); }
+
+/* Sections */
+section { padding: 4rem 0; }
+.section-rule { border: none; border-top: 1px solid var(--rule); margin: 0; }
+.section-label {
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1rem;
+}
+h2 { font-size: 1.6rem; font-weight: 300; margin-bottom: 1.5rem; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }
+
+.intro-prose {
+  font-size: 1.05rem; color: var(--text-muted); max-width: 680px;
+  line-height: 1.8; margin-bottom: 2rem;
+}
+
+/* Install block */
+.install-block {
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 1.5rem 2rem; margin: 2rem 0; position: relative;
+}
+.install-block code {
+  font-family: var(--font-mono); font-size: 0.95rem; color: var(--accent);
+}
+.install-block .copy-btn {
+  position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  background: none; border: 1px solid var(--rule); border-radius: 4px;
+  color: var(--text-dim); font-size: 0.75rem; padding: 0.3rem 0.7rem;
+  cursor: pointer; font-family: var(--font-mono); transition: all 0.2s;
+}
+.install-block .copy-btn:hover { border-color: var(--accent-dim); color: var(--text-muted); }
+
+/* Phase Navigator */
+.phase-nav {
+  display: flex; gap: 0; margin: 3rem 0 2rem; border-bottom: 2px solid var(--rule);
+}
+.phase-tab {
+  flex: 1; padding: 1rem 0.75rem; text-align: center;
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-family: var(--font-body); font-size: 0.85rem; font-weight: 400;
+  transition: all 0.3s; position: relative; white-space: nowrap;
+}
+.phase-tab::after {
+  content: ''; position: absolute; bottom: -2px; left: 0; right: 0;
+  height: 2px; background: transparent; transition: background 0.3s;
+}
+.phase-tab:hover { color: var(--text-muted); }
+.phase-tab.active { color: var(--accent); font-weight: 500; }
+.phase-tab.active::after { background: var(--accent); }
+.phase-tab .tab-num {
+  display: block; font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--accent-dim); margin-bottom: 0.25rem;
+}
+.phase-tab.active .tab-num { color: var(--accent); }
+.phase-tab.completed .tab-num { color: var(--green); }
+
+/* Phase Content */
+.phase-content { display: none; animation: fadeIn 0.4s ease; }
+.phase-content.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.phase-explain {
+  color: var(--text-muted); font-size: 0.95rem; line-height: 1.8;
+  margin-bottom: 2rem; max-width: 680px;
+}
+.phase-explain strong { color: var(--text); font-weight: 500; }
+
+/* Terminal Simulator */
+.terminal {
+  background: #0c0c0e; border: 1px solid var(--rule); border-radius: 8px;
+  overflow: hidden; margin: 2rem 0;
+}
+.terminal-bar {
+  background: #161619; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+.terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+.terminal-dot.red { background: #ff5f57; }
+.terminal-dot.yellow { background: #febc2e; }
+.terminal-dot.green { background: #28c840; }
+.terminal-title {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);
+  margin-left: 0.5rem;
+}
+.terminal-body {
+  padding: 1.25rem 1.5rem; font-family: var(--font-mono); font-size: 0.8rem;
+  line-height: 1.7; color: var(--text-muted); min-height: 200px;
+  max-height: 500px; overflow-y: auto;
+}
+.terminal-body .t-prompt { color: var(--accent); }
+.terminal-body .t-cmd { color: var(--text); }
+.terminal-body .t-green { color: var(--green); }
+.terminal-body .t-yellow { color: var(--yellow); }
+.terminal-body .t-red { color: var(--red); }
+.terminal-body .t-accent { color: var(--accent); }
+.terminal-body .t-dim { color: var(--text-dim); }
+.terminal-body .t-bold { color: var(--text); font-weight: 500; }
+.terminal-body .t-line { margin-bottom: 0.15rem; }
+.terminal-body .t-gap { margin-bottom: 0.8rem; }
+.terminal-body .t-box {
+  border-left: 1px solid var(--rule); padding-left: 1rem; margin: 0.3rem 0;
+}
+
+/* Narrate button */
+.narrate-btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  background: none; border: 1px solid var(--rule); border-radius: 6px;
+  color: var(--text-muted); font-family: var(--font-mono); font-size: 0.8rem;
+  padding: 0.5rem 1rem; cursor: pointer; transition: all 0.2s;
+  margin-bottom: 2rem;
+}
+.narrate-btn:hover { border-color: var(--accent-dim); color: var(--text); }
+.narrate-btn.playing { border-color: var(--accent); color: var(--accent); }
+.narrate-btn svg { flex-shrink: 0; }
+
+/* Wizard Options */
+.wizard-options {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem; margin: 1.5rem 0;
+}
+.wizard-option {
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 1.25rem; cursor: default; transition: all 0.2s;
+}
+.wizard-option.recommended { border-color: var(--accent-dim); }
+.wizard-option .opt-label {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);
+  margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;
+}
+.wizard-option.recommended .opt-label::after {
+  content: 'recommended'; font-size: 0.65rem; color: var(--green);
+  border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+}
+.wizard-option h4 {
+  font-size: 0.95rem; font-weight: 500; margin-bottom: 0.4rem;
+}
+.wizard-option p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.6; }
+
+/* What gets created */
+.creates-list {
+  margin: 1.5rem 0;
+}
+.creates-item {
+  display: flex; align-items: baseline; gap: 0.75rem;
+  padding: 0.6rem 0; border-bottom: 1px solid var(--rule);
+  font-size: 0.9rem;
+}
+.creates-item:last-child { border-bottom: none; }
+.creates-item code {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);
+  background: var(--bg-subtle); padding: 0.15rem 0.5rem; border-radius: 3px;
+  white-space: nowrap;
+}
+.creates-item span { color: var(--text-muted); }
+
+/* After Setup */
+.after-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-top: 2rem;
+}
+.after-card {
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 1.5rem;
+}
+.after-card .card-icon {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+.after-card h3 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; }
+.after-card p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.7; }
+
+/* Buttons */
+.btn {
+  display: inline-block; padding: 0.75rem 1.75rem; border-radius: 6px;
+  font-size: 0.9rem; font-weight: 500; transition: all 0.2s;
+}
+.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary:hover { background: #a8d4ee; color: var(--bg); }
+.btn-secondary { border: 1px solid var(--rule); color: var(--text-muted); }
+.btn-secondary:hover { border-color: var(--accent-dim); color: var(--text); }
+
+/* Convention box */
+.convention {
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 1.5rem; margin: 2rem 0;
+}
+.convention h3 { font-size: 0.95rem; margin-bottom: 0.5rem; }
+.convention p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; }
+.convention code {
+  font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent);
+  background: var(--bg-subtle); padding: 0.2rem 0.5rem; border-radius: 3px;
+}
+
+/* Pull quote */
+.pull-quote { text-align: center; padding: 4rem 0; }
+.pull-quote blockquote {
+  font-size: 1.15rem; font-style: italic; color: var(--text-muted);
+  max-width: 540px; margin: 0 auto; line-height: 1.7;
+}
+
+/* Footer */
+footer { padding: 3rem 0; border-top: 1px solid var(--rule); text-align: center; }
+.footer-links { display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.footer-links a { font-size: 0.8rem; color: var(--text-dim); }
+.footer-links a:hover { color: var(--text-muted); }
+.footer-org { font-size: 0.75rem; color: var(--text-dim); }
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .after-grid { grid-template-columns: 1fr; }
+  .wizard-options { grid-template-columns: 1fr; }
+  .hero { padding: 8rem 0 3rem; }
+  section { padding: 3rem 0; }
+  .phase-tab { min-width: 90px; font-size: 0.75rem; padding: 0.75rem 0.5rem; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/#tenets">Tenets</a>
+      <a href="/#architecture">Architecture</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">GitHub</a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
+  <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">Getting Started</div>
+    <h1>Secure your compute space<br>in <strong>one command</strong></h1>
+    <p class="intro-prose">
+      ZeroPoint discovers your environment, wraps every interface with cryptographic governance, and fades into the background &mdash; guardian until needed. Every action produces a signed receipt. Every interface becomes accountable.
+    </p>
+    <p style="color: var(--text-dim); font-size: 0.95rem; font-style: italic; max-width: 620px;">
+      The CLI is fully functional. For the full visual experience, ZeroPoint launches a dashboard when appropriate.
+    </p>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Prerequisites -->
+<section>
+  <div class="container">
+    <div class="section-label">Prerequisites</div>
+    <h2>Install ZeroPoint</h2>
+    <p class="phase-explain">
+      ZeroPoint is built in Rust. The install script handles the toolchain, builds from source, runs the test suite, and generates your cryptographic identity. On first launch, the Genesis ceremony establishes your node &mdash; a signed record of who you are and what governance rules are active.
+    </p>
+
+    <div class="install-block">
+      <code><span style="color: var(--text-dim)">$</span> curl -sSf https://install.zeropoint.global | bash</code>
+      <button class="copy-btn" onclick="copyInstall(this)">copy</button>
+    </div>
+
+    <p style="color: var(--text-dim); font-size: 0.85rem; margin-top: 1rem;">
+      Requires: macOS or Linux &middot; Rust toolchain (installed automatically) &middot; ~5 minutes to build
+    </p>
+
+    <div class="convention" style="margin-top: 2rem;">
+      <h3>What happens at Genesis</h3>
+      <p>ZeroPoint generates an Ed25519 keypair, installs six governance gate rules (two constitutional, four operational), creates a tamper-evident audit chain, and writes a signed genesis record. This is your node's root of trust. Everything chains from here.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- The Setup Walkthrough -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">The Setup</div>
+    <h2>Five phases to a secured compute space</h2>
+    <p class="intro-prose">
+      After install, run <code style="font-family: var(--font-mono); color: var(--accent); background: var(--bg-subtle); padding: 0.15rem 0.5rem; border-radius: 3px;">zp secure</code> to launch the adaptation wizard. Each phase is explained as it runs &mdash; what it does, why it matters, what changes. Accept the smart defaults or customize everything.
+    </p>
+
+    <!-- Narrate Button -->
+    <button class="narrate-btn" id="narrateBtn" onclick="toggleNarration()">
+      <svg id="narrateIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/>
+      </svg>
+      <span id="narrateLabel">Narrate</span>
+    </button>
+
+    <!-- Phase Tabs -->
+    <div class="phase-nav" id="phaseNav">
+      <button class="phase-tab active" data-phase="discovery" onclick="showPhase('discovery')">
+        <span class="tab-num">01</span> Discovery
+      </button>
+      <button class="phase-tab" data-phase="shell" onclick="showPhase('shell')">
+        <span class="tab-num">02</span> Shell
+      </button>
+      <button class="phase-tab" data-phase="ai" onclick="showPhase('ai')">
+        <span class="tab-num">03</span> AI Tools
+      </button>
+      <button class="phase-tab" data-phase="network" onclick="showPhase('network')">
+        <span class="tab-num">04</span> Network
+      </button>
+      <button class="phase-tab" data-phase="confirm" onclick="showPhase('confirm')">
+        <span class="tab-num">05</span> Confirm
+      </button>
+    </div>
+
+    <!-- Phase 1: Discovery -->
+    <div class="phase-content active" id="phase-discovery">
+      <p class="phase-explain">
+        <strong>ZeroPoint begins by understanding your environment.</strong> It scans for shells, AI tools, running services, sensitive directories, and network interfaces. None of this is intrusive &mdash; ZeroPoint reads, it doesn't touch. The goal is to build a complete picture of your compute space and present it with a clear recommendation. You decide what gets wrapped.
+      </p>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">zp secure &mdash; Discovery</span>
+        </div>
+        <div class="terminal-body">
+          <div class="t-line"><span class="t-prompt">$</span> <span class="t-cmd">zp secure</span></div>
+          <div class="t-gap"></div>
+          <div class="t-line t-bold">  &#x2554;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2557;</div>
+          <div class="t-line t-bold">  &#x2551;      SECURING YOUR COMPUTE SPACE            &#x2551;</div>
+          <div class="t-line t-bold">  &#x2551;      ZeroPoint Adaptation Wizard              &#x2551;</div>
+          <div class="t-line t-bold">  &#x255a;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x255d;</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Scanning your environment...</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-bold">  &#x250c; Shells</div>
+          <div class="t-box">
+            <div class="t-line t-dim">Your shell is the primary governance surface &mdash; every</div>
+            <div class="t-line t-dim">command you or an agent runs passes through it.</div>
+            <div class="t-line"></div>
+            <div class="t-line">Found: <span class="t-green">zsh</span> (primary), <span class="t-accent">bash</span> (available)</div>
+            <div class="t-line">Config: ~/.zshrc (oh-my-zsh detected)</div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-bold">  &#x250c; AI Tools</div>
+          <div class="t-box">
+            <div class="t-line t-dim">AI tools act on your behalf. Wrapping them ensures every</div>
+            <div class="t-line t-dim">action they take produces a signed, verifiable receipt.</div>
+            <div class="t-line"></div>
+            <div class="t-line">Found: <span class="t-green">Claude Code</span> (v1.2), <span class="t-green">Cursor</span> (v0.45)</div>
+            <div class="t-line">Config: ~/.config/claude/ detected</div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-bold">  &#x250c; Services</div>
+          <div class="t-box">
+            <div class="t-line t-dim">Running services represent active interfaces that can be</div>
+            <div class="t-line t-dim">governed for provenance and accountability.</div>
+            <div class="t-line"></div>
+            <div class="t-line">Found: <span class="t-green">Docker</span> (3 containers), <span class="t-accent">Node</span> (port 3000)</div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-bold">  &#x250c; Sensitive Directories</div>
+          <div class="t-box">
+            <div class="t-line t-dim">These contain credentials and keys &mdash; ZeroPoint can watch</div>
+            <div class="t-line t-dim">them and alert on unauthorized access.</div>
+            <div class="t-line"></div>
+            <div class="t-line">Found: <span class="t-yellow">~/.ssh</span> (3 keys), <span class="t-yellow">~/.aws</span> (configured), <span class="t-yellow">~/.gnupg</span></div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-bold">  &#x250c; Network</div>
+          <div class="t-box">
+            <div class="t-line t-dim">Active network interfaces and security posture.</div>
+            <div class="t-line"></div>
+            <div class="t-line">Found: <span class="t-green">en0</span> (active), <span class="t-green">utun3</span> (VPN active)</div>
+            <div class="t-line">Firewall: <span class="t-green">active</span></div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Discovery complete. Press Enter to continue...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 2: Shell Integration -->
+    <div class="phase-content" id="phase-shell">
+      <p class="phase-explain">
+        <strong>Your shell is the foundation of compute space governance.</strong> ZeroPoint installs a lightweight preexec hook that evaluates commands before they execute. Safe commands pass through instantly &mdash; sub-millisecond overhead. Dangerous commands are blocked. Everything in between is logged with a signed receipt. You choose the posture.
+      </p>
+
+      <div class="wizard-options">
+        <div class="wizard-option">
+          <div class="opt-label">permissive</div>
+          <h4>Observe Only</h4>
+          <p>Log everything but block nothing. Good for getting familiar with what ZeroPoint sees before enforcing policy.</p>
+        </div>
+        <div class="wizard-option recommended">
+          <div class="opt-label">balanced</div>
+          <h4>Warn &amp; Block Critical</h4>
+          <p>Warn on risky operations, block critical threats like credential exfiltration and recursive system deletion. The right default for most users.</p>
+        </div>
+        <div class="wizard-option">
+          <div class="opt-label">strict</div>
+          <h4>Approve Everything</h4>
+          <p>Require explicit approval for anything beyond a curated safe list. Maximum governance for high-security environments.</p>
+        </div>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">zp secure &mdash; Shell Integration</span>
+        </div>
+        <div class="terminal-body">
+          <div class="t-line t-bold">  &#x250c; Shell Integration</div>
+          <div class="t-box">
+            <div class="t-line"></div>
+            <div class="t-line t-dim">ZeroPoint installs a lightweight hook in your shell that</div>
+            <div class="t-line t-dim">evaluates commands before they execute. Safe commands (ls,</div>
+            <div class="t-line t-dim">git status, pwd) pass through instantly. Dangerous commands</div>
+            <div class="t-line t-dim">(rm -rf /, credential exfiltration) are blocked. Everything</div>
+            <div class="t-line t-dim">in between is logged with a signed receipt.</div>
+            <div class="t-line"></div>
+            <div class="t-line">Recommended: Install in <span class="t-green">zsh</span> with <span class="t-accent">Balanced</span> posture</div>
+            <div class="t-line"></div>
+            <div class="t-line t-dim">[Enter] Accept  [w] Customize  [s] Skip  [?] Explain more</div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Installing shell hook...</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> preexec hook added to ~/.zshrc</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Posture: <span class="t-accent">balanced</span></div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Actor mode: <span class="t-accent">human</span></div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Safe commands whitelisted (42 patterns)</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-dim">  Shell governance active. ~0.5ms overhead per command.</div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 2rem;">What gets created</h3>
+      <div class="creates-list">
+        <div class="creates-item"><code>~/.zeropoint/hooks/preexec.zsh</code> <span>Shell hook script sourced by your rc file</span></div>
+        <div class="creates-item"><code>~/.zshrc</code> <span>One source line appended (clearly commented)</span></div>
+        <div class="creates-item"><code>~/.zeropoint/config.toml</code> <span>Shell posture and actor mode configuration</span></div>
+      </div>
+    </div>
+
+    <!-- Phase 3: AI Tool Wrapping -->
+    <div class="phase-content" id="phase-ai">
+      <p class="phase-explain">
+        <strong>Your AI tools are powerful &mdash; but they act on your behalf with broad permissions.</strong> Wrapping them means every action they take produces a signed receipt. The AI tool doesn't know it's being governed. It doesn't need to cooperate. It just becomes accountable.
+      </p>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">zp secure &mdash; AI Tools</span>
+        </div>
+        <div class="terminal-body">
+          <div class="t-line t-bold">  &#x250c; AI Tool Wrapping</div>
+          <div class="t-box">
+            <div class="t-line"></div>
+            <div class="t-line t-dim">AI tools act on your behalf with broad permissions.</div>
+            <div class="t-line t-dim">Wrapping them ensures every action produces a signed,</div>
+            <div class="t-line t-dim">verifiable receipt &mdash; without requiring the tool to cooperate.</div>
+            <div class="t-line"></div>
+            <div class="t-line">Detected: <span class="t-green">Claude Code</span>, <span class="t-green">Cursor</span></div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Wrapping Claude Code...</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> MCP governance server installed</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Config: ~/.config/claude/ updated</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Wrapping Cursor...</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Terminal wrapper active</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> PATH shim: ~/.zeropoint/bin/cursor</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  AI Tools secured:</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Claude Code  &#x2192; MCP governance server</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Cursor       &#x2192; Terminal wrapper</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-dim">  All AI tool actions now produce signed receipts.</div>
+        </div>
+      </div>
+
+      <div class="convention" style="margin-top: 2rem;">
+        <h3>How MCP governance works</h3>
+        <p>For Claude Code, ZeroPoint installs as an MCP server &mdash; it intercepts every tool call before execution and evaluates it against your policy set. The agent sees normal responses. Behind the scenes, every action is receipted, policy-checked, and chain-linked. If a call violates policy, it's blocked before the tool ever executes.</p>
+      </div>
+
+      <div class="convention">
+        <h3>How PATH wrapping works</h3>
+        <p>For other tools, ZeroPoint creates lightweight shims in <code>~/.zeropoint/bin/</code> which sits first in your PATH. When you (or an agent) invoke <code>cursor</code>, the shim evaluates the action through the guard, then passes through to the real binary. Same interface, now governed.</p>
+      </div>
+    </div>
+
+    <!-- Phase 4: Network & API -->
+    <div class="phase-content" id="phase-network">
+      <p class="phase-explain">
+        <strong>The outer perimeter.</strong> ZeroPoint watches your sensitive directories, governs Docker containers, and optionally proxies API calls. Not all of this needs to be active on day one. Sensitive directory watchers install by default &mdash; that's the minimum responsible posture. Everything else is available when you're ready.
+      </p>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">zp secure &mdash; Filesystem &amp; Network</span>
+        </div>
+        <div class="terminal-body">
+          <div class="t-line t-bold">  &#x250c; Filesystem &amp; Network</div>
+          <div class="t-box">
+            <div class="t-line"></div>
+            <div class="t-line t-dim">Sensitive directories contain credentials and keys.</div>
+            <div class="t-line t-dim">ZeroPoint watches them using filesystem events and</div>
+            <div class="t-line t-dim">generates a receipt for any access.</div>
+          </div>
+          <div class="t-line t-bold">  &#x2514;</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Installing filesystem watchers...</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> ~/.ssh &mdash; 3 keys, watching</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> ~/.aws &mdash; configured, watching</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> ~/.gnupg &mdash; watching</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Configuring Docker integration...</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Container actions receipted</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Network &amp; API layer:</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Sensitive dirs  &#x2192; watched</div>
+          <div class="t-line">  <span class="t-green">&#x2713;</span> Docker          &#x2192; receipted</div>
+          <div class="t-line">  <span class="t-accent">&#x25cb;</span> API proxy       &#x2192; available (<span class="t-accent">zp proxy start</span>)</div>
+          <div class="t-line">  <span class="t-accent">&#x25cb;</span> Network monitor &#x2192; available (<span class="t-accent">zp net watch</span>)</div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Available on demand</h3>
+      <div class="creates-list">
+        <div class="creates-item"><code>zp proxy start</code> <span>Lightweight local proxy for outbound API calls with receipt logging</span></div>
+        <div class="creates-item"><code>zp net watch</code> <span>Monitor outbound connections from wrapped processes</span></div>
+        <div class="creates-item"><code>zp secure --wizard</code> <span>Reconfigure any layer without starting over</span></div>
+      </div>
+    </div>
+
+    <!-- Phase 5: Confirmation -->
+    <div class="phase-content" id="phase-confirm">
+      <p class="phase-explain">
+        <strong>With every interface wrapped, ZeroPoint closes the circle.</strong> The confirmation screen shows exactly what's been secured. From this moment forward, every action in your compute space produces a signed receipt. Every receipt chains to its predecessor. The chain becomes proof.
+      </p>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">zp secure &mdash; Complete</span>
+        </div>
+        <div class="terminal-body">
+          <div class="t-line t-bold t-green">  &#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;</div>
+          <div class="t-line t-bold t-green">  COMPUTE SPACE SECURED</div>
+          <div class="t-line t-bold t-green">  &#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;&#x2550;</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Identity:     <span class="t-accent">zp:a7f3...9c2e</span></div>
+          <div class="t-line">  Gates:        <span class="t-green">6 rules active</span> (2 constitutional)</div>
+          <div class="t-line">  Shell:        <span class="t-green">zsh preexec hook installed</span></div>
+          <div class="t-line">  AI Tools:     <span class="t-green">2 wrapped</span> (Claude Code, Cursor)</div>
+          <div class="t-line">  File Watch:   <span class="t-green">3 directories monitored</span></div>
+          <div class="t-line">  Docker:       <span class="t-green">container actions receipted</span></div>
+          <div class="t-line">  Posture:      <span class="t-accent">Balanced</span> (warn + block critical)</div>
+          <div class="t-gap"></div>
+          <div class="t-line t-dim">  Every action now produces a signed receipt.</div>
+          <div class="t-line t-dim">  Every receipt chains to its predecessor.</div>
+          <div class="t-line t-bold">  The chain becomes proof.</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Run <span class="t-accent">zp status</span> at any time to verify.</div>
+          <div class="t-line">  Run <span class="t-accent">zp secure --wizard</span> to reconfigure.</div>
+          <div class="t-gap"></div>
+          <div class="t-line">  Dashboard: <span class="t-accent">http://localhost:3000</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- After Setup -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">After Setup</div>
+    <h2>What's different now</h2>
+
+    <div class="after-grid">
+      <div class="after-card">
+        <div class="card-icon">zp status</div>
+        <h3>Verify Anytime</h3>
+        <p>One command shows every active governance layer &mdash; shell hooks, AI tool wrappers, file watchers, policy rules. If something's misconfigured, you'll know immediately.</p>
+      </div>
+
+      <div class="after-card">
+        <div class="card-icon">~0.5ms overhead</div>
+        <h3>Invisible Governance</h3>
+        <p>The guard evaluates locally with sub-millisecond latency. No network round-trip, no waiting. Safe commands pass through before you notice. Governance that disappears into the workflow.</p>
+      </div>
+
+      <div class="after-card">
+        <div class="card-icon">zp secure --wizard</div>
+        <h3>Reconfigure Without Starting Over</h3>
+        <p>Change your posture, add a new shell, wrap a new AI tool, or adjust which directories are watched. The wizard picks up where you left off.</p>
+      </div>
+
+      <div class="after-card">
+        <div class="card-icon">localhost:3000</div>
+        <h3>Visual Dashboard</h3>
+        <p>For complex environments, launch the dashboard to see your governance surface visualized &mdash; policy decisions, receipt chains, AI tool activity, all in one place.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Pull Quote -->
+<section class="pull-quote">
+  <div class="container">
+    <blockquote>
+      Install the gates. Close the circle.<br>
+      Then let ZeroPoint do its job quietly.
+    </blockquote>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Final CTA -->
+<section>
+  <div class="container" style="text-align: center; padding: 3rem 2rem;">
+    <h2 style="margin-bottom: 1rem;">Ready to secure your stack?</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; max-width: 520px; margin-left: auto; margin-right: auto;">
+      ZeroPoint is open source, MIT / Apache-2.0 licensed, and built in Rust.<br>
+      One command to install. One command to secure.
+    </p>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="btn btn-primary">View on GitHub</a>
+      <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/demo-chain.html">Chain Demo</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/setup.html">Setup</a>
+      <a href="/letter.html">Letter</a>
+    </div>
+    <div class="footer-org">
+      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> &middot; MIT / Apache-2.0
+    </div>
+  </div>
+</footer>
+
+<script>
+// Phase navigation
+const phases = ['discovery', 'shell', 'ai', 'network', 'confirm'];
+let currentPhase = 'discovery';
+
+function showPhase(id) {
+  currentPhase = id;
+
+  // Update tabs
+  document.querySelectorAll('.phase-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.phase === id);
+  });
+
+  // Update content
+  document.querySelectorAll('.phase-content').forEach(el => {
+    el.classList.toggle('active', el.id === 'phase-' + id);
+  });
+
+  // If narrating, play this phase's audio
+  if (narrating) {
+    stopAudio();
+    playPhase(id);
+  }
+}
+
+// Copy install command
+function copyInstall(btn) {
+  navigator.clipboard.writeText('curl -sSf https://install.zeropoint.global | bash').then(() => {
+    btn.textContent = 'copied';
+    setTimeout(() => { btn.textContent = 'copy'; }, 2000);
+  });
+}
+
+// Narration system
+const NARRATION_BASE = '/assets/narration';
+const phaseAudioMap = {
+  discovery: 'setup-discovery',
+  shell: 'setup-shell',
+  ai: 'setup-ai',
+  network: 'setup-network',
+  confirm: 'setup-confirm'
+};
+let narrating = false;
+let currentAudio = null;
+
+function toggleNarration() {
+  if (narrating) {
+    stopNarration();
+  } else {
+    startNarration();
+  }
+}
+
+function startNarration() {
+  narrating = true;
+  updateNarrateBtn();
+  showPhase(phases[0]);
+  playPhase(phases[0]);
+}
+
+function stopNarration() {
+  narrating = false;
+  stopAudio();
+  updateNarrateBtn();
+}
+
+function playPhase(id) {
+  stopAudio();
+  const file = phaseAudioMap[id];
+  if (!file) return;
+
+  currentAudio = new Audio(NARRATION_BASE + '/' + file + '.mp3');
+  currentAudio.onended = function() {
+    advanceNarration(id);
+  };
+  currentAudio.onerror = function() {
+    // If audio not available yet, wait 3s and advance
+    setTimeout(() => advanceNarration(id), 3000);
+  };
+  currentAudio.play().catch(() => {
+    // Autoplay blocked or file missing — advance after delay
+    setTimeout(() => advanceNarration(id), 3000);
+  });
+}
+
+function advanceNarration(finishedId) {
+  if (!narrating) return;
+  const idx = phases.indexOf(finishedId);
+  const nextIdx = idx + 1;
+  if (nextIdx < phases.length) {
+    showPhase(phases[nextIdx]);
+  } else {
+    // Narration complete
+    stopNarration();
+  }
+}
+
+function stopAudio() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.onended = null;
+    currentAudio.onerror = null;
+    currentAudio = null;
+  }
+}
+
+function updateNarrateBtn() {
+  const btn = document.getElementById('narrateBtn');
+  const icon = document.getElementById('narrateIcon');
+  const label = document.getElementById('narrateLabel');
+
+  if (narrating) {
+    btn.classList.add('playing');
+    label.textContent = 'Narrating';
+    icon.innerHTML = '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>';
+  } else {
+    btn.classList.remove('playing');
+    label.textContent = 'Narrate';
+    icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/>';
+  }
+}
+</script>
+
+</body>
+</html>
