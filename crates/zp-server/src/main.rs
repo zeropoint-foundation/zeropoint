@@ -11,9 +11,11 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env().add_directive("zp=debug".parse().unwrap()))
         .init();
 
-    let mut config = zp_server::ServerConfig::default();
     // Standalone server mode: don't auto-open browser
-    config.open_dashboard = false;
+    let config = zp_server::ServerConfig {
+        open_dashboard: false,
+        ..zp_server::ServerConfig::default()
+    };
 
     if let Err(e) = zp_server::run_server(config).await {
         eprintln!("Server error: {}", e);

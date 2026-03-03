@@ -556,7 +556,7 @@ fn install_shell_hook(shell: &ShellInfo, posture: &Posture, accept_defaults: boo
 
     ok(&format!("Posture: {CYAN}{}{NC}", posture));
     ok(&format!("Actor mode: {CYAN}human{NC}"));
-    dim(&format!("Shell governance active. ~0.5ms overhead per command."));
+    dim("Shell governance active. ~0.5ms overhead per command.");
 
     true
 }
@@ -700,7 +700,7 @@ fn wrap_ai_tools(tools: &[AiToolInfo], accept_defaults: bool) -> Vec<String> {
                 let shim_content = generate_shim_content(&tool.name.to_lowercase().replace(' ', "-"), "codex");
                 let shim_path = bin_dir.join(tool.name.to_lowercase().replace(' ', "-"));
 
-                if let Err(_) = std::fs::create_dir_all(&bin_dir) {
+                if std::fs::create_dir_all(&bin_dir).is_err() {
                     continue;
                 }
 
