@@ -130,7 +130,7 @@ if ! echo "$PATH" | grep -q "$ZP_BIN"; then
         echo "# ZeroPoint" >> "$RC_FILE"
         echo 'export PATH="$HOME/.zeropoint/bin:$PATH"' >> "$RC_FILE"
         ok "Added $ZP_BIN to PATH in $RC_FILE"
-        info "Run 'source $RC_FILE' or open a new terminal to use 'zp' command"
+        PATH_ADDED_TO="$RC_FILE"
     fi
 
     export PATH="$ZP_BIN:$PATH"
@@ -147,14 +147,14 @@ info "Running workspace tests..."
 TEST_OUTPUT=$(cargo test --workspace --release 2>&1)
 TEST_RESULT=$?
 
-# Extract test summary
-PASS_COUNT=$(echo "$TEST_OUTPUT" | grep -o '[0-9]* passed' | tail -1 || echo "0 passed")
-FAIL_COUNT=$(echo "$TEST_OUTPUT" | grep -o '[0-9]* failed' | tail -1 || echo "")
+# Extract test summary — sum passed/failed across all crates
+TOTAL_PASSED=$(echo "$TEST_OUTPUT" | grep -o '[0-9]* passed' | awk '{s+=$1} END {print s+0}')
+TOTAL_FAILED=$(echo "$TEST_OUTPUT" | grep -o '[0-9]* failed' | awk '{s+=$1} END {print s+0}')
 
 if [ $TEST_RESULT -eq 0 ]; then
-    ok "All tests passed ($PASS_COUNT)"
+    ok "All tests passed ($TOTAL_PASSED passed)"
 else
-    warn "Some tests failed ($PASS_COUNT, $FAIL_COUNT)"
+    warn "Some tests failed ($TOTAL_PASSED passed, $TOTAL_FAILED failed)"
     echo "$TEST_OUTPUT" | grep "FAILED" || true
     warn "Continuing with install — check test output above"
 fi
@@ -264,6 +264,18 @@ echo ""
 echo -e "  ${BOLD}Your environment has not been modified.${NC}"
 echo "  Your shell, tools, and files are untouched."
 echo ""
+
+# Tell the user how to activate PATH
+if [ -n "${PATH_ADDED_TO:-}" ]; then
+echo -e "  ${BOLD}To activate the zp command, run:${NC}"
+echo ""
+echo -e "    ${CYAN}source $PATH_ADDED_TO${NC}"
+echo ""
+else
+echo -e "  The ${CYAN}zp${NC} command is available in your PATH."
+echo ""
+fi
+
 echo "  When you're ready to secure your compute space:"
 echo ""
 echo -e "    ${CYAN}zp secure${NC}"
