@@ -5,6 +5,7 @@
 
 pub mod security;
 
+use axum::http::HeaderValue;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -18,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::info;
-use axum::http::HeaderValue;
 
 use zp_audit::AuditStore;
 use zp_core::{
@@ -144,7 +144,11 @@ fn perform_genesis(identity: &ServerIdentity, config: &ServerConfig) {
     info!("═══════════════════════════════════════════════════════");
     info!("");
     info!("  Generating node identity...");
-    info!("  Public key:    {}...{}", &identity.public_key_hex[..16], &identity.public_key_hex[identity.public_key_hex.len()-8..]);
+    info!(
+        "  Public key:    {}...{}",
+        &identity.public_key_hex[..16],
+        &identity.public_key_hex[identity.public_key_hex.len() - 8..]
+    );
     info!("  Destination:   {}", identity.destination_hash);
     info!("  Algorithm:     Ed25519");
     info!("");
@@ -268,9 +272,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     let cors = if config.bind_addr == "127.0.0.1" || config.bind_addr == "localhost" {
         // Localhost: allow local origins
         let local_http = format!("http://localhost:{}", config.port)
-            .parse::<HeaderValue>().unwrap();
+            .parse::<HeaderValue>()
+            .unwrap();
         let local_ip = format!("http://127.0.0.1:{}", config.port)
-            .parse::<HeaderValue>().unwrap();
+            .parse::<HeaderValue>()
+            .unwrap();
         let public = "https://zeropoint.global".parse::<HeaderValue>().unwrap();
         CorsLayer::new()
             .allow_origin([local_http, local_ip, public])
@@ -297,13 +303,20 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Capabilities
         .route("/api/v1/capabilities/grant", post(grant_handler))
         .route("/api/v1/capabilities/delegate", post(delegate_handler))
-        .route("/api/v1/capabilities/verify-chain", post(verify_chain_handler))
+        .route(
+            "/api/v1/capabilities/verify-chain",
+            post(verify_chain_handler),
+        )
         // Audit
         .route("/api/v1/audit/entries", get(audit_entries_handler))
         .route("/api/v1/audit/chain-head", get(audit_chain_head_handler))
         .route("/api/v1/audit/verify", get(audit_verify_handler))
-        .route("/api/v1/audit/simulate-tamper", post(audit_simulate_tamper_handler))
+        .route(
+            "/api/v1/audit/simulate-tamper",
+            post(audit_simulate_tamper_handler),
+        )
         .route("/api/v1/audit/restore", post(audit_restore_handler))
+        .route("/api/v1/audit/clear", post(audit_clear_handler))
         // Receipts
         .route("/api/v1/receipts/generate", post(receipt_generate_handler))
         // Pipeline (chat)
@@ -996,21 +1009,50 @@ async fn audit_chain_head_handler(State(state): State<AppState>) -> Json<ChainHe
 struct ChainVerifyResponse {
     valid: bool,
     entries_examined: usize,
+    chain_links_valid: usize,
     error: Option<String>,
+    issues: Vec<String>,
+    has_tampered_entries: bool,
 }
 
 async fn audit_verify_handler(State(state): State<AppState>) -> Json<ChainVerifyResponse> {
     let store = state.0.audit_store.lock().unwrap();
+
+    // Check for unrestore tampered entries
+    let has_tampered = store
+        .export_chain(1000)
+        .map(|entries| {
+            entries
+                .iter()
+                .any(|e| e.entry_hash.starts_with("TAMPERED_"))
+        })
+        .unwrap_or(false);
+
     match store.verify_with_report() {
-        Ok(report) => Json(ChainVerifyResponse {
-            valid: report.chain_valid,
-            entries_examined: report.entries_examined,
-            error: None,
-        }),
+        Ok(report) => {
+            let mut issues = report.issues.clone();
+            if has_tampered {
+                issues.insert(
+                    0,
+                    "Unrestored tampered entries detected — click Restore Chain".to_string(),
+                );
+            }
+            Json(ChainVerifyResponse {
+                valid: report.chain_valid && !has_tampered,
+                entries_examined: report.entries_examined,
+                chain_links_valid: report.chain_links_valid,
+                error: None,
+                issues,
+                has_tampered_entries: has_tampered,
+            })
+        }
         Err(e) => Json(ChainVerifyResponse {
             valid: false,
             entries_examined: 0,
+            chain_links_valid: 0,
             error: Some(format!("{}", e)),
+            issues: vec![format!("{}", e)],
+            has_tampered_entries: has_tampered,
         }),
     }
 }
@@ -1122,6 +1164,41 @@ async fn audit_restore_handler(
         entry_id: None,
         original_hash: None,
         corrupted_hash: None,
+    }))
+}
+
+// ============================================================================
+// Audit Clear (reset chain)
+// ============================================================================
+
+#[derive(Serialize)]
+struct AuditClearResponse {
+    cleared: bool,
+    entries_removed: usize,
+    message: String,
+}
+
+async fn audit_clear_handler(
+    State(state): State<AppState>,
+) -> Result<Json<AuditClearResponse>, (StatusCode, String)> {
+    let store = state.0.audit_store.lock().unwrap();
+
+    let count = store
+        .clear()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", e)))?;
+
+    drop(store);
+
+    // Reset the gate's chain head to genesis so new entries chain correctly
+    state.0.gate.reset_audit_chain_head();
+
+    Ok(Json(AuditClearResponse {
+        cleared: true,
+        entries_removed: count,
+        message: format!(
+            "Cleared {} audit entries. Chain reset to genesis. Restart server or run an evaluation to begin a fresh chain.",
+            count
+        ),
     }))
 }
 
@@ -1300,7 +1377,9 @@ async fn stats_handler(State(state): State<AppState>) -> Json<StatsResponse> {
 // Security Posture Handler
 // ============================================================================
 
-async fn security_posture_handler(State(state): State<AppState>) -> Json<security::SecurityPosture> {
+async fn security_posture_handler(
+    State(state): State<AppState>,
+) -> Json<security::SecurityPosture> {
     Json(security::assess(&state))
 }
 

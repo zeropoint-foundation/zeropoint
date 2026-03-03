@@ -161,6 +161,12 @@ impl GovernanceGate {
         *self.audit_chain_head.lock() = hash;
     }
 
+    /// Reset the audit chain head to the genesis hash.
+    /// Uses interior mutability so it can be called through shared references (Arc).
+    pub fn reset_audit_chain_head(&self) {
+        *self.audit_chain_head.lock() = blake3::hash(b"").to_hex().to_string();
+    }
+
     /// Get a reference to the policy engine.
     pub fn policy_engine(&self) -> &PolicyEngine {
         &self.policy_engine
@@ -187,24 +193,29 @@ fn decision_type_name(decision: &PolicyDecision) -> String {
 ///
 /// Serializes the entry to canonical JSON (excluding entry_hash field)
 /// and computes the blake3 hash of the JSON bytes.
+///
+/// IMPORTANT: This must use the exact same serialization format as
+/// `ChainBuilder::build_entry` and `recompute_entry_hash` in zp-audit.
+/// Using `format!("{:?}", ...)` for IDs and `.to_rfc3339()` for timestamps
+/// ensures deterministic, round-trip-safe hashing.
 pub fn compute_entry_hash(entry: &AuditEntry) -> String {
-    // Serialize to JSON for hashing
-    let json = serde_json::json!({
-        "id": entry.id,
-        "timestamp": entry.timestamp,
+    use serde_json::json;
+
+    let entry_data = json!({
+        "id": format!("{:?}", entry.id.0),
+        "timestamp": entry.timestamp.to_rfc3339(),
         "prev_hash": entry.prev_hash,
-        "actor": entry.actor,
-        "action": entry.action,
-        "conversation_id": entry.conversation_id,
-        "policy_decision": entry.policy_decision,
+        "actor": format!("{:?}", entry.actor),
+        "action": serde_json::to_value(&entry.action).unwrap_or(json!(null)),
+        "conversation_id": format!("{:?}", entry.conversation_id.0),
+        "policy_decision": serde_json::to_value(&entry.policy_decision).unwrap_or(json!(null)),
         "policy_module": entry.policy_module,
-        "receipt": entry.receipt,
+        "receipt": entry.receipt.as_ref().map(|r| serde_json::to_value(r).unwrap_or(json!(null))),
         "signature": entry.signature,
     });
 
-    let json_string = serde_json::to_string(&json).unwrap_or_default();
-    let hash = blake3::hash(json_string.as_bytes());
-    hash.to_hex().to_string()
+    let entry_bytes = serde_json::to_vec(&entry_data).unwrap_or_default();
+    blake3::hash(&entry_bytes).to_hex().to_string()
 }
 
 #[cfg(test)]

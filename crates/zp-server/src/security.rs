@@ -56,8 +56,7 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
     });
 
     // 2. Check data directory permissions
-    let data_dir = std::env::var("ZP_DATA_DIR")
-        .unwrap_or_else(|_| "./data/zeropoint".to_string());
+    let data_dir = std::env::var("ZP_DATA_DIR").unwrap_or_else(|_| "./data/zeropoint".to_string());
     let data_path = std::path::Path::new(&data_dir);
     checks.push(if data_path.exists() {
         SecurityCheck {
@@ -109,8 +108,12 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
 
     // 4. Check for sensitive environment variables exposed
     let sensitive_vars = [
-        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY",
-        "DATABASE_URL", "GITHUB_TOKEN", "SLACK_TOKEN",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "AWS_SECRET_ACCESS_KEY",
+        "DATABASE_URL",
+        "GITHUB_TOKEN",
+        "SLACK_TOKEN",
     ];
     let exposed: Vec<&str> = sensitive_vars
         .iter()
@@ -158,8 +161,14 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
 
     // Calculate score
     let total = checks.len() as u8;
-    let passed = checks.iter().filter(|c| c.status == CheckStatus::Pass).count() as u8;
-    let failed = checks.iter().filter(|c| c.status == CheckStatus::Fail).count() as u8;
+    let passed = checks
+        .iter()
+        .filter(|c| c.status == CheckStatus::Pass)
+        .count() as u8;
+    let failed = checks
+        .iter()
+        .filter(|c| c.status == CheckStatus::Fail)
+        .count() as u8;
     let score = if total == 0 {
         0
     } else if failed > 0 {

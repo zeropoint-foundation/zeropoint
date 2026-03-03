@@ -32,7 +32,10 @@ impl std::str::FromStr for Posture {
             "permissive" => Ok(Posture::Permissive),
             "balanced" => Ok(Posture::Balanced),
             "strict" => Ok(Posture::Strict),
-            _ => Err(format!("Unknown posture: {}. Use: permissive, balanced, strict", s)),
+            _ => Err(format!(
+                "Unknown posture: {}. Use: permissive, balanced, strict",
+                s
+            )),
         }
     }
 }
@@ -228,7 +231,11 @@ fn discover_ai_tools() -> Vec<AiToolInfo> {
         tools.push(AiToolInfo {
             name: "Claude Code".into(),
             binary_path: which("claude").ok(),
-            config_dir: if config_dir.exists() { Some(config_dir) } else { None },
+            config_dir: if config_dir.exists() {
+                Some(config_dir)
+            } else {
+                None
+            },
             version: command_output("claude", &["--version"]),
             wrap_method: "mcp".into(),
         });
@@ -286,7 +293,11 @@ fn discover_services() -> Vec<ServiceInfo> {
                 services.push(ServiceInfo {
                     name: "Docker".into(),
                     kind: "docker".into(),
-                    detail: format!("{} container{} running", count, if count == 1 { "" } else { "s" }),
+                    detail: format!(
+                        "{} container{} running",
+                        count,
+                        if count == 1 { "" } else { "s" }
+                    ),
                 });
             }
         }
@@ -314,9 +325,7 @@ fn discover_sensitive_dirs() -> Vec<SensitiveDirInfo> {
             let exists = path.exists();
             let detail = if exists {
                 // Count files for context
-                let count = std::fs::read_dir(&path)
-                    .map(|rd| rd.count())
-                    .unwrap_or(0);
+                let count = std::fs::read_dir(&path).map(|rd| rd.count()).unwrap_or(0);
                 format!("{} ({} items)", desc, count)
             } else {
                 desc.to_string()
@@ -376,15 +385,26 @@ fn display_discovery(result: &DiscoveryResult) {
     if result.shells.is_empty() {
         section_line(&format!("{YELLOW}No shells detected{NC}"));
     } else {
-        let names: Vec<String> = result.shells.iter().map(|s| {
-            let marker = if s.is_primary { format!("{GREEN}{}{NC} (primary)", s.name) }
-                        else { format!("{CYAN}{}{NC} (available)", s.name) };
-            marker
-        }).collect();
+        let names: Vec<String> = result
+            .shells
+            .iter()
+            .map(|s| {
+                let marker = if s.is_primary {
+                    format!("{GREEN}{}{NC} (primary)", s.name)
+                } else {
+                    format!("{CYAN}{}{NC} (available)", s.name)
+                };
+                marker
+            })
+            .collect();
         section_line(&format!("Found: {}", names.join(", ")));
         for shell in &result.shells {
             if let Some(rc) = &shell.rc_file {
-                let extra = if shell.has_ohmyzsh { " (oh-my-zsh detected)" } else { "" };
+                let extra = if shell.has_ohmyzsh {
+                    " (oh-my-zsh detected)"
+                } else {
+                    ""
+                };
                 section_line(&format!("Config: {}{}", rc.display(), extra));
             }
         }
@@ -400,10 +420,18 @@ fn display_discovery(result: &DiscoveryResult) {
     if result.ai_tools.is_empty() {
         section_line(&format!("{DIM}None detected{NC}"));
     } else {
-        let names: Vec<String> = result.ai_tools.iter().map(|t| {
-            let ver = t.version.as_deref().map(|v| format!(" ({})", v.trim())).unwrap_or_default();
-            format!("{GREEN}{}{NC}{}", t.name, ver)
-        }).collect();
+        let names: Vec<String> = result
+            .ai_tools
+            .iter()
+            .map(|t| {
+                let ver = t
+                    .version
+                    .as_deref()
+                    .map(|v| format!(" ({})", v.trim()))
+                    .unwrap_or_default();
+                format!("{GREEN}{}{NC}{}", t.name, ver)
+            })
+            .collect();
         section_line(&format!("Found: {}", names.join(", ")));
     }
     section_end();
@@ -417,9 +445,11 @@ fn display_discovery(result: &DiscoveryResult) {
     if result.services.is_empty() {
         section_line(&format!("{DIM}None detected{NC}"));
     } else {
-        let names: Vec<String> = result.services.iter().map(|s| {
-            format!("{GREEN}{}{NC} ({})", s.name, s.detail)
-        }).collect();
+        let names: Vec<String> = result
+            .services
+            .iter()
+            .map(|s| format!("{GREEN}{}{NC} ({})", s.name, s.detail))
+            .collect();
         section_line(&format!("Found: {}", names.join(", ")));
     }
     section_end();
@@ -434,10 +464,13 @@ fn display_discovery(result: &DiscoveryResult) {
     if found.is_empty() {
         section_line(&format!("{DIM}None found{NC}"));
     } else {
-        let names: Vec<String> = found.iter().map(|d| {
-            let name = d.path.file_name().unwrap_or_default().to_string_lossy();
-            format!("{YELLOW}~/.{}{NC}", name)
-        }).collect();
+        let names: Vec<String> = found
+            .iter()
+            .map(|d| {
+                let name = d.path.file_name().unwrap_or_default().to_string_lossy();
+                format!("{YELLOW}~/.{}{NC}", name)
+            })
+            .collect();
         section_line(&format!("Found: {}", names.join(", ")));
     }
     section_end();
@@ -448,18 +481,27 @@ fn display_discovery(result: &DiscoveryResult) {
     section_dim("Active network interfaces and security posture.");
     section_line("");
     if !result.network.interfaces.is_empty() {
-        section_line(&format!("Interfaces: {}", result.network.interfaces.join(", ")));
+        section_line(&format!(
+            "Interfaces: {}",
+            result.network.interfaces.join(", ")
+        ));
     }
-    section_line(&format!("VPN: {}", if result.network.vpn_active {
-        format!("{GREEN}active{NC}")
-    } else {
-        format!("{DIM}not detected{NC}")
-    }));
-    section_line(&format!("Firewall: {}", if result.network.firewall_active {
-        format!("{GREEN}active{NC}")
-    } else {
-        format!("{DIM}not detected{NC}")
-    }));
+    section_line(&format!(
+        "VPN: {}",
+        if result.network.vpn_active {
+            format!("{GREEN}active{NC}")
+        } else {
+            format!("{DIM}not detected{NC}")
+        }
+    ));
+    section_line(&format!(
+        "Firewall: {}",
+        if result.network.firewall_active {
+            format!("{GREEN}active{NC}")
+        } else {
+            format!("{DIM}not detected{NC}")
+        }
+    ));
     section_end();
     eprintln!();
 }
@@ -477,7 +519,10 @@ fn install_shell_hook(shell: &ShellInfo, posture: &Posture, accept_defaults: boo
         "zsh" => "preexec.zsh",
         "bash" => "preexec.bash",
         _ => {
-            eprintln!("  {YELLOW}⚠{NC} Shell '{}' not yet supported for hooks", shell.name);
+            eprintln!(
+                "  {YELLOW}⚠{NC} Shell '{}' not yet supported for hooks",
+                shell.name
+            );
             return false;
         }
     };
@@ -495,10 +540,14 @@ fn install_shell_hook(shell: &ShellInfo, posture: &Posture, accept_defaults: boo
         section_dim("(rm -rf /, credential exfiltration) are blocked. Everything");
         section_dim("in between is logged with a signed receipt.");
         section_line("");
-        section_line(&format!("Recommended: Install in {GREEN}{}{NC} with {CYAN}{}{NC} posture",
-            shell.name, posture));
+        section_line(&format!(
+            "Recommended: Install in {GREEN}{}{NC} with {CYAN}{}{NC} posture",
+            shell.name, posture
+        ));
         section_line("");
-        section_line(&format!("{DIM}[Enter] Accept  [s] Skip  [?] Explain more{NC}"));
+        section_line(&format!(
+            "{DIM}[Enter] Accept  [s] Skip  [?] Explain more{NC}"
+        ));
         section_end();
 
         let choice = prompt("  > ");
@@ -565,7 +614,7 @@ fn install_shell_hook(shell: &ShellInfo, posture: &Posture, accept_defaults: boo
 fn generate_hook_content(shell: &str, posture: &Posture) -> String {
     match shell {
         "zsh" => format!(
-r#"#!/usr/bin/env zsh
+            r#"#!/usr/bin/env zsh
 # ZeroPoint Shell Governance — zsh preexec hook
 # Installed by: zp secure | Remove: delete this source line from ~/.zshrc
 ZP_BIN="${{ZP_BIN:-$HOME/.zeropoint/bin/zp}}"
@@ -602,9 +651,11 @@ _zp_preexec() {{
 
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec _zp_preexec
-"#, posture = posture),
+"#,
+            posture = posture
+        ),
         "bash" => format!(
-r#"#!/usr/bin/env bash
+            r#"#!/usr/bin/env bash
 # ZeroPoint Shell Governance — bash DEBUG trap
 # Installed by: zp secure | Remove: delete this source line from ~/.bashrc
 ZP_BIN="${{ZP_BIN:-$HOME/.zeropoint/bin/zp}}"
@@ -647,7 +698,9 @@ _zp_debug_trap() {{
 }}
 
 trap '_zp_debug_trap' DEBUG
-"#, posture = posture),
+"#,
+            posture = posture
+        ),
         _ => String::new(),
     }
 }
@@ -675,7 +728,9 @@ fn wrap_ai_tools(tools: &[AiToolInfo], accept_defaults: bool) -> Vec<String> {
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         section_line(&format!("Detected: {}", names.join(", ")));
         section_line("");
-        section_line(&format!("{DIM}[Enter] Wrap all  [s] Skip  [w] Choose individually{NC}"));
+        section_line(&format!(
+            "{DIM}[Enter] Wrap all  [s] Skip  [w] Choose individually{NC}"
+        ));
         section_end();
 
         let choice = prompt("  > ");
@@ -697,7 +752,8 @@ fn wrap_ai_tools(tools: &[AiToolInfo], accept_defaults: bool) -> Vec<String> {
             }
             "wrapper" => {
                 // PATH shim creation
-                let shim_content = generate_shim_content(&tool.name.to_lowercase().replace(' ', "-"), "codex");
+                let shim_content =
+                    generate_shim_content(&tool.name.to_lowercase().replace(' ', "-"), "codex");
                 let shim_path = bin_dir.join(tool.name.to_lowercase().replace(' ', "-"));
 
                 if std::fs::create_dir_all(&bin_dir).is_err() {
@@ -713,7 +769,11 @@ fn wrap_ai_tools(tools: &[AiToolInfo], accept_defaults: bool) -> Vec<String> {
                             std::fs::Permissions::from_mode(0o755),
                         );
                     }
-                    ok(&format!("{} → PATH shim: {}", tool.name, shim_path.display()));
+                    ok(&format!(
+                        "{} → PATH shim: {}",
+                        tool.name,
+                        shim_path.display()
+                    ));
                     wrapped.push(format!("{} (wrapper)", tool.name));
                 }
             }
@@ -731,7 +791,7 @@ fn wrap_ai_tools(tools: &[AiToolInfo], accept_defaults: bool) -> Vec<String> {
 
 fn generate_shim_content(tool_name: &str, actor: &str) -> String {
     format!(
-r#"#!/usr/bin/env bash
+        r#"#!/usr/bin/env bash
 # ZeroPoint PATH wrapper — {tool_name}
 # Generated by: zp secure | Remove: delete this file
 set -euo pipefail
@@ -750,7 +810,10 @@ REAL=$(_find_real) || exit 1
   echo "[ZP] Blocked: {tool_name} $*" >&2; exit 1
 }}
 exec "$REAL" "$@"
-"#, tool_name = tool_name, actor = actor)
+"#,
+        tool_name = tool_name,
+        actor = actor
+    )
 }
 
 // ============================================================================
@@ -818,7 +881,7 @@ fn setup_filesystem_watchers(
 
     // Docker integration (optional)
     let _has_docker = sensitive_dirs.iter().any(|_| false); // placeholder
-    // In practice, check for Docker socket
+                                                            // In practice, check for Docker socket
 
     dim("API proxy available: zp proxy start");
     dim("Network monitor available: zp net watch");
@@ -853,14 +916,18 @@ fn display_confirmation(
             .and_then(|entry| std::fs::read_to_string(entry.path()).ok())
             .and_then(|content| {
                 // Extract content_hash prefix as identity
-                content.find("\"content_hash\"")
+                content
+                    .find("\"content_hash\"")
                     .and_then(|pos| content[pos..].find(':'))
                     .and_then(|colon| {
                         let start = content.find("\"content_hash\"").unwrap() + colon + 2;
                         content[start..].find('"').map(|end| {
                             let hash = &content[start..start + end];
-                            if hash.len() >= 8 { format!("zp:{}...{}", &hash[..4], &hash[hash.len()-4..]) }
-                            else { format!("zp:{}", hash) }
+                            if hash.len() >= 8 {
+                                format!("zp:{}...{}", &hash[..4], &hash[hash.len() - 4..])
+                            } else {
+                                format!("zp:{}", hash)
+                            }
                         })
                     })
             })
@@ -875,32 +942,41 @@ fn display_confirmation(
     if shells_hooked.is_empty() {
         eprintln!("  Shell:        {DIM}not configured{NC}");
     } else {
-        eprintln!("  Shell:        {GREEN}{} preexec hook installed{NC}",
-            shells_hooked.join(", "));
+        eprintln!(
+            "  Shell:        {GREEN}{} preexec hook installed{NC}",
+            shells_hooked.join(", ")
+        );
     }
 
     // AI Tools
     if tools_wrapped.is_empty() {
         eprintln!("  AI Tools:     {DIM}none wrapped{NC}");
     } else {
-        eprintln!("  AI Tools:     {GREEN}{} wrapped{NC} ({})",
+        eprintln!(
+            "  AI Tools:     {GREEN}{} wrapped{NC} ({})",
             tools_wrapped.len(),
-            tools_wrapped.join(", "));
+            tools_wrapped.join(", ")
+        );
     }
 
     // File Watch
     if dirs_watched.is_empty() {
         eprintln!("  File Watch:   {DIM}not configured{NC}");
     } else {
-        eprintln!("  File Watch:   {GREEN}{} directories monitored{NC}",
-            dirs_watched.len());
+        eprintln!(
+            "  File Watch:   {GREEN}{} directories monitored{NC}",
+            dirs_watched.len()
+        );
     }
 
-    eprintln!("  Posture:      {CYAN}{}{NC}", match posture {
-        Posture::Permissive => "Permissive (log only)",
-        Posture::Balanced => "Balanced (warn + block critical)",
-        Posture::Strict => "Strict (approve everything)",
-    });
+    eprintln!(
+        "  Posture:      {CYAN}{}{NC}",
+        match posture {
+            Posture::Permissive => "Permissive (log only)",
+            Posture::Balanced => "Balanced (warn + block critical)",
+            Posture::Strict => "Strict (approve everything)",
+        }
+    );
 
     eprintln!();
     dim("Every action now produces a signed receipt.");
@@ -970,17 +1046,19 @@ pub fn run(config: &SecureConfig) -> i32 {
     let mut dirs_watched = Vec::new();
     if !skip.contains(&"network".to_string()) {
         header("Phase 4/5: Filesystem & Network");
-        dirs_watched = setup_filesystem_watchers(
-            &discovery.sensitive_dirs,
-            config.accept_defaults,
-        );
+        dirs_watched = setup_filesystem_watchers(&discovery.sensitive_dirs, config.accept_defaults);
     } else {
         dim("Filesystem & network: skipped");
     }
 
     // --- Phase 5: Confirmation ---
     header("Phase 5/5: Confirmation");
-    display_confirmation(&config.posture, &shells_hooked, &tools_wrapped, &dirs_watched);
+    display_confirmation(
+        &config.posture,
+        &shells_hooked,
+        &tools_wrapped,
+        &dirs_watched,
+    );
 
     // Write master config
     write_config(config, &shells_hooked, &tools_wrapped, &dirs_watched);
@@ -992,12 +1070,7 @@ pub fn run(config: &SecureConfig) -> i32 {
 // Config File Generation
 // ============================================================================
 
-fn write_config(
-    config: &SecureConfig,
-    shells: &[String],
-    _tools: &[String],
-    watched: &[PathBuf],
-) {
+fn write_config(config: &SecureConfig, shells: &[String], _tools: &[String], watched: &[PathBuf]) {
     let zp_home = dirs_home().join(".zeropoint");
     let _ = std::fs::create_dir_all(&zp_home);
 
@@ -1014,7 +1087,7 @@ fn write_config(
         .join(",\n  ");
 
     let content = format!(
-r#"# ZeroPoint Configuration
+        r#"# ZeroPoint Configuration
 # Generated by: zp secure
 # Reconfigure: zp secure --wizard
 
@@ -1076,7 +1149,12 @@ pub fn status() -> i32 {
 
         // Parse posture
         if let Some(line) = content.lines().find(|l| l.starts_with("posture")) {
-            let posture = line.split('=').nth(1).unwrap_or("unknown").trim().trim_matches('"');
+            let posture = line
+                .split('=')
+                .nth(1)
+                .unwrap_or("unknown")
+                .trim()
+                .trim_matches('"');
             ok(&format!("Posture: {}", posture));
         }
 

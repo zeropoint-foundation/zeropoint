@@ -817,6 +817,7 @@
       <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
       <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
       <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+      <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
       <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
       <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
     </div>
@@ -912,7 +913,8 @@
 
                 <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
                     <button class="btn secondary" id="tamper-btn" style="border-color: var(--block); color: var(--block);">Simulate Tampering</button>
-                    <button class="btn secondary" id="restore-btn" style="display: none;">Restore Chain</button>
+                    <button class="btn secondary" id="restore-btn">Restore Chain</button>
+                    <button class="btn secondary" id="clear-audit-btn" style="border-color: var(--text-muted); color: var(--text-muted);">Clear Audit Trail</button>
                 </div>
 
                 <div id="audit-result" style="margin-top: 1.5rem;"></div>
@@ -1474,6 +1476,11 @@
         function displayAuditVerification(result) {
             const auditDiv = document.getElementById('audit-result');
             const isValid = result.valid !== false;
+            const linksValid = result.chain_links_valid || 0;
+            const examined = result.entries_examined || 0;
+            const issues = result.issues || [];
+            const hasTampered = result.has_tampered_entries || false;
+
             auditDiv.innerHTML = `
                 <div class="verification-result">
                     <div style="margin-bottom: 1.5rem;">
@@ -1481,13 +1488,34 @@
                     </div>
                     <div class="response-item">
                         <label class="response-label">Entries Examined</label>
-                        <div class="response-value">${result.entries_examined || 0}</div>
+                        <div class="response-value">${examined}</div>
                     </div>
+                    <div class="response-item">
+                        <label class="response-label">Valid Links</label>
+                        <div class="response-value">${linksValid} / ${examined}</div>
+                    </div>
+                    ${hasTampered ? `
+                    <div class="response-item">
+                        <label class="response-label" style="color: var(--block);">Tampered Entries</label>
+                        <div class="response-value" style="color: var(--block);">Unrestored tampered entries found — click <strong>Restore Chain</strong></div>
+                    </div>
+                    ` : ''}
+                    ${issues.length > 0 ? `
+                    <div class="response-item">
+                        <label class="response-label">Issues</label>
+                        <div class="response-value" style="font-size: 0.85rem; color: var(--text-muted);">${issues.slice(0, 5).map(i => escapeHtml(i)).join('<br>')}</div>
+                    </div>
+                    ` : ''}
                     ${result.error ? `
                     <div class="response-item">
                         <label class="response-label">Error</label>
                         <div class="response-value">${escapeHtml(result.error)}</div>
                     </div>
+                    ` : ''}
+                    ${!isValid && examined > 0 ? `
+                    <p style="color: var(--text-muted); margin-top: 1rem; font-size: 0.85rem;">
+                        Try <strong>Restore Chain</strong> to fix tampered entries, or <strong>Clear Audit Trail</strong> to reset.
+                    </p>
                     ` : ''}
                 </div>
             `;
@@ -1512,7 +1540,6 @@
                     </div>
                     <p style="color: var(--text-muted); margin-bottom: 1rem;">Now click <strong>Verify Chain Integrity</strong> to see the tamper detected.</p>
                 `;
-                document.getElementById('restore-btn').style.display = 'inline-flex';
             } catch (error) {
                 document.getElementById('audit-result').innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;
             } finally {
@@ -1536,12 +1563,34 @@
                     </div>
                     <p style="color: var(--text-muted); margin-bottom: 1rem;">Click <strong>Verify Chain Integrity</strong> to confirm the chain is valid again.</p>
                 `;
-                btn.style.display = 'none';
             } catch (error) {
                 document.getElementById('audit-result').innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = 'Restore Chain';
+            }
+        });
+
+        document.getElementById('clear-audit-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('clear-audit-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Clearing...</span>';
+
+            try {
+                const result = await apiCall('/api/v1/audit/clear', 'POST');
+                const auditDiv = document.getElementById('audit-result');
+                auditDiv.innerHTML = `
+                    <div class="info-box" style="border-color: var(--allow);">
+                        <strong style="color: var(--allow);">Audit Trail Cleared</strong><br>
+                        ${escapeHtml(result.message)}
+                    </div>
+                    <p style="color: var(--text-muted); margin-bottom: 1rem;">Run some <strong>Guard Evaluations</strong> above, then verify the fresh chain.</p>
+                `;
+            } catch (error) {
+                document.getElementById('audit-result').innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Clear Audit Trail';
             }
         });
 

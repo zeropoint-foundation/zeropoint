@@ -273,10 +273,10 @@ async fn main() -> anyhow::Result<()> {
         None | Some(Commands::Chat) => chat::run(&pipeline).await?,
         Some(Commands::Health) => commands::health(&pipeline).await?,
         Some(Commands::Audit(AuditCmd::Verify)) => commands::audit_verify(&pipeline).await?,
-        Some(Commands::Guard { .. }) => unreachable!(),  // handled above
-        Some(Commands::Serve { .. }) => unreachable!(),  // handled above
+        Some(Commands::Guard { .. }) => unreachable!(), // handled above
+        Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
-        Some(Commands::Status) => unreachable!(),        // handled above
+        Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,

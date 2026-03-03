@@ -111,6 +111,16 @@ impl AuditStore {
         Ok(())
     }
 
+    /// Clear all audit entries (reset the chain). Returns the number of entries deleted.
+    pub fn clear(&self) -> Result<usize> {
+        let count = self
+            .conn
+            .execute("DELETE FROM audit_entries", [])
+            .map_err(StoreError::Database)?;
+        info!("Cleared {} audit entries", count);
+        Ok(count)
+    }
+
     /// Returns the hash of the most recent entry, or a genesis hash if the log is empty.
     pub fn get_latest_hash(&self) -> Result<String> {
         let mut stmt = self
