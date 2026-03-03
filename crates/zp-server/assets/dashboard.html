@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZEROPOINT — Verification Surface</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      background-color: #0A0A0C;
+      color: #E8E6E3;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      overflow-y: auto;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 80px 40px;
+    }
+
+    /* Header */
+    .header {
+      margin-bottom: 120px;
+      text-align: center;
+    }
+
+    .header-title {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .header-tagline {
+      color: #8B8984;
+      font-size: 13px;
+      letter-spacing: 0.05em;
+    }
+
+    /* Section */
+    .section {
+      margin-bottom: 100px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #B8B5B0;
+      margin-bottom: 24px;
+    }
+
+    .section-content {
+      padding-left: 0;
+    }
+
+    /* Identity Card */
+    .identity-row {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .identity-field {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+
+    .identity-label {
+      color: #8B8984;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      min-width: 140px;
+      flex-shrink: 0;
+    }
+
+    .identity-value {
+      color: #E8E6E3;
+      word-break: break-all;
+      font-size: 13px;
+    }
+
+    /* Gate Status */
+    .gate-section {
+      margin-bottom: 60px;
+    }
+
+    .gate-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      font-size: 14px;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-indicator.pass {
+      background-color: #00C896;
+    }
+
+    .status-indicator.fail {
+      background-color: #FF4444;
+    }
+
+    .gate-rules {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .gate-rule {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0;
+      font-size: 13px;
+    }
+
+    .gate-rule-dot {
+      width: 5px;
+      height: 5px;
+      background-color: #8B8984;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .gate-rule-name {
+      color: #E8E6E3;
+      flex: 1;
+    }
+
+    .gate-rule-category {
+      color: #8B8984;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .gate-rule.constitutional {
+      padding-left: 16px;
+      border-left: 2px solid #00C896;
+    }
+
+    .gate-rule.constitutional .gate-rule-name {
+      color: #00C896;
+    }
+
+    /* Chain Integrity */
+    .chain-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .chain-symbol {
+      font-size: 16px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .chain-details {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 20px;
+      padding-left: 16px;
+    }
+
+    .chain-detail-line {
+      font-size: 13px;
+      color: #E8E6E3;
+    }
+
+    .chain-detail-label {
+      color: #8B8984;
+      margin-right: 8px;
+    }
+
+    /* Security Posture */
+    .posture-score {
+      margin-bottom: 32px;
+    }
+
+    .score-value {
+      font-size: 32px;
+      font-weight: 600;
+      color: #E8E6E3;
+      margin-bottom: 8px;
+    }
+
+    .score-label {
+      font-size: 12px;
+      color: #8B8984;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .posture-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+
+    .posture-check {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    .check-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .check-indicator.pass {
+      background-color: #00C896;
+    }
+
+    .check-indicator.warning {
+      background-color: #FFB020;
+    }
+
+    .check-indicator.fail {
+      background-color: #FF4444;
+    }
+
+    .check-name {
+      color: #E8E6E3;
+      flex: 1;
+    }
+
+    .posture-summary {
+      border-top: 1px solid #2A2A2E;
+      padding-top: 20px;
+      color: #8B8984;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    /* Loading & Error States */
+    .loading {
+      color: #8B8984;
+      font-style: italic;
+    }
+
+    .error {
+      color: #FF4444;
+    }
+
+    .unreachable {
+      color: #FFB020;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 120px;
+      padding-top: 40px;
+      border-top: 1px solid #2A2A2E;
+      text-align: center;
+      color: #8B8984;
+    }
+
+    .footer-tagline {
+      font-size: 13px;
+      margin-bottom: 16px;
+      letter-spacing: 0.02em;
+    }
+
+    .footer-link {
+      color: #00C896;
+      text-decoration: none;
+      font-size: 12px;
+    }
+
+    .footer-link:hover {
+      color: #00C896;
+    }
+
+    /* Utility */
+    .muted {
+      color: #8B8984;
+    }
+
+    .success {
+      color: #00C896;
+    }
+
+    .warning-text {
+      color: #FFB020;
+    }
+
+    .error-text {
+      color: #FF4444;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-title">ZEROPOINT</div>
+      <div class="header-tagline">Trust is infrastructure.</div>
+    </div>
+
+    <!-- Identity Card -->
+    <div class="section">
+      <div class="section-title">Identity</div>
+      <div class="section-content">
+        <div class="identity-row">
+          <div class="identity-field">
+            <div class="identity-label">Public Key</div>
+            <div class="identity-value" id="publicKey">Loading...</div>
+          </div>
+          <div class="identity-field">
+            <div class="identity-label">Destination Hash</div>
+            <div class="identity-value" id="destinationHash">Loading...</div>
+          </div>
+          <div class="identity-field">
+            <div class="identity-label">Algorithm</div>
+            <div class="identity-value" id="algorithm">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gate Status -->
+    <div class="section gate-section">
+      <div class="section-title">Gate Status</div>
+      <div class="section-content">
+        <div class="gate-status" id="gateStatus">
+          <div class="status-indicator loading"></div>
+          <div>Loading...</div>
+        </div>
+        <div class="gate-rules" id="gateRules">
+          <div class="loading">Loading rules...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chain Integrity -->
+    <div class="section">
+      <div class="section-title">Chain Integrity</div>
+      <div class="section-content">
+        <div class="chain-status" id="chainStatus">
+          <div class="status-indicator loading"></div>
+          <div>Loading...</div>
+        </div>
+        <div class="chain-details" id="chainDetails"></div>
+      </div>
+    </div>
+
+    <!-- Security Posture -->
+    <div class="section">
+      <div class="section-title">Security Posture</div>
+      <div class="section-content">
+        <div class="posture-score">
+          <div class="score-value" id="postureScore">—</div>
+          <div class="score-label">Overall Score</div>
+        </div>
+        <div class="posture-checks" id="postureChecks">
+          <div class="loading">Loading checks...</div>
+        </div>
+        <div class="posture-summary" id="postureSummary"></div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="footer-tagline">Your keys. Your chain. Your trust.</div>
+      <a href="https://zeropoint.global" class="footer-link">zeropoint.global</a>
+    </div>
+  </div>
+
+  <script>
+    // API endpoints
+    const endpoints = {
+      identity: '/api/v1/identity',
+      rules: '/api/v1/policy/rules',
+      audit: '/api/v1/audit/verify',
+      stats: '/api/v1/stats',
+      security: '/api/v1/security/posture'
+    };
+
+    // Fetch function with error handling
+    async function fetchEndpoint(url) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          return { error: `HTTP ${response.status}` };
+        }
+        return await response.json();
+      } catch (err) {
+        return { error: 'Unreachable' };
+      }
+    }
+
+    // Format truncated public key with ellipsis
+    function truncateKey(key, length = 32) {
+      if (!key || key.length <= length) return key;
+      const start = key.substring(0, Math.floor(length / 2));
+      const end = key.substring(key.length - Math.floor(length / 2));
+      return `${start}...${end}`;
+    }
+
+    // Render identity section
+    function renderIdentity(data) {
+      const publicKeyEl = document.getElementById('publicKey');
+      const hashEl = document.getElementById('destinationHash');
+      const algoEl = document.getElementById('algorithm');
+
+      if (data.error) {
+        publicKeyEl.textContent = `Unreachable`;
+        publicKeyEl.classList.add('unreachable');
+        hashEl.textContent = `—`;
+        algoEl.textContent = `—`;
+        return;
+      }
+
+      publicKeyEl.textContent = truncateKey(data.public_key);
+      hashEl.textContent = truncateKey(data.destination_hash);
+      algoEl.textContent = data.algorithm || 'Ed25519';
+    }
+
+    // Render gate status
+    function renderGates(rulesData, stats) {
+      const statusEl = document.getElementById('gateStatus');
+      const rulesEl = document.getElementById('gateRules');
+
+      const hasError = rulesData.error || !rulesData.rules;
+      const isInstalled = !hasError && rulesData.rules && rulesData.rules.length > 0;
+
+      statusEl.innerHTML = `
+        <div class="status-indicator ${isInstalled ? 'pass' : 'fail'}"></div>
+        <div>${isInstalled ? 'GATES INSTALLED' : 'GATES COMPROMISED'}</div>
+      `;
+
+      if (hasError || !rulesData.rules || rulesData.rules.length === 0) {
+        rulesEl.innerHTML = `<div class="unreachable">No rules loaded</div>`;
+        return;
+      }
+
+      rulesEl.innerHTML = rulesData.rules.map(rule => {
+        const isConstitutional = rule.category === 'constitutional';
+        return `
+          <div class="gate-rule ${isConstitutional ? 'constitutional' : ''}">
+            <div class="gate-rule-dot"></div>
+            <div class="gate-rule-name">${rule.name || 'Unknown'}</div>
+            <div class="gate-rule-category">${rule.category || 'standard'}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Render chain integrity
+    function renderChain(auditData) {
+      const statusEl = document.getElementById('chainStatus');
+      const detailsEl = document.getElementById('chainDetails');
+
+      if (auditData.error) {
+        statusEl.innerHTML = `
+          <div class="status-indicator fail"></div>
+          <div>CHAIN UNREACHABLE</div>
+        `;
+        detailsEl.innerHTML = `<div class="chain-detail-line unreachable">Unable to verify chain</div>`;
+        return;
+      }
+
+      const isValid = auditData.valid === true;
+      const symbol = isValid ? '✓' : '✕';
+      const symbolClass = isValid ? 'success' : 'error-text';
+
+      statusEl.innerHTML = `
+        <div class="status-indicator ${isValid ? 'pass' : 'fail'}"></div>
+        <div>${isValid ? 'CHAIN VERIFIED' : 'CHAIN BROKEN'}</div>
+      `;
+
+      detailsEl.innerHTML = `
+        <div class="chain-detail-line">
+          <span class="chain-detail-label">Entries Examined:</span>
+          <span>${auditData.entries_examined || 0}</span>
+        </div>
+        <div class="chain-detail-line">
+          <span class="chain-detail-label">Validity:</span>
+          <span class="${symbolClass}">${symbol}</span>
+        </div>
+        ${auditData.error_message ? `<div class="chain-detail-line error">${auditData.error_message}</div>` : ''}
+      `;
+    }
+
+    // Render security posture
+    function renderPosture(postureData) {
+      const scoreEl = document.getElementById('postureScore');
+      const checksEl = document.getElementById('postureChecks');
+      const summaryEl = document.getElementById('postureSummary');
+
+      if (postureData.error) {
+        scoreEl.textContent = '—';
+        checksEl.innerHTML = `<div class="unreachable">Posture data unavailable</div>`;
+        summaryEl.innerHTML = `<span class="unreachable">Unable to assess security posture</span>`;
+        return;
+      }
+
+      // Render score
+      const score = postureData.score !== undefined ? postureData.score : '—';
+      scoreEl.textContent = score;
+
+      // Render checks
+      if (postureData.checks && postureData.checks.length > 0) {
+        checksEl.innerHTML = postureData.checks.map(check => {
+          const status = check.status || 'pass';
+          const indicatorClass = status === 'pass' ? 'pass' : status === 'warning' ? 'warning' : 'fail';
+          return `
+            <div class="posture-check">
+              <div class="check-indicator ${indicatorClass}"></div>
+              <div class="check-name">${check.name || 'Unknown Check'}</div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        checksEl.innerHTML = `<div class="loading">No checks available</div>`;
+      }
+
+      // Render summary
+      if (postureData.summary) {
+        summaryEl.textContent = postureData.summary;
+      } else {
+        summaryEl.textContent = 'Security assessment complete.';
+      }
+    }
+
+    // Initialize on page load
+    async function initialize() {
+      try {
+        const [identityData, rulesData, auditData, statsData, postureData] = await Promise.all([
+          fetchEndpoint(endpoints.identity),
+          fetchEndpoint(endpoints.rules),
+          fetchEndpoint(endpoints.audit),
+          fetchEndpoint(endpoints.stats),
+          fetchEndpoint(endpoints.security)
+        ]);
+
+        renderIdentity(identityData);
+        renderGates(rulesData, statsData);
+        renderChain(auditData);
+        renderPosture(postureData);
+      } catch (err) {
+        console.error('Verification surface error:', err);
+      }
+    }
+
+    // Run initialization when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialize);
+    } else {
+      initialize();
+    }
+  </script>
+</body>
+</html>
