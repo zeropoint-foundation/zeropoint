@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Constraint Architecture — ZeroPoint</title>
+<meta name="description" content="ZeroPoint's layered constraint hierarchy: constitutional rules that can never be overridden, operational rules that tighten but never loosen, and WASM-extensible policy for external integrators.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --green: #4ade80;
+  --red: #f87171;
+  --yellow: #facc15;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #a8d4ee; }
+
+.container { max-width: 820px; margin: 0 auto; padding: 0 2rem; }
+.wide-container { max-width: 1080px; margin: 0 auto; padding: 0 2rem; }
+
+/* Nav */
+header {
+  position: fixed; top: 0; width: 100%; z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+nav {
+  max-width: 1080px; margin: 0 auto; padding: 1rem 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  font-family: var(--font-mono); font-weight: 500; font-size: 1rem;
+  color: var(--text); letter-spacing: 0.05em;
+}
+.nav-logo span { color: var(--accent); }
+.nav-links { display: none; }
+
+/* Hamburger */
+.hamburger { display: block; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+
+/* Hero */
+.hero { padding: 10rem 0 5rem; }
+.hero-eyebrow {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.5rem;
+}
+h1 {
+  font-size: clamp(2rem, 5vw, 3rem); font-weight: 300; line-height: 1.2;
+  margin-bottom: 1.5rem; letter-spacing: -0.02em;
+}
+h1 strong { font-weight: 600; color: var(--accent); }
+
+/* Sections */
+section { padding: 4rem 0; }
+.section-rule { border: none; border-top: 1px solid var(--rule); margin: 0; }
+.section-label {
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1rem;
+}
+h2 { font-size: 1.6rem; font-weight: 300; margin-bottom: 1.5rem; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }
+
+.intro-prose {
+  font-size: 1.05rem; color: var(--text-muted); max-width: 680px;
+  line-height: 1.8; margin-bottom: 2rem;
+}
+
+/* Hierarchy Layers */
+.hierarchy { margin-top: 2rem; }
+.layer {
+  border-left: 3px solid var(--rule);
+  padding: 2rem 2rem;
+  margin-bottom: 0;
+  position: relative;
+  background: var(--bg);
+}
+.layer-constitutional {
+  border-left-color: var(--red);
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.03) 0%, transparent 40%);
+}
+.layer-operational {
+  border-left-color: var(--yellow);
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.03) 0%, transparent 40%);
+}
+.layer-baseline {
+  border-left-color: var(--green);
+  background: linear-gradient(90deg, rgba(74, 222, 128, 0.03) 0%, transparent 40%);
+}
+.layer-tag {
+  font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em;
+  text-transform: uppercase; margin-bottom: 0.75rem; font-weight: 500;
+}
+.layer-constitutional .layer-tag { color: var(--red); }
+.layer-operational .layer-tag { color: var(--yellow); }
+.layer-baseline .layer-tag { color: var(--green); }
+.layer h3 { font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; }
+.layer p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; }
+.layer-detail {
+  margin-top: 1rem; padding: 1rem 1.25rem;
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 6px;
+}
+.layer-detail code {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);
+}
+.layer-detail p {
+  font-size: 0.85rem; color: var(--text-dim); margin-top: 0.5rem; line-height: 1.6;
+}
+
+/* Severity table */
+.severity-table {
+  width: 100%; border-collapse: collapse; margin-top: 1.5rem;
+}
+.severity-table th {
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-dim);
+  text-align: left; padding: 0.75rem 1rem; border-bottom: 1px solid var(--rule);
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.severity-table td {
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--rule);
+  font-size: 0.9rem; color: var(--text-muted);
+}
+.severity-table tr:last-child td { border-bottom: none; }
+.severity-num {
+  font-family: var(--font-mono); font-weight: 500; width: 3rem;
+}
+.severity-5 { color: var(--red); }
+.severity-4 { color: #fb923c; }
+.severity-3 { color: var(--yellow); }
+.severity-2 { color: var(--accent); }
+.severity-1 { color: var(--green); }
+
+/* Guarantee cards */
+.guarantee-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-top: 2rem;
+}
+.guarantee-card {
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 1.5rem;
+}
+.guarantee-card .card-icon {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.guarantee-card h3 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; }
+.guarantee-card p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.7; }
+
+/* Integration paths */
+.path-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;
+}
+.path-card {
+  border: 1px solid var(--rule); border-radius: 8px; padding: 2rem;
+  background: var(--bg-elevated);
+}
+.path-card .path-label {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-dim);
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.75rem;
+}
+.path-card h3 { font-size: 1rem; font-weight: 500; margin-bottom: 0.75rem; }
+.path-card p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.7; margin-bottom: 0.75rem; }
+.path-card code {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);
+  display: block; background: var(--bg-subtle); padding: 0.75rem 1rem;
+  border-radius: 4px; margin-top: 0.75rem; line-height: 1.6;
+  white-space: pre; overflow-x: auto;
+}
+
+/* Can / Cannot */
+.can-cannot {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;
+}
+.can-col h3, .cannot-col h3 {
+  font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.1em;
+  text-transform: uppercase; margin-bottom: 1.25rem; padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule);
+}
+.can-col h3 { color: var(--green); }
+.cannot-col h3 { color: var(--red); }
+.can-item, .cannot-item {
+  color: var(--text-muted); font-size: 0.9rem; line-height: 1.7;
+  padding: 0.75rem 0; border-bottom: 1px solid var(--rule);
+}
+.can-item:last-child, .cannot-item:last-child { border-bottom: none; }
+
+/* Composability */
+.compose-flow {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.5rem; margin: 2.5rem 0; flex-wrap: wrap;
+}
+.compose-node {
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 0.75rem 1.25rem;
+  font-size: 0.85rem; text-align: center;
+}
+.compose-node.constitutional { border-color: var(--red); color: var(--red); }
+.compose-node.operational { border-color: var(--yellow); color: var(--yellow); }
+.compose-node.external { border-color: var(--accent); color: var(--accent); }
+.compose-node.baseline { border-color: var(--green); color: var(--green); }
+.compose-arrow { color: var(--text-dim); font-family: var(--font-mono); font-size: 1rem; }
+
+/* Pull quote */
+.pull-quote { text-align: center; padding: 4rem 0; }
+.pull-quote blockquote {
+  font-size: 1.15rem; font-style: italic; color: var(--text-muted);
+  max-width: 540px; margin: 0 auto; line-height: 1.7;
+}
+
+/* CTA */
+.btn {
+  display: inline-block; padding: 0.75rem 1.75rem; border-radius: 6px;
+  font-size: 0.9rem; font-weight: 500; transition: all 0.2s;
+}
+.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary:hover { background: #a8d4ee; color: var(--bg); }
+.btn-secondary { border: 1px solid var(--rule); color: var(--text-muted); }
+.btn-secondary:hover { border-color: var(--accent-dim); color: var(--text); }
+
+/* Footer */
+footer {
+  padding: 3rem 0; border-top: 1px solid var(--rule); text-align: center;
+}
+.footer-links { display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.footer-links a { font-size: 0.8rem; color: var(--text-dim); }
+.footer-links a:hover { color: var(--text-muted); }
+.footer-org { font-size: 0.75rem; color: var(--text-dim); }
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .guarantee-grid { grid-template-columns: 1fr; }
+  .path-grid { grid-template-columns: 1fr; }
+  .can-cannot { grid-template-columns: 1fr; }
+  .compose-flow { flex-direction: column; }
+  .compose-arrow { transform: rotate(90deg); }
+  .hero { padding: 8rem 0 3rem; }
+  section { padding: 3rem 0; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/#tenets">Tenets</a>
+      <a href="/#architecture">Architecture</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/constraints.html" class="active">Constraints</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">GitHub</a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
+  <a href="/constraints.html" onclick="this.parentElement.classList.remove('open')">Constraints</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
+  <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">Constraint Architecture</div>
+    <h1>Rules can only <strong>tighten</strong>.<br>Never loosen.</h1>
+    <p class="intro-prose">
+      ZeroPoint evaluates every action through a layered constraint hierarchy. Constitutional rules are hardcoded and non-removable. Operational rules compose additively. External systems can inject constraints but can never weaken existing ones. The most restrictive decision always wins.
+    </p>
+    <p style="color: var(--text-dim); font-size: 0.95rem; font-style: italic; max-width: 600px;">
+      For integrators building cognitive, compliance, or domain-specific layers on top of ZeroPoint.
+    </p>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Decision Spectrum -->
+<section>
+  <div class="container">
+    <div class="section-label">Decision Spectrum</div>
+    <h2>Five graduated responses to every action</h2>
+    <p class="intro-prose">
+      Not everything is allow/deny. ZeroPoint returns graduated decisions ranked by severity. The engine collects decisions from all rules and returns the most restrictive. A single Block from any rule overrides Allow from every other rule.
+    </p>
+
+    <table class="severity-table">
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Decision</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="severity-num severity-5">5</td>
+          <td>Block</td>
+          <td>Action denied. No override possible for constitutional blocks.</td>
+        </tr>
+        <tr>
+          <td class="severity-num severity-4">4</td>
+          <td>Review</td>
+          <td>Action suspended pending human approval. Configurable timeout.</td>
+        </tr>
+        <tr>
+          <td class="severity-num severity-3">3</td>
+          <td>Warn</td>
+          <td>Action proceeds only after explicit acknowledgment.</td>
+        </tr>
+        <tr>
+          <td class="severity-num severity-2">2</td>
+          <td>Sanitize</td>
+          <td>Action proceeds with modifications &mdash; redaction, scoping, parameter rewriting.</td>
+        </tr>
+        <tr>
+          <td class="severity-num severity-1">1</td>
+          <td>Allow</td>
+          <td>Action proceeds unconditionally.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Constraint Hierarchy -->
+<section>
+  <div class="container">
+    <div class="section-label">The Hierarchy</div>
+    <h2>Three layers. Strict evaluation order.</h2>
+    <p class="intro-prose">
+      Rules evaluate in a fixed order. Each layer can only add constraints, never remove them. Constitutional rules evaluate first and cannot be bypassed by any mechanism &mdash; native, WASM, or external.
+    </p>
+
+    <!-- Evaluation Flow -->
+    <div class="compose-flow">
+      <div class="compose-node constitutional">Constitutional</div>
+      <div class="compose-arrow">&rarr;</div>
+      <div class="compose-node operational">Operational</div>
+      <div class="compose-arrow">&rarr;</div>
+      <div class="compose-node external">WASM / External</div>
+      <div class="compose-arrow">&rarr;</div>
+      <div class="compose-node baseline">Baseline</div>
+      <div class="compose-arrow">&rarr;</div>
+      <div class="compose-node" style="border-color: var(--text-dim); color: var(--text-dim);">max(severity)</div>
+    </div>
+
+    <div class="hierarchy">
+      <!-- Layer 1 -->
+      <div class="layer layer-constitutional">
+        <div class="layer-tag">Layer 1 &mdash; Constitutional</div>
+        <h3>Hardcoded. Non-removable. Evaluated first.</h3>
+        <p>These are ZeroPoint's tenets, enforced in compiled Rust. No capability grant, no policy rule, no WASM module, no external system can bypass them. There is no removal API. They exist in code.</p>
+
+        <div class="layer-detail">
+          <code>HarmPrincipleRule</code> &mdash; Tenet I: Do No Harm
+          <p>Blocks actions whose targets or parameters indicate intent to cause harm: weaponization, surveillance of individuals, deepfakes, impersonation, exploitation, suppression of dissent. Inspects action targets and tool names.</p>
+        </div>
+
+        <div class="layer-detail" style="margin-top: 0.75rem;">
+          <code>SovereigntyRule</code> &mdash; Tenet II: Sovereignty Is Sacred
+          <p>Blocks configuration changes that would undermine sovereignty guarantees: disabling the Guard, bypassing capability checks, truncating the audit trail, forging capability grants, removing constitutional rules, overriding sovereign refusal.</p>
+        </div>
+      </div>
+
+      <!-- Layer 2 -->
+      <div class="layer layer-operational">
+        <div class="layer-tag">Layer 2 &mdash; Operational</div>
+        <h3>Configurable. Extensible. Cannot override Layer 1.</h3>
+        <p>Native Rust rules and WASM policy modules compose here. New rules can be added at runtime. Existing rules cannot be removed. WASM modules execute in memory-isolated sandboxes &mdash; they cannot access the host filesystem, network, or other modules.</p>
+
+        <div class="layer-detail">
+          <code>CatastrophicActionRule</code> &mdash; Blocks credential exfiltration and recursive self-modification. Always.
+        </div>
+        <div class="layer-detail" style="margin-top: 0.75rem;">
+          <code>BulkOperationRule</code> &mdash; Warns on file operations matching glob or recursive patterns above a configurable threshold.
+        </div>
+        <div class="layer-detail" style="margin-top: 0.75rem;">
+          <code>ReputationGateRule</code> &mdash; Gates mesh actions by peer reputation. High-risk actions require Good standing. Unknown peers trigger human Review.
+        </div>
+        <div class="layer-detail" style="margin-top: 0.75rem;">
+          <code>WASM Modules</code> &mdash; Sandboxed, fuel-limited policy rules. Receive the full PolicyContext as JSON, return a PolicyDecision as JSON. Deployed at runtime without recompiling ZeroPoint.
+        </div>
+      </div>
+
+      <!-- Layer 3 -->
+      <div class="layer layer-baseline">
+        <div class="layer-tag">Layer 3 &mdash; Baseline</div>
+        <h3>Default permit. Evaluated last.</h3>
+        <p>The <code style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent);">DefaultAllowRule</code> permits any action that no other rule has restricted. This represents ZeroPoint's "default open" posture. Can be replaced with a default-deny rule for strict environments.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- What External Systems Can/Cannot Do -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">Integration Boundary</div>
+    <h2>What external constraints can and cannot do</h2>
+    <p class="intro-prose">
+      External systems &mdash; cognitive layers, compliance engines, domain-specific policy providers &mdash; can inject constraints through native Rust rules or WASM modules. The boundary is strict.
+    </p>
+
+    <div class="can-cannot">
+      <div class="can-col">
+        <h3>Can do</h3>
+        <div class="can-item">Add new Block rules for domain-specific requirements</div>
+        <div class="can-item">Add Review gates that suspend actions for human oversight</div>
+        <div class="can-item">Add Warn thresholds for domain-specific risk patterns</div>
+        <div class="can-item">Add Sanitize transforms that redact or scope action parameters</div>
+        <div class="can-item">Deploy WASM modules at runtime without recompiling</div>
+        <div class="can-item">Evaluate the full PolicyContext including trust tier, channel, and mesh state</div>
+      </div>
+      <div class="cannot-col">
+        <h3>Cannot do</h3>
+        <div class="cannot-item">Override constitutional rules &mdash; a WASM Allow cannot override a Tenet Block</div>
+        <div class="cannot-item">Remove existing rules from the engine &mdash; there is no removal API</div>
+        <div class="cannot-item">Modify evaluation order &mdash; constitutional rules always evaluate first</div>
+        <div class="cannot-item">Disable the audit trail &mdash; SovereigntyRule blocks this unconditionally</div>
+        <div class="cannot-item">Downgrade a severity &mdash; Block cannot become Warn through any mechanism</div>
+        <div class="cannot-item">Escape the WASM sandbox &mdash; modules cannot access host filesystem or network</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Integration Paths -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">For Integrators</div>
+    <h2>Two paths to inject constraints</h2>
+
+    <div class="path-grid">
+      <div class="path-card">
+        <div class="path-label">Path 1 &mdash; Compile Time</div>
+        <h3>Native Rust Rules</h3>
+        <p>Implement the <code>PolicyRule</code> trait and register with the engine. Full access to the Rust type system. Appropriate for tightly coupled integrations.</p>
+        <code>impl PolicyRule for CognitiveWisdomRule {
+    fn name(&self) -> &str {
+        "CognitiveWisdom"
+    }
+    fn evaluate(&self, ctx: &PolicyContext)
+        -> Option&lt;PolicyDecision&gt;
+    {
+        // Reason about whether the
+        // action is wise, not just
+        // whether it's permitted.
+    }
+}</code>
+      </div>
+
+      <div class="path-card">
+        <div class="path-label">Path 2 &mdash; Runtime</div>
+        <h3>WASM Policy Modules</h3>
+        <p>Deploy sandboxed WebAssembly modules without recompiling ZeroPoint. Receive PolicyContext as JSON, return PolicyDecision as JSON. Memory-isolated, fuel-limited.</p>
+        <code>// Load at runtime
+let registry =
+    PolicyModuleRegistry::new()?;
+registry.load(wasm_bytes)?;
+engine.set_wasm_registry(registry);
+
+// Module receives full context
+// Module returns graduated decision
+// Sandbox prevents host access</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Architectural Guarantees -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">Guarantees</div>
+    <h2>Architectural properties that hold under all conditions</h2>
+
+    <div class="guarantee-grid">
+      <div class="guarantee-card">
+        <div class="card-icon">additive-only</div>
+        <h3>Constraints Only Tighten</h3>
+        <p>There is no mechanism to loosen, override, or remove a constraint once loaded. Rules can only be added, never subtracted.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">constitutional-supremacy</div>
+        <h3>Constitutional Supremacy</h3>
+        <p>HarmPrincipleRule and SovereigntyRule are compiled into the engine, loaded first, and cannot be bypassed by any runtime mechanism.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">deterministic</div>
+        <h3>Deterministic Evaluation</h3>
+        <p>Given the same PolicyContext and rule set, the engine always produces the same decision. No randomness, no external state dependencies.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">sandbox-isolation</div>
+        <h3>Sandbox Isolation</h3>
+        <p>WASM policy modules execute in memory-isolated sandboxes. A malicious module can at most return an incorrect decision. It cannot escape.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">audit-complete</div>
+        <h3>Audit Completeness</h3>
+        <p>Every evaluation is logged with the contributing rule name and decision. The receipt chain records which rules participated in every decision.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">monotonic-severity</div>
+        <h3>Monotonic Severity</h3>
+        <p>The engine selects max(severity) across all decisions. Block&nbsp;>&nbsp;Review&nbsp;>&nbsp;Warn&nbsp;>&nbsp;Sanitize&nbsp;>&nbsp;Allow. This ordering is hardcoded.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Composability Contract -->
+<section class="pull-quote">
+  <div class="container">
+    <blockquote>
+      Wisdom yields to principle.<br>Never the other way around.
+    </blockquote>
+    <p style="color: var(--text-dim); font-size: 0.85rem; margin-top: 1.5rem;">
+      An external cognitive layer can reason about whether an action is wise.<br>
+      ZeroPoint's constitutional rules determine whether it's permitted.<br>
+      If they disagree, principle wins. The receipt records both assessments.
+    </p>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- CTA -->
+<section>
+  <div class="container" style="text-align: center; padding: 3rem 2rem;">
+    <h2 style="margin-bottom: 1rem;">Build on the constraint layer</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; max-width: 520px; margin-left: auto; margin-right: auto;">
+      ZeroPoint is open source, MIT / Apache-2.0 licensed, and built in Rust.
+      The policy engine is in <code style="font-family: var(--font-mono); color: var(--accent); font-size: 0.85rem;">zp-policy</code> &mdash; start there.
+    </p>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+      <a href="https://github.com/zeropoint-foundation/zeropoint/tree/main/crates/zp-policy" class="btn btn-primary">View zp-policy</a>
+      <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/demo-chain.html">Chain Demo</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/constraints.html">Constraints</a>
+      <a href="/setup.html">Setup</a>
+      <a href="/letter.html">Letter</a>
+    </div>
+    <div class="footer-org">
+      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
