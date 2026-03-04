@@ -19,6 +19,7 @@ zp-mesh = { path = "../zp-mesh" }
 zp-pipeline = { path = "../zp-pipeline" }
 zp-trust = { path = "../zp-trust" }
 zp-receipt = { path = "../zp-receipt" }
+zp-policy = { path = "../zp-policy" }
 zp-server = { path = "../zp-server" }
 
 # Workspace dependencies

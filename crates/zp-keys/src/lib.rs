@@ -1,0 +1,29 @@
+//! ZeroPoint Key Hierarchy — cryptographic foundation for trust distribution.
+//!
+//! This crate defines the three-level key hierarchy that underpins all trust
+//! relationships in ZeroPoint:
+//!
+//! ```text
+//! GenesisKey          ← self-signed root of trust (one per deployment)
+//!   └─ OperatorKey    ← signed by genesis (one per node operator)
+//!       └─ AgentKey   ← signed by operator (one per agent instance)
+//! ```
+//!
+//! The hierarchy is a cryptographic primitive — it exists below the policy
+//! engine and does not depend on it. Verification is deterministic: given
+//! a chain of certificates, you can verify it offline with no network or
+//! policy state required.
+//!
+//! The policy engine can *govern* when delegation happens (via ActionType::KeyDelegation),
+//! but the mechanism itself is unconditional. This prevents circular dependencies
+//! between key distribution and policy evaluation.
+
+pub mod certificate;
+pub mod hierarchy;
+pub mod keyring;
+pub mod error;
+
+pub use certificate::{Certificate, CertificateChain, KeyRole};
+pub use hierarchy::{GenesisKey, OperatorKey, AgentKey};
+pub use keyring::Keyring;
+pub use error::KeyError;

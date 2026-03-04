@@ -5,6 +5,8 @@ members = [
     "crates/zp-core",
     "crates/zp-audit",
     "crates/zp-policy",
+    "crates/zp-keys",
+    "crates/zp-introduction",
     "crates/zp-llm",
     "crates/zp-pipeline",
     "crates/zp-skills",

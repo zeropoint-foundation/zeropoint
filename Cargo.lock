@@ -4065,6 +4065,7 @@ dependencies = [
  "zp-core",
  "zp-mesh",
  "zp-pipeline",
+ "zp-policy",
  "zp-receipt",
  "zp-server",
  "zp-trust",
@@ -4087,6 +4088,41 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "zp-receipt",
+]
+
+[[package]]
+name = "zp-introduction"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zp-core",
+ "zp-keys",
+]
+
+[[package]]
+name = "zp-keys"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "ed25519-dalek",
+ "hex",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+ "zeroize",
 ]
 
 [[package]]

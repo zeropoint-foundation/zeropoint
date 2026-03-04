@@ -1,0 +1,25 @@
+[package]
+name = "zp-introduction"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "ZeroPoint introduction protocol — governed cross-node trust establishment"
+
+[dependencies]
+zp-core = { path = "../zp-core" }
+zp-keys = { path = "../zp-keys" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

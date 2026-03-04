@@ -599,6 +599,24 @@ impl ActionContext {
                 Some(setting.clone()),
                 "High".to_string(),
             ),
+            CoreActionType::KeyDelegation {
+                target_role,
+                target_subject,
+                ..
+            } => (
+                "KeyDelegation".to_string(),
+                Some(format!("{}:{}", target_role, target_subject)),
+                "Critical".to_string(),
+            ),
+            CoreActionType::PeerIntroduction {
+                peer_address,
+                same_genesis,
+                ..
+            } => (
+                "PeerIntroduction".to_string(),
+                Some(peer_address.clone()),
+                if *same_genesis { "High" } else { "Critical" }.to_string(),
+            ),
         };
 
         Self {

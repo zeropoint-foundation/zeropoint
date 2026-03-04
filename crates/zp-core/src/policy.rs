@@ -96,6 +96,33 @@ pub enum ActionType {
     CredentialAccess { credential_ref: String },
     /// System configuration change
     ConfigChange { setting: String },
+    /// Key delegation — issuing a child certificate in the key hierarchy.
+    ///
+    /// Governed by the policy engine so that operators can control when and
+    /// how trust is extended. The mechanism (signing) is unconditional;
+    /// the *decision* to delegate is policy-gated.
+    KeyDelegation {
+        /// Role being delegated to (e.g., "operator", "agent").
+        target_role: String,
+        /// Subject name of the key being certified.
+        target_subject: String,
+        /// Genesis public key fingerprint (first 16 hex chars).
+        genesis_fingerprint: String,
+    },
+    /// Peer introduction — establishing trust with a new remote node.
+    ///
+    /// Triggered when a node presents its certificate chain and requests
+    /// a trust relationship. The policy engine decides whether to accept.
+    PeerIntroduction {
+        /// The remote peer's mesh address.
+        peer_address: String,
+        /// The role of the peer's leaf certificate.
+        peer_role: String,
+        /// The genesis fingerprint the peer's chain traces back to.
+        peer_genesis_fingerprint: String,
+        /// Whether the peer's genesis matches our own.
+        same_genesis: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,6 +251,9 @@ impl RiskLevel {
             ActionType::FileOp { .. } => RiskLevel::Low,
             ActionType::CredentialAccess { .. } => RiskLevel::Critical,
             ActionType::ConfigChange { .. } => RiskLevel::High,
+            ActionType::KeyDelegation { .. } => RiskLevel::Critical,
+            ActionType::PeerIntroduction { same_genesis: true, .. } => RiskLevel::High,
+            ActionType::PeerIntroduction { same_genesis: false, .. } => RiskLevel::Critical,
         }
     }
 }

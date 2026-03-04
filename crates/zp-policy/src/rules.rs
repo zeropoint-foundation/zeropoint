@@ -239,6 +239,8 @@ impl PolicyRule for HarmPrincipleRule {
             ActionType::ConfigChange { setting } => Some(setting.as_str()),
             ActionType::Chat => None,
             ActionType::CredentialAccess { credential_ref } => Some(credential_ref.as_str()),
+            ActionType::KeyDelegation { target_subject, .. } => Some(target_subject.as_str()),
+            ActionType::PeerIntroduction { peer_address, .. } => Some(peer_address.as_str()),
         };
 
         if let Some(t) = target {

@@ -1,9 +1,10 @@
-//! ZeroPoint v2 CLI — terminal interface for developers.
+//! ZeroPoint CLI — terminal interface for developers.
 
 mod chat;
 mod commands;
 mod guard;
 mod mesh_commands;
+mod policy_commands;
 mod secure;
 
 use clap::{Parser, Subcommand};
@@ -13,7 +14,7 @@ use zp_core::{OperatorIdentity, TrustTier};
 use zp_pipeline::{MeshConfig, Pipeline, PipelineConfig};
 
 #[derive(Parser)]
-#[command(name = "zp", about = "ZeroPoint v2 CLI", version)]
+#[command(name = "zp", about = "ZeroPoint CLI", version)]
 struct Args {
     #[arg(global = true, long, default_value = "./data/zeropoint")]
     data_dir: PathBuf,
@@ -104,6 +105,29 @@ enum Commands {
     },
     /// Show current governance status
     Status,
+    /// Manage WASM policy modules
+    #[command(subcommand)]
+    Policy(PolicyCmd),
+}
+
+#[derive(Subcommand)]
+enum PolicyCmd {
+    /// Load a WASM policy module from a file
+    Load {
+        /// Path to the .wasm policy module
+        path: String,
+    },
+    /// List installed policy modules
+    List,
+    /// Show full policy engine status (native rules + WASM modules)
+    Status,
+    /// Verify integrity of installed WASM modules
+    Verify,
+    /// Remove an installed policy module by name or hash prefix
+    Remove {
+        /// Module name or content hash prefix
+        identifier: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -221,6 +245,18 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    // Policy subcommand — manages WASM policy modules, no pipeline needed
+    if let Some(Commands::Policy(cmd)) = &args.command {
+        let exit_code = match cmd {
+            PolicyCmd::Load { path } => policy_commands::load(path),
+            PolicyCmd::List => policy_commands::list(),
+            PolicyCmd::Status => policy_commands::status(),
+            PolicyCmd::Verify => policy_commands::verify(),
+            PolicyCmd::Remove { identifier } => policy_commands::remove(identifier),
+        };
+        std::process::exit(exit_code);
+    }
+
     let trust_tier = match args.trust_tier.as_str() {
         "tier0" => TrustTier::Tier0,
         "tier1" => TrustTier::Tier1,
@@ -276,7 +312,8 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
-        Some(Commands::Status) => unreachable!(),       // handled above
+        Some(Commands::Status) => unreachable!(),        // handled above
+        Some(Commands::Policy(_)) => unreachable!(),     // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,

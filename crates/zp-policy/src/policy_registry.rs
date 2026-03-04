@@ -271,6 +271,62 @@ impl PolicyModuleRegistry {
             })
             .collect()
     }
+
+    /// Auto-discover and load all `.wasm` files from a directory.
+    ///
+    /// Scans the given directory for files with a `.wasm` extension,
+    /// loads each one, and returns a summary of successes and failures.
+    /// Files that fail to load are reported but do not prevent other
+    /// modules from loading.
+    ///
+    /// This is the primary mechanism for operators to deploy custom
+    /// policy modules: drop a `.wasm` file into `~/.zeropoint/policies/`
+    /// and the engine picks it up on next startup.
+    pub fn load_directory(
+        &self,
+        dir: &std::path::Path,
+    ) -> Vec<Result<(std::path::PathBuf, WasmModuleMetadata), (std::path::PathBuf, String)>> {
+        let mut results = Vec::new();
+
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) => {
+                tracing::debug!("Could not read policy directory {:?}: {}", dir, e);
+                return results;
+            }
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("wasm") {
+                continue;
+            }
+
+            match std::fs::read(&path) {
+                Ok(bytes) => match self.load(&bytes) {
+                    Ok(metadata) => {
+                        tracing::info!(
+                            "Loaded policy module '{}' from {:?} (hash: {})",
+                            metadata.name,
+                            path,
+                            &metadata.content_hash[..8]
+                        );
+                        results.push(Ok((path, metadata)));
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load policy module {:?}: {}", path, e);
+                        results.push(Err((path, e.to_string())));
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to read {:?}: {}", path, e);
+                    results.push(Err((path, e.to_string())));
+                }
+            }
+        }
+
+        results
+    }
 }
 
 impl Default for PolicyModuleRegistry {
