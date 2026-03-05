@@ -302,6 +302,24 @@ The constitutional rules implement ZeroPoint's Four Tenets, which are embedded i
 
 **IV. The Human Is The Root.** Every delegation chain terminates at a human-held key. No agent may self-authorize. The genesis key is always held by flesh, blood, and soul. This is not only a constraint on agents — it is an assertion of human authority and accountability. The human at the root of a chain is not merely an overseer; they are a participant whose actions are as provable and auditable as any agent's.
 
+### 5.5 Key Hierarchy and Introduction Protocol
+
+ZeroPoint solves the key distribution problem through `zp-keys` — a three-level certificate hierarchy that exists below the policy engine:
+
+```
+GenesisKey       ← self-signed root of trust (one per deployment)
+  └─ OperatorKey ← signed by genesis (one per node operator)
+      └─ AgentKey← signed by operator (one per agent instance)
+```
+
+Each level holds an Ed25519 keypair and a certificate chain linking it back to its genesis root. Any node can verify an agent's identity by walking the chain — offline, with no network or policy state required. Certificate chains are verified against six invariants: valid signatures, issuer linkage, role hierarchy, monotonic depth, no expired certificates, and hash linkage.
+
+The key hierarchy is a primitive — it has no dependency on the policy engine. This avoids a circular dependency: you need keys to establish the engine's authority across nodes, so keys cannot depend on the engine existing. The *decision* to issue a child certificate flows through the policy engine as `ActionType::KeyDelegation` (Critical risk); the *mechanism* of signing is unconditional.
+
+When two ZeroPoint nodes meet for the first time, the introduction protocol (`zp-introduction`) governs trust establishment. The initiator sends its certificate chain and a challenge nonce. The responder verifies the chain, builds a `PolicyContext` with `ActionType::PeerIntroduction`, and evaluates it against the policy engine. Same-genesis introductions are High risk; cross-genesis introductions are Critical. The policy engine decides — the protocol only generates the context.
+
+What remains outside protocol scope: how peers discover each other's network addresses. Key distribution is solved; key discovery is not.
+
 ---
 
 ## 6. Threat Model
@@ -312,7 +330,7 @@ The constitutional rules implement ZeroPoint's Four Tenets, which are embedded i
 |---|---|---|---|
 | **Log forgery / retroactive rewriting** | Alter history to change attribution | Signed receipts with Ed25519 + Blake3 hash chain linkage; peers verify each other's chains via collective audit | Compromised private keys can still sign lies; key revocation is deployment-dependent |
 | **Unauthorized tool use** | Execute actions beyond intended scope | CapabilityGrant gating with 8-invariant delegation chain verification; PolicyEngine evaluates before every action | Bad policy design can still leave gaps; scoping is only as good as the grant definitions |
-| **Cross-operator trust failure** | One party can't trust another's agent outputs | Receipts provide independent verification; peers demand chains before accepting delegations or results | Trust still requires key/identity bootstrapping; first-contact problem is not solved in-protocol |
+| **Cross-operator trust failure** | One party can't trust another's agent outputs | Receipts provide independent verification; `zp-introduction` protocol verifies certificate chains and evaluates peer trust through policy engine (see §5.5) | Peer network discovery is out of scope; cross-genesis introductions require operator-configured policy |
 | **"Security theater" governance** | Claim governance without real constraints | Constitutional rules are non-removable; explicit non-goals section; receipts are independently verifiable, not just logged | Some deployments may misuse branding while gutting constraints; MIT/Apache-2.0 allows this |
 | **Surveillance co-option** | Use receipts to track people rather than actions | Tenets + constitutional non-removability + explicit ethics stance; protocol frames accountability of *actions*, not tracking of *people* | MIT/Apache-2.0 cannot legally prevent misuse; community norms and reputation are the remaining defense |
 | **Replay attacks** | Resend messages or insert previously captured packets | MeshEnvelope sequence numbers (monotonic u64); 16-byte random nonces in link handshake; Ed25519 signatures over content hashes | Depends on peers tracking seen sequence numbers; long-offline nodes may have gaps |
@@ -327,7 +345,7 @@ Being explicit prevents credibility collapse later:
 - **It does not prevent a determined actor from building harmful systems.** The MIT/Apache-2.0 license is permissive. Constitutional rules constrain the framework's own behavior; they cannot constrain a fork.
 - **It does not make intelligence tools impossible.** Receipt infrastructure could be repurposed for surveillance. The Tenets and constitutional rules resist this, but they are a friction, not a wall.
 - **It does not provide universal truth verification.** Receipts prove that a statement was signed, not that the statement is true.
-- **It does not solve the key distribution problem.** How agents and humans discover and verify each other's public keys is outside the protocol scope.
+- **It does not solve key discovery.** `zp-keys` solves key distribution (see §5.5), but how peers find each other's network addresses remains outside the protocol scope.
 
 Instead:
 

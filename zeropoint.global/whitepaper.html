@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint Whitepaper — Cryptographic Governance Primitives for Autonomous Agent Systems</title>
+<meta name="description" content="Technical whitepaper for ZeroPoint: cryptographic accountability primitives for AI agents across multiple transport networks.">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e0ded9;
+  --text-muted: #9a9a9e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: #a8d4ee; text-decoration: underline; }
+
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* --- Header --- */
+header {
+  position: fixed; top: 0; width: 100%; z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+nav {
+  max-width: 760px; margin: 0 auto; padding: 0.8rem 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  font-family: var(--font-mono); font-weight: 500; font-size: 0.9rem;
+  color: var(--text); letter-spacing: 0.05em;
+}
+.nav-logo span { color: var(--accent); }
+.nav-links { display: none; }
+@media (max-width: 480px) { .nav-links .hide-mobile { display: none; } }
+
+/* --- Title Block --- */
+.title-block {
+  padding: 8rem 0 3rem;
+  border-bottom: 1px solid var(--rule);
+}
+.title-block h1 {
+  font-size: 1.8rem; font-weight: 300; line-height: 1.3;
+  margin-bottom: 0.5rem; letter-spacing: -0.01em;
+}
+.title-block h1 strong { font-weight: 600; color: var(--accent); }
+.subtitle {
+  font-size: 1.05rem; color: var(--text-muted); margin-bottom: 1.5rem;
+}
+.meta-block {
+  font-size: 0.8rem; color: var(--text-dim); line-height: 2;
+  font-family: var(--font-mono);
+}
+.meta-block .label { color: var(--text-muted); }
+.cite-block {
+  margin-top: 1.5rem; padding: 1rem 1.25rem;
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  border-radius: 6px; font-size: 0.8rem; color: var(--text-muted);
+  font-style: italic;
+}
+
+/* --- Content --- */
+article { padding: 3rem 0; }
+
+h2 {
+  font-size: 1.4rem; font-weight: 400; margin-top: 3.5rem; margin-bottom: 1rem;
+  padding-bottom: 0.5rem; border-bottom: 1px solid var(--rule);
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: 1.05rem; font-weight: 600; margin-top: 2rem; margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+p { margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-muted); }
+
+strong { color: var(--text); font-weight: 600; }
+
+blockquote {
+  margin: 1.5rem 0; padding: 1rem 1.5rem;
+  border-left: 3px solid var(--accent-dim);
+  background: var(--bg-elevated);
+  font-style: italic; color: var(--text);
+  font-size: 0.95rem;
+}
+
+ul, ol {
+  margin: 0.75rem 0 1rem 1.5rem;
+  font-size: 0.95rem; color: var(--text-muted);
+}
+li { margin-bottom: 0.4rem; }
+
+code {
+  font-family: var(--font-mono); font-size: 0.85em;
+  background: var(--bg-subtle); padding: 0.15em 0.4em;
+  border-radius: 3px; color: var(--accent);
+}
+
+pre {
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 1.25rem 1.5rem;
+  overflow-x: auto; margin: 1.25rem 0;
+}
+pre code {
+  background: none; padding: 0; font-size: 0.8rem;
+  color: var(--text-muted); line-height: 1.7;
+}
+
+/* --- Tables --- */
+table {
+  width: 100%; border-collapse: collapse;
+  margin: 1.25rem 0; font-size: 0.85rem;
+}
+th {
+  text-align: left; padding: 0.6rem 0.8rem;
+  border-bottom: 2px solid var(--rule);
+  color: var(--text); font-weight: 600;
+  font-size: 0.8rem; letter-spacing: 0.02em;
+}
+td {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--text-muted); vertical-align: top;
+}
+tr:hover td { background: var(--bg-elevated); }
+
+/* --- TOC --- */
+.toc {
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 1.5rem 2rem; margin: 2rem 0;
+}
+.toc-title {
+  font-family: var(--font-mono); font-size: 0.75rem;
+  color: var(--accent-dim); letter-spacing: 0.1em;
+  text-transform: uppercase; margin-bottom: 0.75rem;
+}
+.toc ol { margin: 0; padding-left: 1.25rem; }
+.toc li { margin-bottom: 0.25rem; font-size: 0.85rem; }
+.toc a { color: var(--text-muted); }
+.toc a:hover { color: var(--accent); }
+
+/* --- Section Labels --- */
+.section-num {
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--accent-dim); letter-spacing: 0.1em;
+  display: block; margin-bottom: 0.25rem;
+}
+
+/* --- Eval Order --- */
+.eval-order {
+  font-family: var(--font-mono); font-size: 0.8rem;
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 1rem 1.5rem;
+  color: var(--text-muted); margin: 1rem 0; line-height: 2;
+}
+.eval-order .const { color: var(--accent); }
+.eval-order .note { color: var(--text-dim); font-size: 0.75rem; }
+
+/* --- Separator --- */
+hr {
+  border: none; border-top: 1px solid var(--rule);
+  margin: 3rem 0;
+}
+
+/* --- Footer --- */
+footer {
+  padding: 2rem 0; border-top: 1px solid var(--rule);
+  text-align: center; font-size: 0.75rem; color: var(--text-dim);
+}
+footer a { color: var(--text-dim); }
+footer a:hover { color: var(--accent-dim); }
+
+/* --- Print --- */
+@media print {
+  body { background: #fff; color: #111; font-size: 11pt; }
+  header { display: none; }
+  .container { max-width: 100%; padding: 0; }
+  a { color: #111; }
+  code { background: #f0f0f0; color: #333; }
+  pre { background: #f8f8f8; border-color: #ddd; }
+  blockquote { border-left-color: #999; background: #f8f8f8; }
+  th, td { border-color: #ccc; }
+  .toc { background: #f8f8f8; border-color: #ddd; }
+  h2 { border-bottom-color: #ccc; }
+}
+
+@media (max-width: 640px) {
+  .container { padding: 0 1rem; }
+  .title-block { padding-top: 6rem; }
+  .title-block h1 { font-size: 1.4rem; }
+  table { font-size: 0.75rem; }
+  th, td { padding: 0.4rem; }
+}
+
+/* --- Narration Player --- */
+.wp-player {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: rgba(17,17,22,0.96);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--rule);
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+}
+.wp-player.visible { transform: translateY(0); }
+.wp-player-inner {
+  max-width: 760px; margin: 0 auto; padding: 0.7rem 2rem;
+  display: flex; align-items: center; gap: 1rem;
+}
+.wp-player-btn {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  padding: 0.3rem; display: flex; align-items: center; justify-content: center;
+  transition: color 0.2s;
+}
+.wp-player-btn:hover { color: var(--text); }
+.wp-player-btn svg { width: 18px; height: 18px; }
+.wp-player-btn.play-pause svg { width: 22px; height: 22px; }
+.wp-player-section {
+  flex: 1; min-width: 0;
+}
+.wp-player-label {
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--accent-dim); letter-spacing: 0.08em; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-player-title {
+  font-size: 0.85rem; color: var(--text); font-weight: 400;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 0.1rem;
+}
+.wp-player-progress {
+  position: absolute; top: -2px; left: 0; right: 0; height: 2px;
+  background: var(--rule);
+}
+.wp-player-progress-bar {
+  height: 100%; background: var(--accent); width: 0%;
+  transition: width 0.3s linear;
+}
+.wp-player-close {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  padding: 0.3rem; font-size: 1.1rem; line-height: 1; transition: color 0.2s;
+}
+.wp-player-close:hover { color: var(--text); }
+
+/* Narrate launch button */
+.wp-narrate-btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  background: transparent; border: 1px solid var(--accent-dim);
+  color: var(--accent); padding: 0.4rem 1rem; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.05em;
+  cursor: pointer; transition: all 0.2s; margin-top: 0.75rem;
+}
+.wp-narrate-btn:hover { background: rgba(126,184,218,0.08); border-color: var(--accent); }
+.wp-narrate-btn svg { width: 14px; height: 14px; }
+.wp-narrate-btn.pulsing {
+  animation: wpNarratePulse 1.5s ease-in-out 3;
+}
+@keyframes wpNarratePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(126,184,218,0); }
+  50% { box-shadow: 0 0 12px 3px rgba(126,184,218,0.3); }
+}
+
+/* Active section highlight */
+.section-narrating > h2 {
+  border-bottom-color: var(--accent) !important;
+}
+.section-narrating > h2::after {
+  content: ''; display: inline-block; width: 6px; height: 6px;
+  background: var(--accent); border-radius: 50%;
+  margin-left: 0.6rem; vertical-align: middle;
+  animation: narrateDot 1.5s ease-in-out infinite;
+}
+@keyframes narrateDot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Extra bottom padding when player is visible */
+body.player-active { padding-bottom: 5rem; }
+body.player-active footer { margin-bottom: 4rem; }
+
+@media (max-width: 640px) {
+  .wp-player-inner { padding: 0.6rem 1rem; gap: 0.6rem; }
+  .wp-player-title { font-size: 0.78rem; }
+}
+
+/* --- Tech Term Tooltips --- */
+.tt {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--accent-dim);
+  cursor: help;
+  transition: border-color 0.2s, color 0.2s;
+}
+.tt:hover {
+  border-bottom-color: var(--accent);
+  color: #a8d4ee;
+  text-decoration: none;
+}
+.tt-tip {
+  position: fixed;
+  z-index: 500;
+  max-width: 340px;
+  padding: 0.65rem 0.9rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
+.tt-tip.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.tt-tip-def {
+  margin: 0;
+}
+.tt-tip-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--accent-dim);
+  letter-spacing: 0.03em;
+}
+.tt-tip-link:hover { color: var(--accent); }
+
+/* --- Hamburger Menu --- */
+.hamburger { display: block; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; text-decoration: none; }
+.mobile-menu a:hover { color: var(--accent); text-decoration: none; }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/#tenets" class="hide-mobile">Tenets</a>
+      <a href="/#architecture">Architecture</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
+  <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<div class="container">
+
+<!-- Title -->
+<div class="title-block">
+  <h1><strong>ZeroPoint</strong></h1>
+  <p class="subtitle">Cryptographic Governance Primitives for Accountable Systems</p>
+  <div class="meta-block">
+    <span class="label">Version:</span> 1.0 — February 2026<br>
+    <span class="label">Author:</span> Ken Romero, Founder, ThinkStream AI Labs<br>
+    <span class="label">Status:</span> Public Technical Overview<br>
+    <span class="label">License:</span> CC BY 4.0 (text); MIT/Apache-2.0 (code)<br>
+    <span class="label">Download:</span> <a href="#">PDF</a> · SHA-256: <em>pending</em>
+  </div>
+  <div class="cite-block">
+    <strong>How to cite:</strong> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream AI Labs, Whitepaper v1.0, February 2026. https://zeropoint.global/whitepaper
+  </div>
+  <button class="wp-narrate-btn pulsing" id="wpNarrateBtn" onclick="wpPlayer.start()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    Narrate this whitepaper
+  </button>
+</div>
+
+<article>
+
+<!-- Abstract -->
+<h2 id="abstract">Abstract</h2>
+<p>ZeroPoint is portable trust infrastructure — cryptographic governance primitives that make actions provable, auditable, and policy-bound without requiring central control. It restores real exit and real competition by moving trust from platform databases to verifiable cryptographic guarantees that any participant can carry between systems, operators, and networks.</p>
+<p>The framework operates at the protocol-primitives layer. Every significant action produces a verifiable receipt, linked into an immutable chain of accountability. The protocol is participant-agnostic: the same receipts, capability chains, and constitutional constraints work whether the actor is a human, an AI agent, an automated service, or an IoT device — and whether they communicate over HTTP, TCP, encrypted mesh networks, or any future transport. ZeroPoint ships with a Reticulum-compatible mesh transport as one integration — chosen for its philosophical alignment with sovereignty and harm minimization — alongside TCP, UDP, and HTTP interfaces.</p>
+<p>Autonomous AI agents are the most urgent application: agents are proliferating faster than the trust infrastructure to govern them, and ZeroPoint provides the cryptographic substrate they need. But the primitives are not agent-specific. Any participant that holds a keypair can sign receipts, hold capability grants, delegate authority, and exercise sovereign refusal.</p>
+<p>ZeroPoint is technically complete: 699 tests across 13 crates, six delivered development phases, and full documentation. It does not claim to "solve AI safety" or solve trust generally. It provides cryptographic primitives and governance constraints that make actions provable and refusable — shifting the terms of trust between participants, operators, and systems.</p>
+
+<!-- TOC -->
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#s0">Why This Exists — The Portable Trust Thesis</a></li>
+    <li><a href="#s1">Problem Statement</a></li>
+    <li><a href="#s2">Design Goals</a></li>
+    <li><a href="#s3">System Overview</a></li>
+    <li><a href="#s4">Receipts and Chains</a></li>
+    <li><a href="#s5">Governance Model</a></li>
+    <li><a href="#s6">Threat Model</a></li>
+    <li><a href="#s7">Transport Integrations</a></li>
+    <li><a href="#s8">Implementation Status</a></li>
+    <li><a href="#s9">Adoption Paths</a></li>
+    <li><a href="#s10">Roadmap</a></li>
+    <li><a href="#s11">Ethics, Non-Goals, and Misuse Resistance</a></li>
+    <li><a href="#s12">Conclusion</a></li>
+    <li><a href="#appendix-a">Appendix A: Protocol Sketch</a></li>
+    <li><a href="#appendix-b">Appendix B: Glossary</a></li>
+    <li><a href="#appendix-c">Appendix C: Example Integration Pattern</a></li>
+  </ol>
+</div>
+
+<!-- Section 0 -->
+<h2 id="s0"><span class="section-num">Section 0</span>Why This Exists — The Portable Trust Thesis</h2>
+
+<h3>The Structural Problem</h3>
+<p>The internet did not degrade by accident. It degraded because the primitives that make trust work — identity, reputation, provenance, authorization — were never built into the protocol layer. They were left to platforms. And platforms, once they accumulate enough users, face a structural incentive to make those trust primitives non-portable.</p>
+
+<p>This is the dependency loop: a platform offers identity and reputation services. Users and developers build on those services. The platform becomes the only place where a user's history, credentials, and relationships are legible. Exit becomes expensive. Once exit is expensive, the platform can extract — raising prices, degrading quality, inserting intermediaries, selling attention — because the cost of leaving exceeds the cost of staying. The user's trust relationships are held hostage by the platform's database.</p>
+
+<p>Cory Doctorow named this dynamic "enshittification." The diagnosis is precise: platforms attract users with value, then degrade the experience to extract from those users once switching costs are high enough. But the diagnosis, by itself, does not produce a remedy. Regulation can slow the cycle. Interoperability mandates can lower switching costs. But neither addresses the root cause: <strong>trust is not portable.</strong></p>
+
+<p>When your identity lives in a platform's database, your reputation is computed by a platform's algorithm, and your authorization chains terminate at a platform's API — you do not have trust. You have a lease. The platform can revoke, reinterpret, or degrade that lease at any time, and your only recourse is to start over somewhere else.</p>
+
+<h3>The Missing Primitive</h3>
+<p>Consider what SSL/TLS did for e-commerce. Before SSL, transmitting a credit card number over the internet required trusting every intermediary between you and the merchant. Commerce was possible, but it was fragile, and it was concentrated among the few parties who could afford to build proprietary trust infrastructure. SSL did not make merchants trustworthy. It made the <em>transport</em> trustworthy — and in doing so, it made the ecosystem work. Any merchant could participate. Any customer could verify. Trust became a protocol property, not a platform feature.</p>
+
+<p>The internet is missing an equivalent primitive for <em>trust itself</em>. Not transport encryption — that problem is largely solved. The missing piece is: how do you prove what happened, who authorized it, and whether the constraints were honored — without depending on a platform to be the witness?</p>
+
+<p>ZeroPoint's thesis: <strong>make trust portable, and you make exit real. Make exit real, and you make extraction optional. That is the structural antidote.</strong></p>
+
+<p>Portable trust means:</p>
+<ul>
+  <li><strong>Your identity is a keypair you control</strong>, not an account on someone else's server. You can move it between systems without losing continuity.</li>
+  <li><strong>Your reputation is a verifiable chain of receipts</strong>, not a score computed by an opaque algorithm. Anyone can audit it. No one can confiscate it.</li>
+  <li><strong>Your authorization is a cryptographic capability grant</strong>, not an API key that can be revoked without recourse. Delegation chains have mathematical properties — they cannot be silently altered.</li>
+  <li><strong>Your history is a hash-chained audit trail</strong>, not a log file someone else controls. Tampering is detectable. Omission is provable.</li>
+</ul>
+
+<p>When trust is portable, platforms compete on service quality, not on lock-in. When trust is portable, switching costs drop to near zero. When trust is portable, the dependency loop that enables extraction never forms.</p>
+
+<h3>Why This Matters More Now</h3>
+<p>Autonomous AI agents are amplifying the stakes. An agent operating on your behalf inherits the same trust infrastructure — or lack of it — that you do. If your identity is platform-bound, your agent's identity is platform-bound. If your authorization chains are opaque, your agent's delegated authority is opaque. If your audit trail is controlled by someone else, your agent's actions are controlled by someone else.</p>
+
+<p>Agents are proliferating faster than the trust infrastructure to govern them. Multi-agent systems are being orchestrated across organizational boundaries with no shared trust substrate. The accountability gap that humans have tolerated for decades — mutable logs, informal authorization, platform-controlled identity — becomes untenable when agents operate at machine speed, across jurisdictions, with delegation chains that can extend far beyond their original scope.</p>
+
+<p>This is not a future concern. It is the present condition. Every major AI lab is shipping agent frameworks. Every enterprise is deploying agent workflows. And every one of them is building on trust infrastructure that was designed for a world where a human was always in the loop, always reading the screen, always able to intervene manually.</p>
+
+<p>ZeroPoint does not solve AI safety. It solves a more specific and more tractable problem: it provides the cryptographic primitives that make trust portable, actions provable, and authority traceable — for any participant, over any transport, without requiring any central authority to be the witness.</p>
+
+<h3>The Antidote</h3>
+<p>The antidote to platform-captured trust is not better platforms. It is protocol-level trust primitives that no platform controls:</p>
+<ul>
+  <li><strong>Receipts</strong> that are signed by the actor and chained to the previous receipt — not logged by a platform.</li>
+  <li><strong>Capability grants</strong> that are cryptographically scoped and delegatable — not API permissions that can be silently changed.</li>
+  <li><strong>Constitutional constraints</strong> that are non-removable and non-overridable — not terms of service that can be updated unilaterally.</li>
+  <li><strong>Transport agnosticism</strong> that lets trust flow over HTTP, TCP, mesh networks, or any future medium — not locked to a single provider's infrastructure.</li>
+</ul>
+
+<p>ZeroPoint is to agentic and networked computing what SSL/TLS was to e-commerce: a trust primitive that makes the ecosystem work without trusting any single platform. It is not a governance framework you comply with. It is a governance protocol you build on.</p>
+
+<p>Trust is infrastructure.</p>
+
+<!-- Section 1 -->
+<h2 id="s1"><span class="section-num">Section 1</span>Problem Statement</h2>
+
+<p>The accountability gap that agents expose is an instance of the deeper structural problem described above: digital systems have never had protocol-level trust primitives. Agents did not create this gap — they inherited it and are accelerating it to the point where informal trust is no longer tenable.</p>
+
+<p>AI agents are rapidly becoming operational actors: they request tools, move data, execute workflows, and trigger external effects. They act at machine speed, across organizational boundaries, with delegation chains that can extend far beyond their original authority. Yet most systems today remain trust-light:</p>
+
+<ul>
+  <li><strong>Actions are difficult to attribute reliably.</strong> Logs exist, but they are mutable, centralized, and easily rewritten.</li>
+  <li><strong>Authorization is informal and mutable.</strong> Most systems rely on API keys or ambient permissions rather than scoped, cryptographic capability grants. Who authorized what, and when, is often reconstructed after the fact — if it can be reconstructed at all.</li>
+  <li><strong>Logs are easy to forge, prune, or "reinterpret."</strong> There is no chain of evidence — only whatever the operator chooses to retain.</li>
+  <li><strong>Cross-party trust is brittle.</strong> One team cannot safely accept another party's outputs without out-of-band verification.</li>
+</ul>
+
+<p>These are not agent-specific problems. They are structural failures in how digital systems handle trust — failures that existed long before autonomous agents arrived. Human organizations make consequential decisions with mutable logs and informal authorization every day. Agents inherited the accountability gap; they did not create it. But they are compressing decades of accumulated risk into months of operational reality.</p>
+
+<p>At the same time, the infrastructure environment is changing. There is renewed attention on sovereign networking, mesh systems, and local-first operations. Projects like the Reticulum Network Stack demonstrate that decentralized networking can bridge heterogeneous links into resilient networks under user control. Edge computing is moving AI inference closer to the point of action. Multi-agent orchestration frameworks are proliferating without any shared trust substrate.</p>
+
+<p>This combination — agents intensifying an existing trust deficit, sovereignty becoming a design requirement, and real-world execution moving to the edge — creates a clear need:</p>
+
+<blockquote>Systems where actions have consequences require protocol-level accountability primitives, not only policy frameworks.</blockquote>
+
+<p>Many governance efforts exist today as checklists, dashboards, or top-down frameworks. They describe what should be done, but they do not provide low-level mechanisms that make trust enforceable by default. ZeroPoint's position is intentionally infrastructural:</p>
+
+<blockquote>Not a governance framework you comply with — a governance protocol you build on.</blockquote>
+
+<!-- Section 2 -->
+<h2 id="s2"><span class="section-num">Section 2</span>Design Goals</h2>
+
+<h3>2.1 Protocol-Level Accountability</h3>
+<p>ZeroPoint produces verifiable receipts for actions and decisions. A receipt is cryptographically signed data describing what occurred, under what constraints, and with what authorization — regardless of whether the actor is an agent, a human, or an automated service. Receipts are chained — each linking to its parent — to create a durable accountability history.</p>
+
+<h3>2.2 Sovereignty by Design</h3>
+<p>ZeroPoint is built to function in environments where cloud assumptions are unsafe or unavailable. Its governance primitives are transport-agnostic — they work over HTTP in a data center, TCP between containers, or encrypted mesh links in a field deployment. The framework minimizes dependency on centralized infrastructure by design, not by accident.</p>
+
+<h3>2.3 Governance as Constraints, Not Suggestions</h3>
+<p>The system includes governance mechanisms that are not simply "policies in a file." Two constitutional rules — <code>HarmPrincipleRule</code> and <code>SovereigntyRule</code> — are engineered to be non-removable and non-overridable within the protocol's governance model. They evaluate before every action. They cannot be bypassed at runtime.</p>
+
+<h3>2.4 Honest Security Posture</h3>
+<p>ZeroPoint aims to be explicit about what it prevents, what it cannot prevent, and what remains a residual risk. Credibility comes from the boundaries, not the claims. Section 6 of this paper is dedicated to that honesty.</p>
+
+<h3>2.5 Transport Agnosticism and Interoperability</h3>
+<p>ZeroPoint's governance layer is decoupled from any single transport. The receipt format, capability grants, delegation chains, and policy engine operate identically regardless of how messages move. The framework ships with multiple transport integrations — including a Reticulum-compatible mesh transport, TCP/UDP interfaces, and an HTTP API — and is designed to be extended to any future transport without modifying the governance primitives.</p>
+
+<!-- Section 3 -->
+<h2 id="s3"><span class="section-num">Section 3</span>System Overview</h2>
+
+<p>ZeroPoint is composed of layered capabilities, each implemented as one or more Rust crates. The layers are participant-agnostic — any entity that holds a keypair (human, agent, service, device) can operate as a full peer:</p>
+
+<ul>
+  <li><strong>Identity layer.</strong> Ed25519 signing keys and X25519 key agreement. Identity is a keypair. Authentication is a signature.</li>
+  <li><strong>Governance layer.</strong> PolicyEngine with constitutional rules, composable operational rules, WASM-extensible policy modules, and capability gating.</li>
+  <li><strong>Receipt layer.</strong> Signed, hash-chained receipts for every action and decision. CompactReceipt encoding produces 150–300 byte payloads suitable for bandwidth-constrained transports.</li>
+  <li><strong>Transport layer.</strong> Pluggable transport with multiple built-in integrations: Reticulum-compatible mesh (HDLC framing, 128-bit destination hashing, link handshake), TCP client/server, UDP, and HTTP API. The governance primitives are transport-independent.</li>
+  <li><strong>Application layer.</strong> Pipeline orchestration, LLM provider integration, skill registry, and CLI tooling — all built on the governance primitives.</li>
+</ul>
+
+<h3>3.1 Data Flow</h3>
+<p>The GovernanceGate pipeline processes every action through three pillars:</p>
+<ol>
+  <li><strong>Guard</strong> ("May I?") — Local-first, pre-action sovereignty check. The participant's own boundary. Runs before anything else, without consulting external authority.</li>
+  <li><strong>Policy</strong> ("Should I?") — Rule-composed evaluation. Constitutional rules first, then operational rules, then WASM modules. The most restrictive decision wins.</li>
+  <li><strong>Execute</strong> — The action runs only if Guard and Policy both allow it.</li>
+  <li><strong>Audit</strong> ("Did I?") — A receipt is emitted: signed, timestamped, hash-linked to the prior receipt, and persisted to the chain.</li>
+  <li><strong>Transport</strong> — Receipts propagate to peers over whichever transport is configured — mesh, TCP, HTTP, or any combination. Peers verify independently.</li>
+</ol>
+
+<p>Nothing executes without passing through the gate. Nothing passes through the gate without joining the audit chain.</p>
+
+<h3>3.2 The Core Thesis</h3>
+<blockquote>Every action becomes evidence. Evidence becomes a chain. The chain becomes shared truth.</blockquote>
+
+<p>This is not a compliance claim. It is an engineering proposition: if systems can cryptographically prove what happened and under what authorization, then trust becomes composable across operators.</p>
+
+<!-- Section 4 -->
+<h2 id="s4"><span class="section-num">Section 4</span>Receipts and Chains</h2>
+
+<h3>4.1 What a Receipt Is</h3>
+<p>A receipt is a signed artifact that describes an event or action with enough context to be verified independently. In ZeroPoint's implementation, a receipt contains:</p>
+
+<table>
+  <thead>
+    <tr><th>Field</th><th>Wire Name</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Receipt ID</td><td><code>id</code></td><td>Unique identifier (e.g., <code>rcpt-a1b2c3...</code>)</td></tr>
+    <tr><td>Receipt Type</td><td><code>rt</code></td><td><code>execution</code>, <code>intent</code>, <code>approval</code>, <code>delegation</code>, <code>verification</code>, <code>refusal</code></td></tr>
+    <tr><td>Status</td><td><code>st</code></td><td><code>success</code>, <code>partial</code>, <code>failed</code>, <code>denied</code>, <code>timeout</code>, <code>pending</code></td></tr>
+    <tr><td>Trust Grade</td><td><code>tg</code></td><td><code>A</code>, <code>B</code>, <code>C</code>, <code>D</code> — determined by chain completeness and verification</td></tr>
+    <tr><td>Content Hash</td><td><code>ch</code></td><td>Blake3 hash of the action content</td></tr>
+    <tr><td>Timestamp</td><td><code>ts</code></td><td>Unix timestamp (seconds)</td></tr>
+    <tr><td>Parent Receipt</td><td><code>pr</code></td><td>ID of the previous receipt in the chain (if chained)</td></tr>
+    <tr><td>Policy Decision</td><td><code>pd</code></td><td><code>allow</code>, <code>deny</code>, <code>escalate</code>, <code>audit</code></td></tr>
+    <tr><td>Rationale</td><td><code>ra</code></td><td>Short explanation of the policy decision</td></tr>
+    <tr><td>Signature</td><td><code>sg</code></td><td>Ed25519 signature over the content hash</td></tr>
+    <tr><td>Extensions</td><td><code>ex</code></td><td>Compact JSON for domain-specific fields</td></tr>
+  </tbody>
+</table>
+
+<p>Receipts are encoded using MessagePack with named fields, producing a compact binary representation of 150–300 bytes. This compact encoding is efficient over any transport — it fits in a single HTTP request, a single TCP frame, or a single 465-byte mesh packet for bandwidth-constrained links like LoRa.</p>
+
+<p>Receipts are intended to be verifiable. They are not intended to be surveillance.</p>
+
+<h3>4.2 What Receipts Prove vs. What They Don't</h3>
+
+<p><strong>Receipts can prove:</strong></p>
+<ul>
+  <li>A specific Ed25519 key signed a specific statement at a specific time.</li>
+  <li>A chain contains a consistent, unbroken sequence of signed events.</li>
+  <li>The policy engine evaluated a known rule set and produced a specific decision.</li>
+  <li>A capability grant was present and valid at the time of action.</li>
+</ul>
+
+<p><strong>Receipts do not automatically prove:</strong></p>
+<ul>
+  <li>The nature of the signer. A receipt proves that a specific key signed a statement — not whether that key belongs to a human, an agent, or a service. Identity binding to physical persons or specific systems is deployment-dependent.</li>
+  <li>That the content of an action was "good" or "safe." Governance constrains actions; it does not evaluate truth.</li>
+  <li>That the runtime environment was uncompromised. A compromised host can sign whatever it wants.</li>
+  <li>That a result is truthful — only that it was produced and attested under stated constraints.</li>
+</ul>
+
+<h3>4.3 Why Chains Matter</h3>
+<p>Single receipts help attribution. Chains help accountability continuity. Each receipt's <code>pr</code> field links to the previous receipt's ID, forming a hash-linked sequence that resists retroactive tampering.</p>
+
+<p>Chains are not magic. They are a mechanical advantage: they make it harder to rewrite the story after the fact, and they allow counterparties to require evidence before trust is granted.</p>
+
+<p>In ZeroPoint, peers can challenge each other's audit chains. A challenged peer must produce its full chain; the challenger verifies integrity and produces a signed <code>PeerAuditAttestation</code>. Broken chains generate negative reputation signals. This is collective verification — no central auditor required.</p>
+
+<!-- Section 5 -->
+<h2 id="s5"><span class="section-num">Section 5</span>Governance Model</h2>
+
+<h3>5.1 Governance as a Primitive</h3>
+<p>Most governance — whether for agents, human workflows, or automated services — is implemented at the application layer: guardrails, prompt policies, logging conventions, compliance checklists. These are better than nothing, but they sit above the systems they govern. They can be bypassed, reconfigured, or simply ignored.</p>
+
+<p>ZeroPoint moves governance downward into the protocol substrate. The PolicyEngine is not an add-on. It is the gate through which every action must pass — regardless of who or what initiated it.</p>
+
+<h3>5.2 Policy and Capability Gating</h3>
+<p>ZeroPoint requires explicit capabilities for actions. Any participant — human operator, agent, or service — must hold a valid grant to act. A <code>CapabilityGrant</code> is a signed, portable authorization token containing:</p>
+
+<ul>
+  <li>Scope restrictions (which actions, which targets)</li>
+  <li>Cost ceilings and rate limits</li>
+  <li>Time windows (valid_from, valid_until)</li>
+  <li>Delegation depth limits</li>
+  <li>Trust tier requirements</li>
+  <li>The grantor's Ed25519 signature</li>
+</ul>
+
+<p>Capabilities are delegatable. Any participant holding a grant can delegate a subset of that grant to another participant — human to agent, agent to agent, or human to human — forming a <code>DelegationChain</code>. The chain is verified against eight invariants:</p>
+
+<ol>
+  <li>Each grant references the previous one as <code>parent_grant_id</code>.</li>
+  <li>Delegation depths increment monotonically (0, 1, 2, ...).</li>
+  <li>Each child's scope is a subset of its parent's scope.</li>
+  <li>Each child's trust tier is ≥ its parent's trust tier.</li>
+  <li>No child outlives its parent (expiration inheritance).</li>
+  <li>The chain doesn't exceed the <code>max_delegation_depth</code> set by the root.</li>
+  <li>Each grant's grantor matches the previous grant's grantee.</li>
+  <li>All signatures verify.</li>
+</ol>
+
+<p>Break any invariant and the chain is rejected. The authority dissolves.</p>
+
+<h3>5.3 Constitutional Constraints</h3>
+<p>ZeroPoint's PolicyEngine loads rules in a fixed evaluation order. The first two positions are reserved for constitutional rules that cannot be removed, overridden, or reordered:</p>
+
+<div class="eval-order">
+  1. <span class="const">HarmPrincipleRule</span> <span class="note">← Constitutional (always first)</span><br>
+  2. <span class="const">SovereigntyRule</span> <span class="note">← Constitutional</span><br>
+  3. ReputationGateRule <span class="note">← Operational (reputation-based gating)</span><br>
+  4. WASM policy modules <span class="note">← Peer-exchanged, sandboxed, fuel-limited</span><br>
+  5. DefaultAllowRule <span class="note">← Fallback</span>
+</div>
+
+<p><strong><code>HarmPrincipleRule</code></strong> (Tenet I: Do No Harm) — Blocks actions targeting weaponization, surveillance, deception (deepfakes, impersonation), and suppression of dissent. The block message always cites "Tenet I — Do No Harm." This rule evaluates before every action, regardless of what other rules or WASM modules are loaded. It cannot be bypassed by capability grants, policy edits, or consensus votes.</p>
+
+<p><strong><code>SovereigntyRule</code></strong> (Tenet II: Sovereignty Is Sacred) — Blocks configuration changes that would disable the guard, disable or truncate the audit trail, forge or bypass capabilities, remove constitutional rules, or override participant refusal. The block message always cites "Tenet II — Sovereignty Is Sacred."</p>
+
+<p>The evaluation hierarchy enforces precedence. Constitutional rules win over everything. WASM modules can override the default allow but cannot override constitutional rules. The decision severity hierarchy is: Block(5) > Review(4) > Warn(3) > Sanitize(2) > Allow(1). The most restrictive decision always wins.</p>
+
+<p>This is not a moral statement alone. It is a technical property: constitutional constraints remain enforceable even when incentives shift. They serve as a defense against co-option — particularly by surveillance interests.</p>
+
+<h3>5.4 The Four Tenets</h3>
+
+<p>The constitutional rules implement ZeroPoint's Four Tenets, which are embedded in the protocol, expressed in the documentation, and enforced in the code:</p>
+
+<p><strong>I. Do No Harm.</strong> ZeroPoint shall not operate in systems designed to harm humans. The <code>HarmPrincipleRule</code> is a non-removable rule in the PolicyEngine. It exists because architecture shapes outcomes, and we choose to make trust portable.</p>
+
+<p><strong>II. Sovereignty Is Sacred.</strong> Every participant has the right to refuse any action. Every human has the right to disconnect any agent. No agent may acquire capabilities it was not granted. Coercion is architecturally impossible — the Guard enforces this locally, before every action, without consulting any external authority. This applies equally to humans and agents: a human participant operating within ZeroPoint exercises the same sovereign refusal as an agent.</p>
+
+<p><strong>III. Action Without Evidence Is No Action.</strong> Every action produces a receipt. Every receipt joins a chain. If it's not in the chain, it didn't happen. If it is in the chain, it cannot un-happen. This holds whether the action was taken by a person, an agent, or an automated process.</p>
+
+<p><strong>IV. The Human Is The Root.</strong> Every delegation chain terminates at a human-held key. No agent may self-authorize. The genesis key is always held by flesh, blood, and soul. This is not only a constraint on agents — it is an assertion of human authority and accountability. The human at the root of a chain is not merely an overseer; they are a participant whose actions are as provable and auditable as any agent's.</p>
+
+<h3>5.5 Key Hierarchy and Introduction Protocol</h3>
+
+<p>ZeroPoint solves the key distribution problem through <code>zp-keys</code> — a three-level certificate hierarchy that exists below the policy engine:</p>
+
+<p><strong>GenesisKey</strong> — self-signed root of trust, one per deployment. <strong>OperatorKey</strong> — signed by genesis, one per node operator. <strong>AgentKey</strong> — signed by operator, one per agent instance.</p>
+
+<p>Each level holds an Ed25519 keypair and a certificate chain linking it back to its genesis root. Any node can verify an agent's identity by walking the chain — offline, with no network or policy state required. Certificate chains are verified against six invariants: valid signatures, issuer linkage, role hierarchy, monotonic depth, no expired certificates, and hash linkage.</p>
+
+<p>The key hierarchy is a primitive — it has no dependency on the policy engine. This avoids a circular dependency: you need keys to establish the engine's authority across nodes, so keys cannot depend on the engine existing. The decision to issue a child certificate flows through the policy engine as <code>ActionType::KeyDelegation</code> (Critical risk); the mechanism of signing is unconditional.</p>
+
+<p>When two ZeroPoint nodes meet for the first time, the introduction protocol (<code>zp-introduction</code>) governs trust establishment. The initiator sends its certificate chain and a challenge nonce. The responder verifies the chain, builds a <code>PolicyContext</code> with <code>ActionType::PeerIntroduction</code>, and evaluates it against the policy engine. Same-genesis introductions are High risk; cross-genesis introductions are Critical. The policy engine decides — the protocol only generates the context.</p>
+
+<p>What remains outside protocol scope: how peers discover each other's network addresses. Key distribution is solved; key discovery is not.</p>
+
+<!-- Section 6 -->
+<h2 id="s6"><span class="section-num">Section 6</span>Threat Model</h2>
+
+<h3>6.1 Threat Model Table</h3>
+
+<table>
+  <thead>
+    <tr><th>Threat / Failure Mode</th><th>What an attacker can do</th><th>Mitigation in ZeroPoint</th><th>Residual risk / limits</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Log forgery / retroactive rewriting</strong></td>
+      <td>Alter history to change attribution</td>
+      <td>Signed receipts with Ed25519 + Blake3 hash chain linkage; peers verify each other's chains via collective audit</td>
+      <td>Compromised private keys can still sign lies; key revocation is deployment-dependent</td>
+    </tr>
+    <tr>
+      <td><strong>Unauthorized tool use</strong></td>
+      <td>Execute actions beyond intended scope</td>
+      <td>CapabilityGrant gating with 8-invariant delegation chain verification; PolicyEngine evaluates before every action</td>
+      <td>Bad policy design can still leave gaps; scoping is only as good as the grant definitions</td>
+    </tr>
+    <tr>
+      <td><strong>Cross-operator trust failure</strong></td>
+      <td>One party can't trust another's agent outputs</td>
+      <td><code>zp-introduction</code> protocol verifies certificate chains and evaluates peer trust through the policy engine (see §5.5)</td>
+      <td>Peer network discovery is out of scope; cross-genesis introductions require operator-configured policy</td>
+    </tr>
+    <tr>
+      <td><strong>"Security theater" governance</strong></td>
+      <td>Claim governance without real constraints</td>
+      <td>Constitutional rules are non-removable; explicit non-goals section; receipts are independently verifiable, not just logged</td>
+      <td>Some deployments may misuse branding while gutting constraints; MIT/Apache-2.0 allows this</td>
+    </tr>
+    <tr>
+      <td><strong>Surveillance co-option</strong></td>
+      <td>Use receipts to track people rather than actions</td>
+      <td>Tenets + constitutional non-removability + explicit ethics stance; protocol frames accountability of <em>actions</em>, not tracking of <em>people</em></td>
+      <td>MIT/Apache-2.0 cannot legally prevent misuse; community norms and reputation are the remaining defense</td>
+    </tr>
+    <tr>
+      <td><strong>Replay attacks</strong></td>
+      <td>Resend messages or insert previously captured packets</td>
+      <td>MeshEnvelope sequence numbers (monotonic u64); 16-byte random nonces in link handshake; Ed25519 signatures over content hashes</td>
+      <td>Depends on peers tracking seen sequence numbers; long-offline nodes may have gaps</td>
+    </tr>
+    <tr>
+      <td><strong>Injection attacks</strong></td>
+      <td>Insert forged packets into mesh transport</td>
+      <td>HDLC framing with CRC verification; Ed25519 signature verification on all envelopes; link-level X25519 ECDH key agreement</td>
+      <td>Transport-level encryption depends on successful link establishment; unlinked broadcast packets are not encrypted</td>
+    </tr>
+    <tr>
+      <td><strong>WASM policy escape</strong></td>
+      <td>Malicious policy module attempts to break sandbox</td>
+      <td>Wasmtime runtime with fuel limiting (configurable execution budget); hash verification of module contents before loading</td>
+      <td>Fuel exhaustion causes denial-of-service at worst; WASM sandbox escape would require a wasmtime vulnerability</td>
+    </tr>
+    <tr>
+      <td><strong>Identity misbinding</strong></td>
+      <td>Misattribute a key to a human</td>
+      <td>Trust tiers: Tier 0 (unsigned), Tier 1 (self-signed Ed25519), Tier 2 (chain-signed with genesis root); Tier 2 requires verified delegation from a human-held key</td>
+      <td>Identity binding to physical persons remains deployment-dependent; not solved purely in protocol</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>6.2 What ZeroPoint Intentionally Does Not Solve</h3>
+
+<p>Being explicit prevents credibility collapse later:</p>
+
+<ul>
+  <li><strong>It does not prevent a determined actor from building harmful systems.</strong> The MIT/Apache-2.0 license is permissive. Constitutional rules constrain the framework's own behavior; they cannot constrain a fork.</li>
+  <li><strong>It does not make intelligence tools impossible.</strong> Receipt infrastructure could be repurposed for surveillance. The Tenets and constitutional rules resist this, but they are a friction, not a wall.</li>
+  <li><strong>It does not provide universal truth verification.</strong> Receipts prove that a statement was signed, not that the statement is true.</li>
+  <li><strong>It does not solve key discovery.</strong> <code>zp-keys</code> solves key distribution (see §5.5), but how peers find each other's network addresses remains outside the protocol scope.</li>
+</ul>
+
+<p>Instead:</p>
+
+<blockquote>ZeroPoint makes actions provable, and systems refusable.</blockquote>
+
+<p>This is a practical, enforceable improvement: counterparties can demand receipts and reject agents that do not provide them or that violate constraints.</p>
+
+<!-- Section 7 -->
+<h2 id="s7"><span class="section-num">Section 7</span>Transport Integrations</h2>
+
+<p>ZeroPoint's governance primitives are transport-agnostic. The receipt format, capability chains, delegation verification, and policy engine operate identically regardless of how messages move between participants. The framework ships with several transport integrations, each suited to different deployment contexts.</p>
+
+<h3>7.1 HTTP API (zp-server)</h3>
+
+<p>The most straightforward integration path. An Axum-based HTTP server exposes the governance pipeline as a REST API. Agents communicate over standard HTTP/HTTPS — suitable for cloud deployments, container orchestration, and integration with existing web services. No mesh networking required.</p>
+
+<h3>7.2 TCP and UDP Interfaces</h3>
+
+<p>Direct socket communication for low-latency, local-network, or point-to-point deployments. <code>TcpClientInterface</code> and <code>TcpServerInterface</code> support persistent connections with HDLC framing and CRC verification. UDP interfaces support connectionless receipt exchange. Multiple interfaces can run simultaneously on a single node.</p>
+
+<h3>7.3 Reticulum-Compatible Mesh</h3>
+
+<p>ZeroPoint includes a Reticulum-compatible mesh transport — wire-level interoperability with the Reticulum Network Stack, created by Mark Qvist. This integration is philosophically significant: Reticulum demonstrated that encrypted, sovereign networking requires no central authority, and ZeroPoint shares that commitment to sovereignty, decentralization, and harm minimization.</p>
+
+<p>The mesh integration implements:</p>
+
+<ul>
+  <li><strong>HDLC framing</strong> with CRC-CCITT verification, matching Reticulum's serial interface format.</li>
+  <li><strong>128-bit destination hashing</strong> using the same truncated SHA-256 scheme.</li>
+  <li><strong>Ed25519 signing</strong> and <strong>X25519 ECDH</strong> key agreement, matching Reticulum's cryptographic primitives.</li>
+  <li><strong>500-byte default MTU</strong> with a 465-byte data payload — compatible with Reticulum's packet constraints and suitable for LoRa links.</li>
+  <li><strong>3-packet link handshake</strong> (LinkRequest → LinkProof → LinkAccept) with 16-byte random nonces for replay protection.</li>
+</ul>
+
+<p>Interoperability testing with Reticulum ecosystem tools (MeshChat, NomadNet) is underway. The mesh transport is one option among several — chosen when sovereignty, resilience, or operation without cloud infrastructure are priorities.</p>
+
+<h3>7.4 Extending to Other Transports</h3>
+
+<p>Adding a new transport requires implementing the interface trait and providing serialization/deserialization for the envelope format. The governance primitives — receipts, chains, capability verification, policy evaluation — remain unchanged. This makes ZeroPoint deployable in contexts its authors haven't anticipated: industrial IoT, satellite links, air-gapped networks, or standard enterprise infrastructure.</p>
+
+<!-- Section 8 -->
+<h2 id="s8"><span class="section-num">Section 8</span>Implementation Status</h2>
+
+<p>ZeroPoint is implemented in Rust and is technically complete.</p>
+
+<ul>
+  <li><strong>699 tests</strong> (all passing, zero warnings)</li>
+  <li><strong>13 crates</strong> in a Cargo workspace</li>
+  <li><strong>6 development phases</strong> delivered</li>
+  <li><strong>59 integration tests</strong> covering multi-node and cross-transport scenarios</li>
+  <li><strong>Full documentation</strong> for all crates</li>
+</ul>
+
+<h3>8.1 Workspace Structure</h3>
+
+<table>
+  <thead><tr><th>Crate</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>zp-core</code></td><td>Core types: CapabilityGrant, DelegationChain, GovernanceEvent, receipt primitives, Blake3 hashing, Ed25519 signatures</td></tr>
+    <tr><td><code>zp-audit</code></td><td>Hash-chained audit trail, chain verification, collective audit (AuditChallenge, AuditResponse, PeerAuditAttestation)</td></tr>
+    <tr><td><code>zp-policy</code></td><td>PolicyEngine with constitutional rules (HarmPrincipleRule, SovereigntyRule), operational rules, WASM runtime with fuel limiting</td></tr>
+    <tr><td><code>zp-mesh</code></td><td>Transport layer: MeshNode, MeshIdentity, pluggable interfaces (TCP, UDP, serial), HDLC framing, Reticulum-compatible link handshake, envelope types, CompactReceipt, consensus, reputation</td></tr>
+    <tr><td><code>zp-pipeline</code></td><td>GovernanceGate pipeline orchestration, MeshBridge (receipt/delegation/audit/reputation bridging), 14-step action flow</td></tr>
+    <tr><td><code>zp-trust</code></td><td>Trust tier definitions (Tier 0/1/2), trust grade computation, verification utilities</td></tr>
+    <tr><td><code>zp-llm</code></td><td>LLM provider abstraction (OpenAI, Anthropic, local), token counting, response parsing</td></tr>
+    <tr><td><code>zp-skills</code></td><td>SkillRegistry and SkillMatcher — keyword-based capability discovery for agent tool selection</td></tr>
+    <tr><td><code>zp-learning</code></td><td>Feedback collection and outcome tracking for governance policy refinement</td></tr>
+    <tr><td><code>zp-server</code></td><td>HTTP server exposing governance pipeline as an API (Axum-based)</td></tr>
+    <tr><td><code>zp-cli</code></td><td>Interactive terminal: chat, guard evaluation, mesh status, peer management, audit challenge, capability delegation, state persistence</td></tr>
+    <tr><td><code>zp-receipt</code></td><td>Receipt type definitions and serialization for cross-crate portability</td></tr>
+    <tr><td><code>execution-engine</code></td><td>Governed execution runtime: sandboxed action execution with policy enforcement</td></tr>
+  </tbody>
+</table>
+
+<h3>8.2 Build Verification</h3>
+
+<pre><code>$ cargo test --workspace
+   # 699 tests pass, 0 failures, 0 warnings
+
+$ cargo clippy --workspace -- -D warnings
+   # Clean
+
+$ cargo fmt --workspace --check
+   # Formatted</code></pre>
+
+<!-- Section 9 -->
+<h2 id="s9"><span class="section-num">Section 9</span>Adoption Paths</h2>
+
+<p>This project will not win by marketing. It will win by being useful and trustworthy to the right early communities.</p>
+
+<h3>9.1 First Adopters</h3>
+
+<ul>
+  <li><strong>Multi-agent system builders</strong> — teams orchestrating autonomous agents who need protocol-level trust between operators, not just application-level guardrails.</li>
+  <li><strong>Rust networking and security-oriented builders</strong> — developers who understand why governance belongs in the substrate, not in the application.</li>
+  <li><strong>Decentralized infrastructure communities</strong> — projects building sovereign, local-first systems where centralized governance is a contradiction. The Reticulum ecosystem is a natural fit here.</li>
+  <li><strong>Privacy-aligned agent tooling builders</strong> — teams who need accountability without surveillance.</li>
+  <li><strong>Enterprise AI governance teams</strong> — organizations looking for verifiable, auditable behavior — from agents and humans alike — that goes beyond compliance checklists.</li>
+  <li><strong>Accountable-process builders</strong> — teams in journalism, supply chain, humanitarian operations, or organizational governance who need provable attribution and auditable decision chains, whether or not agents are involved.</li>
+</ul>
+
+<h3>9.2 Integration Patterns</h3>
+
+<p><strong>Pattern A: Governed Agent-to-Agent Exchange.</strong> Agents exchange tasks and outputs only when receipts validate authorization. Each agent verifies the other's capability chain before accepting work or results.</p>
+
+<p><strong>Pattern B: Policy-Gated Tool Execution.</strong> A tool runner requires receipts demonstrating valid capability grants before executing. The runner emits its own receipt attesting to acceptance or refusal, creating a bidirectional trust record.</p>
+
+<p><strong>Pattern C: Delegation Chains.</strong> A human operator grants a root capability. The agent delegates subsets to specialist sub-agents, each with narrower scope. Every delegation is verified against the eight invariants. Authority flows down the chain; accountability flows up.</p>
+
+<p><strong>Pattern D: Human-Accountable Workflows.</strong> A human operator performs sensitive actions — data access, approvals, configuration changes — through ZeroPoint's governance pipeline. Every action produces a signed receipt, creating the same cryptographic accountability that agents face. The protocol doesn't distinguish; the keypair holder is accountable.</p>
+
+<p><strong>Pattern E: Mixed Human-Agent Systems.</strong> A workflow involves both human and agent participants. A human initiates a process, delegates a subset to an agent, reviews the agent's output (with receipts), and finalizes the result. Every step — human and agent — produces receipts. The audit chain is continuous regardless of who acted at each step.</p>
+
+<h3>9.3 What Ships First</h3>
+
+<p>A minimal example demonstrating: two participants (human, agent, or both), a governed action, a receipt emitted and verified, and a refusal case. One clean, working demo can convert serious builders faster than any whitepaper.</p>
+
+<!-- Section 10 -->
+<h2 id="s10"><span class="section-num">Section 10</span>Roadmap</h2>
+
+<ol>
+  <li><strong>Public repository release</strong> — GitHub publish, crates.io registration, CI/CD with cargo test + clippy + fmt + docs.</li>
+  <li><strong>Transport integration test suite</strong> — Documented results of cross-transport receipt exchange, including Reticulum ecosystem interop (NomadNet, MeshChat) and HTTP/TCP integration tests.</li>
+  <li><strong>Threat model expansion</strong> — Formalized verification guidance, key revocation strategy, multi-hop trust analysis.</li>
+  <li><strong>Example applications</strong> — Delegation chain demo, policy-gated pipeline, multi-agent consensus scenario.</li>
+  <li><strong>Sustainability layer</strong> — Consulting, hosted infrastructure, and enterprise feature scoping — without compromising the open-source core.</li>
+</ol>
+
+<!-- Section 11 -->
+<h2 id="s11"><span class="section-num">Section 11</span>Ethics, Non-Goals, and Misuse Resistance</h2>
+
+<h3>11.1 The Co-option Risk</h3>
+
+<p>Accountability infrastructure can become surveillance infrastructure depending on how it is deployed. This is not a hypothetical concern — it is the central tension of the project.</p>
+
+<p>ZeroPoint mitigates this through three mechanisms:</p>
+
+<ol>
+  <li><strong>Constitutional constraints</strong> that are engineered to be non-removable. The <code>HarmPrincipleRule</code> blocks weaponization, surveillance, and deception. The <code>SovereigntyRule</code> blocks attempts to remove these constraints.</li>
+  <li><strong>Public tenets</strong> describing intent and boundaries. The Four Tenets are not buried in documentation — they are the first thing on the website and the first code that runs in the PolicyEngine.</li>
+  <li><strong>Protocol-level framing.</strong> ZeroPoint provides accountability of <em>actions</em>, not central control of <em>people</em>. The audit chain tracks what participants did — human or agent — not where anyone went or who they are beyond their keypair.</li>
+</ol>
+
+<h3>11.2 Non-Goals</h3>
+
+<p>ZeroPoint does not aim to:</p>
+
+<ul>
+  <li>Become a compliance product. Compliance is a checklist someone else writes. ZeroPoint is infrastructure you build on.</li>
+  <li>Become a centralized authority. There is no ZeroPoint server, no ZeroPoint cloud, no ZeroPoint corporation deciding who gets to use it.</li>
+  <li>"Prevent all misuse." The MIT/Apache-2.0 license is deliberately permissive. Constitutional rules constrain the framework; they cannot constrain a fork.</li>
+  <li>Depend on any single transport or network. ZeroPoint's governance works over HTTP, TCP, mesh, or anything else. No transport is privileged.</li>
+  <li>Be agent-only infrastructure. The protocol is participant-agnostic by design. Narrowing it to agents alone would abandon the humans and systems that face the same accountability gap.</li>
+</ul>
+
+<!-- Section 12 -->
+<h2 id="s12"><span class="section-num">Section 12</span>Conclusion</h2>
+
+<p>AI agents are the most urgent application — but the accountability gap they expose is not theirs alone. Any system where actions have consequences and trust cannot be left to good faith needs the same properties: provable attribution, sovereign refusal, auditable chains of authority.</p>
+
+<p>The structural problem is clear: trust primitives that are captured by platforms become leverage for extraction. Identity that lives in someone else's database is not identity — it is a lease. Reputation that cannot be carried between systems is not reputation — it is a hostage. Authorization that can be silently revoked is not authorization — it is permission.</p>
+
+<p>ZeroPoint provides protocol-level primitives — receipts, chains, governance constraints, and sovereign transport compatibility — that make any system's actions provable and its participants refusable. It does not solve AI safety. It makes trust portable — and portable trust is the structural antidote to the dependency loops that degrade every system where exit is too expensive.</p>
+
+<p>Make trust portable, and you make exit real. Make exit real, and you make extraction optional.</p>
+
+<p>Trust is infrastructure.</p>
+
+<blockquote>Power will diffuse. Accountability must diffuse with it.</blockquote>
+
+<hr>
+
+<!-- Appendix A -->
+<h2 id="appendix-a"><span class="section-num">Appendix A</span>Protocol Sketch</h2>
+
+<p>This is intentionally not a full specification. It shows rigor and invites contribution.</p>
+
+<h3>A.1 Identities</h3>
+
+<p>Participants — whether human, agent, service, or device — hold Ed25519 signing keypairs and derive X25519 key-agreement keys for encrypted link establishment. A 128-bit destination hash is computed as the truncated SHA-256 of the public key. This addressing scheme is compatible with Reticulum's identity model but is used across all ZeroPoint transports.</p>
+
+<p>Trust is expressed in tiers, applicable to any participant:</p>
+<ul>
+  <li><strong>Tier 0</strong>: Unsigned. No cryptographic identity. Lowest trust.</li>
+  <li><strong>Tier 1</strong>: Self-signed Ed25519. The participant controls a keypair but has no chain authority.</li>
+  <li><strong>Tier 2</strong>: Chain-signed with genesis root. The participant holds a valid delegation chain terminating at a human-held key.</li>
+</ul>
+
+<p>Identity binding to physical humans or organizations is deployment-dependent and explicitly outside the protocol scope.</p>
+
+<h3>A.2 CompactReceipt Envelope</h3>
+
+<p>The wire format uses MessagePack with short field names for bandwidth efficiency:</p>
+
+<pre><code>{
+  "id": "rcpt-a1b2c3d4",       // Receipt ID
+  "rt": "execution",           // Receipt type
+  "st": "success",             // Status
+  "tg": "A",                   // Trust grade
+  "ch": "b3a1...hex",          // Blake3 content hash
+  "ts": 1740000000,            // Unix timestamp (seconds)
+  "pr": "rcpt-prev-id",        // Parent receipt ID (optional)
+  "pd": "allow",               // Policy decision (optional)
+  "ra": "all rules passed",    // Rationale (optional)
+  "sg": "ed25519-sig-hex",     // Ed25519 signature (optional)
+  "ex": { ... }                // Extensions (optional)
+}</code></pre>
+
+<p>Typical encoded size: 150–300 bytes. Maximum for single-packet transmission: 380 bytes (allowing room for MeshEnvelope overhead within the 465-byte payload limit).</p>
+
+<h3>A.3 MeshEnvelope</h3>
+
+<p>The mesh transport's outer wrapper adds (other transports use their own framing):</p>
+<ul>
+  <li><strong>Envelope type</strong>: Receipt, Delegation, AuditChallenge, AuditResponse, PolicySync, ConsensusVote, ReputationUpdate, or Custom.</li>
+  <li><strong>Sequence number</strong>: Monotonic u64 for replay detection.</li>
+  <li><strong>Source/destination</strong>: 128-bit mesh destination hashes.</li>
+  <li><strong>Signature</strong>: Ed25519 over the envelope payload.</li>
+</ul>
+
+<h3>A.4 Chain Verification Rules</h3>
+
+<p>DelegationChain verification enforces eight invariants:</p>
+
+<ol>
+  <li>Each grant references the previous one as <code>parent_grant_id</code>.</li>
+  <li>Delegation depths increment monotonically (0, 1, 2, ...).</li>
+  <li>Each child's scope is a subset of (or equal to) its parent's scope.</li>
+  <li>Each child's trust tier is ≥ its parent's trust tier.</li>
+  <li>No child outlives its parent — expiration dates are inherited and cannot be extended.</li>
+  <li>The chain does not exceed the <code>max_delegation_depth</code> set by the root grant.</li>
+  <li>Each grant's grantor matches the previous grant's grantee (the delegator).</li>
+  <li>All Ed25519 signatures verify against their respective signing keys.</li>
+</ol>
+
+<p>Failure of any single invariant rejects the entire chain. Authority dissolves.</p>
+
+<!-- Appendix B -->
+<h2 id="appendix-b"><span class="section-num">Appendix B</span>Glossary</h2>
+
+<table>
+  <tbody>
+    <tr><td><strong>Receipt</strong></td><td>Signed evidence of an action or decision, containing identity, content hash, policy decision, chain linkage, and Ed25519 signature.</td></tr>
+    <tr><td><strong>Chain</strong></td><td>Linked sequence of receipts forming an accountable history. Each receipt's <code>pr</code> field references the previous receipt's <code>id</code>.</td></tr>
+    <tr><td><strong>Capability Grant</strong></td><td>Cryptographically signed permission token granting an action scope, with constraints on time, cost, rate, and delegation depth.</td></tr>
+    <tr><td><strong>Delegation Chain</strong></td><td>Ordered sequence of capability grants from root (human-held) to leaf (most-delegated agent), verified against eight invariants.</td></tr>
+    <tr><td><strong>Policy</strong></td><td>Constraints governing capability use and system behavior, evaluated by the PolicyEngine in a fixed order.</td></tr>
+    <tr><td><strong>Constitutional Constraint</strong></td><td>Non-overridable rule embedded in the PolicyEngine — specifically <code>HarmPrincipleRule</code> and <code>SovereigntyRule</code> — that cannot be removed, bypassed, or overridden by any other rule, WASM module, or consensus vote.</td></tr>
+    <tr><td><strong>Guard</strong></td><td>Pre-action sovereignty check. Local-first, runs before the PolicyEngine, enforces the participant's right to refuse.</td></tr>
+    <tr><td><strong>GovernanceGate</strong></td><td>The pipeline through which every action must pass: Guard → Policy → Execute → Audit.</td></tr>
+    <tr><td><strong>Reticulum-compatible</strong></td><td>One of several transport integrations — wire-interoperable with Reticulum's HDLC framing, 128-bit destination hashing, Ed25519/X25519 cryptography, and 500-byte MTU.</td></tr>
+    <tr><td><strong>CompactReceipt</strong></td><td>MessagePack-encoded receipt using short field names, optimized for single-packet mesh transmission.</td></tr>
+    <tr><td><strong>MeshNode</strong></td><td>High-level transport primitive managing interfaces, peers, links, delegations, and reputation.</td></tr>
+    <tr><td><strong>Collective Audit</strong></td><td>Peer-to-peer chain verification where nodes challenge each other's audit trails and produce signed attestations.</td></tr>
+  </tbody>
+</table>
+
+<!-- Appendix C -->
+<h2 id="appendix-c"><span class="section-num">Appendix C</span>Example Integration Pattern</h2>
+
+<p>A tool runner integrated with ZeroPoint operates as follows: any participant requesting execution must provide a receipt chain proving it holds a valid <code>CapabilityGrant</code> to call the tool, scoped to the specific action, signed by a chain terminating at a human-held Tier 2 key. The runner's GovernanceGate verifies the chain locally — checking all eight delegation invariants, evaluating the PolicyEngine (including constitutional rules), and confirming the capability hasn't expired or exceeded its rate limit. If verification fails, the runner emits a refusal receipt citing the specific invariant or rule that failed. If verification succeeds, the tool executes and the runner emits an execution receipt attesting to the action, its inputs hash, its outputs hash, and the policy decision. Both receipts join the audit chain. The requesting participant receives the execution receipt and can present it to other peers as proof of completed work.</p>
+
+<p>This pattern works identically regardless of whether the requester is a human operator, an autonomous agent, or an automated service. The GovernanceGate does not check what kind of entity is requesting — it checks the cryptographic chain. This is the practical meaning of participant-agnostic governance.</p>
+
+<p>This creates a bidirectional, evidence-based trust relationship that operates over sovereign transports, requires no central coordinator, and produces a durable record that either party can independently verify at any time.</p>
+
+</article>
+</div>
+
+<footer style="padding: 3rem 0; border-top: 1px solid var(--rule); text-align: center;">
+  <div class="container">
+    <div style="display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap;">
+      <a href="https://github.com/zeropoint-foundation/zeropoint" style="font-size: 0.8rem; color: var(--text-dim);">GitHub</a>
+      <a href="/whitepaper.html" style="font-size: 0.8rem; color: var(--text-dim);">Whitepaper</a>
+      <a href="/playground.html" style="font-size: 0.8rem; color: var(--text-dim);">Playground</a>
+      <a href="/footprint.html" style="font-size: 0.8rem; color: var(--text-dim);">Footprint</a>
+      <a href="/demo-chain.html" style="font-size: 0.8rem; color: var(--text-dim);">Chain Demo</a>
+      <a href="/for-agents.html" style="font-size: 0.8rem; color: var(--text-dim);">Governing Agents</a>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-dim);">
+      Maintained by <a href="https://thinkstreamlabs.ai" style="color: var(--text-dim);">ThinkStream Labs</a> · MIT / Apache-2.0
+    </div>
+  </div>
+</footer>
+
+<!-- Floating Narration Player -->
+<div class="wp-player" id="wpPlayer">
+  <div class="wp-player-progress"><div class="wp-player-progress-bar" id="wpProgressBar"></div></div>
+  <div class="wp-player-inner">
+    <button class="wp-player-btn" id="wpPrev" onclick="wpPlayer.prev()" title="Previous section">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+    </button>
+    <button class="wp-player-btn play-pause" id="wpPlayPause" onclick="wpPlayer.toggle()" title="Play / Pause">
+      <svg id="wpIconPlay" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <svg id="wpIconPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+    </button>
+    <button class="wp-player-btn" id="wpNext" onclick="wpPlayer.next()" title="Next section">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+    </button>
+    <div class="wp-player-section">
+      <div class="wp-player-label" id="wpLabel">Section 0 of 14</div>
+      <div class="wp-player-title" id="wpTitle">Abstract</div>
+    </div>
+    <button class="wp-player-close" onclick="wpPlayer.close()" title="Close player">&times;</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const NARRATION_BASE = '/assets/narration/wp';
+
+  const sections = [
+    { id: 'abstract',    file: 'wp-abstract', title: 'Abstract' },
+    { id: 's0',          file: 'wp-s0',       title: 'Why This Exists — The Portable Trust Thesis' },
+    { id: 's1',          file: 'wp-s1',       title: 'Problem Statement' },
+    { id: 's2',          file: 'wp-s2',       title: 'Design Goals' },
+    { id: 's3',          file: 'wp-s3',       title: 'System Overview' },
+    { id: 's4',          file: 'wp-s4',       title: 'Receipts and Chains' },
+    { id: 's5',          file: 'wp-s5',       title: 'Governance Model' },
+    { id: 's6',          file: 'wp-s6',       title: 'Threat Model' },
+    { id: 's7',          file: 'wp-s7',       title: 'Transport Integrations' },
+    { id: 's8',          file: 'wp-s8',       title: 'Implementation Status' },
+    { id: 's9',          file: 'wp-s9',       title: 'Adoption Paths' },
+    { id: 's10',         file: 'wp-s10',      title: 'Roadmap' },
+    { id: 's11',         file: 'wp-s11',      title: 'Ethics, Non-Goals, and Misuse Resistance' },
+    { id: 's12',         file: 'wp-s12',      title: 'Conclusion' },
+  ];
+
+  let currentIndex = -1;
+  let audio = null;
+  let playing = false;
+  let progressInterval = null;
+
+  const playerEl     = document.getElementById('wpPlayer');
+  const progressBar  = document.getElementById('wpProgressBar');
+  const labelEl      = document.getElementById('wpLabel');
+  const titleEl      = document.getElementById('wpTitle');
+  const iconPlay     = document.getElementById('wpIconPlay');
+  const iconPause    = document.getElementById('wpIconPause');
+  const narrateBtn   = document.getElementById('wpNarrateBtn');
+
+  function showPlayer() {
+    playerEl.classList.add('visible');
+    document.body.classList.add('player-active');
+  }
+
+  function hidePlayer() {
+    playerEl.classList.remove('visible');
+    document.body.classList.remove('player-active');
+  }
+
+  function updateUI() {
+    const s = sections[currentIndex];
+    labelEl.textContent = 'Section ' + (currentIndex + 1) + ' of ' + sections.length;
+    titleEl.textContent = s.title;
+    iconPlay.style.display  = playing ? 'none' : 'block';
+    iconPause.style.display = playing ? 'block' : 'none';
+  }
+
+  function clearHighlight() {
+    document.querySelectorAll('.section-narrating').forEach(function(el) {
+      el.classList.remove('section-narrating');
+    });
+  }
+
+  function highlightSection(id) {
+    clearHighlight();
+    var heading = document.getElementById(id);
+    if (!heading) return;
+    // The h2 is the section heading — we highlight by wrapping context
+    // Find the parent that contains this section's content
+    // For our structure, the h2 is a direct child of <article> so we
+    // collect elements until the next h2
+    var el = heading;
+    while (el) {
+      if (el.nodeType === 1) {
+        el.classList.add('section-narrating');
+      }
+      el = el.nextElementSibling;
+      if (el && el.tagName === 'H2') break;
+      if (el && el.tagName === 'HR') break;
+    }
+  }
+
+  function scrollToSection(id) {
+    var heading = document.getElementById(id);
+    if (!heading) return;
+    var rect = heading.getBoundingClientRect();
+    var offset = window.pageYOffset + rect.top - 80; // account for fixed header
+    window.scrollTo({ top: offset, behavior: 'smooth' });
+  }
+
+  function startProgress() {
+    stopProgress();
+    progressInterval = setInterval(function() {
+      if (audio && audio.duration) {
+        var pct = (audio.currentTime / audio.duration) * 100;
+        progressBar.style.width = pct + '%';
+      }
+    }, 250);
+  }
+
+  function stopProgress() {
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+  }
+
+  function playSection(index) {
+    if (index < 0 || index >= sections.length) return;
+
+    // Stop current
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    }
+    stopProgress();
+
+    currentIndex = index;
+    var s = sections[currentIndex];
+
+    audio = new Audio(NARRATION_BASE + '/' + s.file + '.mp3');
+    playing = true;
+    updateUI();
+    showPlayer();
+    highlightSection(s.id);
+    scrollToSection(s.id);
+    progressBar.style.width = '0%';
+
+    audio.addEventListener('canplay', function() {
+      audio.play();
+      startProgress();
+    });
+
+    audio.addEventListener('ended', function() {
+      stopProgress();
+      progressBar.style.width = '100%';
+      clearHighlight();
+      // Auto-advance
+      if (currentIndex < sections.length - 1) {
+        setTimeout(function() { playSection(currentIndex + 1); }, 800);
+      } else {
+        playing = false;
+        updateUI();
+        clearHighlight();
+      }
+    });
+
+    audio.addEventListener('error', function() {
+      console.warn('Narration audio not found: ' + s.file + '.mp3');
+      stopProgress();
+      // Still advance so the player remains usable
+      if (currentIndex < sections.length - 1) {
+        setTimeout(function() { playSection(currentIndex + 1); }, 400);
+      } else {
+        playing = false;
+        updateUI();
+      }
+    });
+  }
+
+  // Public API
+  window.wpPlayer = {
+    start: function() {
+      narrateBtn.classList.remove('pulsing');
+      playSection(0);
+    },
+    toggle: function() {
+      if (!audio) return;
+      if (playing) {
+        audio.pause();
+        playing = false;
+        stopProgress();
+      } else {
+        audio.play();
+        playing = true;
+        startProgress();
+        highlightSection(sections[currentIndex].id);
+      }
+      updateUI();
+    },
+    prev: function() {
+      if (currentIndex > 0) {
+        playSection(currentIndex - 1);
+      }
+    },
+    next: function() {
+      if (currentIndex < sections.length - 1) {
+        playSection(currentIndex + 1);
+      }
+    },
+    close: function() {
+      if (audio) {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+        audio = null;
+      }
+      playing = false;
+      stopProgress();
+      clearHighlight();
+      hidePlayer();
+      progressBar.style.width = '0%';
+    }
+  };
+
+  // Remove pulse after 4 seconds
+  setTimeout(function() {
+    if (narrateBtn) narrateBtn.classList.remove('pulsing');
+  }, 4500);
+})();
+</script>
+
+<!-- Tech Term Glossary Tooltips -->
+<div class="tt-tip" id="ttTip">
+  <p class="tt-tip-def" id="ttDef"></p>
+  <a class="tt-tip-link" id="ttLink" href="#" target="_blank" rel="noopener">Learn more →</a>
+</div>
+
+<script>
+(function() {
+  var GLOSSARY = {
+    'ChaCha20-Poly1305': {
+      def: 'An authenticated encryption algorithm that protects both confidentiality and integrity of data. Used in TLS 1.3 and WireGuard.',
+      url: 'https://en.wikipedia.org/wiki/ChaCha20-Poly1305'
+    },
+    'CRC-CCITT': {
+      def: 'A specific Cyclic Redundancy Check algorithm used to detect errors in transmitted data — ensures bytes arrive intact.',
+      url: 'https://en.wikipedia.org/wiki/Cyclic_redundancy_check'
+    },
+    'Ed25519': {
+      def: 'A modern digital signature algorithm based on elliptic curve cryptography — fast, compact, and widely trusted for signing and verifying data.',
+      url: 'https://en.wikipedia.org/wiki/EdDSA#Ed25519'
+    },
+    'X25519': {
+      def: 'An elliptic curve Diffie-Hellman key exchange protocol — lets two parties establish a shared secret over an insecure channel.',
+      url: 'https://en.wikipedia.org/wiki/Curve25519'
+    },
+    'Blake3': {
+      def: 'A fast cryptographic hash function that creates a unique fingerprint of any data, making tampering detectable. Successor to BLAKE2.',
+      url: 'https://en.wikipedia.org/wiki/BLAKE_(hash_function)#BLAKE3'
+    },
+    'SHA-256': {
+      def: 'Secure Hash Algorithm (256-bit) — a widely used cryptographic hash function that produces a fixed-size fingerprint of any data.',
+      url: 'https://en.wikipedia.org/wiki/SHA-2'
+    },
+    'SSL/TLS': {
+      def: 'Secure Sockets Layer / Transport Layer Security — the encryption protocols that secure HTTPS connections on the web.',
+      url: 'https://en.wikipedia.org/wiki/Transport_Layer_Security'
+    },
+    'HDLC': {
+      def: 'High-Level Data Link Control — a bit-oriented protocol for framing data on serial and network connections.',
+      url: 'https://en.wikipedia.org/wiki/High-Level_Data_Link_Control'
+    },
+    'MessagePack': {
+      def: 'A compact binary serialization format — like JSON but smaller and faster to parse. Used for efficient data exchange.',
+      url: 'https://msgpack.org/'
+    },
+    'WASM': {
+      def: 'WebAssembly — a portable binary instruction format that runs in a secure sandbox. Originally for browsers, now used anywhere.',
+      url: 'https://webassembly.org/'
+    },
+    'LoRa': {
+      def: 'Long Range radio — a low-power wireless technology for transmitting small amounts of data over several kilometers. Common in IoT.',
+      url: 'https://en.wikipedia.org/wiki/LoRa'
+    },
+    'Reticulum': {
+      def: 'A decentralized, encrypted networking stack for sovereign communications — works over any medium without requiring internet infrastructure.',
+      url: 'https://reticulum.network/'
+    },
+    'Axum': {
+      def: 'A modern Rust web framework for building fast, reliable HTTP services. Built on the Tokio async runtime.',
+      url: 'https://github.com/tokio-rs/axum'
+    },
+    'Wasmtime': {
+      def: 'A standalone runtime for executing WebAssembly code outside the browser — used here to sandbox untrusted policy modules.',
+      url: 'https://wasmtime.dev/'
+    },
+    'ECDH': {
+      def: 'Elliptic Curve Diffie-Hellman — a key agreement protocol that lets two parties create a shared secret using elliptic curve cryptography.',
+      url: 'https://en.wikipedia.org/wiki/Elliptic-curve_Diffie%E2%80%93Hellman'
+    },
+    'CC BY 4.0': {
+      def: 'Creative Commons Attribution 4.0 — a license allowing anyone to share and adapt the work, as long as credit is given.',
+      url: 'https://creativecommons.org/licenses/by/4.0/'
+    },
+    'MIT/Apache-2.0': {
+      def: 'Two permissive open-source licenses — allow anyone to use, modify, and distribute the software with minimal restrictions.',
+      url: 'https://opensource.org/licenses/MIT'
+    },
+    'crates.io': {
+      def: 'The official package registry for Rust — where libraries (crates) are published and shared with the community.',
+      url: 'https://crates.io/'
+    }
+  };
+
+  // Sort longest-first so compound terms match before their parts
+  var terms = Object.keys(GLOSSARY).sort(function(a, b) { return b.length - a.length; });
+  var matched = {};
+
+  var tip    = document.getElementById('ttTip');
+  var defEl  = document.getElementById('ttDef');
+  var linkEl = document.getElementById('ttLink');
+  var hideTimeout = null;
+
+  function showTip(el) {
+    var term = el.getAttribute('data-term');
+    var g = GLOSSARY[term];
+    if (!g) return;
+    defEl.textContent = g.def;
+    linkEl.href = g.url;
+    linkEl.style.display = g.url ? 'inline-block' : 'none';
+    tip.classList.add('visible');
+    positionTip(el);
+  }
+
+  function hideTip() {
+    tip.classList.remove('visible');
+  }
+
+  function positionTip(el) {
+    var r = el.getBoundingClientRect();
+    tip.style.left = '0'; tip.style.top = '0'; // reset for measurement
+    var tw = tip.offsetWidth;
+    var th = tip.offsetHeight;
+
+    var left = r.left + (r.width / 2) - (tw / 2);
+    var top  = r.top - th - 10;
+
+    // Keep in viewport
+    if (left < 10) left = 10;
+    if (left + tw > window.innerWidth - 10) left = window.innerWidth - tw - 10;
+    if (top < 10) top = r.bottom + 10; // flip below
+
+    tip.style.left = left + 'px';
+    tip.style.top  = top + 'px';
+  }
+
+  // Event delegation
+  document.addEventListener('mouseenter', function(e) {
+    if (!e.target.classList || !e.target.classList.contains('tt')) return;
+    clearTimeout(hideTimeout);
+    showTip(e.target);
+  }, true);
+
+  document.addEventListener('mouseleave', function(e) {
+    if (!e.target.classList || !e.target.classList.contains('tt')) return;
+    hideTimeout = setTimeout(hideTip, 150);
+  }, true);
+
+  // Keep tooltip alive when hovering over the tooltip itself
+  tip.addEventListener('mouseenter', function() { clearTimeout(hideTimeout); });
+  tip.addEventListener('mouseleave', function() { hideTimeout = setTimeout(hideTip, 150); });
+
+  // Process the DOM: wrap first occurrence of each term
+  function processTerms() {
+    var article = document.querySelector('article');
+    if (!article) return;
+
+    for (var t = 0; t < terms.length; t++) {
+      var term = terms[t];
+      if (matched[term]) continue;
+
+      var nodes = getTextNodes(article);
+      for (var n = 0; n < nodes.length; n++) {
+        var textNode = nodes[n];
+        var idx = textNode.textContent.indexOf(term);
+        if (idx === -1) continue;
+
+        // Split and wrap
+        var before = textNode.textContent.slice(0, idx);
+        var after  = textNode.textContent.slice(idx + term.length);
+
+        var span = document.createElement('a');
+        span.className = 'tt';
+        span.href = GLOSSARY[term].url;
+        span.target = '_blank';
+        span.rel = 'noopener';
+        span.setAttribute('data-term', term);
+        span.textContent = term;
+
+        var parent = textNode.parentNode;
+        if (before) parent.insertBefore(document.createTextNode(before), textNode);
+        parent.insertBefore(span, textNode);
+        if (after) parent.insertBefore(document.createTextNode(after), textNode);
+        parent.removeChild(textNode);
+
+        matched[term] = true;
+        break;
+      }
+    }
+  }
+
+  function getTextNodes(root) {
+    var nodes = [];
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(node) {
+        var p = node.parentElement;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        var tag = p.tagName.toLowerCase();
+        // Skip code, pre, existing links, script, style, headings, TOC, meta
+        if (['code','pre','a','script','style','h1','h2','h3'].indexOf(tag) !== -1) return NodeFilter.FILTER_REJECT;
+        if (p.closest('.tt, .toc, .meta-block, .cite-block, .eval-order, .nav-links')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var node;
+    while (node = walker.nextNode()) nodes.push(node);
+    return nodes;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', processTerms);
+  } else {
+    processTerms();
+  }
+})();
+</script>
+
+</body>
+</html>
