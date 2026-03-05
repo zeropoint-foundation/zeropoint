@@ -1057,6 +1057,11 @@ $ cargo fmt --workspace --check
     <tr><td><strong>CompactReceipt</strong></td><td>MessagePack-encoded receipt using short field names, optimized for single-packet mesh transmission.</td></tr>
     <tr><td><strong>MeshNode</strong></td><td>High-level transport primitive managing interfaces, peers, links, delegations, and reputation.</td></tr>
     <tr><td><strong>Collective Audit</strong></td><td>Peer-to-peer chain verification where nodes challenge each other's audit trails and produce signed attestations.</td></tr>
+    <tr><td><strong>GenesisKey</strong></td><td>Self-signed root of trust in the key hierarchy (one per deployment). All operator and agent certificates trace back to this key. Always held by a human.</td></tr>
+    <tr><td><strong>OperatorKey</strong></td><td>Signed by the GenesisKey. Represents a node operator in the key hierarchy. Can issue AgentKey certificates.</td></tr>
+    <tr><td><strong>AgentKey</strong></td><td>Signed by an OperatorKey. Represents a single agent instance. Carries a portable certificate chain for remote verification.</td></tr>
+    <tr><td><strong>Certificate Chain</strong></td><td>A sequence of signed certificates (genesis → operator → agent) that proves an agent's identity. Verified offline against six invariants.</td></tr>
+    <tr><td><strong>Introduction Protocol</strong></td><td>The governed handshake between two ZeroPoint nodes meeting for the first time — verifies certificate chains and evaluates peer trust through the policy engine.</td></tr>
   </tbody>
 </table>
 
@@ -1327,6 +1332,7 @@ $ cargo fmt --workspace --check
 <script>
 (function() {
   var GLOSSARY = {
+    // Cryptographic primitives
     'ChaCha20-Poly1305': {
       def: 'An authenticated encryption algorithm that protects both confidentiality and integrity of data. Used in TLS 1.3 and WireGuard.',
       url: 'https://en.wikipedia.org/wiki/ChaCha20-Poly1305'
@@ -1351,6 +1357,28 @@ $ cargo fmt --workspace --check
       def: 'Secure Hash Algorithm (256-bit) — a widely used cryptographic hash function that produces a fixed-size fingerprint of any data.',
       url: 'https://en.wikipedia.org/wiki/SHA-2'
     },
+    'ECDH': {
+      def: 'Elliptic Curve Diffie-Hellman — a key agreement protocol that lets two parties create a shared secret using elliptic curve cryptography.',
+      url: 'https://en.wikipedia.org/wiki/Elliptic-curve_Diffie%E2%80%93Hellman'
+    },
+    'hash-chained': {
+      def: 'A sequence where each entry includes a fingerprint of the previous one — like tamper-evident seals. If anyone alters a past entry, the chain breaks visibly.',
+      url: 'https://en.wikipedia.org/wiki/Hash_chain'
+    },
+    'keypair': {
+      def: 'A matched pair of cryptographic keys: a private key (kept secret, used to sign) and a public key (shared freely, used to verify). Your digital identity.',
+      url: 'https://en.wikipedia.org/wiki/Public-key_cryptography'
+    },
+    'digital signature': {
+      def: 'A mathematical proof that a message was created by a specific key holder and hasn\'t been altered — the cryptographic equivalent of a handwritten signature.',
+      url: 'https://en.wikipedia.org/wiki/Digital_signature'
+    },
+    'nonce': {
+      def: 'A number used once — a random value included in a message to prevent replay attacks (re-sending the same message twice).',
+      url: 'https://en.wikipedia.org/wiki/Cryptographic_nonce'
+    },
+
+    // Protocols and standards
     'SSL/TLS': {
       def: 'Secure Sockets Layer / Transport Layer Security — the encryption protocols that secure HTTPS connections on the web.',
       url: 'https://en.wikipedia.org/wiki/Transport_Layer_Security'
@@ -1363,16 +1391,30 @@ $ cargo fmt --workspace --check
       def: 'A compact binary serialization format — like JSON but smaller and faster to parse. Used for efficient data exchange.',
       url: 'https://msgpack.org/'
     },
+    'REST API': {
+      def: 'A way for programs to communicate over HTTP using standard methods (GET, POST, etc.) — the most common pattern for web services.',
+      url: 'https://en.wikipedia.org/wiki/REST'
+    },
+    'MTU': {
+      def: 'Maximum Transmission Unit — the largest packet size a network link can carry in one piece. Larger data must be split into multiple packets.',
+      url: 'https://en.wikipedia.org/wiki/Maximum_transmission_unit'
+    },
+
+    // Technologies
     'WASM': {
-      def: 'WebAssembly — a portable binary instruction format that runs in a secure sandbox. Originally for browsers, now used anywhere.',
+      def: 'WebAssembly — a portable binary instruction format that runs in a secure sandbox. Originally for browsers, now used for safely running untrusted code anywhere.',
       url: 'https://webassembly.org/'
     },
+    'Rust': {
+      def: 'A systems programming language focused on safety, speed, and concurrency — prevents entire classes of bugs at compile time. Used for security-critical infrastructure.',
+      url: 'https://www.rust-lang.org/'
+    },
     'LoRa': {
-      def: 'Long Range radio — a low-power wireless technology for transmitting small amounts of data over several kilometers. Common in IoT.',
+      def: 'Long Range radio — a low-power wireless technology for transmitting small amounts of data over several kilometers. Common in IoT and off-grid networks.',
       url: 'https://en.wikipedia.org/wiki/LoRa'
     },
     'Reticulum': {
-      def: 'A decentralized, encrypted networking stack for sovereign communications — works over any medium without requiring internet infrastructure.',
+      def: 'A decentralized, encrypted networking stack for sovereign communications — works over any medium (radio, internet, serial) without requiring central infrastructure.',
       url: 'https://reticulum.network/'
     },
     'Axum': {
@@ -1380,13 +1422,83 @@ $ cargo fmt --workspace --check
       url: 'https://github.com/tokio-rs/axum'
     },
     'Wasmtime': {
-      def: 'A standalone runtime for executing WebAssembly code outside the browser — used here to sandbox untrusted policy modules.',
+      def: 'A standalone runtime for executing WebAssembly code outside the browser — used here to sandbox untrusted policy modules so they can\'t access the host system.',
       url: 'https://wasmtime.dev/'
     },
-    'ECDH': {
-      def: 'Elliptic Curve Diffie-Hellman — a key agreement protocol that lets two parties create a shared secret using elliptic curve cryptography.',
-      url: 'https://en.wikipedia.org/wiki/Elliptic-curve_Diffie%E2%80%93Hellman'
+    'IoT': {
+      def: 'Internet of Things — physical devices (sensors, cameras, machines) connected to networks that collect and exchange data autonomously.',
+      url: 'https://en.wikipedia.org/wiki/Internet_of_things'
     },
+
+    // ZeroPoint concepts
+    'capability grant': {
+      def: 'A signed, portable permission token in ZeroPoint — specifies exactly what actions are allowed, for how long, and who can delegate further. Like a power of attorney with cryptographic enforcement.',
+      url: ''
+    },
+    'delegation chain': {
+      def: 'A sequence of capability grants from a human root to an end agent — each link narrows the scope. Authority flows down; accountability flows up. Verified against eight invariants.',
+      url: ''
+    },
+    'constitutional rules': {
+      def: 'ZeroPoint\'s non-removable safety rules — HarmPrincipleRule and SovereigntyRule — hardcoded in Rust. No WASM module, policy change, or consensus vote can override them.',
+      url: ''
+    },
+    'receipt': {
+      def: 'A signed, timestamped record of an action — containing what happened, who authorized it, and the policy decision. Receipts chain together to form an auditable history.',
+      url: ''
+    },
+    'policy engine': {
+      def: 'The component that evaluates every action against all loaded rules (constitutional, operational, WASM) and returns a graduated decision: Allow, Sanitize, Warn, Review, or Block.',
+      url: ''
+    },
+    'trust tier': {
+      def: 'ZeroPoint\'s three levels of cryptographic identity: Tier 0 (anonymous), Tier 1 (self-signed key), Tier 2 (chain-signed back to a human-held genesis key).',
+      url: ''
+    },
+    'genesis key': {
+      def: 'The self-signed root of trust in a ZeroPoint deployment — always held by a human. All authority traces back to this key through certificate chains.',
+      url: ''
+    },
+    'certificate chain': {
+      def: 'A sequence of signed certificates linking an agent\'s key back to the genesis root — verified offline against six invariants. Proves identity without contacting any authority.',
+      url: ''
+    },
+    'fuel limiting': {
+      def: 'A safety mechanism for sandboxed code — each WASM module gets a budget of computation steps. If it exceeds the budget, execution stops. Prevents infinite loops and resource exhaustion.',
+      url: ''
+    },
+    'sovereign refusal': {
+      def: 'Every ZeroPoint participant — human or agent — has the unconditional right to refuse any action, enforced locally by the Guard before any external authority is consulted.',
+      url: ''
+    },
+
+    // General technical
+    'transport-agnostic': {
+      def: 'Works the same regardless of how messages travel — HTTP, TCP, mesh radio, or any future medium. The governance layer doesn\'t care about the network underneath.',
+      url: ''
+    },
+    'deterministic': {
+      def: 'Given the same inputs, always produces the same output — no randomness, no external dependencies. Critical for auditable governance: the same rules + same context = same decision, every time.',
+      url: ''
+    },
+    'air-gapped': {
+      def: 'Physically isolated from the internet and other networks — used for high-security environments where no external connection is permitted.',
+      url: 'https://en.wikipedia.org/wiki/Air_gap_(networking)'
+    },
+    'replay attacks': {
+      def: 'Capturing a valid message and re-sending it later to trick the receiver — like recording a "door open" command and playing it back. Prevented with nonces and sequence numbers.',
+      url: 'https://en.wikipedia.org/wiki/Replay_attack'
+    },
+    'sandbox': {
+      def: 'An isolated environment where untrusted code can run safely — it can compute and return results, but can\'t access the host filesystem, network, or other programs.',
+      url: 'https://en.wikipedia.org/wiki/Sandbox_(computer_security)'
+    },
+    'monotonic': {
+      def: 'Only goes in one direction (always increasing or always decreasing) — used for sequence numbers and delegation depths to prevent reordering or replay.',
+      url: 'https://en.wikipedia.org/wiki/Monotonic_function'
+    },
+
+    // Licenses
     'CC BY 4.0': {
       def: 'Creative Commons Attribution 4.0 — a license allowing anyone to share and adapt the work, as long as credit is given.',
       url: 'https://creativecommons.org/licenses/by/4.0/'
@@ -1471,8 +1583,10 @@ $ cargo fmt --workspace --check
       var nodes = getTextNodes(article);
       for (var n = 0; n < nodes.length; n++) {
         var textNode = nodes[n];
-        var idx = textNode.textContent.indexOf(term);
+        var idx = textNode.textContent.toLowerCase().indexOf(term.toLowerCase());
         if (idx === -1) continue;
+        // Use the actual text from the document (preserving original casing)
+        var originalText = textNode.textContent.slice(idx, idx + term.length);
 
         // Split and wrap
         var before = textNode.textContent.slice(0, idx);
@@ -1480,11 +1594,17 @@ $ cargo fmt --workspace --check
 
         var span = document.createElement('a');
         span.className = 'tt';
-        span.href = GLOSSARY[term].url;
-        span.target = '_blank';
-        span.rel = 'noopener';
+        var termUrl = GLOSSARY[term].url;
+        if (termUrl) {
+          span.href = termUrl;
+          span.target = '_blank';
+          span.rel = 'noopener';
+        } else {
+          span.removeAttribute('href');
+          span.style.cursor = 'help';
+        }
         span.setAttribute('data-term', term);
-        span.textContent = term;
+        span.textContent = originalText;
 
         var parent = textNode.parentNode;
         if (before) parent.insertBefore(document.createTextNode(before), textNode);
