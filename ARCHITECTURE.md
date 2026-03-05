@@ -277,6 +277,33 @@ The LLM never sees any of this. It just sees: "here are your tools for this requ
 
 **Credential isolation** integrates with the trust chain: signing keys and credential vault keys are separate. A Genesis-signed policy module can declare which credentials a skill is authorized to access, and the credential injector enforces this at the host boundary (see §12.1). Credentials never enter WASM memory.
 
+### 3.6 Key Hierarchy (`zp-keys`)
+
+The trust chain described above is implemented by `zp-keys`, a cryptographic primitive that exists *below* the policy engine. The hierarchy uses Ed25519 keypairs with certificate chains:
+
+```
+GenesisKey          ← self-signed root of trust (one per deployment)
+  └─ OperatorKey    ← signed by genesis (one per node operator)
+      └─ AgentKey   ← signed by operator (one per agent instance)
+```
+
+Each level holds a keypair and a certificate attesting its role. Certificates form a chain — any node can verify an agent's identity by walking the chain back to a known genesis key, offline, with no network or policy state required.
+
+**Why below the policy engine:** You need keys to establish the policy engine's authority across nodes. Keys cannot depend on the policy engine existing — this avoids a circular dependency. The *mechanism* (signing, verification) is primitive; the *decision* to delegate (issuing a child certificate) flows through the policy engine as `ActionType::KeyDelegation`.
+
+**Certificate chain verification enforces six invariants:** valid signatures, issuer matches parent, roles follow hierarchy, depths increase monotonically, no expired certificates, and hash linkage between certificates.
+
+### 3.7 Introduction Protocol (`zp-introduction`)
+
+When two ZeroPoint nodes meet for the first time, the introduction protocol governs trust establishment:
+
+1. **Initiator** sends its full certificate chain + a random challenge nonce
+2. **Responder** verifies the chain using `zp-keys` (deterministic, offline)
+3. **Responder** builds a `PolicyContext` with `ActionType::PeerIntroduction` and evaluates it against the policy engine
+4. Based on the decision: Accept (sends own chain + signed nonce), PendingReview (human must approve), or Deny
+
+Same-genesis introductions (nodes in the same deployment) are High risk. Cross-genesis introductions (different deployments) are Critical risk. The policy engine decides — the protocol only generates the `PolicyContext`.
+
 ---
 
 ## 4. The LLM Layer
@@ -493,6 +520,10 @@ zeropoint/
 │   │   └── src/lib.rs
 │   ├── zp-audit/                 # Hash-chained audit trail
 │   │   └── src/lib.rs
+│   ├── zp-keys/                  # Key hierarchy — genesis → operator → agent
+│   │   └── src/                  #   Ed25519 signing, certificate chains, keyring
+│   ├── zp-introduction/          # Governed trust establishment between nodes
+│   │   └── src/                  #   Introduction handshake, policy-gated peer trust
 │   ├── zp-trust/                 # Genesis v2, signing, verification
 │   │   └── src/lib.rs
 │   ├── zp-llm/                   # Provider pool, prompt builder, response validator
@@ -534,7 +565,15 @@ zeropoint/
 │   ├── built-in/
 │   ├── extracted/                # Skills extracted from patterns
 │   └── community/                # Community-contributed skills
-├── trust/                        # Trust chain data
+├── keys/                         # Cryptographic key hierarchy (zp-keys)
+│   ├── genesis.json              # Genesis certificate (public)
+│   ├── genesis.secret            # Genesis secret key (ceremony only)
+│   ├── operator.json             # Operator certificate
+│   ├── operator.secret           # Operator secret key
+│   └── agents/                   # Agent certificates (portable chains)
+│       ├── agent-001.json        # Full chain: genesis → operator → agent
+│       └── agent-001.secret      # Agent secret key
+├── trust/                        # Trust chain data (legacy, migrating to keys/)
 │   ├── keys/                     # Signing keys (tier 1+)
 │   └── genesis/                  # Genesis manifest (tier 2)
 └── channels/                     # Channel-specific config

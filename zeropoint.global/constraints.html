@@ -269,6 +269,7 @@ footer {
   .compose-arrow { transform: rotate(90deg); }
   .hero { padding: 8rem 0 3rem; }
   section { padding: 3rem 0; }
+  [style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
 }
 </style>
 </head>
@@ -525,6 +526,101 @@ engine.set_wasm_registry(registry);
 
 <hr class="section-rule">
 
+<!-- Key Hierarchy -->
+<section>
+  <div class="container">
+    <div class="section-label">Trust Distribution</div>
+    <h2>Cryptographic keys below the policy engine</h2>
+    <p class="intro-prose">
+      ZeroPoint solves the key distribution problem with a three-level hierarchy that exists <em>below</em> the policy engine. The mechanism is primitive &mdash; verification is deterministic and requires no network, no policy state, and no runtime configuration. The <em>decision</em> to delegate is policy-gated; the <em>mechanism</em> of delegation is unconditional.
+    </p>
+
+    <!-- Key hierarchy diagram -->
+    <div style="margin: 2.5rem 0; padding: 2rem; background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;">
+      <div style="font-family: var(--font-mono); font-size: 0.85rem; line-height: 2; color: var(--text-muted);">
+        <span style="color: var(--red);">GenesisKey</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&larr; self-signed root of trust (one per deployment)<br>
+        &nbsp;&nbsp;&boxvr;&boxh; <span style="color: var(--yellow);">OperatorKey</span> &nbsp;&larr; signed by genesis (one per node operator)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&boxvr;&boxh; <span style="color: var(--green);">AgentKey</span> &nbsp;&nbsp;&larr; signed by operator (one per agent instance)
+      </div>
+    </div>
+
+    <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.8; margin-bottom: 1.5rem;">
+      Each level holds an Ed25519 keypair and a signed certificate attesting its role. Certificates form a chain &mdash; any node can verify an agent's identity by walking the chain back to a known genesis key, with no external dependencies.
+    </p>
+
+    <div class="guarantee-grid">
+      <div class="guarantee-card">
+        <div class="card-icon">zp-keys</div>
+        <h3>Primitive, Not Policy</h3>
+        <p>The key hierarchy has no dependency on the policy engine. You need keys to establish the engine's authority across nodes &mdash; so keys cannot depend on the engine existing. This avoids a circular dependency.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">six-invariants</div>
+        <h3>Chain Verification</h3>
+        <p>Every chain is verified against six invariants: valid signatures, issuer linkage, role hierarchy, monotonic depth, no expired certificates, and correct hash linking.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">policy-gated</div>
+        <h3>Governed Delegation</h3>
+        <p>Issuing a child certificate flows through the policy engine as <code style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);">ActionType::KeyDelegation</code> (Critical risk). The mechanism signs; the policy decides <em>when</em>.</p>
+      </div>
+
+      <div class="guarantee-card">
+        <div class="card-icon">portable</div>
+        <h3>Portable Chains</h3>
+        <p>Agent certificate chains are self-contained &mdash; a single JSON file carries genesis, operator, and agent certificates. A remote node verifies the chain with only the genesis public key.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Introduction Protocol -->
+<section>
+  <div class="container">
+    <div class="section-label">Peer Trust</div>
+    <h2>Governed introduction between nodes</h2>
+    <p class="intro-prose">
+      When two ZeroPoint nodes meet, the introduction protocol establishes trust. The protocol uses <code style="font-family: var(--font-mono); font-size: 0.9rem; color: var(--accent);">zp-keys</code> for chain verification and generates <code style="font-family: var(--font-mono); font-size: 0.9rem; color: var(--accent);">PolicyContext</code> events for the policy engine to evaluate.
+    </p>
+
+    <!-- Handshake diagram -->
+    <div style="margin: 2rem 0; padding: 2rem; background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;">
+      <div style="font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.9; color: var(--text-muted);">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+          <span style="color: var(--accent);">Initiator</span>
+          <span style="color: var(--accent);">Responder</span>
+        </div>
+        <div style="padding-left: 1rem;">
+          &boxvr;&boxh;&boxh; <span style="color: var(--text);">IntroductionRequest</span> &rarr;&rarr;&rarr;&rarr;&rarr;&rarr;&rarr;&rarr;&rarr;&rarr;&rarr;&rarr;<br>
+          &boxv;&nbsp;&nbsp; <span style="color: var(--text-dim);">(certificate chain + challenge nonce)</span><br>
+          &boxv; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&boxvr;&boxh; verify chain (zp-keys)<br>
+          &boxv; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&boxvr;&boxh; evaluate policy (zp-policy)<br>
+          &boxv;<br>
+          &boxur;&boxh;&boxh; <span style="color: var(--text);">IntroductionResponse</span> &larr;&larr;&larr;&larr;&larr;&larr;&larr;&larr;&larr;&larr;&larr;<br>
+          &nbsp;&nbsp;&nbsp; <span style="color: var(--text-dim);">(decision + chain + signed nonce)</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+      <div style="background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; padding: 1.5rem;">
+        <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--yellow); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem;">Same Genesis</div>
+        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.7;">Nodes from the same deployment. <strong style="color: var(--text); font-weight: 500;">High</strong> risk. Both share a genesis key, so the chain is a known trust domain.</p>
+      </div>
+      <div style="background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; padding: 1.5rem;">
+        <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--red); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem;">Cross Genesis</div>
+        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.7;">Nodes from different deployments. <strong style="color: var(--text); font-weight: 500;">Critical</strong> risk. Different trust roots require operator-configured policy to allow.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
 <!-- Architectural Guarantees -->
 <section>
   <div class="wide-container">
@@ -595,10 +691,11 @@ engine.set_wasm_registry(registry);
     <h2 style="margin-bottom: 1rem;">Build on the constraint layer</h2>
     <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; max-width: 520px; margin-left: auto; margin-right: auto;">
       ZeroPoint is open source, MIT / Apache-2.0 licensed, and built in Rust.
-      The policy engine is in <code style="font-family: var(--font-mono); color: var(--accent); font-size: 0.85rem;">zp-policy</code> &mdash; start there.
+      The policy engine is in <code style="font-family: var(--font-mono); color: var(--accent); font-size: 0.85rem;">zp-policy</code>, the key hierarchy in <code style="font-family: var(--font-mono); color: var(--accent); font-size: 0.85rem;">zp-keys</code>.
     </p>
     <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
       <a href="https://github.com/zeropoint-foundation/zeropoint/tree/main/crates/zp-policy" class="btn btn-primary">View zp-policy</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint/tree/main/crates/zp-keys" class="btn btn-secondary">View zp-keys</a>
       <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
     </div>
   </div>
