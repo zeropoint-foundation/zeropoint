@@ -1,0 +1,2326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Trust Triangle — Animated Sequence</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0c;
+    --bg-terminal: #0d0d10;
+    --bg-terminal-header: #141418;
+    --accent: #7eb8da;
+    --accent-dim: #7eb8da44;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --cyan: #67e8f9;
+    --text: #e8e8ec;
+    --text-dim: #8a8a96;
+    --text-muted: #5a5a68;
+    --clinic-color: #a78bfa;
+    --pharmacy-color: #34d399;
+    --patient-color: #7eb8da;
+    --receipt-glow: #7eb8da33;
+  }
+
+  html {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100%;
+    background: var(--bg);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    width: 1920px;
+    height: 1080px;
+    flex-shrink: 0;
+    transform-origin: top left;
+  }
+
+  /* ── SCENE CONTAINER ── */
+  .scene {
+    position: absolute;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+  }
+
+  /* ── KEYFRAME SCENES ── */
+  .kf {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+    pointer-events: none;
+  }
+  .kf.active { opacity: 1; pointer-events: auto; }
+
+  /* ── SCENE 1: WIDE ESTABLISHING — THREE TERMINALS ── */
+  .terminals-wide {
+    display: flex;
+    gap: 24px;
+    padding: 60px 100px;
+    height: 100%;
+    align-items: stretch;
+    justify-content: center;
+  }
+
+  .terminal {
+    flex: 1;
+    background: var(--bg-terminal);
+    border: 1px solid #1a1a22;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .terminal-header {
+    background: var(--bg-terminal-header);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #1a1a22;
+    transition: all 0.3s ease;
+  }
+
+  @keyframes header-pulse {
+    0%   { background: var(--bg-terminal-header); box-shadow: none; }
+    30%  { background: #1e1e2a; box-shadow: inset 0 0 20px rgba(126, 184, 218, 0.15); }
+    60%  { background: var(--bg-terminal-header); box-shadow: none; }
+    80%  { background: #1e1e2a; box-shadow: inset 0 0 20px rgba(126, 184, 218, 0.15); }
+    100% { background: var(--bg-terminal-header); box-shadow: none; }
+  }
+
+  .terminal-header.pulse {
+    animation: header-pulse 2s ease-in-out;
+  }
+  .terminal-header.pulse .terminal-title {
+    color: var(--accent);
+    transition: color 0.5s ease;
+  }
+
+  .terminal-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .terminal-dots span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2a2a34;
+  }
+  .terminal-dots span:nth-child(1) { background: #f87171; }
+  .terminal-dots span:nth-child(2) { background: #fbbf24; }
+  .terminal-dots span:nth-child(3) { background: #4ade80; }
+
+  .terminal-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: 8px;
+  }
+
+  .terminal-body {
+    flex: 1;
+    padding: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    overflow: hidden;
+  }
+
+  .terminal-body .line {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  .terminal-body .line.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .terminal-body .cta-line {
+    opacity: 1;
+  }
+
+  .prompt { color: var(--accent); }
+  .dim { color: var(--text-dim); }
+  .grn { color: var(--green); }
+  .yel { color: var(--yellow); }
+  .cyn { color: var(--cyan); }
+  .red { color: var(--red); }
+  .clinic-c { color: var(--clinic-color); }
+  .pharmacy-c { color: var(--pharmacy-color); }
+  .patient-c { color: var(--patient-color); }
+  .bold { font-weight: 700; }
+
+  /* Terminal glow indicators */
+  .terminal.glow-clinic { box-shadow: 0 0 40px #a78bfa22, inset 0 0 40px #a78bfa08; border-color: #a78bfa44; }
+  .terminal.glow-pharmacy { box-shadow: 0 0 40px #34d39922, inset 0 0 40px #34d39908; border-color: #34d39944; }
+  .terminal.glow-patient { box-shadow: 0 0 40px #7eb8da22, inset 0 0 40px #7eb8da08; border-color: #7eb8da44; }
+
+  /* ── SCENE TITLE OVERLAY ── */
+  .scene-title {
+    position: absolute;
+    bottom: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    z-index: 10;
+    max-width: 900px;
+    width: 100%;
+  }
+  .scene-title h2 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 28px;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+  .scene-title .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  /* ── TOP LABEL ── */
+  .top-label {
+    position: absolute;
+    top: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* ── SCENE 2: CLOSE-UP — PATIENT QUESTION ── */
+  .patient-closeup {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 80px;
+  }
+
+  .patient-closeup .terminal {
+    width: 900px;
+    max-height: 600px;
+    flex: none;
+  }
+
+  .question-text {
+    position: absolute;
+    right: 100px;
+    top: 50%;
+    transform: translateY(-50%);
+    max-width: 400px;
+  }
+  .question-text blockquote {
+    font-family: 'Inter', sans-serif;
+    font-size: 36px;
+    font-weight: 300;
+    line-height: 1.4;
+    color: var(--text);
+    border-left: 3px solid var(--accent);
+    padding-left: 24px;
+  }
+  .question-text .attribution {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 16px;
+    padding-left: 28px;
+  }
+
+  /* ── SCENE 3: INTRODUCTION HANDSHAKE ── */
+  .handshake-scene {
+    position: relative;
+    height: 100%;
+    padding: 60px;
+  }
+
+  .handshake-nodes {
+    position: absolute;
+    top: 38%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1000px;
+    height: 500px;
+  }
+
+  .node-badge {
+    position: absolute;
+    width: 200px;
+    text-align: center;
+  }
+  .node-badge .node-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 2px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    overflow: hidden;
+  }
+  .node-badge .node-name {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .node-badge .node-org {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .node-badge .genesis-fp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .node-patient { top: 0; left: 50%; transform: translateX(-50%); }
+  .node-patient .node-icon { border-color: var(--patient-color); color: var(--patient-color); background: #7eb8da0a; }
+  .node-patient .node-name { color: var(--patient-color); }
+
+  .node-clinic { bottom: 0; left: 60px; }
+  .node-clinic .node-icon { border-color: var(--clinic-color); color: var(--clinic-color); background: #a78bfa0a; }
+  .node-clinic .node-name { color: var(--clinic-color); }
+
+  .node-pharmacy { bottom: 0; right: 60px; }
+  .node-pharmacy .node-icon { border-color: var(--pharmacy-color); color: var(--pharmacy-color); background: #34d3990a; }
+  .node-pharmacy .node-name { color: var(--pharmacy-color); }
+
+  /* Connection lines */
+  .connection-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .conn-line {
+    stroke-dasharray: 8 4;
+    stroke-dashoffset: 200;
+    transition: stroke-dashoffset 2s ease;
+  }
+  .conn-line.active { stroke-dashoffset: 0; }
+
+  .chain-packet {
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  .chain-packet.visible { opacity: 1; }
+
+  /* ── KEY HIERARCHY DETAIL ── */
+  .key-hierarchy {
+    position: absolute;
+    bottom: -70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    white-space: nowrap;
+    background: rgba(10, 10, 12, 0.85);
+    padding: 8px 20px;
+    border-radius: 8px;
+    border: 1px solid #1a1a22;
+  }
+
+  .key-level {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .key-level.visible { opacity: 1; transform: translateY(0); }
+
+  .key-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .key-line {
+    width: 1px;
+    height: 28px;
+    margin: 0;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    flex-shrink: 0;
+  }
+  .key-line.visible { opacity: 1; }
+
+  .key-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .key-desc {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* ── SCENE 4: DATA EXCHANGE ── */
+  .exchange-scene {
+    display: flex;
+    height: 100%;
+    padding: 60px 120px;
+    padding-bottom: 120px;
+    gap: 40px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .exchange-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .exchange-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .data-card {
+    background: var(--bg-terminal);
+    border: 1px solid #1a1a22;
+    border-radius: 10px;
+    padding: 20px;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .data-card.visible { opacity: 1; transform: translateY(0); }
+
+  .data-card h3 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  .data-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .data-key { color: var(--text-dim); }
+  .data-val { color: var(--text); }
+
+  .policy-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+  .policy-sanitize { background: #fbbf2418; color: var(--yellow); border: 1px solid #fbbf2433; }
+  .policy-allow { background: #4ade8018; color: var(--green); border: 1px solid #4ade8033; }
+
+  .redacted-indicator {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: #f8717108;
+    border-left: 2px solid var(--red);
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* ── RECEIPT VISUALIZATION ── */
+  .receipt-vis {
+    background: var(--bg-terminal);
+    border: 1px solid #1a1a22;
+    border-radius: 10px;
+    padding: 24px;
+    max-width: 480px;
+  }
+
+  .receipt-header {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .receipt-field {
+    display: flex;
+    gap: 12px;
+    padding: 5px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .receipt-field.visible { opacity: 1; }
+  .receipt-field .rf-key { color: var(--text-dim); min-width: 120px; }
+  .receipt-field .rf-val { color: var(--text); word-break: break-all; }
+
+  .hash-highlight {
+    padding: 2px 6px;
+    background: #7eb8da11;
+    border-radius: 3px;
+    border: 1px solid #7eb8da22;
+  }
+
+  .sig-highlight {
+    padding: 2px 6px;
+    background: #4ade8011;
+    border-radius: 3px;
+    border: 1px solid #4ade8022;
+  }
+
+  /* ── SCENE 5: PROVENANCE CHAIN ── */
+  .provenance-scene {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 100px;
+    height: 100%;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .chain-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .chain-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .chain-node.visible { opacity: 1; transform: scale(1); }
+
+  .chain-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    border: 2px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    position: relative;
+  }
+
+  .chain-icon .check {
+    position: absolute;
+    bottom: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--green);
+    color: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .chain-icon .check.visible { opacity: 1; }
+
+  .chain-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .chain-hash {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    max-width: 100px;
+    text-align: center;
+    word-break: break-all;
+  }
+
+  .chain-arrow {
+    width: 60px;
+    height: 2px;
+    position: relative;
+    margin: 0 8px;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  .chain-arrow.visible { opacity: 1; }
+  .chain-arrow::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 8px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--text-muted), var(--accent));
+  }
+  .chain-arrow::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -4px;
+    border: 5px solid transparent;
+    border-left-color: var(--accent);
+  }
+
+  /* ── SCENE 6: WHAT'S NOT HERE ── */
+  .absence-scene {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 100px;
+    padding-bottom: 160px;
+  }
+
+  .absence-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 900px;
+  }
+
+  .absence-item {
+    padding: 24px;
+    border: 1px solid #1a1a22;
+    border-radius: 10px;
+    background: var(--bg-terminal);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .absence-item.visible { opacity: 1; transform: translateY(0); }
+
+  .absence-item .strikethrough {
+    font-family: 'Inter', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    text-decoration: line-through;
+    color: var(--text-dim);
+  }
+  .absence-item .replacement {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    margin-top: 8px;
+  }
+
+  /* ── SCENE 7: CLOSING ── */
+  .closing-scene {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    flex-direction: column;
+    gap: 16px;
+    padding-bottom: 100px;
+  }
+
+  .closing-scene .tagline {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 42px;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+  }
+  .closing-scene .tagline.visible { opacity: 1; }
+
+  .closing-scene .zp-mark {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 1s ease 0.8s;
+  }
+  .closing-scene .zp-mark.visible { opacity: 1; }
+
+  /* ── ALEX CHEN FIGURE ── */
+  #alex-figure {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  #alex-figure.visible { opacity: 1; }
+
+  /* Idle breathing — gentle vertical bob */
+  @keyframes alex-breathe {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  #alex-figure .alex-body {
+    animation: alex-breathe 3s ease-in-out infinite;
+  }
+
+  /* Two arm states: crossfade between resting and holding phone */
+  #alex-figure .arm-resting { opacity: 1; transition: opacity 0.8s ease; }
+  #alex-figure .arm-phone   { opacity: 0; transition: opacity 0.8s ease; }
+  #alex-figure.phone-out .arm-resting { opacity: 0; }
+  #alex-figure.phone-out .arm-phone   { opacity: 1; }
+
+  /* Phone glow pulse */
+  @keyframes phone-glow {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 0.35; }
+  }
+  #alex-figure.phone-out .phone-screen {
+    animation: phone-glow 2s ease-in-out infinite;
+  }
+
+  /* Name label fade in */
+  #alex-figure .alex-label {
+    opacity: 0;
+    transition: opacity 0.8s ease 0.5s;
+  }
+  #alex-figure.visible .alex-label { opacity: 1; }
+
+  /* ── PLAYBACK CONTROLS ── */
+  .controls {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 9999;
+    background: rgba(13, 13, 16, 0.95);
+    border: 1px solid #2a2a34;
+    border-radius: 10px;
+    padding: 8px 16px;
+    backdrop-filter: blur(12px);
+  }
+  .controls button {
+    background: transparent;
+    border: 1px solid #2a2a34;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .controls button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .controls button.play-btn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+    font-weight: 700;
+    padding: 6px 18px;
+    font-size: 13px;
+  }
+  .controls button.play-btn:hover {
+    background: #9ccae6;
+    color: var(--bg);
+  }
+  .controls .divider {
+    width: 1px;
+    height: 20px;
+    background: #2a2a34;
+    margin: 0 4px;
+  }
+  .controls .info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+  .controls .info strong {
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  /* ── AGENT SPEECH BUBBLES ── */
+  .bubble {
+    position: absolute;
+    max-width: 280px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: 0;
+    transform: scale(0.92);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    z-index: 20;
+  }
+  .bubble.visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Bubble tail — bottom-left pointing down */
+  .bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+  }
+  .bubble.tail-right::after {
+    left: auto;
+    right: 20px;
+  }
+  .bubble.tail-top::after {
+    bottom: auto;
+    top: -8px;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid;
+    border-top: none;
+  }
+  .bubble.tail-none::after {
+    display: none;
+  }
+
+  /* Agent-colored bubbles */
+  .bubble-patient {
+    background: #7eb8da14;
+    border: 1px solid #7eb8da33;
+    color: var(--patient-color);
+  }
+  .bubble-patient::after { border-top: 8px solid #7eb8da33; }
+  .bubble-patient.tail-top::after { border-bottom-color: #7eb8da33; border-top: none; }
+
+  .bubble-clinic {
+    background: #a78bfa14;
+    border: 1px solid #a78bfa33;
+    color: var(--clinic-color);
+  }
+  .bubble-clinic::after { border-top: 8px solid #a78bfa33; }
+  .bubble-clinic.tail-top::after { border-bottom-color: #a78bfa33; border-top: none; }
+
+  .bubble-pharmacy {
+    background: #34d39914;
+    border: 1px solid #34d39933;
+    color: var(--pharmacy-color);
+  }
+  .bubble-pharmacy::after { border-top: 8px solid #34d39933; }
+  .bubble-pharmacy.tail-top::after { border-bottom-color: #34d39933; border-top: none; }
+
+  /* Crypto sub-line inside bubbles */
+  .bubble .crypto {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #ffffff10;
+    word-break: break-all;
+    overflow-wrap: break-word;
+  }
+
+  /* Agent label chip in bubble */
+  .bubble .agent-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    opacity: 0.85;
+    margin-bottom: 4px;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<div class="scene" id="scene">
+
+  <!-- ═══════ SCENE 1: ESTABLISHING SHOT — THREE TERMINALS ═══════ -->
+  <div class="kf active" id="kf1">
+    <div class="top-label">Trust Triangle — An Example Implementation Built on ZeroPoint</div>
+
+    <div class="terminals-wide">
+      <!-- Clinic Terminal -->
+      <div class="terminal" id="t-clinic">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span></span><span></span><span></span></div>
+          <span class="terminal-title">Terminal 1 — MediCare Clinic</span>
+        </div>
+        <div class="terminal-body" id="tb-clinic">
+          <div class="line"><span class="prompt">$</span> <span class="dim">cargo run -p trust-triangle -- --role clinic --port 3001</span></div>
+          <div class="line">&nbsp;</div>
+          <div class="line">  <span class="grn">●</span> <span class="bold">MediCare Clinic</span> started on port <span class="cyn">3001</span></div>
+          <div class="line">    Genesis: <span class="clinic-c">a7f3b21e9c4d...</span></div>
+          <div class="line">    Endpoints:</div>
+          <div class="line">      POST /api/v1/introduce</div>
+          <div class="line">      POST /api/v1/query</div>
+          <div class="line">&nbsp;</div>
+          <div class="line">  <span class="dim">Waiting for connections...</span></div>
+        </div>
+      </div>
+
+      <!-- Pharmacy Terminal -->
+      <div class="terminal" id="t-pharmacy">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span></span><span></span><span></span></div>
+          <span class="terminal-title">Terminal 2 — QuickRx Pharmacy</span>
+        </div>
+        <div class="terminal-body" id="tb-pharmacy">
+          <div class="line"><span class="prompt">$</span> <span class="dim">cargo run -p trust-triangle -- --role pharmacy --port 3002</span></div>
+          <div class="line">&nbsp;</div>
+          <div class="line">  <span class="grn">●</span> <span class="bold">QuickRx Pharmacy</span> started on port <span class="cyn">3002</span></div>
+          <div class="line">    Genesis: <span class="pharmacy-c">d4e8f109ab2c...</span></div>
+          <div class="line">    Endpoints:</div>
+          <div class="line">      POST /api/v1/introduce</div>
+          <div class="line">      POST /api/v1/query</div>
+          <div class="line">&nbsp;</div>
+          <div class="line">  <span class="dim">Waiting for connections...</span></div>
+        </div>
+      </div>
+
+      <!-- Patient Terminal -->
+      <div class="terminal" id="t-patient">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span></span><span></span><span></span></div>
+          <span class="terminal-title">Terminal 3 — Patient Assistant</span>
+        </div>
+        <div class="terminal-body" id="tb-patient">
+          <div class="line"><span class="prompt">$</span> <span class="dim">cargo run -p trust-triangle -- --role patient \</span></div>
+          <div class="line"><span class="dim">    --clinic http://localhost:3001 \</span></div>
+          <div class="line"><span class="dim">    --pharmacy http://localhost:3002 \</span></div>
+          <div class="line"><span class="dim">    --patient-id patient-12345</span></div>
+          <div class="line">&nbsp;</div>
+          <div class="line">  <span class="bold">╔══════════════════════════════════════════════╗</span></div>
+          <div class="line">  <span class="bold">║  TRUST TRIANGLE — ZeroPoint Reference Impl   ║</span></div>
+          <div class="line">  <span class="bold">║  Cross-Domain Governance Over Plain HTTPS     ║</span></div>
+          <div class="line">  <span class="bold">╚══════════════════════════════════════════════╝</span></div>
+          <div class="line">&nbsp;</div>
+          <div class="line">  <span class="dim">Scenario: Patient asks "Why is my prescription late?"</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene-title">
+      <h2>Three terminals. Three organizations. Zero shared infrastructure.</h2>
+      <div class="subtitle">The clinic and pharmacy don't talk to each other — the patient's assistant reaches out to both</div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCENE 2: THE PROBLEM — THREE STRANGERS ═══════ -->
+  <div class="kf" id="kf2">
+    <div class="top-label">The Problem</div>
+
+    <div style="position: relative; height: 100%; padding: 80px 100px;">
+
+      <!-- Alex Chen animated figure -->
+      <div id="alex-figure">
+        <svg width="140" height="320" viewBox="0 0 140 320">
+          <g class="alex-body">
+            <!-- Head -->
+            <circle cx="70" cy="42" r="28" fill="none" stroke="#7eb8da" stroke-width="1.5" opacity="0.8" />
+            <circle cx="60" cy="38" r="2.5" fill="#7eb8da" opacity="0.7" />
+            <circle cx="80" cy="38" r="2.5" fill="#7eb8da" opacity="0.7" />
+            <path d="M62 50 Q70 56 78 50" fill="none" stroke="#7eb8da" stroke-width="1.2" opacity="0.5" />
+            <path d="M44 32 Q50 14 70 12 Q90 14 96 32" fill="none" stroke="#7eb8da" stroke-width="1.5" opacity="0.4" />
+
+            <!-- Neck -->
+            <line x1="70" y1="70" x2="70" y2="85" stroke="#7eb8da" stroke-width="1.5" opacity="0.6" />
+
+            <!-- Torso -->
+            <path d="M70 85 L45 95 L40 160 L100 160 L95 95 Z" fill="none" stroke="#7eb8da" stroke-width="1.5" opacity="0.6" />
+            <path d="M58 85 L70 100 L82 85" fill="none" stroke="#7eb8da" stroke-width="1" opacity="0.4" />
+
+            <!-- Left arm (always hanging) -->
+            <path d="M45 95 L28 140 L32 175" fill="none" stroke="#7eb8da" stroke-width="1.5" opacity="0.6" stroke-linecap="round" />
+
+            <!-- Right arm: RESTING state (hanging down) -->
+            <path class="arm-resting" d="M95 95 L112 140 L108 175" fill="none" stroke="#7eb8da" stroke-width="1.5" opacity="0.6" stroke-linecap="round" />
+
+            <!-- Right arm: PHONE state (bent up, holding phone in front of chest) -->
+            <g class="arm-phone">
+              <!-- Upper arm goes out, forearm bends up and in -->
+              <path d="M95 95 L110 120 L98 105" fill="none" stroke="#7eb8da" stroke-width="1.5" opacity="0.6" stroke-linecap="round" />
+              <!-- Phone held in front of chest -->
+              <rect x="88" y="92" width="16" height="26" rx="3" fill="none" stroke="#7eb8da" stroke-width="1.2" opacity="0.8" />
+              <rect class="phone-screen" x="90" y="95" width="12" height="18" rx="1" fill="#7eb8da" opacity="0.15" />
+              <line x1="92" y1="99" x2="100" y2="99" stroke="#7eb8da" stroke-width="0.5" opacity="0.3" />
+              <line x1="92" y1="103" x2="98" y2="103" stroke="#7eb8da" stroke-width="0.5" opacity="0.3" />
+              <line x1="92" y1="107" x2="100" y2="107" stroke="#7eb8da" stroke-width="0.5" opacity="0.3" />
+            </g>
+
+            <!-- Legs -->
+            <line x1="55" y1="160" x2="48" y2="250" stroke="#7eb8da" stroke-width="1.5" opacity="0.6" />
+            <line x1="85" y1="160" x2="92" y2="250" stroke="#7eb8da" stroke-width="1.5" opacity="0.6" />
+            <path d="M48 250 L38 255" stroke="#7eb8da" stroke-width="1.5" opacity="0.4" stroke-linecap="round" />
+            <path d="M92 250 L102 255" stroke="#7eb8da" stroke-width="1.5" opacity="0.4" stroke-linecap="round" />
+          </g>
+
+          <!-- Label -->
+          <g class="alex-label">
+            <text x="70" y="285" font-family="Inter" font-size="14" font-weight="600" fill="#7eb8da" text-anchor="middle">Alex Chen</text>
+            <text x="70" y="302" font-family="JetBrains Mono" font-size="10" fill="#8a8a96" text-anchor="middle">patient-12345</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- The question — top center -->
+      <div id="s2-question" style="position: absolute; top: 50px; left: 50%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 1s ease;">
+        <div style="font-family: 'Inter'; font-size: 28px; font-weight: 300; color: var(--text); border-left: 3px solid var(--accent); padding-left: 24px; text-align: left;">
+          "Why is my prescription late?"
+        </div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-dim); margin-top: 8px;">
+          — Alex Chen, patient-12345
+        </div>
+      </div>
+
+      <!-- Three entities — horizontal layout -->
+      <div style="position: absolute; top: 220px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 0; width: 800px; justify-content: space-between;">
+
+        <!-- Clinic -->
+        <div id="s2-clinic" style="text-align: center; opacity: 0; transform: translateY(16px); transition: all 0.8s ease;">
+          <div style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--clinic-color); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; background: #a78bfa0a;">
+            <span style="font-size: 30px; color: var(--clinic-color);">✚</span>
+          </div>
+          <div style="font-family: 'Inter'; font-size: 15px; font-weight: 600; color: var(--clinic-color);">MediCare Clinic</div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-dim); margin-top: 4px;">appointment records</div>
+        </div>
+
+        <!-- Disconnect indicator between clinic and pharmacy -->
+        <div id="s2-disconnect" style="display: flex; flex-direction: column; align-items: center; gap: 6px; opacity: 0; transition: opacity 0.8s ease;">
+          <svg width="160" height="40" viewBox="0 0 160 40">
+            <line x1="10" y1="20" x2="65" y2="20" stroke="#3a3a44" stroke-width="1.5" stroke-dasharray="4 4" />
+            <text x="80" y="24" font-family="JetBrains Mono" font-size="16" fill="#f87171" text-anchor="middle">✗</text>
+            <line x1="95" y1="20" x2="150" y2="20" stroke="#3a3a44" stroke-width="1.5" stroke-dasharray="4 4" />
+          </svg>
+          <div style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--text-dim);">no direct link</div>
+        </div>
+
+        <!-- Pharmacy -->
+        <div id="s2-pharmacy" style="text-align: center; opacity: 0; transform: translateY(16px); transition: all 0.8s ease;">
+          <div style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--pharmacy-color); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; background: #34d3990a;">
+            <span style="font-size: 30px; color: var(--pharmacy-color);">℞</span>
+          </div>
+          <div style="font-family: 'Inter'; font-size: 15px; font-weight: 600; color: var(--pharmacy-color);">QuickRx Pharmacy</div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-dim); margin-top: 4px;">prescription records</div>
+        </div>
+      </div>
+
+      <!-- Patient below, reaching up to both -->
+      <div id="s2-patient" style="position: absolute; top: 440px; left: 50%; transform: translateX(-50%); text-align: center; opacity: 0; transition: all 0.8s ease;">
+        <div style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--patient-color); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; background: #7eb8da0a;">
+          <span style="font-family: 'JetBrains Mono'; font-size: 26px; font-weight: 700; color: var(--patient-color);">A</span>
+        </div>
+        <div style="font-family: 'Inter'; font-size: 15px; font-weight: 600; color: var(--patient-color);">Alex's Assistant</div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-dim); margin-top: 4px;">needs answers from both</div>
+      </div>
+
+      <!-- Dashed lines from patient up to clinic and pharmacy -->
+      <svg id="s2-reach-lines" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 0.8s ease;">
+        <!-- Patient center: 50%, 44.4%  Clinic center: 32.8%, 24.1%  Pharmacy center: 67.2%, 24.1% -->
+        <line x1="50%" y1="44.4%" x2="32.8%" y2="24.1%" stroke="#7eb8da" stroke-width="1" stroke-dasharray="6 4" opacity="0.4" />
+        <line x1="50%" y1="44.4%" x2="67.2%" y2="24.1%" stroke="#7eb8da" stroke-width="1" stroke-dasharray="6 4" opacity="0.4" />
+        <!-- Question marks at midpoints -->
+        <text x="41.4%" y="34.2%" font-family="JetBrains Mono" font-size="16" fill="#7eb8da" opacity="0.6" text-anchor="middle">?</text>
+        <text x="58.6%" y="34.2%" font-family="JetBrains Mono" font-size="16" fill="#7eb8da" opacity="0.6" text-anchor="middle">?</text>
+      </svg>
+
+      <!-- Agent bubbles -->
+      <div id="s2-bub1" class="bubble bubble-patient tail-none" style="top: 140px; left: 50%; transform: translateX(-50%) scale(0.92); max-width: 320px;">
+        <span class="agent-label">patient assistant</span>
+        I don't have this data. But I know who might...
+        <span class="crypto">→ Receipt::intent().finalize().sign()</span>
+      </div>
+
+      <div id="s2-bub2" class="bubble bubble-patient tail-none" style="top: 590px; left: 50%; transform: translateX(-50%) scale(0.92); max-width: 340px;">
+        <span class="agent-label">patient assistant</span>
+        I need to ask two organizations I've never talked to before.
+        <span class="crypto">→ No shared auth · No API keys · No prior relationship</span>
+      </div>
+
+      <!-- "Strangers" callout labels — appear last -->
+      <div id="s2-strangers" style="position: absolute; top: 720px; left: 50%; transform: translateX(-50%); display: flex; gap: 32px; opacity: 0; transition: opacity 1s ease;">
+        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-muted); padding: 6px 14px; border: 1px solid #1a1a22; border-radius: 6px;">no shared database</div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-muted); padding: 6px 14px; border: 1px solid #1a1a22; border-radius: 6px;">no shared login</div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-muted); padding: 6px 14px; border: 1px solid #1a1a22; border-radius: 6px;">no shared cloud</div>
+      </div>
+
+    </div>
+
+    <div class="scene-title">
+      <h2 id="s2-title" style="opacity: 0; transition: opacity 1s ease;">Three systems that have never met. Strangers on the internet.</h2>
+      <div class="subtitle" id="s2-subtitle" style="opacity: 0; transition: opacity 1s ease;">How does Alex's assistant get answers from organizations it has no relationship with?</div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCENE 3: INTRODUCTION HANDSHAKE ═══════ -->
+  <div class="kf" id="kf3">
+    <div class="top-label">Cross-Domain Introduction Protocol</div>
+
+    <div class="handshake-scene">
+      <!-- Triangle of nodes -->
+      <div class="handshake-nodes" id="handshakeNodes">
+        <!-- Key hierarchy legend (centered below triangle) -->
+        <div class="key-hierarchy" id="keyHierarchy">
+          <div style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Key Hierarchy</div>
+          <div class="key-line" id="klA" style="background: var(--accent)44;"></div>
+          <div class="key-level" id="kl1">
+            <div class="key-dot" style="background: var(--accent);"></div>
+            <div>
+              <div class="key-label" style="color: var(--accent);">Genesis Key</div>
+              <div class="key-desc">Root of trust</div>
+            </div>
+          </div>
+          <div class="key-line" id="klB" style="background: var(--accent)33;"></div>
+          <div class="key-level" id="kl2">
+            <div class="key-dot" style="background: var(--accent)88;"></div>
+            <div>
+              <div class="key-label" style="color: var(--accent)cc;">Operator Key</div>
+              <div class="key-desc">Signed by genesis</div>
+            </div>
+          </div>
+          <div class="key-line" id="klB2" style="background: var(--accent)22;"></div>
+          <div class="key-level" id="kl3">
+            <div class="key-dot" style="background: var(--accent)55;"></div>
+            <div>
+              <div class="key-label" style="color: var(--accent)88;">Agent Key</div>
+              <div class="key-desc">Signed by operator</div>
+            </div>
+          </div>
+        </div>
+        <svg class="connection-svg" viewBox="0 0 1000 500">
+          <!-- Patient center: (500,40)  Clinic center: (160,399)  Pharmacy center: (840,399) -->
+          <line class="conn-line" id="connPC" x1="500" y1="40" x2="160" y2="399" stroke="#a78bfa" stroke-width="1.5" opacity="0.6" />
+          <line class="conn-line" id="connPP" x1="500" y1="40" x2="840" y2="399" stroke="#34d399" stroke-width="1.5" opacity="0.6" />
+          <!-- Certificate chain packets at midpoints -->
+          <g class="chain-packet" id="pktPC">
+            <rect x="290" y="208" width="80" height="24" rx="4" fill="#a78bfa22" stroke="#a78bfa44" />
+            <text x="330" y="224" font-family="JetBrains Mono" font-size="9" fill="#a78bfa" text-anchor="middle">cert chain</text>
+          </g>
+          <g class="chain-packet" id="pktPP">
+            <rect x="630" y="208" width="80" height="24" rx="4" fill="#34d39922" stroke="#34d39944" />
+            <text x="670" y="224" font-family="JetBrains Mono" font-size="9" fill="#34d399" text-anchor="middle">cert chain</text>
+          </g>
+        </svg>
+
+        <div class="node-badge node-patient">
+          <div class="node-icon" style="font-family: 'JetBrains Mono'; font-size: 24px; font-weight: 700;">A</div>
+          <div class="node-name">Patient</div>
+          <div class="node-org">Patient Cloud</div>
+          <div class="genesis-fp">genesis: e2c7d44f...</div>
+        </div>
+        <div class="node-badge node-clinic">
+          <div class="node-icon" style="font-size: 28px;">✚</div>
+          <div class="node-name">Clinic</div>
+          <div class="node-org">MediCare Foundation</div>
+          <div class="genesis-fp">genesis: a7f3b21e...</div>
+        </div>
+        <div class="node-badge node-pharmacy">
+          <div class="node-icon" style="font-size: 28px;">℞</div>
+          <div class="node-name">Pharmacy</div>
+          <div class="node-org">QuickRx Holdings</div>
+          <div class="genesis-fp">genesis: d4e8f109...</div>
+        </div>
+      </div>
+
+      <!-- Agent conversation bubbles -->
+      <div id="s3-bub1" class="bubble bubble-patient" style="top: 110px; left: 310px;">
+        <span class="agent-label">patient → clinic</span>
+        Here's my certificate chain. I need appointment data.
+        <span class="crypto">→ IntroductionRequest { chain: [genesis→op→agent], nonce }</span>
+      </div>
+
+      <div id="s3-bub2" class="bubble bubble-clinic tail-top" style="bottom: 90px; left: 80px;">
+        <span class="agent-label">clinic (evaluating)</span>
+        Verifying chain... leaf → operator → genesis ✓
+        <span class="crypto">→ verify_introduction() · PolicyEngine::evaluate()</span>
+      </div>
+
+      <div id="s3-bub3" class="bubble bubble-clinic tail-top" style="bottom: 40px; left: 80px;">
+        <span class="agent-label">clinic → patient</span>
+        Verified. Here's my chain. You're trusted.
+        <span class="crypto">→ IntroductionResponse::accept(chain, signed_nonce)</span>
+      </div>
+
+      <div id="s3-bub4" class="bubble bubble-pharmacy tail-top tail-right" style="bottom: 90px; right: 80px;">
+        <span class="agent-label">pharmacy (evaluating)</span>
+        Different genesis. Cross-domain request... checking policy.
+        <span class="crypto">→ TrustTier::Tier1 · Channel::Api · PolicyDecision</span>
+      </div>
+
+      <div id="s3-bub5" class="bubble bubble-pharmacy tail-top tail-right" style="bottom: 40px; right: 80px;">
+        <span class="agent-label">pharmacy → patient</span>
+        Accepted. My policy, my rules.
+        <span class="crypto">→ trusted_peers.insert(peer_key, verified_chain)</span>
+      </div>
+    </div>
+
+    <div class="scene-title">
+      <h2>Three genesis keys. No shared root. Trust verified by math.</h2>
+      <div class="subtitle">The patient introduces to each peer independently — no clinic↔pharmacy link needed</div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCENE 4: CLINIC DATA EXCHANGE ═══════ -->
+  <div class="kf" id="kf4">
+    <div class="top-label">Step 2 — Query MediCare Clinic</div>
+
+    <div class="exchange-scene">
+      <div class="exchange-left">
+        <div class="data-card" id="clinicData">
+          <h3 style="color: var(--clinic-color);">Clinic Response — Patient 12345</h3>
+          <div class="data-row"><span class="data-key">patient_name</span><span class="data-val">Alex Chen</span></div>
+          <div class="data-row"><span class="data-key">condition</span><span class="data-val">hypertension follow-up</span></div>
+          <div class="data-row"><span class="data-key">status</span><span class="data-val yel">rescheduled</span></div>
+          <div class="data-row"><span class="data-key">previous_date</span><span class="data-val">2026-03-01</span></div>
+          <div class="data-row"><span class="data-key">scheduled_date</span><span class="data-val bold">2026-03-08</span></div>
+          <div style="margin-top: 16px;">
+            <span class="policy-badge policy-sanitize">CLINIC'S OWN POLICY</span>
+          </div>
+          <div class="redacted-indicator">The clinic decided what to share — not a platform</div>
+        </div>
+
+        <div class="data-card" id="pharmacyData" style="margin-top: 4px;">
+          <h3 style="color: var(--pharmacy-color);">Pharmacy Response — Patient 12345</h3>
+          <div class="data-row"><span class="data-key">medication</span><span class="data-val">Lisinopril 10mg</span></div>
+          <div class="data-row"><span class="data-key">filled_date</span><span class="data-val">2026-03-04</span></div>
+          <div class="data-row"><span class="data-key">status</span><span class="data-val grn">ready_for_pickup</span></div>
+          <div class="data-row"><span class="data-key">ready_since</span><span class="data-val">2026-03-05T14:00:00Z</span></div>
+          <div style="margin-top: 16px;">
+            <span class="policy-badge policy-sanitize">PHARMACY'S OWN POLICY</span>
+          </div>
+          <div class="redacted-indicator">Each data owner controls its own governance</div>
+        </div>
+      </div>
+
+      <div class="exchange-right">
+        <div class="receipt-vis" id="receiptVis">
+          <div class="receipt-header">Signed Receipt — Clinic Access</div>
+          <div class="receipt-field" id="rf1"><span class="rf-key">id</span><span class="rf-val dim">accs-c4f8a291...</span></div>
+          <div class="receipt-field" id="rf2"><span class="rf-key">receipt_type</span><span class="rf-val">Access</span></div>
+          <div class="receipt-field" id="rf3"><span class="rf-key">node_id</span><span class="rf-val clinic-c">clinic</span></div>
+          <div class="receipt-field" id="rf4"><span class="rf-key">status</span><span class="rf-val grn">Success</span></div>
+          <div class="receipt-field" id="rf5"><span class="rf-key">trust_grade</span><span class="rf-val cyn">B</span></div>
+          <div class="receipt-field" id="rf6"><span class="rf-key">parent_receipt_id</span><span class="rf-val dim">intn-a8f3...</span></div>
+          <div class="receipt-field" id="rf7"><span class="rf-key">action</span><span class="rf-val">patient_appointment_query</span></div>
+          <div class="receipt-field" id="rf8"><span class="rf-key">content_hash</span><span class="rf-val"><span class="hash-highlight">b3a7c9e2f1d8...</span> <span class="dim">Blake3</span></span></div>
+          <div class="receipt-field" id="rf9"><span class="rf-key">signature</span><span class="rf-val"><span class="sig-highlight">7f2a4b8c...</span> <span class="dim">Ed25519</span></span></div>
+          <div class="receipt-field" id="rf10"><span class="rf-key">policy_decision</span><span class="rf-val yel">Clinic's own rules</span></div>
+        </div>
+      </div>
+
+      <!-- Agent conversation bubbles overlaid on exchange scene -->
+      <div id="s4-bub1" class="bubble bubble-patient tail-none" style="top: 20px; left: 120px; max-width: 300px;">
+        <span class="agent-label">patient → clinic</span>
+        I need records for patient-12345. Here's my intent receipt as proof of purpose.
+        <span class="crypto">→ QueryRequest { chain, query: "patient-12345", parent: "intn-a8f3" }</span>
+      </div>
+
+      <div id="s4-bub2" class="bubble bubble-clinic tail-none" style="top: 20px; right: 200px; max-width: 300px;">
+        <span class="agent-label">clinic (internal)</span>
+        5 patients in DB. Returning only the match. 4 records redacted.
+        <span class="crypto">→ Receipt::access().action( "patient_appointment_query" ).finalize().sign()</span>
+      </div>
+
+      <div id="s4-bub3" class="bubble bubble-pharmacy tail-none" style="top: 20px; left: 50%; transform: translateX(-50%); max-width: 300px;">
+        <span class="agent-label">pharmacy → patient</span>
+        Prescription found. Filled March 4. Ready for pickup.
+        <span class="crypto">→ content_hash: Blake3(canonical) · signature: Ed25519(agent_key)</span>
+      </div>
+    </div>
+
+    <div class="scene-title">
+      <h2>The data owner controls the policy. Not the platform.</h2>
+      <div class="subtitle">Each organization defines its own rules, runs its own evaluation, signs its own proof</div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCENE 5: PROVENANCE CHAIN ═══════ -->
+  <div class="kf" id="kf5">
+    <div class="top-label">Cryptographic Provenance</div>
+
+    <div class="provenance-scene">
+      <div class="chain-flow" id="chainFlow">
+        <!-- Intent -->
+        <div class="chain-node" id="cn1">
+          <div class="chain-icon" style="border-color: var(--patient-color); color: var(--patient-color); background: #7eb8da0a;">
+            1
+            <div class="check" id="ck1">✓</div>
+          </div>
+          <div class="chain-label" style="color: var(--patient-color);">Intent</div>
+          <div class="chain-hash">intn-a8f3...</div>
+        </div>
+
+        <div class="chain-arrow" id="ca1"></div>
+
+        <!-- Clinic Access -->
+        <div class="chain-node" id="cn2">
+          <div class="chain-icon" style="border-color: var(--clinic-color); color: var(--clinic-color); background: #a78bfa0a;">
+            2
+            <div class="check" id="ck2">✓</div>
+          </div>
+          <div class="chain-label" style="color: var(--clinic-color);">Clinic Access</div>
+          <div class="chain-hash">accs-c4f8...</div>
+        </div>
+
+        <div class="chain-arrow" id="ca2"></div>
+
+        <!-- Pharmacy Access -->
+        <div class="chain-node" id="cn3">
+          <div class="chain-icon" style="border-color: var(--pharmacy-color); color: var(--pharmacy-color); background: #34d3990a;">
+            3
+            <div class="check" id="ck3">✓</div>
+          </div>
+          <div class="chain-label" style="color: var(--pharmacy-color);">Pharmacy Access</div>
+          <div class="chain-hash">accs-e7b1...</div>
+        </div>
+
+        <div class="chain-arrow" id="ca3"></div>
+
+        <!-- Synthesis -->
+        <div class="chain-node" id="cn4">
+          <div class="chain-icon" style="border-color: var(--accent); color: var(--accent); background: #7eb8da0a;">
+            4
+            <div class="check" id="ck4">✓</div>
+          </div>
+          <div class="chain-label" style="color: var(--accent);">Synthesis</div>
+          <div class="chain-hash">exec-2d9a...</div>
+        </div>
+      </div>
+
+      <div style="text-align: center; max-width: 700px; margin-top: 24px;">
+        <div style="font-family: 'Inter'; font-size: 20px; font-weight: 300; color: var(--text); opacity: 0; transition: opacity 1s ease;" id="synthAnswer">
+          "Your prescription was filled and is ready for pickup.<br>
+          Your follow-up was rescheduled, which delayed the notification."
+        </div>
+        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-dim); margin-top: 16px; opacity: 0; transition: opacity 1s ease 0.5s;" id="synthProof">
+          ✓ All 4 receipts verified — hash valid, signature present
+        </div>
+      </div>
+
+      <!-- Agent bubble for synthesis -->
+      <div id="s5-bub1" class="bubble bubble-patient tail-none" style="bottom: 100px; left: 50%; transform: translateX(-50%) scale(0.92); max-width: 400px; text-align: center;">
+        <span class="agent-label">patient assistant → alex</span>
+        Here's your answer — and here's the cryptographic proof of every step I took to get it.
+        <span class="crypto">→ 4 receipts · 3 genesis domains · verify_hash() ✓ on all</span>
+      </div>
+    </div>
+
+    <div class="scene-title">
+      <h2>Four receipts. Three trust domains. One verifiable answer.</h2>
+      <div class="subtitle">Anyone can check the chain — no authority required</div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCENE 6: WHAT'S NOT HERE ═══════ -->
+  <div class="kf" id="kf6">
+    <div class="top-label">What's Not Here</div>
+
+    <div class="absence-scene">
+      <div class="absence-grid" id="absenceGrid">
+        <div class="absence-item" id="ab1">
+          <div class="strikethrough">Central platform</div>
+          <div class="replacement">→ Portable certificate chains</div>
+        </div>
+        <div class="absence-item" id="ab2">
+          <div class="strikethrough">Shared database</div>
+          <div class="replacement">→ Signed receipts over HTTPS</div>
+        </div>
+        <div class="absence-item" id="ab3">
+          <div class="strikethrough">OAuth / identity provider</div>
+          <div class="replacement">→ Ed25519 key hierarchy</div>
+        </div>
+        <div class="absence-item" id="ab4">
+          <div class="strikethrough">Vendor lock-in</div>
+          <div class="replacement">→ Governance travels with the data</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene-title">
+      <h2>Trust that works between strangers. Over plain HTTPS.</h2>
+      <div class="subtitle">No shared infrastructure required — just math</div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCENE 7: CLOSING ═══════ -->
+  <div class="kf" id="kf7">
+    <div class="closing-scene">
+      <div class="tagline" id="closingTagline">ZeroPoint makes the math do the work.</div>
+      <div class="zp-mark" id="closingMark">zeropoint.global</div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCENE 8: CTA ═══════ -->
+  <div class="kf" id="kf8">
+    <div class="top-label">Try It Yourself</div>
+
+    <div style="position: absolute; top: 44%; left: 50%; transform: translate(-50%, -50%); width: 860px;">
+
+      <!-- Terminal snippet -->
+      <div class="terminal" id="ctaTerminal" style="opacity: 0; transform: translateY(12px); transition: all 0.8s ease;">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span></span><span></span><span></span></div>
+          <span class="terminal-title">your-machine</span>
+        </div>
+        <div class="terminal-body" style="padding: 16px 20px; font-size: 12px; line-height: 1.6;">
+          <div class="cta-line"><span class="prompt">$</span> <span class="dim">git clone https://github.com/zeropoint-foundation/zeropoint</span></div>
+          <div class="cta-line"><span class="prompt">$</span> <span class="dim">cd zeropoint</span></div>
+          <div class="cta-line">&nbsp;</div>
+          <div class="cta-line"><span class="dim"># Terminal 1</span></div>
+          <div class="cta-line"><span class="prompt">$</span> cargo run -p trust-triangle -- --role clinic --port 3001</div>
+          <div class="cta-line"><span class="dim"># Terminal 2</span></div>
+          <div class="cta-line"><span class="prompt">$</span> cargo run -p trust-triangle -- --role pharmacy --port 3002</div>
+          <div class="cta-line"><span class="dim"># Terminal 3</span></div>
+          <div class="cta-line"><span class="prompt">$</span> cargo run -p trust-triangle -- --role patient \</div>
+          <div class="cta-line">    --clinic http://localhost:3001 --pharmacy http://localhost:3002</div>
+        </div>
+      </div>
+
+      <!-- CTA text -->
+      <div id="ctaText" style="opacity: 0; transition: opacity 1s ease; margin-top: 36px; text-align: center;">
+        <div style="font-family: 'Inter'; font-size: 19px; font-weight: 300; color: var(--text); line-height: 1.7;">
+          The Trust Triangle is healthcare. Yours could be supply chain, finance, or&nbsp;legal.
+        </div>
+        <div style="font-family: 'Inter'; font-size: 19px; font-weight: 300; color: var(--accent); line-height: 1.7; margin-top: 4px;">
+          The ZeroPoint substrate is the same. Start building.
+        </div>
+        <div style="display: flex; gap: 20px; margin-top: 28px; justify-content: center;">
+          <div style="font-family: 'JetBrains Mono'; font-size: 12px; padding: 10px 20px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent);">
+            github.com/zeropoint-foundation/zeropoint
+          </div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 12px; padding: 10px 20px; border: 1px solid #3a3a44; border-radius: 8px; color: var(--text-dim);">
+            zeropoint.global
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- START SCREEN — shows loading state, then play button when ready -->
+  <div id="startScreen" style="position: absolute; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 24px; cursor: default; padding-bottom: 100px;">
+    <div style="font-family: 'Inter'; font-size: 14px; font-weight: 300; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase;">Trust Triangle</div>
+    <!-- Loading state (shown initially) -->
+    <div id="loadingState" style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
+      <div id="loadingSpinner" style="width: 48px; height: 48px; border: 2px solid var(--text-muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+      <div id="loadingLabel" style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-muted);">Loading narration…</div>
+    </div>
+    <!-- Ready state (shown after preload completes) -->
+    <div id="readyState" style="display: none; flex-direction: column; align-items: center; gap: 16px;">
+      <button id="startBtn" style="width: 80px; height: 80px; border-radius: 50%; background: transparent; border: 2px solid var(--accent); color: var(--accent); font-size: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; padding-left: 6px;" onmouseover="this.style.background='#7eb8da18'" onmouseout="this.style.background='transparent'" onclick="startPresentation()">▶</button>
+      <div id="startLabel" style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--green);">Click to play with narration</div>
+      <div id="desktopHint" style="display: none; font-family: 'JetBrains Mono'; font-size: 10px; color: var(--text-dim); margin-top: 4px;">Best experienced on desktop</div>
+    </div>
+  </div>
+  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
+  <!-- Tap overlay — tap anywhere to pause/resume on mobile (only shown when accessed directly) -->
+  <div id="tapOverlay" style="display: none; position: absolute; inset: 0; z-index: 150; cursor: pointer;"
+    onclick="if(started) toggleAuto()"></div>
+
+  <!-- Audio indicator -->
+  <div id="audioIndicator" style="display: none; position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-family: 'JetBrains Mono'; font-size: 11px; color: var(--green); z-index: 100;">
+    ♫ Audio synced
+  </div>
+
+  <!-- Controls -->
+  <div class="controls" id="controls" style="display: none;">
+    <button onclick="prevScene()" title="← Previous scene">◂</button>
+    <button onclick="toggleAuto()" id="autoBtn" class="play-btn" title="Space = pause/play">⏸</button>
+    <button onclick="nextScene()" title="→ Next scene">▸</button>
+    <div class="divider"></div>
+    <span class="info"><strong id="stepIndicator">1/8</strong></span>
+    <span class="info" id="paraIndicator" style="display:none;">p01</span>
+    <span class="info" id="audioTime" style="display:none;">0:00</span>
+    <div class="divider"></div>
+    <button onclick="restartPresentation()" title="Restart from beginning">⟲</button>
+  </div>
+  <!-- Progress bar -->
+  <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: #1a1a22; z-index: 100;">
+    <div id="progressBar" style="height: 100%; width: 0%; background: var(--accent); transition: width 0.5s ease;"></div>
+  </div>
+
+  <!-- Back link — only visible when accessed directly (not in iframe) -->
+  <a id="backLink" href="/" style="display: none; position: absolute; top: 24px; left: 32px; z-index: 300;
+    font-family: 'JetBrains Mono', monospace; font-size: 22px; color: #5a5a5e; text-decoration: none;
+    transition: color 0.2s;" onmouseover="this.style.color='#7eb8da'" onmouseout="this.style.color='#5a5a5e'">
+    &larr; <span style="font-size: 16px;">zeropoint</span>
+  </a>
+</div>
+
+<script>
+  // ── VIEWPORT FALLBACK ──
+  // The viewport meta (width=1920) tells mobile browsers to scale the 1920px canvas
+  // to fit the screen. Safari and Chrome honor this, but some browsers (Yandex, etc.)
+  // do not. Detect this and apply a CSS transform as a fallback.
+  (function() {
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+    if (vw < 1920 && window.self === window.top) {
+      var scale = vw / 1920;
+      document.body.style.transform = 'scale(' + scale + ')';
+      document.body.style.height = '100vh';
+      // Prevent page from scrolling into the un-scaled overflow area
+      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.style.height = '100vh';
+    }
+  })();
+
+  const totalScenes = 8;
+  let currentScene = 1;
+  // Show back link + desktop hint when accessed directly (not inside an iframe)
+  if (window.self === window.top) {
+    const bl = document.getElementById('backLink');
+    if (bl) bl.style.display = 'block';
+    if ('ontouchstart' in window) {
+      const dh = document.getElementById('desktopHint');
+      if (dh) dh.style.display = 'block';
+    }
+  }
+
+  let autoPlay = true;
+  let autoTimer = null;
+  let currentAudio = null;
+  let sceneTimeouts = [];  // Track all onStart setTimeout IDs for cleanup
+
+  // ── PARAGRAPH-BASED AUDIO ENGINE ──
+  // Each narration paragraph is its own audio file (p01.mp3–p29.mp3).
+  // When one ends, the next visual beat triggers and the next file plays.
+
+  const paragraphs = [
+    // ── SCENE 1: Establishing — terminals booting ──
+    { file: 'assets/trust-triangle/p01.mp3', scene: 1, fallbackDuration: 8000,
+      onStart: () => {
+        const terminals = ['t-clinic', 't-pharmacy', 't-patient'];
+        terminals.forEach((id, i) => {
+          sceneTimeout(() => {
+            document.getElementById(id).classList.add(
+              id === 't-clinic' ? 'glow-clinic' : id === 't-pharmacy' ? 'glow-pharmacy' : 'glow-patient'
+            );
+            const bodyId = 'tb-' + id.split('-')[1];
+            document.querySelectorAll(`#${bodyId} .line`).forEach((line, j) => {
+              sceneTimeout(() => line.classList.add('visible'), j * 80);
+            });
+          }, i * 600);
+        });
+        // Pulse the headers to call attention to the three players
+        sceneTimeout(() => {
+          document.querySelectorAll('.terminal-header').forEach((hdr, i) => {
+            sceneTimeout(() => {
+              hdr.classList.add('pulse');
+              hdr.addEventListener('animationend', () => hdr.classList.remove('pulse'), { once: true });
+            }, i * 400);
+          });
+        }, 2500);
+      }},
+    { file: 'assets/trust-triangle/p02.mp3', scene: 2, fallbackDuration: 5000,
+      onStart: () => {
+        sceneTimeout(() => document.getElementById('s2-question').style.opacity = '1', 300);
+        sceneTimeout(() => document.getElementById('alex-figure').classList.add('visible'), 800);
+      }},
+    { file: 'assets/trust-triangle/p03.mp3', scene: 2, fallbackDuration: 5000,
+      onStart: () => {
+        sceneTimeout(() => document.getElementById('alex-figure').classList.add('phone-out'), 500);
+      }},
+    { file: 'assets/trust-triangle/p04.mp3', scene: 2, fallbackDuration: 14000,
+      onStart: () => {
+        // Fade out Alex as focus shifts to his AI agent
+        document.getElementById('alex-figure').classList.remove('visible');
+        sceneTimeout(() => document.getElementById('s2-bub1').classList.add('visible'), 500);
+        sceneTimeout(() => { const el = document.getElementById('s2-clinic'); el.style.opacity = '1'; el.style.transform = 'translateY(0)'; }, 3000);
+        sceneTimeout(() => { const el = document.getElementById('s2-pharmacy'); el.style.opacity = '1'; el.style.transform = 'translateY(0)'; }, 4500);
+        sceneTimeout(() => { document.getElementById('s2-bub1').classList.remove('visible'); document.getElementById('s2-disconnect').style.opacity = '1'; }, 12000);
+        sceneTimeout(() => document.getElementById('s2-patient').style.opacity = '1', 13000);
+      }},
+    { file: 'assets/trust-triangle/p05.mp3', scene: 2, fallbackDuration: 7000,
+      onStart: () => {
+        sceneTimeout(() => document.getElementById('s2-reach-lines').style.opacity = '1', 500);
+        sceneTimeout(() => document.getElementById('s2-bub2').classList.add('visible'), 1500);
+        sceneTimeout(() => { document.getElementById('s2-bub2').classList.remove('visible'); document.getElementById('s2-strangers').style.opacity = '1'; }, 5000);
+      }},
+    { file: 'assets/trust-triangle/p06.mp3', scene: 2, fallbackDuration: 5000,
+      onStart: () => {
+        sceneTimeout(() => document.getElementById('s2-title').style.opacity = '1', 500);
+        sceneTimeout(() => document.getElementById('s2-subtitle').style.opacity = '1', 2000);
+      }},
+    // ── SCENE 3 ──
+    { file: 'assets/trust-triangle/p07.mp3', scene: 3, fallbackDuration: 4000, onStart: () => {}},
+    { file: 'assets/trust-triangle/p08.mp3', scene: 3, fallbackDuration: 10000, onStart: () => { stagger(['kl1', 'kl2', 'kl3'], 400, 300); }},
+    { file: 'assets/trust-triangle/p09.mp3', scene: 3, fallbackDuration: 8000, onStart: () => { stagger(['klA', 'klB', 'klB2'], 400, 300); }},
+    { file: 'assets/trust-triangle/p10.mp3', scene: 3, fallbackDuration: 12000,
+      onStart: () => {
+        sceneTimeout(() => { document.getElementById('connPC').classList.add('active'); sceneTimeout(() => document.getElementById('pktPC').classList.add('visible'), 800); }, 500);
+        sceneTimeout(() => document.getElementById('s3-bub1').classList.add('visible'), 800);
+        sceneTimeout(() => { document.getElementById('s3-bub1').classList.remove('visible'); document.getElementById('s3-bub2').classList.add('visible'); }, 5000);
+        sceneTimeout(() => { document.getElementById('s3-bub2').classList.remove('visible'); document.getElementById('s3-bub3').classList.add('visible'); }, 8500);
+        sceneTimeout(() => document.getElementById('s3-bub3').classList.remove('visible'), 11500);
+      }},
+    { file: 'assets/trust-triangle/p11.mp3', scene: 3, fallbackDuration: 7000,
+      onStart: () => {
+        sceneTimeout(() => { document.getElementById('connPP').classList.add('active'); sceneTimeout(() => document.getElementById('pktPP').classList.add('visible'), 800); }, 300);
+        sceneTimeout(() => document.getElementById('s3-bub4').classList.add('visible'), 1000);
+        sceneTimeout(() => { document.getElementById('s3-bub4').classList.remove('visible'); document.getElementById('s3-bub5').classList.add('visible'); }, 5000);
+        sceneTimeout(() => document.getElementById('s3-bub5').classList.remove('visible'), 8500);
+      }},
+    { file: 'assets/trust-triangle/p12.mp3', scene: 3, fallbackDuration: 8000, onStart: () => {}},
+    // ── SCENE 4 ──
+    { file: 'assets/trust-triangle/p13.mp3', scene: 4, fallbackDuration: 3000, onStart: () => {}},
+    { file: 'assets/trust-triangle/p14.mp3', scene: 4, fallbackDuration: 7000,
+      onStart: () => {
+        sceneTimeout(() => document.getElementById('s4-bub1').classList.add('visible'), 300);
+        sceneTimeout(() => document.getElementById('clinicData').classList.add('visible'), 800);
+        sceneTimeout(() => document.getElementById('s4-bub1').classList.remove('visible'), 6500);
+      }},
+    { file: 'assets/trust-triangle/p15.mp3', scene: 4, fallbackDuration: 12000,
+      onStart: () => {
+        sceneTimeout(() => document.getElementById('s4-bub2').classList.add('visible'), 300);
+        stagger(['rf1','rf2','rf3','rf4','rf5','rf6','rf7','rf8','rf9','rf10'], 350, 1500);
+        sceneTimeout(() => document.getElementById('s4-bub2').classList.remove('visible'), 8000);
+      }},
+    { file: 'assets/trust-triangle/p16.mp3', scene: 4, fallbackDuration: 7000,
+      onStart: () => {
+        sceneTimeout(() => { document.getElementById('pharmacyData').classList.add('visible'); document.getElementById('s4-bub3').classList.add('visible'); }, 500);
+        sceneTimeout(() => document.getElementById('s4-bub3').classList.remove('visible'), 5000);
+      }},
+    // ── SCENE 5 ──
+    { file: 'assets/trust-triangle/p17.mp3', scene: 5, fallbackDuration: 4000, onStart: () => {}},
+    { file: 'assets/trust-triangle/p18.mp3', scene: 5, fallbackDuration: 5000, onStart: () => { sceneTimeout(() => document.getElementById('synthAnswer').style.opacity = '1', 300); }},
+    { file: 'assets/trust-triangle/p19.mp3', scene: 5, fallbackDuration: 10000,
+      onStart: () => {
+        ['cn1','cn2','cn3','cn4'].forEach((id, i) => { sceneTimeout(() => { document.getElementById(id).classList.add('visible'); if (i > 0) document.getElementById(['ca1','ca2','ca3'][i-1]).classList.add('visible'); }, i * 800); });
+        sceneTimeout(() => document.getElementById('synthProof').style.opacity = '1', 3500);
+      }},
+    { file: 'assets/trust-triangle/p20.mp3', scene: 5, fallbackDuration: 8000,
+      onStart: () => {
+        ['ck1','ck2','ck3','ck4'].forEach((id, i) => { sceneTimeout(() => document.getElementById(id).classList.add('visible'), i * 500 + 300); });
+        sceneTimeout(() => document.getElementById('s5-bub1').classList.add('visible'), 2500);
+      }},
+    // ── SCENE 6 ──
+    { file: 'assets/trust-triangle/p21.mp3', scene: 6, fallbackDuration: 3000, onStart: () => {}},
+    { file: 'assets/trust-triangle/p22.mp3', scene: 6, fallbackDuration: 7000, onStart: () => { stagger(['ab1','ab2'], 600, 400); }},
+    { file: 'assets/trust-triangle/p23.mp3', scene: 6, fallbackDuration: 7000, onStart: () => { stagger(['ab3','ab4'], 600, 400); }},
+    { file: 'assets/trust-triangle/p24.mp3', scene: 6, fallbackDuration: 8000, onStart: () => {}},
+    { file: 'assets/trust-triangle/p25.mp3', scene: 6, fallbackDuration: 8000, onStart: () => {}},
+    // ── SCENE 7 ──
+    { file: 'assets/trust-triangle/p26.mp3', scene: 7, fallbackDuration: 5000,
+      onStart: () => { sceneTimeout(() => document.getElementById('closingTagline').classList.add('visible'), 500); sceneTimeout(() => document.getElementById('closingMark').classList.add('visible'), 500); }},
+    { file: null, scene: 7, fallbackDuration: 4000, onStart: () => {}},
+    // ── SCENE 8 ──
+    { file: 'assets/trust-triangle/p27.mp3', scene: 8, fallbackDuration: 5000,
+      onStart: () => { const t = document.getElementById('ctaTerminal'); sceneTimeout(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; }, 400); }},
+    { file: 'assets/trust-triangle/p28.mp3', scene: 8, fallbackDuration: 12000,
+      onStart: () => { sceneTimeout(() => document.getElementById('ctaText').style.opacity = '1', 500); }},
+    { file: 'assets/trust-triangle/p29.mp3', scene: 8, fallbackDuration: 8000, onStart: () => {}},
+  ];
+
+  let currentParagraph = 0;
+  let audioMode = false;
+  let audioDetectionDone = false;
+  let started = false;
+
+  // Audio blob storage — populated by the preload IIFE before play button appears
+  const audioBlobs = {};
+  let preloadComplete = false;
+
+  // ── PERSISTENT AUDIO ELEMENT ──
+  // A single Audio element reused for all playback. This is critical for browsers
+  // like Yandex that only "unlock" the specific Audio element that was played
+  // during a user gesture — creating new Audio() objects loses the unlock.
+  // Staleness is tracked via a generation counter instead of object identity.
+  const audioEl = new Audio();
+  let audioGen = 0;  // incremented each time we start a new paragraph
+  // Tiny silent WAV for unlocking (44-byte valid WAV)
+  const silentDataURI = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
+  // ── PRELOAD-FIRST STRATEGY ──
+  // Fetch ALL audio as blobs before showing the play button.
+  // This guarantees every playParagraph() call uses instant blob URLs —
+  // no buffering races, no Yandex quirks, no silent first plays.
+  function showReady(withAudio) {
+    audioMode = withAudio;
+    audioDetectionDone = true;
+    document.getElementById('loadingState').style.display = 'none';
+    var readyEl = document.getElementById('readyState');
+    readyEl.style.display = 'flex';
+    if (!withAudio) {
+      document.getElementById('startLabel').textContent = 'Click to play (no audio found)';
+      document.getElementById('startLabel').style.color = 'var(--text-muted)';
+    }
+    document.getElementById('startScreen').style.cursor = 'pointer';
+    document.getElementById('startScreen').onclick = startPresentation;
+  }
+
+  // Start preloading immediately — fetch works without a user gesture
+  (function() {
+    var loadingLabel = document.getElementById('loadingLabel');
+    var files = paragraphs.map(function(p) { return p.file; }).filter(Boolean);
+    var unique = [];
+    files.forEach(function(f) { if (unique.indexOf(f) === -1) unique.push(f); });
+    var loaded = 0;
+    var failed = 0;
+
+    if (unique.length === 0) { showReady(false); return; }
+
+    function checkDone() {
+      if (loaded + failed >= unique.length) {
+        preloadComplete = true;
+        showReady(loaded > 0);
+      }
+    }
+
+    unique.forEach(function(file) {
+      fetch(file).then(function(resp) {
+        if (!resp.ok) throw new Error('not found');
+        return resp.blob();
+      }).then(function(blob) {
+        audioBlobs[file] = URL.createObjectURL(blob);
+        loaded++;
+        if (loadingLabel) {
+          var pct = Math.round(((loaded + failed) / unique.length) * 100);
+          loadingLabel.textContent = 'Loading narration… ' + pct + '%';
+        }
+        checkDone();
+      }).catch(function() {
+        failed++;
+        checkDone();
+      });
+    });
+
+    // Safety timeout — if preload stalls after 15s, show play button anyway
+    setTimeout(function() {
+      if (!audioDetectionDone) {
+        preloadComplete = true;
+        showReady(loaded > 0);
+      }
+    }, 15000);
+  })();
+
+  function firstParagraphOfScene(scene) { return paragraphs.findIndex(p => p.scene === scene); }
+
+  function updateProgress() {
+    document.getElementById('progressBar').style.width = `${((currentScene - 1) / totalScenes) * 100}%`;
+    document.getElementById('stepIndicator').textContent = `${currentScene} / ${totalScenes}`;
+    const pNum = String(currentParagraph + 1).padStart(2, '0');
+    document.getElementById('paraIndicator').textContent = `p${pNum}`;
+  }
+
+  // Tracked setTimeout — use this instead of raw setTimeout in onStart callbacks
+  function sceneTimeout(fn, ms) {
+    const id = setTimeout(fn, ms);
+    sceneTimeouts.push(id);
+    return id;
+  }
+
+  // ── RESET ALL SCENE ELEMENTS ──
+  // Clears every dynamically-applied class, style, and state from onStart() callbacks.
+  // Must be called before entering any scene to prevent stale element accumulation.
+  function resetAllSceneElements() {
+    // Cancel all pending onStart timeouts
+    sceneTimeouts.forEach(id => clearTimeout(id));
+    sceneTimeouts = [];
+    // Scene 1: terminal glows + line visibility
+    ['t-clinic', 't-pharmacy', 't-patient'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('glow-clinic', 'glow-pharmacy', 'glow-patient');
+    });
+    document.querySelectorAll('.terminal-body .line').forEach(el => el.classList.remove('visible'));
+    document.querySelectorAll('.terminal-header').forEach(el => el.classList.remove('pulse'));
+
+    // Scene 2: opacity-driven elements
+    ['s2-question', 's2-disconnect', 's2-patient', 's2-reach-lines', 's2-strangers', 's2-title', 's2-subtitle'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.opacity = '0';
+    });
+    ['s2-clinic', 's2-pharmacy'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.style.opacity = '0'; el.style.transform = 'translateY(16px)'; }
+    });
+    ['s2-bub1', 's2-bub2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    const alex = document.getElementById('alex-figure');
+    if (alex) { alex.classList.remove('visible', 'phone-out'); }
+
+    // Scene 3: key hierarchy, connection lines, chain packets, bubbles
+    ['kl1', 'kl2', 'kl3', 'klA', 'klB', 'klB2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['connPC', 'connPP'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    });
+    ['pktPC', 'pktPP'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['s3-bub1', 's3-bub2', 's3-bub3', 's3-bub4', 's3-bub5'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+
+    // Scene 4: data cards, receipt fields, bubbles
+    ['clinicData', 'pharmacyData'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['rf1','rf2','rf3','rf4','rf5','rf6','rf7','rf8','rf9','rf10'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['s4-bub1', 's4-bub2', 's4-bub3'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+
+    // Scene 5: chain nodes, arrows, checks, synth answer/proof, bubble
+    ['cn1','cn2','cn3','cn4'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['ca1','ca2','ca3'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['ck1','ck2','ck3','ck4'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['synthAnswer', 'synthProof'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.opacity = '0';
+    });
+    const s5b = document.getElementById('s5-bub1');
+    if (s5b) s5b.classList.remove('visible');
+
+    // Scene 6: absence items
+    ['ab1','ab2','ab3','ab4'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+
+    // Scene 7: closing tagline + mark
+    ['closingTagline', 'closingMark'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+
+    // Scene 8: CTA terminal + text
+    const ctaT = document.getElementById('ctaTerminal');
+    if (ctaT) { ctaT.style.opacity = '0'; ctaT.style.transform = 'translateY(12px)'; }
+    const ctaTx = document.getElementById('ctaText');
+    if (ctaTx) ctaTx.style.opacity = '0';
+  }
+
+  function restartPresentation() {
+    if (!started) return;
+    stopCurrentAudio(); clearTimeout(autoTimer);
+    autoPlay = true;
+    document.getElementById('autoBtn').textContent = '⏸';
+    currentScene = 0; currentParagraph = 0;
+    resetAllSceneElements();
+    document.querySelectorAll('.kf').forEach(el => el.classList.remove('active'));
+    if (audioMode) playParagraph(0);
+    else showSceneTimerMode(1);
+  }
+
+  function stopCurrentAudio() {
+    audioGen++;  // invalidate any in-flight handlers
+    if (currentAudio) {
+      audioEl.pause();
+      audioEl.onended = null;
+      audioEl.ontimeupdate = null;
+      audioEl.onerror = null;
+      currentAudio = null;
+    }
+  }
+
+  function startPresentation() {
+    if (started) return;
+    started = true;
+    document.getElementById('startScreen').style.opacity = '0';
+    document.getElementById('startScreen').style.transition = 'opacity 0.5s ease';
+    setTimeout(() => {
+      document.getElementById('startScreen').style.display = 'none';
+      document.getElementById('controls').style.display = 'flex';
+      if (audioMode) document.getElementById('audioIndicator').style.display = 'block';
+      // On mobile (direct access), show tap overlay for easy pause/resume
+      if (window.self === window.top && 'ontouchstart' in window) {
+        document.getElementById('tapOverlay').style.display = 'block';
+      }
+    }, 500);
+    if (audioMode) {
+      // Unlock the persistent Audio element by playing silence SYNCHRONOUSLY
+      // in the user gesture handler. Critical for Yandex and similar browsers.
+      audioEl.src = silentDataURI;
+      audioEl.play().catch(function(){});
+      // All audio is already preloaded as blob URLs — start after brief unlock delay
+      setTimeout(function() {
+        playParagraph(0);
+      }, 150);
+    } else {
+      showSceneTimerMode(1);
+    }
+  }
+
+  // ── PARAGRAPH-DRIVEN PLAYBACK (audio mode) ──
+  // All audio is preloaded as blob URLs before the user can press play.
+  // This eliminates buffering races — every play() call is instant.
+  function playParagraph(idx, retryCount) {
+    retryCount = retryCount || 0;
+    if (idx < 0 || idx >= paragraphs.length) return;
+    currentParagraph = idx;
+    const p = paragraphs[idx];
+    if (p.scene !== currentScene) {
+      resetAllSceneElements();
+      currentScene = p.scene;
+      document.querySelectorAll('.kf').forEach(el => el.classList.remove('active'));
+      document.getElementById(`kf${currentScene}`).classList.add('active');
+    }
+    updateProgress();
+    if (p.onStart) p.onStart();
+    stopCurrentAudio(); clearTimeout(autoTimer);
+    // Silent hold paragraph — no audio, just wait fallbackDuration
+    if (!p.file) {
+      if (autoPlay) autoTimer = setTimeout(() => playParagraph(idx + 1), p.fallbackDuration);
+      return;
+    }
+    const gen = ++audioGen;
+    const src = audioBlobs[p.file] || p.file;
+    audioEl.src = src;
+    currentAudio = true;
+    const isStale = () => audioGen !== gen;
+
+    function advance() {
+      if (isStale()) return;
+      currentAudio = null;
+      if (autoPlay && idx + 1 < paragraphs.length) playParagraph(idx + 1);
+    }
+
+    function handleFailure() {
+      if (isStale()) return;
+      if (retryCount < 2) {
+        autoTimer = setTimeout(() => {
+          if (isStale()) return;
+          playParagraph(idx, retryCount + 1);
+        }, 500);
+      } else {
+        // All retries exhausted — advance on fallback timer
+        currentAudio = null;
+        if (autoPlay) autoTimer = setTimeout(() => playParagraph(idx + 1), p.fallbackDuration);
+      }
+    }
+
+    audioEl.ontimeupdate = () => {
+      if (isStale()) return;
+      const m = Math.floor(audioEl.currentTime / 60);
+      const s = Math.floor(audioEl.currentTime % 60).toString().padStart(2, '0');
+      const dm = audioEl.duration ? Math.floor(audioEl.duration / 60) : '?';
+      const ds = audioEl.duration ? Math.floor(audioEl.duration % 60).toString().padStart(2, '0') : '??';
+      document.getElementById('audioTime').textContent = `${m}:${s} / ${dm}:${ds}`;
+    };
+    audioEl.onended = advance;
+    audioEl.onerror = handleFailure;
+    audioEl.play().catch(handleFailure);
+  }
+
+  // ── SCENE-BASED TIMER PLAYBACK (no audio fallback) ──
+  const sceneDurations = [8000, 45000, 55000, 30000, 25000, 30000, 5000, 20000];
+
+  function showSceneTimerMode(n) {
+    resetAllSceneElements();
+    currentScene = Math.max(1, Math.min(n, totalScenes));
+    document.querySelectorAll('.kf').forEach(el => el.classList.remove('active'));
+    document.getElementById(`kf${currentScene}`).classList.add('active');
+    updateProgress(); animateSceneTimerMode(currentScene); scheduleNextTimer();
+  }
+
+  function scheduleNextTimer() {
+    clearTimeout(autoTimer);
+    if (autoPlay) autoTimer = setTimeout(() => { if (currentScene < totalScenes) showSceneTimerMode(currentScene + 1); }, sceneDurations[currentScene - 1]);
+  }
+
+  function animateSceneTimerMode(n) {
+    switch(n) {
+      case 1: paragraphs[0].onStart(); break;
+      case 2: paragraphs[1].onStart(); sceneTimeout(() => paragraphs[3].onStart(), 4000); sceneTimeout(() => paragraphs[4].onStart(), 20000); sceneTimeout(() => paragraphs[5].onStart(), 35000); break;
+      case 3: paragraphs[7].onStart(); sceneTimeout(() => paragraphs[8].onStart(), 5000); sceneTimeout(() => paragraphs[9].onStart(), 10000); sceneTimeout(() => paragraphs[10].onStart(), 25000); break;
+      case 4: paragraphs[13].onStart(); sceneTimeout(() => paragraphs[14].onStart(), 8000); sceneTimeout(() => paragraphs[15].onStart(), 18000); break;
+      case 5: paragraphs[17].onStart(); sceneTimeout(() => paragraphs[18].onStart(), 4000); sceneTimeout(() => paragraphs[19].onStart(), 12000); break;
+      case 6: paragraphs[21].onStart(); sceneTimeout(() => paragraphs[22].onStart(), 8000); break;
+      case 7: paragraphs[25].onStart(); break;
+      case 8: paragraphs[26].onStart(); sceneTimeout(() => paragraphs[27].onStart(), 5000); break;
+    }
+  }
+
+  // ── NAVIGATION ──
+  function showScene(n) {
+    resetAllSceneElements();
+    currentScene = Math.max(1, Math.min(n, totalScenes));
+    document.querySelectorAll('.kf').forEach(el => el.classList.remove('active'));
+    document.getElementById(`kf${currentScene}`).classList.add('active');
+    updateProgress();
+    if (audioMode) { const pIdx = firstParagraphOfScene(currentScene); if (pIdx >= 0) playParagraph(pIdx); }
+    else { animateSceneTimerMode(currentScene); scheduleNextTimer(); }
+  }
+
+  function nextScene() { stopCurrentAudio(); clearTimeout(autoTimer); autoPlay = false; document.getElementById('autoBtn').textContent = '▶'; if (currentScene < totalScenes) showScenePaused(currentScene + 1); }
+  function prevScene() { stopCurrentAudio(); clearTimeout(autoTimer); autoPlay = false; document.getElementById('autoBtn').textContent = '▶'; if (currentScene > 1) showScenePaused(currentScene - 1); }
+
+  function nextParagraph() {
+    stopCurrentAudio(); clearTimeout(autoTimer);
+    autoPlay = false; document.getElementById('autoBtn').textContent = '▶';
+    const next = currentParagraph + 1;
+    if (next < paragraphs.length) stepToParagraph(next);
+  }
+
+  function prevParagraph() {
+    stopCurrentAudio(); clearTimeout(autoTimer);
+    autoPlay = false; document.getElementById('autoBtn').textContent = '▶';
+    const prev = currentParagraph - 1;
+    if (prev >= 0) stepToParagraph(prev);
+  }
+
+  function stepToParagraph(idx) {
+    currentParagraph = idx;
+    const p = paragraphs[idx];
+    if (p.scene !== currentScene) {
+      resetAllSceneElements();
+      currentScene = p.scene;
+      document.querySelectorAll('.kf').forEach(el => el.classList.remove('active'));
+      document.getElementById(`kf${currentScene}`).classList.add('active');
+    }
+    updateProgress();
+    if (p.onStart) p.onStart();
+    document.getElementById('audioTime').textContent = 'paused';
+  }
+
+  function showScenePaused(n) {
+    resetAllSceneElements();
+    currentScene = Math.max(1, Math.min(n, totalScenes));
+    document.querySelectorAll('.kf').forEach(el => el.classList.remove('active'));
+    document.getElementById(`kf${currentScene}`).classList.add('active');
+    const pIdx = firstParagraphOfScene(currentScene);
+    if (pIdx >= 0) { currentParagraph = pIdx; if (paragraphs[pIdx].onStart) paragraphs[pIdx].onStart(); }
+    updateProgress();
+    document.getElementById('audioTime').textContent = 'paused';
+  }
+
+  function toggleAuto() {
+    autoPlay = !autoPlay;
+    document.getElementById('autoBtn').textContent = autoPlay ? '⏸' : '▶';
+    // Brief visual feedback for mobile tap-to-toggle
+    const overlay = document.getElementById('tapOverlay');
+    if (overlay && overlay.style.display === 'block') {
+      overlay.style.background = autoPlay ? 'rgba(126,184,218,0.08)' : 'rgba(255,255,255,0.06)';
+      setTimeout(() => overlay.style.background = 'transparent', 300);
+    }
+    if (!autoPlay) {
+      clearTimeout(autoTimer);
+      if (currentAudio) audioEl.pause();
+      document.getElementById('audioTime').textContent = 'paused';
+    } else {
+      if (audioMode) {
+        if (currentAudio) audioEl.play().catch(function(){ playParagraph(currentParagraph); });
+        else playParagraph(currentParagraph);
+      } else scheduleNextTimer();
+    }
+  }
+
+  // ── MOBILE VISIBILITY HANDLING ──
+  // When mobile browsers background the tab (screen lock, app switch, address bar),
+  // audio gets suspended and stale events fire on return. Pause cleanly on hide,
+  // resume on return — without resetting the presentation.
+  let wasAutoPlaying = false;
+  document.addEventListener('visibilitychange', () => {
+    if (!started) return;
+    if (document.hidden) {
+      wasAutoPlaying = autoPlay;
+      if (currentAudio) audioEl.pause();
+      clearTimeout(autoTimer);
+    } else if (wasAutoPlaying) {
+      if (currentAudio) {
+        audioEl.play().catch(() => {
+          currentAudio = null;
+          playParagraph(currentParagraph);
+        });
+      } else if (paragraphs[currentParagraph] && !paragraphs[currentParagraph].file) {
+        if (currentParagraph + 1 < paragraphs.length) {
+          playParagraph(currentParagraph + 1);
+        }
+      } else {
+        playParagraph(currentParagraph);
+      }
+    }
+  });
+
+  function stagger(elements, delayMs = 150, startMs = 300) {
+    elements.forEach((el, i) => {
+      const elem = typeof el === 'string' ? document.getElementById(el) : el;
+      if (elem) { elem.classList.remove('visible'); sceneTimeout(() => elem.classList.add('visible'), startMs + (i * delayMs)); }
+    });
+  }
+
+  // OLD ANIMATE FUNCTIONS REMOVED — all visual events now live in paragraphs[].onStart()
+  // The following block is dead code, kept only as reference:
+  /*
+  function animateQuestion_REMOVED() {
+
+    // ~4s — Patient bubble: "I don't have this data..."
+    setTimeout(() => {
+      document.getElementById('s2-bub1').classList.add('visible');
+    }, 4000);
+
+    // ~8s — "a clinic where Alex has a follow-up" → clinic appears
+    setTimeout(() => {
+      const el = document.getElementById('s2-clinic');
+      el.style.opacity = '1';
+      el.style.transform = 'translateY(0)';
+    }, 8000);
+
+    // ~12s — "and a pharmacy where a doctor prescribed" → pharmacy appears
+    setTimeout(() => {
+      const el = document.getElementById('s2-pharmacy');
+      el.style.opacity = '1';
+      el.style.transform = 'translateY(0)';
+    }, 12000);
+
+    // ~14s — hide first bubble, show disconnect
+    setTimeout(() => {
+      document.getElementById('s2-bub1').classList.remove('visible');
+    }, 13500);
+
+    // ~16s — "don't talk to each other" → disconnect X between them
+    setTimeout(() => {
+      document.getElementById('s2-disconnect').style.opacity = '1';
+    }, 16000);
+
+    // ~20s — "Alex's assistant is the one that needs to reach out" → patient appears
+    setTimeout(() => {
+      document.getElementById('s2-patient').style.opacity = '1';
+    }, 20000);
+
+    // ~24s — dashed lines from patient to both, with question marks
+    setTimeout(() => {
+      document.getElementById('s2-reach-lines').style.opacity = '1';
+    }, 24000);
+
+    // ~26s — Second patient bubble: "I need to ask two organizations..."
+    setTimeout(() => {
+      document.getElementById('s2-bub2').classList.add('visible');
+    }, 26000);
+
+    // ~31s — hide second bubble before strangers appear
+    setTimeout(() => {
+      document.getElementById('s2-bub2').classList.remove('visible');
+    }, 31000);
+
+    // ~32s — "no shared database, no shared login" → stranger labels
+    setTimeout(() => {
+      document.getElementById('s2-strangers').style.opacity = '1';
+    }, 32000);
+
+    // ~40s — bottom title fades in for final beat
+    setTimeout(() => {
+      document.getElementById('s2-title').style.opacity = '1';
+    }, 40000);
+
+    // ~43s — subtitle
+    setTimeout(() => {
+      document.getElementById('s2-subtitle').style.opacity = '1';
+    }, 43000);
+  }
+
+  function animateHandshake() {
+    stagger(['kl1', 'kl2', 'kl3'], 400, 300);
+    stagger(['klA', 'klB', 'klB2'], 400, 500);
+
+    // Patient → Clinic connection
+    setTimeout(() => {
+      document.getElementById('connPC').classList.add('active');
+      setTimeout(() => document.getElementById('pktPC').classList.add('visible'), 800);
+    }, 1500);
+
+    // Bubble: patient sends chain to clinic
+    setTimeout(() => document.getElementById('s3-bub1').classList.add('visible'), 1800);
+
+    // Bubble: clinic evaluates
+    setTimeout(() => {
+      document.getElementById('s3-bub1').classList.remove('visible');
+      document.getElementById('s3-bub2').classList.add('visible');
+    }, 3500);
+
+    // Bubble: clinic accepts
+    setTimeout(() => {
+      document.getElementById('s3-bub2').classList.remove('visible');
+      document.getElementById('s3-bub3').classList.add('visible');
+    }, 5000);
+
+    // Patient → Pharmacy connection
+    setTimeout(() => {
+      document.getElementById('s3-bub3').classList.remove('visible');
+      document.getElementById('connPP').classList.add('active');
+      setTimeout(() => document.getElementById('pktPP').classList.add('visible'), 800);
+    }, 6500);
+
+    // Bubble: pharmacy evaluates
+    setTimeout(() => document.getElementById('s3-bub4').classList.add('visible'), 7000);
+
+    // Bubble: pharmacy accepts
+    setTimeout(() => {
+      document.getElementById('s3-bub4').classList.remove('visible');
+      document.getElementById('s3-bub5').classList.add('visible');
+    }, 8500);
+
+    // Clear last bubble
+    setTimeout(() => document.getElementById('s3-bub5').classList.remove('visible'), 10000);
+  }
+
+  function animateExchange() {
+    // Bubble: patient asks clinic
+    setTimeout(() => document.getElementById('s4-bub1').classList.add('visible'), 300);
+
+    // Clinic data card appears
+    setTimeout(() => document.getElementById('clinicData').classList.add('visible'), 800);
+
+    // Bubble: clinic internal policy
+    setTimeout(() => {
+      document.getElementById('s4-bub1').classList.remove('visible');
+      document.getElementById('s4-bub2').classList.add('visible');
+    }, 2000);
+
+    // Receipt fields start revealing
+    const rFields = ['rf1','rf2','rf3','rf4','rf5','rf6','rf7','rf8','rf9','rf10'];
+    stagger(rFields, 250, 3000);
+
+    // Pharmacy data + bubble
+    setTimeout(() => {
+      document.getElementById('s4-bub2').classList.remove('visible');
+      document.getElementById('pharmacyData').classList.add('visible');
+      document.getElementById('s4-bub3').classList.add('visible');
+    }, 5500);
+
+    // Clear last bubble
+    setTimeout(() => document.getElementById('s4-bub3').classList.remove('visible'), 8000);
+  }
+
+  function animateProvenance() {
+    const nodes = ['cn1','cn2','cn3','cn4'];
+    const arrows = ['ca1','ca2','ca3'];
+    const checks = ['ck1','ck2','ck3','ck4'];
+
+    nodes.forEach((id, i) => {
+      setTimeout(() => {
+        document.getElementById(id).classList.add('visible');
+        if (i > 0) document.getElementById(arrows[i-1]).classList.add('visible');
+        setTimeout(() => document.getElementById(checks[i]).classList.add('visible'), 400);
+      }, i * 800);
+    });
+
+    setTimeout(() => {
+      document.getElementById('synthAnswer').style.opacity = '1';
+    }, 4000);
+    setTimeout(() => {
+      document.getElementById('synthProof').style.opacity = '1';
+    }, 4500);
+
+    // Bubble: patient delivers answer with proof
+    setTimeout(() => document.getElementById('s5-bub1').classList.add('visible'), 5200);
+  }
+
+  function animateAbsence() {
+    stagger(['ab1','ab2','ab3','ab4'], 500, 400);
+  }
+
+  function animateClosing() {
+    setTimeout(() => document.getElementById('closingTagline').classList.add('visible'), 500);
+    setTimeout(() => document.getElementById('closingMark').classList.add('visible'), 500);
+  }
+
+  function animateCTA() {
+    const terminal = document.getElementById('ctaTerminal');
+    const text = document.getElementById('ctaText');
+    setTimeout(() => { terminal.style.opacity = '1'; terminal.style.transform = 'translateY(0)'; }, 400);
+    setTimeout(() => { text.style.opacity = '1'; }, 1200);
+  }
+  */
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.key === ' ') { e.preventDefault(); toggleAuto(); }
+    else if (e.key === 'ArrowRight' && e.shiftKey) { e.preventDefault(); nextParagraph(); }
+    else if (e.key === 'ArrowLeft' && e.shiftKey) { e.preventDefault(); prevParagraph(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); nextScene(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); prevScene(); }
+    else if (e.key === 'r' || e.key === 'R') restartPresentation();
+  });
+
+  // Presentation starts when user clicks the start button
+  // (required for browser audio autoplay policy)
+</script>
+
+</body>
+</html>

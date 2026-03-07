@@ -1,0 +1,173 @@
+# ZeroPoint — Portable Proof Infrastructure for Autonomous Agents
+# https://zeropoint.global
+# Source: https://github.com/zeropoint-foundation/zeropoint
+
+> ZeroPoint produces cryptographic proof of agent governance — policy decisions,
+> signed receipts, and tamper-evident audit chains. Operators wrap agent
+> toolchains with ZeroPoint to enforce policy and produce portable proof of
+> every action, without requiring agent cooperation or modification.
+
+## Core Primitives
+
+- **Governance Gate**: Evaluates every agent action against policy rules before execution
+- **Signed Receipts**: Cryptographic proof of what happened, who did it, and what policy allowed it
+- **Delegation Chains**: Verifiable capability grants that flow from operator → agent → sub-agent
+- **Tamper-Evident Audit**: Blake3 hash-chained log of every decision, immutable after the fact
+- **Trust Tiers**: Graduated autonomy (Tier 0 → Tier 1 → Tier 2) as trust is earned
+
+## Quick Start
+
+```bash
+git clone https://github.com/zeropoint-foundation/zeropoint
+cd zeropoint && cargo build --release
+./target/release/zp-server
+```
+
+## API Base URL
+
+```
+http://localhost:3000/api/v1
+```
+
+## Key Endpoints
+
+### Guard Evaluation (primary integration point)
+```
+POST /api/v1/guard/evaluate
+Content-Type: application/json
+
+{
+  "action": "execute shell command: ls -la",
+  "action_type": "Execute",
+  "trust_tier": "Tier1"
+}
+
+Response: {
+  "decision": "Allow",
+  "allowed": true,
+  "risk_level": "Medium",
+  "trust_tier": "Tier1",
+  "rationale": "Action permitted under current policy",
+  "applied_rules": ["HarmPrincipleRule", "SovereigntyRule"],
+  "receipt_id": "rcpt-...",
+  "audit_entry_id": "...",
+  "audit_entry_hash": "...",
+  "timestamp": "2026-03-06T..."
+}
+```
+
+### Receipt Generation
+```
+POST /api/v1/receipts/generate
+{ "action": "deployed model v2.1", "status": "Success", "policy_decision": "Allow" }
+```
+
+### Capability Grant
+```
+POST /api/v1/capabilities/grant
+{ "grantee": "<destination_hash>", "capability": "Execute", "scope": ["python"], "max_delegation_depth": 3 }
+```
+
+### Capability Delegation
+```
+POST /api/v1/capabilities/delegate
+{ "parent_grant_id": "grant-...", "grantee": "<destination_hash>", "capability": "Execute", "scope": ["python"] }
+```
+
+### Chain Verification
+```
+POST /api/v1/capabilities/verify-chain
+{ "grant_ids": ["grant-aaa", "grant-bbb", "grant-ccc"] }
+```
+
+### Audit Trail
+```
+GET  /api/v1/audit/entries?limit=50
+GET  /api/v1/audit/chain-head
+GET  /api/v1/audit/verify
+```
+
+### Policy Introspection
+```
+GET  /api/v1/policy/rules
+```
+
+### Health & Identity
+```
+GET  /api/v1/health
+GET  /api/v1/identity
+GET  /api/v1/stats
+GET  /api/v1/security/posture
+GET  /api/v1/genesis
+```
+
+## Action Types
+
+Chat, Read, Write, ApiCall, Execute, FileOp, CredentialAccess, ConfigChange,
+KeyDelegation, PeerIntroduction
+
+## Trust Tiers
+
+- **Tier0**: No signing. Local filesystem trust only.
+- **Tier1**: Local key signs modules. Tamper detection via hash verification.
+- **Tier2**: Genesis root key, full delegation chain, all modules signed.
+
+## Receipt Types
+
+Intent (intn-), Design (dsgn-), Approval (appr-), Execution (rcpt-),
+Payment (pymt-), Access (accs-)
+
+## Trust Grades
+
+- **D**: Signed receipt only
+- **C**: Sandboxed execution (container/VM/jail)
+- **B**: Hardware key + OS integrity
+- **A**: TEE with hardware root of trust
+
+## Risk Levels
+
+- **Low**: Chat, Read
+- **Medium**: Write, FileOp
+- **High**: ApiCall, Execute, Delete, ConfigChange
+- **Critical**: CredentialAccess, KeyDelegation
+
+## Cryptography
+
+- Hashing: Blake3 (64-char hex)
+- Signing: Ed25519 (base64 signatures, hex public keys)
+- Chain: Each audit entry links to previous via prev_hash
+
+## Policy Decisions
+
+Allow, Block, Warn, Review, Sanitize
+
+## Constitutional Rules (non-removable)
+
+- HarmPrincipleRule: Block actions that could cause irreversible harm
+- SovereigntyRule: Ensure operator retains ultimate authority
+- CatastrophicActionRule: Escalate high-risk actions for review
+
+## Integration Patterns
+
+1. **Wrap existing agent**: Proxy agent tool calls through ZeroPoint guard endpoint
+2. **MCP server**: Run ZeroPoint as an MCP tool server for Claude Code
+3. **PATH shim**: Place ZeroPoint binary shims ahead of real tools in PATH
+4. **Sidecar**: Run alongside agent process, intercept via local API
+
+## Documentation
+
+- Website: https://zeropoint.global
+- For Agents: https://zeropoint.global/for-agents.html
+- Setup Guide: https://zeropoint.global/setup.html
+- Whitepaper: https://zeropoint.global/whitepaper.html
+- API Spec: https://zeropoint.global/api/openapi.json
+- Receipt Schema: https://zeropoint.global/api/receipt.schema.json
+- Source: https://github.com/zeropoint-foundation/zeropoint
+
+## License
+
+MIT OR Apache-2.0
+
+## Contact
+
+ken@thinkstreamlabs.ai

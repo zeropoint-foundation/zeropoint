@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A Letter — ZeroPoint</title>
+<meta name="description" content="A note from the author on why ZeroPoint exists — and who it's for.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #a8d4ee; }
+
+.container { max-width: 640px; margin: 0 auto; padding: 0 2rem; }
+
+/* Nav */
+header {
+  position: fixed; top: 0; width: 100%; z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+nav {
+  max-width: 1080px; margin: 0 auto; padding: 1rem 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  font-family: var(--font-mono); font-weight: 500; font-size: 1rem;
+  color: var(--text); letter-spacing: 0.05em;
+}
+.nav-logo span { color: var(--accent); }
+.nav-links { display: none; }
+
+/* Hamburger */
+.hamburger { display: block; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+
+/* Letter */
+.letter {
+  padding: 10rem 0 4rem;
+}
+.letter-eyebrow {
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 2rem;
+}
+.letter p {
+  color: var(--text-muted); font-size: 1.05rem; line-height: 1.9;
+  margin-bottom: 1.75rem;
+}
+.letter p:last-of-type {
+  margin-bottom: 0;
+}
+.letter em {
+  color: var(--text); font-style: italic;
+}
+.letter strong {
+  color: var(--text); font-weight: 500;
+}
+.letter-rule {
+  border: none; border-top: 1px solid var(--rule);
+  margin: 3rem 0;
+}
+
+/* Signature */
+.signature {
+  padding: 0 0 6rem;
+}
+.signature .name {
+  font-size: 1rem; font-weight: 500; color: var(--text);
+  margin-bottom: 0.25rem;
+}
+.signature .role {
+  font-size: 0.85rem; color: var(--text-dim);
+}
+.signature .date {
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-dim);
+  margin-top: 1rem;
+}
+.sig-mark {
+  display: block;
+  width: 180px;
+  height: auto;
+  margin-bottom: 1.25rem;
+  opacity: 0.85;
+}
+
+/* Dedication */
+.dedication {
+  text-align: center; padding: 3rem 0 5rem;
+  border-top: 1px solid var(--rule);
+}
+.dedication p {
+  font-size: 0.95rem; font-style: italic; color: var(--text-dim);
+  max-width: 480px; margin: 0 auto; line-height: 1.8;
+}
+
+/* Footer */
+footer {
+  padding: 3rem 0; border-top: 1px solid var(--rule); text-align: center;
+}
+.footer-links { display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.footer-links a { font-size: 0.8rem; color: var(--text-dim); }
+.footer-links a:hover { color: var(--text-muted); }
+.footer-org { font-size: 0.75rem; color: var(--text-dim); }
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+
+@media (max-width: 768px) {
+  .letter { padding: 8rem 0 3rem; }
+  .letter p { font-size: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/#tenets">Tenets</a>
+      <a href="/#architecture">Architecture</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/constraints.html">Constraints</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/setup.html">Setup</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">GitHub</a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
+  <a href="/constraints.html" onclick="this.parentElement.classList.remove('open')">Constraints</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
+  <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<section class="letter">
+  <div class="container">
+    <div class="letter-eyebrow">From the Author</div>
+
+    <p>
+      More than nine months ago, I set out to build the SSL/TLS we were going to need for the Agentic Age.
+    </p>
+
+    <p>
+      Not because someone asked me to. Because I could see we were starting to lose trust in a lot of what we used to rely on. In institutions, in platforms, in the systems we'd built to hold things together. And without portable, cryptographic trust — trust that belongs to the people using it, not the platforms hosting it — we weren't going to get very far. The agents were coming. The autonomy was coming. And the infrastructure to make that autonomy <em>accountable</em> was nowhere.
+    </p>
+
+    <p>
+      I knew that if we didn't start building alternatives to the failure modes we can already see, there just wouldn't be any.
+    </p>
+
+    <p>
+      So I built ZeroPoint. With love, and with the felt weight of the world sometimes upon my shoulders. Not because I'm certain it's enough — but because doing nothing was not an option I could live with. Because the tools we build today decide the civilization we get tomorrow. And because I believe — stubbornly and without apology — that we can still choose better.
+    </p>
+
+    <p>
+      ZeroPoint is open source because trust infrastructure has to be. It's built in Rust because this kind of work demands precision. It's designed around four tenets — not because rules are fun, but because <em>sovereignty, transparency, accountability, and portability</em> are the minimum conditions for a world where humans and agents can coexist with dignity.
+    </p>
+
+    <p>
+      This isn't a product pitch. It's a bet on us — as a species. On the idea that we still have time to lay the right foundations — and that enough people care to help.
+    </p>
+
+    <hr class="letter-rule">
+
+    <div class="signature">
+      <svg class="sig-mark" viewBox="0 0 500 220" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Ken Romero signature">
+        <!-- Backbone — curl at top-left, sweeps down past the branching point to form the leg -->
+        <path d="M 18 30 Q 14 16, 24 12 C 48 48, 85 105, 148 212"
+              stroke="var(--text)" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        <!-- Upper arm — branches from mid-backbone, sweeping up and right -->
+        <path d="M 108 138 C 145 100, 220 40, 300 16 C 350 4, 400 2, 455 8"
+              stroke="var(--text)" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        <!-- Lower tail — branches from mid-backbone, flowing right with gentle S-wave -->
+        <path d="M 115 150 C 150 170, 190 180, 222 172 C 245 166, 258 168, 274 176 C 292 184, 315 178, 345 170 C 385 160, 435 158, 495 156"
+              stroke="var(--text)" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+      </svg>
+      <div class="name">Ken Romero</div>
+      <div class="role">Founder, ThinkStream Labs</div>
+      <div class="date">February 2026</div>
+    </div>
+  </div>
+</section>
+
+<section class="dedication">
+  <div class="container">
+    <p>
+      Dedicated to everyone building toward a future worth living in —<br>
+      and to the quiet conviction that we all might use<br>
+      what we build to help make a better world together.
+    </p>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/demo-chain.html">Chain Demo</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/setup.html">Setup</a>
+      <a href="/letter.html">Letter</a>
+    </div>
+    <div class="footer-org">
+      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

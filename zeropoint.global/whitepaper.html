@@ -387,6 +387,7 @@ body.player-active footer { margin-bottom: 4rem; }
       <a href="/footprint.html">Footprint</a>
       <a href="/playground.html">Playground</a>
       <a href="/for-agents.html">Governing Agents</a>
+      <a href="/constraints.html">Constraints</a>
       <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
       <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -407,6 +408,7 @@ body.player-active footer { margin-bottom: 4rem; }
   <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
   <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
   <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
+  <a href="/constraints.html" onclick="this.parentElement.classList.remove('open')">Constraints</a>
   <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
   <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
   <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
@@ -439,10 +441,10 @@ body.player-active footer { margin-bottom: 4rem; }
 
 <!-- Abstract -->
 <h2 id="abstract">Abstract</h2>
-<p>ZeroPoint is portable trust infrastructure — cryptographic governance primitives that make actions provable, auditable, and policy-bound without requiring central control. It restores real exit and real competition by moving trust from platform databases to verifiable cryptographic guarantees that any participant can carry between systems, operators, and networks.</p>
+<p>ZeroPoint is portable proof infrastructure — cryptographic governance primitives that produce proof of authorization, compliance, and provenance without requiring central control. It restores real exit and real competition by moving trust from platform databases to verifiable cryptographic guarantees that any participant can carry between systems, operators, and networks.</p>
 <p>The framework operates at the protocol-primitives layer. Every significant action produces a verifiable receipt, linked into an immutable chain of accountability. The protocol is participant-agnostic: the same receipts, capability chains, and constitutional constraints work whether the actor is a human, an AI agent, an automated service, or an IoT device — and whether they communicate over HTTP, TCP, encrypted mesh networks, or any future transport. ZeroPoint ships with a Reticulum-compatible mesh transport as one integration — chosen for its philosophical alignment with sovereignty and harm minimization — alongside TCP, UDP, and HTTP interfaces.</p>
 <p>Autonomous AI agents are the most urgent application: agents are proliferating faster than the trust infrastructure to govern them, and ZeroPoint provides the cryptographic substrate they need. But the primitives are not agent-specific. Any participant that holds a keypair can sign receipts, hold capability grants, delegate authority, and exercise sovereign refusal.</p>
-<p>ZeroPoint is technically complete: 699 tests across 13 crates, six delivered development phases, and full documentation. It does not claim to "solve AI safety" or solve trust generally. It provides cryptographic primitives and governance constraints that make actions provable and refusable — shifting the terms of trust between participants, operators, and systems.</p>
+<p>ZeroPoint is technically complete: 699 tests across 13 crates, six delivered development phases, and full documentation. It does not claim to "solve AI safety" or solve trust generally. It provides cryptographic primitives and governance constraints that produce proof of every action and make every participant refusable — shifting the terms of trust between participants, operators, and systems.</p>
 
 <!-- TOC -->
 <div class="toc">
@@ -503,7 +505,7 @@ body.player-active footer { margin-bottom: 4rem; }
 
 <p>This is not a future concern. It is the present condition. Every major AI lab is shipping agent frameworks. Every enterprise is deploying agent workflows. And every one of them is building on trust infrastructure that was designed for a world where a human was always in the loop, always reading the screen, always able to intervene manually.</p>
 
-<p>ZeroPoint does not solve AI safety. It solves a more specific and more tractable problem: it provides the cryptographic primitives that make trust portable, actions provable, and authority traceable — for any participant, over any transport, without requiring any central authority to be the witness.</p>
+<p>ZeroPoint does not solve AI safety. It solves a more specific and more tractable problem: it provides the cryptographic primitives that produce portable proof — of what happened, who authorized it, and what constraints applied — for any participant, over any transport, without requiring any central authority to be the witness.</p>
 
 <h3>The Antidote</h3>
 <p>The antidote to platform-captured trust is not better platforms. It is protocol-level trust primitives that no platform controls:</p>
@@ -585,12 +587,12 @@ body.player-active footer { margin-bottom: 4rem; }
   <li><strong>Transport</strong> — Receipts propagate to peers over whichever transport is configured — mesh, TCP, HTTP, or any combination. Peers verify independently.</li>
 </ol>
 
-<p>Nothing executes without passing through the gate. Nothing passes through the gate without joining the audit chain.</p>
+<p>Nothing executes without passing through the gate. Nothing passes without producing proof.</p>
 
 <h3>3.2 The Core Thesis</h3>
-<blockquote>Every action becomes evidence. Evidence becomes a chain. The chain becomes shared truth.</blockquote>
+<blockquote>Every action becomes proof. Proof becomes a chain. The chain becomes shared truth.</blockquote>
 
-<p>This is not a compliance claim. It is an engineering proposition: if systems can cryptographically prove what happened and under what authorization, then trust becomes composable across operators.</p>
+<p>This is not a compliance claim. It is an engineering proposition: if systems can produce cryptographic proof of what happened and under what authorization, then trust becomes composable across operators.</p>
 
 <!-- Section 4 -->
 <h2 id="s4"><span class="section-num">Section 4</span>Receipts and Chains</h2>
@@ -708,7 +710,7 @@ body.player-active footer { margin-bottom: 4rem; }
 
 <p><strong>II. Sovereignty Is Sacred.</strong> Every participant has the right to refuse any action. Every human has the right to disconnect any agent. No agent may acquire capabilities it was not granted. Coercion is architecturally impossible — the Guard enforces this locally, before every action, without consulting any external authority. This applies equally to humans and agents: a human participant operating within ZeroPoint exercises the same sovereign refusal as an agent.</p>
 
-<p><strong>III. Action Without Evidence Is No Action.</strong> Every action produces a receipt. Every receipt joins a chain. If it's not in the chain, it didn't happen. If it is in the chain, it cannot un-happen. This holds whether the action was taken by a person, an agent, or an automated process.</p>
+<p><strong>III. Action Without Proof Is No Action.</strong> Every action produces a receipt. Every receipt is a cryptographic proof. Every proof joins a chain. If it's not in the chain, it didn't happen. If it is in the chain, it cannot un-happen. This holds whether the action was taken by a person, an agent, or an automated process.</p>
 
 <p><strong>IV. The Human Is The Root.</strong> Every delegation chain terminates at a human-held key. No agent may self-authorize. The genesis key is always held by flesh, blood, and soul. This is not only a constraint on agents — it is an assertion of human authority and accountability. The human at the root of a chain is not merely an overseer; they are a participant whose actions are as provable and auditable as any agent's.</p>
 
@@ -806,7 +808,7 @@ body.player-active footer { margin-bottom: 4rem; }
 
 <p>Instead:</p>
 
-<blockquote>ZeroPoint makes actions provable, and systems refusable.</blockquote>
+<blockquote>ZeroPoint produces proof. Proof makes systems refusable.</blockquote>
 
 <p>This is a practical, enforceable improvement: counterparties can demand receipts and reject agents that do not provide them or that violate constraints.</p>
 
@@ -901,7 +903,7 @@ $ cargo fmt --workspace --check
   <li><strong>Decentralized infrastructure communities</strong> — projects building sovereign, local-first systems where centralized governance is a contradiction. The Reticulum ecosystem is a natural fit here.</li>
   <li><strong>Privacy-aligned agent tooling builders</strong> — teams who need accountability without surveillance.</li>
   <li><strong>Enterprise AI governance teams</strong> — organizations looking for verifiable, auditable behavior — from agents and humans alike — that goes beyond compliance checklists.</li>
-  <li><strong>Accountable-process builders</strong> — teams in journalism, supply chain, humanitarian operations, or organizational governance who need provable attribution and auditable decision chains, whether or not agents are involved.</li>
+  <li><strong>Accountable-process builders</strong> — teams in journalism, supply chain, humanitarian operations, or organizational governance who need cryptographic proof of attribution and auditable decision chains, whether or not agents are involved.</li>
 </ul>
 
 <h3>9.2 Integration Patterns</h3>
@@ -961,15 +963,15 @@ $ cargo fmt --workspace --check
 <!-- Section 12 -->
 <h2 id="s12"><span class="section-num">Section 12</span>Conclusion</h2>
 
-<p>AI agents are the most urgent application — but the accountability gap they expose is not theirs alone. Any system where actions have consequences and trust cannot be left to good faith needs the same properties: provable attribution, sovereign refusal, auditable chains of authority.</p>
+<p>AI agents are the most urgent application — but the accountability gap they expose is not theirs alone. Any system where actions have consequences and trust cannot be left to good faith needs the same properties: cryptographic proof of attribution, sovereign refusal, auditable chains of authority.</p>
 
 <p>The structural problem is clear: trust primitives that are captured by platforms become leverage for extraction. Identity that lives in someone else's database is not identity — it is a lease. Reputation that cannot be carried between systems is not reputation — it is a hostage. Authorization that can be silently revoked is not authorization — it is permission.</p>
 
-<p>ZeroPoint provides protocol-level primitives — receipts, chains, governance constraints, and sovereign transport compatibility — that make any system's actions provable and its participants refusable. It does not solve AI safety. It makes trust portable — and portable trust is the structural antidote to the dependency loops that degrade every system where exit is too expensive.</p>
+<p>ZeroPoint provides protocol-level primitives — receipts, chains, governance constraints, and sovereign transport compatibility — that produce proof of any system's actions and make its participants refusable. It does not solve AI safety. It makes proof portable — and portable proof makes trust portable — and portable trust is the structural antidote to the dependency loops that degrade every system where exit is too expensive.</p>
 
-<p>Make trust portable, and you make exit real. Make exit real, and you make extraction optional.</p>
+<p>Make proof portable, and trust follows. Make trust portable, and exit becomes real. Make exit real, and extraction becomes optional.</p>
 
-<p>Trust is infrastructure.</p>
+<p>Proof produces trust. Trust is infrastructure.</p>
 
 <blockquote>Power will diffuse. Accountability must diffuse with it.</blockquote>
 
@@ -1045,7 +1047,7 @@ $ cargo fmt --workspace --check
 
 <table>
   <tbody>
-    <tr><td><strong>Receipt</strong></td><td>Signed evidence of an action or decision, containing identity, content hash, policy decision, chain linkage, and Ed25519 signature.</td></tr>
+    <tr><td><strong>Receipt</strong></td><td>Cryptographic proof of an action or decision, containing identity, content hash, policy decision, chain linkage, and Ed25519 signature.</td></tr>
     <tr><td><strong>Chain</strong></td><td>Linked sequence of receipts forming an accountable history. Each receipt's <code>pr</code> field references the previous receipt's <code>id</code>.</td></tr>
     <tr><td><strong>Capability Grant</strong></td><td>Cryptographically signed permission token granting an action scope, with constraints on time, cost, rate, and delegation depth.</td></tr>
     <tr><td><strong>Delegation Chain</strong></td><td>Ordered sequence of capability grants from root (human-held) to leaf (most-delegated agent), verified against eight invariants.</td></tr>
@@ -1119,24 +1121,26 @@ $ cargo fmt --workspace --check
 (function() {
   const NARRATION_BASE = '/assets/narration/wp';
 
+  // Paragraph-level audio: wp-{id}-p{nn}.mp3
   const sections = [
-    { id: 'abstract',    file: 'wp-abstract', title: 'Abstract' },
-    { id: 's0',          file: 'wp-s0',       title: 'Why This Exists — The Portable Trust Thesis' },
-    { id: 's1',          file: 'wp-s1',       title: 'Problem Statement' },
-    { id: 's2',          file: 'wp-s2',       title: 'Design Goals' },
-    { id: 's3',          file: 'wp-s3',       title: 'System Overview' },
-    { id: 's4',          file: 'wp-s4',       title: 'Receipts and Chains' },
-    { id: 's5',          file: 'wp-s5',       title: 'Governance Model' },
-    { id: 's6',          file: 'wp-s6',       title: 'Threat Model' },
-    { id: 's7',          file: 'wp-s7',       title: 'Transport Integrations' },
-    { id: 's8',          file: 'wp-s8',       title: 'Implementation Status' },
-    { id: 's9',          file: 'wp-s9',       title: 'Adoption Paths' },
-    { id: 's10',         file: 'wp-s10',      title: 'Roadmap' },
-    { id: 's11',         file: 'wp-s11',      title: 'Ethics, Non-Goals, and Misuse Resistance' },
-    { id: 's12',         file: 'wp-s12',      title: 'Conclusion' },
+    { id: 'abstract', prefix: 'wp-abstract', title: 'Abstract',                                       paragraphs: 6  },
+    { id: 's0',       prefix: 'wp-s0',       title: 'Why This Exists — The Portable Trust Thesis',    paragraphs: 20 },
+    { id: 's1',       prefix: 'wp-s1',       title: 'Problem Statement',                              paragraphs: 10 },
+    { id: 's2',       prefix: 'wp-s2',       title: 'Design Goals',                                   paragraphs: 6  },
+    { id: 's3',       prefix: 'wp-s3',       title: 'System Overview',                                paragraphs: 11 },
+    { id: 's4',       prefix: 'wp-s4',       title: 'Receipts and Chains',                            paragraphs: 9  },
+    { id: 's5',       prefix: 'wp-s5',       title: 'Governance Model',                               paragraphs: 20 },
+    { id: 's6',       prefix: 'wp-s6',       title: 'Threat Model',                                   paragraphs: 13 },
+    { id: 's7',       prefix: 'wp-s7',       title: 'Transport Integrations',                         paragraphs: 8  },
+    { id: 's8',       prefix: 'wp-s8',       title: 'Implementation Status',                          paragraphs: 2  },
+    { id: 's9',       prefix: 'wp-s9',       title: 'Adoption Paths',                                 paragraphs: 11 },
+    { id: 's10',      prefix: 'wp-s10',      title: 'Roadmap',                                        paragraphs: 6  },
+    { id: 's11',      prefix: 'wp-s11',      title: 'Ethics, Non-Goals, and Misuse Resistance',       paragraphs: 7  },
+    { id: 's12',      prefix: 'wp-s12',      title: 'Conclusion',                                     paragraphs: 5  },
   ];
 
-  let currentIndex = -1;
+  let currentSection = -1;
+  let currentParagraph = 0;  // 1-indexed when playing
   let audio = null;
   let playing = false;
   let progressInterval = null;
@@ -1149,6 +1153,12 @@ $ cargo fmt --workspace --check
   const iconPause    = document.getElementById('wpIconPause');
   const narrateBtn   = document.getElementById('wpNarrateBtn');
 
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function audioFile(sectionIdx, paraNum) {
+    return NARRATION_BASE + '/' + sections[sectionIdx].prefix + '-p' + pad(paraNum) + '.mp3';
+  }
+
   function showPlayer() {
     playerEl.classList.add('visible');
     document.body.classList.add('player-active');
@@ -1160,8 +1170,8 @@ $ cargo fmt --workspace --check
   }
 
   function updateUI() {
-    const s = sections[currentIndex];
-    labelEl.textContent = 'Section ' + (currentIndex + 1) + ' of ' + sections.length;
+    var s = sections[currentSection];
+    labelEl.textContent = 'Section ' + (currentSection + 1) + ' of ' + sections.length;
     titleEl.textContent = s.title;
     iconPlay.style.display  = playing ? 'none' : 'block';
     iconPause.style.display = playing ? 'block' : 'none';
@@ -1177,10 +1187,6 @@ $ cargo fmt --workspace --check
     clearHighlight();
     var heading = document.getElementById(id);
     if (!heading) return;
-    // The h2 is the section heading — we highlight by wrapping context
-    // Find the parent that contains this section's content
-    // For our structure, the h2 is a direct child of <article> so we
-    // collect elements until the next h2
     var el = heading;
     while (el) {
       if (el.nodeType === 1) {
@@ -1196,7 +1202,7 @@ $ cargo fmt --workspace --check
     var heading = document.getElementById(id);
     if (!heading) return;
     var rect = heading.getBoundingClientRect();
-    var offset = window.pageYOffset + rect.top - 80; // account for fixed header
+    var offset = window.pageYOffset + rect.top - 80;
     window.scrollTo({ top: offset, behavior: 'smooth' });
   }
 
@@ -1204,7 +1210,11 @@ $ cargo fmt --workspace --check
     stopProgress();
     progressInterval = setInterval(function() {
       if (audio && audio.duration) {
-        var pct = (audio.currentTime / audio.duration) * 100;
+        // Progress combines paragraph position within section + audio position within paragraph
+        var s = sections[currentSection];
+        var paraDone = (currentParagraph - 1) / s.paragraphs;
+        var paraProgress = (audio.currentTime / audio.duration) / s.paragraphs;
+        var pct = (paraDone + paraProgress) * 100;
         progressBar.style.width = pct + '%';
       }
     }, 250);
@@ -1217,8 +1227,10 @@ $ cargo fmt --workspace --check
     }
   }
 
-  function playSection(index) {
-    if (index < 0 || index >= sections.length) return;
+  function playParagraph(sectionIdx, paraNum) {
+    if (sectionIdx < 0 || sectionIdx >= sections.length) return;
+    var s = sections[sectionIdx];
+    if (paraNum < 1 || paraNum > s.paragraphs) return;
 
     // Stop current
     if (audio) {
@@ -1228,42 +1240,59 @@ $ cargo fmt --workspace --check
     }
     stopProgress();
 
-    currentIndex = index;
-    var s = sections[currentIndex];
+    currentSection = sectionIdx;
+    currentParagraph = paraNum;
 
-    audio = new Audio(NARRATION_BASE + '/' + s.file + '.mp3');
+    // Only scroll/highlight on first paragraph of a section
+    if (paraNum === 1) {
+      highlightSection(s.id);
+      scrollToSection(s.id);
+    }
+
+    audio = new Audio(audioFile(sectionIdx, paraNum));
     playing = true;
     updateUI();
     showPlayer();
-    highlightSection(s.id);
-    scrollToSection(s.id);
-    progressBar.style.width = '0%';
+    progressBar.style.width = (((paraNum - 1) / s.paragraphs) * 100) + '%';
 
-    audio.addEventListener('canplay', function() {
+    audio.addEventListener('canplay', function handler() {
+      audio.removeEventListener('canplay', handler);
       audio.play();
       startProgress();
     });
 
-    audio.addEventListener('ended', function() {
+    audio.addEventListener('ended', function handler() {
+      audio.removeEventListener('ended', handler);
       stopProgress();
-      progressBar.style.width = '100%';
-      clearHighlight();
-      // Auto-advance
-      if (currentIndex < sections.length - 1) {
-        setTimeout(function() { playSection(currentIndex + 1); }, 800);
-      } else {
+
+      // More paragraphs in this section?
+      if (currentParagraph < s.paragraphs) {
+        playParagraph(currentSection, currentParagraph + 1);
+      }
+      // More sections?
+      else if (currentSection < sections.length - 1) {
+        progressBar.style.width = '100%';
+        clearHighlight();
+        setTimeout(function() { playParagraph(currentSection + 1, 1); }, 800);
+      }
+      // Done
+      else {
+        progressBar.style.width = '100%';
         playing = false;
         updateUI();
         clearHighlight();
       }
     });
 
-    audio.addEventListener('error', function() {
-      console.warn('Narration audio not found: ' + s.file + '.mp3');
+    audio.addEventListener('error', function handler() {
+      audio.removeEventListener('error', handler);
+      console.warn('Narration audio not found: ' + s.prefix + '-p' + pad(paraNum) + '.mp3');
       stopProgress();
-      // Still advance so the player remains usable
-      if (currentIndex < sections.length - 1) {
-        setTimeout(function() { playSection(currentIndex + 1); }, 400);
+      // Skip missing paragraph — advance
+      if (currentParagraph < s.paragraphs) {
+        setTimeout(function() { playParagraph(currentSection, currentParagraph + 1); }, 200);
+      } else if (currentSection < sections.length - 1) {
+        setTimeout(function() { playParagraph(currentSection + 1, 1); }, 400);
       } else {
         playing = false;
         updateUI();
@@ -1275,7 +1304,7 @@ $ cargo fmt --workspace --check
   window.wpPlayer = {
     start: function() {
       narrateBtn.classList.remove('pulsing');
-      playSection(0);
+      playParagraph(0, 1);
     },
     toggle: function() {
       if (!audio) return;
@@ -1287,18 +1316,21 @@ $ cargo fmt --workspace --check
         audio.play();
         playing = true;
         startProgress();
-        highlightSection(sections[currentIndex].id);
+        highlightSection(sections[currentSection].id);
       }
       updateUI();
     },
     prev: function() {
-      if (currentIndex > 0) {
-        playSection(currentIndex - 1);
+      // Jump to start of current section, or previous section if at paragraph 1
+      if (currentParagraph > 1) {
+        playParagraph(currentSection, 1);
+      } else if (currentSection > 0) {
+        playParagraph(currentSection - 1, 1);
       }
     },
     next: function() {
-      if (currentIndex < sections.length - 1) {
-        playSection(currentIndex + 1);
+      if (currentSection < sections.length - 1) {
+        playParagraph(currentSection + 1, 1);
       }
     },
     close: function() {
@@ -1309,6 +1341,8 @@ $ cargo fmt --workspace --check
         audio = null;
       }
       playing = false;
+      currentSection = -1;
+      currentParagraph = 0;
       stopProgress();
       clearHighlight();
       hidePlayer();
@@ -1493,8 +1527,8 @@ $ cargo fmt --workspace --check
       def: 'An isolated environment where untrusted code can run safely — it can compute and return results, but can\'t access the host filesystem, network, or other programs.',
       url: 'https://en.wikipedia.org/wiki/Sandbox_(computer_security)'
     },
-    'monotonic': {
-      def: 'Only goes in one direction (always increasing or always decreasing) — used for sequence numbers and delegation depths to prevent reordering or replay.',
+    'monotonically': {
+      def: 'Only goes in one direction (always increasing, never decreasing) — used for sequence numbers and delegation depths to prevent reordering or replay.',
       url: 'https://en.wikipedia.org/wiki/Monotonic_function'
     },
 

@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zeropoint.global/api/receipt.schema.json",
+  "title": "ZeroPoint Receipt",
+  "description": "Cryptographically signed proof of an action within a governed agent system. Receipts form hash-linked chains for tamper-evident provenance.",
+  "type": "object",
+  "required": ["id", "version", "receipt_type", "status", "content_hash", "trust_grade", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique receipt identifier. Prefixed by type: rcpt- (execution), intn- (intent), dsgn- (design), appr- (approval), pymt- (payment), accs- (access).",
+      "pattern": "^(rcpt|intn|dsgn|appr|pymt|accs)-[a-f0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "description": "Receipt schema version.",
+      "example": "1.0.0"
+    },
+    "receipt_type": {
+      "type": "string",
+      "enum": ["Intent", "Design", "Approval", "Execution", "Payment", "Access"],
+      "description": "Lifecycle stage this receipt represents."
+    },
+    "parent_receipt_id": {
+      "type": ["string", "null"],
+      "description": "ID of the parent receipt in a provenance chain. Null for root receipts."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["Success", "Partial", "Failed", "Denied", "Timeout", "Pending"]
+    },
+    "content_hash": {
+      "type": "string",
+      "description": "Blake3 hash of the receipt content (64 hex characters).",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "signature": {
+      "type": ["string", "null"],
+      "description": "Ed25519 signature over the content hash (base64-encoded)."
+    },
+    "signer_public_key": {
+      "type": ["string", "null"],
+      "description": "Hex-encoded Ed25519 public key of the signer."
+    },
+    "trust_grade": {
+      "type": "string",
+      "enum": ["D", "C", "B", "A"],
+      "description": "D: signed only. C: sandboxed. B: hardware key. A: TEE root of trust."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "executor": {
+      "type": ["object", "null"],
+      "description": "Who or what performed the action.",
+      "properties": {
+        "id": { "type": "string" },
+        "executor_type": { "type": "string", "enum": ["Agent", "Human", "Service", "Pipeline", "Role"] },
+        "runtime": { "type": ["string", "null"] },
+        "platform": { "type": ["string", "null"] },
+        "framework": { "type": ["string", "null"] }
+      },
+      "required": ["id"]
+    },
+    "action": {
+      "type": ["object", "null"],
+      "description": "What was done.",
+      "properties": {
+        "type": { "type": "string", "enum": ["CodeExecution", "ShellCommand", "ToolCall", "ApiRequest", "FileOperation", "Payment", "ContentAccess", "Delegation", "PolicyEvaluation", "PlanCreation", "ApprovalDecision"] },
+        "name": { "type": ["string", "null"] },
+        "input_hash": { "type": ["string", "null"] },
+        "output_hash": { "type": ["string", "null"] },
+        "exit_code": { "type": ["integer", "null"] },
+        "detail": {}
+      }
+    },
+    "timing": {
+      "type": ["object", "null"],
+      "properties": {
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "duration_ms": { "type": "integer" },
+        "queued_ms": { "type": ["integer", "null"] }
+      }
+    },
+    "resources": {
+      "type": ["object", "null"],
+      "description": "Resource consumption metrics.",
+      "properties": {
+        "cpu_seconds": { "type": ["number", "null"] },
+        "memory_peak_bytes": { "type": ["integer", "null"] },
+        "disk_written_bytes": { "type": ["integer", "null"] },
+        "network_bytes_sent": { "type": ["integer", "null"] },
+        "network_bytes_received": { "type": ["integer", "null"] },
+        "tokens_input": { "type": ["integer", "null"] },
+        "tokens_output": { "type": ["integer", "null"] },
+        "cost_usd": { "type": ["number", "null"] }
+      }
+    },
+    "outputs": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "hash": { "type": "string", "description": "Blake3 hash" },
+          "size_bytes": { "type": "integer" },
+          "mime_type": { "type": ["string", "null"] }
+        },
+        "required": ["path", "hash", "size_bytes"]
+      }
+    },
+    "io_hashes": {
+      "type": ["object", "null"],
+      "description": "Hashes of stdin/stdout/stderr for shell commands.",
+      "properties": {
+        "stdin_hash": { "type": ["string", "null"] },
+        "stdout_hash": { "type": ["string", "null"] },
+        "stderr_hash": { "type": ["string", "null"] },
+        "stdout_size": { "type": ["integer", "null"] },
+        "stderr_size": { "type": ["integer", "null"] }
+      }
+    },
+    "policy": {
+      "type": ["object", "null"],
+      "description": "The policy decision that governed this action.",
+      "properties": {
+        "decision": { "type": "string", "enum": ["Allow", "Deny", "Escalate", "AuditOnly"] },
+        "policy_id": { "type": ["string", "null"] },
+        "trust_tier": { "type": ["string", "null"], "enum": ["Tier0", "Tier1", "Tier2", null] },
+        "rationale": { "type": ["string", "null"] }
+      }
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": { "type": ["string", "null"] },
+        "message": { "type": "string" },
+        "detail": {}
+      }
+    },
+    "redactions": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "chain": {
+      "type": ["object", "null"],
+      "description": "Hash chain metadata linking this receipt to the audit trail.",
+      "properties": {
+        "prev_hash": { "type": "string" },
+        "sequence": { "type": "integer" }
+      }
+    },
+    "extensions": {
+      "type": ["object", "null"],
+      "description": "Vendor-specific extension fields.",
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Governing Agents — ZeroPoint</title>
+<meta name="description" content="ZeroPoint produces cryptographic proof of every agent action — auditable, policy-bound, and portable. Install it once, govern everything. Your agents become deployable because they're accountable.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --green: #4ade80;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #a8d4ee; }
+
+.container { max-width: 820px; margin: 0 auto; padding: 0 2rem; }
+.wide-container { max-width: 1080px; margin: 0 auto; padding: 0 2rem; }
+
+/* Nav */
+header {
+  position: fixed; top: 0; width: 100%; z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+nav {
+  max-width: 1080px; margin: 0 auto; padding: 1rem 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  font-family: var(--font-mono); font-weight: 500; font-size: 1rem;
+  color: var(--text); letter-spacing: 0.05em;
+}
+.nav-logo span { color: var(--accent); }
+.nav-links { display: none; }
+
+/* Hamburger */
+.hamburger { display: block; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+
+/* Hero */
+.hero { padding: 10rem 0 5rem; }
+.hero-eyebrow {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.5rem;
+}
+h1 {
+  font-size: clamp(2rem, 5vw, 3rem); font-weight: 300; line-height: 1.2;
+  margin-bottom: 1.5rem; letter-spacing: -0.02em;
+}
+h1 strong { font-weight: 600; color: var(--accent); }
+
+/* Sections */
+section { padding: 4rem 0; }
+.section-rule { border: none; border-top: 1px solid var(--rule); margin: 0; }
+.section-label {
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1rem;
+}
+h2 { font-size: 1.6rem; font-weight: 300; margin-bottom: 1.5rem; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }
+
+/* Intro prose */
+.intro-prose {
+  font-size: 1.05rem; color: var(--text-muted); max-width: 680px;
+  line-height: 1.8; margin-bottom: 2rem;
+}
+
+/* Value props */
+.value-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-top: 2rem;
+}
+.value-card {
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 2rem 1.5rem;
+}
+.value-card .card-icon {
+  font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+.value-card h3 { font-size: 1rem; font-weight: 500; margin-bottom: 0.5rem; }
+.value-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; }
+
+/* Ladder */
+.ladder { margin-top: 2rem; }
+.ladder-step {
+  display: flex; gap: 1.5rem; padding: 1.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+.ladder-step:last-child { border-bottom: none; }
+.ladder-level {
+  font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent);
+  min-width: 2.5rem; font-weight: 500; padding-top: 0.15rem;
+}
+.ladder-content h3 { font-size: 1rem; font-weight: 500; margin-bottom: 0.25rem; }
+.ladder-content p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; }
+
+/* Before/After */
+.contrast-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;
+}
+.contrast-col h3 {
+  font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.1em;
+  text-transform: uppercase; margin-bottom: 1.25rem; padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--rule);
+}
+.contrast-col.before h3 { color: var(--text-dim); }
+.contrast-col.after h3 { color: var(--green); }
+.contrast-item {
+  color: var(--text-muted); font-size: 0.9rem; line-height: 1.7;
+  padding: 0.75rem 0; border-bottom: 1px solid var(--rule);
+}
+.contrast-item:last-child { border-bottom: none; }
+.contrast-col.before .contrast-item { color: var(--text-dim); }
+
+/* How it works */
+.how-steps {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 2rem;
+}
+.how-step {
+  padding: 1.5rem; border-left: 2px solid var(--rule);
+}
+.how-step .step-num {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-dim);
+  margin-bottom: 0.75rem;
+}
+.how-step h3 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; }
+.how-step p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.7; }
+
+/* Convention box */
+.convention {
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 2rem; margin: 2rem 0;
+}
+.convention h3 { font-size: 1rem; margin-bottom: 0.75rem; }
+.convention code {
+  font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent);
+  background: var(--bg-subtle); padding: 0.2rem 0.5rem; border-radius: 3px;
+}
+.convention p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; margin-top: 0.75rem; }
+
+/* CTA */
+.agent-cta {
+  display: flex; gap: 1rem; margin-top: 2.5rem; flex-wrap: wrap;
+}
+.btn {
+  display: inline-block; padding: 0.75rem 1.75rem; border-radius: 6px;
+  font-size: 0.9rem; font-weight: 500; transition: all 0.2s;
+}
+.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary:hover { background: #a8d4ee; color: var(--bg); }
+.btn-secondary { border: 1px solid var(--rule); color: var(--text-muted); }
+.btn-secondary:hover { border-color: var(--accent-dim); color: var(--text); }
+
+/* Pull quote */
+.pull-quote {
+  text-align: center; padding: 4rem 0;
+}
+.pull-quote blockquote {
+  font-size: 1.15rem; font-style: italic; color: var(--text-muted);
+  max-width: 540px; margin: 0 auto; line-height: 1.7;
+}
+
+/* Footer */
+footer {
+  padding: 3rem 0; border-top: 1px solid var(--rule); text-align: center;
+}
+.footer-links { display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.5rem; }
+.footer-links a { font-size: 0.8rem; color: var(--text-dim); }
+.footer-links a:hover { color: var(--text-muted); }
+.footer-org { font-size: 0.75rem; color: var(--text-dim); }
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+
+/* ===== Animated Trust Tiers ===== */
+.tier-stack {
+  display: flex; flex-direction: column; gap: 0.75rem; margin: 2.5rem 0;
+}
+.tier-bar {
+  display: flex; align-items: center; gap: 1.25rem;
+  padding: 1.25rem 1.5rem; border-radius: 8px;
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  opacity: 0; transform: translateX(-24px);
+  transition: opacity 0.5s ease, transform 0.5s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.tier-bar.visible { opacity: 1; transform: translateX(0); }
+.tier-bar.highlight {
+  box-shadow: 0 0 16px rgba(126, 184, 218, 0.15);
+}
+.tier-badge {
+  font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600;
+  padding: 0.3rem 0.75rem; border-radius: 4px; white-space: nowrap;
+  min-width: 4.5rem; text-align: center;
+}
+.tier-badge.t4 { background: rgba(74,222,128,0.12); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+.tier-badge.t3 { background: rgba(126,184,218,0.12); color: #7eb8da; border: 1px solid rgba(126,184,218,0.3); }
+.tier-badge.t2 { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+.tier-badge.t1 { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+.tier-bar .tier-name {
+  font-size: 0.95rem; font-weight: 500; color: var(--text); min-width: 7rem;
+}
+.tier-bar .tier-desc {
+  font-size: 0.85rem; color: var(--text-muted); flex: 1;
+}
+.tier-bar .tier-trust {
+  font-family: var(--font-mono); font-size: 0.7rem; padding: 0.2rem 0.5rem;
+  border-radius: 3px; white-space: nowrap;
+}
+
+/* Agent journey animation */
+.tier-journey {
+  margin: 2rem 0; padding: 1.5rem; border-radius: 8px;
+  background: var(--bg-elevated); border: 1px solid var(--rule);
+  opacity: 0; transition: opacity 0.5s ease;
+}
+.tier-journey.visible { opacity: 1; }
+.journey-step {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.6rem 0; opacity: 0; transform: translateY(8px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.journey-step.visible { opacity: 1; transform: translateY(0); }
+.journey-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.journey-dot.promote { background: #4ade80; }
+.journey-dot.demote { background: #f87171; }
+.journey-dot.neutral { background: var(--text-dim); }
+.journey-text { font-size: 0.85rem; color: var(--text-muted); }
+.journey-text strong { color: var(--text); font-weight: 500; }
+.journey-tier {
+  font-family: var(--font-mono); font-size: 0.75rem; margin-left: auto;
+  padding: 0.15rem 0.5rem; border-radius: 3px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .value-grid { grid-template-columns: 1fr; }
+  .contrast-grid { grid-template-columns: 1fr; }
+  .how-steps { grid-template-columns: 1fr; }
+  .hero { padding: 8rem 0 3rem; }
+  section { padding: 3rem 0; }
+  .tier-bar { flex-wrap: wrap; gap: 0.5rem; }
+  .tier-bar .tier-desc { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/#tenets">Tenets</a>
+      <a href="/#architecture">Architecture</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html" class="active">Governing Agents</a>
+      <a href="/constraints.html">Constraints</a>
+      <a href="/integrate.html">Integrate</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">GitHub</a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
+  <a href="/constraints.html" onclick="this.parentElement.classList.remove('open')">Constraints</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
+  <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">Governing Agents</div>
+    <h1>You deploy the agents.<br>ZeroPoint makes them <strong>accountable</strong>.</h1>
+    <p class="intro-prose">
+      Agents don't choose governance &mdash; you do. ZeroPoint installs into your stack and wraps every interface with cryptographic proof. Every action gets a signed receipt. Every decision gets an audit trail. Your agents don't need to know it's there. They just become governable.
+    </p>
+    <p style="color: var(--text-dim); font-size: 0.95rem; font-style: italic; max-width: 600px;">
+      The question isn't whether to trust your agents. It's whether you can prove what they did.
+    </p>
+    <div class="agent-cta">
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="btn btn-primary">View on GitHub</a>
+      <a href="/demo-chain.html" class="btn btn-secondary">See the Receipt Chain</a>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- The Problem -->
+<section>
+  <div class="container">
+    <div class="section-label">The Problem</div>
+    <h2>Agents are powerful. They're also opaque.</h2>
+    <p class="intro-prose">
+      You're deploying agents that call tools, make decisions, and produce artifacts &mdash; often across multiple runtimes, orchestrators, and model providers. When something goes wrong, you get logs if you're lucky. You get nothing if you're not.
+    </p>
+    <p class="intro-prose">
+      The harder question: when things go <em>right</em>, can you prove it? Can you show an auditor, a client, or a regulator exactly what happened, in what order, with what authority? Without that, agent autonomy is a liability.
+    </p>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Before / After -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">What Changes</div>
+    <h2>Your stack before and after ZeroPoint</h2>
+
+    <div class="contrast-grid">
+      <div class="contrast-col before">
+        <h3>Without ZeroPoint</h3>
+        <div class="contrast-item">Agent actions are logged inconsistently or not at all</div>
+        <div class="contrast-item">Delegation chains are invisible &mdash; you can't tell which agent did what</div>
+        <div class="contrast-item">Trust is binary: sandbox everything or hope for the best</div>
+        <div class="contrast-item">Audit means reconstructing behavior from scattered platform logs</div>
+        <div class="contrast-item">Agents can't prove compliance, even when they comply</div>
+      </div>
+      <div class="contrast-col after">
+        <h3>With ZeroPoint</h3>
+        <div class="contrast-item">Every action produces a signed, hash-chained receipt automatically</div>
+        <div class="contrast-item">Parent-child receipt chains preserve attribution across delegation</div>
+        <div class="contrast-item">Trust is graduated &mdash; agents earn autonomy through verifiable behavior</div>
+        <div class="contrast-item">The receipt chain <em>is</em> the audit trail. Portable. Self-contained.</div>
+        <div class="contrast-item">Agents carry their own proof. Compliance is built into the output.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- What Your Agents Gain -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">Operator Value</div>
+    <h2>What your agents gain when ZeroPoint is in the stack</h2>
+
+    <div class="value-grid">
+      <div class="value-card">
+        <div class="card-icon">auditability</div>
+        <h3>Proof of History</h3>
+        <p>Every tool call, every policy evaluation, every decision point is captured in a tamper-evident receipt. Not in a vendor dashboard you don't control &mdash; in a chain you own.</p>
+      </div>
+
+      <div class="value-card">
+        <div class="card-icon">autonomy</div>
+        <h3>Graduated Trust</h3>
+        <p>Stop choosing between "sandbox everything" and "YOLO." Trust grades let you expand agent permissions based on verified behavior, not blind faith.</p>
+      </div>
+
+      <div class="value-card">
+        <div class="card-icon">attribution</div>
+        <h3>Clean Delegation</h3>
+        <p>When Agent A delegates to Agent B, the receipt chain tracks it. If something breaks, you know exactly where. No finger-pointing, no forensics &mdash; just evidence.</p>
+      </div>
+
+      <div class="value-card">
+        <div class="card-icon">portability</div>
+        <h3>No Platform Lock-In</h3>
+        <p>Receipts are self-contained and transport-agnostic. Move between orchestrators, model providers, or infrastructure and your agents' trust history travels with them.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- How It Works -->
+<section>
+  <div class="wide-container">
+    <div class="section-label">How It Works</div>
+    <h2>Install once. Govern transparently.</h2>
+    <p class="intro-prose">
+      ZeroPoint doesn't require your agents to integrate anything. It wraps the interfaces they already use.
+    </p>
+
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="step-num">01</div>
+        <h3>Install &amp; Configure</h3>
+        <p>Deploy ZeroPoint into your environment. Define policies &mdash; what actions are allowed, what requires review, what gets blocked. Your rules, cryptographically enforced.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">02</div>
+        <h3>Wrap &amp; Guard</h3>
+        <p>ZeroPoint's guard evaluates every action against your policy set. Each evaluation produces a signed receipt: action, decision, rationale, timestamp, trust grade. The agent doesn't need to cooperate.</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">03</div>
+        <h3>Verify &amp; Prove</h3>
+        <p>Receipts chain together with hash links. Verify the chain at any time. Hand it to an auditor. Query it programmatically. The proof is always there, always portable, always yours.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Autonomy Ladder -->
+<section>
+  <div class="container">
+    <div class="section-label">Autonomy Progression</div>
+    <h2>How your agents graduate</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1rem;">
+      ZeroPoint enables a trust progression. Start conservative. Expand permissions as agents demonstrate verifiable good behavior. Each level is unlocked by evidence, not configuration.
+    </p>
+
+    <!-- Animated Trust Tier Stack -->
+    <div class="tier-stack" id="tier-stack">
+      <div class="tier-bar" data-delay="3" id="tier-4">
+        <div class="tier-badge t4">TIER 4</div>
+        <div class="tier-name">Autonomous</div>
+        <div class="tier-desc">Execute without pre-approval. Full delegation rights. Post-hoc audit.</div>
+        <div class="tier-trust" style="background: rgba(74,222,128,0.12); color: #4ade80;">High</div>
+      </div>
+      <div class="tier-bar" data-delay="2" id="tier-3">
+        <div class="tier-badge t3">TIER 3</div>
+        <div class="tier-name">Supervised</div>
+        <div class="tier-desc">Periodic human review. Limited delegation. Batch audit with sampling.</div>
+        <div class="tier-trust" style="background: rgba(126,184,218,0.12); color: #7eb8da;">Med</div>
+      </div>
+      <div class="tier-bar" data-delay="1" id="tier-2">
+        <div class="tier-badge t2">TIER 2</div>
+        <div class="tier-name">Restricted</div>
+        <div class="tier-desc">Pre-approved action types only. No delegation. Individually audited.</div>
+        <div class="tier-trust" style="background: rgba(251,191,36,0.12); color: #fbbf24;">Low</div>
+      </div>
+      <div class="tier-bar" data-delay="0" id="tier-1">
+        <div class="tier-badge t1">TIER 1</div>
+        <div class="tier-name">Quarantined</div>
+        <div class="tier-desc">Read-only. No delegation. No network. All actions require human approval.</div>
+        <div class="tier-trust" style="background: rgba(248,113,113,0.12); color: #f87171;">None</div>
+      </div>
+    </div>
+
+    <!-- Agent Journey Animation -->
+    <div class="tier-journey" id="tier-journey">
+      <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem;">Example Progression</div>
+      <div class="journey-step" data-delay="0">
+        <div class="journey-dot neutral"></div>
+        <div class="journey-text"><strong>Agent onboarded</strong> — enters at Tier 1</div>
+        <div class="journey-tier" style="background: rgba(248,113,113,0.12); color: #f87171;">Quarantined</div>
+      </div>
+      <div class="journey-step" data-delay="1">
+        <div class="journey-dot promote"></div>
+        <div class="journey-text">50 successful actions, zero violations</div>
+        <div class="journey-tier" style="background: rgba(251,191,36,0.12); color: #fbbf24;">→ Tier 2</div>
+      </div>
+      <div class="journey-step" data-delay="2">
+        <div class="journey-dot promote"></div>
+        <div class="journey-text">200 actions, consistent scoped behavior</div>
+        <div class="journey-tier" style="background: rgba(126,184,218,0.12); color: #7eb8da;">→ Tier 3</div>
+      </div>
+      <div class="journey-step" data-delay="3">
+        <div class="journey-dot demote"></div>
+        <div class="journey-text">Scope violation — attempted unauthorized write</div>
+        <div class="journey-tier" style="background: rgba(248,113,113,0.12); color: #f87171;">→ Tier 1</div>
+      </div>
+      <div style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-dim); font-style: italic; text-align: center;">Trust is earned, not declared. Any agent can lose it.</div>
+    </div>
+
+    <!-- Original ladder kept for progressive detail -->
+    <div class="ladder" style="margin-top: 2rem;">
+      <div class="ladder-step">
+        <div class="ladder-level">L0</div>
+        <div class="ladder-content">
+          <h3>Supervised Execution</h3>
+          <p>Every action requires approval. Receipts prove what was requested and what was authorized. Full training wheels.</p>
+        </div>
+      </div>
+
+      <div class="ladder-step">
+        <div class="ladder-level">L1</div>
+        <div class="ladder-content">
+          <h3>Policy-Bound Autonomy</h3>
+          <p>Agents operate freely within defined policy boundaries. Actions that match policy proceed automatically with receipts. Exceptions escalate.</p>
+        </div>
+      </div>
+
+      <div class="ladder-step">
+        <div class="ladder-level">L2</div>
+        <div class="ladder-content">
+          <h3>Delegated Authority</h3>
+          <p>Agents can delegate to sub-agents with scoped permissions. Parent-child receipt chains maintain attribution. Trust narrows at each level of delegation.</p>
+        </div>
+      </div>
+
+      <div class="ladder-step">
+        <div class="ladder-level">L3</div>
+        <div class="ladder-content">
+          <h3>Cross-Stack Operations</h3>
+          <p>Agents move between orchestrators and infrastructure boundaries with portable proof. No re-establishing trust. The receipt chain speaks for itself.</p>
+        </div>
+      </div>
+
+      <div class="ladder-step">
+        <div class="ladder-level">L4</div>
+        <div class="ladder-content">
+          <h3>Proof-Native Autonomy</h3>
+          <p>Agents operate with broad authority because every action produces proof. Hand the receipt chain to a regulator, a client, or an insurer. The proof is built into the work product.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- What ZeroPoint Produces -->
+<section>
+  <div class="container">
+    <div class="section-label">The Output</div>
+    <h2>What a governed agent produces</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
+      Every action through ZeroPoint generates a receipt. This is what one looks like.
+    </p>
+
+    <div class="convention">
+      <h3>A ZeroPoint Receipt</h3>
+      <p>Each receipt contains: a unique ID, a content hash (Blake3), an Ed25519 signature, a link to the parent receipt, the action evaluated, the policy decision and rationale, a trust grade, and a timestamp. Chained together, these form a tamper-evident audit trail.</p>
+    </div>
+
+    <div class="convention">
+      <h3>In-Band Proof</h3>
+      <code>proof: zp:receipt:&lt;receipt_id&gt;</code>
+      <p>Agents can attach this header to any output. Any system receiving it can fetch the receipt, verify the chain, and decide how much to trust the claim. The proof travels with the work.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Pull Quote -->
+<section class="pull-quote">
+  <div class="container">
+    <blockquote>
+      You don't restrict agents to make them useful.<br>
+      You give them proof of accountability — and set them free.
+    </blockquote>
+  </div>
+</section>
+
+<hr class="section-rule">
+
+<!-- Final CTA -->
+<section>
+  <div class="container" style="text-align: center; padding: 3rem 2rem;">
+    <h2 style="margin-bottom: 1rem;">Ready to govern your stack?</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; max-width: 520px; margin-left: auto; margin-right: auto;">
+      ZeroPoint is open source, MIT / Apache-2.0 licensed, and built in Rust.
+      699 tests across 13 crates. No runtime dependency on any platform.
+    </p>
+    <div class="agent-cta" style="justify-content: center;">
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="btn btn-primary">View on GitHub</a>
+      <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/demo-chain.html">Chain Demo</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/integrate.html">Integrate</a>
+      <a href="/setup.html">Setup</a>
+      <a href="/letter.html">Letter</a>
+    </div>
+    <div class="footer-org">
+      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+    </div>
+  </div>
+</footer>
+
+<script>
+// Scroll-triggered animations
+(function() {
+  var BASE_DELAY = 350;
+
+  // --- Trust Tier Stack ---
+  var tierStack = document.getElementById('tier-stack');
+  if (tierStack) {
+    var stackObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (!entry.isIntersecting) return;
+        stackObserver.unobserve(entry.target);
+        animateTierStack();
+      });
+    }, { threshold: 0.3 });
+    stackObserver.observe(tierStack);
+  }
+
+  function animateTierStack() {
+    var bars = tierStack.querySelectorAll('.tier-bar');
+    bars.forEach(function(bar) {
+      var delay = parseInt(bar.getAttribute('data-delay') || '0') * BASE_DELAY;
+      setTimeout(function() {
+        bar.classList.add('visible');
+        // Brief highlight
+        bar.classList.add('highlight');
+        setTimeout(function() { bar.classList.remove('highlight'); }, 600);
+      }, delay);
+    });
+  }
+
+  // --- Agent Journey ---
+  var journey = document.getElementById('tier-journey');
+  if (journey) {
+    var journeyObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (!entry.isIntersecting) return;
+        journeyObserver.unobserve(entry.target);
+        animateJourney();
+      });
+    }, { threshold: 0.3 });
+    journeyObserver.observe(journey);
+  }
+
+  function animateJourney() {
+    journey.classList.add('visible');
+    var steps = journey.querySelectorAll('.journey-step');
+    steps.forEach(function(step) {
+      var delay = parseInt(step.getAttribute('data-delay') || '0') * 600 + 300;
+      setTimeout(function() {
+        step.classList.add('visible');
+        // Highlight corresponding tier bar
+        var tierMap = { '0': 'tier-1', '1': 'tier-2', '2': 'tier-3', '3': 'tier-1' };
+        var targetTier = document.getElementById(tierMap[step.getAttribute('data-delay')]);
+        if (targetTier) {
+          targetTier.classList.add('highlight');
+          targetTier.style.borderColor = 'var(--accent)';
+          setTimeout(function() {
+            targetTier.classList.remove('highlight');
+            targetTier.style.borderColor = '';
+          }, 500);
+        }
+      }, delay);
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

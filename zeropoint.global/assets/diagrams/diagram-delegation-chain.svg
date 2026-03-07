@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <rect width="1920" height="1080" fill="#0A0A0C"/>
+
+  <!-- Title -->
+  <text x="960" y="70" font-family="Inter, sans-serif" font-size="24" fill="#E8E6E3" text-anchor="middle" font-weight="600">Delegation Chain Architecture</text>
+  <text x="960" y="100" font-family="Inter, sans-serif" font-size="14" fill="#5A5A5E" text-anchor="middle">Trust flows from human to agent. At every link, the chain narrows.</text>
+
+  <!-- ===== LEFT: DELEGATION TREE ===== -->
+  <text x="500" y="170" font-family="Inter, sans-serif" font-size="16" fill="#8A8A8E" text-anchor="middle">Delegation Tree</text>
+
+  <!-- Human (root) -->
+  <circle cx="500" cy="240" r="30" fill="none" stroke="#FBBF24" stroke-width="2"/>
+  <text x="500" y="246" font-family="Inter, sans-serif" font-size="14" fill="#FBBF24" text-anchor="middle">H</text>
+  <text x="540" y="230" font-family="Inter, sans-serif" font-size="11" fill="#FBBF24">Root Key</text>
+
+  <!-- Capability badge for Human -->
+  <rect x="580" y="240" width="200" height="28" rx="4" fill="#1A1A22" stroke="#FBBF24" stroke-width="1"/>
+  <text x="680" y="259" font-family="JetBrains Mono, monospace" font-size="11" fill="#FBBF24" text-anchor="middle">Full scope (genesis)</text>
+
+  <!-- Depth/scope labels -->
+  <text x="350" y="246" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="end">depth: 0</text>
+
+  <!-- Lines to agents -->
+  <line x1="480" y1="268" x2="360" y2="340" stroke="#333338" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <line x1="520" y1="268" x2="640" y2="340" stroke="#333338" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+  <!-- Agent A1 -->
+  <circle cx="360" cy="370" r="24" fill="none" stroke="#4ADE80" stroke-width="2"/>
+  <text x="360" y="376" font-family="Inter, sans-serif" font-size="13" fill="#4ADE80" text-anchor="middle">A1</text>
+  <text x="230" y="376" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="end">depth: 1</text>
+
+  <rect x="160" y="400" width="200" height="28" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="260" y="419" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80" text-anchor="middle">Read+Write: data/*</text>
+
+  <!-- Agent A2 -->
+  <circle cx="640" cy="370" r="24" fill="none" stroke="#4ADE80" stroke-width="2"/>
+  <text x="640" y="376" font-family="Inter, sans-serif" font-size="13" fill="#4ADE80" text-anchor="middle">A2</text>
+
+  <rect x="690" y="355" width="180" height="28" rx="4" fill="#1A1A22" stroke="#4ADE80" stroke-width="1"/>
+  <text x="780" y="374" font-family="JetBrains Mono, monospace" font-size="11" fill="#4ADE80" text-anchor="middle">Read: config/*</text>
+
+  <!-- A1 delegates down -->
+  <line x1="340" y1="394" x2="260" y2="470" stroke="#333338" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <line x1="380" y1="394" x2="460" y2="470" stroke="#333338" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+  <!-- Agent B1 (narrowed) -->
+  <circle cx="260" cy="500" r="20" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="260" y="505" font-family="Inter, sans-serif" font-size="11" fill="#7EB8DA" text-anchor="middle">B1</text>
+  <text x="130" y="505" font-family="JetBrains Mono, monospace" font-size="11" fill="#5A5A5E" text-anchor="end">depth: 2</text>
+
+  <rect x="130" y="530" width="200" height="28" rx="4" fill="#1A1A22" stroke="#7EB8DA" stroke-width="1"/>
+  <text x="230" y="549" font-family="JetBrains Mono, monospace" font-size="11" fill="#7EB8DA" text-anchor="middle">Read: data/public</text>
+
+  <!-- Agent B2 (narrowed) -->
+  <circle cx="460" cy="500" r="20" fill="none" stroke="#7EB8DA" stroke-width="1.5"/>
+  <text x="460" y="505" font-family="Inter, sans-serif" font-size="11" fill="#7EB8DA" text-anchor="middle">B2</text>
+
+  <rect x="360" y="530" width="200" height="28" rx="4" fill="#1A1A22" stroke="#7EB8DA" stroke-width="1"/>
+  <text x="460" y="549" font-family="JetBrains Mono, monospace" font-size="11" fill="#7EB8DA" text-anchor="middle">Write: data/tmp</text>
+
+  <!-- Failed delegation from B1 -->
+  <line x1="260" y1="520" x2="260" y2="600" stroke="#F87171" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.5"/>
+  <circle cx="260" cy="630" r="18" fill="none" stroke="#F87171" stroke-width="1.5" opacity="0.5"/>
+  <text x="260" y="635" font-family="Inter, sans-serif" font-size="10" fill="#F87171" text-anchor="middle" opacity="0.5">C</text>
+
+  <rect x="130" y="660" width="200" height="28" rx="4" fill="#F87171" opacity="0.08" stroke="#F87171" stroke-width="1"/>
+  <text x="230" y="679" font-family="JetBrains Mono, monospace" font-size="11" fill="#F87171" text-anchor="middle">Write: data/* ✕</text>
+
+  <text x="370" y="675" font-family="Inter, sans-serif" font-size="12" fill="#F87171">Scope exceeded — blocked</text>
+
+  <!-- Scope narrowing bracket -->
+  <line x1="800" y1="260" x2="820" y2="260" stroke="#5A5A5E" stroke-width="1"/>
+  <line x1="820" y1="260" x2="820" y2="550" stroke="#5A5A5E" stroke-width="1"/>
+  <line x1="800" y1="550" x2="820" y2="550" stroke="#5A5A5E" stroke-width="1"/>
+  <text x="840" y="400" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">Scope narrows</text>
+  <text x="840" y="418" font-family="Inter, sans-serif" font-size="12" fill="#5A5A5E">at every link</text>
+
+  <!-- ===== RIGHT: INVARIANTS ===== -->
+  <rect x="1050" y="160" width="750" height="640" rx="8" fill="#111116" stroke="#333338" stroke-width="1"/>
+  <text x="1425" y="200" font-family="Inter, sans-serif" font-size="18" fill="#E8E6E3" text-anchor="middle" font-weight="600">Eight Invariants</text>
+  <text x="1425" y="225" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">Enforced at every delegation. No exceptions.</text>
+
+  <!-- Invariant list -->
+  <rect x="1100" y="260" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="280" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">1. Parent-child linkage</text>
+  <text x="1130" y="296" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Every grant references its parent. Chain must be traversable to root.</text>
+
+  <rect x="1100" y="314" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="334" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">2. Scope subset constraint</text>
+  <text x="1130" y="350" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Child scope must be a strict subset of parent scope.</text>
+
+  <rect x="1100" y="368" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="388" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">3. Monotonic depth</text>
+  <text x="1130" y="404" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Depth increases by exactly 1 at each delegation level.</text>
+
+  <rect x="1100" y="422" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="442" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">4. Expiration inheritance</text>
+  <text x="1130" y="458" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Child expiration cannot exceed parent expiration.</text>
+
+  <rect x="1100" y="476" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="496" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">5. Signature verification</text>
+  <text x="1130" y="512" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Every grant must be signed by the grantor's Ed25519 key.</text>
+
+  <rect x="1100" y="530" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="550" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">6. Grantor-grantee continuity</text>
+  <text x="1130" y="566" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Grantor of child must be the grantee of the parent.</text>
+
+  <rect x="1100" y="584" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="604" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">7. Max delegation depth</text>
+  <text x="1130" y="620" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Chain cannot exceed the max_delegation_depth set by root.</text>
+
+  <rect x="1100" y="638" width="650" height="44" rx="4" fill="#1A1A22" stroke="#333338" stroke-width="1"/>
+  <text x="1130" y="658" font-family="JetBrains Mono, monospace" font-size="13" fill="#7EB8DA">8. Trust tier monotonicity</text>
+  <text x="1130" y="674" font-family="Inter, sans-serif" font-size="11" fill="#5A5A5E">Trust tier cannot increase along the chain — only stay or decrease.</text>
+
+  <!-- Key principle -->
+  <text x="1425" y="730" font-family="Inter, sans-serif" font-size="15" fill="#FBBF24" text-anchor="middle" font-style="italic">Violation of any invariant breaks the chain.</text>
+  <text x="1425" y="755" font-family="Inter, sans-serif" font-size="15" fill="#FBBF24" text-anchor="middle" font-style="italic">Cryptographically. Detectably.</text>
+
+  <!-- Bottom -->
+  <text x="960" y="900" font-family="Inter, sans-serif" font-size="15" fill="#8A8A8E" text-anchor="middle">Genesis key held by human. No agent may self-authorize.</text>
+  <text x="960" y="930" font-family="Inter, sans-serif" font-size="13" fill="#5A5A5E" text-anchor="middle">DelegationChain | CapabilityGrant | TrustTier</text>
+</svg>

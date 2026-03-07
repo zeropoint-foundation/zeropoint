@@ -1,0 +1,543 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ZeroPoint Governance API",
+    "version": "0.1.0",
+    "description": "Portable proof infrastructure for autonomous agent systems. Produce cryptographic proof of every governance decision — signed receipts, capability delegation chains, and tamper-evident audit trails.",
+    "contact": { "email": "ken@thinkstreamlabs.ai" },
+    "license": { "name": "MIT OR Apache-2.0", "url": "https://github.com/zeropoint-foundation/zeropoint/blob/main/LICENSE" }
+  },
+  "servers": [
+    { "url": "http://localhost:3000", "description": "Local development server" }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Health check",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Server health status",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/identity": {
+      "get": {
+        "operationId": "getIdentity",
+        "summary": "Server identity and public key",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Server cryptographic identity",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IdentityResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "operationId": "getStats",
+        "summary": "Operational statistics",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Current system statistics",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatsResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/security/posture": {
+      "get": {
+        "operationId": "getSecurityPosture",
+        "summary": "Security posture assessment",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Security score and check results",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SecurityPosture" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/genesis": {
+      "get": {
+        "operationId": "getGenesis",
+        "summary": "Genesis record",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Root genesis record for this instance",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/guard/evaluate": {
+      "post": {
+        "operationId": "evaluateGuard",
+        "summary": "Evaluate an action against governance policy",
+        "description": "Primary integration point. Submit an action description and receive a policy decision (Allow/Block/Warn/Review/Sanitize) with a signed audit entry and optional receipt.",
+        "tags": ["Guard"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GuardEvaluateRequest" },
+              "example": {
+                "action": "execute shell command: ls -la /tmp",
+                "action_type": "Execute",
+                "trust_tier": "Tier1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Policy evaluation result with audit proof",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GuardEvaluateResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/policy/rules": {
+      "get": {
+        "operationId": "getPolicyRules",
+        "summary": "List active policy rules",
+        "tags": ["Policy"],
+        "responses": {
+          "200": {
+            "description": "All loaded policy rules",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PolicyRulesResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/capabilities/grant": {
+      "post": {
+        "operationId": "createGrant",
+        "summary": "Issue a capability grant",
+        "description": "Create a signed capability grant authorizing a grantee to perform specific actions.",
+        "tags": ["Capabilities"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateGrantRequest" },
+              "example": {
+                "grantee": "a1b2c3d4e5f6...",
+                "capability": "Execute",
+                "scope": ["python", "node"],
+                "max_delegation_depth": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created grant with receipt",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GrantResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/capabilities/delegate": {
+      "post": {
+        "operationId": "delegateCapability",
+        "summary": "Delegate a capability to a sub-agent",
+        "description": "Delegate an existing capability grant to another agent, extending the delegation chain.",
+        "tags": ["Capabilities"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DelegateRequest" },
+              "example": {
+                "parent_grant_id": "grant-abc123",
+                "grantee": "f6e5d4c3b2a1...",
+                "capability": "Execute",
+                "scope": ["python"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delegated grant with chain metadata",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DelegateResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/capabilities/verify-chain": {
+      "post": {
+        "operationId": "verifyChain",
+        "summary": "Verify a delegation chain",
+        "description": "Verify the integrity and validity of a chain of capability grants from root to leaf.",
+        "tags": ["Capabilities"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyChainRequest" },
+              "example": { "grant_ids": ["grant-aaa", "grant-bbb", "grant-ccc"] }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chain verification result",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VerifyChainResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/receipts/generate": {
+      "post": {
+        "operationId": "generateReceipt",
+        "summary": "Generate a signed receipt",
+        "description": "Produce a cryptographically signed receipt proving an action occurred with a specific policy decision.",
+        "tags": ["Receipts"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GenerateReceiptRequest" },
+              "example": {
+                "action": "deployed model v2.1 to production",
+                "status": "Success",
+                "policy_decision": "Allow"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generated signed receipt",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerateReceiptResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/audit/entries": {
+      "get": {
+        "operationId": "getAuditEntries",
+        "summary": "Query audit trail",
+        "tags": ["Audit"],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 }, "description": "Maximum entries to return" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit entries (most recent first)",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuditEntriesResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/audit/chain-head": {
+      "get": {
+        "operationId": "getChainHead",
+        "summary": "Get latest audit chain hash",
+        "tags": ["Audit"],
+        "responses": {
+          "200": {
+            "description": "Current chain head",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChainHeadResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/audit/verify": {
+      "get": {
+        "operationId": "verifyAuditChain",
+        "summary": "Verify audit chain integrity",
+        "description": "Walk the entire audit chain and verify every hash link. Detects tampering.",
+        "tags": ["Audit"],
+        "responses": {
+          "200": {
+            "description": "Chain verification result",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChainVerifyResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "operationId": "chat",
+        "summary": "Send a governed chat message",
+        "description": "Send a message through the full governance pipeline (guard → LLM → receipt → audit).",
+        "tags": ["Pipeline"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChatRequest" },
+              "example": { "message": "What files are in the current directory?" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Governed response",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatResponse" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TrustTier": {
+        "type": "string",
+        "enum": ["Tier0", "Tier1", "Tier2"],
+        "description": "Tier0: filesystem trust only. Tier1: local key signing. Tier2: genesis root key with full delegation chains."
+      },
+      "RiskLevel": {
+        "type": "string",
+        "enum": ["Low", "Medium", "High", "Critical"]
+      },
+      "TrustGrade": {
+        "type": "string",
+        "enum": ["D", "C", "B", "A"],
+        "description": "D: signed receipt. C: sandboxed. B: hardware key. A: TEE root of trust."
+      },
+      "ReceiptType": {
+        "type": "string",
+        "enum": ["Intent", "Design", "Approval", "Execution", "Payment", "Access"]
+      },
+      "Status": {
+        "type": "string",
+        "enum": ["Success", "Partial", "Failed", "Denied", "Timeout", "Pending"]
+      },
+      "ActionType": {
+        "type": "string",
+        "enum": ["Chat", "Read", "Write", "ApiCall", "Execute", "FileOp", "CredentialAccess", "ConfigChange", "KeyDelegation", "PeerIntroduction"]
+      },
+      "PolicyDecision": {
+        "type": "string",
+        "enum": ["Allow", "Block", "Warn", "Review", "Sanitize"]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "version": { "type": "string" },
+          "pipeline_enabled": { "type": "boolean" }
+        }
+      },
+      "IdentityResponse": {
+        "type": "object",
+        "properties": {
+          "public_key": { "type": "string", "description": "Hex-encoded Ed25519 public key" },
+          "destination_hash": { "type": "string", "description": "Blake3 hash of public key" },
+          "trust_tier": { "$ref": "#/components/schemas/TrustTier" },
+          "algorithm": { "type": "string", "example": "Ed25519" }
+        }
+      },
+      "StatsResponse": {
+        "type": "object",
+        "properties": {
+          "total_audit_entries": { "type": "integer" },
+          "chain_valid": { "type": "boolean" },
+          "pipeline_enabled": { "type": "boolean" },
+          "policy_rules_loaded": { "type": "integer" },
+          "grants_active": { "type": "integer" }
+        }
+      },
+      "SecurityPosture": {
+        "type": "object",
+        "properties": {
+          "score": { "type": "number" },
+          "checks": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "GuardEvaluateRequest": {
+        "type": "object",
+        "required": ["action"],
+        "properties": {
+          "action": { "type": "string", "description": "Human-readable description of the action to evaluate" },
+          "action_type": { "$ref": "#/components/schemas/ActionType" },
+          "trust_tier": { "$ref": "#/components/schemas/TrustTier" }
+        }
+      },
+      "GuardEvaluateResponse": {
+        "type": "object",
+        "properties": {
+          "decision": { "$ref": "#/components/schemas/PolicyDecision" },
+          "allowed": { "type": "boolean" },
+          "blocked": { "type": "boolean" },
+          "risk_level": { "$ref": "#/components/schemas/RiskLevel" },
+          "trust_tier": { "$ref": "#/components/schemas/TrustTier" },
+          "rationale": { "type": "string" },
+          "applied_rules": { "type": "array", "items": { "type": "string" } },
+          "audit_entry_id": { "type": "string" },
+          "audit_entry_hash": { "type": "string", "description": "Blake3 hash (64 hex chars)" },
+          "audit_prev_hash": { "type": "string" },
+          "receipt_id": { "type": "string", "nullable": true },
+          "action_evaluated": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PolicyRulesResponse": {
+        "type": "object",
+        "properties": {
+          "rules": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "non_removable": { "type": "boolean" } } } },
+          "total": { "type": "integer" }
+        }
+      },
+      "CreateGrantRequest": {
+        "type": "object",
+        "required": ["grantee", "capability"],
+        "properties": {
+          "grantee": { "type": "string", "description": "Destination hash of the grantee" },
+          "capability": { "type": "string" },
+          "scope": { "type": "array", "items": { "type": "string" }, "nullable": true },
+          "max_delegation_depth": { "type": "integer", "default": 3 }
+        }
+      },
+      "GrantResponse": {
+        "type": "object",
+        "properties": {
+          "grant": { "$ref": "#/components/schemas/CapabilityGrant" },
+          "receipt_id": { "type": "string" },
+          "signed": { "type": "boolean" }
+        }
+      },
+      "DelegateRequest": {
+        "type": "object",
+        "required": ["parent_grant_id", "grantee", "capability"],
+        "properties": {
+          "parent_grant_id": { "type": "string" },
+          "grantee": { "type": "string" },
+          "capability": { "type": "string" },
+          "scope": { "type": "array", "items": { "type": "string" }, "nullable": true }
+        }
+      },
+      "DelegateResponse": {
+        "type": "object",
+        "properties": {
+          "grant": { "$ref": "#/components/schemas/CapabilityGrant" },
+          "receipt_id": { "type": "string" },
+          "delegation_depth": { "type": "integer" },
+          "chain_valid": { "type": "boolean" }
+        }
+      },
+      "VerifyChainRequest": {
+        "type": "object",
+        "required": ["grant_ids"],
+        "properties": {
+          "grant_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "VerifyChainResponse": {
+        "type": "object",
+        "properties": {
+          "valid": { "type": "boolean" },
+          "chain_length": { "type": "integer" },
+          "root_grantor": { "type": "string" },
+          "leaf_grantee": { "type": "string" },
+          "max_depth": { "type": "integer" },
+          "current_depth": { "type": "integer" },
+          "can_extend": { "type": "boolean" },
+          "error": { "type": "string", "nullable": true },
+          "invariants_checked": { "type": "integer" }
+        }
+      },
+      "CapabilityGrant": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^grant-" },
+          "capability": { "type": "string" },
+          "grantor": { "type": "string" },
+          "grantee": { "type": "string" },
+          "trust_tier": { "$ref": "#/components/schemas/TrustTier" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time", "nullable": true },
+          "receipt_id": { "type": "string" },
+          "signature": { "type": "string", "nullable": true },
+          "parent_grant_id": { "type": "string", "nullable": true },
+          "delegation_depth": { "type": "integer" },
+          "max_delegation_depth": { "type": "integer", "default": 3 }
+        }
+      },
+      "GenerateReceiptRequest": {
+        "type": "object",
+        "required": ["action"],
+        "properties": {
+          "action": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/Status" },
+          "policy_decision": { "$ref": "#/components/schemas/PolicyDecision" }
+        }
+      },
+      "GenerateReceiptResponse": {
+        "type": "object",
+        "properties": {
+          "receipt_id": { "type": "string" },
+          "receipt_type": { "$ref": "#/components/schemas/ReceiptType" },
+          "status": { "$ref": "#/components/schemas/Status" },
+          "content_hash": { "type": "string", "description": "Blake3 hash (64 hex chars)" },
+          "signature": { "type": "string", "description": "Ed25519 signature (base64)" },
+          "signer_public_key": { "type": "string", "description": "Hex-encoded Ed25519 public key" },
+          "trust_grade": { "$ref": "#/components/schemas/TrustGrade" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "action": { "type": "string" },
+          "chain_prev_hash": { "type": "string" }
+        }
+      },
+      "AuditEntriesResponse": {
+        "type": "object",
+        "properties": {
+          "entries": { "type": "array", "items": { "type": "object" } },
+          "count": { "type": "integer" }
+        }
+      },
+      "ChainHeadResponse": {
+        "type": "object",
+        "properties": {
+          "latest_hash": { "type": "string" },
+          "chain_algorithm": { "type": "string", "example": "blake3" }
+        }
+      },
+      "ChainVerifyResponse": {
+        "type": "object",
+        "properties": {
+          "valid": { "type": "boolean" },
+          "entries_examined": { "type": "integer" },
+          "chain_links_valid": { "type": "integer" },
+          "error": { "type": "string", "nullable": true },
+          "issues": { "type": "array", "items": { "type": "string" } },
+          "has_tampered_entries": { "type": "boolean" }
+        }
+      },
+      "ChatRequest": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "conversation_id": { "type": "string", "nullable": true },
+          "message": { "type": "string" }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "properties": {
+          "conversation_id": { "type": "string" },
+          "response": { "type": "string" },
+          "model_used": { "type": "string" }
+        }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Guard", "description": "Policy evaluation — the primary integration point for agents" },
+    { "name": "Capabilities", "description": "Capability grants and delegation chains" },
+    { "name": "Receipts", "description": "Cryptographically signed proof of execution" },
+    { "name": "Audit", "description": "Tamper-evident audit trail" },
+    { "name": "Policy", "description": "Policy rule introspection" },
+    { "name": "Pipeline", "description": "Full governance pipeline (guard → LLM → receipt → audit)" },
+    { "name": "System", "description": "Health, identity, and operational status" }
+  ]
+}

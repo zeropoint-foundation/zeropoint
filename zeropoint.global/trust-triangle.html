@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Trust Triangle — ZeroPoint Reference Implementation</title>
+<meta name="description" content="Three autonomous agents from independent trust domains negotiate, verify, and transact over plain HTTPS — with no shared database, no shared login, no central authority. A narrated walkthrough of ZeroPoint's cryptographic governance primitives in action.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --rule: #222228;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #a8d4ee; }
+
+/* --- Header / Nav --- */
+
+header {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+
+nav {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-logo {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--text);
+  letter-spacing: 0.05em;
+}
+.nav-logo span { color: var(--accent); }
+
+.nav-links {
+  display: none;
+  align-items: center;
+  gap: 1.5rem;
+}
+.nav-links a {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.nav-links a:hover { color: var(--accent); }
+@media (min-width: 769px) {
+  .nav-links { display: flex; }
+  .hamburger { display: none; }
+}
+
+/* --- Hamburger Menu --- */
+
+.hamburger { background: none; border: none; cursor: pointer; padding: 0.5rem; display: block; }
+.hamburger span { display: block; width: 20px; height: 2px; background: var(--text-muted); margin: 4px 0; transition: all 0.3s; }
+
+.mobile-menu {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); z-index: 200;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a { color: var(--text); font-size: 1.2rem; font-weight: 400; text-decoration: none; }
+.mobile-menu a:hover { color: var(--accent); }
+.mobile-menu .close-btn {
+  position: absolute; top: 1rem; right: 1.5rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
+}
+
+/* --- Presentation Container --- */
+
+.presentation-wrapper {
+  padding-top: 60px; /* space for fixed nav */
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.presentation-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #0a0a0c;
+  touch-action: manipulation;
+}
+
+.presentation-frame {
+  position: absolute;
+  width: 1920px;
+  height: 1080px;
+  border: none;
+  transform-origin: top left;
+  /* Scale and position are set once on load via CSS custom properties */
+  transform: scale(var(--pres-scale, 1));
+  left: var(--pres-left, 0px);
+  top: var(--pres-top, 0px);
+}
+
+/* --- Bottom Bar --- */
+
+.bottom-bar {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--rule);
+  padding: 0.75rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.bottom-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.bottom-bar-left .back-link {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.bottom-bar-left .back-link:hover { color: var(--accent); }
+
+.bottom-bar-left .page-title {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.bottom-bar-right {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.bottom-bar-right a {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.bottom-bar-right a:hover { color: var(--accent); }
+
+@media (max-width: 600px) {
+  .bottom-bar { padding: 0.5rem 1rem; flex-direction: column; gap: 0.5rem; }
+  .bottom-bar-right { gap: 1rem; }
+}
+
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/trust-triangle.html">Trust Triangle</a>
+      <a href="/footprint.html">Footprint</a>
+      <a href="/playground.html">Playground</a>
+      <a href="/for-agents.html">Governing Agents</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="https://github.com/zeropoint-foundation/zeropoint">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: -2px;"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<div id="mobile-menu" class="mobile-menu">
+  <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
+  <a href="/trust-triangle.html" onclick="this.parentElement.classList.remove('open')">Trust Triangle</a>
+  <a href="#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
+  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
+  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
+  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
+  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+</div>
+
+<div class="presentation-wrapper">
+  <div class="presentation-container" id="presentationContainer">
+    <iframe src="/trust-triangle-player.html" class="presentation-frame" id="presentationFrame" allowfullscreen></iframe>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="bottom-bar-left">
+      <a href="/" class="back-link">&larr; Home</a>
+      <span class="page-title">Trust Triangle &mdash; ZeroPoint Reference Implementation</span>
+    </div>
+    <div class="bottom-bar-right">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/playground.html">Playground</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Mobile: skip the iframe wrapper entirely and go straight to the player.
+// CSS-transformed iframes on mobile Safari/Chrome are unreliable — touch events,
+// address bar changes, and memory management all interfere with iframe content.
+// The player's own viewport meta (width=1920) handles mobile scaling natively.
+//
+// Detection: require BOTH touch capability AND a small screen. This avoids
+// false positives on desktop browsers (Yandex, Chrome on touch laptops, etc.)
+// that report 'ontouchstart' even though they're full desktop viewports.
+(function() {
+  var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  var isSmallScreen = window.innerWidth < 768;
+  var isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  if (isSmallScreen || (isTouch && isMobileUA)) {
+    window.location.replace('/trust-triangle-player.html');
+  }
+})();
+
+function scalePresentation() {
+  const container = document.getElementById('presentationContainer');
+  const cw = container.clientWidth;
+  const ch = container.clientHeight;
+  const scale = Math.min(cw / 1920, ch / 1080);
+  const scaledW = 1920 * scale;
+  const scaledH = 1080 * scale;
+  container.style.setProperty('--pres-scale', scale);
+  container.style.setProperty('--pres-left', `${(cw - scaledW) / 2}px`);
+  container.style.setProperty('--pres-top', `${(ch - scaledH) / 2}px`);
+}
+
+window.addEventListener('load', scalePresentation);
+window.addEventListener('resize', scalePresentation);
+</script>
+</body>
+</html>
