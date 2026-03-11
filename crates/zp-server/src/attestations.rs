@@ -556,7 +556,7 @@ pub async fn course_analytics_handler(
 
         // Median duration (for completed events with duration)
         let median_duration: Option<u64> = {
-            let mut stmt = conn
+            let stmt = conn
                 .prepare(
                     "SELECT duration_secs FROM course_analytics
                      WHERE track = ?1 AND module_id = ?2 AND event = 'completed'
