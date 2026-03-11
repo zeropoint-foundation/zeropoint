@@ -3,6 +3,7 @@
 //! Exposes the governance API as a library so it can be embedded
 //! in the unified `zp` binary.
 
+pub mod attestations;
 pub mod security;
 
 use axum::http::HeaderValue;
@@ -210,6 +211,7 @@ pub struct AppStateInner {
     pub identity: ServerIdentity,
     pub pipeline: Option<Pipeline>,
     pub grants: std::sync::Mutex<Vec<CapabilityGrant>>,
+    pub data_dir: String,
 }
 
 #[derive(Clone)]
@@ -253,12 +255,17 @@ impl AppState {
             None
         };
 
+        // Initialize attestation database
+        attestations::init_attestation_db(&config.data_dir)
+            .expect("Failed to initialize attestation database");
+
         AppState(Arc::new(AppStateInner {
             gate,
             audit_store: std::sync::Mutex::new(audit_store),
             identity,
             pipeline,
             grants: std::sync::Mutex::new(Vec::new()),
+            data_dir: config.data_dir.clone(),
         }))
     }
 }
@@ -328,6 +335,13 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/security/posture", get(security_posture_handler))
         // Genesis record
         .route("/api/v1/genesis", get(genesis_handler))
+        // Attestations
+        .route("/api/v1/attestations", post(attestations::issue_attestation_handler))
+        .route("/api/v1/attestations", get(attestations::lookup_attestation_handler))
+        .route("/api/v1/attestations/all", get(attestations::list_attestations_handler))
+        // Anonymous course analytics
+        .route("/api/v1/analytics/event", post(attestations::record_analytics_handler))
+        .route("/api/v1/analytics/course", get(attestations::course_analytics_handler))
         .layer(cors)
         .with_state(state)
 }

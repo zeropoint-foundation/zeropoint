@@ -1,0 +1,12 @@
+name = "zeropoint-global"
+main = "_worker.js"
+compatibility_date = "2024-12-01"
+
+# Static assets: everything in this directory except the worker itself
+[assets]
+directory = "."
+
+# Custom domain
+routes = [
+  { pattern = "zeropoint.global/*", zone_name = "zeropoint.global" }
+]

@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — Track 2: Builder Course</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-toml.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0c;
+    --bg-surface: #111114;
+    --bg-elevated: #18181c;
+    --bg-hover: #1e1e24;
+    --border: #2a2a32;
+    --border-subtle: #1e1e26;
+    --text: #e4e4e8;
+    --text-dim: #8e8e9a;
+    --text-muted: #5a5a66;
+    --accent: #7eb8da;
+    --accent-dim: #5a8da8;
+    --accent-glow: rgba(126,184,218,0.12);
+    --green: #6ec47e;
+    --green-dim: rgba(110,196,126,0.15);
+    --yellow: #d4a846;
+    --yellow-dim: rgba(212,168,70,0.15);
+    --red: #c46e6e;
+    --red-dim: rgba(196,110,110,0.15);
+    --sidebar-w: 300px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 15px; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* Layout */
+  .app { display: flex; height: 100vh; }
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+  }
+
+  /* Sidebar header */
+  .sidebar-header {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .sidebar-logo {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .sidebar-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .sidebar-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Progress bar */
+  .progress-section { padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+  .progress-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .progress-bar {
+    height: 3px;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  /* Module list */
+  .module-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .module-list::-webkit-scrollbar { width: 4px; }
+  .module-list::-webkit-scrollbar-track { background: transparent; }
+  .module-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .module-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .module-item:hover { background: var(--bg-hover); }
+  .module-item.active {
+    background: var(--accent-glow);
+    border-left-color: var(--accent);
+  }
+  .module-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    min-width: 20px;
+    padding-top: 2px;
+  }
+  .module-item.active .module-num { color: var(--accent); }
+  .module-info { flex: 1; min-width: 0; }
+  .module-name {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .module-item.active .module-name { color: var(--text); }
+  .module-status {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+  .module-check {
+    font-size: 0.85rem;
+    padding-top: 1px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .check-done { color: var(--green); }
+  .check-active { color: var(--accent); }
+  .check-pending { color: var(--text-muted); opacity: 0.3; }
+
+  /* Intro module item */
+  .module-item.intro { opacity: 0.85; }
+
+  /* Main content area */
+  .content-wrapper {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 48px 48px 120px;
+  }
+
+  /* Hero for intro */
+  .hero {
+    text-align: center;
+    padding: 60px 0 48px;
+  }
+  .hero-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+  .hero p {
+    font-size: 1rem;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .hero-meta {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 28px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .hero-meta span { display: flex; align-items: center; gap: 6px; }
+  .hero-meta .val { color: var(--text-dim); font-weight: 500; }
+
+  /* Module header */
+  .module-header {
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .module-header-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .module-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  /* Section tabs */
+  .section-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-tab {
+    padding: 10px 24px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-family: inherit;
+  }
+  .section-tab:hover { color: var(--text-dim); }
+  .section-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Section content */
+  .section-content h1, .section-content h2, .section-content h3 {
+    color: var(--text);
+    margin: 28px 0 12px;
+    line-height: 1.3;
+  }
+  .section-content h1 { font-size: 1.5rem; }
+  .section-content h2 { font-size: 1.2rem; }
+  .section-content h3 { font-size: 1rem; }
+  .section-content p {
+    margin-bottom: 16px;
+    color: var(--text-dim);
+  }
+  .section-content strong { color: var(--text); font-weight: 600; }
+  .section-content em { color: var(--accent-dim); font-style: italic; }
+  .section-content ul, .section-content ol {
+    margin: 12px 0 16px 20px;
+    color: var(--text-dim);
+  }
+  .section-content li { margin-bottom: 6px; }
+  .section-content code:not([class*="language-"]) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    background: var(--bg-hover);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  /* Code blocks */
+  .code-block {
+    position: relative;
+    margin: 16px 0 24px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .code-lang {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .copy-btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .copy-btn.copied {
+    color: var(--green);
+    border-color: var(--green);
+  }
+  .code-block pre {
+    margin: 0 !important;
+    padding: 16px !important;
+    background: var(--bg) !important;
+    border-radius: 0 !important;
+    font-size: 0.82rem !important;
+    line-height: 1.6 !important;
+    overflow-x: auto;
+  }
+  .code-block pre code {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.82rem !important;
+  }
+
+  /* Navigation buttons */
+  .nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    color: var(--text-dim);
+  }
+  .nav-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .nav-btn.primary {
+    background: var(--accent-glow);
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+  .nav-btn.primary:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* Complete button */
+  .complete-section {
+    display: flex;
+    justify-content: center;
+    margin-top: 32px;
+  }
+  .complete-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 28px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid var(--green);
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .complete-btn:hover {
+    background: var(--green);
+    color: var(--bg);
+  }
+  .complete-btn.completed {
+    background: var(--green);
+    color: var(--bg);
+    cursor: default;
+  }
+
+  /* Intro sections */
+  .intro-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+  .intro-card {
+    padding: 20px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .intro-card h3 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .intro-card p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .philosophy-text {
+    padding: 24px;
+    background: var(--bg-surface);
+    border-left: 3px solid var(--accent-dim);
+    border-radius: 0 8px 8px 0;
+    margin: 24px 0;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+  }
+  .philosophy-text p { margin-bottom: 12px; }
+  .philosophy-text p:last-child { margin-bottom: 0; }
+
+  /* Scrollbar */
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .sidebar { width: 260px; min-width: 260px; }
+    .content-wrapper { padding: 32px 24px 100px; }
+    .intro-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) {
+    .sidebar { display: none; }
+    .content-wrapper { padding: 24px 16px 100px; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script id="course-data" type="application/json">
+{
+  "title": "Track 2: Builder",
+  "subtitle": "ZeroPoint Developer Course",
+  "tagline": "From Zero to Governed Agent Fleet",
+  "prereqs": "Rust toolchain (rustup, cargo), basic Rust literacy (ownership, traits, Result), a terminal.",
+  "duration": "~20 hours self-paced",
+  "outcome": "You deploy a governed multi-agent system with Tier 2 key chains, constrained capability grants, hash-chained audit trails, epoch compaction, and mesh-connected peer verification.",
+  "modules": [
+    {
+      "id": 1,
+      "title": "Your First Key",
+      "concept": "Everything in ZeroPoint flows from a key. Identity is a key pair. Authentication is a signature. Authority originates from a genesis key held by a human and flows downward through a signed hierarchy: Genesis \u2192 Operator \u2192 Agent.\n\nThis module creates that hierarchy from scratch.",
+      "lab": "Create a new Rust project that depends on `zp-keys` and `zp-trust`:\n\n```bash\ncargo new zp-lab && cd zp-lab\n```\n\nAdd dependencies to `Cargo.toml` (use path dependencies pointing to your ZeroPoint checkout):\n\n```toml\n[dependencies]\nzp-keys = { path = \"../zeropoint/crates/zp-keys\" }\nzp-trust = { path = \"../zeropoint/crates/zp-trust\" }\nchrono = { version = \"0.4\", features = [\"serde\"] }\nhex = \"0.4\"\n```\n\nWrite `src/main.rs`:\n\n```rust\nuse zp_keys::{GenesisKey, OperatorKey, AgentKey, KeyRole};\nuse chrono::{Utc, Duration};\n\nfn main() {\n    // Step 1: Generate the genesis key\n    let genesis = GenesisKey::generate(\"alice\");\n    println!(\"Genesis public key: {}\", hex::encode(genesis.public_key()));\n    println!(\"Genesis role: {:?}\", genesis.certificate().body.role);\n\n    // Step 2: Issue an operator key (expires in 365 days)\n    let operator = OperatorKey::generate(\n        \"operator-alpha\",\n        &genesis,\n        Some(Utc::now() + Duration::days(365)),\n    );\n    println!(\"\\nOperator public key: {}\", hex::encode(operator.public_key()));\n    println!(\"Operator issuer: {}\", operator.certificate().body.issuer_public_key);\n\n    // Step 3: Issue an agent key (expires in 30 days)\n    let agent = AgentKey::generate(\n        \"agent-001\",\n        &operator,\n        Some(Utc::now() + Duration::days(30)),\n    );\n    println!(\"\\nAgent public key: {}\", hex::encode(agent.public_key()));\n    println!(\"Agent depth: {}\", agent.certificate().body.depth);\n\n    // Step 4: Verify the chain\n    assert_eq!(\n        agent.certificate().body.issuer_public_key,\n        hex::encode(operator.public_key()),\n        \"Agent's issuer must be the operator\"\n    );\n    assert_eq!(\n        operator.certificate().body.issuer_public_key,\n        hex::encode(genesis.public_key()),\n        \"Operator's issuer must be genesis\"\n    );\n\n    agent.certificate().verify(&operator.public_key())\n        .expect(\"Agent certificate signature must verify against operator\");\n    operator.certificate().verify(&genesis.public_key())\n        .expect(\"Operator certificate signature must verify against genesis\");\n\n    println!(\"\\n\\u2713 Full chain verified: Genesis \\u2192 Operator \\u2192 Agent\");\n    println!(\"  Depths: 0 \\u2192 1 \\u2192 2\");\n    println!(\"  Every signature verifies.\");\n}\n```\n\nRun it:\n\n```bash\ncargo run\n```\n\nYou should see the full key hierarchy printed, with verification passing.",
+      "checkpoint": "**Without looking at the lab code**, write a program that:\n\n1. Generates a genesis key for a subject named \"my-org\"\n2. Issues two operator keys: \"ops-east\" and \"ops-west\"\n3. Issues three agent keys under \"ops-east\" and two under \"ops-west\"\n4. Verifies every certificate in every chain\n5. Prints the full hierarchy as a tree\n\nIf every assertion passes, you understand key hierarchies."
+    },
+    {
+      "id": 2,
+      "title": "Signing and Verification",
+      "concept": "A key pair is useless until it signs something. Ed25519 signatures are the cryptographic primitive that makes receipts verifiable, audit entries attributable, and capability grants authentic. This module builds fluency with signing and verification.",
+      "lab": "```rust\nuse zp_trust::Signer;\n\nfn main() {\n    // Generate a signer (Ed25519 key pair)\n    let signer = Signer::generate();\n    println!(\"Public key: {}\", hex::encode(signer.public_key()));\n\n    // Sign arbitrary data\n    let message = b\"This agent is authorized to read /data/reports/*\";\n    let signature = signer.sign(message);\n    println!(\"Signature: {}...{}\", &signature[..16], &signature[signature.len()-16..]);\n\n    // Verify \u2014 anyone with the public key can do this\n    let valid = Signer::verify(&signer.public_key(), message, &signature)\n        .expect(\"Verification should not error\");\n    assert!(valid, \"Signature must verify\");\n    println!(\"\\u2713 Signature verified\");\n\n    // Tamper with the message \u2014 verification must fail\n    let tampered = b\"This agent is authorized to read /data/secrets/*\";\n    let still_valid = Signer::verify(&signer.public_key(), tampered, &signature)\n        .expect(\"Verification should not error\");\n    assert!(!still_valid, \"Tampered message must not verify\");\n    println!(\"\\u2713 Tampered message correctly rejected\");\n\n    // Tamper with the signature \u2014 verification must fail\n    let mut bad_sig = signature.clone();\n    let bytes: Vec<u8> = hex::decode(&bad_sig).unwrap();\n    let mut flipped = bytes;\n    flipped[0] ^= 0xFF;\n    bad_sig = hex::encode(flipped);\n\n    let still_valid = Signer::verify(&signer.public_key(), message, &bad_sig)\n        .unwrap_or(false);\n    assert!(!still_valid, \"Tampered signature must not verify\");\n    println!(\"\\u2713 Tampered signature correctly rejected\");\n\n    // Restore signer from secret key (persistence)\n    let secret = signer.secret_key();\n    let restored = Signer::from_secret(&secret)\n        .expect(\"Should restore from secret\");\n    assert_eq!(signer.public_key(), restored.public_key());\n    println!(\"\\u2713 Signer restored from secret key\");\n}\n```",
+      "checkpoint": "Write a function `sign_and_verify(data: &[u8]) -> bool` that generates a fresh signer, signs the data, and verifies the signature. Then write a function `cross_verify_fails(data: &[u8]) -> bool` that generates *two* signers, signs with one, and attempts to verify with the other's public key. The first should return true, the second false."
+    },
+    {
+      "id": 3,
+      "title": "The Credential Vault",
+      "concept": "Agents need secrets \u2014 API keys, database credentials, tokens. The credential vault stores them encrypted with ChaCha20-Poly1305, retrieves them by reference (never exposing the master key), and zeroizes all sensitive material on drop. This module teaches secure credential handling.",
+      "lab": "```rust\nuse zp_trust::CredentialVault;\nuse rand::RngCore;\n\nfn main() {\n    // Generate a random 256-bit master key\n    let mut master_key = [0u8; 32];\n    rand::thread_rng().fill_bytes(&mut master_key);\n\n    // Create the vault\n    let mut vault = CredentialVault::new(&master_key);\n\n    // Store credentials\n    vault.store(\"db-production\", b\"postgres://user:pass@db.internal:5432/prod\")\n        .expect(\"Should store credential\");\n    vault.store(\"api-key-weather\", b\"sk-weather-abc123def456\")\n        .expect(\"Should store credential\");\n    vault.store(\"api-key-maps\", b\"sk-maps-xyz789\")\n        .expect(\"Should store credential\");\n\n    // List \u2014 only names, never values\n    let names = vault.list();\n    println!(\"Stored credentials: {:?}\", names);\n    assert_eq!(names.len(), 3);\n\n    // Retrieve \u2014 decrypts on demand\n    let db_cred = vault.retrieve(\"db-production\")\n        .expect(\"Should retrieve credential\");\n    assert_eq!(db_cred, b\"postgres://user:pass@db.internal:5432/prod\");\n    println!(\"\\u2713 Retrieved and decrypted db-production\");\n\n    // Retrieve with wrong name \u2014 fails\n    let result = vault.retrieve(\"db-staging\");\n    assert!(result.is_err(), \"Non-existent credential should error\");\n    println!(\"\\u2713 Non-existent credential correctly rejected\");\n\n    // Remove\n    vault.remove(\"api-key-maps\").expect(\"Should remove\");\n    assert_eq!(vault.list().len(), 2);\n    println!(\"\\u2713 Credential removed, {} remaining\", vault.list().len());\n}\n```",
+      "checkpoint": "Build a program that stores 5 credentials, retrieves each one, verifies the values match, removes 2 of them, and confirms the list shows exactly 3. Then drop the vault and create a new one with the *same* master key \u2014 can you retrieve the credentials? (Hint: the current vault is in-memory. Think about what persistence would require.)"
+    },
+    {
+      "id": 4,
+      "title": "Capability Grants and Constraints",
+      "concept": "A capability grant is a signed, portable authorization token. It specifies what an agent can do, what constraints apply, and who issued it. This module builds grants with real constraints and explores how they compose.",
+      "lab": "```rust\nuse zp_core::capability_grant::{CapabilityGrant, GrantedCapability, Constraint};\nuse zp_core::policy::TrustTier;\nuse chrono::{Utc, Duration};\n\nfn main() {\n    let grantor = \"operator-alpha-hash\";\n    let grantee = \"agent-001-hash\";\n\n    // Build a grant with multiple constraints\n    let grant = CapabilityGrant::new(\n        grantor.to_string(),\n        grantee.to_string(),\n        GrantedCapability::Read { scope: vec![\"data/reports/*\".into()] },\n        \"receipt-001\".to_string(),\n    )\n    .with_constraint(Constraint::MaxCost(0.50))\n    .with_constraint(Constraint::RateLimit {\n        max_actions: 100,\n        window_secs: 3600,\n    })\n    .with_constraint(Constraint::TimeWindow {\n        start_hour: 9,\n        end_hour: 17,\n    })\n    .with_constraint(Constraint::RequireReceipt)\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(30))\n    .with_max_delegation_depth(2);\n\n    println!(\"Grant ID: {}\", grant.id);\n    println!(\"Capability: {:?}\", grant.capability);\n    println!(\"Constraints: {}\", grant.constraints.len());\n    for c in &grant.constraints {\n        println!(\"  - {:?}\", c);\n    }\n    println!(\"Trust tier: {:?}\", grant.trust_tier);\n    println!(\"Max delegation depth: {:?}\", grant.max_delegation_depth);\n    println!(\"Expires: {:?}\", grant.expires_at);\n\n    // Now build an ApiCall grant with scope restriction\n    let api_grant = CapabilityGrant::new(\n        grantor.to_string(),\n        grantee.to_string(),\n        GrantedCapability::ApiCall {\n            endpoints: vec![\"api.weather.com/**\".into()],\n        },\n        \"receipt-002\".to_string(),\n    )\n    .with_constraint(Constraint::MaxCost(0.01))\n    .with_constraint(Constraint::RateLimit {\n        max_actions: 10,\n        window_secs: 60,\n    })\n    .with_constraint(Constraint::ScopeRestriction {\n        allowed: vec![\"api.weather.com/v2/**\".into()],\n        denied: vec![\"api.weather.com/v2/admin/**\".into()],\n    });\n\n    println!(\"\\nAPI Grant scope restriction:\");\n    for c in &api_grant.constraints {\n        if let Constraint::ScopeRestriction { allowed, denied } = c {\n            println!(\"  Allowed: {:?}\", allowed);\n            println!(\"  Denied: {:?}\", denied);\n        }\n    }\n    println!(\"\\u2713 Both grants constructed with constraints\");\n}\n```",
+      "checkpoint": "Build grants for all eight capability types (Read, Write, Execute, CredentialAccess, ApiCall, ConfigChange, MeshSend, Custom). Each grant should have at least two constraints. Print a summary table showing capability type, constraint count, and expiration for each."
+    },
+    {
+      "id": 5,
+      "title": "Delegation Chains",
+      "concept": "Authority flows downward through signed grants. Each link narrows the scope, tightens the constraints, and shortens the expiration. Eight invariants are enforced in code. This module builds a three-level delegation chain and verifies it.",
+      "lab": "```rust\nuse zp_core::capability_grant::{CapabilityGrant, GrantedCapability, Constraint};\nuse zp_core::delegation_chain::DelegationChain;\nuse zp_core::policy::TrustTier;\nuse chrono::{Utc, Duration};\n\nfn main() {\n    // Root grant: human \\u2192 operator\n    let root = CapabilityGrant::new(\n        \"genesis-hash\".to_string(),\n        \"operator-hash\".to_string(),\n        GrantedCapability::Read { scope: vec![\"data/**\".into()] },\n        \"receipt-root\".to_string(),\n    )\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(365))\n    .with_max_delegation_depth(3);\n\n    // Level 1: operator \\u2192 agent (narrower scope, tighter constraints)\n    let level1 = CapabilityGrant::new(\n        \"operator-hash\".to_string(),\n        \"agent-hash\".to_string(),\n        GrantedCapability::Read { scope: vec![\"data/reports/**\".into()] },\n        \"receipt-level1\".to_string(),\n    )\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(90))\n    .with_constraint(Constraint::RateLimit { max_actions: 100, window_secs: 3600 })\n    .with_constraint(Constraint::RequireReceipt);\n\n    // Level 2: agent \\u2192 sub-agent (narrowest scope, tightest constraints)\n    let level2 = CapabilityGrant::new(\n        \"agent-hash\".to_string(),\n        \"sub-agent-hash\".to_string(),\n        GrantedCapability::Read { scope: vec![\"data/reports/billing/*\".into()] },\n        \"receipt-level2\".to_string(),\n    )\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(7))\n    .with_constraint(Constraint::RateLimit { max_actions: 20, window_secs: 3600 })\n    .with_constraint(Constraint::RequireReceipt)\n    .with_constraint(Constraint::TimeWindow { start_hour: 9, end_hour: 17 });\n\n    // Verify the chain\n    match DelegationChain::verify(vec![root, level1, level2]) {\n        Ok(chain) => {\n            println!(\"\\u2713 Delegation chain verified ({} grants)\", chain.grants().len());\n            for (i, grant) in chain.grants().iter().enumerate() {\n                println!(\"  Level {}: {} \\u2192 {}\", i, grant.grantor, grant.grantee);\n                println!(\"    Scope: {:?}\", grant.capability);\n                println!(\"    Constraints: {}\", grant.constraints.len());\n            }\n        }\n        Err(e) => {\n            println!(\"\\u2717 Chain verification failed: {:?}\", e);\n        }\n    }\n}\n```",
+      "checkpoint": "Build a chain that **violates** each of the eight invariants, one at a time. For each violation, verify that `DelegationChain::verify()` returns the appropriate error. Document which invariant each test case violates and what the error message says. This is the most important checkpoint in the course \u2014 understanding how the invariants fail teaches you what they protect."
+    },
+    {
+      "id": 6,
+      "title": "The Policy Engine",
+      "concept": "The policy engine evaluates actions against rules and returns graduated decisions. Constitutional rules (HarmPrinciple, Sovereignty) are immovable. Operational rules compose on top. The most restrictive decision wins. This module builds a policy engine, fires actions through it, and observes graduated decisions.",
+      "lab": "```rust\nuse zp_policy::{PolicyEngine, GovernanceGate, GateResult};\nuse zp_core::policy::{ActionType, PolicyContext, PolicyDecision, TrustTier};\nuse zp_core::audit::ActorId;\nuse chrono::Utc;\n\nfn main() {\n    // Create engine with default rules\n    let engine = PolicyEngine::new();\n\n    // Low-risk action: Chat\n    let chat_context = PolicyContext {\n        action: ActionType::Chat,\n        trust_tier: TrustTier::Tier1,\n        ..Default::default()\n    };\n    let decision = engine.evaluate(&chat_context);\n    println!(\"Chat decision: {:?}\", decision);\n\n    // High-risk action: Execute\n    let exec_context = PolicyContext {\n        action: ActionType::Execute { language: \"python\".into() },\n        trust_tier: TrustTier::Tier1,\n        ..Default::default()\n    };\n    let decision = engine.evaluate(&exec_context);\n    println!(\"Execute decision: {:?}\", decision);\n\n    // Critical action: CredentialAccess at Tier0\n    let cred_context = PolicyContext {\n        action: ActionType::CredentialAccess {\n            credential_ref: \"db-production\".into(),\n        },\n        trust_tier: TrustTier::Tier0,\n        ..Default::default()\n    };\n    let decision = engine.evaluate(&cred_context);\n    println!(\"CredentialAccess at Tier0: {:?}\", decision);\n\n    // Use the GovernanceGate for full pipeline\n    let gate = GovernanceGate::new(\"lab-gate\");\n    let result = gate.evaluate(&chat_context, ActorId::User(\"alice\".into()));\n\n    println!(\"\\nGovernanceGate result:\");\n    println!(\"  Decision: {:?}\", result.decision);\n    println!(\"  Risk level: {:?}\", result.risk_level);\n    println!(\"  Trust tier: {:?}\", result.trust_tier);\n    println!(\"  Applied rules: {:?}\", result.applied_rules);\n    println!(\"  is_allowed: {}\", result.is_allowed());\n    println!(\"  is_blocked: {}\", result.is_blocked());\n    println!(\"  needs_interaction: {}\", result.needs_interaction());\n}\n```",
+      "checkpoint": "Write a program that evaluates all 11 ActionType variants through the GovernanceGate at each of the three trust tiers (Tier0, Tier1, Tier2). Print a matrix: action type \\u00d7 trust tier \\u2192 decision. Identify which combinations produce Block, which produce Warn, and which produce Allow. This matrix is your deployment's security profile."
+    },
+    {
+      "id": 7,
+      "title": "Receipts and Receipt Chains",
+      "concept": "The receipt is the atomic unit of accountability. Every governed action produces one, signed by the actor, hash-chained to the previous. This module creates receipts, chains them, and verifies the chain's integrity.",
+      "lab": "```rust\nuse zp_receipt::{Receipt, ReceiptChain};\nuse zp_receipt::types::{Status, Action, TrustGrade};\nuse zp_trust::Signer;\n\nfn main() {\n    let signer = Signer::generate();\n\n    // Create an Intent receipt (root of provenance chain)\n    let intent = Receipt::intent(\"user-alice\")\n        .status(Status::Success)\n        .trust_grade(TrustGrade::B)\n        .finalize();\n    println!(\"Intent receipt: {}\", intent.id);\n    assert!(intent.verify_hash(), \"Hash must verify\");\n\n    // Create an Execution receipt linked to the intent\n    let execution = Receipt::execution(\"agent-001\")\n        .parent(&intent.id)\n        .status(Status::Success)\n        .action(Action::code_execution(\"python\", 0))\n        .trust_grade(TrustGrade::B)\n        .finalize();\n    println!(\"Execution receipt: {}\", execution.id);\n    assert!(execution.verify_hash(), \"Hash must verify\");\n\n    // Chain them\n    let mut chain = ReceiptChain::new();\n    chain.add_receipt(intent).expect(\"Should add root\");\n    chain.add_receipt(execution).expect(\"Should add child\");\n\n    // Verify the chain\n    chain.verify().expect(\"Chain should verify\");\n    println!(\"\\n\\u2713 Receipt chain verified ({} entries)\", chain.entries().len());\n\n    // Print chain structure\n    for entry in chain.entries() {\n        println!(\"  seq={} hash={}...{}\",\n            entry.sequence,\n            &entry.content_hash[..8],\n            &entry.content_hash[entry.content_hash.len()-8..],\n        );\n    }\n}\n```",
+      "checkpoint": "Build a provenance chain with all six receipt types: Intent \\u2192 Design \\u2192 Approval \\u2192 Execution \\u2192 Payment \\u2192 Access. Each receipt should reference its parent. Verify the full chain. Then tamper with one receipt (modify a field after creation) and confirm that `chain.verify()` fails. Identify which entry the failure points to."
+    },
+    {
+      "id": 8,
+      "title": "The Audit Trail",
+      "concept": "The audit trail records every governance decision in a hash-chained, persisted sequence. It is the evidence that makes everything else verifiable after the fact. This module creates an audit store, appends entries, and verifies the chain.",
+      "lab": "```rust\nuse zp_audit::{AuditStore, ChainBuilder, ChainVerifier};\nuse zp_core::audit::{ActorId, AuditAction};\nuse zp_core::policy::PolicyDecision;\nuse zp_core::types::ConversationId;\n\nfn main() {\n    let store = AuditStore::open(\"./lab-audit.db\")\n        .expect(\"Should open audit store\");\n    let conv_id = ConversationId::new();\n\n    // Build genesis entry (first in chain)\n    let entry1 = ChainBuilder::build_entry_from_genesis(\n        ActorId::User(\"alice\".into()),\n        AuditAction::MessageReceived {\n            content_hash: \"abc123\".into(),\n        },\n        conv_id.clone(),\n        PolicyDecision::Allow { conditions: vec![] },\n        \"default-allow\".into(),\n        None, None,\n    );\n    println!(\"Entry 1: {} (genesis)\", entry1.id);\n    store.append(entry1.clone()).expect(\"Should append\");\n\n    // Build second entry (chained to first)\n    let entry2 = ChainBuilder::build_entry(\n        entry1.entry_hash.clone(),\n        ActorId::Operator,\n        AuditAction::ResponseGenerated {\n            model: \"claude-3\".into(),\n            content_hash: \"def456\".into(),\n        },\n        conv_id.clone(),\n        PolicyDecision::Allow { conditions: vec![] },\n        \"default-allow\".into(),\n        None, None,\n    );\n    println!(\"Entry 2: {} (prev={}...)\", entry2.id, &entry2.prev_hash[..8]);\n    store.append(entry2.clone()).expect(\"Should append\");\n\n    // Build third entry\n    let entry3 = ChainBuilder::build_entry(\n        entry2.entry_hash.clone(),\n        ActorId::Skill(\"code-executor\".into()),\n        AuditAction::ToolInvoked {\n            tool_name: \"python\".into(),\n            arguments_hash: \"ghi789\".into(),\n        },\n        conv_id.clone(),\n        PolicyDecision::Warn {\n            message: \"High-risk execution\".into(),\n            require_ack: true,\n        },\n        \"catastrophic-action-rule\".into(),\n        None, None,\n    );\n    store.append(entry3).expect(\"Should append\");\n\n    // Retrieve and verify\n    let entries = store.get_entries_by_conversation(&conv_id)\n        .expect(\"Should retrieve\");\n    println!(\"\\nRetrieved {} entries\", entries.len());\n\n    let report = ChainVerifier::verify(&entries)\n        .expect(\"Should verify\");\n    println!(\"Chain valid: {}\", report.is_valid);\n    println!(\"\\u2713 Audit chain verified\");\n}\n```",
+      "checkpoint": "Create 20 audit entries across 3 different conversations. Retrieve each conversation's entries separately. Verify each conversation's chain independently. Then retrieve all entries by time range and verify the combined chain. How does cross-conversation verification differ from within-conversation verification?"
+    },
+    {
+      "id": 9,
+      "title": "The Governance Gate \u2014 End to End",
+      "concept": "This module wires everything together. A request enters the GovernanceGate, passes through Guard \\u2192 Policy \\u2192 Audit, and produces a GateResult with a full audit entry hash-chained to the previous. This is the integration point where ZeroPoint's guarantees become operational.",
+      "lab": "```rust\nuse zp_policy::{GovernanceGate, PolicyEngine};\nuse zp_core::policy::{ActionType, PolicyContext, TrustTier};\nuse zp_core::audit::ActorId;\n\nfn main() {\n    let gate = GovernanceGate::new(\"production-gate\");\n\n    let actions = vec![\n        (\"alice\", ActionType::Chat, TrustTier::Tier1),\n        (\"alice\", ActionType::Read { target: \"reports/q4.pdf\".into() }, TrustTier::Tier1),\n        (\"agent-001\", ActionType::Execute { language: \"python\".into() }, TrustTier::Tier2),\n        (\"agent-001\", ActionType::Write { target: \"output/results.json\".into() }, TrustTier::Tier2),\n        (\"agent-002\", ActionType::CredentialAccess { credential_ref: \"api-key\".into() }, TrustTier::Tier0),\n    ];\n\n    println!(\"Action Sequence Through GovernanceGate:\\n\");\n    println!(\"{:<12} {:<25} {:<8} {:<10} {:<8}\",\n        \"Actor\", \"Action\", \"Tier\", \"Decision\", \"Rules\");\n    println!(\"{}\", \"-\".repeat(70));\n\n    for (actor, action, tier) in actions {\n        let context = PolicyContext {\n            action: action.clone(),\n            trust_tier: tier,\n            ..Default::default()\n        };\n        let actor_id = ActorId::User(actor.into());\n        let result = gate.evaluate(&context, actor_id);\n\n        let action_name = format!(\"{:?}\", action);\n        let action_short = if action_name.len() > 24 {\n            format!(\"{}...\", &action_name[..21])\n        } else {\n            action_name\n        };\n\n        println!(\"{:<12} {:<25} {:<8} {:<10} {}\",\n            actor,\n            action_short,\n            format!(\"{:?}\", tier),\n            if result.is_allowed() { \"Allow\" }\n            else if result.is_blocked() { \"Block\" }\n            else { \"Interact\" },\n            result.applied_rules.join(\", \"),\n        );\n    }\n\n    println!(\"\\n\\u2713 All actions evaluated through GovernanceGate\");\n    println!(\"  Each produced an audit entry hash-chained to the previous.\");\n}\n```",
+      "checkpoint": "Build a complete request lifecycle: create a GovernanceGate, evaluate an action sequence that includes at least one Allow, one Warn, and one Block decision. For each result, print the full GateResult including the audit entry's prev_hash. Verify that each audit entry's prev_hash matches the previous entry's entry_hash. This is the chain in action."
+    },
+    {
+      "id": 10,
+      "title": "Mesh Identity and Node Setup",
+      "concept": "The mesh extends governance beyond a single node. Each node has a MeshIdentity (Ed25519 for signing + X25519 for encryption), a unique address derived from its public key, and the ability to communicate over any transport. This module creates a mesh node and prepares it for peer communication.",
+      "lab": "```rust\nuse zp_mesh::{MeshIdentity, MeshNode};\nuse zp_mesh::destination::DestinationHash;\nuse zp_trust::Signer;\n\nfn main() {\n    // Method 1: Generate a fresh mesh identity\n    let identity = MeshIdentity::generate();\n    println!(\"Signing key:    {}\", hex::encode(identity.signing_public_key()));\n    println!(\"Encryption key: {}\", hex::encode(identity.encryption_public_key()));\n\n    // The address is a 128-bit hash of the combined public key\n    let address = DestinationHash::from_public_key(&identity.combined_public_key());\n    println!(\"Mesh address:   {}\", address.to_hex());\n\n    // Method 2: Promote an existing Signer to mesh identity\n    let signer = Signer::generate();\n    let mesh_id = MeshIdentity::from_signer(&signer)\n        .expect(\"Should promote signer to mesh identity\");\n    println!(\"\\nPromoted signer to mesh identity\");\n    println!(\"  Signer pub:  {}\", hex::encode(signer.public_key()));\n    println!(\"  Mesh signing: {}\", hex::encode(mesh_id.signing_public_key()));\n    assert_eq!(signer.public_key(), mesh_id.signing_public_key());\n\n    // Create a mesh node\n    let node = MeshNode::new(identity);\n    println!(\"\\nMesh node created\");\n    println!(\"  Node address: {}\", node.address());\n\n    // The address is deterministic \u2014 same key always produces same address\n    let identity2 = MeshIdentity::from_ed25519_secret(&signer.secret_key())\n        .expect(\"Should restore identity\");\n    let node2 = MeshNode::new(identity2);\n    let node3_id = MeshIdentity::from_ed25519_secret(&signer.secret_key())\n        .expect(\"Should restore identity\");\n    let node3 = MeshNode::new(node3_id);\n    assert_eq!(node2.address(), node3.address());\n    println!(\"\\u2713 Deterministic addressing: same key \\u2192 same address\");\n}\n```",
+      "checkpoint": "Create three mesh nodes with three different identities. Print each node's address. Verify that no two addresses collide (they won't \u2014 128-bit hashes \u2014 but confirm it). Then restore one node from its secret key and verify the address is identical to the original."
+    },
+    {
+      "id": 11,
+      "title": "Peer Communication",
+      "concept": "Mesh nodes communicate through interfaces (TCP, LoRa, serial) and establish encrypted links through a three-packet handshake. This module sets up two nodes on TCP and exchanges messages.",
+      "lab": "This lab requires two terminal windows (or async tasks). Set up two nodes:\n\n```rust\nuse zp_mesh::{MeshIdentity, MeshNode};\nuse zp_mesh::interface::TcpServerInterface;\nuse std::sync::Arc;\n\n#[tokio::main]\nasync fn main() {\n    // Node A\n    let id_a = MeshIdentity::generate();\n    let mut node_a = MeshNode::new(id_a);\n    let tcp_a = Arc::new(TcpServerInterface::new(\"127.0.0.1:4242\").unwrap());\n    node_a.add_interface(tcp_a).unwrap();\n    println!(\"Node A: {}\", node_a.address());\n\n    // Node B\n    let id_b = MeshIdentity::generate();\n    let mut node_b = MeshNode::new(id_b);\n    let tcp_b = Arc::new(TcpServerInterface::new(\"127.0.0.1:4243\").unwrap());\n    node_b.add_interface(tcp_b).unwrap();\n    println!(\"Node B: {}\", node_b.address());\n\n    // Establish link from A to B\n    let link = node_a.establish_link(&node_b.address()).await\n        .expect(\"Should establish link\");\n    println!(\"Link state: {:?}\", link.state());\n    println!(\"\\u2713 Encrypted link established between A and B\");\n\n    // Send a receipt from A to B\n    let receipt = create_sample_receipt(); // (helper from Module 7)\n    node_a.send_receipt(&node_b.address(), &receipt).await\n        .expect(\"Should send receipt\");\n    println!(\"\\u2713 Receipt sent from A to B\");\n}\n```",
+      "checkpoint": "Set up three nodes (A, B, C) on different TCP ports. Establish links A\\u2194B and B\\u2194C. Send a receipt from A to C through B. Verify the receipt arrived intact. This is mesh relay in action."
+    },
+    {
+      "id": 12,
+      "title": "Audit Challenges and Attestations",
+      "concept": "A node's audit chain is self-attested until a peer verifies it. The challenge/response protocol lets peers request proof of chain integrity and produce signed attestations of what they found. This module exercises the full verification flow.",
+      "lab": "```rust\nuse zp_audit::{AuditStore, ChainBuilder, verify_peer_chain};\nuse zp_audit::{AuditChallenge, AuditResponse, PeerAuditAttestation};\nuse zp_core::audit::{ActorId, AuditAction};\nuse zp_core::policy::PolicyDecision;\nuse zp_core::types::ConversationId;\n\nfn main() {\n    let store = AuditStore::open(\"./lab-challenge.db\").unwrap();\n    let conv = ConversationId::new();\n\n    let mut prev_hash = String::new();\n    for i in 0..10 {\n        let entry = if i == 0 {\n            ChainBuilder::build_entry_from_genesis(\n                ActorId::User(\"alice\".into()),\n                AuditAction::MessageReceived { content_hash: format!(\"msg-{}\", i) },\n                conv.clone(),\n                PolicyDecision::Allow { conditions: vec![] },\n                \"default-allow\".into(),\n                None, None,\n            )\n        } else {\n            ChainBuilder::build_entry(\n                prev_hash.clone(),\n                ActorId::Operator,\n                AuditAction::ResponseGenerated {\n                    model: \"claude-3\".into(),\n                    content_hash: format!(\"resp-{}\", i),\n                },\n                conv.clone(),\n                PolicyDecision::Allow { conditions: vec![] },\n                \"default-allow\".into(),\n                None, None,\n            )\n        };\n        prev_hash = entry.entry_hash.clone();\n        store.append(entry).unwrap();\n    }\n    println!(\"Created 10 audit entries\");\n\n    // Peer creates a challenge\n    let challenge = AuditChallenge::recent(5);\n    println!(\"Challenge: requesting last 5 entries\");\n\n    // Node responds\n    let entries = store.get_entries_by_conversation(&conv).unwrap();\n    let recent: Vec<_> = entries.into_iter().rev().take(5).collect();\n\n    // Peer verifies the chain\n    let report = zp_audit::ChainVerifier::verify(&recent).unwrap();\n    println!(\"Verification: chain_valid={}\", report.is_valid);\n\n    println!(\"\\n\\u2713 Peer attestation:\");\n    println!(\"  Entries verified: 5\");\n    println!(\"  Chain valid: {}\", report.is_valid);\n    println!(\"  (In production: signed by peer's Ed25519 key)\");\n}\n```",
+      "checkpoint": "Create two separate audit stores (simulating two nodes). Populate each with 20 entries. Have each node challenge the other's chain. Produce attestations from both directions. Verify that both attestations confirm valid chains. Then tamper with one entry in one store and re-challenge \u2014 the attestation should report an invalid chain."
+    },
+    {
+      "id": 13,
+      "title": "WASM Policy Modules",
+      "concept": "The policy engine supports WebAssembly modules \u2014 sandboxed, portable policy rules that can be shared between peers. This module loads a WASM policy module, evaluates it alongside native rules, and observes the most-restrictive-wins composition.",
+      "lab": "First, create a simple WASM policy module (a Rust crate compiled to wasm32-wasi):\n\n```rust\n// wasm-policy/src/lib.rs\n// Compile with: cargo build --target wasm32-wasi --release\n\n#[no_mangle]\npub extern \"C\" fn evaluate(action_type: i32, trust_tier: i32) -> i32 {\n    // Block Execute actions at Tier0\n    if action_type == 4 && trust_tier == 0 {\n        return 5; // Block\n    }\n    // Warn on Write at Tier1\n    if action_type == 2 && trust_tier == 1 {\n        return 3; // Warn\n    }\n    1 // Allow\n}\n```\n\nThen load it in the policy engine:\n\n```rust\nuse zp_policy::{PolicyEngine, PolicyModuleRegistry};\n\nfn main() {\n    let wasm_bytes = std::fs::read(\"./wasm-policy/target/wasm32-wasi/release/policy.wasm\")\n        .expect(\"Should read WASM file\");\n\n    let mut registry = PolicyModuleRegistry::new()\n        .expect(\"Should create WASM runtime\");\n    let metadata = registry.load(&wasm_bytes)\n        .expect(\"Should load module\");\n    println!(\"Loaded WASM module: {}\", metadata.content_hash);\n\n    // Create engine with WASM\n    let engine = PolicyEngine::with_wasm(registry);\n\n    // Evaluate \u2014 WASM module participates alongside native rules\n    // ... (use same evaluation pattern as Module 6)\n}\n```",
+      "checkpoint": "Create two different WASM policy modules with different rules. Load both into the same engine. Evaluate an action that triggers rules from both modules and from native rules. Verify that the most restrictive decision from all three sources wins. This demonstrates the composition model across native and WASM boundaries."
+    },
+    {
+      "id": 14,
+      "title": "Capstone \u2014 Governed Agent Fleet",
+      "concept": "This is the integration exercise. You build a complete governed agent system from the primitives you've learned: key hierarchy, capability grants, delegation chains, policy engine, receipt chains, audit trail, and mesh communication. No hand-holding \u2014 only the requirements.",
+      "lab": "Build a system with:\n\n1. **One genesis key** (\"fleet-command\")\n2. **Two operator keys** (\"ops-primary\", \"ops-secondary\")\n3. **Three agents** under ops-primary (\"reader-01\", \"writer-01\", \"executor-01\") and **two agents** under ops-secondary (\"reader-02\", \"analyst-01\")\n4. **Capability grants** for each agent:\n   - reader-01: Read scope `data/**`, rate limit 200/hour, RequireReceipt\n   - writer-01: Write scope `output/**`, MaxCost(1.00), rate limit 50/hour, RequireReceipt\n   - executor-01: Execute Python only, MaxCost(5.00), rate limit 10/hour, TimeWindow 9-17, RequireReceipt\n   - reader-02: Read scope `data/public/**`, rate limit 100/hour\n   - analyst-01: Read scope `data/**` + ApiCall scope `analytics.internal/**`, rate limit 30/hour, RequireReceipt\n5. **Delegation from executor-01 to a sub-agent** (\"sandbox-01\") with narrower scope: Execute Python only, MaxCost(0.50), rate limit 5/hour, TimeWindow 10-16\n6. **Verify all delegation chains**\n7. **A GovernanceGate** with default policy engine\n8. **Run 20 actions** through the gate (mix of reads, writes, executes, API calls, credential accesses across different agents and tiers)\n9. **Produce a receipt for each action** and chain them\n10. **Persist the audit trail** to SQLite\n11. **Verify the full audit chain**\n12. **Set up two mesh nodes** (ops-primary and ops-secondary)\n13. **Exchange receipts** between the nodes\n14. **Challenge each node's audit chain** from the other\n15. **Produce signed attestations** from both nodes\n\nYour deliverable: a single Rust binary that performs all of the above and prints:\n\n```\nFLEET SUMMARY\n\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\nGenesis: fleet-command\nOperators: 2\nAgents: 5 (+ 1 sub-agent)\nDelegation chains: 6 verified \\u2713\n\nGOVERNANCE RUN\n\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\nActions evaluated: 20\n  Allowed: 16\n  Warned: 3\n  Blocked: 1\nReceipts produced: 20\nReceipt chain: verified \\u2713\n\nAUDIT\n\\u2500\\u2500\\u2500\\u2500\\u2500\nEntries: 20\nChain integrity: verified \\u2713\nSQLite store: ./capstone-audit.db\n\nMESH\n\\u2500\\u2500\\u2500\\u2500\nNodes: 2\nReceipts exchanged: 20\nPeer attestations: 2 (both valid \\u2713)\n\nAll systems operational.\n```",
+      "checkpoint": "If your output matches the structure above (numbers may vary based on which actions you chose), you have built a governed agent fleet from scratch. You understand key hierarchies, capability grants, delegation chains, the policy engine, the governance gate, receipts, audit trails, mesh communication, and peer verification.\n\n**You are a ZeroPoint builder.**"
+    }
+  ]
+}
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+// Parse course data
+const courseData = JSON.parse(document.getElementById('course-data').textContent);
+
+// Custom markdown renderer with Prism highlighting
+function renderMarkdown(md) {
+  if (!md) return '';
+
+  // Process code blocks first
+  const codeBlocks = [];
+  let processed = md.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({ lang: lang || 'text', code: code.trimEnd() });
+    return `%%CODEBLOCK_${idx}%%`;
+  });
+
+  // Basic markdown to HTML
+  processed = processed
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+
+  // Wrap in paragraphs
+  if (!processed.startsWith('<')) processed = '<p>' + processed + '</p>';
+
+  // Restore code blocks as placeholders (we'll render them as React components)
+  processed = processed.replace(/%%CODEBLOCK_(\d+)%%/g, (_, idx) => {
+    const block = codeBlocks[parseInt(idx)];
+    let highlighted;
+    try {
+      const grammar = Prism.languages[block.lang] || Prism.languages.clike;
+      highlighted = Prism.highlight(block.code, grammar, block.lang);
+    } catch (e) {
+      highlighted = block.code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    return `<div class="code-block" data-lang="${block.lang}" data-code="${encodeURIComponent(block.code)}"><div class="code-block-header"><span class="code-lang">${block.lang}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div><pre class="language-${block.lang}"><code class="language-${block.lang}">${highlighted}</code></pre></div>`;
+  });
+
+  return processed;
+}
+
+// Global copy function
+window.copyCode = function(btn) {
+  const block = btn.closest('.code-block');
+  const code = decodeURIComponent(block.dataset.code);
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+};
+
+// Components
+function IntroPage({ onStart }) {
+  return (
+    <div className="content-wrapper">
+      <div className="hero">
+        <div className="hero-badge">ZeroPoint Academy</div>
+        <h1>Track 2: Builder</h1>
+        <p>{courseData.tagline}</p>
+        <div className="hero-meta">
+          <span><span className="val">{courseData.duration}</span></span>
+          <span><span className="val">14 Modules</span></span>
+          <span><span className="val">Rust</span></span>
+        </div>
+      </div>
+
+      <div className="intro-grid">
+        <div className="intro-card">
+          <h3>Concept</h3>
+          <p>What you're building and why it matters, drawn from the book.</p>
+        </div>
+        <div className="intro-card">
+          <h3>Lab</h3>
+          <p>Hands-on code you write and run against a real ZeroPoint instance.</p>
+        </div>
+        <div className="intro-card">
+          <h3>Checkpoint</h3>
+          <p>A verification exercise that proves you understood the module.</p>
+        </div>
+      </div>
+
+      <div className="philosophy-text">
+        <p>You should type the code, not copy it. The muscle memory matters. When a lab says "verify that X," it means run the code and confirm the output matches expectations.</p>
+        <p>The modules are sequential. Each builds on the previous. Do not skip ahead.</p>
+      </div>
+
+      <div style={{ marginTop: '24px' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginBottom: '8px' }}><strong>Prerequisites:</strong> {courseData.prereqs}</p>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}><strong>Outcome:</strong> {courseData.outcome}</p>
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: '40px' }}>
+        <button className="nav-btn primary" onClick={onStart} style={{ padding: '12px 32px', fontSize: '0.9rem' }}>
+          Begin Module 1 &rarr;
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ModulePage({ module, completed, onComplete, onPrev, onNext, hasPrev, hasNext }) {
+  const [activeTab, setActiveTab] = useState('concept');
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    setActiveTab('concept');
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [module.id]);
+
+  const sections = {
+    concept: module.concept,
+    lab: module.lab,
+    checkpoint: module.checkpoint,
+  };
+
+  const html = useMemo(() => renderMarkdown(sections[activeTab]), [module.id, activeTab]);
+
+  return (
+    <div className="content-wrapper" ref={contentRef}>
+      <div className="module-header">
+        <div className="module-header-num">Module {module.id} of 14</div>
+        <h1>{module.title}</h1>
+      </div>
+
+      <div className="section-tabs">
+        {['concept', 'lab', 'checkpoint'].map(tab => (
+          <button
+            key={tab}
+            className={`section-tab ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <div className="section-content" dangerouslySetInnerHTML={{ __html: html }} />
+
+      {activeTab === 'checkpoint' && (
+        <div className="complete-section">
+          <button
+            className={`complete-btn ${completed ? 'completed' : ''}`}
+            onClick={() => !completed && onComplete(module.id)}
+          >
+            {completed ? '\u2713 Module Completed' : 'Mark as Complete'}
+          </button>
+        </div>
+      )}
+
+      <div className="nav-buttons">
+        <button className="nav-btn" onClick={onPrev} disabled={!hasPrev}>
+          &larr; Previous
+        </button>
+        {hasNext ? (
+          <button className="nav-btn primary" onClick={onNext}>
+            Next Module &rarr;
+          </button>
+        ) : (
+          <span style={{ fontSize: '0.85rem', color: 'var(--green)', fontWeight: 500 }}>
+            {completed ? '\u2713 Course Complete' : 'Final Module'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// API Configuration
+// ============================================================================
+// The course app talks to the ZeroPoint server (zp-server on Hetzner) for two
+// purposes:
+//   1. Anonymous analytics — module start/complete events with no identity
+//   2. Attestation issuance — when all 14 modules are complete, the builder
+//      enters their name and receives a signed, hash-chained attestation
+//
+// The API_BASE should point to the zp-server instance. In production this is
+// proxied through Cloudflare at zeropoint.global. For local dev, point it at
+// localhost:3000.
+// ============================================================================
+const API_BASE = 'https://zeropoint.global';
+const TRACK_ID = 'track-2-builder';
+
+// Generate a random session ID for anonymous analytics.
+// This groups events within a single learning session but cannot identify
+// a person. It's regenerated each time the page loads.
+const SESSION_ID = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+
+// Fire an anonymous analytics event to the server.
+// Failures are silently ignored — analytics should never block learning.
+function sendAnalyticsEvent(moduleId, event, durationSecs) {
+  fetch(`${API_BASE}/api/v1/analytics/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: SESSION_ID,
+      track: TRACK_ID,
+      module_id: moduleId,
+      event: event,
+      duration_secs: durationSecs || null,
+    }),
+  }).catch(() => {}); // Silent — never block the learner
+}
+
+// Request an attestation from the server when all modules are complete.
+// Returns the attestation object (id, hash, signature) or null on failure.
+async function requestAttestation(name, completions) {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/attestations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        track: TRACK_ID,
+        completions: completions,
+      }),
+    });
+    if (res.ok) return await res.json();
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function App() {
+  const [currentModule, setCurrentModule] = useState(0); // 0 = intro
+  const [completedModules, setCompletedModules] = useState(new Set());
+  // Track when each module was started (for duration calculation)
+  const moduleStartTimes = useRef({});
+  // Track when each module was completed (for attestation payload)
+  const completionTimestamps = useRef({});
+  // Attestation state
+  const [showAttestationModal, setShowAttestationModal] = useState(false);
+  const [attestation, setAttestation] = useState(null);
+  const [attestationLoading, setAttestationLoading] = useState(false);
+  const mainRef = useRef(null);
+
+  const goTo = useCallback((idx) => {
+    setCurrentModule(idx);
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+
+    // Fire "started" analytics event when entering a module
+    if (idx > 0) {
+      moduleStartTimes.current[idx] = Date.now();
+      sendAnalyticsEvent(idx, 'started');
+    }
+  }, []);
+
+  const handleComplete = useCallback((id) => {
+    // Calculate time spent on this module (seconds)
+    const startTime = moduleStartTimes.current[id];
+    const durationSecs = startTime ? Math.round((Date.now() - startTime) / 1000) : null;
+
+    // Record completion timestamp for the attestation payload
+    completionTimestamps.current[id] = new Date().toISOString();
+
+    // Fire "completed" analytics event with duration
+    sendAnalyticsEvent(id, 'completed', durationSecs);
+
+    setCompletedModules(prev => {
+      const next = new Set(prev);
+      next.add(id);
+
+      // If all 14 modules are now complete, show the attestation modal
+      if (next.size === courseData.modules.length) {
+        setTimeout(() => setShowAttestationModal(true), 600);
+      }
+
+      return next;
+    });
+  }, []);
+
+  // Handle attestation request when the builder submits their name
+  const handleAttestationRequest = useCallback(async (name) => {
+    setAttestationLoading(true);
+    const completions = courseData.modules.map(mod => ({
+      module_id: mod.id,
+      module_name: mod.title,
+      completed_at: completionTimestamps.current[mod.id] || new Date().toISOString(),
+    }));
+    const result = await requestAttestation(name, completions);
+    setAttestation(result);
+    setAttestationLoading(false);
+  }, []);
+
+  const progress = (completedModules.size / courseData.modules.length) * 100;
+
+  return (
+    <div className="app">
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-logo">ZeroPoint</div>
+          <div className="sidebar-title">Track 2: Builder</div>
+          <div className="sidebar-subtitle">Developer Course</div>
+        </div>
+
+        <div className="progress-section">
+          <div className="progress-label">
+            <span>Progress</span>
+            <span>{completedModules.size}/{courseData.modules.length}</span>
+          </div>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        <div className="module-list">
+          <div
+            className={`module-item intro ${currentModule === 0 ? 'active' : ''}`}
+            onClick={() => goTo(0)}
+          >
+            <div className="module-num" style={{ fontWeight: 500 }}>&bull;</div>
+            <div className="module-info">
+              <div className="module-name">Introduction</div>
+            </div>
+          </div>
+
+          {courseData.modules.map((mod, idx) => {
+            const isDone = completedModules.has(mod.id);
+            const isActive = currentModule === mod.id;
+            return (
+              <div
+                key={mod.id}
+                className={`module-item ${isActive ? 'active' : ''}`}
+                onClick={() => goTo(mod.id)}
+              >
+                <div className="module-num">{String(mod.id).padStart(2, '0')}</div>
+                <div className="module-info">
+                  <div className="module-name">{mod.title}</div>
+                </div>
+                <div className="module-check">
+                  {isDone ? (
+                    <span className="check-done">{'\u2713'}</span>
+                  ) : isActive ? (
+                    <span className="check-active">{'\u25CB'}</span>
+                  ) : (
+                    <span className="check-pending">{'\u25CB'}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="main" ref={mainRef}>
+        {currentModule === 0 ? (
+          <IntroPage onStart={() => goTo(1)} />
+        ) : (
+          <ModulePage
+            module={courseData.modules[currentModule - 1]}
+            completed={completedModules.has(currentModule)}
+            onComplete={handleComplete}
+            onPrev={() => goTo(currentModule - 1)}
+            onNext={() => goTo(currentModule + 1)}
+            hasPrev={currentModule > 0}
+            hasNext={currentModule < courseData.modules.length}
+          />
+        )}
+      </div>
+
+      {/* ================================================================
+          Attestation Modal
+          Shown when all 14 modules are marked complete. The builder enters
+          their name, the app calls POST /api/v1/attestations, and on
+          success displays the attestation ID with a link to the visual
+          verification page.
+          ================================================================ */}
+      {showAttestationModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 100,
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            borderRadius: '8px', padding: '40px', width: '440px', textAlign: 'center',
+          }}>
+            {!attestation ? (
+              <>
+                <div style={{
+                  fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.15em',
+                  textTransform: 'uppercase', color: 'var(--green)', marginBottom: '12px',
+                }}>
+                  {'\u2713'} All 14 Modules Complete
+                </div>
+                <h2 style={{
+                  fontFamily: "'Inter', sans-serif", fontSize: '1.4rem',
+                  fontWeight: 600, color: 'var(--text)', marginBottom: '8px',
+                }}>
+                  You are a ZeroPoint Builder.
+                </h2>
+                <p style={{
+                  fontSize: '0.85rem', color: 'var(--text-dim)',
+                  marginBottom: '28px', lineHeight: 1.6,
+                }}>
+                  Enter your name to issue a signed attestation of completion,
+                  hash-chained to the ZeroPoint attestation ledger.
+                </p>
+                <input
+                  type="text"
+                  id="attestation-name"
+                  placeholder="Your full name"
+                  style={{
+                    width: '100%', padding: '10px 14px', background: 'var(--bg)',
+                    border: '1px solid var(--border)', borderRadius: '4px',
+                    color: 'var(--text)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '15px', outline: 'none', marginBottom: '16px',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                />
+                <button
+                  onClick={() => {
+                    const name = document.getElementById('attestation-name').value.trim();
+                    if (name) handleAttestationRequest(name);
+                  }}
+                  disabled={attestationLoading}
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: '4px',
+                    border: '1px solid rgba(126,184,218,0.3)',
+                    background: attestationLoading ? 'var(--bg-hover)' : 'var(--accent-glow)',
+                    color: attestationLoading ? 'var(--text-muted)' : 'var(--accent)',
+                    fontFamily: "'Inter', sans-serif", fontSize: '14px',
+                    fontWeight: 500, cursor: attestationLoading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {attestationLoading ? 'Sealing attestation...' : 'Issue Attestation'}
+                </button>
+                <button
+                  onClick={() => setShowAttestationModal(false)}
+                  style={{
+                    width: '100%', padding: '8px', marginTop: '8px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--text-muted)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  Skip for now
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  border: '2px solid var(--green)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 16px', fontSize: '24px', color: 'var(--green)',
+                }}>
+                  {'\u2713'}
+                </div>
+                <h2 style={{
+                  fontFamily: "'Inter', sans-serif", fontSize: '1.3rem',
+                  fontWeight: 600, color: 'var(--text)', marginBottom: '8px',
+                }}>
+                  Attestation Sealed
+                </h2>
+                <div style={{
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: '0.85rem',
+                  color: 'var(--accent)', marginBottom: '16px',
+                  padding: '8px 16px', background: 'var(--accent-dim)',
+                  borderRadius: '4px', display: 'inline-block',
+                }}>
+                  {attestation.id}
+                </div>
+                <p style={{
+                  fontSize: '0.8rem', color: 'var(--text-dim)',
+                  marginBottom: '8px', lineHeight: 1.5,
+                }}>
+                  Signed by the ZeroPoint server, hash-chained to the attestation ledger.
+                </p>
+                <div style={{
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem',
+                  color: 'var(--text-muted)', marginBottom: '20px', wordBreak: 'break-all',
+                }}>
+                  {attestation.attestation_hash}
+                </div>
+                <a
+                  href={`${API_BASE}/verify.html?id=${attestation.id}`}
+                  target="_blank"
+                  rel="noopener"
+                  style={{
+                    display: 'inline-block', padding: '10px 28px', borderRadius: '4px',
+                    border: '1px solid rgba(126,184,218,0.3)',
+                    background: 'var(--accent-glow)', color: 'var(--accent)',
+                    fontFamily: "'Inter', sans-serif", fontSize: '14px',
+                    fontWeight: 500, textDecoration: 'none',
+                  }}
+                >
+                  View Attestation
+                </a>
+                <button
+                  onClick={() => setShowAttestationModal(false)}
+                  style={{
+                    display: 'block', width: '100%', padding: '8px', marginTop: '12px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--text-muted)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
