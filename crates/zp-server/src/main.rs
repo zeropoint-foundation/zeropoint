@@ -1,4 +1,4 @@
-//! ZeroPoint v2 HTTP Server
+//! ZeroPoint HTTP Server
 //!
 //! Thin wrapper around `zp_server::run_server()`.
 //! For the unified CLI, use `zp serve` instead.

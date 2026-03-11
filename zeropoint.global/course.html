@@ -796,7 +796,7 @@ function ModulePage({ module, completed, onComplete, onPrev, onNext, hasPrev, ha
 // proxied through Cloudflare at zeropoint.global. For local dev, point it at
 // localhost:3000.
 // ============================================================================
-const API_BASE = 'https://zeropoint.global';
+const API_BASE = 'https://api.zeropoint.global';
 const TRACK_ID = 'track-2-builder';
 
 // Generate a random session ID for anonymous analytics.
@@ -1095,7 +1095,7 @@ function App() {
                   {attestation.attestation_hash}
                 </div>
                 <a
-                  href={`${API_BASE}/verify.html?id=${attestation.id}`}
+                  href={`https://zeropoint.global/verify.html?id=${attestation.id}`}
                   target="_blank"
                   rel="noopener"
                   style={{
