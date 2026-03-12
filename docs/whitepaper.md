@@ -556,6 +556,7 @@ Open items, roughly in priority order.
 3. **Key revocation and multi-hop trust formalization** — Revocation propagation strategy for compromised keys; formal analysis of trust transitivity across delegation chains longer than two hops.
 4. **Reputation-weighted Sybil resistance** — The Presence Plane provides behavioral signals and reciprocity enforcement but defers Sybil resistance to the reputation system. Requires implementing reputation-weighted peer scoring in `zp-mesh`.
 5. **Sustainability layer** — Consulting, hosted infrastructure, and enterprise feature scoping — without compromising the open-source core.
+6. **Edge Sovereignty and governed firmware** — OpenWrt governance fork with device keypairs, attested boot, and receipt-gated telemetry. Routers become governed participants — not silent data exporters. WiFi CSI sensing capabilities require explicit consent boundaries.
 
 ---
 

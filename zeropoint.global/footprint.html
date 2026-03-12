@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ZeroPoint — AI Security Landscape Footprint</title>
-<meta name="description" content="ZeroPoint's coverage across 53 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.">
+<meta name="description" content="ZeroPoint's coverage across 59 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, MITRE ATLAS, and ZeroPoint Edge Sovereignty.">
 <style>
 :root {
   --bg: #0a0a0c;
@@ -156,8 +156,8 @@ footer {
   ZeroPoint's approach is to make authority <span style="color: #e8e6e3;">explicit</span>, <span style="color: #e8e6e3;">enforceable at the point of action</span>, <span style="color: #e8e6e3;">observable by default</span>, and <span style="color: #e8e6e3;">terminable by design</span>.
 </p>
 <p style="color: #5a5a5e; margin-bottom: 2rem; font-size: 0.9rem;">
-  ZeroPoint's coverage across 53 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.
-  Overall weighted coverage: approximately 70%.
+  ZeroPoint's coverage across 59 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, MITRE ATLAS, and ZeroPoint Edge Sovereignty.
+  Overall weighted coverage: approximately 69%.
   Green = directly addressed, Yellow = partially addressed, Red = outside scope.
 </p>
 
@@ -252,6 +252,17 @@ footer {
   <li><strong style="color: #f87171;">Endpoint Protection</strong> — OS / infrastructure concern</li>
   <li><strong style="color: #f87171;">Runtime Model Protection</strong> — Model hosting concern</li>
   <li><strong style="color: #f87171;">Canary Deployments</strong> — Deployment infrastructure concern</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Edge Sovereignty <span style="color: #8a8a8e; font-weight: 400;">(ZeroPoint · GOVERN)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Treating routers and network-edge devices as governed participants with identity, consent, and receipts</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #34d399;">Device Identity</strong> — Ed25519 keypair per device; same identity primitive as agents and humans</li>
+  <li><strong style="color: #fb923c;">Firmware Integrity</strong> — Attested boot chain + receipt of firmware state; requires open-firmware baseline</li>
+  <li><strong style="color: #fb923c;">RF Sensing Governance</strong> — CSI extraction detection + consent boundary; governance layer over WiFi sensing</li>
+  <li><strong style="color: #fb923c;">Telemetry Accountability</strong> — Receipt-gated telemetry export; no silent data exfiltration from edge devices</li>
+  <li><strong style="color: #fb923c;">Physical Presence Consent</strong> — Structural requirement: occupants must consent before spatial sensing activates</li>
+  <li><strong style="color: #fb923c;">Open Firmware Mandate</strong> — Policy rule requiring auditable firmware; non-compliant devices flagged in governance chain</li>
 </ul>
 
 <div style="margin-top: 2rem; padding: 1.25rem 1.5rem; background-color: #111114; border: 1px solid #222228; border-radius: 8px;">
@@ -418,6 +429,18 @@ const landscape = [
       { name: "Endpoint Protection", c: "red", zp: "OS / infrastructure concern" },
       { name: "Runtime Model Protection", c: "red", zp: "Model hosting concern" },
       { name: "Canary Deployments", c: "red", zp: "Deployment infrastructure concern" },
+    ],
+  },
+  {
+    id: "edge", name: "Edge Sovereignty", source: "ZeroPoint · GOVERN",
+    desc: "Treating routers and network-edge devices as governed participants with identity, consent, and receipts",
+    items: [
+      { name: "Device Identity", c: "green", zp: "Ed25519 keypair per device — same identity primitive as agents and humans" },
+      { name: "Firmware Integrity", c: "yellow", zp: "Attested boot chain + receipt of firmware state; requires open-firmware baseline" },
+      { name: "RF Sensing Governance", c: "yellow", zp: "CSI extraction detection + consent boundary; governance layer over WiFi sensing capability" },
+      { name: "Telemetry Accountability", c: "yellow", zp: "Receipt-gated telemetry export — no silent data exfiltration from edge devices" },
+      { name: "Physical Presence Consent", c: "yellow", zp: "Structural requirement: occupants must consent before spatial sensing activates" },
+      { name: "Open Firmware Mandate", c: "yellow", zp: "Policy rule requiring auditable firmware; non-compliant devices flagged in governance chain" },
     ],
   },
 ];
@@ -886,7 +909,7 @@ function ZeroPointFootprint() {
         </div>
         <div style={{ fontSize: 13, color: THEME.textMuted, marginTop: 8, lineHeight: 1.7, maxWidth: 720 }}>
           This map shows where ZeroPoint sits across {totals.t} capabilities drawn from four
-          authoritative AI security frameworks.
+          authoritative AI security frameworks — plus ZeroPoint's own Edge Sovereignty domain.
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
           {[
@@ -894,6 +917,7 @@ function ZeroPointFootprint() {
             { tag: "OWASP LLM Top 10", tip: "Open Worldwide Application Security Project — Top 10 risks for Large Language Model applications" },
             { tag: "OWASP Agentic Top 10", tip: "Open Worldwide Application Security Project — Top 10 risks for autonomous AI agents" },
             { tag: "MITRE ATLAS", tip: "MITRE Adversarial Threat Landscape for AI Systems — tactics & techniques targeting ML" },
+            { tag: "ZP GOVERN", tip: "ZeroPoint Edge Sovereignty — router and network-edge device governance" },
           ].map(f => <FrameworkBadge key={f.tag} tag={f.tag} tip={f.tip} />)}
         </div>
       </div>
