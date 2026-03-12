@@ -306,6 +306,62 @@ footer a:hover { color: var(--accent-dim); }
 body.player-active { padding-bottom: 5rem; }
 body.player-active footer { margin-bottom: 4rem; }
 
+/* ─── Narration-synced SVG Animations ─── */
+.zp-anim {
+  width: 100%;
+  max-width: 600px;
+  margin: 1.5rem auto;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  pointer-events: none;
+}
+.zp-anim.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.zp-anim svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+/* Animation states — paused by default, play when active */
+.zp-anim svg * {
+  animation-play-state: paused;
+}
+.zp-anim.active svg * {
+  animation-play-state: running;
+}
+
+/* Shared animation keyframes for §8 Presence Plane */
+@keyframes zpFadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes zpFadeOut  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes zpReveal   { 0%,8% { opacity: 0; } 18%,72% { opacity: 1; } 88%,100% { opacity: 0; } }
+@keyframes zpPulse    { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+@keyframes zpGlow     { 0%,100% { filter: drop-shadow(0 0 2px rgba(126,184,218,0.3)); }
+                        50%     { filter: drop-shadow(0 0 8px rgba(126,184,218,0.7)); } }
+@keyframes zpFlowRight { from { transform: translateX(-40px); opacity: 0; }
+                          20%  { opacity: 1; }
+                          80%  { opacity: 1; }
+                          to   { transform: translateX(40px); opacity: 0; } }
+@keyframes zpFlowDown  { from { transform: translateY(-30px); opacity: 0; }
+                          20%  { opacity: 1; }
+                          80%  { opacity: 1; }
+                          to   { transform: translateY(30px); opacity: 0; } }
+@keyframes zpGrowBar   { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes zpDash      { to { stroke-dashoffset: 0; } }
+
+/* Node styles */
+.zp-node       { fill: var(--accent); }
+.zp-node-dim   { fill: var(--accent-dim); opacity: 0.5; }
+.zp-node-warn  { fill: #da7e7e; }
+.zp-edge       { stroke: var(--accent-dim); stroke-width: 1; opacity: 0.4; }
+.zp-edge-live  { stroke: var(--accent); stroke-width: 1.5; opacity: 0.8; }
+.zp-packet     { fill: var(--accent); rx: 2; }
+.zp-label      { fill: var(--text-muted); font-family: var(--font-mono); font-size: 9px; text-anchor: middle; }
+.zp-label-sm   { fill: var(--text-dim); font-family: var(--font-mono); font-size: 7px; text-anchor: middle; }
+
 @media (max-width: 640px) {
   .wp-player-inner { padding: 0.6rem 1rem; gap: 0.6rem; }
   .wp-player-title { font-size: 0.78rem; }
@@ -422,14 +478,14 @@ body.player-active footer { margin-bottom: 4rem; }
   <h1><strong>ZeroPoint</strong></h1>
   <p class="subtitle">Cryptographic Governance Primitives for Accountable Systems</p>
   <div class="meta-block">
-    <span class="label">Version:</span> 1.0 — February 2026<br>
+    <span class="label">Version:</span> 1.1 — March 2026<br>
     <span class="label">Author:</span> Ken Romero, Founder, ThinkStream AI Labs<br>
     <span class="label">Status:</span> Public Technical Overview<br>
     <span class="label">License:</span> CC BY 4.0 (text); MIT/Apache-2.0 (code)<br>
     <span class="label">Download:</span> <a href="#">PDF</a> · SHA-256: <em>pending</em>
   </div>
   <div class="cite-block">
-    <strong>How to cite:</strong> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream AI Labs, Whitepaper v1.0, February 2026. https://zeropoint.global/whitepaper
+    <strong>How to cite:</strong> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream AI Labs, Whitepaper v1.1, March 2026. https://zeropoint.global/whitepaper
   </div>
   <button class="wp-narrate-btn pulsing" id="wpNarrateBtn" onclick="wpPlayer.start()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -442,9 +498,9 @@ body.player-active footer { margin-bottom: 4rem; }
 <!-- Abstract -->
 <h2 id="abstract">Abstract</h2>
 <p>ZeroPoint is portable proof infrastructure — cryptographic governance primitives that produce proof of authorization, compliance, and provenance without requiring central control. It restores real exit and real competition by moving trust from platform databases to verifiable cryptographic guarantees that any participant can carry between systems, operators, and networks.</p>
-<p>The framework operates at the protocol-primitives layer. Every significant action produces a verifiable receipt, linked into an immutable chain of accountability. The protocol is participant-agnostic: the same receipts, capability chains, and constitutional constraints work whether the actor is a human, an AI agent, an automated service, or an IoT device — and whether they communicate over HTTP, TCP, encrypted mesh networks, or any future transport. ZeroPoint ships with a Reticulum-compatible mesh transport as one integration — chosen for its philosophical alignment with sovereignty and harm minimization — alongside TCP, UDP, and HTTP interfaces.</p>
+<p>The framework operates at the protocol-primitives layer. Every significant action produces a verifiable receipt, linked into an immutable chain of accountability. The protocol is participant-agnostic: the same receipts, capability chains, and constitutional constraints work whether the actor is a human, an AI agent, an automated service, or an IoT device — and whether they communicate over HTTP, TCP, encrypted mesh networks, or any future transport. ZeroPoint ships with a Reticulum-compatible mesh transport as one integration — chosen for its philosophical alignment with sovereignty and harm minimization — alongside TCP, UDP, HTTP interfaces, and a privacy-preserving Presence Plane that lets agents discover each other without surveillance infrastructure.</p>
 <p>Autonomous AI agents are the most urgent application: agents are proliferating faster than the trust infrastructure to govern them, and ZeroPoint provides the cryptographic substrate they need. But the primitives are not agent-specific. Any participant that holds a keypair can sign receipts, hold capability grants, delegate authority, and exercise sovereign refusal.</p>
-<p>ZeroPoint is technically complete: 699 tests across 13 crates, six delivered development phases, and full documentation. It does not claim to "solve AI safety" or solve trust generally. It provides cryptographic primitives and governance constraints that produce proof of every action and make every participant refusable — shifting the terms of trust between participants, operators, and systems.</p>
+<p>ZeroPoint is technically complete: 700+ tests across 13 crates, six delivered development phases, and full documentation including a dual-backend discovery layer (the Presence Plane) that solves peer discovery without centralized registries. It does not claim to "solve AI safety" or solve trust generally. It provides cryptographic primitives and governance constraints that make actions provable and refusable — shifting the terms of trust between participants, operators, and systems.</p>
 
 <!-- TOC -->
 <div class="toc">
@@ -458,11 +514,12 @@ body.player-active footer { margin-bottom: 4rem; }
     <li><a href="#s5">Governance Model</a></li>
     <li><a href="#s6">Threat Model</a></li>
     <li><a href="#s7">Transport Integrations</a></li>
-    <li><a href="#s8">Implementation Status</a></li>
-    <li><a href="#s9">Adoption Paths</a></li>
-    <li><a href="#s10">Roadmap</a></li>
-    <li><a href="#s11">Ethics, Non-Goals, and Misuse Resistance</a></li>
-    <li><a href="#s12">Conclusion</a></li>
+    <li><a href="#s8">The Presence Plane</a></li>
+    <li><a href="#s9">Implementation Status</a></li>
+    <li><a href="#s10">Adoption Paths</a></li>
+    <li><a href="#s11">Roadmap</a></li>
+    <li><a href="#s12">Ethics, Non-Goals, and Misuse Resistance</a></li>
+    <li><a href="#s13">Conclusion</a></li>
     <li><a href="#appendix-a">Appendix A: Protocol Sketch</a></li>
     <li><a href="#appendix-b">Appendix B: Glossary</a></li>
     <li><a href="#appendix-c">Appendix C: Example Integration Pattern</a></li>
@@ -574,6 +631,7 @@ body.player-active footer { margin-bottom: 4rem; }
   <li><strong>Governance layer.</strong> PolicyEngine with constitutional rules, composable operational rules, WASM-extensible policy modules, and capability gating.</li>
   <li><strong>Receipt layer.</strong> Signed, hash-chained receipts for every action and decision. CompactReceipt encoding produces 150–300 byte payloads suitable for bandwidth-constrained transports.</li>
   <li><strong>Transport layer.</strong> Pluggable transport with multiple built-in integrations: Reticulum-compatible mesh (HDLC framing, 128-bit destination hashing, link handshake), TCP client/server, UDP, and HTTP API. The governance primitives are transport-independent.</li>
+  <li><strong>Presence Plane.</strong> Dual-backend discovery layer (web relay + Reticulum mesh) that lets agents find each other without centralized registries. Same Ed25519 identity anchors both discovery and governance. Privacy is structural: the relay never parses, indexes, or persists announce payloads.</li>
   <li><strong>Application layer.</strong> Pipeline orchestration, LLM provider integration, skill registry, and CLI tooling — all built on the governance primitives.</li>
 </ul>
 
@@ -726,7 +784,7 @@ body.player-active footer { margin-bottom: 4rem; }
 
 <p>When two ZeroPoint nodes meet for the first time, the introduction protocol (<code>zp-introduction</code>) governs trust establishment. The initiator sends its certificate chain and a challenge nonce. The responder verifies the chain, builds a <code>PolicyContext</code> with <code>ActionType::PeerIntroduction</code>, and evaluates it against the policy engine. Same-genesis introductions are High risk; cross-genesis introductions are Critical. The policy engine decides — the protocol only generates the context.</p>
 
-<p>What remains outside protocol scope: how peers discover each other's network addresses. Key distribution is solved; key discovery is not.</p>
+<p>Key distribution is solved by <code>zp-keys</code>. Key <em>discovery</em> — how peers find each other's network addresses — is solved by the Presence Plane (§8), a dual-backend discovery layer that uses the same Ed25519 identity but serves a different purpose: finding peers without requiring a centralized registry.</p>
 
 <!-- Section 6 -->
 <h2 id="s6"><span class="section-num">Section 6</span>Threat Model</h2>
@@ -753,8 +811,20 @@ body.player-active footer { margin-bottom: 4rem; }
     <tr>
       <td><strong>Cross-operator trust failure</strong></td>
       <td>One party can't trust another's agent outputs</td>
-      <td><code>zp-introduction</code> protocol verifies certificate chains and evaluates peer trust through the policy engine (see §5.5)</td>
-      <td>Peer network discovery is out of scope; cross-genesis introductions require operator-configured policy</td>
+      <td>Receipts provide independent verification; <code>zp-introduction</code> protocol verifies certificate chains; Presence Plane (§8) provides dual-backend discovery with reciprocity enforcement</td>
+      <td>Cross-genesis introductions require operator-configured policy; relay-based discovery requires internet connectivity</td>
+    </tr>
+    <tr>
+      <td><strong>Passive scanning / surveillance</strong></td>
+      <td>Harvest peer identities without participating</td>
+      <td>Presence Plane reciprocity rule: agents must announce before receiving. Relay is structurally amnesic — no logs, no index, no persistence. Scanners become observable before they can observe</td>
+      <td>A scanner that announces gains access; reputation system detects consume-only behavior over time but cannot prevent initial observation</td>
+    </tr>
+    <tr>
+      <td><strong>Sybil flooding</strong></td>
+      <td>Overwhelm discovery with cheap fake identities</td>
+      <td>Ed25519 keypair generation is computationally cheap; relay broadcasts all announces</td>
+      <td>Sybil resistance depends on reputation layer (§10) and external identity binding; not solved at discovery layer alone</td>
     </tr>
     <tr>
       <td><strong>"Security theater" governance</strong></td>
@@ -803,7 +873,7 @@ body.player-active footer { margin-bottom: 4rem; }
   <li><strong>It does not prevent a determined actor from building harmful systems.</strong> The MIT/Apache-2.0 license is permissive. Constitutional rules constrain the framework's own behavior; they cannot constrain a fork.</li>
   <li><strong>It does not make intelligence tools impossible.</strong> Receipt infrastructure could be repurposed for surveillance. The Tenets and constitutional rules resist this, but they are a friction, not a wall.</li>
   <li><strong>It does not provide universal truth verification.</strong> Receipts prove that a statement was signed, not that the statement is true.</li>
-  <li><strong>It does not solve key discovery.</strong> <code>zp-keys</code> solves key distribution (see §5.5), but how peers find each other's network addresses remains outside the protocol scope.</li>
+  <li><strong>Key discovery is now addressed but not fully hardened.</strong> The Presence Plane (§8) provides dual-backend discovery with reciprocity enforcement and structural amnesia. It is not yet resistant to sophisticated Sybil attacks without the reputation layer; see §8 for the full threat analysis.</li>
 </ul>
 
 <p>Instead:</p>
@@ -843,22 +913,466 @@ body.player-active footer { margin-bottom: 4rem; }
 
 <h3>7.4 Extending to Other Transports</h3>
 
-<p>Adding a new transport requires implementing the interface trait and providing serialization/deserialization for the envelope format. The governance primitives — receipts, chains, capability verification, policy evaluation — remain unchanged. This makes ZeroPoint deployable in contexts its authors haven't anticipated: industrial IoT, satellite links, air-gapped networks, or standard enterprise infrastructure.</p>
+<p>Adding a new transport requires implementing the interface trait and providing serialization/deserialization for the envelope format. The governance primitives — receipts, chains, capability verification, policy evaluation — remain unchanged. The same decoupling principle extends to discovery: the <code>DiscoveryBackend</code> trait (§8) allows new discovery mechanisms without touching the governance stack. This makes ZeroPoint deployable in contexts its authors haven't anticipated: industrial IoT, satellite links, air-gapped networks, or standard enterprise infrastructure.</p>
 
 <!-- Section 8 -->
-<h2 id="s8"><span class="section-num">Section 8</span>Implementation Status</h2>
+<h2 id="s8"><span class="section-num">Section 8</span>The Presence Plane</h2>
+
+<h3>8.1 The Discovery Problem</h3>
+
+<p>Key distribution — how participants verify each other's identity — is solved by <code>zp-keys</code> and the certificate hierarchy (§5.5). But key <em>discovery</em> — how participants find each other in the first place — is a separate problem. Most systems solve it with a centralized registry: a server that indexes who is online, what they offer, and where to reach them. This creates exactly the dependency that ZeroPoint exists to eliminate. A registry is a single point of surveillance, censorship, and failure.</p>
+
+<p>ZeroPoint's answer is the <strong>Presence Plane</strong>: a discovery layer that runs alongside the Governance Plane, using the same Ed25519 identity but serving a different purpose. The Governance Plane determines what agents do together (receipts, policy, consensus). The Presence Plane determines how agents find each other — without requiring any participant to trust a central directory.</p>
+
+<!-- Animation: The structural problem — centralized registry vs. decentralized mesh -->
+<div class="zp-anim" id="anim-discovery">
+  <svg viewBox="0 0 600 200" xmlns="http://www.w3.org/2000/svg">
+    <!-- Left side: Centralized star topology -->
+    <text x="150" y="18" class="zp-label" style="font-size:10px; fill:#9a9a9e;">Centralized Registry</text>
+
+    <!-- Central hub — single point of failure -->
+    <circle cx="150" cy="100" r="14" class="zp-node" style="animation: zpPulse 2s ease-in-out infinite;"/>
+    <text x="150" y="104" class="zp-label-sm" style="fill:#0a0a0c; font-size:8px; font-weight:600;">REG</text>
+
+    <!-- Spokes from hub to peripheral agents -->
+    <line x1="150" y1="100" x2="80"  y2="50"  class="zp-edge"/>
+    <line x1="150" y1="100" x2="220" y2="50"  class="zp-edge"/>
+    <line x1="150" y1="100" x2="80"  y2="150" class="zp-edge"/>
+    <line x1="150" y1="100" x2="220" y2="150" class="zp-edge"/>
+    <line x1="150" y1="100" x2="60"  y2="100" class="zp-edge"/>
+    <line x1="150" y1="100" x2="240" y2="100" class="zp-edge"/>
+
+    <!-- Peripheral agents -->
+    <circle cx="80"  cy="50"  r="6" class="zp-node-dim"/>
+    <circle cx="220" cy="50"  r="6" class="zp-node-dim"/>
+    <circle cx="80"  cy="150" r="6" class="zp-node-dim"/>
+    <circle cx="220" cy="150" r="6" class="zp-node-dim"/>
+    <circle cx="60"  cy="100" r="6" class="zp-node-dim"/>
+    <circle cx="240" cy="100" r="6" class="zp-node-dim"/>
+
+    <!-- Failure X over the hub -->
+    <g style="animation: zpPulse 1.5s ease-in-out infinite;">
+      <line x1="138" y1="88" x2="162" y2="112" stroke="#da7e7e" stroke-width="3" stroke-linecap="round"/>
+      <line x1="162" y1="88" x2="138" y2="112" stroke="#da7e7e" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <text x="150" y="188" class="zp-label-sm" style="fill:#da7e7e;">single point of failure</text>
+
+    <!-- Divider -->
+    <line x1="300" y1="30" x2="300" y2="170" stroke="#222228" stroke-width="1" stroke-dasharray="4,4"/>
+    <text x="300" y="190" class="zp-label-sm" style="fill:#5a5a5e;">vs</text>
+
+    <!-- Right side: Decentralized mesh -->
+    <text x="450" y="18" class="zp-label" style="font-size:10px; fill:#9a9a9e;">Presence Plane</text>
+
+    <!-- Mesh nodes — all equal -->
+    <circle cx="380" cy="60"  r="7" class="zp-node" style="animation: zpGlow 3s ease-in-out 0.0s infinite;"/>
+    <circle cx="450" cy="45"  r="7" class="zp-node" style="animation: zpGlow 3s ease-in-out 0.5s infinite;"/>
+    <circle cx="520" cy="60"  r="7" class="zp-node" style="animation: zpGlow 3s ease-in-out 1.0s infinite;"/>
+    <circle cx="370" cy="120" r="7" class="zp-node" style="animation: zpGlow 3s ease-in-out 1.5s infinite;"/>
+    <circle cx="450" cy="130" r="7" class="zp-node" style="animation: zpGlow 3s ease-in-out 0.3s infinite;"/>
+    <circle cx="530" cy="120" r="7" class="zp-node" style="animation: zpGlow 3s ease-in-out 0.8s infinite;"/>
+
+    <!-- Mesh edges — peer-to-peer connections (staggered pulse) -->
+    <line x1="380" y1="60"  x2="450" y2="45"  class="zp-edge-live" style="animation: zpPulse 3s ease-in-out 0.0s infinite;"/>
+    <line x1="450" y1="45"  x2="520" y2="60"  class="zp-edge-live" style="animation: zpPulse 3s ease-in-out 0.3s infinite;"/>
+    <line x1="380" y1="60"  x2="370" y2="120" class="zp-edge-live" style="animation: zpPulse 3s ease-in-out 0.6s infinite;"/>
+    <line x1="450" y1="45"  x2="450" y2="130" class="zp-edge-live" style="animation: zpPulse 3s ease-in-out 0.9s infinite;"/>
+    <line x1="520" y1="60"  x2="530" y2="120" class="zp-edge-live" style="animation: zpPulse 3s ease-in-out 1.2s infinite;"/>
+    <line x1="370" y1="120" x2="450" y2="130" class="zp-edge-live" style="animation: zpPulse 3s ease-in-out 1.5s infinite;"/>
+    <line x1="450" y1="130" x2="530" y2="120" class="zp-edge-live" style="animation: zpPulse 3s ease-in-out 1.8s infinite;"/>
+    <!-- Cross-links for resilience -->
+    <line x1="380" y1="60"  x2="530" y2="120" class="zp-edge" style="animation: zpPulse 4s ease-in-out 0.5s infinite;"/>
+    <line x1="520" y1="60"  x2="370" y2="120" class="zp-edge" style="animation: zpPulse 4s ease-in-out 1.0s infinite;"/>
+
+    <text x="450" y="170" class="zp-label-sm" style="fill:var(--accent);">no center · no failure point</text>
+  </svg>
+</div>
+
+<h3>8.2 Dual-Backend Architecture</h3>
+
+<p>The Presence Plane is built on a <code>DiscoveryBackend</code> trait — a four-method interface that any transport can implement:</p>
+
+<ul>
+  <li><code>announce(payload)</code> — publish a signed announce blob</li>
+  <li><code>poll_discoveries()</code> — retrieve newly discovered peers</li>
+  <li><code>is_active()</code> — check backend status</li>
+  <li><code>shutdown()</code> — clean teardown</li>
+</ul>
+
+<p>Two production backends ship today:</p>
+
+<p><strong>Web relay.</strong> A privacy-preserving pub/sub relay over WebSocket. Agents publish signed announce blobs to the relay; the relay broadcasts all blobs to all subscribers; agents filter locally for peers they care about. The relay never parses payloads, never indexes capabilities, never maintains query logs, and never persists state. Restart equals clean slate. Privacy is a property of the architecture — not a policy promise that can be revoked.</p>
+
+<p><strong>Reticulum mesh.</strong> Broadcast announces over mesh interfaces — LoRa, WiFi, serial, TCP. Fully decentralized. No server, no internet dependency. Announces propagate over whatever physical medium is available.</p>
+
+<p>Both backends share the same announce wire format: <code>[combined_key(64)] + [capabilities_json] + [ed25519_signature(64)]</code>. A peer discovered via web and a peer discovered via Reticulum end up in the same peer table with the same destination hash. The <code>DiscoveryManager</code> fans out announces to all active backends, polls all backends, validates signatures, deduplicates peers, and prunes expired entries.</p>
+
+<!-- Animation: Dual-backend convergence -->
+<div class="zp-anim" id="anim-dual-backend">
+  <svg viewBox="0 0 600 220" xmlns="http://www.w3.org/2000/svg">
+    <!-- Left channel: Web Relay -->
+    <text x="150" y="18" class="zp-label" style="font-size:10px;">WebSocket Relay</text>
+    <!-- Cloud icon -->
+    <path d="M130,40 Q130,28 142,28 Q148,20 160,24 Q170,18 180,28 Q190,28 190,40 Q190,50 180,50 L140,50 Q130,50 130,40Z" fill="none" stroke="var(--accent-dim)" stroke-width="1"/>
+
+    <!-- Announce packets flowing down left channel -->
+    <rect x="146" y="58"  width="28" height="8" rx="2" class="zp-packet" style="animation: zpFlowDown 2.5s ease-in-out 0.0s infinite;"/>
+    <rect x="146" y="58"  width="28" height="8" rx="2" class="zp-packet" style="animation: zpFlowDown 2.5s ease-in-out 1.2s infinite;"/>
+
+    <!-- Channel line -->
+    <line x1="160" y1="55" x2="160" y2="140" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="3,3"/>
+
+    <!-- Right channel: Reticulum Mesh -->
+    <text x="450" y="18" class="zp-label" style="font-size:10px;">Reticulum Mesh</text>
+    <!-- Radio wave arcs -->
+    <g stroke="var(--accent-dim)" stroke-width="1" fill="none">
+      <path d="M440,35 Q450,25 460,35" style="animation: zpPulse 2s ease-in-out 0.0s infinite;"/>
+      <path d="M435,40 Q450,22 465,40" style="animation: zpPulse 2s ease-in-out 0.3s infinite;"/>
+      <path d="M430,45 Q450,19 470,45" style="animation: zpPulse 2s ease-in-out 0.6s infinite;"/>
+    </g>
+
+    <!-- Announce packets flowing down right channel -->
+    <rect x="436" y="58"  width="28" height="8" rx="2" class="zp-packet" style="animation: zpFlowDown 2.5s ease-in-out 0.6s infinite;"/>
+    <rect x="436" y="58"  width="28" height="8" rx="2" class="zp-packet" style="animation: zpFlowDown 2.5s ease-in-out 1.8s infinite;"/>
+
+    <!-- Channel line -->
+    <line x1="450" y1="55" x2="450" y2="140" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="3,3"/>
+
+    <!-- Convergence arrows -->
+    <line x1="160" y1="140" x2="280" y2="170" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#zpArrow)"/>
+    <line x1="450" y1="140" x2="330" y2="170" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#zpArrow)"/>
+
+    <!-- Peer Table -->
+    <rect x="240" y="168" width="130" height="36" rx="4" fill="var(--bg-elevated)" stroke="var(--accent)" stroke-width="1.5"
+          style="animation: zpGlow 3s ease-in-out infinite;"/>
+    <text x="305" y="183" class="zp-label" style="font-size:9px; fill:var(--accent);">Peer Table</text>
+    <text x="305" y="196" class="zp-label-sm" style="font-size:7px;">same destination hash</text>
+
+    <!-- Wire format label -->
+    <text x="305" y="216" class="zp-label-sm" style="font-size:7px; fill:var(--text-dim);">[key(64)] + [caps_json] + [sig(64)]</text>
+
+    <!-- Arrow marker -->
+    <defs>
+      <marker id="zpArrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6" fill="var(--accent)"/>
+      </marker>
+    </defs>
+  </svg>
+</div>
+
+<h3>8.3 Structural Amnesia</h3>
+
+<p>The web relay is designed to be <em>structurally</em> incapable of surveillance — not merely configured to avoid it. It operates as a dumb pipe:</p>
+
+<ul>
+  <li>It does not parse announce payloads (no capability indexing)</li>
+  <li>It does not maintain query logs (no search patterns recorded)</li>
+  <li>It does not persist any state (memory-only, restart erases everything)</li>
+  <li>It does not track who received what (no delivery receipts)</li>
+</ul>
+
+<p>This makes the relay subpoena-proof: there is nothing to hand over. Compromise-proof: an attacker who gains access to the relay finds zero peer data. Audit-friendly: the relay's own receipt chain proves honest behavior — that it did not censor, filter, or selectively route announces.</p>
+
+<p>The key insight is that structural amnesia is stronger than policy-based privacy. A "no-logs" VPN policy can be changed, overridden, or secretly violated. A relay that architecturally cannot parse what it forwards cannot be coerced into surveillance — the capability does not exist.</p>
+
+<!-- Animation: Structural Amnesia — the transparent pipe -->
+<div class="zp-anim" id="anim-amnesia">
+  <svg viewBox="0 0 600 140" xmlns="http://www.w3.org/2000/svg">
+    <!-- The relay pipe -->
+    <rect x="180" y="40" width="240" height="60" rx="30" fill="none" stroke="var(--accent-dim)" stroke-width="1.5" stroke-dasharray="4,2"/>
+    <text x="300" y="75" class="zp-label" style="font-size:10px; fill:var(--text-dim);">relay</text>
+
+    <!-- "No storage" indicators inside pipe -->
+    <text x="240" y="88" class="zp-label-sm" style="fill:var(--text-dim); opacity:0.5;">∅ logs</text>
+    <text x="300" y="88" class="zp-label-sm" style="fill:var(--text-dim); opacity:0.5;">∅ state</text>
+    <text x="360" y="88" class="zp-label-sm" style="fill:var(--text-dim); opacity:0.5;">∅ index</text>
+
+    <!-- Packets flowing through — they pass and vanish -->
+    <rect width="24" height="10" rx="2" class="zp-packet" opacity="0.8"
+          style="animation: zpAmnesiaFlow 3.0s linear 0.0s infinite;"/>
+    <rect width="24" height="10" rx="2" class="zp-packet" opacity="0.8"
+          style="animation: zpAmnesiaFlow 3.0s linear 1.0s infinite;"/>
+    <rect width="24" height="10" rx="2" class="zp-packet" opacity="0.8"
+          style="animation: zpAmnesiaFlow 3.0s linear 2.0s infinite;"/>
+
+    <!-- Entry label -->
+    <text x="100" y="74" class="zp-label-sm" style="text-anchor:end; fill:var(--accent);">announces in →</text>
+
+    <!-- Exit label -->
+    <text x="500" y="74" class="zp-label-sm" style="text-anchor:start; fill:var(--accent);">→ broadcasts out</text>
+
+    <!-- Bottom caption -->
+    <text x="300" y="128" class="zp-label-sm" style="fill:var(--accent); font-size:8px;">nothing sticks · subpoena-proof · compromise-proof</text>
+
+    <style>
+      @keyframes zpAmnesiaFlow {
+        0%   { transform: translate(110px, 60px); opacity: 0; }
+        10%  { opacity: 0.9; }
+        50%  { opacity: 0.9; }
+        90%  { opacity: 0.9; }
+        100% { transform: translate(470px, 60px); opacity: 0; }
+      }
+    </style>
+  </svg>
+</div>
+
+<h3>8.4 Reciprocity Enforcement</h3>
+
+<p>Passive scanning is the primary adversarial concern for any discovery mechanism. An attacker connects to the relay, subscribes to the full firehose, and harvests peer identities without ever revealing their own. Traditional registries have no defense against this — querying a directory does not require participation.</p>
+
+<p>The Presence Plane enforces a reciprocity rule: <strong>you must announce before you receive.</strong> A connection that only subscribes without publishing its own announce is structurally suspicious — it is a consumer-only node, a passive scanner. The enforcement mechanism:</p>
+
+<ol>
+  <li>On connect, the client receives a <code>RelayConnection</code> handle.</li>
+  <li>The handle tracks whether the client has published an announce.</li>
+  <li><code>try_receive()</code> returns an error until the client publishes.</li>
+  <li>A configurable grace period (default 30 seconds) allows time for announce construction.</li>
+  <li>After the grace period, the connection is terminated.</li>
+</ol>
+
+<p>This means any scanner must first announce itself — exposing its own signed Ed25519 identity to every legitimate agent on the network — before it can observe anyone else. Scanners become observable before they can observe.</p>
+
+<!-- Animation: Reciprocity Enforcement — announce gate -->
+<div class="zp-anim" id="anim-reciprocity">
+  <svg viewBox="0 0 600 200" xmlns="http://www.w3.org/2000/svg">
+    <!-- Top row: Legitimate agent — announces, then receives -->
+    <text x="300" y="16" class="zp-label" style="font-size:10px; fill:#9a9a9e;">Reciprocity Rule</text>
+
+    <!-- Agent A (legitimate) -->
+    <circle cx="80" cy="65" r="10" class="zp-node" style="animation: zpGlow 3s ease-in-out infinite;"/>
+    <text x="80" y="69" class="zp-label-sm" style="fill:#0a0a0c; font-size:7px; font-weight:600;">A</text>
+    <text x="80" y="90" class="zp-label-sm">agent</text>
+
+    <!-- Announce arrow out (A → gate) -->
+    <g style="animation: zpReveal 8s ease 0.0s infinite;">
+      <line x1="95" y1="58" x2="215" y2="42" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#zpArrow)"/>
+      <text x="155" y="40" class="zp-label-sm" style="fill:var(--accent);">announce</text>
+    </g>
+
+    <!-- Gate (open) -->
+    <rect x="220" y="30" width="60" height="26" rx="3" fill="var(--bg-elevated)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="250" y="47" class="zp-label-sm" style="fill:var(--accent); font-size:8px;">GATE</text>
+
+    <!-- Check mark -->
+    <g style="animation: zpReveal 8s ease 1.0s infinite;">
+      <circle cx="295" cy="43" r="8" fill="none" stroke="#7eda7e" stroke-width="1.5"/>
+      <path d="M289,43 L293,47 L301,39" fill="none" stroke="#7eda7e" stroke-width="1.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- Receive arrow back (gate → A) -->
+    <g style="animation: zpReveal 8s ease 2.0s infinite;">
+      <line x1="215" y1="72" x2="95" y2="72" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#zpArrow)"/>
+      <text x="155" y="86" class="zp-label-sm" style="fill:var(--accent);">peers</text>
+    </g>
+
+    <!-- Peer data flowing to A -->
+    <rect width="16" height="6" rx="2" class="zp-packet"
+          style="animation: zpRecvFlow 2s ease-in-out infinite;"/>
+
+    <!-- Divider -->
+    <line x1="40" y1="110" x2="560" y2="110" stroke="#222228" stroke-width="1" stroke-dasharray="4,4"/>
+
+    <!-- Bottom row: Scanner — tries to receive without announcing → blocked -->
+    <!-- Scanner (adversary) -->
+    <circle cx="80" cy="155" r="10" class="zp-node-warn" style="animation: zpPulse 2s ease-in-out infinite;"/>
+    <text x="80" y="159" class="zp-label-sm" style="fill:#0a0a0c; font-size:7px; font-weight:600;">S</text>
+    <text x="80" y="180" class="zp-label-sm" style="fill:#da7e7e;">scanner</text>
+
+    <!-- No announce — scanner tries to receive directly -->
+    <g style="animation: zpReveal 8s ease 1.0s infinite;">
+      <line x1="95" y1="155" x2="215" y2="155" stroke="#da7e7e" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="155" y="148" class="zp-label-sm" style="fill:#da7e7e;">no announce</text>
+    </g>
+
+    <!-- Gate (closed) -->
+    <rect x="220" y="142" width="60" height="26" rx="3" fill="var(--bg-elevated)" stroke="#da7e7e" stroke-width="1.5"/>
+    <text x="250" y="159" class="zp-label-sm" style="fill:#da7e7e; font-size:8px;">GATE</text>
+
+    <!-- X mark -->
+    <g style="animation: zpReveal 8s ease 2.0s infinite;">
+      <circle cx="295" cy="155" r="8" fill="none" stroke="#da7e7e" stroke-width="1.5"/>
+      <line x1="290" y1="150" x2="300" y2="160" stroke="#da7e7e" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="300" y1="150" x2="290" y2="160" stroke="#da7e7e" stroke-width="1.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- Terminated label -->
+    <text x="360" y="159" class="zp-label-sm" style="text-anchor:start; fill:#da7e7e; animation: zpReveal 8s ease 3.0s infinite;">connection terminated</text>
+
+    <style>
+      @keyframes zpRecvFlow {
+        0%   { transform: translate(210px, 62px); opacity: 0; }
+        20%  { opacity: 0.9; }
+        80%  { opacity: 0.9; }
+        100% { transform: translate(100px, 62px); opacity: 0; }
+      }
+    </style>
+  </svg>
+</div>
+
+<h3>8.5 Behavioral Signals and Reputation Integration</h3>
+
+<p>Reciprocity enforcement catches the most naive scanners. Sophisticated ones will announce once (passing the gate), then silently consume. The Presence Plane addresses this by emitting behavioral summaries — not content, not identity, just counters — when connections close:</p>
+
+<ul>
+  <li><code>announced</code>: whether the client ever published an announce</li>
+  <li><code>announces_published</code>: how many announces were sent</li>
+  <li><code>duration</code>: how long the connection was active</li>
+  <li><code>reciprocity_violation</code>: whether the connection was terminated for failing to announce</li>
+</ul>
+
+<p>These <code>ConnectionBehavior</code> summaries map directly to <code>ReputationSignal</code> in the <code>PolicyCompliance</code> category. An agent that connects, announces regularly, and participates in discovery accumulates positive signals. An agent that connects, announces once, and silently consumes for hours accumulates weaker or negative signals. Over time, the reputation system naturally separates participants from parasites — without the relay ever needing to inspect content.</p>
+
+<!-- Animation: Behavioral signals → reputation separation -->
+<div class="zp-anim" id="anim-behavioral">
+  <svg viewBox="0 0 600 180" xmlns="http://www.w3.org/2000/svg">
+    <text x="300" y="16" class="zp-label" style="font-size:10px; fill:#9a9a9e;">ConnectionBehavior → ReputationSignal</text>
+
+    <!-- Signal bars — participant (left group) -->
+    <text x="120" y="38" class="zp-label-sm" style="fill:var(--accent);">participant</text>
+
+    <!-- announced: true (tall bar) -->
+    <rect x="60" y="105" width="20" height="0" rx="2" fill="var(--accent)" opacity="0.7"
+          style="animation: zpBarGrow1 5s ease 0.0s infinite;"/>
+    <text x="70" y="120" class="zp-label-sm" style="font-size:6px;">ann</text>
+
+    <!-- announces_published: many -->
+    <rect x="90" y="105" width="20" height="0" rx="2" fill="var(--accent)" opacity="0.8"
+          style="animation: zpBarGrow2 5s ease 0.3s infinite;"/>
+    <text x="100" y="120" class="zp-label-sm" style="font-size:6px;">pub</text>
+
+    <!-- duration: long -->
+    <rect x="120" y="105" width="20" height="0" rx="2" fill="var(--accent)" opacity="0.6"
+          style="animation: zpBarGrow3 5s ease 0.6s infinite;"/>
+    <text x="130" y="120" class="zp-label-sm" style="font-size:6px;">dur</text>
+
+    <!-- reciprocity: clean -->
+    <rect x="150" y="105" width="20" height="0" rx="2" fill="#7eda7e" opacity="0.7"
+          style="animation: zpBarGrow1 5s ease 0.9s infinite;"/>
+    <text x="160" y="120" class="zp-label-sm" style="font-size:6px;">rec</text>
+
+    <!-- Arrow to reputation -->
+    <line x1="185" y1="80" x2="230" y2="80" stroke="var(--accent)" stroke-width="1" marker-end="url(#zpArrow)"/>
+
+    <!-- Reputation gauge — positive -->
+    <rect x="235" y="60" width="80" height="40" rx="4" fill="var(--bg-elevated)" stroke="var(--accent)" stroke-width="1"/>
+    <rect x="240" y="85" width="0" height="8" rx="2" fill="var(--accent)"
+          style="animation: zpGaugeFill 5s ease 1.2s infinite;"/>
+    <text x="275" y="78" class="zp-label-sm" style="fill:var(--accent); font-size:8px;">trusted</text>
+
+    <!-- Divider -->
+    <line x1="330" y1="30" x2="330" y2="130" stroke="#222228" stroke-width="1" stroke-dasharray="4,4"/>
+
+    <!-- Signal bars — parasite (right group) -->
+    <text x="460" y="38" class="zp-label-sm" style="fill:#da7e7e;">parasite</text>
+
+    <!-- announced: barely -->
+    <rect x="400" y="105" width="20" height="0" rx="2" fill="#da7e7e" opacity="0.5"
+          style="animation: zpBarTiny 5s ease 0.0s infinite;"/>
+    <text x="410" y="120" class="zp-label-sm" style="font-size:6px;">ann</text>
+
+    <!-- announces_published: 1 -->
+    <rect x="430" y="105" width="20" height="0" rx="2" fill="#da7e7e" opacity="0.5"
+          style="animation: zpBarTiny 5s ease 0.3s infinite;"/>
+    <text x="440" y="120" class="zp-label-sm" style="font-size:6px;">pub</text>
+
+    <!-- duration: very long (suspicious) -->
+    <rect x="460" y="105" width="20" height="0" rx="2" fill="#da7e7e" opacity="0.7"
+          style="animation: zpBarGrow3 5s ease 0.6s infinite;"/>
+    <text x="470" y="120" class="zp-label-sm" style="font-size:6px;">dur</text>
+
+    <!-- reciprocity: violation -->
+    <rect x="490" y="105" width="20" height="0" rx="2" fill="#da7e7e" opacity="0.9"
+          style="animation: zpBarWarn 5s ease 0.9s infinite;"/>
+    <text x="500" y="120" class="zp-label-sm" style="font-size:6px;">rec!</text>
+
+    <!-- Arrow to reputation -->
+    <line x1="525" y1="80" x2="547" y2="80" stroke="#da7e7e" stroke-width="1" marker-end="url(#zpArrowWarn)"/>
+
+    <!-- Reputation gauge — negative -->
+    <rect x="552" y="60" width="40" height="40" rx="4" fill="var(--bg-elevated)" stroke="#da7e7e" stroke-width="1"/>
+    <text x="572" y="78" class="zp-label-sm" style="fill:#da7e7e; font-size:7px;">suspect</text>
+    <rect x="556" y="85" width="0" height="8" rx="2" fill="#da7e7e"
+          style="animation: zpGaugeLow 5s ease 1.2s infinite;"/>
+
+    <!-- Bottom caption -->
+    <text x="300" y="155" class="zp-label-sm" style="fill:var(--accent); font-size:8px;">reputation separates participants from parasites</text>
+    <text x="300" y="168" class="zp-label-sm" style="fill:var(--text-dim); font-size:7px;">no content inspection required</text>
+
+    <defs>
+      <marker id="zpArrowWarn" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6" fill="#da7e7e"/>
+      </marker>
+    </defs>
+
+    <style>
+      @keyframes zpBarGrow1 { 0%,10% { height: 0; y: 105; } 30%,70% { height: 55px; y: 50; } 90%,100% { height: 0; y: 105; } }
+      @keyframes zpBarGrow2 { 0%,10% { height: 0; y: 105; } 30%,70% { height: 48px; y: 57; } 90%,100% { height: 0; y: 105; } }
+      @keyframes zpBarGrow3 { 0%,10% { height: 0; y: 105; } 30%,70% { height: 40px; y: 65; } 90%,100% { height: 0; y: 105; } }
+      @keyframes zpBarTiny  { 0%,10% { height: 0; y: 105; } 30%,70% { height: 12px; y: 93; } 90%,100% { height: 0; y: 105; } }
+      @keyframes zpBarWarn  { 0%,10% { height: 0; y: 105; } 30%,70% { height: 30px; y: 75; } 90%,100% { height: 0; y: 105; } }
+      @keyframes zpGaugeFill { 0%,15% { width: 0; } 35%,70% { width: 65px; } 90%,100% { width: 0; } }
+      @keyframes zpGaugeLow  { 0%,15% { width: 0; } 35%,70% { width: 12px; } 90%,100% { width: 0; } }
+    </style>
+  </svg>
+</div>
+
+<h3>8.6 Presence Plane Threat Model</h3>
+
+<table>
+  <thead>
+    <tr><th>Threat</th><th>Attack</th><th>Mitigation</th><th>Residual Risk</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Passive scanning</strong></td>
+      <td>Subscribe to firehose without announcing</td>
+      <td>Reciprocity rule: must announce before receiving; grace period + termination</td>
+      <td>A scanner that announces gains access; detection relies on behavioral reputation over time</td>
+    </tr>
+    <tr>
+      <td><strong>Sybil flooding</strong></td>
+      <td>Generate thousands of keypairs, flood announces</td>
+      <td>Announce format requires valid Ed25519 signatures; relay broadcasts all</td>
+      <td>Keypair generation is computationally cheap; Sybil resistance depends on reputation layer, not discovery layer</td>
+    </tr>
+    <tr>
+      <td><strong>Relay compromise</strong></td>
+      <td>Attacker gains access to relay infrastructure</td>
+      <td>Relay holds no data (structural amnesia); no payloads parsed, no state persisted</td>
+      <td>Compromised relay could selectively drop announces (censorship); relay receipt chain makes this detectable</td>
+    </tr>
+    <tr>
+      <td><strong>Traffic analysis</strong></td>
+      <td>Observe connection timing and metadata</td>
+      <td>Relay does not log connections beyond a counter; no identity-to-IP mapping</td>
+      <td>Network-level observation by ISPs or co-located attackers is outside protocol scope</td>
+    </tr>
+    <tr>
+      <td><strong>Eclipse attack</strong></td>
+      <td>Surround a target with attacker-controlled peers</td>
+      <td>Dual-backend architecture means discovery via Reticulum bypasses web relay entirely</td>
+      <td>If both backends are eclipsed, the target is isolated; out-of-band peer introduction mitigates</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The Presence Plane does not claim to solve <a class="tt" data-term="Sybil" href="https://en.wikipedia.org/wiki/Sybil_attack" target="_blank" rel="noopener">Sybil</a> attacks at the discovery layer. Sybil resistance is a reputation-layer concern (§10). What the Presence Plane does provide is the architectural foundation — reciprocity, behavioral signals, structural amnesia — that makes reputation-based Sybil defense possible without surveillance infrastructure.</p>
+
+<!-- Section 9 -->
+<h2 id="s9"><span class="section-num">Section 9</span>Implementation Status</h2>
 
 <p>ZeroPoint is implemented in Rust and is technically complete.</p>
 
 <ul>
-  <li><strong>699 tests</strong> (all passing, zero warnings)</li>
-  <li><strong>13 crates</strong> in a Cargo workspace</li>
+  <li><strong>700+ tests</strong> (all passing, zero warnings)</li>
+  <li><strong>16 crates</strong> in a Cargo workspace (including dual-backend discovery in <code>zp-mesh</code>, key hierarchy in <code>zp-keys</code>, and the introduction protocol in <code>zp-introduction</code>)</li>
   <li><strong>6 development phases</strong> delivered</li>
   <li><strong>59 integration tests</strong> covering multi-node and cross-transport scenarios</li>
   <li><strong>Full documentation</strong> for all crates</li>
 </ul>
 
-<h3>8.1 Workspace Structure</h3>
+<h3>9.1 Workspace Structure</h3>
 
 <table>
   <thead><tr><th>Crate</th><th>Purpose</th></tr></thead>
@@ -866,7 +1380,7 @@ body.player-active footer { margin-bottom: 4rem; }
     <tr><td><code>zp-core</code></td><td>Core types: CapabilityGrant, DelegationChain, GovernanceEvent, receipt primitives, Blake3 hashing, Ed25519 signatures</td></tr>
     <tr><td><code>zp-audit</code></td><td>Hash-chained audit trail, chain verification, collective audit (AuditChallenge, AuditResponse, PeerAuditAttestation)</td></tr>
     <tr><td><code>zp-policy</code></td><td>PolicyEngine with constitutional rules (HarmPrincipleRule, SovereigntyRule), operational rules, WASM runtime with fuel limiting</td></tr>
-    <tr><td><code>zp-mesh</code></td><td>Transport layer: MeshNode, MeshIdentity, pluggable interfaces (TCP, UDP, serial), HDLC framing, Reticulum-compatible link handshake, envelope types, CompactReceipt, consensus, reputation</td></tr>
+    <tr><td><code>zp-mesh</code></td><td>Transport layer: MeshNode, MeshIdentity, pluggable interfaces (TCP, UDP, serial), HDLC framing, Reticulum-compatible link handshake, envelope types, CompactReceipt, consensus, reputation; Presence Plane: DiscoveryManager, DiscoveryBackend trait, WebDiscovery (pub/sub relay with reciprocity), ReticulumDiscovery (mesh broadcast), ConnectionBehavior</td></tr>
     <tr><td><code>zp-pipeline</code></td><td>GovernanceGate pipeline orchestration, MeshBridge (receipt/delegation/audit/reputation bridging), 14-step action flow</td></tr>
     <tr><td><code>zp-trust</code></td><td>Trust tier definitions (Tier 0/1/2), trust grade computation, verification utilities</td></tr>
     <tr><td><code>zp-llm</code></td><td>LLM provider abstraction (OpenAI, Anthropic, local), token counting, response parsing</td></tr>
@@ -874,14 +1388,17 @@ body.player-active footer { margin-bottom: 4rem; }
     <tr><td><code>zp-learning</code></td><td>Feedback collection and outcome tracking for governance policy refinement</td></tr>
     <tr><td><code>zp-server</code></td><td>HTTP server exposing governance pipeline as an API (Axum-based)</td></tr>
     <tr><td><code>zp-cli</code></td><td>Interactive terminal: chat, guard evaluation, mesh status, peer management, audit challenge, capability delegation, state persistence</td></tr>
+    <tr><td><code>zp-keys</code></td><td>Ed25519 key hierarchy: genesis key generation, certificate chain construction and verification, key-to-identity binding</td></tr>
+    <tr><td><code>zp-introduction</code></td><td>Governed cross-node trust establishment — the introduction protocol for two ZeroPoint nodes meeting for the first time</td></tr>
     <tr><td><code>zp-receipt</code></td><td>Receipt type definitions and serialization for cross-crate portability</td></tr>
     <tr><td><code>execution-engine</code></td><td>Governed execution runtime: sandboxed action execution with policy enforcement</td></tr>
+    <tr><td><code>default-gate</code></td><td>Reference WASM policy module — the default governance gate shipped with the framework</td></tr>
   </tbody>
 </table>
 
-<h3>8.2 Build Verification</h3>
+<h3>9.2 Build Verification</h3>
 
-<pre><code>$ cargo test --workspace
+<pre data-no-narrate><code>$ cargo test --workspace
    # 699 tests pass, 0 failures, 0 warnings
 
 $ cargo clippy --workspace -- -D warnings
@@ -890,12 +1407,12 @@ $ cargo clippy --workspace -- -D warnings
 $ cargo fmt --workspace --check
    # Formatted</code></pre>
 
-<!-- Section 9 -->
-<h2 id="s9"><span class="section-num">Section 9</span>Adoption Paths</h2>
+<!-- Section 10 -->
+<h2 id="s10"><span class="section-num">Section 10</span>Adoption Paths</h2>
 
 <p>This project will not win by marketing. It will win by being useful and trustworthy to the right early communities.</p>
 
-<h3>9.1 First Adopters</h3>
+<h3>10.1 First Adopters</h3>
 
 <ul>
   <li><strong>Multi-agent system builders</strong> — teams orchestrating autonomous agents who need protocol-level trust between operators, not just application-level guardrails.</li>
@@ -906,7 +1423,7 @@ $ cargo fmt --workspace --check
   <li><strong>Accountable-process builders</strong> — teams in journalism, supply chain, humanitarian operations, or organizational governance who need cryptographic proof of attribution and auditable decision chains, whether or not agents are involved.</li>
 </ul>
 
-<h3>9.2 Integration Patterns</h3>
+<h3>10.2 Integration Patterns</h3>
 
 <p><strong>Pattern A: Governed Agent-to-Agent Exchange.</strong> Agents exchange tasks and outputs only when receipts validate authorization. Each agent verifies the other's capability chain before accepting work or results.</p>
 
@@ -918,25 +1435,27 @@ $ cargo fmt --workspace --check
 
 <p><strong>Pattern E: Mixed Human-Agent Systems.</strong> A workflow involves both human and agent participants. A human initiates a process, delegates a subset to an agent, reviews the agent's output (with receipts), and finalizes the result. Every step — human and agent — produces receipts. The audit chain is continuous regardless of who acted at each step.</p>
 
-<h3>9.3 What Ships First</h3>
+<h3>10.3 What Ships Next</h3>
 
-<p>A minimal example demonstrating: two participants (human, agent, or both), a governed action, a receipt emitted and verified, and a refusal case. One clean, working demo can convert serious builders faster than any whitepaper.</p>
+<p>The <a href="/playground.html">live playground</a> already demonstrates the core patterns: governed actions, receipt chains, refusal cases, and delegation — all running against real ZeroPoint primitives in the browser. Next: a multi-agent integration example where two or more independent agents discover each other via the Presence Plane, negotiate capabilities, execute governed work, and produce a verifiable end-to-end audit trail. That working demo — agents trusting each other without a central broker — is the proof point.</p>
 
-<!-- Section 10 -->
-<h2 id="s10"><span class="section-num">Section 10</span>Roadmap</h2>
+<!-- Section 11 -->
+<h2 id="s11"><span class="section-num">Section 11</span>Roadmap</h2>
+
+<p>Open items, roughly in priority order.</p>
 
 <ol>
-  <li><strong>Public repository release</strong> — GitHub publish, crates.io registration, CI/CD with cargo test + clippy + fmt + docs.</li>
-  <li><strong>Transport integration test suite</strong> — Documented results of cross-transport receipt exchange, including Reticulum ecosystem interop (NomadNet, MeshChat) and HTTP/TCP integration tests.</li>
-  <li><strong>Threat model expansion</strong> — Formalized verification guidance, key revocation strategy, multi-hop trust analysis.</li>
-  <li><strong>Example applications</strong> — Delegation chain demo, policy-gated pipeline, multi-agent consensus scenario.</li>
+  <li><strong>crates.io registration</strong> — Publish workspace crates for external consumption. Requires stabilizing public API surfaces and versioning strategy.</li>
+  <li><strong>Transport integration test suite</strong> — Documented cross-transport receipt exchange results, including Reticulum ecosystem interop (NomadNet, MeshChat) and HTTP/TCP integration tests.</li>
+  <li><strong>Key revocation and multi-hop trust formalization</strong> — Revocation propagation strategy for compromised keys; formal analysis of trust transitivity across delegation chains longer than two hops.</li>
+  <li><strong>Reputation-weighted Sybil resistance</strong> — The Presence Plane provides behavioral signals and reciprocity enforcement but defers Sybil resistance to the reputation system. Requires implementing reputation-weighted peer scoring in <code>zp-mesh</code>.</li>
   <li><strong>Sustainability layer</strong> — Consulting, hosted infrastructure, and enterprise feature scoping — without compromising the open-source core.</li>
 </ol>
 
-<!-- Section 11 -->
-<h2 id="s11"><span class="section-num">Section 11</span>Ethics, Non-Goals, and Misuse Resistance</h2>
+<!-- Section 12 -->
+<h2 id="s12"><span class="section-num">Section 12</span>Ethics, Non-Goals, and Misuse Resistance</h2>
 
-<h3>11.1 The Co-option Risk</h3>
+<h3>12.1 The Co-option Risk</h3>
 
 <p>Accountability infrastructure can become surveillance infrastructure depending on how it is deployed. This is not a hypothetical concern — it is the central tension of the project.</p>
 
@@ -948,7 +1467,7 @@ $ cargo fmt --workspace --check
   <li><strong>Protocol-level framing.</strong> ZeroPoint provides accountability of <em>actions</em>, not central control of <em>people</em>. The audit chain tracks what participants did — human or agent — not where anyone went or who they are beyond their keypair.</li>
 </ol>
 
-<h3>11.2 Non-Goals</h3>
+<h3>12.2 Non-Goals</h3>
 
 <p>ZeroPoint does not aim to:</p>
 
@@ -960,18 +1479,20 @@ $ cargo fmt --workspace --check
   <li>Be agent-only infrastructure. The protocol is participant-agnostic by design. Narrowing it to agents alone would abandon the humans and systems that face the same accountability gap.</li>
 </ul>
 
-<!-- Section 12 -->
-<h2 id="s12"><span class="section-num">Section 12</span>Conclusion</h2>
+<!-- Section 13 -->
+<h2 id="s13"><span class="section-num">Section 13</span>Conclusion</h2>
 
 <p>AI agents are the most urgent application — but the accountability gap they expose is not theirs alone. Any system where actions have consequences and trust cannot be left to good faith needs the same properties: cryptographic proof of attribution, sovereign refusal, auditable chains of authority.</p>
 
 <p>The structural problem is clear: trust primitives that are captured by platforms become leverage for extraction. Identity that lives in someone else's database is not identity — it is a lease. Reputation that cannot be carried between systems is not reputation — it is a hostage. Authorization that can be silently revoked is not authorization — it is permission.</p>
 
-<p>ZeroPoint provides protocol-level primitives — receipts, chains, governance constraints, and sovereign transport compatibility — that produce proof of any system's actions and make its participants refusable. It does not solve AI safety. It makes proof portable — and portable proof makes trust portable — and portable trust is the structural antidote to the dependency loops that degrade every system where exit is too expensive.</p>
+<p>ZeroPoint provides protocol-level primitives — receipts, chains, governance constraints, sovereign transport compatibility, and a privacy-preserving Presence Plane — that make any system's actions provable and refusable, and its participants discoverable without surveillance. Agents are the most urgent application, and ZeroPoint is built to meet that urgency. But the primitives do not care who holds the keypair. A human's actions are as provable as an agent's. A team's decisions are as auditable as a pipeline's. The protocol serves everyone who participates in systems where trust matters.</p>
 
-<p>Make proof portable, and trust follows. Make trust portable, and exit becomes real. Make exit real, and extraction becomes optional.</p>
+<p>It does not solve AI safety. It does not solve trust generally. It makes trust portable — and portable trust is the structural antidote to the dependency loops that degrade every system where exit is too expensive.</p>
 
-<p>Proof produces trust. Trust is infrastructure.</p>
+<p>Make trust portable, and you make exit real. Make exit real, and you make extraction optional.</p>
+
+<p>Trust is infrastructure.</p>
 
 <blockquote>Power will diffuse. Accountability must diffuse with it.</blockquote>
 
@@ -1064,6 +1585,11 @@ $ cargo fmt --workspace --check
     <tr><td><strong>AgentKey</strong></td><td>Signed by an OperatorKey. Represents a single agent instance. Carries a portable certificate chain for remote verification.</td></tr>
     <tr><td><strong>Certificate Chain</strong></td><td>A sequence of signed certificates (genesis → operator → agent) that proves an agent's identity. Verified offline against six invariants.</td></tr>
     <tr><td><strong>Introduction Protocol</strong></td><td>The governed handshake between two ZeroPoint nodes meeting for the first time — verifies certificate chains and evaluates peer trust through the policy engine.</td></tr>
+    <tr><td><strong>Presence Plane</strong></td><td>ZeroPoint's discovery layer — dual-backend (web relay + Reticulum mesh) system that lets agents find each other without centralized registries. Uses the same Ed25519 identity as the Governance Plane.</td></tr>
+    <tr><td><strong>DiscoveryBackend</strong></td><td>Four-method trait (<code>announce</code>, <code>poll_discoveries</code>, <code>is_active</code>, <code>shutdown</code>) that any transport can implement to participate in the Presence Plane.</td></tr>
+    <tr><td><strong>Structural Amnesia</strong></td><td>Architectural property of the web relay: it cannot parse, index, or persist announce payloads. Privacy is a property of the design, not a policy promise.</td></tr>
+    <tr><td><strong>Reciprocity Enforcement</strong></td><td>Presence Plane rule requiring agents to announce before receiving. Prevents passive scanning by making scanners observable before they can observe.</td></tr>
+    <tr><td><strong>ConnectionBehavior</strong></td><td>Behavioral summary emitted when a relay connection closes — tracks announce count, duration, and reciprocity violations. Maps to <code>PolicyCompliance</code> reputation signals.</td></tr>
   </tbody>
 </table>
 
@@ -1110,7 +1636,7 @@ $ cargo fmt --workspace --check
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
     </button>
     <div class="wp-player-section">
-      <div class="wp-player-label" id="wpLabel">Section 0 of 14</div>
+      <div class="wp-player-label" id="wpLabel">Section 0 of 15</div>
       <div class="wp-player-title" id="wpTitle">Abstract</div>
     </div>
     <button class="wp-player-close" onclick="wpPlayer.close()" title="Close player">&times;</button>
@@ -1123,20 +1649,21 @@ $ cargo fmt --workspace --check
 
   // Paragraph-level audio: wp-{id}-p{nn}.mp3
   const sections = [
-    { id: 'abstract', prefix: 'wp-abstract', title: 'Abstract',                                       paragraphs: 6  },
-    { id: 's0',       prefix: 'wp-s0',       title: 'Why This Exists — The Portable Trust Thesis',    paragraphs: 20 },
-    { id: 's1',       prefix: 'wp-s1',       title: 'Problem Statement',                              paragraphs: 10 },
-    { id: 's2',       prefix: 'wp-s2',       title: 'Design Goals',                                   paragraphs: 6  },
-    { id: 's3',       prefix: 'wp-s3',       title: 'System Overview',                                paragraphs: 11 },
-    { id: 's4',       prefix: 'wp-s4',       title: 'Receipts and Chains',                            paragraphs: 9  },
-    { id: 's5',       prefix: 'wp-s5',       title: 'Governance Model',                               paragraphs: 20 },
-    { id: 's6',       prefix: 'wp-s6',       title: 'Threat Model',                                   paragraphs: 13 },
+    { id: 'abstract', prefix: 'wp-abstract', title: 'Abstract',                                       paragraphs: 5  },
+    { id: 's0',       prefix: 'wp-s0',       title: 'Why This Exists — The Portable Trust Thesis',    paragraphs: 18 },
+    { id: 's1',       prefix: 'wp-s1',       title: 'Problem Statement',                              paragraphs: 9  },
+    { id: 's2',       prefix: 'wp-s2',       title: 'Design Goals',                                   paragraphs: 5  },
+    { id: 's3',       prefix: 'wp-s3',       title: 'System Overview',                                paragraphs: 7  },
+    { id: 's4',       prefix: 'wp-s4',       title: 'Receipts and Chains',                            paragraphs: 10 },
+    { id: 's5',       prefix: 'wp-s5',       title: 'Governance Model',                               paragraphs: 23 },
+    { id: 's6',       prefix: 'wp-s6',       title: 'Threat Model',                                   paragraphs: 5  },
     { id: 's7',       prefix: 'wp-s7',       title: 'Transport Integrations',                         paragraphs: 8  },
-    { id: 's8',       prefix: 'wp-s8',       title: 'Implementation Status',                          paragraphs: 2  },
-    { id: 's9',       prefix: 'wp-s9',       title: 'Adoption Paths',                                 paragraphs: 11 },
-    { id: 's10',      prefix: 'wp-s10',      title: 'Roadmap',                                        paragraphs: 6  },
-    { id: 's11',      prefix: 'wp-s11',      title: 'Ethics, Non-Goals, and Misuse Resistance',       paragraphs: 7  },
-    { id: 's12',      prefix: 'wp-s12',      title: 'Conclusion',                                     paragraphs: 5  },
+    { id: 's8',       prefix: 'wp-s8',       title: 'The Presence Plane',                             paragraphs: 20 },
+    { id: 's9',       prefix: 'wp-s9',       title: 'Implementation Status',                          paragraphs: 3  },
+    { id: 's10',      prefix: 'wp-s10',      title: 'Adoption Paths',                                 paragraphs: 8  },
+    { id: 's11',      prefix: 'wp-s11',      title: 'Roadmap',                                        paragraphs: 1  },
+    { id: 's12',      prefix: 'wp-s12',      title: 'Ethics, Non-Goals, and Misuse Resistance',       paragraphs: 5  },
+    { id: 's13',      prefix: 'wp-s13',      title: 'Conclusion',                                     paragraphs: 7  },
   ];
 
   let currentSection = -1;
@@ -1243,6 +1770,11 @@ $ cargo fmt --workspace --check
     currentSection = sectionIdx;
     currentParagraph = paraNum;
 
+    // Fire animation sync event
+    document.dispatchEvent(new CustomEvent('wpNarrationStep', {
+      detail: { section: s.id, sectionIdx: sectionIdx, paragraph: paraNum }
+    }));
+
     // Only scroll/highlight on first paragraph of a section
     if (paraNum === 1) {
       highlightSection(s.id);
@@ -1347,6 +1879,7 @@ $ cargo fmt --workspace --check
       clearHighlight();
       hidePlayer();
       progressBar.style.width = '0%';
+      document.dispatchEvent(new CustomEvent('wpNarrationStop'));
     }
   };
 
@@ -1354,6 +1887,63 @@ $ cargo fmt --workspace --check
   setTimeout(function() {
     if (narrateBtn) narrateBtn.classList.remove('pulsing');
   }, 4500);
+})();
+</script>
+
+<!-- Narration-synced Animation Controller -->
+<script>
+(function() {
+  /*
+   * Animation map: each entry binds a .zp-anim element to a paragraph range.
+   *   el:    CSS selector for the animation container
+   *   sec:   section id (e.g. 's8')
+   *   start: first paragraph number that activates this animation
+   *   end:   last paragraph number (inclusive)
+   *
+   * When narration enters the range, the element gets class 'active'.
+   * When narration leaves the range (or stops), 'active' is removed.
+   */
+  var animMap = [
+    { el: '#anim-discovery',   sec: 's8', start: 1,  end: 2  },
+    { el: '#anim-dual-backend',sec: 's8', start: 3,  end: 8  },
+    { el: '#anim-amnesia',     sec: 's8', start: 9,  end: 12 },
+    { el: '#anim-reciprocity', sec: 's8', start: 13, end: 16 },
+    { el: '#anim-behavioral',  sec: 's8', start: 17, end: 20 },
+  ];
+
+  function deactivateAll() {
+    animMap.forEach(function(a) {
+      var el = document.querySelector(a.el);
+      if (el) el.classList.remove('active');
+    });
+  }
+
+  function syncAnimations(sectionId, paragraph) {
+    animMap.forEach(function(a) {
+      var el = document.querySelector(a.el);
+      if (!el) return;
+      if (a.sec === sectionId && paragraph >= a.start && paragraph <= a.end) {
+        el.classList.add('active');
+      } else {
+        el.classList.remove('active');
+      }
+    });
+  }
+
+  document.addEventListener('wpNarrationStep', function(e) {
+    syncAnimations(e.detail.section, e.detail.paragraph);
+  });
+
+  document.addEventListener('wpNarrationStop', function() {
+    deactivateAll();
+  });
+
+  // Expose for manual testing: wpAnim.test('s8', 3)
+  window.wpAnim = {
+    test: function(sec, para) { syncAnimations(sec, para); },
+    reset: deactivateAll,
+    map: animMap
+  };
 })();
 </script>
 
@@ -1522,6 +2112,10 @@ $ cargo fmt --workspace --check
     'replay attacks': {
       def: 'Capturing a valid message and re-sending it later to trick the receiver — like recording a "door open" command and playing it back. Prevented with nonces and sequence numbers.',
       url: 'https://en.wikipedia.org/wiki/Replay_attack'
+    },
+    'Sybil': {
+      def: 'An attack where one adversary creates many fake identities to gain disproportionate influence — named after a case study of dissociative identity disorder. In discovery networks, Sybil attackers flood announcements with thousands of keypairs.',
+      url: 'https://en.wikipedia.org/wiki/Sybil_attack'
     },
     'sandbox': {
       def: 'An isolated environment where untrusted code can run safely — it can compute and return results, but can\'t access the host filesystem, network, or other programs.',

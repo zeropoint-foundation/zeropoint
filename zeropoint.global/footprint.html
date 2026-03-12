@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ZeroPoint — AI Security Landscape Footprint</title>
-<meta name="description" content="ZeroPoint's coverage across 51 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.">
+<meta name="description" content="ZeroPoint's coverage across 53 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.">
 <style>
 :root {
   --bg: #0a0a0c;
@@ -156,8 +156,8 @@ footer {
   ZeroPoint's approach is to make authority <span style="color: #e8e6e3;">explicit</span>, <span style="color: #e8e6e3;">enforceable at the point of action</span>, <span style="color: #e8e6e3;">observable by default</span>, and <span style="color: #e8e6e3;">terminable by design</span>.
 </p>
 <p style="color: #5a5a5e; margin-bottom: 2rem; font-size: 0.9rem;">
-  ZeroPoint's coverage across 51 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.
-  Overall weighted coverage: approximately 68%.
+  ZeroPoint's coverage across 53 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, and MITRE ATLAS.
+  Overall weighted coverage: approximately 70%.
   Green = directly addressed, Yellow = partially addressed, Red = outside scope.
 </p>
 
@@ -170,6 +170,7 @@ footer {
   <li><strong style="color: #34d399;">Scoped Capability Grants</strong> — Read/Write/Execute/ApiCall scoped per-agent</li>
   <li><strong style="color: #34d399;">Least-Privilege Enforcement</strong> — Scoped fields + expiry + delegation depth limits</li>
   <li><strong style="color: #34d399;">Credential Rotation</strong> — Dynamic keypair lifecycle; zero static secrets</li>
+  <li><strong style="color: #34d399;">Peer Discovery</strong> — Presence Plane: dual-backend discovery (web relay + Reticulum mesh) with reciprocity enforcement; no central registry</li>
 </ul>
 
 <h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Governance &amp; Policy <span style="color: #8a8a8e; font-weight: 400;">(NIST AI RMF · GOVERN + MAP)</span></h2>
@@ -200,7 +201,8 @@ footer {
   <li><strong style="color: #fb923c;">Agent Goal Hijack</strong> — GovernanceGate screens; policy rules constrain goals</li>
   <li><strong style="color: #34d399;">Tool Misuse</strong> — zp-skills: verified registry + sandboxed execution</li>
   <li><strong style="color: #34d399;">Rogue Agents</strong> — Kill switch (SovereigntyRule) + capability revocation</li>
-  <li><strong style="color: #34d399;">Insecure Inter-Agent Comms</strong> — zp-mesh: Ed25519-signed messages</li>
+  <li><strong style="color: #34d399;">Insecure Inter-Agent Comms</strong> — zp-mesh: Ed25519-signed messages over Presence Plane dual-backend transport</li>
+  <li><strong style="color: #34d399;">Passive Scanning</strong> — Presence Plane reciprocity enforcement; peers must announce before they can observe</li>
   <li><strong style="color: #fb923c;">Cascading Hallucinations</strong> — Receipt chain traces provenance across chains</li>
   <li><strong style="color: #34d399;">Excessive Agency</strong> — Scoped capabilities + delegation depth limits</li>
 </ul>
@@ -221,7 +223,7 @@ footer {
 <h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Adversarial ML <span style="color: #8a8a8e; font-weight: 400;">(MITRE ATLAS)</span></h2>
 <p style="color: #8a8a8e; font-size: 0.9rem;">Adversarial techniques targeting ML across the attack lifecycle</p>
 <ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
-  <li><strong style="color: #fb923c;">Reconnaissance</strong> — Audit trail detects anomalous probing</li>
+  <li><strong style="color: #34d399;">Reconnaissance</strong> — Reciprocity enforcement; scanners are observable before they can observe</li>
   <li><strong style="color: #f87171;">Resource Development</strong> — Attacker infrastructure; outside scope</li>
   <li><strong style="color: #34d399;">Initial Access (API)</strong> — Ed25519 identity + capability grants</li>
   <li><strong style="color: #fb923c;">ML Attack Staging</strong> — GovernanceGate screens suspicious patterns</li>
@@ -238,14 +240,14 @@ footer {
   <li><strong style="color: #34d399;">Access Controls</strong> — Capability grants govern who reads/writes what</li>
   <li><strong style="color: #fb923c;">Data Loss Prevention</strong> — GovernanceGate enforces content policies</li>
   <li><strong style="color: #f87171;">Training Data Security</strong> — Training-time concern</li>
-  <li><strong style="color: #fb923c;">Privacy Preservation</strong> — Scoped access + audit enables compliance</li>
+  <li><strong style="color: #34d399;">Privacy Preservation</strong> — Structural amnesia: relay retains no logs, state, or index (subpoena-proof by design). Scoped access + audit enables compliance</li>
 </ul>
 
 <h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Infrastructure <span style="color: #8a8a8e; font-weight: 400;">(NIST CSF · Protect)</span></h2>
 <p style="color: #8a8a8e; font-size: 0.9rem;">Network, endpoint, and deployment infrastructure</p>
 <ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
   <li><strong style="color: #f87171;">Network Segmentation</strong> — Network infrastructure concern</li>
-  <li><strong style="color: #fb923c;">TLS / Transport</strong> — Transport-agnostic; TLS is deployment config</li>
+  <li><strong style="color: #fb923c;">TLS / Transport</strong> — Dual-backend transport (WebSocket relay + Reticulum mesh); TLS on web path, end-to-end encryption on both</li>
   <li><strong style="color: #f87171;">Firewalls &amp; IDPS</strong> — Network layer</li>
   <li><strong style="color: #f87171;">Endpoint Protection</strong> — OS / infrastructure concern</li>
   <li><strong style="color: #f87171;">Runtime Model Protection</strong> — Model hosting concern</li>
@@ -327,6 +329,7 @@ const landscape = [
       { name: "Scoped Capability Grants", c: "green", zp: "Read/Write/Execute/ApiCall scoped per-agent" },
       { name: "Least-Privilege Enforcement", c: "green", zp: "Scoped fields + expiry + delegation depth limits" },
       { name: "Credential Rotation", c: "green", zp: "Dynamic keypair lifecycle — zero static secrets" },
+      { name: "Peer Discovery", c: "green", zp: "Presence Plane: dual-backend discovery (web relay + Reticulum mesh) with reciprocity enforcement — no central registry" },
     ],
   },
   {
@@ -360,7 +363,8 @@ const landscape = [
       { name: "Agent Goal Hijack", c: "yellow", zp: "GovernanceGate screens; policy rules constrain goals" },
       { name: "Tool Misuse", c: "green", zp: "zp-skills: verified registry + sandboxed execution" },
       { name: "Rogue Agents", c: "green", zp: "Kill switch (SovereigntyRule) + capability revocation" },
-      { name: "Insecure Inter-Agent Comms", c: "green", zp: "zp-mesh: Ed25519-signed messages" },
+      { name: "Insecure Inter-Agent Comms", c: "green", zp: "zp-mesh: Ed25519-signed messages over Presence Plane dual-backend transport" },
+      { name: "Passive Scanning", c: "green", zp: "Presence Plane reciprocity enforcement — peers must announce before they can observe" },
       { name: "Cascading Hallucinations", c: "yellow", zp: "Receipt chain traces provenance across chains" },
       { name: "Excessive Agency", c: "green", zp: "Scoped capabilities + delegation depth limits" },
     ],
@@ -383,7 +387,7 @@ const landscape = [
     id: "atlas", name: "Adversarial ML", source: "MITRE ATLAS",
     desc: "Adversarial techniques targeting ML across the attack lifecycle",
     items: [
-      { name: "Reconnaissance", c: "yellow", zp: "Audit trail detects anomalous probing" },
+      { name: "Reconnaissance", c: "green", zp: "Reciprocity enforcement — scanners are observable before they can observe" },
       { name: "Resource Development", c: "red", zp: "Attacker infrastructure — outside scope" },
       { name: "Initial Access (API)", c: "green", zp: "Ed25519 identity + capability grants" },
       { name: "ML Attack Staging", c: "yellow", zp: "GovernanceGate screens suspicious patterns" },
@@ -401,7 +405,7 @@ const landscape = [
       { name: "Access Controls", c: "green", zp: "Capability grants govern who reads/writes what" },
       { name: "Data Loss Prevention", c: "yellow", zp: "GovernanceGate enforces content policies" },
       { name: "Training Data Security", c: "red", zp: "Training-time concern" },
-      { name: "Privacy Preservation", c: "yellow", zp: "Scoped access + audit enables compliance" },
+      { name: "Privacy Preservation", c: "green", zp: "Structural amnesia — relay retains no logs, state, or index; subpoena-proof by design. Scoped access + audit enables compliance" },
     ],
   },
   {
@@ -409,7 +413,7 @@ const landscape = [
     desc: "Network, endpoint, and deployment infrastructure",
     items: [
       { name: "Network Segmentation", c: "red", zp: "Network infrastructure concern" },
-      { name: "TLS / Transport", c: "yellow", zp: "Transport-agnostic; TLS is deployment config" },
+      { name: "TLS / Transport", c: "yellow", zp: "Dual-backend transport (WebSocket relay + Reticulum mesh); TLS on web path, end-to-end encryption on both" },
       { name: "Firewalls & IDPS", c: "red", zp: "Network layer" },
       { name: "Endpoint Protection", c: "red", zp: "OS / infrastructure concern" },
       { name: "Runtime Model Protection", c: "red", zp: "Model hosting concern" },
@@ -610,6 +614,21 @@ function RadialMap({ selected, onSelect, dims, narrating }) {
     <svg ref={svgRef} width="100%" viewBox={`0 0 ${vw} ${vh}`} style={{ display: "block" }}>
       <style>{`
         .branch-group { transition: opacity 0.4s ease; }
+        @keyframes fpNodeGlow {
+          0%, 100% { filter: drop-shadow(0 0 0px rgba(126,184,218,0)); }
+          50% { filter: drop-shadow(0 0 8px rgba(126,184,218,0.6)); }
+        }
+        @keyframes fpDashMarch {
+          to { stroke-dashoffset: -20; }
+        }
+        @keyframes fpLeafPulse {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
+        }
+        @keyframes fpHaloBreath {
+          0%, 100% { opacity: 0.04; transform-origin: center; }
+          50% { opacity: 0.14; }
+        }
       `}</style>
       <circle cx={cx} cy={cy} r={R1} fill="none" stroke={THEME.border} strokeWidth={0.5} strokeDasharray="4 6" opacity={0.4} />
       <circle cx={cx} cy={cy} r={R2} fill="none" stroke={THEME.border} strokeWidth={0.5} strokeDasharray="2 8" opacity={0.25} />
@@ -620,6 +639,7 @@ function RadialMap({ selected, onSelect, dims, narrating }) {
         const isHov = hovered === b.id;
         const isActive = isSel || isHov;
         const isDimmed = focusId && focusId !== b.id;
+        const isNarrated = narrating && selected === b.id;
         const n = b.items.length;
         const spread = 0.38;
         const leaves = b.items.map((item, j) => {
@@ -646,15 +666,22 @@ function RadialMap({ selected, onSelect, dims, narrating }) {
             onMouseEnter={() => !narrating && setHovered(b.id)}
             onMouseLeave={() => !narrating && setHovered(null)}>
             <line x1={cx} y1={cy} x2={b.bx} y2={b.by}
-              stroke={isActive ? THEME.accent : THEME.border} strokeWidth={isActive ? 1.5 : 1} opacity={isActive ? 0.8 : 0.35} />
+              stroke={isActive ? THEME.accent : THEME.border} strokeWidth={isActive ? 1.5 : 1} opacity={isActive ? 0.8 : 0.35}
+              strokeDasharray={isNarrated ? "6 4" : "none"}
+              style={isNarrated ? { animation: "fpDashMarch 0.8s linear infinite" } : {}} />
             {leaves.map((l, j) => (
               <line key={j} x1={b.bx} y1={b.by} x2={l.lx} y2={l.ly}
-                stroke={l.col} strokeWidth={isActive ? 0.8 : 0.6} opacity={isActive ? 0.5 : 0.12} />
+                stroke={l.col} strokeWidth={isNarrated ? 1.2 : isActive ? 0.8 : 0.6} opacity={isActive ? 0.5 : 0.12}
+                strokeDasharray={isNarrated ? "4 3" : "none"}
+                style={isNarrated ? { animation: `fpDashMarch 1.2s linear infinite`, animationDelay: `${j * 0.1}s` } : {}} />
             ))}
             {leaves.map((l, j) => (
               <g key={j}>
-                <circle cx={l.lx} cy={l.ly} r={isActive ? 5 : 3.5} fill={l.col} opacity={isActive ? 0.9 : 0.5} />
-                {isActive && <circle cx={l.lx} cy={l.ly} r={8} fill={l.col} opacity={0.1} />}
+                <circle cx={l.lx} cy={l.ly} r={isActive ? 5 : 3.5} fill={l.col} opacity={isActive ? 0.9 : 0.5}
+                  style={isNarrated ? { animation: `fpLeafPulse 2s ease-in-out infinite`, animationDelay: `${j * 0.15}s` } : {}} />
+                {isActive && <circle cx={l.lx} cy={l.ly} r={8} fill={l.col}
+                  opacity={isNarrated ? undefined : 0.1}
+                  style={isNarrated ? { animation: `fpLeafPulse 2.5s ease-in-out infinite`, animationDelay: `${j * 0.15 + 0.3}s`, opacity: 0.15 } : {}} />}
               </g>
             ))}
             <g onClick={() => onSelect(b.id === selected ? null : b.id)} style={{ cursor: "pointer" }}>
@@ -662,7 +689,8 @@ function RadialMap({ selected, onSelect, dims, narrating }) {
               <circle cx={b.bx} cy={b.by} r={26}
                 fill={isActive ? THEME.surface2 : THEME.surface}
                 stroke={isActive ? THEME.accent : THEME.border}
-                strokeWidth={isActive ? 2 : 1} />
+                strokeWidth={isNarrated ? 2.5 : isActive ? 2 : 1}
+                style={isNarrated ? { animation: "fpNodeGlow 2s ease-in-out infinite" } : {}} />
               <text x={b.bx} y={b.by + 1} textAnchor="middle" dominantBaseline="central"
                 fill={isActive ? THEME.accent : THEME.textDim} fontSize={12} fontWeight="700">
                 {c.pct}%
@@ -679,7 +707,8 @@ function RadialMap({ selected, onSelect, dims, narrating }) {
         );
       })}
 
-      <circle cx={cx} cy={cy} r={R0 + 8} fill={THEME.accent} opacity={0.04} />
+      <circle cx={cx} cy={cy} r={R0 + 8} fill={THEME.accent} opacity={0.04}
+        style={narrating && selected ? { animation: "fpHaloBreath 3s ease-in-out infinite" } : {}} />
       <circle cx={cx} cy={cy} r={R0} fill={THEME.surface} stroke={THEME.accent} strokeWidth={1.5} />
       <text x={cx} y={cy - 8} textAnchor="middle" fill={THEME.accent} fontSize={13} fontWeight="700">
         {totals.pct}%
