@@ -473,7 +473,7 @@ The Presence Plane does not claim to solve Sybil attacks at the discovery layer.
 ZeroPoint is implemented in Rust and is technically complete.
 
 - **700+ tests** (all passing, zero warnings)
-- **13 crates** in a Cargo workspace (including dual-backend discovery in `zp-mesh`)
+- **16 crates** in a Cargo workspace (including dual-backend discovery in `zp-mesh`)
 - **6 development phases** delivered
 - **59 integration tests** covering multi-node and cross-transport scenarios
 - **Full documentation** for all crates

@@ -580,6 +580,7 @@ mod tests {
             }
         }
 
+        #[allow(dead_code)]
         async fn inject_discovery(&self, payload: Vec<u8>, hops: u8) {
             self.pending_discoveries.write().await.push(DiscoveredPeer {
                 payload,

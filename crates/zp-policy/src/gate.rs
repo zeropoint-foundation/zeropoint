@@ -709,8 +709,9 @@ mod tests {
         let context = make_context(ActionType::Chat);
         let actor = ActorId::User("blocklisted_user".to_string());
 
-        // Block the actor
-        gate.guard().block_actor("ActorId::User(\"blocklisted_user\")");
+        // Block the actor — key must match format!("{:?}", actor)
+        let actor_key = format!("{:?}", actor);
+        gate.guard().block_actor(&actor_key);
 
         let result = gate.evaluate(&context, actor);
 
@@ -766,8 +767,6 @@ mod tests {
         let guard = Guard::with_config(3, Duration::from_secs(60), TrustTier::Tier0);
         let context = make_context(ActionType::Chat);
         let actor = ActorId::User("rate_limited_user".to_string());
-        let actor_key = format!("{:?}", &actor);
-
         // First 3 requests should pass
         for _ in 0..3 {
             let decision = guard.check(&context, &actor);
@@ -789,7 +788,7 @@ mod tests {
     #[test]
     fn test_guard_detects_missing_conversation_id() {
         let guard = Guard::new();
-        let mut context = make_context(ActionType::Chat);
+        let context = make_context(ActionType::Chat);
         // Simulate missing conversation_id (would need to modify PolicyContext)
         // For now, we just test that valid context passes
         let actor = ActorId::User("test".to_string());

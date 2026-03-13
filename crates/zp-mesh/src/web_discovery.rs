@@ -827,10 +827,13 @@ mod tests {
         assert!(conn.has_announced());
         assert_eq!(conn.announces_published(), 1);
 
+        // Drain own announce echo (broadcast channels echo back to sender)
+        let _own_echo = conn.try_receive().unwrap();
+
         // Now relay a peer announce
         relay.relay_announce(vec![0xCC; 150]).unwrap();
 
-        // Should be able to receive now
+        // Should be able to receive the peer announce
         let frame = conn.try_receive().unwrap();
         let (msg_type, payload) = parse_frame(&frame).unwrap();
         assert_eq!(msg_type, MSG_PEER_ANNOUNCE);

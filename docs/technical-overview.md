@@ -106,7 +106,7 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-The test suite contains 699 tests across all crates, covering unit tests, integration tests, load tests, and multi-node end-to-end scenarios.
+The test suite covers all crates with unit tests, integration tests, load tests, and multi-node end-to-end scenarios.
 
 ## Running
 

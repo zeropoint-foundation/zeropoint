@@ -165,6 +165,11 @@ impl MerkleTree {
             .collect();
 
         while current_level.len() > 1 {
+            // Pad odd-length levels by duplicating the last node
+            if current_level.len() % 2 != 0 {
+                current_level.push(current_level[current_level.len() - 1].clone());
+            }
+
             let mut next_level = Vec::new();
 
             for i in (0..current_level.len()).step_by(2) {
@@ -229,6 +234,7 @@ impl MerkleTree {
     }
 
     /// Helper to collect proof path by traversing the tree.
+    /// Path is built bottom-up: leaf siblings first, root siblings last.
     #[allow(clippy::only_used_in_recursion)]
     fn collect_proof_path(
         node: &MerkleNode,
@@ -238,19 +244,17 @@ impl MerkleTree {
     ) -> bool {
         // If this is a leaf, check if it matches
         if node.left.is_none() && node.right.is_none() {
-            // This is a leaf node
-            return target_index == 0; // Only matches if we're looking for index 0
+            return target_index == 0;
         }
 
         // Calculate how many leaves are in the left subtree
         let left_size = Self::leaf_count(node.left.as_deref());
         let target_is_in_left = target_index < left_size;
 
-        if let Some(left) = &node.left {
-            if target_is_in_left {
-                // Target is in left subtree
+        if target_is_in_left {
+            if let Some(left) = &node.left {
                 if Self::collect_proof_path(left, target_index, leaves, path) {
-                    // Add right sibling to path
+                    // Add right sibling AFTER recursion (bottom-up order)
                     if let Some(right) = &node.right {
                         path.push(ProofStep {
                             hash: right.hash.clone(),
@@ -259,19 +263,20 @@ impl MerkleTree {
                     }
                     return true;
                 }
-            } else {
-                // Target is in right subtree, add left sibling
-                path.push(ProofStep {
-                    hash: left.hash.clone(),
-                    direction: Direction::Left,
-                });
             }
-        }
-
-        if let Some(right) = &node.right {
-            if !target_is_in_left {
+        } else {
+            if let Some(right) = &node.right {
                 let right_index = target_index - left_size;
-                return Self::collect_proof_path(right, right_index, leaves, path);
+                if Self::collect_proof_path(right, right_index, leaves, path) {
+                    // Add left sibling AFTER recursion (bottom-up order)
+                    if let Some(left) = &node.left {
+                        path.push(ProofStep {
+                            hash: left.hash.clone(),
+                            direction: Direction::Left,
+                        });
+                    }
+                    return true;
+                }
             }
         }
 

@@ -19,7 +19,7 @@ git clone https://github.com/zeropoint-foundation/zeropoint.git
 cd zeropoint
 cargo build --workspace
 
-# Test (699 tests across 13 crates)
+# Test
 cargo test --workspace
 
 # Install and launch
@@ -80,7 +80,7 @@ The [zeropoint.global](https://zeropoint.global) site includes two interactive d
 
 ## Architecture
 
-ZeroPoint is a Rust workspace of 13 crates, designed to be transport-agnostic (HTTP, TCP, UDP, mesh) and participant-agnostic (same primitives for humans, agents, services, devices).
+ZeroPoint is a Rust workspace of focused crates, designed to be transport-agnostic (HTTP, TCP, UDP, mesh) and participant-agnostic (same primitives for humans, agents, services, devices).
 
 The governance pipeline follows a strict sequence: **Guard → Policy → Execute → Audit**. Constitutional rules (HarmPrincipleRule, SovereigntyRule) are non-removable — they cannot be overridden by any policy or configuration.
 

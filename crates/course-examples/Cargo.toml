@@ -1,0 +1,28 @@
+[package]
+name = "course-examples"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ZeroPoint Builder Course — compilable lab examples"
+publish = false
+
+# All lab dependencies
+[dependencies]
+zp-keys    = { path = "../zp-keys" }
+zp-trust   = { path = "../zp-trust" }
+zp-core    = { path = "../zp-core" }
+zp-receipt = { path = "../zp-receipt" }
+zp-policy  = { path = "../zp-policy" }
+zp-audit   = { path = "../zp-audit" }
+zp-mesh    = { path = "../zp-mesh" }
+zp-pipeline = { path = "../zp-pipeline" }
+chrono     = { workspace = true }
+hex        = "0.4"
+rand       = { workspace = true }
+tokio      = { workspace = true }
+
+[lib]
+name = "course_examples"
+path = "src/lib.rs"

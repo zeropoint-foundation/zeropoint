@@ -18,6 +18,7 @@ members = [
     "crates/zp-receipt",
     "crates/execution-engine",
     "policies/default-gate",
+    "crates/course-examples",
 ]
 
 [workspace.package]

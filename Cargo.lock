@@ -457,6 +457,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
+name = "course-examples"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "rand 0.8.5",
+ "tokio",
+ "zp-audit",
+ "zp-core",
+ "zp-keys",
+ "zp-mesh",
+ "zp-pipeline",
+ "zp-policy",
+ "zp-receipt",
+ "zp-trust",
+]
+
+[[package]]
 name = "cpp_demangle"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4260,6 +4278,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "rand 0.8.5",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",

@@ -49,8 +49,9 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use crate::envelope::{EnvelopeType, MeshEnvelope};
+use crate::identity::PeerIdentity;
 use crate::packet::PacketType;
-use crate::transport::MeshNode;
+use crate::transport::{AgentCapabilities, MeshNode};
 
 /// An inbound envelope that the runtime dispatched but the consumer
 /// may want to process further (e.g., inbound receipts for the pipeline).
@@ -75,6 +76,8 @@ pub struct RuntimeStats {
     pub deserialize_errors: u64,
     /// Announce packets seen (not envelope-dispatched).
     pub announces_seen: u64,
+    /// Peers successfully discovered and registered.
+    pub peers_discovered: u64,
     /// Non-data packets skipped.
     pub packets_skipped: u64,
 }
@@ -235,15 +238,20 @@ async fn run_event_loop(
 
                         let iface_name = iface.config().name.clone();
 
-                        // Only process data packets — announces are handled differently
-                        if packet.header.packet_type != PacketType::Data {
-                            if packet.header.packet_type == PacketType::Announce {
+                        // Handle announce packets specially
+                        if packet.header.packet_type == PacketType::Announce {
+                            {
                                 let mut s = stats.write().await;
                                 s.announces_seen += 1;
-                            } else {
-                                let mut s = stats.write().await;
-                                s.packets_skipped += 1;
                             }
+                            handle_announce_packet(&node, &packet, &stats).await;
+                            continue;
+                        }
+
+                        // Only process data packets
+                        if packet.header.packet_type != PacketType::Data {
+                            let mut s = stats.write().await;
+                            s.packets_skipped += 1;
                             continue;
                         }
 
@@ -314,6 +322,106 @@ async fn run_event_loop(
     }
 
     info!("Mesh runtime event loop stopped");
+}
+
+/// Handle an inbound announce packet.
+///
+/// Announces contain:
+/// 1. Combined public key (64 bytes): Ed25519 (32) + X25519 (32)
+/// 2. JSON-encoded AgentCapabilities (variable length)
+/// 3. Ed25519 signature over the payload (64 bytes)
+async fn handle_announce_packet(
+    node: &Arc<MeshNode>,
+    packet: &crate::packet::Packet,
+    stats: &Arc<tokio::sync::RwLock<RuntimeStats>>,
+) {
+    let payload = &packet.data;
+
+    // Minimum size: 64 (combined key) + 1 (minimal JSON) + 64 (signature)
+    if payload.len() < 129 {
+        debug!(
+            payload_len = payload.len(),
+            "Announce packet too small, skipping"
+        );
+        return;
+    }
+
+    // Extract components from the announce payload
+    let combined_key_bytes = match <[u8; 64]>::try_from(&payload[..64]) {
+        Ok(b) => b,
+        Err(_) => {
+            warn!("Failed to extract combined key from announce");
+            return;
+        }
+    };
+
+    let signature_start = payload.len() - 64;
+    let signature_bytes = match <[u8; 64]>::try_from(&payload[signature_start..]) {
+        Ok(b) => b,
+        Err(_) => {
+            warn!("Failed to extract signature from announce");
+            return;
+        }
+    };
+
+    let announce_data = &payload[64..signature_start];
+
+    // Verify the signature using the Ed25519 public key (first 32 bytes of combined key)
+    let signing_key_bytes = &combined_key_bytes[..32];
+    let signature_verified = verify_announce_signature(signing_key_bytes, &payload[..signature_start], &signature_bytes);
+
+    if !signature_verified {
+        debug!("Announce signature verification failed, skipping");
+        return;
+    }
+
+    // Parse AgentCapabilities from JSON
+    let capabilities: AgentCapabilities = match serde_json::from_slice(announce_data) {
+        Ok(caps) => caps,
+        Err(e) => {
+            debug!(error = %e, "Failed to parse AgentCapabilities from announce");
+            return;
+        }
+    };
+
+    // Create PeerIdentity from combined key (use hops=1 for directly-received announces)
+    let peer_identity = match PeerIdentity::from_combined_key(&combined_key_bytes, 1) {
+        Ok(pi) => pi,
+        Err(e) => {
+            warn!(error = %e, "Failed to create PeerIdentity from announce");
+            return;
+        }
+    };
+
+    // Register the peer with the node
+    node.register_peer(peer_identity, Some(capabilities.clone())).await;
+
+    debug!(
+        peer_address = %hex::encode(&combined_key_bytes[..32]),
+        agent_name = %capabilities.name,
+        "Peer discovered and registered from announce"
+    );
+
+    {
+        let mut s = stats.write().await;
+        s.peers_discovered += 1;
+    }
+}
+
+/// Verify an Ed25519 signature over announce data.
+fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u8; 64]) -> bool {
+    use ed25519_dalek::{Signature, VerifyingKey, Verifier};
+
+    let Ok(key_array): Result<[u8; 32], _> = signing_key.try_into() else {
+        return false;
+    };
+
+    let Ok(verifying_key) = VerifyingKey::from_bytes(&key_array) else {
+        return false;
+    };
+
+    let sig = Signature::from_bytes(signature);
+    verifying_key.verify(data, &sig).is_ok()
 }
 
 /// Dispatch a single envelope to the appropriate handler.
@@ -440,6 +548,7 @@ mod tests {
     use crate::identity::MeshIdentity;
     use crate::interface::LoopbackInterface;
     use crate::packet::{Packet, PacketContext};
+    use crate::transport::{AgentCapabilities, AgentTransport};
     use std::sync::Arc;
 
     /// Helper: create a MeshNode with a loopback interface and return both.
@@ -815,6 +924,87 @@ mod tests {
         // Check that the node stored the delegation chain
         let chain = node.get_delegation_chain(&grant.id).await;
         assert!(chain.is_some());
+
+        runtime.shutdown();
+    }
+
+    /// Helper: create an announce packet and inject it into the loopback.
+    async fn inject_announce_packet(
+        lo: &LoopbackInterface,
+        sender_id: &MeshIdentity,
+        capabilities: &AgentCapabilities,
+    ) {
+        use crate::packet::PacketType;
+
+        let announce_data = serde_json::to_vec(capabilities).unwrap();
+
+        // Build announce: combined public key + capabilities + signature
+        let combined_key = sender_id.combined_public_key();
+        let mut payload = Vec::with_capacity(64 + announce_data.len() + 64);
+        payload.extend_from_slice(&combined_key);
+        payload.extend_from_slice(&announce_data);
+
+        // Sign the announce payload
+        let signature = sender_id.sign(&payload);
+        payload.extend_from_slice(&signature);
+
+        // Create announce packet with the signed payload
+        let dest = DestinationHash::from_public_key(&combined_key);
+        let mut packet = Packet::announce(dest, payload).unwrap();
+        // Ensure packet type is set correctly
+        packet.header.packet_type = PacketType::Announce;
+
+        lo.inject(&packet).await;
+    }
+
+    #[tokio::test]
+    async fn test_runtime_handles_announce_discovery() {
+        let (node, lo) = setup_node_with_loopback().await;
+
+        let mut runtime = MeshRuntime::start(
+            node.clone(),
+            RuntimeConfig {
+                poll_interval: Duration::from_millis(10),
+                ..Default::default()
+            },
+        );
+        let _inbound_rx = runtime.take_inbound_rx().unwrap();
+
+        // Create a test peer identity and capabilities
+        let peer_id = MeshIdentity::generate();
+        let capabilities = AgentCapabilities {
+            name: "test-agent".to_string(),
+            version: "1.0.0".to_string(),
+            receipt_types: vec!["execution".to_string()],
+            skills: vec!["shell".to_string()],
+            actor_type: "agent".to_string(),
+            trust_tier: "tier0".to_string(),
+        };
+
+        // Inject an announce packet
+        inject_announce_packet(&lo, &peer_id, &capabilities).await;
+
+        // Wait for processing
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Verify the peer was registered
+        let peers = node.known_peers().await;
+        assert!(!peers.is_empty(), "Peer should be registered");
+
+        let peer = peers.iter().find(|p| p.address == peer_id.address());
+        assert!(peer.is_some(), "Specific peer should be found");
+        assert_eq!(peer.unwrap().hops, 1);
+
+        // Verify capabilities were stored
+        let peer_caps = peer.unwrap().capabilities.as_ref();
+        assert!(peer_caps.is_some());
+        assert_eq!(peer_caps.unwrap().name, "test-agent");
+        assert_eq!(peer_caps.unwrap().version, "1.0.0");
+
+        // Check stats
+        let stats = runtime.stats().await;
+        assert_eq!(stats.announces_seen, 1);
+        assert_eq!(stats.peers_discovered, 1);
 
         runtime.shutdown();
     }
