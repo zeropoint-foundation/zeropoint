@@ -408,7 +408,7 @@ pub async fn list_attestations_handler(
     let conn = rusqlite::Connection::open(&db_path)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let stmt = conn
+    let mut stmt = conn
         .prepare(
             "SELECT id, name, track, modules_completed, issued_at, attestation_hash
              FROM attestations ORDER BY created_at DESC",

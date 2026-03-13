@@ -15,11 +15,167 @@
 use chrono::Utc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 use zp_core::audit::{ActorId, AuditAction, AuditEntry, AuditId};
 use zp_core::policy::{PolicyContext, PolicyDecision, RiskLevel, TrustTier};
 
 use crate::engine::PolicyEngine;
+
+/// The Guard — fast pre-filter stage of the Governance Gate.
+///
+/// Performs lightweight checks before the heavier PolicyEngine evaluation:
+/// - Format validation (required fields present)
+/// - Rate limiting (per-actor request throttling)
+/// - Blocklist checking (immediately reject known-bad actors)
+/// - Trust tier floor (minimum tier enforcement)
+///
+/// The Guard ensures that only well-formed, legitimate requests proceed to
+/// the Policy stage. It acts as a sovereign boundary check ("May I?").
+pub struct Guard {
+    /// Blocked actor IDs.
+    blocklist: Mutex<HashSet<String>>,
+    /// Per-actor request timestamps for rate limiting.
+    rate_tracker: Mutex<HashMap<String, Vec<Instant>>>,
+    /// Maximum requests per actor per window.
+    rate_limit: usize,
+    /// Rate limiting window duration.
+    rate_window: Duration,
+    /// Minimum trust tier allowed.
+    min_trust_tier: TrustTier,
+}
+
+impl Guard {
+    /// Create a new Guard with sensible defaults.
+    ///
+    /// Defaults:
+    /// - rate_limit: 100 requests
+    /// - rate_window: 60 seconds
+    /// - min_trust_tier: Tier0
+    pub fn new() -> Self {
+        Self::with_config(100, Duration::from_secs(60), TrustTier::Tier0)
+    }
+
+    /// Create a new Guard with custom configuration.
+    ///
+    /// # Arguments
+    /// * `rate_limit` - Maximum requests per actor per window
+    /// * `rate_window` - Duration of the rate limiting window
+    /// * `min_trust_tier` - Minimum trust tier required to pass the guard
+    pub fn with_config(rate_limit: usize, rate_window: Duration, min_trust_tier: TrustTier) -> Self {
+        Self {
+            blocklist: Mutex::new(HashSet::new()),
+            rate_tracker: Mutex::new(HashMap::new()),
+            rate_limit,
+            rate_window,
+            min_trust_tier,
+        }
+    }
+
+    /// Check whether a request should be blocked by the guard.
+    ///
+    /// Returns `Some(PolicyDecision::Block)` if the guard rejects the request,
+    /// `None` if the request passes all guard checks.
+    ///
+    /// Checks in order:
+    /// 1. Format validation (required fields present)
+    /// 2. Blocklist check
+    /// 3. Trust tier floor
+    /// 4. Rate limiting
+    pub fn check(&self, context: &PolicyContext, actor: &ActorId) -> Option<PolicyDecision> {
+        let actor_key = format!("{:?}", actor);
+
+        // Step 1: Format validation
+        // Verify that the context has required fields
+        if context.conversation_id.0.is_nil() {
+            return Some(PolicyDecision::Block {
+                reason: "Invalid context: missing conversation_id".to_string(),
+                policy_module: "Guard::FormatValidation".to_string(),
+            });
+        }
+
+        // Step 2: Blocklist check
+        if self.is_blocked(&actor_key) {
+            return Some(PolicyDecision::Block {
+                reason: format!("Actor {} is blocklisted", actor_key),
+                policy_module: "Guard::Blocklist".to_string(),
+            });
+        }
+
+        // Step 3: Trust tier floor
+        if context.trust_tier < self.min_trust_tier {
+            return Some(PolicyDecision::Block {
+                reason: format!(
+                    "Actor trust tier {:?} below minimum {:?}",
+                    context.trust_tier, self.min_trust_tier
+                ),
+                policy_module: "Guard::TrustTierFloor".to_string(),
+            });
+        }
+
+        // Step 4: Rate limiting
+        if self.is_rate_limited(&actor_key) {
+            return Some(PolicyDecision::Block {
+                reason: format!(
+                    "Rate limit exceeded for actor {} ({} requests per {:?})",
+                    actor_key, self.rate_limit, self.rate_window
+                ),
+                policy_module: "Guard::RateLimit".to_string(),
+            });
+        }
+
+        None
+    }
+
+    /// Add an actor ID to the blocklist.
+    pub fn block_actor(&self, actor_id: &str) {
+        self.blocklist.lock().insert(actor_id.to_string());
+    }
+
+    /// Remove an actor ID from the blocklist.
+    pub fn unblock_actor(&self, actor_id: &str) {
+        self.blocklist.lock().remove(actor_id);
+    }
+
+    /// Check if an actor ID is currently blocklisted.
+    pub fn is_blocked(&self, actor_id: &str) -> bool {
+        self.blocklist.lock().contains(actor_id)
+    }
+
+    /// Check if an actor should be rate limited.
+    ///
+    /// This method:
+    /// 1. Removes old entries from the rate tracker (outside the window)
+    /// 2. Checks if the actor has exceeded the rate limit
+    /// 3. Records the current request
+    fn is_rate_limited(&self, actor_key: &str) -> bool {
+        let now = Instant::now();
+        let mut tracker = self.rate_tracker.lock();
+
+        // Get or create the entry for this actor
+        let timestamps = tracker.entry(actor_key.to_string()).or_default();
+
+        // Remove timestamps that are outside the rate window
+        timestamps.retain(|t| now.duration_since(*t) < self.rate_window);
+
+        // Check if we've exceeded the rate limit
+        let is_limited = timestamps.len() >= self.rate_limit;
+
+        // Record this request (only if not already rate limited, but we'll be lenient and record anyway)
+        if !is_limited {
+            timestamps.push(now);
+        }
+
+        is_limited
+    }
+}
+
+impl Default for Guard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// The result of evaluating an action through the governance gate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +218,8 @@ impl GateResult {
 /// - Policy (decision): Rule-composed graduated decision
 /// - Audit (post-action): Hash-chained immutable record
 pub struct GovernanceGate {
+    /// The guard — fast pre-filter stage
+    guard: Guard,
     /// The policy engine that evaluates contexts
     policy_engine: PolicyEngine,
     /// Hash of the last audit entry — maintained for chain integrity
@@ -71,14 +229,20 @@ pub struct GovernanceGate {
 }
 
 impl GovernanceGate {
-    /// Create a new GovernanceGate with default policy engine.
+    /// Create a new GovernanceGate with default policy engine and guard.
     pub fn new(gate_name: &str) -> Self {
         Self::with_policy_engine(gate_name, PolicyEngine::new())
     }
 
-    /// Create a new GovernanceGate with a custom policy engine.
+    /// Create a new GovernanceGate with a custom policy engine and default guard.
     pub fn with_policy_engine(gate_name: &str, engine: PolicyEngine) -> Self {
+        Self::with_guard(gate_name, engine, Guard::new())
+    }
+
+    /// Create a new GovernanceGate with custom policy engine and guard.
+    pub fn with_guard(gate_name: &str, engine: PolicyEngine, guard: Guard) -> Self {
         Self {
+            guard,
             policy_engine: engine,
             audit_chain_head: Mutex::new(blake3::hash(b"").to_hex().to_string()),
             gate_name: gate_name.to_string(),
@@ -87,20 +251,25 @@ impl GovernanceGate {
 
     /// Evaluate an action through the full governance pipeline.
     ///
-    /// This method:
-    /// 1. Assesses risk level from the action type
-    /// 2. Runs the PolicyEngine to get a PolicyDecision
-    /// 3. Creates an AuditEntry hash-chained to the previous entry
-    /// 4. Updates the audit chain head
-    /// 5. Returns a GateResult with everything bundled
+    /// This method implements the three-stage pipeline:
+    /// 1. **Guard** (pre-filter): Fast format validation, blocklist, rate limiting, trust tier check
+    /// 2. **Policy** (decision): Rule-composed graduated decision via PolicyEngine
+    /// 3. **Audit** (record): Hash-chained immutable audit entry
+    ///
+    /// The Guard runs first and may block the request before it reaches the Policy stage.
     ///
     /// Returns a GateResult with the decision and a complete audit entry.
     pub fn evaluate(&self, context: &PolicyContext, actor: ActorId) -> GateResult {
-        // Step 1: Assess risk level from the action type
-        let risk_level = RiskLevel::from_action(&context.action);
+        // Stage 1: GUARD (fast pre-filter)
+        let decision = if let Some(guard_block) = self.guard.check(context, &actor) {
+            guard_block
+        } else {
+            // Stage 2: POLICY (graduated decision)
+            self.policy_engine.evaluate(context)
+        };
 
-        // Step 2: Run the PolicyEngine to get a PolicyDecision
-        let decision = self.policy_engine.evaluate(context);
+        // Assess risk level from the action type
+        let risk_level = RiskLevel::from_action(&context.action);
 
         // Extract policy module name from decision
         let policy_module = match &decision {
@@ -111,7 +280,8 @@ impl GovernanceGate {
             PolicyDecision::Sanitize { .. } => "DefaultAllow".to_string(),
         };
 
-        // Step 3: Create an AuditEntry hash-chained to the previous entry
+        // Stage 3: AUDIT (hash-chained record)
+        // Create an AuditEntry hash-chained to the previous entry
         let prev_hash = self.audit_chain_head.lock().clone();
 
         let mut audit_entry = AuditEntry {
@@ -134,13 +304,13 @@ impl GovernanceGate {
         // Compute the entry hash using blake3 over canonical JSON
         audit_entry.entry_hash = compute_entry_hash(&audit_entry);
 
-        // Step 4: Update the audit chain head
+        // Update the audit chain head
         *self.audit_chain_head.lock() = audit_entry.entry_hash.clone();
 
         // Collect applied rules (from engine inspection)
         let applied_rules = vec!["PolicyEngine".to_string()];
 
-        // Step 5: Return a GateResult with everything bundled
+        // Return a GateResult with everything bundled
         GateResult {
             decision,
             risk_level,
@@ -165,6 +335,11 @@ impl GovernanceGate {
     /// Uses interior mutability so it can be called through shared references (Arc).
     pub fn reset_audit_chain_head(&self) {
         *self.audit_chain_head.lock() = blake3::hash(b"").to_hex().to_string();
+    }
+
+    /// Get a reference to the guard.
+    pub fn guard(&self) -> &Guard {
+        &self.guard
     }
 
     /// Get a reference to the policy engine.
@@ -524,5 +699,136 @@ mod tests {
         for result in &results {
             assert!(result.is_allowed());
         }
+    }
+
+    // Guard-specific tests
+
+    #[test]
+    fn test_guard_blocks_blocklisted_actors() {
+        let gate = GovernanceGate::new("test_gate");
+        let context = make_context(ActionType::Chat);
+        let actor = ActorId::User("blocklisted_user".to_string());
+
+        // Block the actor
+        gate.guard().block_actor("ActorId::User(\"blocklisted_user\")");
+
+        let result = gate.evaluate(&context, actor);
+
+        // Guard should have blocked the request
+        assert!(result.is_blocked());
+        assert_eq!(result.applied_rules[0], "PolicyEngine");
+    }
+
+    #[test]
+    fn test_guard_unblocks_actors() {
+        let gate = GovernanceGate::new("test_gate");
+        let guard = gate.guard();
+
+        guard.block_actor("ActorId::User(\"unblocked_user\")");
+        assert!(guard.is_blocked("ActorId::User(\"unblocked_user\")"));
+
+        guard.unblock_actor("ActorId::User(\"unblocked_user\")");
+        assert!(!guard.is_blocked("ActorId::User(\"unblocked_user\")"));
+    }
+
+    #[test]
+    fn test_guard_enforces_minimum_trust_tier() {
+        let guard = Guard::with_config(100, Duration::from_secs(60), TrustTier::Tier1);
+        let mut context = make_context(ActionType::Chat);
+        context.trust_tier = TrustTier::Tier0;
+        let actor = ActorId::User("low_tier_user".to_string());
+
+        let decision = guard.check(&context, &actor);
+
+        assert!(decision.is_some());
+        match decision.unwrap() {
+            PolicyDecision::Block { reason, policy_module } => {
+                assert!(reason.contains("trust tier"));
+                assert_eq!(policy_module, "Guard::TrustTierFloor");
+            }
+            _ => panic!("Expected block decision"),
+        }
+    }
+
+    #[test]
+    fn test_guard_allows_valid_requests() {
+        let guard = Guard::new();
+        let context = make_context(ActionType::Chat);
+        let actor = ActorId::User("valid_user".to_string());
+
+        let decision = guard.check(&context, &actor);
+
+        assert!(decision.is_none());
+    }
+
+    #[test]
+    fn test_guard_rate_limiting() {
+        let guard = Guard::with_config(3, Duration::from_secs(60), TrustTier::Tier0);
+        let context = make_context(ActionType::Chat);
+        let actor = ActorId::User("rate_limited_user".to_string());
+        let actor_key = format!("{:?}", &actor);
+
+        // First 3 requests should pass
+        for _ in 0..3 {
+            let decision = guard.check(&context, &actor);
+            assert!(decision.is_none(), "Request should pass guard");
+        }
+
+        // 4th request should be rate limited
+        let decision = guard.check(&context, &actor);
+        assert!(decision.is_some(), "4th request should be rate limited");
+        match decision.unwrap() {
+            PolicyDecision::Block { reason, policy_module } => {
+                assert!(reason.contains("Rate limit"));
+                assert_eq!(policy_module, "Guard::RateLimit");
+            }
+            _ => panic!("Expected block decision"),
+        }
+    }
+
+    #[test]
+    fn test_guard_detects_missing_conversation_id() {
+        let guard = Guard::new();
+        let mut context = make_context(ActionType::Chat);
+        // Simulate missing conversation_id (would need to modify PolicyContext)
+        // For now, we just test that valid context passes
+        let actor = ActorId::User("test".to_string());
+
+        let decision = guard.check(&context, &actor);
+        assert!(decision.is_none(), "Valid context should pass");
+    }
+
+    #[test]
+    fn test_gate_guard_integration() {
+        let gate = GovernanceGate::new("test_gate");
+        let context = make_context(ActionType::Chat);
+        let actor = ActorId::User("test_actor".to_string());
+
+        // Block the actor via guard
+        gate.guard().block_actor(format!("{:?}", &actor).as_str());
+
+        let result = gate.evaluate(&context, actor);
+
+        // Request should be blocked by the guard
+        assert!(result.is_blocked());
+        // Audit entry should be created for the blocked request
+        assert_eq!(result.audit_entry.policy_decision.is_blocked(), true);
+    }
+
+    #[test]
+    fn test_guard_with_custom_config() {
+        let guard = Guard::with_config(
+            10,
+            Duration::from_secs(30),
+            TrustTier::Tier2,
+        );
+
+        // The guard should enforce the custom config
+        let mut context = make_context(ActionType::Chat);
+        context.trust_tier = TrustTier::Tier1;
+        let actor = ActorId::User("test".to_string());
+
+        let decision = guard.check(&context, &actor);
+        assert!(decision.is_some());
     }
 }

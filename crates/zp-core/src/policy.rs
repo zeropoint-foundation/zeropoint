@@ -10,7 +10,7 @@ use crate::types::{Channel, ConversationId};
 
 /// Trust tier configuration.
 /// The runtime enforces whatever tier is configured — the LLM never knows.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum TrustTier {
     /// No signing. Modules load from local filesystem. Trust = you control the machine.
     #[default]
