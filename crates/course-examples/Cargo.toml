@@ -20,6 +20,7 @@ zp-mesh    = { path = "../zp-mesh" }
 zp-pipeline = { path = "../zp-pipeline" }
 chrono     = { workspace = true }
 hex        = "0.4"
+serde_json = { workspace = true }
 rand       = { workspace = true }
 tokio      = { workspace = true }
 

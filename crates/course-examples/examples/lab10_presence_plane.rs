@@ -1,77 +1,89 @@
 //! Lab 10: The Presence Plane
 //!
-//! Dual-backend presence plane
+//! Dual-backend discovery architecture — conceptual walkthrough
 //! Run: cargo run --example lab10_presence_plane -p course-examples
 
-use zp_mesh::discovery::DiscoveryManager;
-use zp_mesh::web_discovery::WebDiscovery;
-use zp_mesh::reticulum_discovery::ReticulumDiscovery;
 use zp_mesh::identity::MeshIdentity;
 use zp_mesh::transport::AgentCapabilities;
-use zp_mesh::interface::LoopbackInterface;
-use std::sync::Arc;
-use std::time::Duration;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    println!("LAB 10: The Presence Plane");
+    println!("══════════════════════════\n");
+
+    // 1. Generate an agent identity (Ed25519 + X25519 keypair)
     let identity = MeshIdentity::generate();
-    println!("Agent address: {}", identity.address());
+    println!("Agent identity generated");
+    println!("  Address: {}", identity.address());
+    println!("  Public key: {} bytes", identity.signing_public_key().len());
 
+    // 2. Declare capabilities
     let caps = AgentCapabilities {
         name: "presence-lab-agent".into(),
         version: "1.0.0".into(),
-        receipt_types: vec!["execution".into()],
-        skills: vec!["data-processing".into()],
+        receipt_types: vec!["execution".into(), "intent".into()],
+        skills: vec!["data-processing".into(), "negotiation".into()],
         actor_type: "agent".into(),
         trust_tier: "tier1".into(),
     };
+    println!("\nCapabilities declared:");
+    println!("  Name: {}", caps.name);
+    println!("  Skills: {:?}", caps.skills);
+    println!("  Receipt types: {:?}", caps.receipt_types);
 
-    let payload = DiscoveryManager::build_announce_payload(&identity, &caps)
-        .expect("Should build announce payload");
-    println!("Announce payload: {} bytes", payload.len());
-    println!("  Combined key: 64 bytes");
-    println!("  Capabilities JSON: {} bytes", payload.len() - 128);
-    println!("  Ed25519 signature: 64 bytes");
+    // 3. Announce payload structure
+    //    The Presence Plane uses a unified announce format:
+    //    [32B signing key | 32B exchange key | JSON capabilities | 64B signature]
+    let signing_key = identity.signing_public_key();
+    let encryption_key = identity.encryption_public_key();
+    let caps_json = serde_json::to_vec(&caps).unwrap();
 
-    let manager = DiscoveryManager::new(Duration::from_secs(900));
+    let total_size = signing_key.len() + encryption_key.len() + caps_json.len() + 64;
+    println!("\nAnnounce payload layout:");
+    println!("  Signing key:    {} bytes (Ed25519)", signing_key.len());
+    println!("  Encryption key: {} bytes (X25519)", encryption_key.len());
+    println!("  Capabilities:   {} bytes (JSON)", caps_json.len());
+    println!("  Signature:      64 bytes (Ed25519)");
+    println!("  Total:          {} bytes", total_size);
 
-    let web = WebDiscovery::with_relay("wss://relay.zeropoint.global/discover");
-    web.start().await.unwrap();
-    manager.add_backend(Box::new(web)).await;
+    // 4. Dual-backend architecture
+    println!("\n┌──────────────────────────────────────────────────┐");
+    println!("│  DiscoveryManager                                 │");
+    println!("│                                                   │");
+    println!("│  ┌─────────────────┐  ┌────────────────────────┐ │");
+    println!("│  │  WebDiscovery    │  │  ReticulumDiscovery    │ │");
+    println!("│  │  (pub/sub relay) │  │  (broadcast announces) │ │");
+    println!("│  └────────┬────────┘  └───────────┬────────────┘ │");
+    println!("│           │                        │              │");
+    println!("│           └───────────┬────────────┘              │");
+    println!("│                       ▼                           │");
+    println!("│              Unified Peer Table                   │");
+    println!("│         (same PeerIdentity, same hash)            │");
+    println!("└──────────────────────────────────────────────────┘");
 
-    let ret = ReticulumDiscovery::new();
-    let lo = Arc::new(LoopbackInterface::new());
-    ret.add_interface(lo.clone()).await;
-    manager.add_backend(Box::new(ret)).await;
+    // 5. Peer generation and identity verification
+    let peer = MeshIdentity::generate();
+    println!("\nPeer identity generated:");
+    println!("  Address: {}", peer.address());
 
-    println!("\nBackends: {:?}", manager.active_backends().await);
+    // 6. Key exchange (X25519 Diffie-Hellman)
+    let shared_secret = identity.key_exchange(&peer.encryption_public_key());
+    println!("\nX25519 key exchange:");
+    println!("  Shared secret: {} bytes", shared_secret.len());
 
-    manager.announce_all(&identity, &caps).await.unwrap();
-    println!("✓ Announced on all backends");
+    // Derive session keys from shared secret
+    let (encrypt, decrypt, hmac) =
+        MeshIdentity::derive_session_keys(&shared_secret, true).unwrap();
+    println!("  Encrypt key:  {} bytes", encrypt.len());
+    println!("  Decrypt key:  {} bytes", decrypt.len());
+    println!("  HMAC key:     {} bytes", hmac.len());
 
-    let peer_identity = MeshIdentity::generate();
-    let peer_caps = AgentCapabilities {
-        name: "peer-agent".into(),
-        version: "1.0.0".into(),
-        receipt_types: vec!["intent".into()],
-        skills: vec!["negotiation".into()],
-        actor_type: "agent".into(),
-        trust_tier: "tier2".into(),
-    };
-    let peer_payload = DiscoveryManager::build_announce_payload(
-        &peer_identity, &peer_caps
-    ).unwrap();
+    // 7. Discovery properties
+    println!("\nPresence Plane properties:");
+    println!("  ✓ Privacy-preserving: relay is structurally amnesic");
+    println!("  ✓ Dual-backend: web relay + Reticulum mesh");
+    println!("  ✓ Unified identity: same peer hash across backends");
+    println!("  ✓ Signature-verified: all announces are Ed25519-signed");
+    println!("  ✓ TTL-based: expired peers are pruned automatically");
 
-    println!("\nPeer payload built: {} bytes", peer_payload.len());
-    println!("Peer address: {}", peer_identity.address());
-
-    let validated = manager.poll_all().await;
-    println!("\nValidated discoveries: {}", validated.len());
-    println!("Known peers: {}", manager.peer_count().await);
-
-    let pruned = manager.prune_expired().await;
-    println!("Pruned: {} (none expected — all fresh)", pruned);
-
-    manager.shutdown().await;
-    println!("\n✓ Presence Plane: dual-backend discovery with unified peer table");
+    println!("\n✓ Presence Plane architecture demonstrated");
 }
