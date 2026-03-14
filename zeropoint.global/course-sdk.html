@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — SDK Developer Course</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0c;
+    --bg-surface: #111114;
+    --bg-elevated: #18181c;
+    --bg-hover: #1e1e24;
+    --border: #2a2a32;
+    --border-subtle: #1e1e26;
+    --text: #e4e4e8;
+    --text-dim: #8e8e9a;
+    --text-muted: #5a5a66;
+    --accent: #7eb8da;
+    --accent-dim: #5a8da8;
+    --accent-glow: rgba(126,184,218,0.12);
+    --green: #6ec47e;
+    --green-dim: rgba(110,196,126,0.15);
+    --yellow: #d4a846;
+    --yellow-dim: rgba(212,168,70,0.15);
+    --red: #c46e6e;
+    --red-dim: rgba(196,110,110,0.15);
+    --sidebar-w: 300px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 15px; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* Layout */
+  .app { display: flex; height: 100vh; }
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+  }
+
+  /* Sidebar header */
+  .sidebar-header {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .sidebar-logo {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .sidebar-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .sidebar-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Progress bar */
+  .progress-section { padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+  .progress-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .progress-bar {
+    height: 3px;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  /* Module list */
+  .module-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .module-list::-webkit-scrollbar { width: 4px; }
+  .module-list::-webkit-scrollbar-track { background: transparent; }
+  .module-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .module-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .module-item:hover { background: var(--bg-hover); }
+  .module-item.active {
+    background: var(--accent-glow);
+    border-left-color: var(--accent);
+  }
+  .module-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    min-width: 20px;
+    padding-top: 2px;
+  }
+  .module-item.active .module-num { color: var(--accent); }
+  .module-info { flex: 1; min-width: 0; }
+  .module-name {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .module-item.active .module-name { color: var(--text); }
+  .module-status {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+  .module-check {
+    font-size: 0.85rem;
+    padding-top: 1px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .check-done { color: var(--green); }
+  .check-active { color: var(--accent); }
+  .check-pending { color: var(--text-muted); opacity: 0.3; }
+
+  /* Intro module item */
+  .module-item.intro { opacity: 0.85; }
+
+  /* Main content area */
+  .content-wrapper {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 48px 48px 120px;
+  }
+
+  /* Hero for intro */
+  .hero {
+    text-align: center;
+    padding: 60px 0 48px;
+  }
+  .hero-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+  .hero p {
+    font-size: 1rem;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .hero-meta {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 28px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .hero-meta span { display: flex; align-items: center; gap: 6px; }
+  .hero-meta .val { color: var(--text-dim); font-weight: 500; }
+
+  /* Module header */
+  .module-header {
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .module-header-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .module-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  /* Section tabs */
+  .section-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-tab {
+    padding: 10px 24px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-family: inherit;
+  }
+  .section-tab:hover { color: var(--text-dim); }
+  .section-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Section content */
+  .section-content h1, .section-content h2, .section-content h3 {
+    color: var(--text);
+    margin: 28px 0 12px;
+    line-height: 1.3;
+  }
+  .section-content h1 { font-size: 1.5rem; }
+  .section-content h2 { font-size: 1.2rem; }
+  .section-content h3 { font-size: 1rem; }
+  .section-content p {
+    margin-bottom: 16px;
+    color: var(--text-dim);
+  }
+  .section-content strong { color: var(--text); font-weight: 600; }
+  .section-content em { color: var(--accent-dim); font-style: italic; }
+  .section-content ul, .section-content ol {
+    margin: 12px 0 16px 20px;
+    color: var(--text-dim);
+  }
+  .section-content li { margin-bottom: 6px; }
+  .section-content code:not([class*="language-"]) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    background: var(--bg-hover);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  /* Code blocks */
+  .code-block {
+    position: relative;
+    margin: 16px 0 24px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .code-lang {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .copy-btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .copy-btn.copied {
+    color: var(--green);
+    border-color: var(--green);
+  }
+  .code-block pre {
+    margin: 0 !important;
+    padding: 16px !important;
+    background: var(--bg) !important;
+    border-radius: 0 !important;
+    font-size: 0.82rem !important;
+    line-height: 1.6 !important;
+    overflow-x: auto;
+  }
+  .code-block pre code {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.82rem !important;
+  }
+
+  /* Navigation buttons */
+  .nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    color: var(--text-dim);
+  }
+  .nav-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .nav-btn.primary {
+    background: var(--accent-glow);
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+  .nav-btn.primary:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* Complete button */
+  .complete-section {
+    display: flex;
+    justify-content: center;
+    margin-top: 32px;
+  }
+  .complete-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 28px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid var(--green);
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .complete-btn:hover {
+    background: var(--green);
+    color: var(--bg);
+  }
+  .complete-btn.completed {
+    background: var(--green);
+    color: var(--bg);
+    cursor: default;
+  }
+
+  /* Intro sections */
+  .intro-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+  .intro-card {
+    padding: 20px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .intro-card h3 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .intro-card p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .philosophy-text {
+    padding: 24px;
+    background: var(--bg-surface);
+    border-left: 3px solid var(--accent-dim);
+    border-radius: 0 8px 8px 0;
+    margin: 24px 0;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+  }
+  .philosophy-text p { margin-bottom: 12px; }
+  .philosophy-text p:last-child { margin-bottom: 0; }
+
+  /* Scrollbar */
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Hamburger button */
+  .hamburger {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 200;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    cursor: pointer;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  .hamburger span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: var(--text-dim);
+    border-radius: 1px;
+    transition: all 0.25s;
+  }
+  .hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(2.5px, 2.5px); }
+  .hamburger.open span:nth-child(2) { opacity: 0; }
+  .hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(2.5px, -2.5px); }
+
+  /* Overlay backdrop */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 90;
+    backdrop-filter: blur(4px);
+  }
+  .sidebar-overlay.visible { display: block; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .sidebar { width: 260px; min-width: 260px; }
+    .content-wrapper { padding: 32px 24px 100px; }
+    .intro-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .hamburger { display: flex; }
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 100;
+      width: 300px;
+      min-width: 300px;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+      box-shadow: none;
+    }
+    .sidebar.open {
+      transform: translateX(0);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+    }
+    .main { width: 100%; }
+    .content-wrapper { padding: 60px 20px 100px; }
+    .module-header { margin-top: 0; }
+    .hero { padding-top: 20px; }
+  }
+  @media (max-width: 480px) {
+    .sidebar { width: 280px; min-width: 280px; }
+    .content-wrapper { padding: 56px 16px 80px; }
+    .hero-meta { flex-direction: column; gap: 8px; }
+    .intro-grid { grid-template-columns: 1fr; }
+    .nav-buttons { flex-direction: column; gap: 12px; }
+    .nav-btn { width: 100%; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script id="course-data" type="application/json">
+{
+  "title": "SDK Developer Course",
+  "subtitle": "ZeroPoint SDK Developer Course",
+  "tagline": "From Zero to Governed Agent in an Afternoon",
+  "prereqs": "A terminal. Rust toolchain (for building ZeroPoint). No Rust literacy required — this track uses only the CLI and HTTP API.",
+  "duration": "~4 hours self-paced",
+  "outcome": "You bootstrap a ZeroPoint environment, issue agent keys with scoped capabilities, evaluate actions through the governance gate stack, install a custom WASM gate, verify your audit chain, and integrate via the HTTP API.",
+  "modules": [
+    {
+      "id": 0,
+      "title": "Bootstrap",
+      "concept": "`zp init` generates your cryptographic identity, seals five constitutional governance gates into the runtime, and writes a genesis record that anchors your trust chain. After this command, you exist in the ZeroPoint universe.",
+      "lab": "$ zp init\n\nYou should see:\n\n  ZeroPoint Genesis\n  ─────────────────\n  Generating operator keypair...        ✓ Ed25519\n  Sealing constitutional bedrock...     ✓ 5 gates installed\n  Writing genesis record...             ✓ ~/.zeropoint/genesis.json\n\n  Operator identity: 2008570f...\n  Constitutional hash: b1e466...\n\n  Your environment is ready.\n  Run `zp keys issue` to create your first agent key.\n\nNow look at what was created:\n\n$ ls ~/.zeropoint/keys/\nagents/          genesis.json     genesis.secret   operator.json    operator.secret\n\n$ cat ~/.zeropoint/genesis.json | head -5\n\nThe genesis record contains your operator's public key, the constitutional hash (a BLAKE3 fingerprint of the five immutable gates), and a timestamp. This is your root of trust.\n\nCheck your project directory too:\n\n$ cat zeropoint.toml\n\nThis is your project-level configuration. The `key_path` tells ZeroPoint where to find the keyring.\n\n**Where does ZeroPoint live?**\n\nBy default, keys and governance state live at `~/.zeropoint/` — one identity per machine, shared across projects. But ZeroPoint resolves its home through a three-step chain, first match wins:\n\n1. **`ZP_HOME` env var** — explicit override. Use in CI, Docker, or production.\n2. **`zeropoint.toml` key_path** — project-level config. ZeroPoint walks up from your working directory looking for this file.\n3. **`~/.zeropoint/`** — the default for local development.\n\n```bash\n# Local dev — uses ~/.zeropoint/ automatically\n$ zp keys list\n\n# CI pipeline — keys come from a mounted secret\n$ ZP_HOME=/run/secrets/zeropoint zp keys list\n\n# Per-project isolation — set key_path in that project's zeropoint.toml\n```\n\nYou don't have to think about this until you need it.",
+      "checkpoint": "Run `zp keys list`. You should see genesis and operator keys present, zero agents. If you don't, something went wrong with init — check the error output and the contents of `~/.zeropoint/`."
+    },
+    {
+      "id": 1,
+      "title": "Agent Keys",
+      "concept": "Your operator identity is yours. Agents get their own keys — scoped, expiring, revocable. The delegation chain links every agent key back to your genesis through cryptographic signatures: genesis → operator → agent. No trust is assumed. Every link is verified.",
+      "lab": "Issue a key for a research agent that can read data and query LLMs:\n\n$ zp keys issue --name scout --capabilities \"tool:read,llm:query\"\n\nYou should see:\n\n  Issuing Agent Key\n  ─────────────────\n  Generating agent key...              ✓ Ed25519\n  Writing to keyring...                ✓ .zeropoint/keys/agents/scout.json\n\n  Agent:        scout\n  Public key:   784af05deeb5146a...\n  Capabilities: tool:read, llm:query\n  Expires:      90 days\n\n  Delegation chain: genesis → operator → scout\n\nNow issue a second agent with different capabilities and a shorter lifespan:\n\n$ zp keys issue --name writer --capabilities \"tool:write,tool:read\" --expires-days 30\n\nCheck the keyring:\n\n$ zp keys list\n\nYou should see genesis, operator, and two agents.\n\nLook at the raw certificate chain:\n\n$ cat ~/.zeropoint/keys/agents/scout.json\n\nThat JSON contains three certificates — genesis, operator, and agent — each signed by the level above. Anyone with the genesis public key can verify the entire chain without contacting any server.",
+      "checkpoint": "Issue three more agent keys with different capability sets and expiration periods. Then revoke one:\n\n```\n$ zp keys revoke <name>\n```\n\nRun `zp keys list` again and confirm the count decreased. Think about what \"revoke\" means here — the key material is deleted from your keyring. Any copy of the certificate chain that exists elsewhere is still cryptographically valid, but won't appear in your keyring. Real revocation in a distributed system requires publishing the revocation to peers (that's a Track 3 topic)."
+    },
+    {
+      "id": 2,
+      "title": "The Gate Stack",
+      "concept": "Every action in a ZeroPoint-governed system passes through a stack of gates before it executes. The stack has four layers:\n\n1. **Constitutional bedrock** — two immutable rules that enforce foundational principles (HarmPrincipleRule, SovereigntyRule). These cannot be removed or overridden. They are the floor.\n2. **Operational gates** — three immutable rules that enforce practical governance (CatastrophicActionRule, BulkOperationRule, ReputationGateRule). Also compiled into the runtime.\n3. **Custom WASM gates** — modules you install. These implement your policies: rate limits, cost caps, scope restrictions, compliance rules. They run in a sandbox with no I/O access.\n4. **DefaultAllowRule** — the fallback. If nothing blocked or warned, the action proceeds.\n\nTogether, the constitutional bedrock and operational gates form five native gates that are always present. The most restrictive decision wins. If any gate blocks, the action is blocked. If any gate warns (and none blocks), the action gets a warning. Only if every gate allows does the action proceed cleanly.",
+      "lab": "First, see what gates are installed:\n\n$ zp gate list\n\nYou should see the five constitutional gates, no custom WASM gates, and the DefaultAllowRule fallback.\n\nNow evaluate an action:\n\n$ zp gate eval \"tool:filesystem:read\" --resource \"/data/reports/q4.csv\"\n\nEvery gate should pass. You'll see a receipt hash — that's a BLAKE3 fingerprint of this evaluation, timestamped and unique.\n\nNow try something the gates should scrutinize more carefully:\n\n$ zp gate eval \"tool:filesystem:write\" --resource \"/etc/passwd\"\n\nAnd something that involves credentials:\n\n$ zp gate eval \"credential:access\" --resource \"db-production\"",
+      "checkpoint": "Evaluate at least five different actions across different categories: reads, writes, executes, API calls, credential accesses. Note which gates fire for each. The constitutional gates always run, but their decisions may differ based on what you're asking to do. Build a mental model of how the gate stack triages different action types."
+    },
+    {
+      "id": 3,
+      "title": "Custom Gates",
+      "concept": "The constitutional bedrock protects against catastrophic harm. Your operational policies — cost caps, rate limits, compliance rules, org-specific restrictions — live in WASM gates. A WASM gate is a compiled module that receives a policy context and returns a decision. It runs in a sandbox: no filesystem, no network, no clock. Pure evaluation logic.",
+      "lab": "If you have the Rust toolchain and the `wasm32-wasi` target installed, you can write a gate from scratch. If not, you can install a pre-built one.\n\n**Option A: Install a pre-built gate**\n\n$ zp gate add path/to/cost-cap.wasm\n\n**Option B: Write your own**\n\nCreate a new Rust library:\n\n$ cargo new --lib my-gate && cd my-gate\n\nAdd to `Cargo.toml`:\n\n```toml\n[lib]\ncrate-type = [\"cdylib\"]\n```\n\nWrite `src/lib.rs`:\n\n```rust\n/// Gate that blocks any action on sensitive paths.\n/// Returns: 1 = Allow, 3 = Warn, 5 = Block\n#[no_mangle]\npub extern \"C\" fn evaluate(action_type: i32, _trust_tier: i32) -> i32 {\n    // Block all execute actions (action_type 4)\n    if action_type == 4 {\n        return 5; // Block\n    }\n    1 // Allow\n}\n```\n\nCompile and install:\n\n$ cargo build --target wasm32-wasi --release\n$ zp gate add target/wasm32-wasi/release/my_gate.wasm\n\nNow evaluate again:\n\n$ zp gate eval \"tool:execute\" --resource \"python\"\n\nYour custom gate should now appear in the gate stack output, and its decision participates in the most-restrictive-wins composition.\n\n$ zp gate list\n\nYou should see your gate listed under \"Custom WASM Gates.\"",
+      "checkpoint": "Write (or obtain) two WASM gates with different rules. Install both. Evaluate an action that one gate allows and the other blocks. Verify that the block wins. Then evaluate an action that both allow. This is the composition model: the stack is additive, and the most restrictive voice wins."
+    },
+    {
+      "id": 4,
+      "title": "The Audit Chain",
+      "concept": "Every gate evaluation produces a receipt. Receipts are hash-chained — each one references the previous, forming an append-only log that's tamper-evident. If anyone modifies a receipt after the fact, the chain breaks. This is your evidence layer.",
+      "lab": "Run a few evaluations to generate audit entries:\n\n$ zp gate eval \"tool:filesystem:read\" --resource \"/data/safe.txt\"\n$ zp gate eval \"tool:filesystem:write\" --resource \"/tmp/output.json\"\n$ zp gate eval \"tool:execute\" --resource \"python\"\n$ zp gate eval \"credential:access\" --resource \"api-key-weather\"\n\nNow check the audit log:\n\n$ zp audit log --limit 10\n\nAnd verify the chain's integrity:\n\n$ zp audit verify\n\nIf the chain is valid, every entry's hash matches its content, and every entry's prev_hash matches the previous entry's hash. No gaps, no tampering.\n\n**How the chain stays valid across invocations**\n\nEach `zp gate eval` invocation creates a fresh GovernanceGate, but the audit chain lives in a persistent SQLite database. Before evaluating, the CLI reads the store's latest hash and sets it as the gate's chain head. The new entry's `prev_hash` then correctly points to the previous entry, maintaining an unbroken chain.\n\nIf you're reading the Rust internals later (Track 3) and you see `GovernanceGate::new()` used without calling `set_audit_chain_head()`, that's intentional — course labs and tests run in-memory with no persistence, so chain continuity doesn't apply. In production code that persists to an AuditStore, the chain head must always be synced first.",
+      "checkpoint": "Run 20 evaluations with varied actions. Check the audit log. Verify the chain. Then think about what happens at scale — thousands of evaluations per hour across a fleet of agents. This is where epoch compaction (Track 4) becomes necessary: rolling up old entries into a single Merkle proof so the chain doesn't grow without bound."
+    },
+    {
+      "id": 5,
+      "title": "The HTTP API",
+      "concept": "The CLI is for operators. Agents talk to ZeroPoint through the HTTP API. The core endpoint is `POST /api/v1/evaluate` — it takes an action description and returns a gate decision with a receipt. This is how you integrate ZeroPoint into any agentic system, regardless of language or framework.",
+      "lab": "Start the server:\n\n$ zp serve\n\nIn another terminal, hit the evaluate endpoint:\n\n```bash\n$ curl -s http://localhost:3000/api/v1/evaluate \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"action\": \"tool:filesystem:read\",\n    \"trust_tier\": \"Tier1\"\n  }' | jq .\n```\n\nYou should get back a JSON response with the decision, rationale, applied rules, and an audit entry ID.\n\nTry a higher-risk action:\n\n```bash\n$ curl -s http://localhost:3000/api/v1/evaluate \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"action\": \"credential:access\",\n    \"trust_tier\": \"Tier0\"\n  }' | jq .\n```\n\nCheck the audit chain through the API:\n\n```bash\n$ curl -s http://localhost:3000/api/v1/audit/entries | jq .\n$ curl -s http://localhost:3000/api/v1/audit/verify | jq .\n```",
+      "checkpoint": "Write a simple script (bash, Python, whatever you prefer) that:\n\n1. Evaluates 10 different actions through the HTTP API\n2. Collects all the receipt IDs\n3. Verifies the audit chain through the API\n4. Prints a summary: how many allowed, warned, blocked\n\nThis script is the skeleton of a governance sidecar. Any agent framework — OpenClaw, Agent Zero, LangGraph, CrewAI — can call this endpoint before executing an action. ZeroPoint doesn't care what framework you use. It evaluates the action and returns a decision. The agent respects it or doesn't. The receipt exists either way."
+    }
+  ]
+}
+</script>
+
+<script type="text/babel">
+const { useState, useRef, useCallback, useMemo, useEffect } = React;
+
+const courseData = JSON.parse(document.getElementById('course-data').textContent);
+
+// Custom markdown renderer with Prism highlighting
+function renderMarkdown(md) {
+  if (!md) return '';
+
+  // Process code blocks first
+  const codeBlocks = [];
+  let processed = md.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({ lang: lang || 'text', code: code.trimEnd() });
+    return `%%CODEBLOCK_${idx}%%`;
+  });
+
+  // Basic markdown to HTML
+  processed = processed
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+
+  // Wrap in paragraphs
+  if (!processed.startsWith('<')) processed = '<p>' + processed + '</p>';
+
+  // Restore code blocks as placeholders (we'll render them as React components)
+  processed = processed.replace(/%%CODEBLOCK_(\d+)%%/g, (_, idx) => {
+    const block = codeBlocks[parseInt(idx)];
+    let highlighted;
+    try {
+      const grammar = Prism.languages[block.lang] || Prism.languages.clike;
+      highlighted = Prism.highlight(block.code, grammar, block.lang);
+    } catch (e) {
+      highlighted = block.code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    return `<div class="code-block" data-lang="${block.lang}" data-code="${encodeURIComponent(block.code)}"><div class="code-block-header"><span class="code-lang">${block.lang}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div><pre class="language-${block.lang}"><code class="language-${block.lang}">${highlighted}</code></pre></div>`;
+  });
+
+  return processed;
+}
+
+// Global copy function
+window.copyCode = function(btn) {
+  const block = btn.closest('.code-block');
+  const code = decodeURIComponent(block.dataset.code);
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+};
+
+function IntroPage({ onStart }) {
+  return (
+    <div className="content-wrapper">
+      <div className="hero">
+        <div className="hero-badge">ZeroPoint Academy</div>
+        <h1>SDK Developer Course</h1>
+        <p>{courseData.tagline}</p>
+        <div className="hero-meta">
+          <span><span className="val">{courseData.duration}</span></span>
+          <span><span className="val">{courseData.modules.length} Modules</span></span>
+          <span><span className="val">CLI + HTTP</span></span>
+        </div>
+      </div>
+
+      <div className="intro-grid">
+        <div className="intro-card">
+          <h3>Concept</h3>
+          <p>What you're doing and why it matters — one paragraph, not three.</p>
+        </div>
+        <div className="intro-card">
+          <h3>Do It</h3>
+          <p>Run the commands. Read the output. Understand what happened.</p>
+        </div>
+        <div className="intro-card">
+          <h3>Checkpoint</h3>
+          <p>Prove you understood by doing something slightly different.</p>
+        </div>
+      </div>
+
+      <div className="philosophy-text">
+        <p>The modules are sequential. Each builds on the previous. The whole track takes an afternoon.</p>
+        <p>What you'll build in an afternoon: A cryptographic identity anchored by a genesis key, agent keys with scoped capabilities and delegation chains, a five-layer constitutional gate stack with custom WASM extension points, a tamper-evident audit chain with hash-linked receipts, and an HTTP API that any agent framework can call.</p>
+      </div>
+
+      <div style={{ marginTop: '24px' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginBottom: '8px' }}><strong>Prerequisites:</strong> {courseData.prereqs}</p>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}><strong>Outcome:</strong> {courseData.outcome}</p>
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: '40px' }}>
+        <button className="nav-btn primary" onClick={onStart} style={{ padding: '12px 32px', fontSize: '0.9rem' }}>
+          Begin Module 1 &rarr;
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ModulePage({ module, completed, onComplete, onPrev, onNext, hasPrev, hasNext }) {
+  const [activeTab, setActiveTab] = useState('concept');
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    setActiveTab('concept');
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [module.id]);
+
+  const sections = {
+    concept: module.concept,
+    lab: module.lab,
+    checkpoint: module.checkpoint,
+  };
+
+  const html = useMemo(() => renderMarkdown(sections[activeTab]), [module.id, activeTab]);
+
+  const tabLabels = {
+    concept: 'Concept',
+    lab: 'Do It',
+    checkpoint: 'Checkpoint',
+  };
+
+  return (
+    <div className="content-wrapper" ref={contentRef}>
+      <div className="module-header">
+        <div className="module-header-num">Module {module.id} of {courseData.modules.length}</div>
+        <h1>{module.title}</h1>
+      </div>
+
+      <div className="section-tabs">
+        {['concept', 'lab', 'checkpoint'].map(tab => (
+          <button
+            key={tab}
+            className={`section-tab ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tabLabels[tab]}
+          </button>
+        ))}
+      </div>
+
+      <div className="section-content" dangerouslySetInnerHTML={{ __html: html }} />
+
+      {activeTab === 'checkpoint' && (
+        <div className="complete-section">
+          <button
+            className={`complete-btn ${completed ? 'completed' : ''}`}
+            onClick={() => !completed && onComplete(module.id)}
+          >
+            {completed ? '\u2713 Module Completed' : 'Mark as Complete'}
+          </button>
+        </div>
+      )}
+
+      <div className="nav-buttons">
+        <button className="nav-btn" onClick={onPrev} disabled={!hasPrev}>
+          &larr; Previous
+        </button>
+        {hasNext ? (
+          <button className="nav-btn primary" onClick={onNext}>
+            Next Module &rarr;
+          </button>
+        ) : (
+          <span style={{ fontSize: '0.85rem', color: 'var(--green)', fontWeight: 500 }}>
+            {completed ? '\u2713 Course Complete' : 'Final Module'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// API Configuration
+// ============================================================================
+// The course app talks to the ZeroPoint server (zp-server on Hetzner) for two
+// purposes:
+//   1. Anonymous analytics — module start/complete events with no identity
+//   2. Attestation issuance — when all 6 modules are complete, the learner
+//      enters their name and receives a signed, hash-chained attestation
+//
+// The API_BASE should point to the zp-server instance. In production this is
+// proxied through Cloudflare at zeropoint.global. For local dev, point it at
+// localhost:3000.
+// ============================================================================
+const API_BASE = 'https://api.zeropoint.global';
+const TRACK_ID = 'track-2-sdk-developer';
+
+// Generate a random session ID for anonymous analytics.
+// This groups events within a single learning session but cannot identify
+// a person. It's regenerated each time the page loads.
+const SESSION_ID = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+
+// Fire an anonymous analytics event to the server.
+// Failures are silently ignored — analytics should never block learning.
+function sendAnalyticsEvent(moduleId, event, durationSecs) {
+  fetch(`${API_BASE}/api/v1/analytics/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: SESSION_ID,
+      track: TRACK_ID,
+      module_id: moduleId,
+      event: event,
+      duration_secs: durationSecs || null,
+    }),
+  }).catch(() => {}); // Silent — never block the learner
+}
+
+// Request an attestation from the server when all modules are complete.
+// Returns the attestation object (id, hash, signature) or null on failure.
+async function requestAttestation(name, completions) {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/attestations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        track: TRACK_ID,
+        completions: completions,
+      }),
+    });
+    if (res.ok) return await res.json();
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function App() {
+  const [currentModule, setCurrentModule] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [completedModules, setCompletedModules] = useState(new Set());
+  const moduleStartTimes = useRef({});
+  // Track when each module was completed (for attestation payload)
+  const completionTimestamps = useRef({});
+  // Attestation state
+  const [showAttestationModal, setShowAttestationModal] = useState(false);
+  const [attestation, setAttestation] = useState(null);
+  const [attestationLoading, setAttestationLoading] = useState(false);
+  const mainRef = useRef(null);
+
+  const goTo = useCallback((idx) => {
+    setCurrentModule(idx);
+    setSidebarOpen(false); // Close sidebar on mobile after selection
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+
+    // Fire "started" analytics event when entering a module
+    if (idx > 0) {
+      moduleStartTimes.current[idx] = Date.now();
+      sendAnalyticsEvent(idx, 'started');
+    }
+  }, []);
+
+  const handleComplete = useCallback((id) => {
+    // Calculate time spent on this module (seconds)
+    const startTime = moduleStartTimes.current[id];
+    const durationSecs = startTime ? Math.round((Date.now() - startTime) / 1000) : null;
+
+    // Record completion timestamp for the attestation payload
+    completionTimestamps.current[id] = new Date().toISOString();
+
+    // Fire "completed" analytics event with duration
+    sendAnalyticsEvent(id, 'completed', durationSecs);
+
+    setCompletedModules(prev => {
+      const next = new Set(prev);
+      next.add(id);
+
+      // If all 6 modules are now complete, show the attestation modal
+      if (next.size === courseData.modules.length) {
+        setTimeout(() => setShowAttestationModal(true), 600);
+      }
+
+      return next;
+    });
+  }, []);
+
+  // Handle attestation request when the learner submits their name
+  const handleAttestationRequest = useCallback(async (name) => {
+    setAttestationLoading(true);
+    const completions = courseData.modules.map(mod => ({
+      module_id: mod.id,
+      module_name: mod.title,
+      completed_at: completionTimestamps.current[mod.id] || new Date().toISOString(),
+    }));
+    const result = await requestAttestation(name, completions);
+    setAttestation(result);
+    setAttestationLoading(false);
+  }, []);
+
+  const progress = (completedModules.size / courseData.modules.length) * 100;
+
+  return (
+    <div className="app">
+      <button
+        className={`hamburger ${sidebarOpen ? 'open' : ''}`}
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label="Toggle navigation"
+      >
+        <span /><span /><span />
+      </button>
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-logo">ZeroPoint</div>
+          <div className="sidebar-title">SDK Developer</div>
+          <div className="sidebar-subtitle">Track 2 — Ship a Governed Agent in an Afternoon</div>
+        </div>
+
+        <div className="progress-section">
+          <div className="progress-label">
+            <span>Progress</span>
+            <span>{completedModules.size}/{courseData.modules.length}</span>
+          </div>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        <div className="module-list">
+          <div
+            className={`module-item intro ${currentModule === 0 ? 'active' : ''}`}
+            onClick={() => goTo(0)}
+          >
+            <div className="module-num" style={{ fontWeight: 500 }}>&bull;</div>
+            <div className="module-info">
+              <div className="module-name">Introduction</div>
+            </div>
+          </div>
+
+          {courseData.modules.map((mod, idx) => {
+            const isDone = completedModules.has(mod.id);
+            const isActive = currentModule === mod.id;
+            return (
+              <div
+                key={mod.id}
+                className={`module-item ${isActive ? 'active' : ''}`}
+                onClick={() => goTo(mod.id)}
+              >
+                <div className="module-num">{String(mod.id).padStart(2, '0')}</div>
+                <div className="module-info">
+                  <div className="module-name">{mod.title}</div>
+                </div>
+                <div className="module-check">
+                  {isDone ? (
+                    <span className="check-done">{'\u2713'}</span>
+                  ) : isActive ? (
+                    <span className="check-active">{'\u25CB'}</span>
+                  ) : (
+                    <span className="check-pending">{'\u25CB'}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border-subtle)' }}>
+          <a href="course.html" style={{ fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            Next: Track 3 — Internals <span style={{ fontSize: '0.9em' }}>→</span>
+          </a>
+        </div>
+      </div>
+
+      <div className="main" ref={mainRef}>
+        {currentModule === 0 ? (
+          <IntroPage onStart={() => goTo(1)} />
+        ) : (
+          <ModulePage
+            module={courseData.modules[currentModule - 1]}
+            completed={completedModules.has(currentModule)}
+            onComplete={handleComplete}
+            onPrev={() => goTo(currentModule - 1)}
+            onNext={() => goTo(currentModule + 1)}
+            hasPrev={currentModule > 0}
+            hasNext={currentModule < courseData.modules.length}
+          />
+        )}
+      </div>
+
+      {/* ================================================================
+          Attestation Modal
+          Shown when all 6 modules are marked complete. The learner enters
+          their name, the app calls POST /api/v1/attestations, and on
+          success displays the attestation ID with a link to the visual
+          verification page.
+          ================================================================ */}
+      {showAttestationModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 100,
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            borderRadius: '8px', padding: '40px', width: '440px', textAlign: 'center',
+          }}>
+            {!attestation ? (
+              <>
+                <div style={{
+                  fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.15em',
+                  textTransform: 'uppercase', color: 'var(--green)', marginBottom: '12px',
+                }}>
+                  {'\u2713'} All Modules Complete
+                </div>
+                <h2 style={{
+                  fontFamily: "'Inter', sans-serif", fontSize: '1.4rem',
+                  fontWeight: 600, color: 'var(--text)', marginBottom: '8px',
+                }}>
+                  You are a ZeroPoint Developer.
+                </h2>
+                <p style={{
+                  fontSize: '0.85rem', color: 'var(--text-dim)',
+                  marginBottom: '28px', lineHeight: 1.6,
+                }}>
+                  Enter your name to issue a signed attestation of completion,
+                  hash-chained to the ZeroPoint attestation ledger.
+                </p>
+                <input
+                  type="text"
+                  id="attestation-name"
+                  placeholder="Your full name"
+                  style={{
+                    width: '100%', padding: '10px 14px', background: 'var(--bg)',
+                    border: '1px solid var(--border)', borderRadius: '4px',
+                    color: 'var(--text)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '15px', outline: 'none', marginBottom: '16px',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                />
+                <button
+                  onClick={() => {
+                    const name = document.getElementById('attestation-name').value.trim();
+                    if (name) handleAttestationRequest(name);
+                  }}
+                  disabled={attestationLoading}
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: '4px',
+                    border: '1px solid rgba(126,184,218,0.3)',
+                    background: attestationLoading ? 'var(--bg-hover)' : 'var(--accent-glow)',
+                    color: attestationLoading ? 'var(--text-muted)' : 'var(--accent)',
+                    fontFamily: "'Inter', sans-serif", fontSize: '14px',
+                    fontWeight: 500, cursor: attestationLoading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {attestationLoading ? 'Sealing attestation...' : 'Issue Attestation'}
+                </button>
+                <button
+                  onClick={() => setShowAttestationModal(false)}
+                  style={{
+                    width: '100%', padding: '8px', marginTop: '8px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--text-muted)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  Skip for now
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  border: '2px solid var(--green)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 16px', fontSize: '24px', color: 'var(--green)',
+                }}>
+                  {'\u2713'}
+                </div>
+                <h2 style={{
+                  fontFamily: "'Inter', sans-serif", fontSize: '1.3rem',
+                  fontWeight: 600, color: 'var(--text)', marginBottom: '8px',
+                }}>
+                  Attestation Sealed
+                </h2>
+                <div style={{
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: '0.85rem',
+                  color: 'var(--accent)', marginBottom: '16px',
+                  padding: '8px 16px', background: 'var(--accent-dim)',
+                  borderRadius: '4px', display: 'inline-block',
+                }}>
+                  {attestation.id}
+                </div>
+                <p style={{
+                  fontSize: '0.8rem', color: 'var(--text-dim)',
+                  marginBottom: '8px', lineHeight: 1.5,
+                }}>
+                  Signed by the ZeroPoint server, hash-chained to the attestation ledger.
+                </p>
+                <div style={{
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem',
+                  color: 'var(--text-muted)', marginBottom: '20px', wordBreak: 'break-all',
+                }}>
+                  {attestation.attestation_hash}
+                </div>
+                <a
+                  href={`https://zeropoint.global/verify.html?id=${attestation.id}`}
+                  target="_blank"
+                  rel="noopener"
+                  style={{
+                    display: 'inline-block', padding: '10px 28px', borderRadius: '4px',
+                    border: '1px solid rgba(126,184,218,0.3)',
+                    background: 'var(--accent-glow)', color: 'var(--accent)',
+                    fontFamily: "'Inter', sans-serif", fontSize: '14px',
+                    fontWeight: 500, textDecoration: 'none',
+                  }}
+                >
+                  View Attestation
+                </a>
+                <button
+                  onClick={() => setShowAttestationModal(false)}
+                  style={{
+                    display: 'block', width: '100%', padding: '8px', marginTop: '12px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--text-muted)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
