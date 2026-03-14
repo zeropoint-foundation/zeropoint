@@ -32,10 +32,12 @@
 
 pub mod detector;
 pub mod store;
+pub mod proposal;
 
 // Re-export the main types for convenience
 pub use detector::{PatternDetector, PatternDetectorError, Result as DetectorResult};
 pub use store::{EpisodeStore, Result as StoreResult, StoreError};
+pub use proposal::{LearningLoop, ProposalStore, ProposalStatus, SkillProposal, ProposalError};
 
 // Re-export commonly used types from zp-core
 pub use zp_core::episode::{Episode, EpisodeId, Outcome, Pattern};

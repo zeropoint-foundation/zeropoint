@@ -1,0 +1,43 @@
+[package]
+name = "trust-triangle"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Trust Triangle — ZeroPoint reference implementation demonstrating cross-domain governance"
+
+[[bin]]
+name = "trust-triangle"
+path = "src/bin/main.rs"
+
+[dependencies]
+# ZeroPoint governance primitives
+zp-keys = { path = "../zp-keys" }
+zp-introduction = { path = "../zp-introduction" }
+zp-core = { path = "../zp-core" }
+zp-policy = { path = "../zp-policy" }
+zp-receipt = { path = "../zp-receipt", features = ["signing"] }
+
+# HTTP
+axum = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+tower-http = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Crypto
+hex = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Misc
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

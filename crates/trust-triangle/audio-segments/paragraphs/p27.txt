@@ -1,0 +1,1 @@
+Everything you just saw runs on your laptop. Three terminals, three organizations, zero cloud dependencies.

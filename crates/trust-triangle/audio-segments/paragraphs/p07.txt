@@ -1,0 +1,1 @@
+Before any data moves, the systems need to shake hands — cryptographically.

@@ -1,0 +1,1 @@
+Each organization has what ZeroPoint calls a genesis key. Think of it like the root of a family tree. The clinic's genesis key belongs to MediCare Foundation. The pharmacy's belongs to QuickRx Holdings. Alex's assistant has one too, from Patient Cloud. Three separate roots. Three separate domains of trust.

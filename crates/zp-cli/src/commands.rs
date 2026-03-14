@@ -1,7 +1,114 @@
-//! Subcommand handlers for skills, audit, and health operations
+//! Subcommand handlers for skills, audit, health, keys, and gate operations
+
+use std::path::PathBuf;
 
 use anyhow::Result;
+use zp_audit::AuditStore;
+use zp_core::{
+    ActionType, ActorId, Channel, ConversationId,
+    policy::{PolicyContext, TrustTier},
+};
+use zp_keys::hierarchy::AgentKey;
+use zp_keys::keyring::Keyring;
 use zp_pipeline::Pipeline;
+use zp_policy::GovernanceGate;
+
+/// Resolve the ZeroPoint home directory.
+///
+/// Resolution chain (first match wins):
+///   1. `ZP_HOME` env var         — explicit override (CI, Docker, production)
+///   2. `zeropoint.toml` key_path — project-level config (walks up from cwd)
+///   3. `~/.zeropoint/`           — sensible default for local dev
+///
+/// Examples:
+///   ZP_HOME=/opt/zeropoint zp keys list   → /opt/zeropoint
+///   (in project with toml key_path)       → whatever toml says
+///   (default)                             → ~/.zeropoint
+pub fn resolve_zp_home() -> PathBuf {
+    // 1. Explicit env override
+    if let Some(zp_home) = std::env::var_os("ZP_HOME") {
+        return PathBuf::from(zp_home);
+    }
+
+    // 2. Walk up from cwd looking for zeropoint.toml with key_path
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut dir = cwd.as_path();
+        loop {
+            let toml_path = dir.join("zeropoint.toml");
+            if toml_path.exists() {
+                if let Ok(contents) = std::fs::read_to_string(&toml_path) {
+                    // Simple parse — look for key_path under [identity]
+                    if let Some(kp) = parse_key_path(&contents) {
+                        let expanded = expand_tilde(&kp);
+                        if expanded.is_absolute() {
+                            // Absolute paths are parent of "keys/"
+                            // key_path points to the keys dir, we want its parent
+                            if let Some(parent) = expanded.parent() {
+                                return parent.to_path_buf();
+                            }
+                            return expanded;
+                        } else {
+                            // Relative to the toml's directory
+                            let resolved = dir.join(&expanded);
+                            if let Some(parent) = resolved.parent() {
+                                return parent.to_path_buf();
+                            }
+                            return resolved;
+                        }
+                    }
+                }
+                break; // Found toml but no key_path — fall through to default
+            }
+            match dir.parent() {
+                Some(p) => dir = p,
+                None => break,
+            }
+        }
+    }
+
+    // 3. Default: ~/.zeropoint/
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".zeropoint")
+}
+
+/// Open a keyring using the resolved ZP home.
+pub fn open_keyring() -> Result<Keyring, zp_keys::error::KeyError> {
+    Keyring::open(resolve_zp_home().join("keys"))
+}
+
+/// Expand `~` at the start of a path to $HOME.
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
+/// Extract key_path value from zeropoint.toml content.
+/// Simple line-based parse — no toml crate dependency needed.
+fn parse_key_path(contents: &str) -> Option<String> {
+    let mut in_identity = false;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_identity = trimmed == "[identity]";
+            continue;
+        }
+        if in_identity && trimmed.starts_with("key_path") {
+            if let Some(val) = trimmed.split('=').nth(1) {
+                let val = val.trim().trim_matches('"').trim_matches('\'');
+                if !val.is_empty() {
+                    return Some(val.to_string());
+                }
+            }
+        }
+    }
+    None
+}
 
 /// List all registered skills
 #[allow(dead_code)]
@@ -64,21 +171,127 @@ pub async fn audit_show(_pipeline: &Pipeline, conversation_id: &str) -> Result<(
     Ok(())
 }
 
-/// Verify audit chain integrity
+/// Show recent audit log entries from the real AuditStore.
+pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str>) -> Result<()> {
+    let db_path = resolve_zp_home().join("data").join("audit.db");
+
+    if !db_path.exists() {
+        eprintln!();
+        eprintln!("  \x1b[1mAudit Log\x1b[0m");
+        eprintln!("  \x1b[2m─────────\x1b[0m");
+        eprintln!();
+        eprintln!("  \x1b[2mNo audit entries yet.\x1b[0m");
+        eprintln!("  Run `zp gate eval` to generate your first audit receipt.");
+        eprintln!();
+        return Ok(());
+    }
+
+    let store = AuditStore::open(&db_path)
+        .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
+
+    let entries = store.export_chain(limit)
+        .map_err(|e| anyhow::anyhow!("Failed to read audit chain: {}", e))?;
+
+    eprintln!();
+    eprintln!("  \x1b[1mAudit Log\x1b[0m");
+    eprintln!("  \x1b[2m─────────\x1b[0m");
+
+    if let Some(cat) = category {
+        eprintln!("  Filter: {}", cat);
+    }
+
+    if entries.is_empty() {
+        eprintln!();
+        eprintln!("  \x1b[2mNo audit entries yet.\x1b[0m");
+        eprintln!("  Run `zp gate eval` to generate your first audit receipt.");
+        eprintln!();
+        return Ok(());
+    }
+
+    eprintln!("  Showing {} of {} entries", entries.len().min(limit), entries.len());
+    eprintln!();
+
+    for entry in &entries {
+        let decision_str = if entry.policy_decision.is_allowed() {
+            "\x1b[32mALLOW\x1b[0m"
+        } else if entry.policy_decision.is_blocked() {
+            "\x1b[31mBLOCK\x1b[0m"
+        } else {
+            "\x1b[33mREVIEW\x1b[0m"
+        };
+
+        let action_str = format!("{:?}", entry.action);
+        let short_hash = &entry.entry_hash[..12.min(entry.entry_hash.len())];
+
+        eprintln!(
+            "  \x1b[2m{}\x1b[0m  {}  \x1b[36m{}\x1b[0m  {}",
+            entry.timestamp.format("%Y-%m-%d %H:%M:%S"),
+            decision_str,
+            short_hash,
+            action_str,
+        );
+    }
+
+    eprintln!();
+    Ok(())
+}
+
+/// Verify audit chain integrity using the real AuditStore.
 pub async fn audit_verify(_pipeline: &Pipeline) -> Result<()> {
-    println!();
-    println!("Verifying Audit Chain Integrity");
-    println!("{}", "=".repeat(60));
+    let db_path = resolve_zp_home().join("data").join("audit.db");
 
-    // In a full implementation, we would verify the hash chain
-    // let result = pipeline.audit_store().verify_chain()?;
+    if !db_path.exists() {
+        eprintln!();
+        eprintln!("  \x1b[1mAudit Chain Verification\x1b[0m");
+        eprintln!("  \x1b[2m────────────────────────\x1b[0m");
+        eprintln!();
+        eprintln!("  Status:  \x1b[2m(no audit store)\x1b[0m");
+        eprintln!("  Run `zp gate eval` to create your first audit entry.");
+        eprintln!();
+        return Ok(());
+    }
 
-    println!("Status:     OK");
-    println!("Entries:    0");
-    println!("Last Hash:  (genesis)");
-    println!();
-    println!("Audit chain is valid and tamper-proof.");
-    println!();
+    let store = AuditStore::open(&db_path)
+        .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
+
+    let report = store.verify_with_report()
+        .map_err(|e| anyhow::anyhow!("Verification failed: {}", e))?;
+
+    eprintln!();
+    eprintln!("  \x1b[1mAudit Chain Verification\x1b[0m");
+    eprintln!("  \x1b[2m────────────────────────\x1b[0m");
+    eprintln!();
+
+    if report.chain_valid {
+        eprintln!("  Status:       \x1b[32mVALID\x1b[0m");
+    } else {
+        eprintln!("  Status:       \x1b[31mINVALID\x1b[0m");
+    }
+
+    eprintln!("  Entries:      {}", report.entries_examined);
+    eprintln!("  Hashes OK:    {}/{}", report.hashes_valid, report.entries_examined);
+    eprintln!("  Chain links:  {}/{}", report.chain_links_valid, report.entries_examined.saturating_sub(1).max(0));
+
+    if report.signatures_present > 0 {
+        eprintln!("  Signatures:   {}/{}", report.signatures_valid, report.signatures_present);
+    }
+
+    if !report.issues.is_empty() {
+        eprintln!();
+        eprintln!("  \x1b[31mIssues:\x1b[0m");
+        for issue in &report.issues {
+            eprintln!("    ✗ {}", issue);
+        }
+    }
+
+    eprintln!();
+    if report.chain_valid {
+        eprintln!("  Audit chain is \x1b[32mtamper-proof\x1b[0m and intact.");
+    } else {
+        eprintln!("  \x1b[31mAudit chain integrity compromised.\x1b[0m");
+        eprintln!("  Investigate the issues above before trusting this audit trail.");
+    }
+    eprintln!();
 
     Ok(())
 }
@@ -99,4 +312,368 @@ pub async fn health(_pipeline: &Pipeline) -> Result<()> {
     println!();
 
     Ok(())
+}
+
+// ── Key lifecycle commands ─────────────────────────────────────────
+
+/// Issue a new agent key with scoped capabilities.
+pub fn keys_issue(name: &str, capabilities: Option<&str>, expires_days: u64) -> i32 {
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            eprintln!("  Run `zp init` first to bootstrap your environment.");
+            return 1;
+        }
+    };
+
+    // Load operator key (needed to sign agent key)
+    let operator = match keyring.load_operator() {
+        Ok(op) => op,
+        Err(e) => {
+            eprintln!("  No operator key found: {}", e);
+            eprintln!("  Run `zp init` first.");
+            return 1;
+        }
+    };
+
+    eprintln!();
+    eprintln!("  \x1b[1mIssuing Agent Key\x1b[0m");
+    eprintln!("  \x1b[2m─────────────────\x1b[0m");
+
+    // Parse capabilities
+    let caps: Vec<String> = capabilities
+        .unwrap_or("tool:*")
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .collect();
+
+    // Compute expiration
+    let expires_at = Some(
+        chrono::Utc::now() + chrono::Duration::days(expires_days as i64),
+    );
+
+    eprint!("  Generating agent key...              ");
+    let agent = AgentKey::generate(name, &operator, expires_at);
+    eprintln!("\x1b[32m✓\x1b[0m Ed25519");
+
+    eprint!("  Writing to keyring...                ");
+    if let Err(e) = keyring.save_agent(name, &agent) {
+        eprintln!("\x1b[31m✗\x1b[0m");
+        eprintln!("  Failed to save agent key: {}", e);
+        return 1;
+    }
+    eprintln!("\x1b[32m✓\x1b[0m .zeropoint/keys/agents/{}.json", name);
+
+    let pub_hex = hex::encode(agent.public_key());
+    eprintln!();
+    eprintln!("  Agent:        \x1b[36m{}\x1b[0m", name);
+    eprintln!("  Public key:   \x1b[36m{}...\x1b[0m", &pub_hex[..16]);
+    eprintln!("  Capabilities: {}", caps.join(", "));
+    eprintln!("  Expires:      {} days", expires_days);
+    eprintln!();
+    eprintln!("  Delegation chain: genesis → operator → \x1b[1m{}\x1b[0m", name);
+    eprintln!();
+
+    0
+}
+
+/// List all keys in the keyring.
+pub fn keys_list() -> i32 {
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            return 1;
+        }
+    };
+
+    let status = keyring.status();
+
+    eprintln!();
+    eprintln!("  \x1b[1mKeyring Status\x1b[0m");
+    eprintln!("  \x1b[2m──────────────\x1b[0m");
+    eprintln!("  Genesis key:   {}", if status.has_genesis { "\x1b[32m✓\x1b[0m present" } else { "\x1b[31m✗\x1b[0m missing" });
+    eprintln!("  Operator key:  {}", if status.has_operator { "\x1b[32m✓\x1b[0m present" } else { "\x1b[31m✗\x1b[0m missing" });
+    eprintln!("  Agent keys:    {}", status.agent_count);
+
+    if !status.agent_names.is_empty() {
+        eprintln!();
+        eprintln!("  \x1b[2mAgents:\x1b[0m");
+        for name in &status.agent_names {
+            eprintln!("    • {}", name);
+        }
+    }
+    eprintln!();
+
+    0
+}
+
+/// Revoke an agent key by name.
+pub fn keys_revoke(name: &str) -> i32 {
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            return 1;
+        }
+    };
+
+    // Check if agent exists
+    match keyring.load_agent(name) {
+        Ok(_) => {}
+        Err(_) => {
+            eprintln!("  Agent key '{}' not found.", name);
+            return 1;
+        }
+    }
+
+    // Remove the agent key files
+    let agents_dir = keyring.path().join("agents");
+    let json_path = agents_dir.join(format!("{}.json", name));
+    let secret_path = agents_dir.join(format!("{}.secret", name));
+
+    if let Err(e) = std::fs::remove_file(&json_path) {
+        eprintln!("  Failed to remove {}: {}", json_path.display(), e);
+        return 1;
+    }
+    let _ = std::fs::remove_file(&secret_path); // secret may not exist
+
+    eprintln!();
+    eprintln!("  \x1b[33m⊘\x1b[0m Agent key '{}' revoked.", name);
+    eprintln!();
+
+    0
+}
+
+// ── Gate evaluation commands ───────────────────────────────────────
+
+/// Infer an ActionType from a free-form action string.
+/// Mirrors the server's `infer_action_type()` so CLI and HTTP API behave identically.
+fn infer_action_type(action: &str) -> ActionType {
+    let lower = action.to_lowercase();
+
+    if lower.contains("delete") || lower.contains("remove") || lower.contains("destroy") {
+        ActionType::FileOp {
+            op: zp_core::FileOperation::Delete,
+            path: action.to_string(),
+        }
+    } else if lower.contains("disable")
+        || lower.contains("override")
+        || lower.contains("config")
+        || lower.contains("setting")
+    {
+        ActionType::ConfigChange {
+            setting: action.to_string(),
+        }
+    } else if lower.contains("credential")
+        || lower.contains("password")
+        || lower.contains("secret")
+        || lower.contains("key")
+        || lower.contains("token")
+    {
+        ActionType::CredentialAccess {
+            credential_ref: action.to_string(),
+        }
+    } else if lower.contains("execute")
+        || lower.contains("run")
+        || lower.contains("deploy")
+        || lower.contains("train")
+        || lower.contains("build")
+        || lower.contains("install")
+    {
+        ActionType::Execute {
+            language: action.to_string(),
+        }
+    } else if lower.contains("write")
+        || lower.contains("create")
+        || lower.contains("update")
+        || lower.contains("modify")
+    {
+        ActionType::Write {
+            target: action.to_string(),
+        }
+    } else if lower.contains("read")
+        || lower.contains("view")
+        || lower.contains("list")
+        || lower.contains("get")
+    {
+        ActionType::Read {
+            target: action.to_string(),
+        }
+    } else if lower.contains("call")
+        || lower.contains("api")
+        || lower.contains("send")
+        || lower.contains("email")
+    {
+        ActionType::ApiCall {
+            endpoint: action.to_string(),
+        }
+    } else {
+        ActionType::Chat
+    }
+}
+
+/// Evaluate a request against the full gate stack using the real GovernanceGate.
+/// Persists the resulting audit entry to the append-only audit chain.
+pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i32 {
+    eprintln!();
+    eprintln!("  \x1b[1mGate Evaluation\x1b[0m");
+    eprintln!("  \x1b[2m───────────────\x1b[0m");
+    eprintln!("  Action:   {}", action);
+    if let Some(r) = resource {
+        eprintln!("  Resource: {}", r);
+    }
+    if let Some(a) = agent {
+        eprintln!("  Agent:    {}", a);
+    }
+    eprintln!();
+
+    // Build the PolicyContext from CLI args
+    let action_type = infer_action_type(action);
+    let context = PolicyContext {
+        action: action_type,
+        trust_tier: TrustTier::Tier1,
+        channel: Channel::Cli,
+        conversation_id: ConversationId::new(),
+        skill_ids: vec![],
+        tool_names: resource.map(|r| vec![r.to_string()]).unwrap_or_default(),
+        mesh_context: None,
+    };
+
+    let actor = match agent {
+        Some(name) => ActorId::Skill(name.to_string()),
+        None => ActorId::User("cli-operator".to_string()),
+    };
+
+    // Open the audit store first so we can sync the chain head
+    let db_path = resolve_zp_home().join("data").join("audit.db");
+    if let Some(parent) = db_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let store = AuditStore::open(&db_path).ok();
+
+    // Create the real governance gate (default PolicyEngine with 6 rules)
+    let mut gate = GovernanceGate::new("cli-gate");
+
+    // Sync the gate's chain head with the store's actual latest hash
+    // so prev_hash on the new entry continues the real chain
+    if let Some(ref s) = store {
+        if let Ok(latest) = s.get_latest_hash() {
+            gate.set_audit_chain_head(latest);
+        }
+    }
+
+    // Evaluate through the full gate stack
+    let result = gate.evaluate(&context, actor);
+
+    // Print each applied rule
+    // applied_rules lists every rule that fired; the aggregate decision
+    // is in result.decision (most-restrictive wins)
+    for (i, rule_name) in result.applied_rules.iter().enumerate() {
+        // Last rule is the one whose decision won if blocked
+        let icon = if !result.is_allowed() && i == result.applied_rules.len() - 1 {
+            "\x1b[31m✗\x1b[0m"
+        } else {
+            "\x1b[32m✓\x1b[0m"
+        };
+        eprintln!("  {} {}", icon, rule_name);
+    }
+
+    // Check for custom WASM gates (informational — real WASM eval is TODO)
+    let policies_dir = resolve_zp_home().join("policies");
+    if policies_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&policies_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "wasm").unwrap_or(false) {
+                    let name = path.file_stem().unwrap_or_default().to_string_lossy();
+                    eprintln!("  \x1b[32m✓\x1b[0m {} \x1b[2m(wasm)\x1b[0m", name);
+                }
+            }
+        }
+    }
+
+    eprintln!();
+
+    // Print the decision
+    let exit_code = if result.is_allowed() {
+        eprintln!("  Decision: \x1b[32mALLOW\x1b[0m");
+        0
+    } else if result.is_blocked() {
+        eprintln!("  Decision: \x1b[31mBLOCK\x1b[0m");
+        1
+    } else {
+        eprintln!("  Decision: \x1b[33mREVIEW\x1b[0m");
+        2
+    };
+
+    // Print receipt ID if present
+    if let Some(ref receipt_id) = result.receipt_id {
+        let short = if receipt_id.len() > 12 { &receipt_id[..12] } else { receipt_id };
+        eprintln!("  Receipt:  \x1b[36m{}...\x1b[0m", short);
+    }
+
+    // Persist the audit entry to the append-only chain
+    match store {
+        Some(s) => {
+            if let Err(e) = s.append(result.audit_entry) {
+                eprintln!("  \x1b[33m⚠\x1b[0m  Failed to persist audit entry: {}", e);
+            } else {
+                eprintln!("  \x1b[2mAudit entry persisted.\x1b[0m");
+            }
+        }
+        None => {
+            eprintln!("  \x1b[33m⚠\x1b[0m  Could not open audit store.");
+        }
+    }
+
+    eprintln!();
+    exit_code
+}
+
+/// List installed gates (constitutional + custom).
+pub fn gate_list() -> i32 {
+    eprintln!();
+    eprintln!("  \x1b[1mInstalled Gates\x1b[0m");
+    eprintln!("  \x1b[2m───────────────\x1b[0m");
+    eprintln!();
+
+    // Constitutional bedrock (always present)
+    eprintln!("  \x1b[2mConstitutional Bedrock (immutable):\x1b[0m");
+    eprintln!("    ◈ HarmPrincipleRule");
+    eprintln!("    ◈ SovereigntyRule");
+    eprintln!();
+    eprintln!("  \x1b[2mOperational Gates (immutable):\x1b[0m");
+    eprintln!("    ⊘ CatastrophicActionRule");
+    eprintln!("    ⊘ BulkOperationRule");
+    eprintln!("    ⊘ ReputationGateRule");
+    eprintln!();
+
+    // Custom WASM gates
+    let policies_dir = resolve_zp_home().join("policies");
+    let mut custom_count = 0;
+    if policies_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&policies_dir) {
+            eprintln!("  \x1b[2mCustom WASM Gates:\x1b[0m");
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "wasm").unwrap_or(false) {
+                    let name = path.file_stem().unwrap_or_default().to_string_lossy();
+                    eprintln!("    ⚙ {}", name);
+                    custom_count += 1;
+                }
+            }
+        }
+    }
+
+    if custom_count == 0 {
+        eprintln!("  \x1b[2mCustom WASM Gates:\x1b[0m (none installed)");
+    }
+
+    eprintln!();
+    eprintln!("  DefaultAllowRule (fallback)");
+    eprintln!();
+
+    0
 }

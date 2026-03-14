@@ -1,0 +1,1 @@
+From each genesis key, a chain of authority flows downward: genesis signs an operator key, the operator signs an agent key. Every agent carries this chain with them like a passport — a portable certificate chain that proves exactly who authorized them to act.

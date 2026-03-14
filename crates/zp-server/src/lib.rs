@@ -8,12 +8,17 @@ pub mod security;
 
 use axum::http::HeaderValue;
 use axum::{
-    extract::{Query, State},
+    extract::{
+        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
+        Query, State,
+    },
     http::StatusCode,
     response::Html,
     routing::{get, post},
     Json, Router,
 };
+use futures::stream::StreamExt;
+use futures::SinkExt;
 use chrono::Utc;
 use ed25519_dalek::{Signer as DalekSigner, SigningKey};
 use serde::{Deserialize, Serialize};
@@ -342,6 +347,8 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Anonymous course analytics
         .route("/api/v1/analytics/event", post(attestations::record_analytics_handler))
         .route("/api/v1/analytics/course", get(attestations::course_analytics_handler))
+        // WebSocket endpoint for Bridge UI
+        .route("/wss", get(ws_upgrade_handler))
         .layer(cors)
         .with_state(state)
 }
@@ -1352,6 +1359,212 @@ async fn create_conversation_handler(
     Ok(Json(ConversationResponse {
         conversation_id: id.0.to_string(),
     }))
+}
+
+// ============================================================================
+// WebSocket Handler — Bridge UI real-time connection
+// ============================================================================
+
+/// Upgrade HTTP → WebSocket at /wss
+async fn ws_upgrade_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> axum::response::Response {
+    ws.on_upgrade(move |socket| ws_connection(socket, state))
+}
+
+/// Handle a single WebSocket connection from the Bridge UI.
+///
+/// The client sends JSON frames like:
+///   { "type": "message", "role": "architect", "content": "Hello" }
+///   { "type": "health" }
+///   { "type": "HCSApprovalDecision", "payload": { ... } }
+///
+/// We route "message" into the deterministic pipeline and stream the
+/// response back in the format the Bridge expects.
+async fn ws_connection(socket: WebSocket, state: AppState) {
+    let (mut sender, mut receiver) = socket.split();
+
+    // Track conversation across the session
+    let conversation_id = ConversationId::new();
+
+    info!(
+        "WebSocket client connected (conversation: {:?})",
+        conversation_id
+    );
+
+    while let Some(msg) = receiver.next().await {
+        let msg = match msg {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::debug!("WebSocket recv error: {}", e);
+                break;
+            }
+        };
+
+        let text = match msg {
+            WsMessage::Text(t) => t,
+            WsMessage::Close(_) => break,
+            WsMessage::Ping(d) => {
+                let _ = sender.send(WsMessage::Pong(d)).await;
+                continue;
+            }
+            _ => continue,
+        };
+
+        // Parse the JSON frame
+        let frame: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => {
+                let err = serde_json::json!({
+                    "type": "Error",
+                    "message": format!("Invalid JSON: {}", e)
+                });
+                let _ = sender.send(WsMessage::Text(err.to_string().into())).await;
+                continue;
+            }
+        };
+
+        let msg_type = frame
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        match msg_type {
+            // ---- Health / keepalive ----
+            "health" => {
+                let resp = serde_json::json!({
+                    "type": "health",
+                    "status": "ok",
+                    "pipeline_enabled": state.0.pipeline.is_some(),
+                    "version": env!("CARGO_PKG_VERSION"),
+                });
+                let _ = sender.send(WsMessage::Text(resp.to_string().into())).await;
+            }
+
+            // ---- Chat message ----
+            "message" => {
+                let content = frame
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let role = frame
+                    .get("role")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("architect")
+                    .to_string();
+
+                if content.is_empty() {
+                    let err = serde_json::json!({
+                        "type": "Error",
+                        "message": "Empty message content"
+                    });
+                    let _ = sender.send(WsMessage::Text(err.to_string().into())).await;
+                    continue;
+                }
+
+                // Check pipeline availability
+                let pipeline = match state.0.pipeline.as_ref() {
+                    Some(p) => p,
+                    None => {
+                        // No LLM pipeline — echo back a helpful message
+                        let resp = serde_json::json!({
+                            "type": "message",
+                            "success": true,
+                            "response": format!(
+                                "Pipeline not enabled. Set ZP_LLM_ENABLED=true to enable LLM responses. (Received: {})",
+                                content
+                            ),
+                            "officer": role,
+                            "message_id": uuid::Uuid::now_v7().to_string(),
+                            "conversation_id": conversation_id.0.to_string(),
+                        });
+                        let _ = sender.send(WsMessage::Text(resp.to_string().into())).await;
+                        continue;
+                    }
+                };
+
+                // Build the deterministic core Request
+                let request = Request::new(
+                    conversation_id.clone(),
+                    content,
+                    Channel::WebDashboard,
+                );
+
+                // Send stream-start so the UI shows the officer is working
+                let stream_start = serde_json::json!({
+                    "type": "OfficerStreamStart",
+                    "officer": role,
+                });
+                let _ = sender.send(WsMessage::Text(stream_start.to_string().into())).await;
+
+                // Route through the pipeline
+                match pipeline.handle(request).await {
+                    Ok(response) => {
+                        // Send the complete response
+                        let stream_end = serde_json::json!({
+                            "type": "OfficerStreamEnd",
+                            "officer": role,
+                            "full_text": response.content,
+                        });
+                        let _ = sender.send(WsMessage::Text(stream_end.to_string().into())).await;
+
+                        // Also send the simple response format for compatibility
+                        let simple = serde_json::json!({
+                            "type": "message",
+                            "success": true,
+                            "response": response.content,
+                            "officer": role,
+                            "message_id": response.id.0.to_string(),
+                            "conversation_id": response.conversation_id.0.to_string(),
+                        });
+                        let _ = sender.send(WsMessage::Text(simple.to_string().into())).await;
+                    }
+                    Err(e) => {
+                        let err = serde_json::json!({
+                            "type": "OfficerStreamEnd",
+                            "officer": role,
+                            "full_text": format!("Error: {}", e),
+                        });
+                        let _ = sender.send(WsMessage::Text(err.to_string().into())).await;
+                    }
+                }
+            }
+
+            // ---- HCS Approval Decision (from Trust section) ----
+            "HCSApprovalDecision" => {
+                // Acknowledge — actual HCS processing is future work
+                let ack = serde_json::json!({
+                    "type": "HCSApprovalStatus",
+                    "pendingCount": 0,
+                });
+                let _ = sender.send(WsMessage::Text(ack.to_string().into())).await;
+            }
+
+            // ---- Voice transcription ----
+            "VoiceTranscribe" => {
+                // Placeholder — voice processing is future work
+                let resp = serde_json::json!({
+                    "type": "TranscriptionResponse",
+                    "success": false,
+                    "text": "",
+                    "error": "Voice transcription not yet implemented on server"
+                });
+                let _ = sender.send(WsMessage::Text(resp.to_string().into())).await;
+            }
+
+            // ---- Unknown types — log and ignore ----
+            other => {
+                tracing::debug!("Unhandled WebSocket message type: {}", other);
+            }
+        }
+    }
+
+    info!(
+        "WebSocket client disconnected (conversation: {:?})",
+        conversation_id
+    );
 }
 
 // ============================================================================

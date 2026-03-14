@@ -1,0 +1,1 @@
+This is what portable trust infrastructure means. Trust that works over plain HTTPS between systems that have never met, governed by cryptography rather than contracts, verifiable by anyone without calling home to a central authority.
