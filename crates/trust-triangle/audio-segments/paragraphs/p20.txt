@@ -1,0 +1,1 @@
+Anyone can check this chain after the fact. Did the clinic actually authorize this access? Verify the receipt. Did the pharmacy's policy engine approve the query? It's in the receipt. Was any data accessed beyond what was sanctioned? The sanitization counts are recorded and signed.

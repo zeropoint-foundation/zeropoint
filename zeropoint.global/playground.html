@@ -161,7 +161,55 @@ body.story-active .story-panel { bottom: 7.8rem; }
 .sim-nav a:hover { color: var(--accent); }
 .sim-nav a.nav-active { color: var(--accent); }
 .sim-nav .nav-sep { color: var(--rule); font-size: 0.6rem; }
-@media (max-width: 1100px) { .sim-nav { display: none; } }
+/* Hamburger toggle for topbar nav */
+.sim-hamburger {
+  display: none;
+  background: transparent; border: 1px solid var(--rule); border-radius: 4px;
+  width: 32px; height: 32px; cursor: pointer;
+  flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  margin-left: auto; margin-right: 0.75rem;
+}
+.sim-hamburger span {
+  display: block; width: 14px; height: 1.5px; background: var(--text-muted);
+  border-radius: 1px; transition: all 0.25s;
+}
+.sim-hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(2px, 2px); }
+.sim-hamburger.open span:nth-child(2) { opacity: 0; }
+.sim-hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(2px, -2px); }
+.sim-hamburger:hover { border-color: var(--accent); }
+.sim-hamburger:hover span { background: var(--accent); }
+
+/* Dropdown nav panel */
+.sim-nav-dropdown {
+  display: none;
+  position: fixed; top: 3rem; right: 0; z-index: 99;
+  background: rgba(10, 10, 12, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--rule); border-top: none;
+  border-radius: 0 0 0 8px;
+  padding: 0.75rem 0;
+  min-width: 180px;
+}
+.sim-nav-dropdown.open { display: block; }
+.sim-nav-dropdown a {
+  display: block; padding: 0.5rem 1.25rem;
+  font-family: var(--font-body); font-size: 0.75rem; color: var(--text-dim);
+  text-decoration: none; letter-spacing: 0.03em; transition: all 0.15s;
+}
+.sim-nav-dropdown a:hover { color: var(--accent); background: rgba(126,184,218,0.06); }
+.sim-nav-dropdown a.nav-active { color: var(--accent); }
+
+@media (max-width: 1600px) {
+  .sim-tagline { display: none; }
+}
+@media (max-width: 1500px) {
+  .sim-nav { display: none; }
+  .sim-hamburger { display: flex; }
+  .sim-title em { display: none; }
+}
+@media (max-width: 1000px) {
+  .sim-stats { gap: 0.5rem; font-size: 0.6rem; }
+}
 
 .sim-controls {
   display: flex; align-items: center; gap: 0.5rem;
@@ -394,6 +442,16 @@ body.story-active .minimap-container {
   transition: all 0.2s;
 }
 .story-close-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(126,184,218,0.08); }
+.story-narrate-btn {
+  background: transparent; border: 1px solid var(--rule); color: var(--text-muted);
+  font-size: 0.65rem; line-height: 1; height: 28px; padding: 0 10px;
+  border-radius: 4px; cursor: pointer; flex-shrink: 0;
+  font-family: var(--font-mono); letter-spacing: 0.04em;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.story-narrate-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(126,184,218,0.08); }
+.story-narrate-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(126,184,218,0.1); }
 .story-scenario-name {
   font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
   color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase;
@@ -645,6 +703,7 @@ body.story-active .minimap-container {
   font-family: var(--font-mono);
 }
 .cam-btn:hover { border-color: var(--accent); color: var(--accent); }
+.cam-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(126,184,218,0.1); }
 
 /* === SCROLLBAR — invisible by default, faint on hover === */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -789,6 +848,9 @@ body.story-active .minimap-container {
     <span class="nav-sep">·</span>
     <a href="/exhibits.html">Technical Deep Dive</a>
   </nav>
+  <button class="sim-hamburger" id="simHamburger" onclick="toggleSimNav()">
+    <span></span><span></span><span></span>
+  </button>
   <div class="sim-controls">
     <button class="sim-btn" id="playPauseBtn" onclick="simControls.togglePlay()">⏸ Pause</button>
   </div>
@@ -798,6 +860,17 @@ body.story-active .minimap-container {
     <span><span class="sim-stat-label">Decisions</span><span class="sim-stat-value" id="statDecisions">0</span></span>
     <span><span class="sim-stat-label">Sim Time</span><span class="sim-stat-value" id="statTime">00:00</span></span>
   </div>
+</div>
+
+<!-- Nav Dropdown (hamburger menu, visible below 1100px) -->
+<div class="sim-nav-dropdown" id="simNavDropdown">
+  <a href="/">Home</a>
+  <a href="/trust-triangle.html">Triangle</a>
+  <a href="/footprint.html">Footprint</a>
+  <a href="/playground.html" class="nav-active">Playground</a>
+  <a href="/for-agents.html">Agents</a>
+  <a href="/whitepaper.html">Whitepaper</a>
+  <a href="/exhibits.html">Technical Deep Dive</a>
 </div>
 
 <!-- Receipt Chain Bar — Full-width, anchored to bottom -->
@@ -838,7 +911,10 @@ body.story-active .minimap-container {
         <span class="story-pov-swap" id="storyPovSwap"></span>
       </div>
     </div>
-    <button class="story-close-btn" onclick="storyEngine.closePanel()" title="Close story">&times;</button>
+    <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
+      <button class="story-narrate-btn" id="narratorToggle" onclick="scenarioNarrator.toggle()" title="Play scenario narration">▶ Narrate</button>
+      <button class="story-close-btn" onclick="storyEngine.closePanel()" title="Close story">&times;</button>
+    </div>
   </div>
   <div class="story-body" id="storyBody"></div>
   <div class="process-stage" id="processStage">
@@ -862,6 +938,25 @@ body.story-active .minimap-container {
 </div>
 
 <script>
+// ============================================================
+// HAMBURGER NAV TOGGLE
+// ============================================================
+function toggleSimNav() {
+  const btn = document.getElementById('simHamburger');
+  const dropdown = document.getElementById('simNavDropdown');
+  btn.classList.toggle('open');
+  dropdown.classList.toggle('open');
+}
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const btn = document.getElementById('simHamburger');
+  const dropdown = document.getElementById('simNavDropdown');
+  if (btn && dropdown && !btn.contains(e.target) && !dropdown.contains(e.target)) {
+    btn.classList.remove('open');
+    dropdown.classList.remove('open');
+  }
+});
+
 // ============================================================
 // CONFIG
 // ============================================================
@@ -894,8 +989,8 @@ const CONFIG = {
 // ============================================================
 const STREET_NODES = [
   // Embarcadero waterfront (north → south) — corrected to road centerline
-  /* 0*/ { lng: -122.39380, lat: 37.79560, name: 'Ferry Building' },
-  /* 1*/ { lng: -122.39395, lat: 37.79480, name: 'Embarcadero / Market' },
+  /* 0*/ { lng: -122.39330, lat: 37.79555, name: 'Ferry Building' },           // on Embarcadero road, east of plaza
+  /* 1*/ { lng: -122.39365, lat: 37.79475, name: 'Embarcadero / Market' },    // on Embarcadero road at Market junction
   /* 2*/ { lng: -122.38965, lat: 37.78905, name: 'Embarcadero / Folsom' },
   /* 3*/ { lng: -122.38945, lat: 37.78790, name: 'Embarcadero / Harrison' },
   /* 4*/ { lng: -122.38930, lat: 37.77810, name: 'Oracle Park' },          // 3rd & King streetside
@@ -903,7 +998,7 @@ const STREET_NODES = [
   // Market Street corridor (NE → SW) — OSM verified
   /* 5*/ { lng: -122.39916, lat: 37.79105, name: 'Market / 1st' },
   /* 6*/ { lng: -122.40140, lat: 37.78928, name: 'Market / 2nd' },
-  /* 7*/ { lng: -122.40344, lat: 37.78768, name: 'Market / 3rd' },
+  /* 7*/ { lng: -122.40350, lat: 37.78790, name: 'Market / 3rd' },
   /* 8*/ { lng: -122.40592, lat: 37.78571, name: 'Market / 4th' },
   /* 9*/ { lng: -122.40807, lat: 37.78401, name: 'Market / 5th (Powell)' },
   /*10*/ { lng: -122.41030, lat: 37.78225, name: 'Market / 6th' },
@@ -964,38 +1059,38 @@ const STREET_NODES = [
   /*41*/ { lng: -122.38920, lat: 37.78470, name: 'Embarcadero / Brannan' },
 
   // === North of Market — Financial District & Chinatown ===
-  // OSM-corrected: actual SF block spacing ~75m (0.00068° lat), not 110m.
-  // Montgomery drifts NNW; Kearny ~125m west; Grant ~140m west of Kearny.
+  // All positions below from US Census Bureau geocoder (geocoding.geo.census.gov).
+  // Montgomery ~0.00093° lat / ~0.00019° lng per block NNW; Kearny & Grant parallel.
 
-  // Montgomery Street corridor (FiDi spine, N-S)
-  /*42*/ { lng: -122.40200, lat: 37.78890, name: 'Montgomery / Post' },
-  /*43*/ { lng: -122.40210, lat: 37.78966, name: 'Montgomery / Sutter' },
-  /*44*/ { lng: -122.40220, lat: 37.79038, name: 'Montgomery / Bush' },
-  /*45*/ { lng: -122.40228, lat: 37.79104, name: 'Montgomery / Pine' },
-  /*46*/ { lng: -122.40252, lat: 37.79182, name: 'Montgomery / California' },
-  /*47*/ { lng: -122.40246, lat: 37.79242, name: 'Montgomery / Sacramento' },
-  /*48*/ { lng: -122.40254, lat: 37.79308, name: 'Montgomery / Clay' },
-  /*49*/ { lng: -122.40264, lat: 37.79374, name: 'Montgomery / Washington' },
-  /*50*/ { lng: -122.40272, lat: 37.79440, name: 'Montgomery / Jackson' },
+  // Montgomery Street corridor (FiDi spine, N-S) — US Census geocoder verified
+  /*42*/ { lng: -122.40200, lat: 37.78911, name: 'Montgomery / Post' },
+  /*43*/ { lng: -122.40219, lat: 37.79004, name: 'Montgomery / Sutter' },
+  /*44*/ { lng: -122.40238, lat: 37.79097, name: 'Montgomery / Bush' },
+  /*45*/ { lng: -122.40257, lat: 37.79190, name: 'Montgomery / Pine' },
+  /*46*/ { lng: -122.40277, lat: 37.79285, name: 'Montgomery / California' },
+  /*47*/ { lng: -122.40296, lat: 37.79378, name: 'Montgomery / Sacramento' },
+  /*48*/ { lng: -122.40314, lat: 37.79467, name: 'Montgomery / Clay' },
+  /*49*/ { lng: -122.40332, lat: 37.79553, name: 'Montgomery / Washington' },
+  /*50*/ { lng: -122.40350, lat: 37.79641, name: 'Montgomery / Jackson' },
 
-  // Kearny Street corridor (FiDi / Chinatown boundary, N-S)
-  /*51*/ { lng: -122.40350, lat: 37.78974, name: 'Kearny / Sutter' },
-  /*52*/ { lng: -122.40360, lat: 37.79046, name: 'Kearny / Bush' },
-  /*53*/ { lng: -122.40378, lat: 37.79184, name: 'Kearny / California' },
-  /*54*/ { lng: -122.40394, lat: 37.79316, name: 'Kearny / Clay (Portsmouth Sq)' },
-  /*55*/ { lng: -122.40404, lat: 37.79382, name: 'Kearny / Washington' },
-  /*56*/ { lng: -122.40412, lat: 37.79448, name: 'Kearny / Jackson' },
+  // Kearny Street corridor (FiDi / Chinatown boundary, N-S) — US Census geocoder verified
+  /*51*/ { lng: -122.40384, lat: 37.78983, name: 'Kearny / Sutter' },
+  /*52*/ { lng: -122.40403, lat: 37.79076, name: 'Kearny / Bush' },
+  /*53*/ { lng: -122.40442, lat: 37.79264, name: 'Kearny / California' },
+  /*54*/ { lng: -122.40480, lat: 37.79445, name: 'Kearny / Clay (Portsmouth Sq)' },
+  /*55*/ { lng: -122.40496, lat: 37.79532, name: 'Kearny / Washington' },
+  /*56*/ { lng: -122.40514, lat: 37.79622, name: 'Kearny / Jackson' },
 
-  // Grant Avenue (Chinatown main drag, N-S)
-  /*57*/ { lng: -122.40510, lat: 37.79054, name: 'Grant / Bush (Dragon\'s Gate)' },
-  /*58*/ { lng: -122.40528, lat: 37.79192, name: 'Grant / California' },
-  /*59*/ { lng: -122.40544, lat: 37.79324, name: 'Grant / Clay' },
-  /*60*/ { lng: -122.40554, lat: 37.79390, name: 'Grant / Washington' },
-  /*61*/ { lng: -122.40562, lat: 37.79456, name: 'Grant / Jackson' },
+  // Grant Avenue (Chinatown main drag, N-S) — US Census geocoder verified
+  /*57*/ { lng: -122.40558, lat: 37.79056, name: 'Grant / Bush (Dragon\'s Gate)' },
+  /*58*/ { lng: -122.40594, lat: 37.79245, name: 'Grant / California' },
+  /*59*/ { lng: -122.40631, lat: 37.79426, name: 'Grant / Clay' },
+  /*60*/ { lng: -122.40648, lat: 37.79514, name: 'Grant / Washington' },
+  /*61*/ { lng: -122.40665, lat: 37.79603, name: 'Grant / Jackson' },
 
-  // Post Street intermediates (Union Square → Montgomery, block-by-block)
-  /*62*/ { lng: -122.40613, lat: 37.78830, name: 'Stockton / Post' },
-  /*63*/ { lng: -122.40407, lat: 37.78860, name: 'Kearny / Post' },
+  // Post Street intermediates (Union Square → Montgomery, block-by-block) — US Census geocoder verified
+  /*62*/ { lng: -122.40677, lat: 37.78850, name: 'Stockton / Post' },
+  /*63*/ { lng: -122.40366, lat: 37.78890, name: 'Kearny / Post' },
 
   // Embarcadero waterfront intermediates (break up long edges for block-by-block routing)
   /*64*/ { lng: -122.39000, lat: 37.78330, name: 'Brannan / 1st' },
@@ -1005,6 +1100,9 @@ const STREET_NODES = [
 
   // Embarcadero curve south of Market — breaks up the sharp bend
   /*68*/ { lng: -122.39180, lat: 37.79330, name: 'Embarcadero / Rincon' },
+
+  // Kearny intermediate — keeps agents on-street between Market and Post
+  /*69*/ { lng: -122.40349, lat: 37.78796, name: 'Kearny / Geary' },
 ];
 
 // Adjacency: every edge connects two nodes on the SAME street.
@@ -1097,7 +1195,8 @@ const STREET_EDGES = [
 
   // Connect to existing Market St grid
   [6, 42],           // Market/2nd → Montgomery/Post (New Montgomery St, ~70m)
-  [7, 63],           // Market/3rd → Kearny/Post (Kearny St from Market, 1 block)
+  [7, 69],           // Market/3rd → Kearny/Geary (Kearny St from Market, 1 block)
+  [69, 63],          // Kearny/Geary → Kearny/Post (Kearny St, 1 block)
   [63, 51],          // Kearny/Post → Kearny/Sutter (Kearny St, 1 block)
   // [24, 42] removed — replaced by Post St block-by-block: [24, 62], [62, 63], [63, 42]
 ];
@@ -1197,9 +1296,9 @@ const AGENT_DEFS = [
     patrolRoute: [0, 1, 40, 5, 40, 1, 0],  // Ferry Building ↔ Market/Main ↔ Market/1st
     caps: ['request_ride', 'rate_driver', 'report_issue'] },
 
-  // Priya R. — Shopper, walks around Union Square / Powell area
+  // Nadia — Shopper, walks around Union Square / Powell area
   // Near: AV Credential Exchange, Early Exit, Surge Pricing hot zones
-  { name: 'Priya R.',    role: 'rider',        icon: '🧑', color: '#67e8f9',
+  { name: 'Nadia',    role: 'rider',        icon: '🧑', color: '#67e8f9',
     startNode: 9,
     patrolRoute: [9, 24, 42, 24, 9, 10, 9],  // Powell ↔ Union Sq ↔ Montgomery ↔ back
     caps: ['request_ride', 'rate_driver', 'report_issue'] },
@@ -1210,16 +1309,28 @@ const AGENT_DEFS = [
     patrolRoute: [0, 1, 40, 5, 6, 42, 43, 44, 45, 46, 47, 48, 47, 46, 45, 44, 43, 42, 6, 7, 13, 17, 20, 19, 16, 12, 5, 1, 2, 3, 65, 41, 67, 34, 66, 4, 66, 34, 67, 41, 64, 31, 22, 21, 19, 2, 1, 0],
     caps: ['accept_ride', 'verify_rider', 'sovereign_refusal'] },
 
-  // Driver Priya — Part-time driver, SoMa / Caltrain corridor
-  { name: 'Driver Priya', role: 'human_driver', icon: '🚗', color: '#4ade80',
+  // Driver Leroy — Part-time driver, SoMa / Caltrain corridor
+  { name: 'Driver Leroy', role: 'human_driver', icon: '🚗', color: '#4ade80',
     startNode: 23,
     patrolRoute: [23, 18, 17, 13, 14, 15, 18, 23, 22, 21, 20, 17, 16, 12, 13, 7, 8, 14, 13, 17, 18, 23],
     caps: ['accept_ride', 'verify_rider', 'sovereign_refusal'] },
 
-  // Waymo-7 — Autonomous vehicle, Chinatown ↔ Embarcadero ↔ SoMa loop
+  // Waymo-7 — Autonomous vehicle, FiDi ↔ SoMa ↔ Embarcadero loop
+  // Every hop is a direct street edge. Avoids: New Montgomery diagonal (6→42),
+  // 3rd St through SoMa (7→14→25) — both clip buildings in Cesium 3D tiles.
+  // Uses Kearny St (7→63→42) to reach FiDi, 1st/2nd/Mission for SoMa loop.
   { name: 'Waymo-7',     role: 'av_driver',    icon: '🤖', color: '#f87171',
     startNode: 5,
-    patrolRoute: [5, 6, 42, 43, 51, 52, 57, 58, 59, 60, 61, 60, 59, 58, 53, 46, 45, 44, 43, 42, 6, 5, 1, 0, 1, 2, 19, 16, 17, 13, 7, 6, 5],
+    patrolRoute: [
+      5, 6, 7, 63, 42,            // Market St east→west, Kearny north to Montgomery/Post
+      43, 44, 45, 46,              // Montgomery north to California
+      45, 44, 43, 42, 63, 7,      // Montgomery south, Post west, Kearny south to Market
+      6, 5,                        // Market east to 1st
+      12, 13, 17,                  // 1st south to Mission, Mission west to 2nd, 2nd south to Howard
+      16, 12, 5,                   // Howard east to 1st, 1st north to Mission, 1st north to Market
+      40, 1, 0,                    // Market NE to Embarcadero, Ferry Building
+      1, 40, 5                     // back along Market
+    ],
     caps: ['accept_ride', 'prove_certification', 'report_obstacle'] },
 
   // Tesla CC-9 — Privately owned Tesla Cybercab, SoMa / Moscone / Civic Center loop
@@ -1609,27 +1720,27 @@ const SCENARIOS = [
         narrative: 'requesting ride from Moscone Center to Civic Center — convention just ended',
         eventType: 'allow' },
       { agent: 'Dispatch', goTo: 14, action: 'broadcast_surge', surgeNode: 17,
-        narrative: 'surge pricing active near Moscone Center — convention ending, 2.3x multiplier. Matching Driver Priya.',
+        narrative: 'surge pricing active near Moscone Center — convention ending, 2.3x multiplier. Matching Driver Leroy.',
         eventType: 'warn' },
       { agent: 'Mia', goTo: 17, action: 'accept_surge_fare',
         narrative: 'accepted surge fare of $38.50 to Civic Center — signed fare agreement receipt at 2.3x',
         eventType: 'allow' },
-      { agent: 'Driver Priya', goTo: 17, action: 'present_credentials',
+      { agent: 'Driver Leroy', goTo: 17, action: 'present_credentials',
         narrative: 'presenting credential chain to Mia — license verified, insurance current, background check signed by issuing authority',
         eventType: 'allow' },
       { agent: 'Mia', goTo: 17, action: 'verify_credentials',
-        narrative: 'verified Driver Priya\'s credentials — all certificates chain to root authority. Boarding.',
+        narrative: 'verified Driver Leroy\'s credentials — all certificates chain to root authority. Boarding.',
         eventType: 'allow' },
-      { agent: 'Driver Priya', goTo: 17, action: 'accept_ride',
+      { agent: 'Driver Leroy', goTo: 17, action: 'accept_ride',
         narrative: 'picking up Mia at Moscone — surge fare $38.50 confirmed in signed receipt',
         eventType: 'allow', pickup: 'Mia' },
       { agent: 'Mia', goTo: 11, action: 'dispute_fare',
         narrative: 'questioning fare at Civic Center — "surge dropped during my ride, $38.50 feels high"',
-        eventType: 'warn', rideWith: 'Driver Priya' },
+        eventType: 'warn', rideWith: 'Driver Leroy' },
       { agent: 'Dispatch', goTo: 14, action: 'mediate_dispute',
         narrative: 'mediating — receipt chain shows Mia signed at 2.3x, but surge fell to 1.8x mid-ride. Adjusting fare to $32, refunding $6.50',
         eventType: 'allow' },
-      { agent: 'Driver Priya', goTo: 11, action: 'accept_adjusted_fare',
+      { agent: 'Driver Leroy', goTo: 11, action: 'accept_adjusted_fare',
         narrative: 'accepted adjusted fare of $32 — compromise receipt signed by rider, driver, and platform. All three hold proof.',
         eventType: 'allow', dropoff: 'Mia' },
       { agent: 'Dispatch', goTo: 14, action: 'close_receipt_chain',
@@ -1673,29 +1784,38 @@ const SCENARIOS = [
     name: 'Mixed Fleet Handoff',
     summary: 'An AV encounters a construction zone and hands off to a human driver mid-ride — the trust chain transfers without breaking',
     steps: [
+      { agent: 'James', goTo: 18, action: 'riding_av',
+        narrative: 'mid-ride in Tesla CC-9 through SoMa — heading to Caltrain, smooth ride so far',
+        eventType: 'info', startRiding: 'Tesla CC-9' },
       { agent: 'Tesla CC-9', goTo: 18, action: 'report_obstacle',
-        narrative: 'reporting construction zone on Howard at 4th — cannot proceed, requesting handoff',
+        narrative: 'reporting construction zone blocking 4th Street south of Howard — cannot proceed to Caltrain, requesting handoff',
         eventType: 'warn' },
       { agent: 'Dispatch', goTo: 14, action: 'initiate_handoff',
-        narrative: 'initiating mixed fleet handoff — matching Driver Priya to complete James\'s ride',
+        narrative: 'initiating mixed fleet handoff — matching Driver Leroy to complete James\'s ride',
         eventType: 'allow' },
-      { agent: 'Driver Priya', goTo: 18, action: 'present_credentials',
+      { agent: 'Driver Leroy', goTo: 18, action: 'present_credentials',
         narrative: 'presenting credential chain to James — license verified, insurance current, background check signed by issuing authority',
         eventType: 'allow' },
       { agent: 'James', goTo: 18, action: 'verify_credentials',
-        narrative: 'verified Driver Priya\'s credentials — all certificates chain to root authority. Accepting handoff.',
+        narrative: 'verified Driver Leroy\'s credentials — all certificates chain to root authority. Accepting handoff.',
         eventType: 'allow' },
       { agent: 'Tesla CC-9', goTo: 18, action: 'transfer_trust_chain',
-        narrative: 'transferring trust chain to Driver Priya — ride context, fare agreement, route progress. Three receipts bridging AV to human.',
-        eventType: 'allow' },
-      { agent: 'Driver Priya', goTo: 23, action: 'complete_handoff_ride',
-        narrative: 'completing ride to Caltrain — James arrived safely, original fare agreement honored',
+        narrative: 'transferring trust chain to Driver Leroy — ride context, fare agreement, route progress. Three receipts bridging AV to human.',
+        eventType: 'allow', dropoff: 'James' },
+      { agent: 'Driver Leroy', goTo: 18, action: 'accept_handoff_passenger',
+        narrative: 'picking up James — trust chain received, original fare agreement intact',
         eventType: 'allow', pickup: 'James' },
+      { agent: 'James', goTo: 23, action: 'ride_to_caltrain',
+        narrative: 'riding with Driver Leroy to Caltrain — seamless handoff, same fare, no renegotiation',
+        eventType: 'info', rideWith: 'Driver Leroy' },
+      { agent: 'Driver Leroy', goTo: 23, action: 'complete_handoff_ride',
+        narrative: 'completing ride to Caltrain — James arrived safely, original fare agreement honored',
+        eventType: 'allow', dropoff: 'James' },
       { agent: 'James', goTo: 23, action: 'confirm_arrival',
         narrative: 'confirming arrival at Caltrain — "seamless handoff, didn\'t even need to re-negotiate the fare"',
         eventType: 'allow' },
       { agent: 'Dispatch', goTo: 14, action: 'close_receipt_chain',
-        narrative: 'sealing receipt chain — 8 receipts: AV start → obstacle → match → credentials → verify → transfer → complete → confirm. Trust chain survived the handoff.',
+        narrative: 'sealing receipt chain — 10 receipts: AV start → obstacle → match → credentials → verify → transfer → pickup → ride → complete → confirm. Trust chain survived the handoff.',
         eventType: 'info' },
     ],
   },
@@ -1709,11 +1829,11 @@ const SCENARIOS = [
     steps: [
       { agent: 'James', goTo: 8, action: 'report_concern',
         narrative: 'reporting safety concern — "driver took unexpected route through Tenderloin"',
-        eventType: 'warn', rideWith: 'Driver Priya', startRiding: 'Driver Priya' },
+        eventType: 'warn', rideWith: 'Driver Leroy', startRiding: 'Driver Leroy' },
       { agent: 'Dispatch', goTo: 14, action: 'evaluate_safety',
-        narrative: 'evaluating safety report — checking Driver Priya\'s current route against agreed path',
+        narrative: 'evaluating safety report — checking Driver Leroy\'s current route against agreed path',
         eventType: 'review' },
-      { agent: 'Driver Priya', goTo: 8, action: 'explain_route',
+      { agent: 'Driver Leroy', goTo: 8, action: 'explain_route',
         narrative: 'providing route explanation — "Market St blocked by construction zone at Montgomery, took Mission St detour"',
         eventType: 'allow', dropoff: 'James' },
       { agent: 'Dispatch', goTo: 14, action: 'verify_explanation',
@@ -1723,7 +1843,7 @@ const SCENARIOS = [
         narrative: 'corroborating — Waymo-7 sensor data confirms Market St construction obstruction at Montgomery',
         eventType: 'allow' },
       { agent: 'James', goTo: 8, action: 'acknowledge_resolution',
-        narrative: 'acknowledging resolution — "makes sense, thanks for checking." Concern closed, no trust impact to Driver Priya.',
+        narrative: 'acknowledging resolution — "makes sense, thanks for checking." Concern closed, no trust impact to Driver Leroy.',
         eventType: 'allow' },
       { agent: 'Dispatch', goTo: 14, action: 'close_receipt_chain',
         narrative: 'sealing receipt chain — 7 receipts: report → evaluate → explain → verify → corroborate → acknowledge → close. The concern was raised, investigated, and resolved — all on the record.',
@@ -1800,7 +1920,7 @@ const SCENARIOS = [
         narrative: 'requesting quotes: Montgomery/California to Ferry Building — querying all available drivers and AVs',
         eventType: 'info' },
       { agent: 'Dispatch', goTo: 14, action: 'return_quotes',
-        narrative: 'returning 3 quotes: Driver Ray $18.50 / 8 min / trust 92 · Waymo-7 $16.20 / 6 min / trust 88 · Driver Priya $19.80 / 12 min / trust 85',
+        narrative: 'returning 3 quotes: Driver Ray $18.50 / 8 min / trust 92 · Waymo-7 $16.20 / 6 min / trust 88 · Driver Leroy $19.80 / 12 min / trust 85',
         eventType: 'allow' },
       { agent: 'Aria', goTo: 46, action: 'compare_and_select',
         narrative: 'comparing: Waymo-7 wins on price ($16.20) and ETA (6 min), trust 88 exceeds Sarah\'s 80 threshold — selecting Waymo-7',
@@ -2018,14 +2138,29 @@ function showScenarioOverlay(scenarioName) {
   }
 
   if (scenarioName === 'Mixed Fleet Handoff') {
-    // Construction zone on Howard St (where Tesla CC-9 gets blocked)
-    const howardBlock = STREET_NODES[25]; // Howard / 3rd
+    // Construction zone on 4th St south of Howard — blocks Tesla's path to Caltrain
+    // Tesla is at node 18 (Howard/4th), needs to go south: 18→27→30→32→23 (Caltrain)
+    // Place the blockage on 4th St between Howard/4th (18) and Harrison/4th (30)
+    const blockN = STREET_NODES[18];  // Howard / 4th — Tesla's position
+    const blockMid = STREET_NODES[27]; // Folsom / 4th — mid-block
+    const blockS = STREET_NODES[30];  // Harrison / 4th — end of closure
+
+    // Blinking ROAD CLOSED label — placed just ahead of Tesla on 4th St
+    const signLng = (blockN.lng + blockMid.lng) / 2;
+    const signLat = (blockN.lat + blockMid.lat) / 2;
+
+    const blinkAlpha = new Cesium.CallbackProperty(() => {
+      const t = Date.now() / 600; // ~1.7 Hz blink
+      const a = 0.5 + 0.5 * Math.sin(t);
+      return Cesium.Color.fromCssColorString('#fbbf24').withAlpha(0.4 + 0.6 * a);
+    }, false);
+
     const constructionIcon = viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(howardBlock.lng, howardBlock.lat, 55),
+      position: Cesium.Cartesian3.fromDegrees(signLng, signLat, 55),
       label: {
         text: '🚧 ROAD CLOSED',
         font: '12px Inter, sans-serif',
-        fillColor: Cesium.Color.fromCssColorString('#fbbf24'),
+        fillColor: blinkAlpha,
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 3,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -2036,23 +2171,26 @@ function showScenarioOverlay(scenarioName) {
     });
     scenarioOverlayEntities.push(constructionIcon);
 
-    // Blocked segment on Howard between 2nd and 4th
-    const blockedHoward = viewer.entities.add({
+    // Blocked segment on 4th St: Howard/4th → Folsom/4th → Harrison/4th — pulsing red line
+    const blinkLineColor = new Cesium.CallbackProperty(() => {
+      const t = Date.now() / 600;
+      const a = 0.3 + 0.5 * Math.abs(Math.sin(t));
+      return Cesium.Color.fromCssColorString('#ef4444').withAlpha(a);
+    }, false);
+
+    const blocked4th = viewer.entities.add({
       polyline: {
         positions: Cesium.Cartesian3.fromDegreesArrayHeights([
-          STREET_NODES[17].lng, STREET_NODES[17].lat, 38,
-          STREET_NODES[25].lng, STREET_NODES[25].lat, 38,
-          STREET_NODES[18].lng, STREET_NODES[18].lat, 38
+          blockN.lng, blockN.lat, 38,
+          blockMid.lng, blockMid.lat, 38,
+          blockS.lng, blockS.lat, 38
         ]),
         width: 10,
-        material: new Cesium.PolylineDashMaterialProperty({
-          color: Cesium.Color.fromCssColorString('#ef4444').withAlpha(0.8),
-          dashLength: 14
-        }),
+        material: new Cesium.ColorMaterialProperty(blinkLineColor),
         clampToGround: false
       }
     });
-    scenarioOverlayEntities.push(blockedHoward);
+    scenarioOverlayEntities.push(blocked4th);
   }
 }
 
@@ -2504,6 +2642,9 @@ function triggerStoryForAgent(agent) {
   document.body.classList.add('story-active');
   document.getElementById('receiptChainBar').classList.add('active');
   setTimeout(() => { if (viewer) viewer.resize(); }, 450);
+
+  // Queue narrator for this agent's POV
+  scenarioNarrator.setScenario(pick, agent.name);
 
   // Initialise the process stage animation
   setTimeout(() => { processStage.init(pick); }, 500);
@@ -3416,13 +3557,13 @@ const STORY_STAGE = {
     'James': 24,         // Union Square
     'Waymo-7': 42,       // 1 hop away at Montgomery/Post
     'Leo': 9,            // at Market/Powell, close to Union Sq
-    'Priya R.': 24,      // shopping at Union Square
+    'Nadia': 24,      // shopping at Union Square
   },
   'Surge Pricing Dispute': {
     'Mia': 17,           // Moscone Center
-    'Driver Priya': 25,  // 1 hop away at Howard/3rd
+    'Driver Leroy': 25,  // 1 hop away at Howard/3rd
     'Sarah': 13,         // at Mission/2nd, 1 hop from Moscone
-    'Priya R.': 16,      // at Howard/1st, nearby
+    'Nadia': 16,      // at Howard/1st, nearby
   },
   'Sovereign Refusal': {
     'Driver Ray': 5,     // Market / 1st
@@ -3430,17 +3571,18 @@ const STORY_STAGE = {
   },
   'Mixed Fleet Handoff': {
     'Tesla CC-9': 18,      // Howard/4th — construction zone
-    'Driver Priya': 25,  // 1 hop away at Howard/3rd
+    'James': 18,           // riding in Tesla CC-9
+    'Driver Leroy': 25,  // 1 hop away at Howard/3rd
   },
   'Safety Escalation': {
-    'James': 8,          // in Priya's car near Market/4th
-    'Driver Priya': 8,   // co-located
+    'James': 8,          // in Leroy's car near Market/4th
+    'Driver Leroy': 8,   // co-located
     'Sarah': 7,          // 1 hop away at Market/3rd
   },
   'Early Exit': {
     'Mia': 23,           // at Caltrain
     'Driver Ray': 23,    // co-located, ride starts immediately
-    'Priya R.': 13,      // at Mission/2nd, near the exit point
+    'Nadia': 13,      // at Mission/2nd, near the exit point
   },
   'Agent-Assisted Ride': {
     'Sarah': 46,         // leaving office on California St
@@ -3510,11 +3652,11 @@ const STORY_NARRATIVES = {
       'The ride is smooth. Smoother than most human drivers, honestly. At the Ferry Building, Leo rates it five stars. His rating becomes a <span class="story-receipt">signed receipt</span> — proof of experience, not just a data point in someone else\'s database.',
       'Leo thinks about the restaurant where he works. Reviews on the apps can be faked, deleted, manipulated. But a signed rating receipt? <span class="story-highlight">That\'s his honest opinion, permanently attached to his identity, unfakeable.</span> He wishes restaurants had this.',
     ],
-    'Priya R.': [
-      'Priya R. gets matched with an autonomous vehicle. Her first instinct: no way. But curiosity wins — especially when the app shows <span class="story-receipt">a full credential chain</span> she can verify herself.',
-      'CPUC permit, insurance, safety record. Not trust badges from a company. <span class="story-highlight">Actual certificates from actual authorities.</span> Priya R. taps through them. Every one checks out.',
+    'Nadia': [
+      'Nadia gets matched with an autonomous vehicle. Her first instinct: no way. But curiosity wins — especially when the app shows <span class="story-receipt">a full credential chain</span> she can verify herself.',
+      'CPUC permit, insurance, safety record. Not trust badges from a company. <span class="story-highlight">Actual certificates from actual authorities.</span> Nadia taps through them. Every one checks out.',
       'The ride is uneventful, which is exactly what she wanted. At the Ferry Building, she rates it. That rating isn\'t just a star — it\'s a <span class="story-receipt">signed, portable attestation</span> that lives in her chain and the AV\'s chain.',
-      'On the walk home, Priya R. thinks about how many services ask her to "just trust us." <span class="story-highlight">This one didn\'t ask. It proved.</span>',
+      'On the walk home, Nadia thinks about how many services ask her to "just trust us." <span class="story-highlight">This one didn\'t ask. It proved.</span>',
     ],
   },
 
@@ -3523,13 +3665,13 @@ const STORY_NARRATIVES = {
       'A convention just let out near Moscone. Three thousand people hitting the sidewalk at once, all reaching for their phones. The app flashes: <span class="story-warn">⚡ Surge pricing — 2.3x.</span>',
       'Mia winces, but she needs to get to Civic Center. <span class="story-highlight">$38.50.</span> She signs the fare agreement. The receipt drops into her chain — timestamped, signed, locked.',
       'Halfway through the ride, the surge drops. By the time she arrives, it\'s down to 1.8x. Mia notices. She taps <span class="story-warn">"Dispute."</span> But this isn\'t the old world — there\'s no faceless support ticket, no algorithm deciding in a black box.',
-      'Dispatch pulls the receipt chain. Mia signed at 2.3x — that\'s real. But the surge <em>did</em> fall during her ride. So the system splits the difference: <span class="story-highlight">fare adjusted to $32, refund of $6.50.</span> All three parties — Mia, Priya, and the platform — sign the compromise receipt. Everyone holds proof of what was fair.',
+      'Dispatch pulls the receipt chain. Mia signed at 2.3x — that\'s real. But the surge <em>did</em> fall during her ride. So the system splits the difference: <span class="story-highlight">fare adjusted to $32, refund of $6.50.</span> All three parties — Mia, Leroy, and the platform — sign the compromise receipt. Everyone holds proof of what was fair.',
     ],
-    'Driver Priya': [
-      'Priya gets a surge ride near Moscone — convention crowd, 2.3x multiplier, $38.50 fare. Good money on a Tuesday evening. The signed fare agreement is in both their chains.',
-      'At Civic Center, the rider disputes. Priya tenses — in the old days, the platform just sided with whoever it wanted. <span class="story-warn">Drivers had no say.</span>',
-      'But the receipt chain tells the real story. Mia signed at 2.3x. The surge fell to 1.8x during the ride. Dispatch mediates: <span class="story-highlight">$32 adjusted fare, $6.50 refund to Mia.</span> Priya still gets a fair cut.',
-      'The compromise receipt lands in Priya\'s chain, signed by all three parties. Not a platform decision — <span class="story-receipt">a negotiated outcome with cryptographic proof.</span> Priya can see the math. She can verify the inputs. And nobody can change it after the fact.',
+    'Driver Leroy': [
+      'Leroy gets a surge ride near Moscone — convention crowd, 2.3x multiplier, $38.50 fare. Good money on a Tuesday evening. The signed fare agreement is in both their chains.',
+      'At Civic Center, the rider disputes. Leroy tenses — in the old days, the platform just sided with whoever it wanted. <span class="story-warn">Drivers had no say.</span>',
+      'But the receipt chain tells the real story. Mia signed at 2.3x. The surge fell to 1.8x during the ride. Dispatch mediates: <span class="story-highlight">$32 adjusted fare, $6.50 refund to Mia.</span> Leroy still gets a fair cut.',
+      'The compromise receipt lands in Leroy\'s chain, signed by all three parties. Not a platform decision — <span class="story-receipt">a negotiated outcome with cryptographic proof.</span> Leroy can see the math. He can verify the inputs. And nobody can change it after the fact.',
     ],
     'Sarah': [
       'Sarah\'s heading home from a late meeting near Moscone when the surge hits. <span class="story-warn">2.3x multiplier.</span> Convention crowd. She grimaces but needs the ride. $38.50. She signs.',
@@ -3537,11 +3679,11 @@ const STORY_NARRATIVES = {
       'In the old days, this goes into a black box. Some algorithm decides. Maybe she gets a credit, maybe not. But here, Dispatch pulls the receipt chain. She signed at 2.3x — that\'s real. The surge <em>did</em> drop mid-ride — also real. <span class="story-highlight">Both facts are timestamped and signed.</span>',
       'The compromise: <span class="story-highlight">$32, refund of $6.50.</span> All three parties sign. Sarah has seen dispute resolution in banking. It takes weeks and involves lawyers. This took seconds and involves math. <span class="story-receipt">She can audit every input. That\'s the system she wants to build for fintech.</span>',
     ],
-    'Priya R.': [
-      'Priya R.\'s been shopping near Union Square when the surge notification pops: <span class="story-warn">2.3x near Moscone. Convention crowd.</span> She needs to get across town. $38.50 is steep, but she\'s tired of walking.',
+    'Nadia': [
+      'Nadia\'s been shopping near Union Square when the surge notification pops: <span class="story-warn">2.3x near Moscone. Convention crowd.</span> She needs to get across town. $38.50 is steep, but she\'s tired of walking.',
       'She signs the fare agreement — and that\'s the moment everything becomes different from the old world. The <span class="story-receipt">signed receipt</span> locks in the terms. Not a promise. Not an "estimated fare." A cryptographic commitment.',
       'When the surge drops mid-ride and she disputes at Civic Center, there\'s no guessing. The chain shows the exact moment she signed, the exact multiplier, and the exact moment it changed. <span class="story-highlight">Dispatch splits the difference: $32.</span>',
-      'Priya R. has been overcharged before. The difference isn\'t the refund — it\'s that she can <span class="story-receipt">see the math</span>. She can verify every input. And the driver got a fair deal too. Nobody\'s word against anyone else\'s. <span class="story-highlight">Just signed records.</span>',
+      'Nadia has been overcharged before. The difference isn\'t the refund — it\'s that she can <span class="story-receipt">see the math</span>. She can verify every input. And the driver got a fair deal too. Nobody\'s word against anyone else\'s. <span class="story-highlight">Just signed records.</span>',
     ],
   },
 
@@ -3562,16 +3704,22 @@ const STORY_NARRATIVES = {
 
   'Mixed Fleet Handoff': {
     'Tesla CC-9': [
-      'Tesla CC-9 is mid-ride through SoMa when its vision system picks up a construction zone ahead on Howard. <span class="story-warn">Route blocked. Cannot proceed.</span>',
+      'Tesla CC-9 is mid-ride heading south on 4th Street toward Caltrain when its vision system picks up a construction zone blocking the road ahead. <span class="story-warn">Route blocked. Cannot proceed.</span>',
       'In the old world, the ride just fails. Passenger stranded, refund maybe, frustration certainly. But Tesla CC-9 does something different: it <span class="story-highlight">requests a handoff.</span>',
-      'Dispatch finds Driver Priya nearby. Tesla CC-9 transfers its trust chain — the ride context, the fare agreement, the route progress so far. <span class="story-receipt">Three receipts, intact, linked to the new driver.</span>',
-      'The trust chain didn\'t break. It <em>transferred</em>. The rider\'s fare agreement still holds. The AV\'s partial completion is receipted. Priya picks up where the machine left off. Six total receipts in the chain when the ride completes. <span class="story-highlight">Human and machine, governed by the same primitives.</span>',
+      'Dispatch finds Driver Leroy nearby. Tesla CC-9 transfers its trust chain — the ride context, the fare agreement, the route progress so far. <span class="story-receipt">Three receipts, intact, linked to the new driver.</span>',
+      'The trust chain didn\'t break. It <em>transferred</em>. The rider\'s fare agreement still holds. The AV\'s partial completion is receipted. Leroy picks up where the machine left off. Ten total receipts in the chain when the ride completes. <span class="story-highlight">Human and machine, governed by the same primitives.</span>',
     ],
-    'Driver Priya': [
-      'Priya\'s cruising SoMa when a handoff request comes in. A Tesla Cybercab hit a construction zone — rider needs a human to finish the trip to Caltrain.',
-      'She accepts and heads to the handoff point. But before the rider transfers, something unusual happens: <span class="story-receipt">Tesla CC-9\'s trust chain arrives in her app.</span> Ride context, fare agreement, route progress. Three receipts, all signed, all verifiable.',
-      'Priya doesn\'t need to renegotiate the fare or re-verify the rider. <span class="story-highlight">The trust chain carries the context.</span> She picks up where the machine left off.',
-      'At Caltrain, the ride closes. Six receipts total: AV start → obstacle → handoff → human accept → human complete → chain close. Every link signed. <span class="story-receipt">The rider got where they needed to go. Both drivers got fairly compensated. And the whole thing is provable.</span>',
+    'James': [
+      'James is mid-ride in a Tesla Cybercab, heading south on 4th Street toward Caltrain. Smooth ride so far — he\'s getting used to the no-driver thing. Then the car slows and stops. <span class="story-warn">Construction zone blocking 4th Street. Route blocked.</span>',
+      'In the old world, this is where everything falls apart. You\'re stuck in a car that can\'t move, the app refunds you, and you\'re on the sidewalk trying to hail something else. But James watches something different unfold: the AV <span class="story-highlight">requests a handoff.</span> Not a cancellation. A transfer.',
+      'Driver Leroy arrives in minutes. Before James even gets out of the Tesla, his <span class="story-receipt">credential chain</span> hits his app: license verified, insurance current, background check signed by the issuing authority. He verifies — all certificates chain to root. He accepts the handoff.',
+      'Here\'s the part that surprises him: <span class="story-highlight">the fare doesn\'t change.</span> His original agreement, signed before the Tesla moved, carries over. The trust chain transferred intact — AV to human, three bridging receipts, zero renegotiation. Leroy drives him to Caltrain. Ten receipts in the chain when it closes. <span class="story-receipt">James never lost his ride. He never lost his fare agreement. And he has proof of every step of the transition.</span>',
+    ],
+    'Driver Leroy': [
+      'Leroy\'s cruising SoMa when a handoff request comes in. A Tesla Cybercab hit a construction zone on 4th Street — rider needs a human to finish the trip to Caltrain.',
+      'He accepts and heads to the handoff point. But before the rider transfers, something unusual happens: <span class="story-receipt">Tesla CC-9\'s trust chain arrives in his app.</span> Ride context, fare agreement, route progress. Three receipts, all signed, all verifiable.',
+      'Leroy doesn\'t need to renegotiate the fare or re-verify the rider. <span class="story-highlight">The trust chain carries the context.</span> He picks up James and drives where the machine couldn\'t.',
+      'At Caltrain, the ride closes. Ten receipts total: AV start → obstacle → match → credentials → verify → transfer → pickup → ride → complete → confirm. Every link signed. <span class="story-receipt">The rider got where they needed to go. Both drivers got fairly compensated. And the whole thing is provable.</span>',
     ],
   },
 
@@ -3579,14 +3727,14 @@ const STORY_NARRATIVES = {
     'James': [
       'James is mid-ride when the driver takes an unexpected turn off the main route. That\'s not the path the app showed. <span class="story-warn">James taps "Report Concern."</span>',
       'He\'s not panicking — it might be nothing. But in the old days, reporting meant typing into a void and hoping someone read it eventually.',
-      'The response comes in seconds. Dispatch checked Priya\'s route against the agreed path and cross-referenced city permit data. <span class="story-highlight">Market Street is closed for a construction zone at Montgomery.</span> The detour is reasonable. A Waymo nearby corroborates — its sensors confirm the obstruction.',
-      'Concern resolved. But here\'s what matters: every step is receipted. <span class="story-receipt">Report → investigate → explain → verify → corroborate → close.</span> James has proof his concern was taken seriously. Priya has proof her detour was legitimate. Nobody\'s word against anyone else\'s.',
+      'The response comes in seconds. Dispatch checked Leroy\'s route against the agreed path and cross-referenced city permit data. <span class="story-highlight">Market Street is closed for a construction zone at Montgomery.</span> The detour is reasonable. A Waymo nearby corroborates — its sensors confirm the obstruction.',
+      'Concern resolved. But here\'s what matters: every step is receipted. <span class="story-receipt">Report → investigate → explain → verify → corroborate → close.</span> James has proof his concern was taken seriously. Leroy has proof his detour was legitimate. Nobody\'s word against anyone else\'s.',
     ],
-    'Driver Priya': [
-      'The route ahead is blocked — construction zone on Market at Montgomery. Priya takes a detour. Reasonable call, she\'s driven this city for years.',
-      'Then the notification: <span class="story-warn">"Your rider has reported a safety concern."</span> Priya\'s stomach drops. She knows this feeling from the old platforms — guilty until the algorithm decides otherwise.',
-      'But this time she gets to explain: <span class="story-highlight">"Market Street closed — construction zone at Montgomery. Took Mission St instead."</span> Her explanation is receipted. Dispatch verifies it against city permit data. A Waymo confirms the obstruction with sensor data.',
-      '<span class="story-receipt">Concern resolved.</span> Priya\'s trust score is untouched. The receipt chain shows exactly what happened: a reasonable detour, a concerned rider, a quick verification, a fair resolution. No black mark. No algorithmic penalty. <span class="story-highlight">Just proof.</span>',
+    'Driver Leroy': [
+      'The route ahead is blocked — construction zone on Market at Montgomery. Leroy takes a detour. Reasonable call, he\'s driven this city for years.',
+      'Then the notification: <span class="story-warn">"Your rider has reported a safety concern."</span> Leroy\'s stomach drops. He knows this feeling from the old platforms — guilty until the algorithm decides otherwise.',
+      'But this time he gets to explain: <span class="story-highlight">"Market Street closed — construction zone at Montgomery. Took Mission St instead."</span> His explanation is receipted. Dispatch verifies it against city permit data. A Waymo confirms the obstruction with sensor data.',
+      '<span class="story-receipt">Concern resolved.</span> Leroy\'s trust score is untouched. The receipt chain shows exactly what happened: a reasonable detour, a concerned rider, a quick verification, a fair resolution. No black mark. No algorithmic penalty. <span class="story-highlight">Just proof.</span>',
     ],
     'Sarah': [
       'Sarah sees a safety notification pop on her screen: a nearby rider reported a concern. In the old world, she\'d never know. Here, <span class="story-highlight">the system is transparent about how it handles safety.</span>',
@@ -3609,11 +3757,11 @@ const STORY_NARRATIVES = {
       'But this time the receipt chain is already running. Four entries deep: request, match, acceptance, progress checkpoints. <span class="story-highlight">The system has GPS-verified proof of how far they traveled.</span> Nobody needs to argue about it.',
       'Dispatch computes the partial: $11.74. Ray checks the math — 58% of the route, plus the early-exit base. Fair. He co-signs the exit receipt. <span class="story-receipt">Seven receipts total. Ray got paid for the work he actually did.</span> Not what the platform decided he deserved, not some black-box "cancellation policy." The signed agreement, prorated by the actual distance, verified by both parties. <span class="story-highlight">That\'s the difference.</span>',
     ],
-    'Priya R.': [
-      'Priya R. watches from the sidewalk as a car pulls over mid-ride on Market Street. A woman hops out, waves at someone on the corner. The car stays put.',
-      'In the old days, that\'s a cancelled ride. The driver eats the cost or fights for a cancellation fee. But Priya R. can see on her own app what just happened: <span class="story-receipt">an early exit receipt, computed from the signed fare agreement.</span>',
+    'Nadia': [
+      'Nadia watches from the sidewalk as a car pulls over mid-ride on Market Street. A woman hops out, waves at someone on the corner. The car stays put.',
+      'In the old days, that\'s a cancelled ride. The driver eats the cost or fights for a cancellation fee. But Nadia can see on her own app what just happened: <span class="story-receipt">an early exit receipt, computed from the signed fare agreement.</span>',
       'The rider paid 58% of the agreed fare. The driver got paid for the work actually done. Both signed the exit receipt. <span class="story-highlight">Seven receipts in the chain, each one linked.</span>',
-      'Priya R.\'s been stuck in rides she wanted to leave. She\'s been overcharged for cancellations she didn\'t cause. The idea that you can exit a signed agreement <em>fairly</em> — with math, not mercy — <span class="story-receipt">that changes everything about how you think about commitments.</span>',
+      'Nadia\'s been stuck in rides she wanted to leave. She\'s been overcharged for cancellations she didn\'t cause. The idea that you can exit a signed agreement <em>fairly</em> — with math, not mercy — <span class="story-receipt">that changes everything about how you think about commitments.</span>',
     ],
   },
   'Agent-Assisted Ride': {
@@ -3626,7 +3774,7 @@ const STORY_NARRATIVES = {
     'Aria': [
       'Sarah taps "Let Aria handle it." A <span class="story-receipt">delegation credential</span> arrives — signed by Sarah\'s genesis key, scoped to ride booking, capped at $25, trust floor of 80. This is Aria\'s operating authority. Not open-ended. Not assumed. Cryptographically bounded.',
       'Aria presents the delegation to Dispatch. Dispatch verifies the chain: Aria\'s key traces to Sarah\'s genesis key. The scope is valid. The credential hasn\'t expired. <span class="story-highlight">Aria is authorized to act — but only within the lines Sarah drew.</span>',
-      'Three quotes come back: Driver Ray at $18.50 / 8 min / trust 92. Waymo-7 at $16.20 / 6 min / trust 88. Driver Priya at $19.80 / 12 min / trust 85. Aria runs the comparison: Waymo-7 wins on price and ETA, trust score clears Sarah\'s 80-point threshold. <span class="story-highlight">Selection: Waymo-7.</span>',
+      'Three quotes come back: Driver Ray at $18.50 / 8 min / trust 92. Waymo-7 at $16.20 / 6 min / trust 88. Driver Leroy at $19.80 / 12 min / trust 85. Aria runs the comparison: Waymo-7 wins on price and ETA, trust score clears Sarah\'s 80-point threshold. <span class="story-highlight">Selection: Waymo-7.</span>',
       'The booking completes. The ride completes. Aria closes the delegation chain — nine receipts, every decision auditable. Sarah\'s genesis key is the root of the whole chain. <span class="story-receipt">Aria acted on Sarah\'s behalf, within Sarah\'s rules, and Sarah holds the proof.</span> The agent didn\'t ask for trust. It earned it through transparency.',
     ],
     'Dispatch': [
@@ -3675,6 +3823,79 @@ const STORY_NARRATIVES = {
     ],
   },
 };
+
+// ── Scenario Narrator (per-agent audio) ──────────────────────
+const scenarioNarrator = {
+  el: document.createElement('audio'),
+  audioKey: null,   // 'scenario|agent' composite key
+  playing: false,
+  // Keyed by 'Scenario Name|Agent Name' → filename (without .mp3)
+  audioMap: {
+    'Standard Ride Match|Mia': 'srm-mia',
+    'Standard Ride Match|Driver Ray': 'srm-ray',
+    'Standard Ride Match|Dispatch': 'srm-dispatch',
+    'Standard Ride Match|Sarah': 'srm-sarah',
+    'Standard Ride Match|Leo': 'srm-leo',
+    'AV Credential Exchange|James': 'avc-james',
+    'AV Credential Exchange|Waymo-7': 'avc-waymo',
+    'AV Credential Exchange|Leo': 'avc-leo',
+    'AV Credential Exchange|Nadia': 'avc-nadia',
+    'Surge Pricing Dispute|Mia': 'spd-mia',
+    'Surge Pricing Dispute|Driver Leroy': 'spd-leroy',
+    'Surge Pricing Dispute|Sarah': 'spd-sarah',
+    'Surge Pricing Dispute|Nadia': 'spd-nadia',
+    'Sovereign Refusal|Driver Ray': 'sr-ray',
+    'Sovereign Refusal|Dispatch': 'sr-dispatch',
+    'Mixed Fleet Handoff|Tesla CC-9': 'mfh-tesla',
+    'Mixed Fleet Handoff|James': 'mfh-james',
+    'Mixed Fleet Handoff|Driver Leroy': 'mfh-leroy',
+    'Safety Escalation|James': 'se-james',
+    'Safety Escalation|Driver Leroy': 'se-leroy',
+    'Safety Escalation|Sarah': 'se-sarah',
+    'Early Exit|Mia': 'ee-mia',
+    'Early Exit|Driver Ray': 'ee-ray',
+    'Early Exit|Nadia': 'ee-nadia',
+    'Agent-Assisted Ride|Sarah': 'aar-sarah',
+    'Agent-Assisted Ride|Aria': 'aar-aria',
+    'Agent-Assisted Ride|Dispatch': 'aar-dispatch',
+    'Agent-Assisted Ride|Waymo-7': 'aar-waymo',
+    'Agent-Assisted Ride|Driver Ray': 'aar-ray',
+    'Prescription Provenance|Sarah': 'pp-sarah',
+    'Prescription Provenance|Aria': 'pp-aria',
+    'Prescription Provenance|Driver Ray': 'pp-ray',
+    'Prescription Provenance|Dispatch': 'pp-dispatch',
+  },
+  _play(key) {
+    const id = this.audioMap[key];
+    if (!id) return;
+    this.el.src = 'assets/narration/playground/' + id + '.mp3';
+    this.el.currentTime = 0;
+    this.playing = true;
+    this.el.play().then(() => this._btn('⏸ Stop')).catch(() => { this.playing = false; this._btn('▶ Narrate'); });
+  },
+  setScenario(scenarioName, agentName) {
+    this.audioKey = scenarioName + '|' + agentName;
+    this._play(this.audioKey);
+  },
+  clear() { this.audioKey = null; this.playing = false; this.el.pause(); this._btn('▶ Narrate'); },
+  toggle() {
+    if (!this.audioKey && storyEngine && storyEngine.activeScenarioName && storyEngine.agentPov) {
+      this.audioKey = storyEngine.activeScenarioName + '|' + storyEngine.agentPov;
+    }
+    if (this.playing) {
+      this.playing = false;
+      this.el.pause();
+      this._btn('▶ Narrate');
+    } else if (this.audioKey) {
+      this._play(this.audioKey);
+    }
+  },
+  _btn(txt) {
+    const b = document.getElementById('narratorToggle');
+    if (b) { b.textContent = txt; b.className = 'story-narrate-btn' + (txt.includes('Stop') ? ' active' : ''); }
+  },
+};
+scenarioNarrator.el.addEventListener('ended', () => { scenarioNarrator.playing = false; scenarioNarrator._btn('▶ Narrate'); });
 
 // ── Story panel controller ─────────────────────────────────
 const storyEngine = {
@@ -3766,6 +3987,9 @@ const storyEngine = {
     document.getElementById('receiptChainBar').classList.add('active');
     // Notify Cesium to resize after transition
     setTimeout(() => { if (viewer) viewer.resize(); }, 450);
+
+    // Queue narrator for this agent's POV
+    scenarioNarrator.setScenario(scenarioName, agent.name);
 
     // Initialise process stage
     setTimeout(() => { processStage.init(scenarioName); }, 500);
@@ -3931,6 +4155,9 @@ const storyEngine = {
     // Scroll story body to top for the fresh perspective
     body.scrollTop = 0;
 
+    // Update narrator audio to the new agent's perspective
+    scenarioNarrator.setScenario(scenarioName, newAgent.name);
+
     this.updateSwapButton();
   },
 
@@ -3939,6 +4166,8 @@ const storyEngine = {
     panel.classList.remove('active');
     document.body.classList.remove('story-active');
     document.getElementById('receiptChainBar').classList.remove('active');
+    // Clear narrator
+    scenarioNarrator.clear();
     // Restore Cesium to full width after transition
     setTimeout(() => { if (viewer) viewer.resize(); }, 450);
     this.activeScenarioName = null;

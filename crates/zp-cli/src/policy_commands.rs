@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use zp_policy::{PolicyModuleRegistry, WasmModuleMetadata};
 
+use crate::commands::resolve_zp_home;
+
 // ANSI colors (matching the rest of the CLI)
 const CYAN: &str = "\x1b[36m";
 const GREEN: &str = "\x1b[32m";
@@ -17,22 +19,9 @@ const DIM: &str = "\x1b[2m";
 const BOLD: &str = "\x1b[1m";
 const NC: &str = "\x1b[0m";
 
-/// Default policy module directory.
+/// Policy module directory, resolved through the ZP_HOME chain.
 fn default_policy_dir() -> PathBuf {
-    dirs_or_home().join("policies")
-}
-
-/// Get `~/.zeropoint` or fall back to home dir.
-fn dirs_or_home() -> PathBuf {
-    if let Some(home) = home_dir() {
-        home.join(".zeropoint")
-    } else {
-        PathBuf::from(".zeropoint")
-    }
-}
-
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
+    resolve_zp_home().join("policies")
 }
 
 // ────────────────────────────────────────────────────────────────

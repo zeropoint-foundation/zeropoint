@@ -35,6 +35,7 @@
 
 mod builder;
 mod chain;
+mod epoch;
 mod hasher;
 mod types;
 mod verifier;
@@ -48,6 +49,7 @@ mod otel;
 // Re-export everything at crate root
 pub use builder::ReceiptBuilder;
 pub use chain::{ChainEntry, ChainError, ReceiptChain};
+pub use epoch::{Epoch, EpochCompactor, EpochError, MerkleProof};
 pub use hasher::canonical_hash;
 pub use types::*;
 pub use verifier::{ReceiptVerifier, VerificationError, VerificationResult};

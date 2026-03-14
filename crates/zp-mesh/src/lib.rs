@@ -63,6 +63,7 @@
 pub mod capability_exchange;
 pub mod consensus;
 pub mod destination;
+pub mod discovery;
 pub mod envelope;
 pub mod error;
 pub mod identity;
@@ -71,10 +72,12 @@ pub mod link;
 pub mod packet;
 pub mod policy_sync;
 pub mod reputation;
+pub mod reticulum_discovery;
 pub mod runtime;
 pub mod store;
 pub mod tcp;
 pub mod transport;
+pub mod web_discovery;
 
 // Re-export primary types
 pub use capability_exchange::{
@@ -100,3 +103,13 @@ pub use runtime::{InboundEnvelope, MeshRuntime, RuntimeConfig, RuntimeStats};
 pub use store::MeshStore;
 pub use tcp::{TcpClientInterface, TcpServerInterface};
 pub use transport::{AgentTransport, MeshNode};
+
+// Discovery system
+pub use discovery::{
+    DiscoveredPeer, DiscoveryBackend, DiscoveryConfig, DiscoveryManager, DiscoverySource,
+    ValidatedDiscovery,
+};
+pub use reticulum_discovery::ReticulumDiscovery;
+pub use web_discovery::{
+    ConnectionBehavior, RelayConnection, WebDiscovery, WebDiscoveryConfig, WebRelayServer,
+};

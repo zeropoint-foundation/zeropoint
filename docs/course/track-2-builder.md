@@ -1,10 +1,12 @@
-# Track 2: Builder
+# Track 3: Internals
 
-## ZeroPoint Developer Course — From Zero to Governed Agent Fleet
+## ZeroPoint Crate-Level Deep Dive — From Primitives to Governed Agent Fleet
 
-**Prerequisites:** Rust toolchain (rustup, cargo), basic Rust literacy (ownership, traits, Result), a terminal.
+> **Note:** This track assumes you've completed Track 2 (SDK Developer) and want to go deeper. If you haven't, start there — it takes an afternoon and teaches the CLI and HTTP API that most developers need.
+
+**Prerequisites:** Rust toolchain (rustup, cargo), basic Rust literacy (ownership, traits, Result), a terminal. Completion of Track 2 (SDK Developer).
 **Duration:** ~20 hours self-paced
-**Outcome:** You deploy a governed multi-agent system with Tier 2 key chains, constrained capability grants, hash-chained audit trails, epoch compaction, and mesh-connected peer verification.
+**Outcome:** You deploy a governed multi-agent system with Tier 2 key chains, constrained capability grants, hash-chained audit trails, epoch compaction, and mesh-connected peer verification — all built directly against ZeroPoint's Rust crates.
 
 ---
 
@@ -470,6 +472,20 @@ fn main() {
 }
 ```
 
+### A note on persistence
+
+In this lab, the gate runs in memory — no AuditStore, no SQLite. That's fine for exploring how the gate evaluates. But in production code that persists audit entries, you **must** sync the gate's chain head with the store before evaluating:
+
+```rust
+let store = AuditStore::open("./audit.db")?;
+let mut gate = GovernanceGate::new("my-gate");
+gate.set_audit_chain_head(store.get_latest_hash()?);
+// Now gate.evaluate() produces entries whose prev_hash
+// continues the real chain in the store.
+```
+
+Without this, each process restart begins a new chain, and `zp audit verify` will report broken links. The CLI handles this automatically; if you embed the gate in your own code, it's your responsibility.
+
 ### Checkpoint
 
 Write a program that evaluates all 11 ActionType variants through the GovernanceGate at each of the three trust tiers (Tier0, Tier1, Tier2). Print a matrix: action type × trust tier → decision. Identify which combinations produce Block, which produce Warn, and which produce Allow. This matrix is your deployment's security profile.
@@ -692,6 +708,8 @@ fn main() {
 ### Checkpoint
 
 Build a complete request lifecycle: create a GovernanceGate, evaluate an action sequence that includes at least one Allow, one Warn, and one Block decision. For each result, print the full GateResult including the audit entry's prev_hash. Verify that each audit entry's prev_hash matches the previous entry's entry_hash. This is the chain in action.
+
+**Going further:** Extend your code to persist the audit entries to an AuditStore. Remember: when you open a store and create a gate, call `gate.set_audit_chain_head(store.get_latest_hash()?)` before evaluating — otherwise the first entry's `prev_hash` won't continue the existing chain. After persisting, run `store.verify_with_report()` and confirm the chain is valid. This is the pattern the CLI uses internally.
 
 ---
 
@@ -1013,13 +1031,12 @@ You are a ZeroPoint builder.
 
 ## What Comes Next
 
-Track 2 gives you the primitives. Real deployments add:
+Track 3 gave you the primitives at the crate level. Real deployments add:
 
-- **Epoch compaction** (Chapter 12 of the book) — managing chain growth over months and years
+- **Epoch compaction** — managing chain growth over months and years
 - **WASM policy modules in production** — writing, testing, and exchanging policy rules between peers
-- **Skill system integration** — connecting the learning loop to the governance pipeline
 - **Key ceremony procedures** — secure genesis key generation for production deployments
 - **Retention policy configuration** — deciding how long to keep what, and where to archive it
 - **Monitoring and alerting** — watching the seal chain, attestation health, and policy decision distributions
 
-These are Track 3 (Operator) topics. The book covers the architecture. This course gave you the code. Track 3 will give you the operations.
+These are Track 4 (Operator) topics. The book covers the architecture. This course gave you the code. Track 4 will give you the operations.

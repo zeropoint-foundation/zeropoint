@@ -1,0 +1,1 @@
+The clinic runs its own server. The pharmacy runs its own server. They make their own policy decisions using their own rules. The governance travels with the data, not through a platform that sits between them.

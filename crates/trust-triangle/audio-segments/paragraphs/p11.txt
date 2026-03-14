@@ -1,0 +1,1 @@
+No central directory was consulted. No shared database was queried. Two organizations that have never interacted before just established mutual trust using nothing but math and their own keys.

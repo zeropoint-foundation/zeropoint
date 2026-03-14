@@ -1,0 +1,1 @@
+Alex's assistant asks the clinic about patient-12345. The clinic looks up the record, applies its own policy, and sends back the answer: Alex's follow-up appointment was rescheduled from March 1st to March 8th.

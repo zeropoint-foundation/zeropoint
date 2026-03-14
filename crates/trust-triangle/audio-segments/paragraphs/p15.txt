@@ -1,0 +1,1 @@
+But the clinic doesn't just send data. It sends a signed receipt — a cryptographic proof that this data access happened, recording what was accessed, by whom, under what policy, and when. The receipt's content is hashed with Blake3, and the hash is signed with Ed25519. If anyone changes a single byte later, the hash breaks. The signature proves who created it.

@@ -1,0 +1,1 @@
+There's no platform in the middle. No API gateway that both organizations had to register with. No shared identity provider. No OAuth handshake through a third party. No vendor lock-in.

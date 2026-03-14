@@ -17,7 +17,7 @@ If all tests pass and clippy is quiet, your environment is set up correctly.
 
 ## Where to Contribute
 
-ZeroPoint is organized into 13 focused crates:
+ZeroPoint is organized into focused crates:
 
 - **zp-core**: The foundational types, cryptographic primitives, and the Four Tenets model
 - **zp-audit**: Comprehensive audit logging and forensics
@@ -32,6 +32,10 @@ ZeroPoint is organized into 13 focused crates:
 - **zp-receipt**: Receipt building, signing, hashing, and verification
 - **execution-engine**: Sandboxed command execution environment
 - **zp-cli**: Command-line interface and user-facing tools
+- **zp-keys**: Key hierarchy, signing, and cryptographic identity
+- **zp-introduction**: Cross-node trust establishment protocols
+- **trust-triangle**: Reference implementation of the Trust Triangle pattern
+- **default-gate**: Tier 0 default policy module (permissive baseline)
 
 Each crate has clear boundaries and responsibilities. When you're considering a contribution, understand which crate owns the concern you're addressing.
 
@@ -89,7 +93,7 @@ ZeroPoint is built on four foundational commitments:
 3. **Integrity First**: Everything is auditable and verifiable. Our discussions should be honest and evidence-based.
 4. **Transparency**: The mechanisms and reasoning should be understandable. We explain our decisions clearly.
 
-These principles apply to how we build together. Refer to the [ZeroPoint Whitepaper](./docs/whitepaper.md) for the complete vision.
+These principles apply to how we build together. Refer to the [ZeroPoint Whitepaper](https://zeropoint.global/whitepaper) for the complete vision.
 
 ## Security Issues
 

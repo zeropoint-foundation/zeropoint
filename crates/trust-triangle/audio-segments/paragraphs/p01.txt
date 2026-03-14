@@ -1,0 +1,1 @@
+This is the Trust Triangle — an open source example implementation built on ZeroPoint, a cryptographic governance substrate for autonomous agent systems. It's one representation of what becomes possible when trust is portable.

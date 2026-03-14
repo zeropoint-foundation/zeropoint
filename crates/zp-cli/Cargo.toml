@@ -15,11 +15,13 @@ path = "src/main.rs"
 [dependencies]
 # Local workspace crates
 zp-core = { path = "../zp-core" }
+zp-keys = { path = "../zp-keys" }
 zp-mesh = { path = "../zp-mesh" }
 zp-pipeline = { path = "../zp-pipeline" }
 zp-trust = { path = "../zp-trust" }
 zp-receipt = { path = "../zp-receipt" }
 zp-policy = { path = "../zp-policy" }
+zp-audit = { path = "../zp-audit" }
 zp-server = { path = "../zp-server" }
 
 # Workspace dependencies
@@ -32,6 +34,7 @@ tracing-subscriber.workspace = true
 
 # Additional dependencies
 anyhow.workspace = true
+blake3.workspace = true
 hex.workspace = true
 thiserror.workspace = true
 chrono.workspace = true

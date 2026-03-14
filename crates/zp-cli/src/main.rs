@@ -3,6 +3,7 @@
 mod chat;
 mod commands;
 mod guard;
+mod init;
 mod mesh_commands;
 mod policy_commands;
 mod secure;
@@ -108,6 +109,25 @@ enum Commands {
     /// Manage WASM policy modules
     #[command(subcommand)]
     Policy(PolicyCmd),
+
+    /// Initialize a new ZeroPoint environment
+    Init {
+        /// Operator name (defaults to system username)
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Directory to initialize (defaults to current directory)
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+
+    /// Key lifecycle management
+    #[command(subcommand)]
+    Keys(KeysCmd),
+
+    /// Gate evaluation and management
+    #[command(subcommand)]
+    Gate(GateCmd),
 }
 
 #[derive(Subcommand)]
@@ -132,6 +152,17 @@ enum PolicyCmd {
 
 #[derive(Subcommand)]
 enum AuditCmd {
+    /// Show recent audit entries
+    Log {
+        /// Number of entries to show (default: 20)
+        #[arg(long, default_value = "20")]
+        limit: usize,
+
+        /// Filter by category (e.g. "gate", "key", "policy")
+        #[arg(long)]
+        category: Option<String>,
+    },
+    /// Verify audit chain integrity
     Verify,
 }
 
@@ -162,6 +193,55 @@ enum MeshCmd {
     },
     /// Save current mesh state to persistent store
     Save,
+}
+
+#[derive(Subcommand)]
+enum KeysCmd {
+    /// Issue a new agent key with scoped capabilities
+    Issue {
+        /// Agent name / subject
+        #[arg(long)]
+        name: String,
+
+        /// Comma-separated capabilities (e.g. "tool:*,llm:query")
+        #[arg(long)]
+        capabilities: Option<String>,
+
+        /// Expiration in days (default: 90)
+        #[arg(long, default_value = "90")]
+        expires_days: u64,
+    },
+    /// List all keys in the keyring
+    List,
+    /// Revoke an agent key by name
+    Revoke {
+        /// Agent name to revoke
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum GateCmd {
+    /// Evaluate a request against the full gate stack
+    Eval {
+        /// Action to evaluate (e.g. "read sensor data", "delete all logs")
+        action: String,
+
+        /// Resource path (e.g. "/etc/passwd")
+        #[arg(long)]
+        resource: Option<String>,
+
+        /// Agent identity (public key hex prefix)
+        #[arg(long)]
+        agent: Option<String>,
+    },
+    /// Install a custom WASM gate
+    Add {
+        /// Path to .wasm policy module
+        path: String,
+    },
+    /// List installed gates (constitutional + custom)
+    List,
 }
 
 #[tokio::main]
@@ -245,6 +325,52 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    // Init — bootstrap a new ZeroPoint environment, no pipeline needed
+    if let Some(Commands::Init { name, dir }) = &args.command {
+        let operator_name = name.clone().unwrap_or_else(|| {
+            std::env::var("USER")
+                .or_else(|_| std::env::var("USERNAME"))
+                .unwrap_or_else(|_| "operator".to_string())
+        });
+        let project_dir = dir.clone().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        });
+        let config = init::InitConfig {
+            operator_name,
+            project_dir,
+            store_genesis_secret: true,
+        };
+        std::process::exit(init::run(&config));
+    }
+
+    // Keys — key lifecycle management, no pipeline needed
+    if let Some(Commands::Keys(cmd)) = &args.command {
+        let exit_code = match cmd {
+            KeysCmd::Issue {
+                name,
+                capabilities,
+                expires_days,
+            } => commands::keys_issue(name, capabilities.as_deref(), *expires_days),
+            KeysCmd::List => commands::keys_list(),
+            KeysCmd::Revoke { name } => commands::keys_revoke(name),
+        };
+        std::process::exit(exit_code);
+    }
+
+    // Gate — gate evaluation and management, no pipeline needed
+    if let Some(Commands::Gate(cmd)) = &args.command {
+        let exit_code = match cmd {
+            GateCmd::Eval {
+                action,
+                resource,
+                agent,
+            } => commands::gate_eval(action, resource.as_deref(), agent.as_deref()),
+            GateCmd::Add { path } => policy_commands::load(path),
+            GateCmd::List => commands::gate_list(),
+        };
+        std::process::exit(exit_code);
+    }
+
     // Policy subcommand — manages WASM policy modules, no pipeline needed
     if let Some(Commands::Policy(cmd)) = &args.command {
         let exit_code = match cmd {
@@ -309,11 +435,17 @@ async fn main() -> anyhow::Result<()> {
         None | Some(Commands::Chat) => chat::run(&pipeline).await?,
         Some(Commands::Health) => commands::health(&pipeline).await?,
         Some(Commands::Audit(AuditCmd::Verify)) => commands::audit_verify(&pipeline).await?,
+        Some(Commands::Audit(AuditCmd::Log { limit, category })) => {
+            commands::audit_log(&pipeline, limit, category.as_deref()).await?
+        }
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
         Some(Commands::Status) => unreachable!(),        // handled above
         Some(Commands::Policy(_)) => unreachable!(),     // handled above
+        Some(Commands::Init { .. }) => unreachable!(),  // handled above
+        Some(Commands::Keys(_)) => unreachable!(),      // handled above
+        Some(Commands::Gate(_)) => unreachable!(),      // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,
