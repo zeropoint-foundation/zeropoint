@@ -166,7 +166,7 @@ impl MerkleTree {
 
         while current_level.len() > 1 {
             // Pad odd-length levels by duplicating the last node
-            if current_level.len() % 2 != 0 {
+            if !current_level.len().is_multiple_of(2) {
                 current_level.push(current_level[current_level.len() - 1].clone());
             }
 
@@ -264,19 +264,17 @@ impl MerkleTree {
                     return true;
                 }
             }
-        } else {
-            if let Some(right) = &node.right {
-                let right_index = target_index - left_size;
-                if Self::collect_proof_path(right, right_index, leaves, path) {
-                    // Add left sibling AFTER recursion (bottom-up order)
-                    if let Some(left) = &node.left {
-                        path.push(ProofStep {
-                            hash: left.hash.clone(),
-                            direction: Direction::Left,
-                        });
-                    }
-                    return true;
+        } else if let Some(right) = &node.right {
+            let right_index = target_index - left_size;
+            if Self::collect_proof_path(right, right_index, leaves, path) {
+                // Add left sibling AFTER recursion (bottom-up order)
+                if let Some(left) = &node.left {
+                    path.push(ProofStep {
+                        hash: left.hash.clone(),
+                        direction: Direction::Left,
+                    });
                 }
+                return true;
             }
         }
 
