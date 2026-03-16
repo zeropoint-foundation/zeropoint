@@ -235,20 +235,109 @@ Add to `Cargo.toml`:
 ```toml
 [lib]
 crate-type = ["cdylib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 ```
 
 Write `src/lib.rs`:
 
 ```rust
-/// Gate that blocks any action on sensitive paths.
-/// Returns: 1 = Allow, 3 = Warn, 5 = Block
+//! Custom WASM gate — blocks execute actions on sensitive paths.
+//!
+//! Required exports (see wasm_runtime.rs):
+//!   name_ptr / name_len  — module name in linear memory
+//!   alloc                — allocate guest memory for the host
+//!   evaluate / evaluate_len — evaluate(ctx_ptr, ctx_len) -> result_ptr
+//!   memory               — exported linear memory
+
+use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
+
+#[derive(Deserialize)]
+struct PolicyContext {
+    action: ActionType,
+    #[serde(default)]
+    trust_tier: String,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+enum ActionType {
+    Chat,
+    Read { target: String },
+    Write { target: String },
+    Execute { language: String },
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Serialize)]
+struct PolicyDecision {
+    decision: String,
+    reason: Option<String>,
+    conditions: Vec<String>,
+}
+
+// ── Name export ──────────────────────────────────────────────
+static MODULE_NAME: &str = "execute-blocker";
+
 #[no_mangle]
-pub extern "C" fn evaluate(action_type: i32, _trust_tier: i32) -> i32 {
-    // Block all execute actions (action_type 4)
-    if action_type == 4 {
-        return 5; // Block
-    }
-    1 // Allow
+pub extern "C" fn name_ptr() -> i32 { MODULE_NAME.as_ptr() as i32 }
+
+#[no_mangle]
+pub extern "C" fn name_len() -> i32 { MODULE_NAME.len() as i32 }
+
+// ── Memory allocator ────────────────────────────────────────
+#[no_mangle]
+pub extern "C" fn alloc(len: i32) -> i32 {
+    let buf = vec![0u8; len as usize];
+    let ptr = buf.as_ptr() as i32;
+    std::mem::forget(buf);
+    ptr
+}
+
+// ── Evaluate ────────────────────────────────────────────────
+thread_local! {
+    static LAST_RESULT: RefCell<Vec<u8>> = RefCell::new(Vec::new());
+}
+
+#[no_mangle]
+pub extern "C" fn evaluate(ctx_ptr: i32, ctx_len: i32) -> i32 {
+    let ctx_bytes = unsafe {
+        std::slice::from_raw_parts(ctx_ptr as *const u8, ctx_len as usize)
+    };
+
+    let decision = match serde_json::from_slice::<PolicyContext>(ctx_bytes) {
+        Ok(ctx) => match ctx.action {
+            ActionType::Execute { .. } => PolicyDecision {
+                decision: "block".into(),
+                reason: Some("Execute actions blocked by custom gate".into()),
+                conditions: vec![],
+            },
+            _ => PolicyDecision {
+                decision: "allow".into(),
+                reason: None,
+                conditions: vec![],
+            },
+        },
+        Err(_) => PolicyDecision {
+            decision: "allow".into(),
+            reason: None,
+            conditions: vec![],
+        },
+    };
+
+    let json = serde_json::to_vec(&decision).unwrap();
+    let ptr = json.as_ptr() as i32;
+    LAST_RESULT.with(|r| *r.borrow_mut() = json);
+    ptr
+}
+
+#[no_mangle]
+pub extern "C" fn evaluate_len() -> i32 {
+    LAST_RESULT.with(|r| r.borrow().len() as i32)
 }
 ```
 
@@ -396,7 +485,7 @@ You didn't write Rust (unless you chose to in Module 4). You didn't learn a fram
 
 ## What Comes Next
 
-**Track 3: Internals** teaches the Rust crate-level API — for builders who want to embed ZeroPoint directly, write custom policy engines, or understand the cryptographic primitives. It covers key hierarchy construction, signing and verification, the credential vault, capability grants, delegation chain invariants, the full governance gate pipeline, receipt chains, audit persistence, and mesh peer communication. 16 modules, ~20 hours.
+**Track 3: Internals** teaches the Rust crate-level API — for builders who want to embed ZeroPoint directly, write custom policy engines, or understand the cryptographic primitives. It covers key hierarchy construction, signing and verification, the credential vault, capability grants, delegation chain invariants, the full governance gate pipeline, receipt chains, audit persistence, and mesh peer communication. 14 modules, ~20 hours.
 
 **Track 4: Operator** covers production deployment — epoch compaction, key ceremony procedures, retention policies, monitoring, and fleet-scale mesh governance.
 

@@ -24,17 +24,16 @@ fn make_context(action: ActionType, tier: TrustTier) -> PolicyContext {
 }
 
 fn main() {
-    // In a full setup, you'd compile a WASM policy module first:
+    // In a full setup, you'd compile a WASM policy module first.
+    // The module must export: name_ptr, name_len, alloc, evaluate, evaluate_len, memory.
     //
-    // ```rust
-    // // wasm-policy/src/lib.rs — compiled to wasm32-wasi
-    // #[no_mangle]
-    // pub extern "C" fn evaluate(action_type: i32, trust_tier: i32) -> i32 {
-    //     if action_type == 4 && trust_tier == 0 { return 5; } // Block Execute at Tier0
-    //     if action_type == 2 && trust_tier == 1 { return 3; } // Warn on Write at Tier1
-    //     1 // Allow
-    // }
-    // ```
+    // evaluate(ctx_ptr: i32, ctx_len: i32) -> i32
+    //   The host writes a JSON-serialized PolicyContext into guest memory via alloc(),
+    //   then calls evaluate(). The guest deserializes, applies its rules, and returns
+    //   a pointer to a JSON-serialized PolicyDecision. evaluate_len() returns its size.
+    //
+    // See policies/default-gate/ for a complete working example, or the course
+    // Module 4 walkthrough for a minimal gate you can compile and install.
     //
     // Then load it:
     // let wasm_bytes = std::fs::read("./policy.wasm").expect("Should read WASM file");
