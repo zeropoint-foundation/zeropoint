@@ -19,6 +19,7 @@ use axum::{
 };
 use futures::stream::StreamExt;
 use futures::SinkExt;
+use tower_http::services::ServeDir;
 use chrono::Utc;
 use ed25519_dalek::{Signer as DalekSigner, SigningKey};
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,9 @@ pub struct ServerConfig {
     pub open_dashboard: bool,
     pub llm_enabled: bool,
     pub operator_name: String,
+    /// Optional path to the Bridge UI dist directory.
+    /// When set, serves the Bridge at /bridge.
+    pub bridge_dir: Option<std::path::PathBuf>,
 }
 
 impl Default for ServerConfig {
@@ -70,6 +74,7 @@ impl Default for ServerConfig {
             llm_enabled: std::env::var("ZP_LLM_ENABLED").unwrap_or_default() == "true",
             operator_name: std::env::var("ZP_OPERATOR_NAME")
                 .unwrap_or_else(|_| "ZeroPoint".to_string()),
+            bridge_dir: std::env::var("ZP_BRIDGE_DIR").ok().map(std::path::PathBuf::from),
         }
     }
 }
@@ -302,14 +307,16 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             .allow_headers(tower_http::cors::Any)
     };
 
-    Router::new()
+    let mut router = Router::new()
         // Verification surface (dashboard)
         .route("/", get(dashboard_handler))
         // Health
         .route("/api/v1/health", get(health_handler))
         // Identity
         .route("/api/v1/identity", get(identity_handler))
-        // Guard / Policy
+        // Gate evaluation (SDK endpoint)
+        .route("/api/v1/evaluate", post(guard_evaluate_handler))
+        // Guard / Policy (legacy)
         .route("/api/v1/guard/evaluate", post(guard_evaluate_handler))
         .route("/api/v1/policy/rules", get(policy_rules_handler))
         // Capabilities
@@ -350,7 +357,30 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // WebSocket endpoint for Bridge UI
         .route("/wss", get(ws_upgrade_handler))
         .layer(cors)
-        .with_state(state)
+        .with_state(state);
+
+    // Serve Bridge UI static files if configured.
+    // The Bridge assets use absolute paths (/assets/...) so we serve
+    // them as a fallback at root level — API routes take priority.
+    if let Some(ref bridge_dir) = config.bridge_dir {
+        if bridge_dir.exists() {
+            info!("Bridge UI: http://localhost:{}/bridge", config.port);
+            // Serve index.html at /bridge
+            let index_path = bridge_dir.join("index.html");
+            let index_html: &'static str = Box::leak(
+                std::fs::read_to_string(&index_path)
+                    .unwrap_or_else(|_| "<h1>Bridge index.html not found</h1>".to_string())
+                    .into_boxed_str(),
+            );
+            router = router
+                .route("/bridge", get(move || async move { Html(index_html) }))
+                .fallback_service(ServeDir::new(bridge_dir));
+        } else {
+            tracing::warn!("ZP_BRIDGE_DIR={:?} does not exist, Bridge UI disabled", bridge_dir);
+        }
+    }
+
+    router
 }
 
 // ============================================================================
@@ -1420,7 +1450,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                     "type": "Error",
                     "message": format!("Invalid JSON: {}", e)
                 });
-                let _ = sender.send(WsMessage::Text(err.to_string().into())).await;
+                let _ = sender.send(WsMessage::Text(err.to_string())).await;
                 continue;
             }
         };
@@ -1439,7 +1469,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                     "pipeline_enabled": state.0.pipeline.is_some(),
                     "version": env!("CARGO_PKG_VERSION"),
                 });
-                let _ = sender.send(WsMessage::Text(resp.to_string().into())).await;
+                let _ = sender.send(WsMessage::Text(resp.to_string())).await;
             }
 
             // ---- Chat message ----
@@ -1460,7 +1490,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                         "type": "Error",
                         "message": "Empty message content"
                     });
-                    let _ = sender.send(WsMessage::Text(err.to_string().into())).await;
+                    let _ = sender.send(WsMessage::Text(err.to_string())).await;
                     continue;
                 }
 
@@ -1480,7 +1510,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                             "message_id": uuid::Uuid::now_v7().to_string(),
                             "conversation_id": conversation_id.0.to_string(),
                         });
-                        let _ = sender.send(WsMessage::Text(resp.to_string().into())).await;
+                        let _ = sender.send(WsMessage::Text(resp.to_string())).await;
                         continue;
                     }
                 };
@@ -1497,7 +1527,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                     "type": "OfficerStreamStart",
                     "officer": role,
                 });
-                let _ = sender.send(WsMessage::Text(stream_start.to_string().into())).await;
+                let _ = sender.send(WsMessage::Text(stream_start.to_string())).await;
 
                 // Route through the pipeline
                 match pipeline.handle(request).await {
@@ -1508,7 +1538,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                             "officer": role,
                             "full_text": response.content,
                         });
-                        let _ = sender.send(WsMessage::Text(stream_end.to_string().into())).await;
+                        let _ = sender.send(WsMessage::Text(stream_end.to_string())).await;
 
                         // Also send the simple response format for compatibility
                         let simple = serde_json::json!({
@@ -1519,7 +1549,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                             "message_id": response.id.0.to_string(),
                             "conversation_id": response.conversation_id.0.to_string(),
                         });
-                        let _ = sender.send(WsMessage::Text(simple.to_string().into())).await;
+                        let _ = sender.send(WsMessage::Text(simple.to_string())).await;
                     }
                     Err(e) => {
                         let err = serde_json::json!({
@@ -1527,7 +1557,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                             "officer": role,
                             "full_text": format!("Error: {}", e),
                         });
-                        let _ = sender.send(WsMessage::Text(err.to_string().into())).await;
+                        let _ = sender.send(WsMessage::Text(err.to_string())).await;
                     }
                 }
             }
@@ -1539,7 +1569,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                     "type": "HCSApprovalStatus",
                     "pendingCount": 0,
                 });
-                let _ = sender.send(WsMessage::Text(ack.to_string().into())).await;
+                let _ = sender.send(WsMessage::Text(ack.to_string())).await;
             }
 
             // ---- Voice transcription ----
@@ -1551,7 +1581,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                     "text": "",
                     "error": "Voice transcription not yet implemented on server"
                 });
-                let _ = sender.send(WsMessage::Text(resp.to_string().into())).await;
+                let _ = sender.send(WsMessage::Text(resp.to_string())).await;
             }
 
             // ---- Unknown types — log and ignore ----
