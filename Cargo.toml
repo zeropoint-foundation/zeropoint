@@ -57,7 +57,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 
 # HTTP server
 axum = { version = "0.7", features = ["tokio", "json", "ws"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 
 # Error handling
 thiserror = "2.0"
