@@ -1,0 +1,120 @@
+# ZeroPoint Network Sentinel Configuration
+# ASUS Merlin Router - ARM 32-bit, Python 3.11 via Entware
+
+[dns]
+# Path to dnsmasq query log
+# Enable with: dnsmasq config "log-queries=extra" or "log-queries"
+log_path = "/var/log/dnsmasq.log"
+
+# URLs to download blocklists from (Steven Black hosts format)
+blocklist_urls = [
+    "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+    "https://adaway.org/hosts.txt",
+    "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
+]
+
+# Cache path for downloaded blocklists
+blocklist_cache_path = "/opt/var/cache/zp-sentinel/blocklist.txt"
+
+# Rate limit threshold for anomaly detection (queries per second)
+rate_limit_qps = 100
+
+
+[device]
+# Path to DHCP lease file
+# dnsmasq: /tmp/dnsmasq.leases
+# udhcpc: /var/lib/misc/dnsmasq.leases
+dhcp_lease_file = "/tmp/dnsmasq.leases"
+
+# MAC addresses to block (Tuya, AI-Link, etc.)
+# Format: "xx:xx:xx:xx:xx:xx" or "xx-xx-xx-xx-xx-xx"
+mac_blocklist = [
+    "38:a5:c9:20:4a:a5",  # Tuya
+    "b4:61:e9:e2:16:0b",  # AI-Link
+    "b4:61:e9:e2:3a:8c",  # AI-Link
+]
+
+# Rate limit for new device connections
+rate_limit_connections_per_minute = 10
+
+
+[audit]
+# SQLite database path for audit trail
+# Use USB for persistence: /opt/var/zp-sentinel/audit.db
+# Or tmpfs during testing: /tmp/zp-audit.db
+db_path = "/opt/var/zp-sentinel/audit.db"
+
+# In-memory cache size for recent audit entries
+max_entries_memory = 10000
+
+
+[notifications]
+# Alert file — human-readable log of all notifications
+alert_file = "/opt/var/zp-sentinel/alerts.log"
+
+# Minimum risk level to trigger notifications: low, medium, high, critical
+min_level = "medium"
+
+# Syslog: writes to router system log (visible in Merlin UI → System Log)
+syslog = true
+
+# File: appends to alert_file above
+file = true
+
+# Webhook: POST to Ntfy, Pushover, Slack, or any HTTP endpoint
+# Leave empty to disable. Example Ntfy: "https://ntfy.sh"
+webhook_url = ""
+webhook_topic = "zp-sentinel"
+
+# Silent mode: set to true to suppress ALL notifications (log-only)
+# This is the explicit opt-in for silent operation — NOT the default
+silent = false
+
+# Deduplication: minimum seconds between identical notifications
+cooldown_seconds = 30
+
+# Critical alerts repeat every N seconds until acknowledged
+critical_repeat_seconds = 300
+
+
+[mesh]
+# ZeroPoint Core server for mesh registration and heartbeat.
+# Leave empty to run in standalone mode (no mesh participation).
+# core_url = "http://192.168.1.1:5173"
+# core_ws_url = "ws://192.168.1.1:5173/ws"
+
+# Persistent Ed25519 identity keypair (generated on first run)
+key_path = "/opt/var/zp-sentinel/identity.key"
+
+# Human-readable name shown in the topology view
+component_name = "ZP Sentinel — ASUS RT-AX58U"
+
+# Heartbeat interval in seconds (how often we ping Core)
+heartbeat_interval_sec = 30
+
+# Missed heartbeats before Core marks us unreachable
+heartbeat_threshold = 3
+
+# Auto-register with Core on startup (if core_url is set)
+auto_register = true
+
+# Wire protocol version
+protocol_version = "0.1.0"
+
+# Network address Core should use to reach us (auto-detected if empty)
+# advertise_address = "192.168.1.1"
+# advertise_port = 0
+
+
+[service]
+# PID file location
+pid_file = "/opt/var/run/zp-sentinel.pid"
+
+# Log file location
+log_file = "/opt/var/log/zp-sentinel.log"
+
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level = "INFO"
+
+# Monitor polling interval (seconds)
+monitor_interval = 5

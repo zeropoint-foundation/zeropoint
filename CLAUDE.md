@@ -19,7 +19,7 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 | zp-playground | Hetzner server running ZeroPoint server |
 | Playground | zeropoint.global/playground — interactive governance demo |
 | Barn | Elevated structure between main house and studio — central hub for network router |
-| APOLLO-3 | Mac Mini at 192.168.1.170 — runs dnsmasq DNS shield with Steven Black blocklist |
+| APOLLO-3 | Mac Mini at 192.168.1.170 — retired as DNS shield (Sentinel handles DNS now). Available for repurposing as ZP Core server, ledger node, or monitoring collector |
 
 ## Local Network
 | Component | Details |
@@ -27,9 +27,10 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 | **Gateway** | AT&T BGW210-700 @ 192.168.1.254 — will be set to IP Passthrough (dumb modem) |
 | **Router** | ASUS RT-AX58U (v1) w/ Merlin firmware — arriving 2026-03-13, located in the Barn |
 | **Topology** | Main House (BGW210) → ethernet → Barn (ASUS primary router) → Studio (AT&T extender for now) |
-| **DNS** | Cloudflare 1.1.1.1 / 1.0.0.1 — set globally on ASUS once deployed |
-| **APOLLO-3** | Mac Mini @ 192.168.1.170 — dnsmasq + Steven Black blocklist (to be migrated to ASUS Merlin) |
-| **Block list** | MACs to block: 38:a5:c9:20:4a:a5 (Tuya), b4:61:e9:e2:16:0b (AI-Link), b4:61:e9:e2:3a:8c (AI-Link) |
+| **DNS** | Cloudflare 1.1.1.1 / 1.0.0.1 — set globally on ASUS. Sentinel handles DNS filtering + Steven Black blocklist |
+| **Sentinel** | ZP Network Sentinel on ASUS Merlin — DNS filtering, device monitoring, anomaly detection, mesh peer via AgentAnnounce |
+| **APOLLO-3** | Mac Mini @ 192.168.1.170 — retired from DNS duty. Available for repurposing as ZP Core server, ledger node, or monitoring collector |
+| **Block list** | MACs to block (managed by Sentinel): 38:a5:c9:20:4a:a5 (Tuya), b4:61:e9:e2:16:0b (AI-Link), b4:61:e9:e2:3a:8c (AI-Link) |
 | **Monitor** | dns-monitor.py — ZP-themed traffic dashboard, not yet deployed |
 
 ## Projects
