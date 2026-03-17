@@ -88,3 +88,10 @@ generate_whitepaper_pdf.py
 m0_homepage_copy.md
 mindmap-prompt.md
 DATABASE_*.txt
+
+# Personal / draft content (never commit)
+*-draft.md
+*-comparative-analysis.md
+substack-draft*
+*.mobileconfig
+voice-tuner-server.py

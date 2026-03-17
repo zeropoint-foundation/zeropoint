@@ -14,8 +14,9 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  build-and-test:
-    name: Build & Test
+  # ── Rust Workspace ──────────────────────────────────────────
+  rust:
+    name: Rust (build + test + clippy + fmt)
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -46,3 +47,43 @@ jobs:
 
       - name: Format check
         run: cargo fmt --all --check
+
+  # ── Sentinel (Python) ──────────────────────────────────────
+  sentinel:
+    name: Sentinel (Python syntax + shell lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Python syntax check
+        run: |
+          for f in tools/sentinel/zp_sentinel/*.py; do
+            python -m py_compile "$f"
+            echo "✓ $(basename $f)"
+          done
+
+      - name: Shell syntax check
+        run: |
+          sh -n tools/sentinel/install.sh
+          echo "✓ install.sh"
+          for f in tools/sentinel/platforms/*/profile.sh; do
+            sh -n "$f"
+            echo "✓ $f"
+          done
+
+      - name: Install and smoke test
+        run: |
+          pip install tomli pynacl blake3
+          cd tools/sentinel
+          export PYTHONPATH="$(pwd)"
+          python -c "from zp_sentinel.config import Config; print('✓ config imports')"
+          python -c "from zp_sentinel.gate import GovernanceGate; print('✓ gate imports')"
+          python -c "from zp_sentinel.mesh import MeshClient; print('✓ mesh imports')"
+          python -c "from zp_sentinel.anomaly import AnomalyDetector; print('✓ anomaly imports')"
+          python -c "from zp_sentinel.audit import AuditStore; print('✓ audit imports')"
