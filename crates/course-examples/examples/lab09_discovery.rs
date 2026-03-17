@@ -3,12 +3,12 @@
 //! Mesh discovery with loopback interfaces
 //! Run: cargo run --example lab09_discovery -p course-examples
 
-use zp_mesh::{MeshNode, MeshRuntime, RuntimeConfig};
-use zp_mesh::transport::{AgentCapabilities, AgentTransport};
-use zp_mesh::interface::LoopbackInterface;
-use zp_trust::Signer;
 use std::sync::Arc;
 use std::time::Duration;
+use zp_mesh::interface::LoopbackInterface;
+use zp_mesh::transport::{AgentCapabilities, AgentTransport};
+use zp_mesh::{MeshNode, MeshRuntime, RuntimeConfig};
+use zp_trust::Signer;
 
 #[tokio::main]
 async fn main() {
@@ -22,10 +22,13 @@ async fn main() {
     node_a.attach_interface(lo.clone()).await;
     node_b.attach_interface(lo.clone()).await;
 
-    let mut runtime_b = MeshRuntime::start(node_b.clone(), RuntimeConfig {
-        poll_interval: Duration::from_millis(10),
-        ..Default::default()
-    });
+    let mut runtime_b = MeshRuntime::start(
+        node_b.clone(),
+        RuntimeConfig {
+            poll_interval: Duration::from_millis(10),
+            ..Default::default()
+        },
+    );
     let _inbound = runtime_b.take_inbound_rx();
 
     let caps = AgentCapabilities {
@@ -47,7 +50,11 @@ async fn main() {
     let peers: Vec<_> = node_b.known_peers().await;
     println!("Known peers: {}", peers.len());
     for peer in &peers {
-        println!("  {} — {:?}", peer.address, peer.capabilities.as_ref().map(|c| &c.name));
+        println!(
+            "  {} — {:?}",
+            peer.address,
+            peer.capabilities.as_ref().map(|c| &c.name)
+        );
     }
 
     runtime_b.shutdown();

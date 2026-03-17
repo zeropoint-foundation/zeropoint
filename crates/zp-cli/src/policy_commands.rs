@@ -73,10 +73,7 @@ pub fn load(path: &str) -> i32 {
                 if dest != path {
                     match std::fs::copy(&path, &dest) {
                         Ok(_) => {
-                            eprintln!(
-                                "  {DIM}Installed to {}{NC}",
-                                dest.display()
-                            );
+                            eprintln!("  {DIM}Installed to {}{NC}", dest.display());
                         }
                         Err(e) => {
                             eprintln!(
@@ -110,10 +107,7 @@ fn print_module_loaded(path: &std::path::Path, meta: &WasmModuleMetadata) {
     eprintln!("  {GREEN}✓{NC} Policy module loaded");
     eprintln!();
     eprintln!("  {BOLD}Name:{NC}    {CYAN}{}{NC}", meta.name);
-    eprintln!(
-        "  {BOLD}Hash:{NC}    {}",
-        &meta.content_hash[..16]
-    );
+    eprintln!("  {BOLD}Hash:{NC}    {}", &meta.content_hash[..16]);
     eprintln!("  {BOLD}Size:{NC}    {} bytes", meta.size_bytes);
     eprintln!("  {BOLD}Source:{NC}  {}", path.display());
     eprintln!();
@@ -151,7 +145,10 @@ pub fn list() -> i32 {
     let results = registry.load_directory(&policy_dir);
 
     if results.is_empty() {
-        eprintln!("  {DIM}No .wasm files found in {}{NC}", policy_dir.display());
+        eprintln!(
+            "  {DIM}No .wasm files found in {}{NC}",
+            policy_dir.display()
+        );
         eprintln!("  {DIM}Use: zp policy load <file.wasm>{NC}");
         eprintln!();
         return 0;
@@ -190,10 +187,7 @@ pub fn list() -> i32 {
     }
 
     eprintln!();
-    eprintln!(
-        "  {DIM}{} module(s) loaded, {} failed{NC}",
-        loaded, failed
-    );
+    eprintln!("  {DIM}{} module(s) loaded, {} failed{NC}", loaded, failed);
     eprintln!();
     0
 }
@@ -219,12 +213,16 @@ pub fn status() -> i32 {
     eprintln!("  {BOLD}Operational Rules{NC} {DIM}(built-in){NC}");
     eprintln!("  {GREEN}●{NC} CatastrophicActionRule  {DIM}— blocks credential exfil, self-modification{NC}");
     eprintln!("  {GREEN}●{NC} BulkOperationRule       {DIM}— warns on glob/recursive file ops{NC}");
-    eprintln!("  {GREEN}●{NC} ReputationGateRule      {DIM}— gates mesh actions by peer reputation{NC}");
+    eprintln!(
+        "  {GREEN}●{NC} ReputationGateRule      {DIM}— gates mesh actions by peer reputation{NC}"
+    );
     eprintln!();
 
     // Report baseline
     eprintln!("  {BOLD}Baseline{NC}");
-    eprintln!("  {GREEN}●{NC} DefaultAllowRule        {DIM}— permits actions no rule restricts{NC}");
+    eprintln!(
+        "  {GREEN}●{NC} DefaultAllowRule        {DIM}— permits actions no rule restricts{NC}"
+    );
     eprintln!();
 
     // Report WASM modules
@@ -295,9 +293,7 @@ fn print_status_summary(native_rules: usize, wasm_loaded: usize, wasm_failed: us
             wasm_failed
         );
     }
-    eprintln!(
-        "  {DIM}Evaluation: Constitutional → Operational → WASM → Baseline{NC}"
-    );
+    eprintln!("  {DIM}Evaluation: Constitutional → Operational → WASM → Baseline{NC}");
     eprintln!(
         "  {DIM}Guarantee: most restrictive decision wins (Block > Review > Warn > Sanitize > Allow){NC}"
     );
@@ -343,16 +339,10 @@ pub fn verify() -> i32 {
 
     for (hash, valid) in &integrity {
         if *valid {
-            eprintln!(
-                "  {GREEN}✓{NC} {}…  {DIM}integrity OK{NC}",
-                &hash[..16]
-            );
+            eprintln!("  {GREEN}✓{NC} {}…  {DIM}integrity OK{NC}", &hash[..16]);
         } else {
             all_ok = false;
-            eprintln!(
-                "  {RED}✗{NC} {}…  {RED}INTEGRITY MISMATCH{NC}",
-                &hash[..16]
-            );
+            eprintln!("  {RED}✗{NC} {}…  {RED}INTEGRITY MISMATCH{NC}", &hash[..16]);
         }
     }
 
@@ -414,11 +404,7 @@ pub fn remove(hash_prefix: &str) -> i32 {
             matched.len()
         );
         for (_, meta) in &matched {
-            eprintln!(
-                "    {} ({}…)",
-                meta.name,
-                &meta.content_hash[..16]
-            );
+            eprintln!("    {} ({}…)", meta.name, &meta.content_hash[..16]);
         }
         eprintln!("  Provide a longer prefix to disambiguate.");
         return 1;
@@ -439,11 +425,7 @@ pub fn remove(hash_prefix: &str) -> i32 {
             0
         }
         Err(e) => {
-            eprintln!(
-                "{RED}✗{NC} Failed to remove {}: {}",
-                path.display(),
-                e
-            );
+            eprintln!("{RED}✗{NC} Failed to remove {}: {}", path.display(), e);
             1
         }
     }

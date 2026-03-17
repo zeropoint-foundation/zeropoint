@@ -15,12 +15,12 @@
 //! the `PolicyContext` that the policy engine evaluates. This keeps the separation
 //! between mechanism (zp-keys) and governance (zp-policy) clean.
 
-pub mod protocol;
 pub mod error;
+pub mod protocol;
 pub mod request;
 pub mod response;
 
 pub use error::IntroductionError;
-pub use protocol::{IntroductionOutcome, verify_introduction};
+pub use protocol::{verify_introduction, IntroductionOutcome};
 pub use request::IntroductionRequest;
 pub use response::IntroductionResponse;

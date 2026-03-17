@@ -3,7 +3,7 @@
 //! Receipt chains with hash verification
 //! Run: cargo run --example lab07_receipts -p course-examples
 
-use zp_receipt::{Receipt, ReceiptChain, Status, Action, TrustGrade};
+use zp_receipt::{Action, Receipt, ReceiptChain, Status, TrustGrade};
 
 fn main() {
     // Create an Intent receipt (root of provenance chain)
@@ -31,14 +31,18 @@ fn main() {
 
     // Verify the chain
     chain.verify_integrity().expect("Chain should verify");
-    println!("\n✓ Receipt chain verified ({} entries)", chain.entries().len());
+    println!(
+        "\n✓ Receipt chain verified ({} entries)",
+        chain.entries().len()
+    );
 
     // Print chain structure
     for entry in chain.entries() {
-        println!("  seq={} hash={}...{}",
+        println!(
+            "  seq={} hash={}...{}",
             entry.sequence,
             &entry.content_hash[..8],
-            &entry.content_hash[entry.content_hash.len()-8..],
+            &entry.content_hash[entry.content_hash.len() - 8..],
         );
     }
 }

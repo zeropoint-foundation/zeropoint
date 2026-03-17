@@ -11,7 +11,11 @@ fn main() {
 
     let message = b"This agent is authorized to read /data/reports/*";
     let signature = signer.sign(message);
-    println!("Signature: {}...{}", &signature[..16], &signature[signature.len()-16..]);
+    println!(
+        "Signature: {}...{}",
+        &signature[..16],
+        &signature[signature.len() - 16..]
+    );
 
     let valid = Signer::verify(&signer.public_key(), message, &signature)
         .expect("Verification should not error");
@@ -29,21 +33,22 @@ fn main() {
     let mut flipped = bytes;
     flipped[0] ^= 0xFF;
     let bad_sig = hex::encode(flipped);
-    let still_valid = Signer::verify(&signer.public_key(), message, &bad_sig)
-        .unwrap_or(false);
+    let still_valid = Signer::verify(&signer.public_key(), message, &bad_sig).unwrap_or(false);
     assert!(!still_valid, "Tampered signature must not verify");
     println!("✓ Tampered signature correctly rejected");
 
     let secret = signer.secret_key();
-    let restored = Signer::from_secret(&secret)
-        .expect("Should restore from secret");
+    let restored = Signer::from_secret(&secret).expect("Should restore from secret");
     assert_eq!(signer.public_key(), restored.public_key());
     println!("✓ Signer restored from secret key");
 
     let signer2 = Signer::generate();
     let sig_from_signer2 = signer2.sign(message);
-    let cross_verify = Signer::verify(&signer.public_key(), message, &sig_from_signer2)
-        .unwrap_or(false);
-    assert!(!cross_verify, "Different signer's signature must not verify");
+    let cross_verify =
+        Signer::verify(&signer.public_key(), message, &sig_from_signer2).unwrap_or(false);
+    assert!(
+        !cross_verify,
+        "Different signer's signature must not verify"
+    );
     println!("✓ Cross-verification correctly rejected");
 }

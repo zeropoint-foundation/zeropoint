@@ -154,19 +154,14 @@ data_dir = ".zeropoint/data"
     let short_pub = &genesis_pub[..8];
 
     eprintln!();
-    eprintln!(
-        "  Operator identity: \x1b[36m{}...\x1b[0m",
-        short_pub
-    );
+    eprintln!("  Operator identity: \x1b[36m{}...\x1b[0m", short_pub);
     eprintln!(
         "  Constitutional hash: \x1b[36m{}...\x1b[0m",
         &constitutional_hash[..6]
     );
     eprintln!();
     eprintln!("  Your environment is ready.");
-    eprintln!(
-        "  Run \x1b[1m`zp keys issue`\x1b[0m to create your first agent key."
-    );
+    eprintln!("  Run \x1b[1m`zp keys issue`\x1b[0m to create your first agent key.");
     eprintln!();
 
     0

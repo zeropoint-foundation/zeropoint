@@ -180,10 +180,7 @@ mod tests {
         let operator = OperatorKey::generate("op-b", &genesis_b, None);
         let agent = AgentKey::generate("agent-b", &operator, None);
 
-        let request = crate::request::IntroductionRequest::new(
-            agent.portable_chain(),
-            None,
-        );
+        let request = crate::request::IntroductionRequest::new(agent.portable_chain(), None);
 
         // Verify against genesis A — should report different genesis
         let outcome = verify_introduction(
@@ -256,10 +253,8 @@ mod tests {
         let operator = OperatorKey::generate("o", &genesis, None);
         let agent = AgentKey::generate("a", &operator, None);
 
-        let request = crate::request::IntroductionRequest::new(
-            agent.portable_chain(),
-            Some("hello".into()),
-        );
+        let request =
+            crate::request::IntroductionRequest::new(agent.portable_chain(), Some("hello".into()));
 
         let bytes = request.to_bytes().unwrap();
         let restored = crate::request::IntroductionRequest::from_bytes(&bytes).unwrap();

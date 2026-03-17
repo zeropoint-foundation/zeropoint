@@ -17,19 +17,15 @@
 //! authors the data they need to improve the material without surveilling
 //! learners — philosophically consistent with ZeroPoint's stance on sovereignty.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use chrono::Utc;
 use ed25519_dalek::Signer as DalekSigner;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use axum::extract::Query;
 use crate::AppState;
+use axum::extract::Query;
 
 // ============================================================================
 // Types
@@ -255,7 +251,10 @@ pub async fn issue_attestation_handler(
         return Err((StatusCode::BAD_REQUEST, "Name is required".into()));
     }
     if req.completions.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "No module completions provided".into()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "No module completions provided".into(),
+        ));
     }
 
     let issued_at = Utc::now().to_rfc3339();
@@ -287,7 +286,11 @@ pub async fn issue_attestation_handler(
 
     // Sign with server's Ed25519 key
     let signature = {
-        let sig = state.0.identity.signing_key.sign(attestation_hash.as_bytes());
+        let sig = state
+            .0
+            .identity
+            .signing_key
+            .sign(attestation_hash.as_bytes());
         hex::encode(sig.to_bytes())
     };
 
@@ -380,10 +383,14 @@ pub async fn lookup_attestation_handler(
                 ))
             },
         )
-        .map_err(|_| (StatusCode::NOT_FOUND, format!("Attestation {} not found", att_id)))?;
+        .map_err(|_| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Attestation {} not found", att_id),
+            )
+        })?;
 
-    let completions: Vec<ModuleCompletion> =
-        serde_json::from_str(&row.4).unwrap_or_default();
+    let completions: Vec<ModuleCompletion> = serde_json::from_str(&row.4).unwrap_or_default();
 
     Ok(Json(Attestation {
         id: row.0,
@@ -447,9 +454,17 @@ pub async fn record_analytics_handler(
     Json(event): Json<AnalyticsEvent>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     // Validate event type
-    let valid_events = ["started", "completed", "checkpoint_started", "checkpoint_completed"];
+    let valid_events = [
+        "started",
+        "completed",
+        "checkpoint_started",
+        "checkpoint_completed",
+    ];
     if !valid_events.contains(&event.event.as_str()) {
-        return Err((StatusCode::BAD_REQUEST, format!("Invalid event type: {}", event.event)));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("Invalid event type: {}", event.event),
+        ));
     }
     if event.module_id < 1 || event.module_id > 14 {
         return Err((StatusCode::BAD_REQUEST, "Module ID must be 1-14".into()));

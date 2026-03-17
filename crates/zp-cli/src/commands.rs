@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use zp_audit::AuditStore;
 use zp_core::{
-    ActionType, ActorId, Channel, ConversationId,
     policy::{PolicyContext, TrustTier},
+    ActionType, ActorId, Channel, ConversationId,
 };
 use zp_keys::hierarchy::AgentKey;
 use zp_keys::keyring::Keyring;
@@ -189,7 +189,8 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
     let store = AuditStore::open(&db_path)
         .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
 
-    let entries = store.export_chain(limit)
+    let entries = store
+        .export_chain(limit)
         .map_err(|e| anyhow::anyhow!("Failed to read audit chain: {}", e))?;
 
     eprintln!();
@@ -208,7 +209,11 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
         return Ok(());
     }
 
-    eprintln!("  Showing {} of {} entries", entries.len().min(limit), entries.len());
+    eprintln!(
+        "  Showing {} of {} entries",
+        entries.len().min(limit),
+        entries.len()
+    );
     eprintln!();
 
     for entry in &entries {
@@ -254,7 +259,8 @@ pub async fn audit_verify(_pipeline: &Pipeline) -> Result<()> {
     let store = AuditStore::open(&db_path)
         .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
 
-    let report = store.verify_with_report()
+    let report = store
+        .verify_with_report()
         .map_err(|e| anyhow::anyhow!("Verification failed: {}", e))?;
 
     eprintln!();
@@ -269,11 +275,21 @@ pub async fn audit_verify(_pipeline: &Pipeline) -> Result<()> {
     }
 
     eprintln!("  Entries:      {}", report.entries_examined);
-    eprintln!("  Hashes OK:    {}/{}", report.hashes_valid, report.entries_examined);
-    eprintln!("  Chain links:  {}/{}", report.chain_links_valid, report.entries_examined.saturating_sub(1).max(0));
+    eprintln!(
+        "  Hashes OK:    {}/{}",
+        report.hashes_valid, report.entries_examined
+    );
+    eprintln!(
+        "  Chain links:  {}/{}",
+        report.chain_links_valid,
+        report.entries_examined.saturating_sub(1).max(0)
+    );
 
     if report.signatures_present > 0 {
-        eprintln!("  Signatures:   {}/{}", report.signatures_valid, report.signatures_present);
+        eprintln!(
+            "  Signatures:   {}/{}",
+            report.signatures_valid, report.signatures_present
+        );
     }
 
     if !report.issues.is_empty() {
@@ -349,9 +365,7 @@ pub fn keys_issue(name: &str, capabilities: Option<&str>, expires_days: u64) -> 
         .collect();
 
     // Compute expiration
-    let expires_at = Some(
-        chrono::Utc::now() + chrono::Duration::days(expires_days as i64),
-    );
+    let expires_at = Some(chrono::Utc::now() + chrono::Duration::days(expires_days as i64));
 
     eprint!("  Generating agent key...              ");
     let agent = AgentKey::generate(name, &operator, expires_at);
@@ -372,7 +386,10 @@ pub fn keys_issue(name: &str, capabilities: Option<&str>, expires_days: u64) -> 
     eprintln!("  Capabilities: {}", caps.join(", "));
     eprintln!("  Expires:      {} days", expires_days);
     eprintln!();
-    eprintln!("  Delegation chain: genesis → operator → \x1b[1m{}\x1b[0m", name);
+    eprintln!(
+        "  Delegation chain: genesis → operator → \x1b[1m{}\x1b[0m",
+        name
+    );
     eprintln!();
 
     0
@@ -393,8 +410,22 @@ pub fn keys_list() -> i32 {
     eprintln!();
     eprintln!("  \x1b[1mKeyring Status\x1b[0m");
     eprintln!("  \x1b[2m──────────────\x1b[0m");
-    eprintln!("  Genesis key:   {}", if status.has_genesis { "\x1b[32m✓\x1b[0m present" } else { "\x1b[31m✗\x1b[0m missing" });
-    eprintln!("  Operator key:  {}", if status.has_operator { "\x1b[32m✓\x1b[0m present" } else { "\x1b[31m✗\x1b[0m missing" });
+    eprintln!(
+        "  Genesis key:   {}",
+        if status.has_genesis {
+            "\x1b[32m✓\x1b[0m present"
+        } else {
+            "\x1b[31m✗\x1b[0m missing"
+        }
+    );
+    eprintln!(
+        "  Operator key:  {}",
+        if status.has_operator {
+            "\x1b[32m✓\x1b[0m present"
+        } else {
+            "\x1b[31m✗\x1b[0m missing"
+        }
+    );
     eprintln!("  Agent keys:    {}", status.agent_count);
 
     if !status.agent_names.is_empty() {
@@ -610,7 +641,11 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
 
     // Print receipt ID if present
     if let Some(ref receipt_id) = result.receipt_id {
-        let short = if receipt_id.len() > 12 { &receipt_id[..12] } else { receipt_id };
+        let short = if receipt_id.len() > 12 {
+            &receipt_id[..12]
+        } else {
+            receipt_id
+        };
         eprintln!("  Receipt:  \x1b[36m{}...\x1b[0m", short);
     }
 

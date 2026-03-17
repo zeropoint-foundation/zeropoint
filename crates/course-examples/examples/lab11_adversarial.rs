@@ -3,11 +3,10 @@
 //! Relay reciprocity and reputation signals from behavioral analysis
 //! Run: cargo run --example lab11_adversarial -p course-examples
 
-use zp_mesh::reputation::{
-    PeerReputation, ReputationSignal, ReputationWeights,
-    SignalCategory, SignalPolarity,
-};
 use chrono::Utc;
+use zp_mesh::reputation::{
+    PeerReputation, ReputationSignal, ReputationWeights, SignalCategory, SignalPolarity,
+};
 
 fn main() {
     println!("LAB 11: Adversarial Model");
@@ -108,7 +107,10 @@ fn main() {
         });
     }
     let good_score = good_peer.compute_score("good-agent", &weights, Utc::now());
-    println!("Good peer: {:.2} ({}) — can delegate, share policies", good_score.score, good_score.grade);
+    println!(
+        "Good peer: {:.2} ({}) — can delegate, share policies",
+        good_score.score, good_score.grade
+    );
 
     let mut bad_peer = PeerReputation::new();
     for i in 0..5 {
@@ -121,7 +123,10 @@ fn main() {
         });
     }
     let bad_score = bad_peer.compute_score("scanner-agent", &weights, Utc::now());
-    println!("Bad peer:  {:.2} ({}) — blocked from delegation, policy exchange", bad_score.score, bad_score.grade);
+    println!(
+        "Bad peer:  {:.2} ({}) — blocked from delegation, policy exchange",
+        bad_score.score, bad_score.grade
+    );
 
     println!("\n✓ Adversarial model: reciprocity gate + behavioral signals + reputation gating");
 }

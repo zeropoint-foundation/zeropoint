@@ -235,7 +235,18 @@ impl ProposalStore {
             .optional()?;
 
         match result {
-            Some((id, pattern_id, proposed_name, description, tool_sequence_json, evidence_count, confidence, created_at, status_json, category)) => {
+            Some((
+                id,
+                pattern_id,
+                proposed_name,
+                description,
+                tool_sequence_json,
+                evidence_count,
+                confidence,
+                created_at,
+                status_json,
+                category,
+            )) => {
                 let tool_sequence = serde_json::from_str(&tool_sequence_json)?;
                 let status = serde_json::from_str(&status_json)?;
                 let created_at = DateTime::parse_from_rfc3339(&created_at)
@@ -288,7 +299,19 @@ impl ProposalStore {
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut result = Vec::new();
-        for (id, pattern_id, proposed_name, description, tool_sequence_json, evidence_count, confidence, created_at, status_json, category) in proposals {
+        for (
+            id,
+            pattern_id,
+            proposed_name,
+            description,
+            tool_sequence_json,
+            evidence_count,
+            confidence,
+            created_at,
+            status_json,
+            category,
+        ) in proposals
+        {
             let tool_sequence = serde_json::from_str(&tool_sequence_json)?;
             let status = serde_json::from_str(&status_json)?;
             let created_at = DateTime::parse_from_rfc3339(&created_at)
@@ -316,9 +339,7 @@ impl ProposalStore {
 
     /// Approves a proposal by transitioning it to Approved status.
     pub fn approve(&self, id: &str, approved_by: &str) -> Result<SkillProposal> {
-        let mut proposal = self
-            .get_proposal(id)?
-            .ok_or(ProposalError::NotFound)?;
+        let mut proposal = self.get_proposal(id)?.ok_or(ProposalError::NotFound)?;
 
         if !proposal.status.is_pending() {
             return Err(ProposalError::InvalidData(
@@ -346,9 +367,7 @@ impl ProposalStore {
 
     /// Rejects a proposal by transitioning it to Rejected status.
     pub fn reject(&self, id: &str, rejected_by: &str, reason: &str) -> Result<SkillProposal> {
-        let mut proposal = self
-            .get_proposal(id)?
-            .ok_or(ProposalError::NotFound)?;
+        let mut proposal = self.get_proposal(id)?.ok_or(ProposalError::NotFound)?;
 
         if !proposal.status.is_pending() {
             return Err(ProposalError::InvalidData(
@@ -402,7 +421,19 @@ impl ProposalStore {
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut result = Vec::new();
-        for (id, pattern_id, proposed_name, description, tool_sequence_json, evidence_count, confidence, created_at, status_json, category) in proposals {
+        for (
+            id,
+            pattern_id,
+            proposed_name,
+            description,
+            tool_sequence_json,
+            evidence_count,
+            confidence,
+            created_at,
+            status_json,
+            category,
+        ) in proposals
+        {
             let tool_sequence = serde_json::from_str(&tool_sequence_json)?;
             let status = serde_json::from_str(&status_json)?;
             let created_at = DateTime::parse_from_rfc3339(&created_at)
@@ -423,7 +454,11 @@ impl ProposalStore {
             });
         }
 
-        debug!(pattern_id, count = result.len(), "retrieved proposals for pattern");
+        debug!(
+            pattern_id,
+            count = result.len(),
+            "retrieved proposals for pattern"
+        );
 
         Ok(result)
     }
@@ -464,8 +499,9 @@ pub struct LearningLoop {
 impl LearningLoop {
     /// Opens or creates the learning loop with episode and proposal stores.
     pub fn open<P: AsRef<Path>>(episodes_path: P, proposals_path: P) -> Result<Self> {
-        let episode_store = crate::EpisodeStore::open(&episodes_path)
-            .map_err(|e| ProposalError::InvalidData(format!("failed to open episode store: {}", e)))?;
+        let episode_store = crate::EpisodeStore::open(&episodes_path).map_err(|e| {
+            ProposalError::InvalidData(format!("failed to open episode store: {}", e))
+        })?;
 
         let proposal_store = ProposalStore::open(&proposals_path)?;
         let detector = crate::PatternDetector::new();
@@ -494,7 +530,9 @@ impl LearningLoop {
             .map_err(|e| ProposalError::InvalidData(format!("detection error: {}", e)))?
         {
             // Create a proposal from the detected pattern
-            let proposal = self.proposal_store.create_proposal(&pattern, &episode.request_category)?;
+            let proposal = self
+                .proposal_store
+                .create_proposal(&pattern, &episode.request_category)?;
             info!(proposal_id = %proposal.id, "created proposal from detected pattern");
             Ok(Some(proposal))
         } else {
@@ -513,7 +551,12 @@ impl LearningLoop {
     }
 
     /// Rejects a proposal by its ID.
-    pub fn reject_proposal(&self, id: &str, rejected_by: &str, reason: &str) -> Result<SkillProposal> {
+    pub fn reject_proposal(
+        &self,
+        id: &str,
+        rejected_by: &str,
+        reason: &str,
+    ) -> Result<SkillProposal> {
         self.proposal_store.reject(id, rejected_by, reason)
     }
 
@@ -578,9 +621,7 @@ mod tests {
         let store = ProposalStore::open(":memory:").unwrap();
         let pattern = create_test_pattern();
 
-        let proposal = store
-            .create_proposal(&pattern, "search")
-            .unwrap();
+        let proposal = store.create_proposal(&pattern, "search").unwrap();
 
         assert_eq!(proposal.pattern_id, pattern.id);
         assert_eq!(proposal.confidence, pattern.confidence);
@@ -593,13 +634,9 @@ mod tests {
         let store = ProposalStore::open(":memory:").unwrap();
         let pattern = create_test_pattern();
 
-        let created = store
-            .create_proposal(&pattern, "search")
-            .unwrap();
+        let created = store.create_proposal(&pattern, "search").unwrap();
 
-        let retrieved = store
-            .get_proposal(&created.id)
-            .unwrap();
+        let retrieved = store.get_proposal(&created.id).unwrap();
 
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().id, created.id);
@@ -624,13 +661,9 @@ mod tests {
         let store = ProposalStore::open(":memory:").unwrap();
         let pattern = create_test_pattern();
 
-        let proposal = store
-            .create_proposal(&pattern, "search")
-            .unwrap();
+        let proposal = store.create_proposal(&pattern, "search").unwrap();
 
-        let approved = store
-            .approve(&proposal.id, "alice")
-            .unwrap();
+        let approved = store.approve(&proposal.id, "alice").unwrap();
 
         assert!(approved.status.is_approved());
 
@@ -647,18 +680,18 @@ mod tests {
         let store = ProposalStore::open(":memory:").unwrap();
         let pattern = create_test_pattern();
 
-        let proposal = store
-            .create_proposal(&pattern, "search")
-            .unwrap();
+        let proposal = store.create_proposal(&pattern, "search").unwrap();
 
-        let rejected = store
-            .reject(&proposal.id, "bob", "not a good fit")
-            .unwrap();
+        let rejected = store.reject(&proposal.id, "bob", "not a good fit").unwrap();
 
         assert!(rejected.status.is_rejected());
 
         match &rejected.status {
-            ProposalStatus::Rejected { rejected_by, reason, .. } => {
+            ProposalStatus::Rejected {
+                rejected_by,
+                reason,
+                ..
+            } => {
                 assert_eq!(rejected_by, "bob");
                 assert_eq!(reason, "not a good fit");
             }
@@ -671,9 +704,7 @@ mod tests {
         let store = ProposalStore::open(":memory:").unwrap();
         let pattern = create_test_pattern();
 
-        let proposal = store
-            .create_proposal(&pattern, "search")
-            .unwrap();
+        let proposal = store.create_proposal(&pattern, "search").unwrap();
 
         // Approve it once
         store.approve(&proposal.id, "alice").unwrap();
@@ -693,9 +724,7 @@ mod tests {
         let pattern2 = create_test_pattern();
         store.create_proposal(&pattern2, "analysis").unwrap();
 
-        let proposals = store
-            .proposals_for_pattern(&pattern_id)
-            .unwrap();
+        let proposals = store.proposals_for_pattern(&pattern_id).unwrap();
 
         assert_eq!(proposals.len(), 1);
         assert_eq!(proposals[0].pattern_id, pattern_id);
@@ -762,10 +791,7 @@ mod tests {
 
         // Record episode and detect pattern
         let ep = create_test_episode(&conversation_id, "test", vec!["a", "b"]);
-        let proposal = loop_obj
-            .record_and_detect(&ep)
-            .unwrap()
-            .unwrap();
+        let proposal = loop_obj.record_and_detect(&ep).unwrap().unwrap();
 
         // Reject the proposal
         let rejected = loop_obj

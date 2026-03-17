@@ -3,8 +3,8 @@
 //! Key hierarchy: Genesis → Operator → Agent
 //! Run: cargo run --example lab01_first_key -p course-examples
 
-use zp_keys::{GenesisKey, OperatorKey, AgentKey};
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
+use zp_keys::{AgentKey, GenesisKey, OperatorKey};
 
 fn main() {
     // Step 1: Generate the genesis key
@@ -18,8 +18,14 @@ fn main() {
         &genesis,
         Some(Utc::now() + Duration::days(365)),
     );
-    println!("\nOperator public key: {}", hex::encode(operator.public_key()));
-    println!("Operator issuer: {}", operator.certificate().body.issuer_public_key);
+    println!(
+        "\nOperator public key: {}",
+        hex::encode(operator.public_key())
+    );
+    println!(
+        "Operator issuer: {}",
+        operator.certificate().body.issuer_public_key
+    );
 
     // Step 3: Issue an agent key (expires in 30 days)
     let agent = AgentKey::generate(
@@ -43,12 +49,16 @@ fn main() {
     );
 
     assert!(
-        agent.certificate().verify_signature()
+        agent
+            .certificate()
+            .verify_signature()
             .expect("Signature verification should not error"),
         "Agent certificate signature must verify"
     );
     assert!(
-        operator.certificate().verify_signature()
+        operator
+            .certificate()
+            .verify_signature()
             .expect("Signature verification should not error"),
         "Operator certificate signature must verify"
     );

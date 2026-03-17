@@ -6,9 +6,9 @@
 //! NOTE: This lab requires a compiled WASM policy module.
 //! See the course page for instructions on building the WASM module.
 
-use zp_policy::PolicyEngine;
 use zp_core::policy::{ActionType, PolicyContext, TrustTier};
 use zp_core::{Channel, ConversationId};
+use zp_policy::PolicyEngine;
 
 /// Helper to build a PolicyContext with sensible defaults.
 fn make_context(action: ActionType, tier: TrustTier) -> PolicyContext {
@@ -49,10 +49,30 @@ fn main() {
     // Show how different action types get evaluated
     let actions: Vec<(&str, ActionType)> = vec![
         ("Chat", ActionType::Chat),
-        ("Read", ActionType::Read { target: "file.txt".into() }),
-        ("Write", ActionType::Write { target: "output.txt".into() }),
-        ("Execute", ActionType::Execute { language: "python".into() }),
-        ("CredentialAccess", ActionType::CredentialAccess { credential_ref: "api-key".into() }),
+        (
+            "Read",
+            ActionType::Read {
+                target: "file.txt".into(),
+            },
+        ),
+        (
+            "Write",
+            ActionType::Write {
+                target: "output.txt".into(),
+            },
+        ),
+        (
+            "Execute",
+            ActionType::Execute {
+                language: "python".into(),
+            },
+        ),
+        (
+            "CredentialAccess",
+            ActionType::CredentialAccess {
+                credential_ref: "api-key".into(),
+            },
+        ),
     ];
 
     for tier in [TrustTier::Tier0, TrustTier::Tier1, TrustTier::Tier2] {
@@ -60,9 +80,13 @@ fn main() {
         for (name, action) in &actions {
             let context = make_context(action.clone(), tier);
             let decision = engine.evaluate(&context);
-            let status = if decision.is_allowed() { "Allow" }
-                else if decision.is_blocked() { "Block" }
-                else { "Warn/Review" };
+            let status = if decision.is_allowed() {
+                "Allow"
+            } else if decision.is_blocked() {
+                "Block"
+            } else {
+                "Warn/Review"
+            };
             println!("  {}: {}", name, status);
         }
         println!();

@@ -3,10 +3,10 @@
 //! Policy engine with graduated decisions
 //! Run: cargo run --example lab05_policy_engine -p course-examples
 
-use zp_policy::{PolicyEngine, GovernanceGate};
-use zp_core::policy::{ActionType, PolicyContext, TrustTier};
 use zp_core::audit::ActorId;
+use zp_core::policy::{ActionType, PolicyContext, TrustTier};
 use zp_core::{Channel, ConversationId};
+use zp_policy::{GovernanceGate, PolicyEngine};
 
 /// Helper to build a PolicyContext with sensible defaults.
 fn make_context(action: ActionType, tier: TrustTier) -> PolicyContext {
@@ -29,14 +29,18 @@ fn main() {
     println!("Chat decision: {:?}", decision);
 
     let exec_context = make_context(
-        ActionType::Execute { language: "python".into() },
+        ActionType::Execute {
+            language: "python".into(),
+        },
         TrustTier::Tier1,
     );
     let decision = engine.evaluate(&exec_context);
     println!("Execute decision: {:?}", decision);
 
     let cred_context = make_context(
-        ActionType::CredentialAccess { credential_ref: "db-production".into() },
+        ActionType::CredentialAccess {
+            credential_ref: "db-production".into(),
+        },
         TrustTier::Tier0,
     );
     let decision = engine.evaluate(&cred_context);

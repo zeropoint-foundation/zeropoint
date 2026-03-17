@@ -252,8 +252,13 @@ impl RiskLevel {
             ActionType::CredentialAccess { .. } => RiskLevel::Critical,
             ActionType::ConfigChange { .. } => RiskLevel::High,
             ActionType::KeyDelegation { .. } => RiskLevel::Critical,
-            ActionType::PeerIntroduction { same_genesis: true, .. } => RiskLevel::High,
-            ActionType::PeerIntroduction { same_genesis: false, .. } => RiskLevel::Critical,
+            ActionType::PeerIntroduction {
+                same_genesis: true, ..
+            } => RiskLevel::High,
+            ActionType::PeerIntroduction {
+                same_genesis: false,
+                ..
+            } => RiskLevel::Critical,
         }
     }
 }

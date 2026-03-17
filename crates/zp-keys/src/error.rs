@@ -9,10 +9,7 @@ pub enum KeyError {
     BrokenChain { depth: u8, reason: String },
 
     #[error("certificate expired: {subject} expired at {expired_at}")]
-    CertificateExpired {
-        subject: String,
-        expired_at: String,
-    },
+    CertificateExpired { subject: String, expired_at: String },
 
     #[error("role mismatch: expected {expected}, found {found}")]
     RoleMismatch { expected: String, found: String },

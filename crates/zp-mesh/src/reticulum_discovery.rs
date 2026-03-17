@@ -205,8 +205,9 @@ impl DiscoveryBackend for ReticulumDiscovery {
         // Build a Reticulum announce packet from the raw payload.
         // Uses the well-known discovery destination hash.
         let discovery_dest = Destination::discovery();
-        let packet = Packet::announce(discovery_dest.hash, payload.to_vec())
-            .map_err(|e| MeshError::InvalidPacket(format!("Failed to build announce packet: {}", e)))?;
+        let packet = Packet::announce(discovery_dest.hash, payload.to_vec()).map_err(|e| {
+            MeshError::InvalidPacket(format!("Failed to build announce packet: {}", e))
+        })?;
 
         self.broadcast_on_interfaces(&packet).await?;
         self.announces_sent.fetch_add(1, Ordering::Relaxed);
