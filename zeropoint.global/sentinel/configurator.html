@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint Sentinel — Install Configurator</title>
+<style>
+  :root {
+    --bg: #0a0a0c; --surface: #111114; --border: #1e1e24;
+    --text: #e4e4e7; --muted: #71717a; --accent: #7eb8da;
+    --green: #34d399; --amber: #fbbf24; --red: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
+  .container { max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem; }
+
+  h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--muted); font-size: 0.875rem; margin-bottom: 2rem; }
+
+  .step { margin-bottom: 2rem; }
+  .step-label { color: var(--accent); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+  .step-title { font-size: 1.125rem; font-weight: 500; margin-bottom: 1rem; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem;
+    padding: 1rem; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .card-name { font-weight: 500; font-size: 0.9rem; }
+  .card-desc { color: var(--muted); font-size: 0.75rem; margin-top: 0.25rem; line-height: 1.4; }
+  .card-compat { color: var(--muted); font-size: 0.65rem; margin-top: 0.5rem; font-style: italic; }
+
+  .options { margin-top: 1rem; }
+  .option { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .option input[type="text"] {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 0.375rem;
+    color: var(--text); padding: 0.375rem 0.625rem; font-size: 0.8rem; width: 100%;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .option input[type="text"]:focus { outline: none; border-color: var(--accent); }
+  .option label { color: var(--muted); font-size: 0.8rem; white-space: nowrap; min-width: 120px; }
+
+  .toggle { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; cursor: pointer; }
+  .toggle input { display: none; }
+  .toggle .track {
+    width: 2rem; height: 1.125rem; border-radius: 1rem; background: #333;
+    position: relative; transition: background 0.15s; flex-shrink: 0;
+  }
+  .toggle input:checked + .track { background: var(--accent); }
+  .toggle .track::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 0.875rem; height: 0.875rem; border-radius: 50%; background: white;
+    transition: transform 0.15s;
+  }
+  .toggle input:checked + .track::after { transform: translateX(0.875rem); }
+  .toggle span { font-size: 0.8rem; color: var(--muted); }
+
+  .output { margin-top: 2rem; }
+  .command-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem;
+    padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+    line-height: 1.6; overflow-x: auto; position: relative;
+  }
+  .command-box .comment { color: var(--muted); }
+  .command-box .cmd { color: var(--green); }
+
+  .copy-btn {
+    position: absolute; top: 0.5rem; right: 0.5rem;
+    background: var(--border); border: none; color: var(--text); border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem; font-size: 0.7rem; cursor: pointer;
+  }
+  .copy-btn:hover { background: var(--accent); color: var(--bg); }
+
+  .footer { margin-top: 3rem; text-align: center; color: var(--muted); font-size: 0.75rem; }
+  .footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>⛊ ZeroPoint Sentinel</h1>
+  <p class="subtitle">Governance-based network monitoring for the ZeroPoint trust mesh</p>
+
+  <!-- Step 1: Platform -->
+  <div class="step">
+    <div class="step-label">Step 1</div>
+    <div class="step-title">Select your platform</div>
+    <div class="grid" id="platforms">
+      <div class="card selected" data-platform="merlin" onclick="selectPlatform(this)">
+        <div class="card-icon">📡</div>
+        <div class="card-name">ASUS Merlin</div>
+        <div class="card-desc">Asuswrt-Merlin routers with Entware + USB</div>
+        <div class="card-compat">RT-AX58U, RT-AX86U, GT-AX11000, etc.</div>
+      </div>
+      <div class="card" data-platform="openwrt" onclick="selectPlatform(this)">
+        <div class="card-icon">🌐</div>
+        <div class="card-name">OpenWrt</div>
+        <div class="card-desc">OpenWrt, GL.iNet, Turris routers</div>
+        <div class="card-compat">Any OpenWrt 21.02+ device</div>
+      </div>
+      <div class="card" data-platform="linux" onclick="selectPlatform(this)">
+        <div class="card-icon">🐧</div>
+        <div class="card-name">Linux (systemd)</div>
+        <div class="card-desc">Ubuntu, Debian, Fedora, Raspberry Pi</div>
+        <div class="card-compat">Any Linux with systemd + Python 3.11</div>
+      </div>
+      <div class="card" data-platform="docker" onclick="selectPlatform(this)">
+        <div class="card-icon">🐳</div>
+        <div class="card-name">Docker</div>
+        <div class="card-desc">Run as a container anywhere</div>
+        <div class="card-compat">Docker 20+, Podman, Kubernetes</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Options -->
+  <div class="step">
+    <div class="step-label">Step 2</div>
+    <div class="step-title">Configure options</div>
+    <div class="options">
+      <div class="option">
+        <label>Core URL</label>
+        <input type="text" id="core-url" placeholder="http://192.168.1.1:3000 (optional)">
+      </div>
+      <div class="option">
+        <label>Sentinel name</label>
+        <input type="text" id="sentinel-name" placeholder="ZP Sentinel">
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="opt-mesh" checked onchange="updateCommand()">
+        <span class="track"></span>
+        <span>Enable mesh registration (join ZeroPoint trust mesh)</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="opt-notifications" onchange="updateCommand()">
+        <span class="track"></span>
+        <span>Enable webhook notifications (Ntfy, Slack, etc.)</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Step 3: Install Command -->
+  <div class="step">
+    <div class="step-label">Step 3</div>
+    <div class="step-title">Install</div>
+    <div class="output">
+      <div class="command-box" id="command-output">
+        <button class="copy-btn" onclick="copyCommand()">Copy</button>
+        <span class="comment"># loading...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Governed by <a href="https://zeropoint.global">ZeroPoint</a> · <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a></p>
+    <p style="margin-top: 0.5rem;">One protocol. One graph. End to end.</p>
+  </div>
+</div>
+
+<script>
+let selectedPlatform = 'merlin';
+
+function selectPlatform(el) {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedPlatform = el.dataset.platform;
+  updateCommand();
+}
+
+function updateCommand() {
+  const box = document.getElementById('command-output');
+  const coreUrl = document.getElementById('core-url').value.trim();
+  const name = document.getElementById('sentinel-name').value.trim();
+
+  if (selectedPlatform === 'docker') {
+    let cmd = `<span class="comment"># Pull and run ZP Sentinel container</span>\n`;
+    cmd += `<span class="cmd">docker run -d --name zp-sentinel \\</span>\n`;
+    cmd += `<span class="cmd">  --restart=unless-stopped \\</span>\n`;
+    cmd += `<span class="cmd">  -v sentinel-data:/data \\</span>\n`;
+    if (coreUrl) {
+      cmd += `<span class="cmd">  -e ZP_CORE_URL="${coreUrl}" \\</span>\n`;
+    }
+    cmd += `<span class="cmd">  ghcr.io/zeropoint-foundation/sentinel:latest</span>`;
+    box.innerHTML = `<button class="copy-btn" onclick="copyCommand()">Copy</button>` + cmd;
+  } else {
+    const platformFlag = selectedPlatform === 'merlin' ? '' : ` --platform ${selectedPlatform}`;
+    let cmd = `<span class="comment"># Install ZP Sentinel</span>\n`;
+    cmd += `<span class="cmd">curl -fsSL https://zeropoint.global/sentinel/install.sh | sh -s --${platformFlag}</span>`;
+
+    if (coreUrl) {
+      cmd += `\n\n<span class="comment"># Connect to mesh (edit config after install)</span>\n`;
+      cmd += `<span class="cmd">sed -i 's|# core_url =.*|core_url = "${coreUrl}"|' /etc/zp-sentinel/zp-sentinel.toml</span>`;
+    }
+    box.innerHTML = `<button class="copy-btn" onclick="copyCommand()">Copy</button>` + cmd;
+  }
+}
+
+function copyCommand() {
+  const box = document.getElementById('command-output');
+  const text = box.innerText.replace('Copy\n', '').replace('Copy', '');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = box.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  });
+}
+
+// Init
+document.getElementById('core-url').addEventListener('input', updateCommand);
+document.getElementById('sentinel-name').addEventListener('input', updateCommand);
+updateCommand();
+</script>
+
+</body>
+</html>
