@@ -1,0 +1,44 @@
+# ZeroPoint Network Sentinel — Docker container defaults
+# Mount your own config at /etc/zp-sentinel/zp-sentinel.toml to override
+
+[dns]
+log_path = "/var/log/dnsmasq.log"
+blocklist_urls = [
+    "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+]
+blocklist_cache_path = "/var/cache/zp-sentinel/blocklist.txt"
+rate_limit_qps = 100
+
+[device]
+dhcp_lease_file = "/var/lib/misc/dnsmasq.leases"
+mac_blocklist = []
+rate_limit_connections_per_minute = 10
+
+[audit]
+db_path = "/data/audit.db"
+max_entries_memory = 10000
+
+[notifications]
+alert_file = "/data/alerts.log"
+min_level = "medium"
+syslog = false
+file = true
+silent = false
+cooldown_seconds = 30
+critical_repeat_seconds = 300
+
+[mesh]
+# Set core_url to join the ZeroPoint trust mesh
+# core_url = "http://your-zp-core:3000"
+key_path = "/data/identity.key"
+component_name = "ZP Sentinel (Docker)"
+heartbeat_interval_sec = 30
+heartbeat_threshold = 3
+auto_register = true
+protocol_version = "0.1.0"
+
+[service]
+pid_file = "/run/zp-sentinel/zp-sentinel.pid"
+log_file = "/var/log/zp-sentinel/zp-sentinel.log"
+log_level = "INFO"
+monitor_interval = 5
