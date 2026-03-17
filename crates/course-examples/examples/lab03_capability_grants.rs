@@ -3,9 +3,9 @@
 //! Capability grants with constraints
 //! Run: cargo run --example lab03_capability_grants -p course-examples
 
-use zp_core::capability_grant::{CapabilityGrant, GrantedCapability, Constraint};
+use chrono::{Duration, Utc};
+use zp_core::capability_grant::{CapabilityGrant, Constraint, GrantedCapability};
 use zp_core::policy::TrustTier;
-use chrono::{Utc, Duration};
 
 fn main() {
     let grantor = "operator-alpha-hash";
@@ -14,7 +14,9 @@ fn main() {
     let grant = CapabilityGrant::new(
         grantor.to_string(),
         grantee.to_string(),
-        GrantedCapability::Read { scope: vec!["data/reports/*".into()] },
+        GrantedCapability::Read {
+            scope: vec!["data/reports/*".into()],
+        },
         "receipt-001".to_string(),
     )
     .with_constraint(Constraint::MaxCost(0.50))

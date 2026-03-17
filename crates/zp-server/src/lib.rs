@@ -17,14 +17,14 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use futures::stream::StreamExt;
-use futures::SinkExt;
-use tower_http::services::ServeDir;
 use chrono::Utc;
 use ed25519_dalek::{Signer as DalekSigner, SigningKey};
+use futures::stream::StreamExt;
+use futures::SinkExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 use tracing::info;
 
 use zp_audit::AuditStore;
@@ -74,7 +74,9 @@ impl Default for ServerConfig {
             llm_enabled: std::env::var("ZP_LLM_ENABLED").unwrap_or_default() == "true",
             operator_name: std::env::var("ZP_OPERATOR_NAME")
                 .unwrap_or_else(|_| "ZeroPoint".to_string()),
-            bridge_dir: std::env::var("ZP_BRIDGE_DIR").ok().map(std::path::PathBuf::from),
+            bridge_dir: std::env::var("ZP_BRIDGE_DIR")
+                .ok()
+                .map(std::path::PathBuf::from),
         }
     }
 }
@@ -348,12 +350,27 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Genesis record
         .route("/api/v1/genesis", get(genesis_handler))
         // Attestations
-        .route("/api/v1/attestations", post(attestations::issue_attestation_handler))
-        .route("/api/v1/attestations", get(attestations::lookup_attestation_handler))
-        .route("/api/v1/attestations/all", get(attestations::list_attestations_handler))
+        .route(
+            "/api/v1/attestations",
+            post(attestations::issue_attestation_handler),
+        )
+        .route(
+            "/api/v1/attestations",
+            get(attestations::lookup_attestation_handler),
+        )
+        .route(
+            "/api/v1/attestations/all",
+            get(attestations::list_attestations_handler),
+        )
         // Anonymous course analytics
-        .route("/api/v1/analytics/event", post(attestations::record_analytics_handler))
-        .route("/api/v1/analytics/course", get(attestations::course_analytics_handler))
+        .route(
+            "/api/v1/analytics/event",
+            post(attestations::record_analytics_handler),
+        )
+        .route(
+            "/api/v1/analytics/course",
+            get(attestations::course_analytics_handler),
+        )
         // WebSocket endpoint for Bridge UI
         .route("/wss", get(ws_upgrade_handler))
         .layer(cors)
@@ -376,7 +393,10 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
                 .route("/bridge", get(move || async move { Html(index_html) }))
                 .fallback_service(ServeDir::new(bridge_dir));
         } else {
-            tracing::warn!("ZP_BRIDGE_DIR={:?} does not exist, Bridge UI disabled", bridge_dir);
+            tracing::warn!(
+                "ZP_BRIDGE_DIR={:?} does not exist, Bridge UI disabled",
+                bridge_dir
+            );
         }
     }
 
@@ -1455,10 +1475,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
             }
         };
 
-        let msg_type = frame
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let msg_type = frame.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
         match msg_type {
             // ---- Health / keepalive ----
@@ -1516,11 +1533,7 @@ async fn ws_connection(socket: WebSocket, state: AppState) {
                 };
 
                 // Build the deterministic core Request
-                let request = Request::new(
-                    conversation_id.clone(),
-                    content,
-                    Channel::WebDashboard,
-                );
+                let request = Request::new(conversation_id.clone(), content, Channel::WebDashboard);
 
                 // Send stream-start so the UI shows the officer is working
                 let stream_start = serde_json::json!({

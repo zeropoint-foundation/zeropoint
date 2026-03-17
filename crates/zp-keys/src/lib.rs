@@ -19,11 +19,11 @@
 //! between key distribution and policy evaluation.
 
 pub mod certificate;
+pub mod error;
 pub mod hierarchy;
 pub mod keyring;
-pub mod error;
 
 pub use certificate::{Certificate, CertificateChain, KeyRole};
-pub use hierarchy::{GenesisKey, OperatorKey, AgentKey};
-pub use keyring::Keyring;
 pub use error::KeyError;
+pub use hierarchy::{AgentKey, GenesisKey, OperatorKey};
+pub use keyring::Keyring;

@@ -63,7 +63,11 @@ impl Guard {
     /// * `rate_limit` - Maximum requests per actor per window
     /// * `rate_window` - Duration of the rate limiting window
     /// * `min_trust_tier` - Minimum trust tier required to pass the guard
-    pub fn with_config(rate_limit: usize, rate_window: Duration, min_trust_tier: TrustTier) -> Self {
+    pub fn with_config(
+        rate_limit: usize,
+        rate_window: Duration,
+        min_trust_tier: TrustTier,
+    ) -> Self {
         Self {
             blocklist: Mutex::new(HashSet::new()),
             rate_tracker: Mutex::new(HashMap::new()),
@@ -743,7 +747,10 @@ mod tests {
 
         assert!(decision.is_some());
         match decision.unwrap() {
-            PolicyDecision::Block { reason, policy_module } => {
+            PolicyDecision::Block {
+                reason,
+                policy_module,
+            } => {
                 assert!(reason.contains("trust tier"));
                 assert_eq!(policy_module, "Guard::TrustTierFloor");
             }
@@ -777,7 +784,10 @@ mod tests {
         let decision = guard.check(&context, &actor);
         assert!(decision.is_some(), "4th request should be rate limited");
         match decision.unwrap() {
-            PolicyDecision::Block { reason, policy_module } => {
+            PolicyDecision::Block {
+                reason,
+                policy_module,
+            } => {
                 assert!(reason.contains("Rate limit"));
                 assert_eq!(policy_module, "Guard::RateLimit");
             }
@@ -816,11 +826,7 @@ mod tests {
 
     #[test]
     fn test_guard_with_custom_config() {
-        let guard = Guard::with_config(
-            10,
-            Duration::from_secs(30),
-            TrustTier::Tier2,
-        );
+        let guard = Guard::with_config(10, Duration::from_secs(30), TrustTier::Tier2);
 
         // The guard should enforce the custom config
         let mut context = make_context(ActionType::Chat);

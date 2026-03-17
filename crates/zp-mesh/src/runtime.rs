@@ -368,7 +368,11 @@ async fn handle_announce_packet(
 
     // Verify the signature using the Ed25519 public key (first 32 bytes of combined key)
     let signing_key_bytes = &combined_key_bytes[..32];
-    let signature_verified = verify_announce_signature(signing_key_bytes, &payload[..signature_start], &signature_bytes);
+    let signature_verified = verify_announce_signature(
+        signing_key_bytes,
+        &payload[..signature_start],
+        &signature_bytes,
+    );
 
     if !signature_verified {
         debug!("Announce signature verification failed, skipping");
@@ -394,7 +398,8 @@ async fn handle_announce_packet(
     };
 
     // Register the peer with the node
-    node.register_peer(peer_identity, Some(capabilities.clone())).await;
+    node.register_peer(peer_identity, Some(capabilities.clone()))
+        .await;
 
     debug!(
         peer_address = %hex::encode(&combined_key_bytes[..32]),
@@ -410,7 +415,7 @@ async fn handle_announce_packet(
 
 /// Verify an Ed25519 signature over announce data.
 fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u8; 64]) -> bool {
-    use ed25519_dalek::{Signature, VerifyingKey, Verifier};
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
     let Ok(key_array): Result<[u8; 32], _> = signing_key.try_into() else {
         return false;

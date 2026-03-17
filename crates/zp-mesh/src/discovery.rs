@@ -221,7 +221,6 @@ impl DiscoveryManager {
             discoveries_total: RwLock::new(0),
         }
     }
-
 }
 
 impl Default for DiscoveryManager {
@@ -232,7 +231,6 @@ impl Default for DiscoveryManager {
 }
 
 impl DiscoveryManager {
-
     /// Register a discovery backend.
     pub async fn add_backend(&self, backend: Box<dyn DiscoveryBackend>) {
         info!(backend = backend.name(), "Discovery backend registered");
@@ -408,9 +406,7 @@ impl DiscoveryManager {
             if !record.sources.contains(&disc.source) {
                 record.sources.push(disc.source);
             }
-            record
-                .last_seen
-                .insert(disc.source, disc.discovered_at);
+            record.last_seen.insert(disc.source, disc.discovered_at);
             if disc.hops < record.best_hops {
                 record.best_hops = disc.hops;
             }
@@ -465,14 +461,19 @@ impl DiscoveryManager {
 
         records.retain(|_dest, record| {
             // Keep if ANY source has seen the peer within TTL
-            record.last_seen.values().any(|ts| {
-                now.signed_duration_since(*ts) < ttl_chrono
-            })
+            record
+                .last_seen
+                .values()
+                .any(|ts| now.signed_duration_since(*ts) < ttl_chrono)
         });
 
         let pruned = before - records.len();
         if pruned > 0 {
-            debug!(pruned, remaining = records.len(), "Pruned expired peer records");
+            debug!(
+                pruned,
+                remaining = records.len(),
+                "Pruned expired peer records"
+            );
         }
         pruned
     }
@@ -660,8 +661,15 @@ mod tests {
         let (identity, caps) = make_test_identity_and_caps();
         let manager = DiscoveryManager::default();
 
-        manager.add_backend(Box::new(MockBackend::new("web", DiscoverySource::Web))).await;
-        manager.add_backend(Box::new(MockBackend::new("reticulum", DiscoverySource::Reticulum))).await;
+        manager
+            .add_backend(Box::new(MockBackend::new("web", DiscoverySource::Web)))
+            .await;
+        manager
+            .add_backend(Box::new(MockBackend::new(
+                "reticulum",
+                DiscoverySource::Reticulum,
+            )))
+            .await;
 
         manager.announce_all(&identity, &caps).await.unwrap();
 
@@ -765,15 +773,12 @@ mod tests {
 
         // Web backend
         let web = MockBackend::new("web", DiscoverySource::Web);
-        web.pending_discoveries
-            .write()
-            .await
-            .push(DiscoveredPeer {
-                payload: payload.clone(),
-                source: DiscoverySource::Web,
-                discovered_at: Utc::now(),
-                hops: 2,
-            });
+        web.pending_discoveries.write().await.push(DiscoveredPeer {
+            payload: payload.clone(),
+            source: DiscoverySource::Web,
+            discovered_at: Utc::now(),
+            hops: 2,
+        });
         manager.add_backend(Box::new(web)).await;
 
         // First poll — new peer via web
@@ -783,15 +788,12 @@ mod tests {
 
         // Now add reticulum backend with same peer at lower hops
         let ret = MockBackend::new("reticulum", DiscoverySource::Reticulum);
-        ret.pending_discoveries
-            .write()
-            .await
-            .push(DiscoveredPeer {
-                payload: payload.clone(),
-                source: DiscoverySource::Reticulum,
-                discovered_at: Utc::now(),
-                hops: 1,
-            });
+        ret.pending_discoveries.write().await.push(DiscoveredPeer {
+            payload: payload.clone(),
+            source: DiscoverySource::Reticulum,
+            discovered_at: Utc::now(),
+            hops: 1,
+        });
         manager.add_backend(Box::new(ret)).await;
 
         // Second poll — same peer, but via reticulum now
@@ -850,7 +852,10 @@ mod tests {
             .add_backend(Box::new(MockBackend::new("web", DiscoverySource::Web)))
             .await;
         manager
-            .add_backend(Box::new(MockBackend::new("ret", DiscoverySource::Reticulum)))
+            .add_backend(Box::new(MockBackend::new(
+                "ret",
+                DiscoverySource::Reticulum,
+            )))
             .await;
 
         assert_eq!(manager.active_backends().await.len(), 2);

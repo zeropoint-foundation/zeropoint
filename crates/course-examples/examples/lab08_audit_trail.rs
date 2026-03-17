@@ -9,8 +9,7 @@ use zp_core::policy::PolicyDecision;
 use zp_core::types::ConversationId;
 
 fn main() {
-    let store = AuditStore::open("./lab-audit.db")
-        .expect("Should open audit store");
+    let store = AuditStore::open("./lab-audit.db").expect("Should open audit store");
     let conv_id = ConversationId::new();
 
     // Build genesis entry (first in chain)
@@ -22,7 +21,8 @@ fn main() {
         conv_id.clone(),
         PolicyDecision::Allow { conditions: vec![] },
         "default-allow".into(),
-        None, None,
+        None,
+        None,
     );
     println!("Entry 1: {:?} (genesis)", entry1.id);
     store.append(entry1.clone()).expect("Should append");
@@ -38,9 +38,14 @@ fn main() {
         conv_id.clone(),
         PolicyDecision::Allow { conditions: vec![] },
         "default-allow".into(),
-        None, None,
+        None,
+        None,
     );
-    println!("Entry 2: {:?} (prev={}...)", entry2.id, &entry2.prev_hash[..8]);
+    println!(
+        "Entry 2: {:?} (prev={}...)",
+        entry2.id,
+        &entry2.prev_hash[..8]
+    );
     store.append(entry2.clone()).expect("Should append");
 
     // Build third entry
@@ -57,13 +62,13 @@ fn main() {
             require_ack: true,
         },
         "catastrophic-action-rule".into(),
-        None, None,
+        None,
+        None,
     );
     store.append(entry3).expect("Should append");
 
     // Retrieve and verify
-    let entries = store.get_entries(&conv_id, 100)
-        .expect("Should retrieve");
+    let entries = store.get_entries(&conv_id, 100).expect("Should retrieve");
     println!("\nRetrieved {} entries", entries.len());
 
     let verifier = ChainVerifier::new();

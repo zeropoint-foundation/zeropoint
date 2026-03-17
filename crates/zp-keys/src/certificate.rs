@@ -139,8 +139,8 @@ impl Certificate {
         let verifying_key = VerifyingKey::from_bytes(&key_array)
             .map_err(|e| KeyError::InvalidKeyMaterial(e.to_string()))?;
 
-        let sig_bytes = hex::decode(&self.signature)
-            .map_err(|e| KeyError::InvalidSignature(e.to_string()))?;
+        let sig_bytes =
+            hex::decode(&self.signature).map_err(|e| KeyError::InvalidSignature(e.to_string()))?;
 
         if sig_bytes.len() != 64 {
             return Err(KeyError::InvalidSignature(
@@ -152,8 +152,8 @@ impl Certificate {
         sig_array.copy_from_slice(&sig_bytes);
         let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
 
-        let canonical = serde_json::to_vec(&self.body)
-            .map_err(|e| KeyError::Serialization(e.to_string()))?;
+        let canonical =
+            serde_json::to_vec(&self.body).map_err(|e| KeyError::Serialization(e.to_string()))?;
 
         Ok(verifying_key.verify_strict(&canonical, &signature).is_ok())
     }
@@ -443,12 +443,8 @@ mod tests {
         );
 
         // Verify the full chain
-        let chain = CertificateChain::verify(vec![
-            genesis_cert,
-            operator_cert,
-            agent_cert,
-        ])
-        .unwrap();
+        let chain =
+            CertificateChain::verify(vec![genesis_cert, operator_cert, agent_cert]).unwrap();
 
         assert_eq!(chain.len(), 3);
         assert_eq!(chain.genesis().body.subject, "zeropoint-genesis");
@@ -493,11 +489,9 @@ mod tests {
         // Verify against a wrong genesis should fail
         let wrong_key = gen_key();
         let wrong_pub = wrong_key.verifying_key().to_bytes();
-        let err = CertificateChain::verify_against_genesis(
-            chain.certificates().to_vec(),
-            &wrong_pub,
-        )
-        .unwrap_err();
+        let err =
+            CertificateChain::verify_against_genesis(chain.certificates().to_vec(), &wrong_pub)
+                .unwrap_err();
         assert!(matches!(err, KeyError::GenesisMismatch));
     }
 

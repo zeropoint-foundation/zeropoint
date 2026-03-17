@@ -332,9 +332,9 @@ async fn main() -> anyhow::Result<()> {
                 .or_else(|_| std::env::var("USERNAME"))
                 .unwrap_or_else(|_| "operator".to_string())
         });
-        let project_dir = dir.clone().unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        });
+        let project_dir = dir
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
         let config = init::InitConfig {
             operator_name,
             project_dir,
@@ -441,8 +441,8 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
-        Some(Commands::Status) => unreachable!(),        // handled above
-        Some(Commands::Policy(_)) => unreachable!(),     // handled above
+        Some(Commands::Status) => unreachable!(),       // handled above
+        Some(Commands::Policy(_)) => unreachable!(),    // handled above
         Some(Commands::Init { .. }) => unreachable!(),  // handled above
         Some(Commands::Keys(_)) => unreachable!(),      // handled above
         Some(Commands::Gate(_)) => unreachable!(),      // handled above

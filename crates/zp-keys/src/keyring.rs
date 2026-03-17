@@ -129,10 +129,7 @@ impl Keyring {
         let cert_json = serde_json::to_string_pretty(operator.certificate())
             .map_err(|e| KeyError::Serialization(e.to_string()))?;
         std::fs::write(self.base_dir.join("operator.json"), cert_json)?;
-        std::fs::write(
-            self.base_dir.join("operator.secret"),
-            operator.secret_key(),
-        )?;
+        std::fs::write(self.base_dir.join("operator.secret"), operator.secret_key())?;
         Ok(())
     }
 
@@ -200,12 +197,7 @@ impl Keyring {
         let mut secret = [0u8; 32];
         secret.copy_from_slice(&secret_bytes);
 
-        AgentKey::from_parts(
-            secret,
-            certs[2].clone(),
-            certs[1].clone(),
-            certs[0].clone(),
-        )
+        AgentKey::from_parts(secret, certs[2].clone(), certs[1].clone(), certs[0].clone())
     }
 
     /// Load just the portable certificate chain for an agent (no secrets).

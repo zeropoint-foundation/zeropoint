@@ -395,11 +395,7 @@ impl EpochCompactor {
     }
 
     /// Verify that an epoch's Merkle root matches the given entries.
-    pub fn verify_epoch(
-        &self,
-        epoch: &Epoch,
-        entries: &[ChainEntry],
-    ) -> Result<(), EpochError> {
+    pub fn verify_epoch(&self, epoch: &Epoch, entries: &[ChainEntry]) -> Result<(), EpochError> {
         // Check that entries match the epoch's sequence range
         if entries.is_empty() {
             return Err(EpochError::NonContiguousEntries);
@@ -603,7 +599,10 @@ mod tests {
         let entries = vec![make_chain_entry(0, "hash0")];
 
         let result = compactor.compact("test-chain", &entries, None);
-        assert!(matches!(result, Err(EpochError::InsufficientEntries { .. })));
+        assert!(matches!(
+            result,
+            Err(EpochError::InsufficientEntries { .. })
+        ));
     }
 
     #[test]
@@ -615,10 +614,7 @@ mod tests {
         ];
 
         let result = compactor.compact("test-chain", &entries, None);
-        assert!(matches!(
-            result,
-            Err(EpochError::NonContiguousEntries)
-        ));
+        assert!(matches!(result, Err(EpochError::NonContiguousEntries)));
     }
 
     #[test]

@@ -14,7 +14,10 @@ fn main() {
     let identity = MeshIdentity::generate();
     println!("Agent identity generated");
     println!("  Address: {}", identity.address());
-    println!("  Public key: {} bytes", identity.signing_public_key().len());
+    println!(
+        "  Public key: {} bytes",
+        identity.signing_public_key().len()
+    );
 
     // 2. Declare capabilities
     let caps = AgentCapabilities {
@@ -71,8 +74,7 @@ fn main() {
     println!("  Shared secret: {} bytes", shared_secret.len());
 
     // Derive session keys from shared secret
-    let (encrypt, decrypt, hmac) =
-        MeshIdentity::derive_session_keys(&shared_secret, true).unwrap();
+    let (encrypt, decrypt, hmac) = MeshIdentity::derive_session_keys(&shared_secret, true).unwrap();
     println!("  Encrypt key:  {} bytes", encrypt.len());
     println!("  Decrypt key:  {} bytes", decrypt.len());
     println!("  HMAC key:     {} bytes", hmac.len());

@@ -4,11 +4,11 @@
 //! attests their role. They provide ergonomic methods for issuing child
 //! certificates without exposing raw signing key manipulation.
 
+use crate::certificate::{Certificate, CertificateChain, KeyRole};
+use crate::error::KeyError;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
-use crate::certificate::{Certificate, CertificateChain, KeyRole};
-use crate::error::KeyError;
 
 /// The genesis key — absolute root of trust.
 ///
@@ -268,7 +268,10 @@ impl AgentKey {
     }
 
     /// Verify this agent's chain against a known genesis public key.
-    pub fn verify_against_genesis(&self, genesis_public_key: &[u8; 32]) -> Result<CertificateChain, KeyError> {
+    pub fn verify_against_genesis(
+        &self,
+        genesis_public_key: &[u8; 32],
+    ) -> Result<CertificateChain, KeyError> {
         CertificateChain::verify_against_genesis(
             vec![
                 self.genesis_certificate.clone(),
@@ -341,7 +344,9 @@ mod tests {
 
         // Should fail against a different genesis
         let rogue = GenesisKey::generate("rogue-genesis");
-        let err = agent.verify_against_genesis(&rogue.public_key()).unwrap_err();
+        let err = agent
+            .verify_against_genesis(&rogue.public_key())
+            .unwrap_err();
         assert!(matches!(err, KeyError::GenesisMismatch));
     }
 
@@ -373,11 +378,7 @@ mod tests {
         assert_eq!(certs.len(), 3);
 
         // A remote node can verify this chain with only the genesis public key
-        let chain = CertificateChain::verify_against_genesis(
-            certs,
-            &genesis.public_key(),
-        )
-        .unwrap();
+        let chain = CertificateChain::verify_against_genesis(certs, &genesis.public_key()).unwrap();
         assert_eq!(chain.leaf().body.subject, "a");
     }
 

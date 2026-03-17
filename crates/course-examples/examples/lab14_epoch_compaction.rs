@@ -3,7 +3,7 @@
 //! Epoch compaction with merkle proofs
 //! Run: cargo run --example lab14_epoch_compaction -p course-examples
 
-use zp_receipt::{Receipt, ReceiptChain, Status, TrustGrade, EpochCompactor, Epoch};
+use zp_receipt::{Epoch, EpochCompactor, Receipt, ReceiptChain, Status, TrustGrade};
 
 fn main() {
     let mut chain = ReceiptChain::new("compaction-lab");
@@ -30,14 +30,22 @@ fn main() {
         let end = start + 50;
         let epoch_entries = &entries[start..end];
 
-        let prev = if epochs.is_empty() { None } else { Some(epochs.last().unwrap()) };
-        let epoch = compactor.compact("compaction-lab", epoch_entries, prev).unwrap();
+        let prev = if epochs.is_empty() {
+            None
+        } else {
+            Some(epochs.last().unwrap())
+        };
+        let epoch = compactor
+            .compact("compaction-lab", epoch_entries, prev)
+            .unwrap();
 
-        println!("Epoch {}: merkle_root={}...{}, entries={}",
+        println!(
+            "Epoch {}: merkle_root={}...{}, entries={}",
             epoch.epoch_number,
             &epoch.merkle_root[..8],
-            &epoch.merkle_root[epoch.merkle_root.len()-8..],
-            epoch.entry_count);
+            &epoch.merkle_root[epoch.merkle_root.len() - 8..],
+            epoch.entry_count
+        );
 
         epochs.push(epoch);
     }

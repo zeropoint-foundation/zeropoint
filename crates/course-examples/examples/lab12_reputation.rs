@@ -3,11 +3,10 @@
 //! Reputation scoring with time decay
 //! Run: cargo run --example lab12_reputation -p course-examples
 
-use zp_mesh::reputation::{
-    PeerReputation, ReputationSignal, ReputationWeights,
-    SignalCategory, SignalPolarity,
-};
 use chrono::Utc;
+use zp_mesh::reputation::{
+    PeerReputation, ReputationSignal, ReputationWeights, SignalCategory, SignalPolarity,
+};
 
 fn main() {
     let mut rep = PeerReputation::new();
@@ -60,7 +59,10 @@ fn main() {
     let updated = rep.compute_score("peer-abc", &weights, Utc::now());
     println!("\nAfter negative signal:");
     println!("Score: {:.2} (grade: {})", updated.score, updated.grade);
-    assert!(updated.score < score.score, "Negative signal should lower score");
+    assert!(
+        updated.score < score.score,
+        "Negative signal should lower score"
+    );
 
     println!("\n✓ Reputation: signals → time-decayed scores → grades");
 }
