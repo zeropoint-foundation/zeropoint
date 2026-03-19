@@ -1120,7 +1120,7 @@ fn display_confirmation(
     eprintln!("  Run {CYAN}zp status{NC} at any time to verify.");
     eprintln!("  Run {CYAN}zp secure --wizard{NC} to reconfigure.");
     eprintln!();
-    eprintln!("  Dashboard: {CYAN}http://localhost:3000{NC}");
+    eprintln!("  Dashboard: {CYAN}http://localhost:3000{NC} (launching...)");
     eprintln!();
 }
 
@@ -1197,7 +1197,87 @@ pub fn run(config: &SecureConfig) -> i32 {
     // Write master config
     write_config(config, &shells_hooked, &tools_wrapped, &dirs_watched);
 
+    // Launch the dashboard server in the background
+    launch_dashboard();
+
     0
+}
+
+// ============================================================================
+// Dashboard Auto-Launch
+// ============================================================================
+
+/// Spawn `zp serve` as a detached background process so the dashboard is
+/// immediately available after `zp secure` completes.  If the server is
+/// already running on port 3000 we skip the spawn and just open the browser.
+fn launch_dashboard() {
+    // Check if something is already listening on 3000
+    let already_running = std::net::TcpStream::connect("127.0.0.1:3000").is_ok();
+
+    if !already_running {
+        // Resolve our own binary path so we launch the same build
+        let zp_bin = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("zp"));
+
+        // Spawn detached — stdout/stderr go to a log file so the wizard
+        // output stays clean.
+        let log_dir = dirs_home().join(".zeropoint/logs");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let log_file = log_dir.join("serve.log");
+
+        match std::fs::File::create(&log_file) {
+            Ok(log) => {
+                let log_err = log.try_clone().unwrap_or_else(|_| {
+                    std::fs::File::create("/dev/null").expect("/dev/null")
+                });
+                match std::process::Command::new(&zp_bin)
+                    .arg("serve")
+                    .stdout(std::process::Stdio::from(log))
+                    .stderr(std::process::Stdio::from(log_err))
+                    .stdin(std::process::Stdio::null())
+                    .spawn()
+                {
+                    Ok(_child) => {
+                        // Give the server a moment to bind
+                        std::thread::sleep(std::time::Duration::from_millis(800));
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "  {YELLOW}⚠{NC} Could not start dashboard: {}",
+                            e
+                        );
+                        eprintln!(
+                            "    Run {CYAN}zp serve{NC} manually to start it."
+                        );
+                        return;
+                    }
+                }
+            }
+            Err(_) => {
+                // Can't create log file — try spawning without log redirection
+                let _ = std::process::Command::new(&zp_bin)
+                    .arg("serve")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .stdin(std::process::Stdio::null())
+                    .spawn();
+                std::thread::sleep(std::time::Duration::from_millis(800));
+            }
+        }
+    }
+
+    // Open the browser — works on macOS and Linux
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("http://localhost:3000")
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("http://localhost:3000")
+            .spawn();
+    }
 }
 
 // ============================================================================
