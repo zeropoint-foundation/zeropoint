@@ -279,7 +279,141 @@ fn discover_ai_tools() -> Vec<AiToolInfo> {
         }
     }
 
+    // Agent Zero — detect via Docker containers and filesystem markers
+    if let Some(a0) = detect_agent_zero(&home) {
+        tools.push(a0);
+    }
+
     tools
+}
+
+/// Detect an Agent Zero installation via Docker container inspection and
+/// filesystem marker scanning. Returns an `AiToolInfo` if found.
+fn detect_agent_zero(home: &std::path::Path) -> Option<AiToolInfo> {
+    // ── Strategy 1: Docker container inspection ────────────────────────
+    if which("docker").is_ok() {
+        // Get running container IDs
+        if let Some(ids) = command_output("docker", &["ps", "-q"]) {
+            for cid in ids.lines().filter(|l| !l.is_empty()) {
+                if let Some(inspect) = command_output(
+                    "docker",
+                    &["inspect", "--format",
+                      "{{.Config.Image}}||{{.Config.WorkingDir}}||{{range .Config.Env}}{{.}}||{{end}}",
+                      cid],
+                ) {
+                    let inspect_lower = inspect.to_lowercase();
+                    let is_a0_image = ["frdel/agent-zero", "agent-zero", "a0-docker"]
+                        .iter()
+                        .any(|pat| inspect_lower.contains(pat));
+                    let is_a0_workdir = ["/a0", "/agent-zero"]
+                        .iter()
+                        .any(|pat| inspect_lower.contains(pat));
+                    let is_a0_env = ["agent_zero_root", "a0_set_"]
+                        .iter()
+                        .any(|pat| inspect_lower.contains(pat));
+
+                    if is_a0_image || (is_a0_workdir && is_a0_env) {
+                        // Extract image name for version info
+                        let version = inspect.split("||").next().map(|s| s.to_string());
+                        return Some(AiToolInfo {
+                            name: "Agent Zero".into(),
+                            binary_path: None,
+                            config_dir: None,
+                            version,
+                            wrap_method: "mcp".into(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Strategy 2: Filesystem marker scanning ─────────────────────────
+    let candidate_dirs: Vec<std::path::PathBuf> = vec![
+        home.join("projects/agent-zero"),
+        home.join("agent-zero"),
+        home.join("Agent-Zero"),
+        home.join("src/agent-zero"),
+        home.join("dev/agent-zero"),
+        home.join("code/agent-zero"),
+    ];
+
+    let markers = [
+        "run_ui.py",
+        "agent.py",
+        "initialize.py",
+        "models.py",
+        "python/helpers/settings.py",
+    ];
+    let confidence_threshold: usize = 3;
+
+    for dir in &candidate_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        let hits = markers.iter().filter(|m| dir.join(m).exists()).count();
+        if hits >= confidence_threshold {
+            // Try to read version from docker-compose or pyproject
+            let version = read_a0_version(dir);
+            return Some(AiToolInfo {
+                name: "Agent Zero".into(),
+                binary_path: Some(dir.join("run_ui.py")),
+                config_dir: Some(dir.clone()),
+                version,
+                wrap_method: "mcp".into(),
+            });
+        }
+    }
+
+    // ── Strategy 3: Check existing ZP deployment records ───────────────
+    let zp_deploy = home
+        .join("projects/zeropoint/.zp-bare-process/agent_zero/deployment.json");
+    if zp_deploy.exists() {
+        // We know an A0 deployment was registered with ZP even if the
+        // install dir moved — surface it so the wizard can re-wrap.
+        return Some(AiToolInfo {
+            name: "Agent Zero".into(),
+            binary_path: None,
+            config_dir: None,
+            version: Some("(registered in ZP deployment records)".into()),
+            wrap_method: "mcp".into(),
+        });
+    }
+
+    None
+}
+
+/// Try to extract a human-readable version string from an Agent Zero
+/// installation directory (docker-compose image tag or pyproject version).
+fn read_a0_version(dir: &std::path::Path) -> Option<String> {
+    // Check docker-compose.yml for image tag
+    for compose_name in &["docker-compose.yml", "docker-compose.yaml", "compose.yml"] {
+        let compose_path = dir.join(compose_name);
+        if compose_path.exists() {
+            if let Ok(contents) = std::fs::read_to_string(&compose_path) {
+                for line in contents.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("image:") {
+                        return Some(trimmed.trim_start_matches("image:").trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+    // Check pyproject.toml
+    let pyproject = dir.join("pyproject.toml");
+    if pyproject.exists() {
+        if let Ok(contents) = std::fs::read_to_string(&pyproject) {
+            for line in contents.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("version") && trimmed.contains('=') {
+                    let val = trimmed.split('=').nth(1)?.trim().trim_matches('"');
+                    return Some(format!("v{}", val));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn discover_services() -> Vec<ServiceInfo> {
