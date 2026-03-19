@@ -1,0 +1,264 @@
+# ZeroPoint Trust Profile: Agent Zero Framework
+# ─────────────────────────────────────────────────────────────────────
+#
+# This profile defines how ZeroPoint classifies and governs Agent Zero
+# tools, surfaces, and capabilities during brownfield adaptation.
+#
+# Used by the Aegis scanner in Phase 2 (Survey) of `zp secure`.
+#
+# Risk tiers:
+#   allowed    — no restriction, governance is advisory only
+#   advisory   — logged, user notified, but not blocked
+#   guarded    — requires explicit user approval per invocation
+#   restricted — blocked unless operator overrides in policy
+# ─────────────────────────────────────────────────────────────────────
+
+framework:
+  id: agent_zero
+  display_name: "Agent Zero"
+  project_url: "https://github.com/agent0ai/agent-zero"
+  description: >
+    General-purpose personal AI agent framework with tool execution,
+    memory, web browsing, code execution, and multi-agent delegation.
+
+# ─── Detection fingerprints ──────────────────────────────────────────
+
+detection:
+  docker:
+    image_patterns:
+      - "frdel/agent-zero"
+      - "agent-zero"
+      - "a0-docker"
+    entrypoint_patterns:
+      - "run_ui.py"
+      - "python.*run_ui"
+    workdir_patterns:
+      - "/a0"
+      - "/agent-zero"
+    env_markers:
+      - "AGENT_ZERO_ROOT"
+      - "A0_SET_"
+    labels:
+      - key: "com.agent-zero"
+        match: "*"
+
+  filesystem:
+    # Minimum markers needed (out of the marker list) to confirm A0
+    confidence_threshold: 3
+    markers:
+      - "run_ui.py"
+      - "agent.py"
+      - "initialize.py"
+      - "models.py"
+      - "python/helpers/settings.py"
+      - "conf/model_providers.yaml"
+      - "agents/agent0/"
+      - "prompts/"
+
+  network:
+    default_ports:
+      web_ui: 50080
+      ssh: 55022
+
+# ─── Tool risk classification ────────────────────────────────────────
+#
+# Each tool in A0 is classified by its risk to the operator's
+# compute space. The Aegis scanner maps discovered tools to these
+# classifications during Phase 2 (Survey).
+
+tools:
+  # ── Code execution tools ──
+  code_execution_tool:
+    display_name: "Code Execution (Python/Bash)"
+    description: "Executes arbitrary code on the host or container shell"
+    risk_tier: guarded
+    risk_rationale: >
+      Unrestricted code execution is the highest-risk surface.
+      Can read/write filesystem, make network calls, install packages.
+    governance:
+      recommended_mode: strict
+      require_receipt: true
+      capabilities_required:
+        - "tool:execute:code"
+        - "fs:write"
+        - "net:outbound"
+
+  # ── Memory tools ──
+  memory_tool:
+    display_name: "Memory (FAISS vector store)"
+    description: "Stores and retrieves agent memories with vector similarity search"
+    risk_tier: advisory
+    risk_rationale: >
+      Memory persistence means agent decisions accumulate over time.
+      Poisoned memories can affect future behavior.
+    governance:
+      recommended_mode: audit
+      require_receipt: true
+      capabilities_required:
+        - "memory:read"
+        - "memory:write"
+
+  knowledge_tool:
+    display_name: "Knowledge Import"
+    description: "Imports documents into the agent's knowledge base"
+    risk_tier: advisory
+    risk_rationale: >
+      Knowledge imports shape agent behavior. Untrusted documents
+      could introduce prompt injection via knowledge retrieval.
+    governance:
+      recommended_mode: audit
+      require_receipt: true
+      capabilities_required:
+        - "knowledge:import"
+
+  # ── Web tools ──
+  web_browser_tool:
+    display_name: "Web Browser (browser-use)"
+    description: "Autonomous web browsing with vision and interaction"
+    risk_tier: guarded
+    risk_rationale: >
+      Browser automation can navigate to arbitrary sites, fill forms,
+      click buttons, and exfiltrate data. High injection risk from
+      adversarial web content.
+    governance:
+      recommended_mode: strict
+      require_receipt: true
+      capabilities_required:
+        - "net:outbound"
+        - "browser:navigate"
+        - "browser:interact"
+
+  # ── Communication tools ──
+  call_subordinate:
+    display_name: "Agent Delegation"
+    description: "Spawns subordinate agents that inherit tools and context"
+    risk_tier: guarded
+    risk_rationale: >
+      Delegation amplifies all other tool risks. Each subordinate
+      gets full tool access unless scoped. Chain depth increases
+      blast radius of any single bad decision.
+    governance:
+      recommended_mode: strict
+      require_receipt: true
+      max_delegation_depth: 3
+      capabilities_required:
+        - "agent:delegate"
+
+  # ── File tools ──
+  file_tools:
+    display_name: "File Read/Write"
+    description: "Reads and writes files in the working directory"
+    risk_tier: advisory
+    risk_rationale: >
+      File operations are scoped to the workdir by default,
+      but code execution can bypass this.
+    governance:
+      recommended_mode: audit
+      require_receipt: true
+      capabilities_required:
+        - "fs:read"
+        - "fs:write"
+
+  # ── MCP tools ──
+  mcp_servers:
+    display_name: "MCP Server Connections"
+    description: "External tool servers connected via Model Context Protocol"
+    risk_tier: guarded
+    risk_rationale: >
+      MCP servers can expose arbitrary external tools. Each server
+      should be individually assessed. Unknown servers are treated
+      as restricted until classified.
+    governance:
+      recommended_mode: strict
+      require_receipt: true
+      capabilities_required:
+        - "mcp:connect"
+        - "tool:execute:external"
+
+# ─── Model provider classification ───────────────────────────────────
+#
+# API keys represent trust boundaries — each provider is a different
+# external service that the agent can call.
+
+model_providers:
+  openai:
+    risk_tier: advisory
+    note: "Commercial API, usage tracked by provider"
+  anthropic:
+    risk_tier: advisory
+    note: "Commercial API, usage tracked by provider"
+  google:
+    risk_tier: advisory
+    note: "Commercial API, usage tracked by provider"
+  openrouter:
+    risk_tier: advisory
+    note: "Proxy service, routes to multiple providers"
+  ollama:
+    risk_tier: allowed
+    note: "Local model execution, no data leaves the machine"
+  lm_studio:
+    risk_tier: allowed
+    note: "Local model execution, no data leaves the machine"
+  huggingface:
+    risk_tier: allowed
+    note: "Default embedding model runs locally via sentence-transformers"
+  other:
+    risk_tier: guarded
+    note: "Unknown OpenAI-compatible endpoint, requires assessment"
+
+# ─── Governance recommendations ──────────────────────────────────────
+
+governance_recommendations:
+  # Minimum viable governance for a brownfield adaptation
+  minimum:
+    governance_mode: audit
+    execution_mode: deterministic
+    description: >
+      Audit mode: all tool invocations are logged with receipts.
+      No blocking. Operator reviews the audit trail to assess behavior.
+
+  # Recommended posture for production use
+  recommended:
+    governance_mode: strict
+    execution_mode: deterministic
+    max_delegation_depth: 3
+    description: >
+      Strict mode: code execution and browser tools require
+      capability grants. Delegation is depth-limited.
+      Memory writes produce signed receipts.
+
+  # Maximum lockdown
+  maximum:
+    governance_mode: strict
+    execution_mode: deterministic
+    max_delegation_depth: 1
+    require_all_receipts: true
+    block_unknown_mcp: true
+    description: >
+      Full lockdown: single-level delegation, all operations
+      receipt-wrapped, unknown MCP servers blocked.
+
+# ─── Sensitive paths ─────────────────────────────────────────────────
+#
+# Paths within or adjacent to an A0 installation that contain
+# credentials, keys, or sensitive configuration.
+
+sensitive_paths:
+  - path: "usr/.env"
+    sensitivity: critical
+    contains: "API keys, auth credentials"
+  - path: ".zp-identity/"
+    sensitivity: critical
+    contains: "Ed25519 agent keypairs"
+  - path: "usr/settings.json"
+    sensitivity: internal
+    contains: "Model configuration, MCP server configs"
+  - path: "memory/"
+    sensitivity: internal
+    contains: "Agent memory vectors and metadata"
+  - path: "knowledge/"
+    sensitivity: internal
+    contains: "Imported knowledge documents"
+  - path: "logs/"
+    sensitivity: internal
+    contains: "Agent execution logs"
