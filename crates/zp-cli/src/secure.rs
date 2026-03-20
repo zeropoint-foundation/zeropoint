@@ -366,8 +366,7 @@ fn detect_agent_zero(home: &std::path::Path) -> Option<AiToolInfo> {
     }
 
     // ── Strategy 3: Check existing ZP deployment records ───────────────
-    let zp_deploy = home
-        .join("projects/zeropoint/.zp-bare-process/agent_zero/deployment.json");
+    let zp_deploy = home.join("projects/zeropoint/.zp-bare-process/agent_zero/deployment.json");
     if zp_deploy.exists() {
         // We know an A0 deployment was registered with ZP even if the
         // install dir moved — surface it so the wizard can re-wrap.
@@ -1226,9 +1225,9 @@ fn launch_dashboard() {
 
         match std::fs::File::create(&log_file) {
             Ok(log) => {
-                let log_err = log.try_clone().unwrap_or_else(|_| {
-                    std::fs::File::create("/dev/null").expect("/dev/null")
-                });
+                let log_err = log
+                    .try_clone()
+                    .unwrap_or_else(|_| std::fs::File::create("/dev/null").expect("/dev/null"));
                 match std::process::Command::new(&zp_bin)
                     .arg("serve")
                     .stdout(std::process::Stdio::from(log))
@@ -1241,13 +1240,8 @@ fn launch_dashboard() {
                         std::thread::sleep(std::time::Duration::from_millis(800));
                     }
                     Err(e) => {
-                        eprintln!(
-                            "  {YELLOW}⚠{NC} Could not start dashboard: {}",
-                            e
-                        );
-                        eprintln!(
-                            "    Run {CYAN}zp serve{NC} manually to start it."
-                        );
+                        eprintln!("  {YELLOW}⚠{NC} Could not start dashboard: {}", e);
+                        eprintln!("    Run {CYAN}zp serve{NC} manually to start it.");
                         return;
                     }
                 }
