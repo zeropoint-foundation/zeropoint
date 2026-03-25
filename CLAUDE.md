@@ -45,3 +45,30 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 - zeropoint.global files are gitignored — must use `git add -f zeropoint.global/`
 - Dark theme design system: --bg: #0a0a0c, accent: #7eb8da, Inter + JetBrains Mono
 - **Browser**: Uses Comet browser (NOT Chrome). Claude MCP is available via Comet tabs. Do NOT use Claude in Chrome MCP tools — they don't exist here.
+- **Dev workflow**: `./zp-dev.sh` (dev build), `./zp-dev.sh html` (instant HTML reload), `./zp-dev.sh release` (ship)
+
+## Asset Architecture (Two-Tier)
+| Tier | Location | When |
+|------|----------|------|
+| **Override** | `~/.zeropoint/assets/` (or `$ZP_ASSETS_DIR`) | Hot reload (`./zp-dev.sh html`) copies source here. Persistent files (narration MP3s, images) live here always. |
+| **Compiled-in** | `include_str!()` in binary | Always available. Matches last `cargo build`. Dev/release builds delete overrides so compiled-in takes effect. |
+
+**Rules**: No relative ServeDir paths. Override dir is the single ServeDir root. `resolve_html_asset()` checks override → compiled-in. Two file categories in `zp-dev.sh`: `HTML_FILES` (have compiled-in fallback, deleted after build) and `STATIC_FILES` (CSS/JS, no fallback, always deployed to override dir).
+
+## TTS / Voice
+| Component | Details |
+|-----------|---------|
+| **Piper binary** | `/Users/kenrom/anaconda3/bin/piper` |
+| **Models** | `~/projects/zeropoint/models/piper/` — Kusal (primary), Amy (secondary) |
+| **TTS server** | `python3 voice-tuner-server.py` → `localhost:8473` — HTTP wrapper around Piper |
+| **Voice Tuner** | `voice-tuner.html` — standalone page for voice param tuning |
+| **Speak page** | `localhost:3000/speak` — paste text, hear it via Piper. Auto-reads clipboard on focus. |
+| **CLI speak** | `./zp-speak.sh` — pipe text or reads clipboard, plays via `afplay` |
+| **Narration voices** | Kusal (even steps + recovery), Amy (odd steps). Params: length_scale 0.7692, noise_scale 0.360, noise_w 0.930, sentence_silence 0.30 |
+| **Narration output** | `~/.zeropoint/assets/narration/onboard/` — permanent, never compiled in |
+| **Narration source** | `generate-narration-onboard.py` → `generate-audio-onboard.sh` |
+
+## TODO (Deferred)
+| Item | Context |
+|------|---------|
+| **Re-enable ZP Guard in .zshrc** | Hardened 3-layer hook ready in `docs/GUARD-SAFE-RENABLE.md`. Validate `zp guard -s "ls"` < 50ms, then paste hook into `~/.zshrc`. Related: `crates/zp-cli/src/guard.rs` |
