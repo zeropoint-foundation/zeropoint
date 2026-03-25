@@ -4,7 +4,11 @@
 //! in the unified `zp` binary.
 
 pub mod attestations;
+pub mod exec_ws;
+pub mod onboard;
+pub mod proxy;
 pub mod security;
+pub mod tool_chain;
 
 use axum::http::HeaderValue;
 use axum::{
@@ -224,6 +228,9 @@ pub struct AppStateInner {
     pub pipeline: Option<Pipeline>,
     pub grants: std::sync::Mutex<Vec<CapabilityGrant>>,
     pub data_dir: String,
+    /// Vault key resolved once at startup from the OS credential store.
+    /// Cached here so we never hit the Keychain again during the session.
+    pub vault_key: Option<zp_keys::ResolvedVaultKey>,
 }
 
 #[derive(Clone)]
@@ -271,13 +278,49 @@ impl AppState {
         attestations::init_attestation_db(&config.data_dir)
             .expect("Failed to initialize attestation database");
 
+        // Resolve vault key once at startup — this is the single Keychain access.
+        // Cached for the lifetime of the server so the OS never re-prompts.
+        let vault_key = {
+            let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
+            match zp_keys::Keyring::open(home.join("keys"))
+                .and_then(|kr| zp_keys::resolve_vault_key(&kr))
+            {
+                Ok(resolved) => {
+                    info!(
+                        "Vault key resolved (source: {:?}) — cached for session",
+                        resolved.source
+                    );
+                    Some(resolved)
+                }
+                Err(e) => {
+                    info!("Vault key not available: {} — vault operations will require re-auth", e);
+                    None
+                }
+            }
+        };
+
+        let audit_store = std::sync::Mutex::new(audit_store);
+
+        // Receipt: keychain access is a trust-relevant event on the chain
+        if vault_key.is_some() {
+            let source_str = vault_key.as_ref()
+                .map(|v| format!("{:?}", v.source))
+                .unwrap_or_default();
+            tool_chain::emit_tool_receipt(
+                &audit_store,
+                "system:keychain:accessed",
+                Some(&format!("source={}", source_str)),
+            );
+        }
+
         AppState(Arc::new(AppStateInner {
             gate,
-            audit_store: std::sync::Mutex::new(audit_store),
+            audit_store,
             identity,
             pipeline,
             grants: std::sync::Mutex::new(Vec::new()),
             data_dir: config.data_dir.clone(),
+            vault_key,
         }))
     }
 }
@@ -345,8 +388,17 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/conversations", post(create_conversation_handler))
         // Stats
         .route("/api/v1/stats", get(stats_handler))
-        // Security posture
+        // Security posture + topology
         .route("/api/v1/security/posture", get(security_posture_handler))
+        .route("/api/v1/security/topology", get(topology_handler))
+        // Configured tools (cockpit)
+        .route("/api/v1/tools", get(tools_handler))
+        .route("/api/v1/tools/launch", post(tools_launch_handler))
+        .route("/api/v1/tools/log", get(tools_log_handler))
+        .route("/api/v1/tools/preflight", post(tools_preflight_handler))
+        .route("/api/v1/tools/preflight", get(tools_preflight_status_handler))
+        .route("/api/v1/tools/receipt", post(tools_receipt_handler))
+        .route("/api/v1/tools/chain", get(tools_chain_handler))
         // Genesis record
         .route("/api/v1/genesis", get(genesis_handler))
         // Attestations
@@ -371,10 +423,35 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             "/api/v1/analytics/course",
             get(attestations::course_analytics_handler),
         )
+        // API Proxy — governance-aware LLM provider proxy
+        .route("/api/v1/proxy/*proxy_path", post(proxy::proxy_handler))
         // WebSocket endpoint for Bridge UI
         .route("/wss", get(ws_upgrade_handler))
+        // Governed execution surface — cockpit terminal
+        .route("/ws/exec", get(exec_ws::exec_ws_handler))
+        // Onboard: browser-based onboarding flow
+        .route("/onboard", get(onboard_page_handler))
+        .route("/api/onboard/ws", get(onboard::onboard_ws_handler))
+        // Speak: live TTS reader (Piper voice-tuner-server companion)
+        .route("/speak", get(speak_page_handler))
         .layer(cors)
         .with_state(state);
+
+    // Serve static assets (CSS, JS, narration audio, etc.)
+    // Single authoritative location: $ZP_ASSETS_DIR or ~/.zeropoint/assets/
+    // In dev: `./zp-dev.sh html` copies source files here for hot reload.
+    // In release: compiled-in HTML serves via resolve_html_asset(); static
+    //   files (narration MP3s, images) live here permanently.
+    let assets_dir = std::env::var("ZP_ASSETS_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| config.home_dir.join("assets"));
+    if assets_dir.exists() {
+        info!("Assets:     http://localhost:{}/assets/  ({})", config.port, assets_dir.display());
+    } else {
+        info!("Assets:     {} (not yet created)", assets_dir.display());
+    }
+    let assets_service = ServeDir::new(&assets_dir);
+    router = router.nest_service("/assets", assets_service);
 
     // Serve Bridge UI static files if configured.
     // The Bridge assets use absolute paths (/assets/...) so we serve
@@ -426,6 +503,7 @@ pub async fn run_server(config: ServerConfig) -> anyhow::Result<()> {
 
     info!("ZeroPoint server on {}", addr);
     info!("Dashboard: http://localhost:{}", config.port);
+    info!("Onboard:   http://localhost:{}/onboard", config.port);
     info!("Trust is infrastructure.");
 
     // Open browser if requested
@@ -1653,14 +1731,493 @@ async fn security_posture_handler(
     Json(security::assess(&state))
 }
 
+async fn topology_handler() -> Json<security::NetworkTopology> {
+    Json(security::topology())
+}
+
+// ============================================================================
+// Tools / Cockpit Handler
+// ============================================================================
+
+/// A configured tool for the agentic cockpit.
+#[derive(Serialize)]
+struct CockpitTool {
+    name: String,
+    path: String,
+    status: String,          // "governed", "configured", "unconfigured"
+    governance: String,      // "genesis-bound", "unanchored", "none"
+    providers: Vec<String>,  // provider names found in .env.example
+    launch: ToolLaunch,      // how to open this tool
+    ready: bool,             // preflight passed?
+    preflight_issues: Vec<String>, // failures from last preflight
+}
+
+/// How a cockpit tile launches its tool.
+#[derive(Serialize)]
+struct ToolLaunch {
+    kind: String,        // "web", "docker", "cli"
+    url: Option<String>, // http://localhost:{port} if web
+    port: Option<u16>,   // detected port
+    cmd: Option<String>, // launch command if cli/docker
+}
+
+/// Port variable names we look for in .env / .env.example, in priority order.
+const PORT_VAR_NAMES: &[&str] = &[
+    "PORT", "APP_PORT", "SERVER_PORT", "API_PORT",
+    "HTTP_PORT", "LISTEN_PORT", "WEBUI_PORT",
+];
+
+/// Try to detect a web port from a tool's .env or .env.example.
+fn detect_tool_port(tool_path: &std::path::Path) -> Option<u16> {
+    // Check .env first, then .env.example
+    for filename in &[".env", ".env.example"] {
+        let file = tool_path.join(filename);
+        if let Ok(contents) = std::fs::read_to_string(&file) {
+            for line in contents.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('#') || !trimmed.contains('=') {
+                    continue;
+                }
+                if let Some((key, val)) = trimmed.split_once('=') {
+                    let key = key.trim();
+                    let val = val.trim().trim_matches('"').trim_matches('\'');
+                    if PORT_VAR_NAMES.iter().any(|&p| key == p) {
+                        if let Ok(port) = val.parse::<u16>() {
+                            return Some(port);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Determine the launch method for a tool.
+fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
+    let has_docker_compose = tool_path.join("docker-compose.yml").exists()
+        || tool_path.join("docker-compose.yaml").exists()
+        || tool_path.join("compose.yml").exists()
+        || tool_path.join("compose.yaml").exists();
+
+    if let Some(port) = detect_tool_port(tool_path) {
+        // Web tool — has a detectable port
+        let cmd = if has_docker_compose {
+            Some(format!("cd {} && docker compose up -d", tool_path.display()))
+        } else {
+            None
+        };
+        ToolLaunch {
+            kind: "web".to_string(),
+            url: Some(format!("http://localhost:{}", port)),
+            port: Some(port),
+            cmd,
+        }
+    } else if has_docker_compose {
+        // Docker tool without a detectable web port — launch via compose
+        ToolLaunch {
+            kind: "docker".to_string(),
+            url: None,
+            port: None,
+            cmd: Some(format!("cd {} && docker compose up -d", tool_path.display())),
+        }
+    } else {
+        // CLI / unknown — best we can do is open the directory
+        ToolLaunch {
+            kind: "cli".to_string(),
+            url: None,
+            port: None,
+            cmd: Some(format!("cd {}", tool_path.display())),
+        }
+    }
+}
+
+/// Scan ~/projects for tools and return their governance status.
+/// Used by the dashboard cockpit to render app launcher tiles.
+///
+/// Readiness is derived from the **audit chain** (canonical source),
+/// with a fallback to the preflight JSON cache for backward compat.
+async fn tools_handler(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let scan_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("projects");
+
+    if !scan_path.exists() {
+        return Json(serde_json::json!({
+            "tools": [],
+            "scan_path": scan_path.display().to_string(),
+        }));
+    }
+
+    let results = zp_engine::scan::scan_tools(&scan_path);
+    let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
+    let has_genesis = home.join("genesis.json").exists();
+
+    // ── Chain state: canonical source of truth ──────────────
+    let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
+
+    // ── Fallback: JSON cache (for tools preflighted before chain was wired) ──
+    let preflight_cache = onboard::preflight::PreflightResults::load();
+
+    let tools: Vec<CockpitTool> = results.tools.into_iter().map(|tool| {
+        // Check if .env exists and was written by zp configure
+        let env_path = tool.path.join(".env");
+        let (status, governance) = if env_path.exists() {
+            let is_zp = std::fs::read_to_string(&env_path)
+                .map(|c| c.contains("Generated by: zp configure"))
+                .unwrap_or(false);
+            if is_zp && has_genesis {
+                ("governed".to_string(), "genesis-bound".to_string())
+            } else if is_zp {
+                ("configured".to_string(), "unanchored".to_string())
+            } else {
+                ("configured".to_string(), "none".to_string())
+            }
+        } else {
+            ("unconfigured".to_string(), "none".to_string())
+        };
+
+        let launch = detect_launch(&tool.path);
+
+        // Derive readiness: chain first, then JSON fallback
+        let (ready, preflight_issues) = if let Some(cs) = chain_state.get(&tool.name) {
+            // Chain has receipts for this tool — use chain state
+            (cs.ready, cs.preflight_issues.clone())
+        } else if let Some(ref pf) = preflight_cache {
+            // Fallback to JSON cache
+            if let Some(tp) = pf.tools.iter().find(|t| t.name == tool.name) {
+                let issues: Vec<String> = tp.checks.iter()
+                    .filter(|c| c.status == "fail")
+                    .map(|c| c.detail.clone())
+                    .collect();
+                (tp.ready, issues)
+            } else {
+                (false, vec!["Not preflighted yet".to_string()])
+            }
+        } else {
+            (false, vec!["Preflight not run".to_string()])
+        };
+
+        CockpitTool {
+            name: tool.name,
+            path: tool.path.display().to_string(),
+            status,
+            governance,
+            providers: tool.provider_vars,
+            launch,
+            ready,
+            preflight_issues,
+        }
+    }).collect();
+
+    let chain_receipts = !chain_state.is_empty();
+    Json(serde_json::json!({
+        "tools": tools,
+        "scan_path": scan_path.display().to_string(),
+        "has_genesis": has_genesis,
+        "chain_receipts": chain_receipts,
+    }))
+}
+
+// ── Tool Launch ─────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct LaunchRequest {
+    name: String,
+}
+
+/// Start a tool process.  Returns immediately with the expected URL and
+/// the kind of process that was started so the frontend can poll.
+///
+/// Output is captured to `~/.zeropoint/logs/<tool>.log` so the frontend
+/// can fetch diagnostics via `/api/v1/tools/log?name=<tool>` on failure.
+async fn tools_launch_handler(
+    State(state): State<AppState>,
+    Json(req): Json<LaunchRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let scan_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("projects");
+
+    let tool_path = scan_path.join(&req.name);
+    if !tool_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("Tool '{}' not found in ~/projects/", req.name),
+            })),
+        );
+    }
+
+    let launch = detect_launch(&tool_path);
+
+    // Build the shell command to start the tool
+    let start_cmd = match launch.kind.as_str() {
+        "web" | "docker" => {
+            let compose_file = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]
+                .iter()
+                .find(|f| tool_path.join(f).exists());
+
+            if let Some(_compose) = compose_file {
+                Some(format!("cd '{}' && docker compose up -d", tool_path.display()))
+            } else {
+                let scripts = ["start.sh", "run.sh", "launch.sh"];
+                let script = scripts.iter().find(|s| tool_path.join(s).exists());
+                if let Some(s) = script {
+                    Some(format!("cd '{}' && bash '{}'", tool_path.display(), s))
+                } else if tool_path.join("Makefile").exists() {
+                    Some(format!("cd '{}' && make start", tool_path.display()))
+                } else if tool_path.join("package.json").exists() {
+                    Some(format!("cd '{}' && npm start", tool_path.display()))
+                } else {
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+
+    let start_cmd = match start_cmd {
+        Some(cmd) => cmd,
+        None => {
+            let has_env = tool_path.join(".env").exists();
+            let has_example = tool_path.join(".env.example").exists();
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": format!("No launch method found for '{}'", req.name),
+                    "hint": "ZeroPoint looks for: docker-compose.yml, start.sh, run.sh, Makefile, or package.json",
+                    "has_env": has_env,
+                    "has_env_example": has_example,
+                    "path": tool_path.display().to_string(),
+                })),
+            );
+        }
+    };
+
+    // Log file for diagnostics: ~/.zeropoint/logs/<tool>.log
+    let log_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".zeropoint")
+        .join("logs");
+    std::fs::create_dir_all(&log_dir).ok();
+    let log_path = log_dir.join(format!("{}.log", req.name));
+
+    // Wrap the command so stdout+stderr go to the log file
+    let logged_cmd = format!(
+        "{{ {} ; }} > '{}' 2>&1",
+        start_cmd,
+        log_path.display()
+    );
+
+    info!("Cockpit launch: {} → {}", req.name, start_cmd);
+    let spawn_result = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&logged_cmd)
+        .current_dir(&tool_path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+
+    match spawn_result {
+        Ok(_child) => {
+            // Emit launched receipt into the chain
+            let event = tool_chain::ToolEvent::launched(&req.name);
+            tool_chain::emit_tool_receipt(
+                &state.0.audit_store,
+                &event,
+                Some(&format!("cmd={}", start_cmd)),
+            );
+
+            (
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({
+                    "status": "starting",
+                    "name": req.name,
+                    "cmd": start_cmd,
+                    "url": launch.url,
+                    "port": launch.port,
+                    "kind": launch.kind,
+                })),
+            )
+        }
+        Err(e) => {
+            let hint = if e.kind() == std::io::ErrorKind::NotFound {
+                "Shell not found — is 'sh' available?"
+            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                "Permission denied — check the tool's file permissions."
+            } else {
+                "Try running the command manually in your terminal."
+            };
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to start: {}", e),
+                    "cmd": start_cmd,
+                    "hint": hint,
+                })),
+            )
+        }
+    }
+}
+
+/// Return the last 50 lines of a tool's launch log for diagnostics.
+async fn tools_log_handler(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let name = match params.get("name") {
+        Some(n) => n,
+        None => return Json(serde_json::json!({ "error": "Missing 'name' parameter" })),
+    };
+
+    let log_path = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".zeropoint")
+        .join("logs")
+        .join(format!("{}.log", name));
+
+    if !log_path.exists() {
+        return Json(serde_json::json!({
+            "name": name,
+            "log": null,
+            "message": "No launch log found. Tool may not have been started from the cockpit.",
+        }));
+    }
+
+    let contents = std::fs::read_to_string(&log_path).unwrap_or_default();
+    let lines: Vec<&str> = contents.lines().collect();
+    let tail_start = if lines.len() > 50 { lines.len() - 50 } else { 0 };
+    let tail: String = lines[tail_start..].join("\n");
+
+    Json(serde_json::json!({
+        "name": name,
+        "log": tail,
+        "lines": lines.len(),
+        "path": log_path.display().to_string(),
+    }))
+}
+
+// ── Tool Preflight ──────────────────────────────────────────────────────────
+
+/// Run preflight checks on all configured tools (POST).
+/// This pulls docker images, installs deps, fixes permissions, etc.
+async fn tools_preflight_handler(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let scan_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("projects");
+
+    let (results, _events) = onboard::preflight::run_preflight(
+        &scan_path,
+        Some(&state.0.audit_store),
+    ).await;
+    Json(serde_json::to_value(&results).unwrap_or_default())
+}
+
+/// Get cached preflight results without re-running (GET).
+async fn tools_preflight_status_handler() -> Json<serde_json::Value> {
+    match onboard::preflight::PreflightResults::load() {
+        Some(results) => Json(serde_json::to_value(&results).unwrap_or_default()),
+        None => Json(serde_json::json!({
+            "error": "No preflight results. POST /api/v1/tools/preflight to run.",
+        })),
+    }
+}
+
+// ============================================================================
+// Tool-issued lifecycle receipts (tools attest to their own state)
+// ============================================================================
+
+/// Accept a lifecycle receipt from a tool (POST).
+///
+/// Tools call this to announce their own state transitions:
+///   { "name": "IronClaw", "event": "setup:complete", "detail": "Admin created" }
+///
+/// The receipt is emitted into the audit chain under the tool lifecycle
+/// namespace, signed with ZeroPoint's identity. This is how tools
+/// participate in the receipt chain without needing their own signing keys.
+async fn tools_receipt_handler(
+    State(state): State<AppState>,
+    Json(body): Json<tool_chain::ToolReceiptRequest>,
+) -> Json<serde_json::Value> {
+    let event = format!("tool:{}:{}", body.event, body.name);
+    let detail = body.detail.as_deref();
+
+    match tool_chain::emit_tool_receipt(&state.0.audit_store, &event, detail) {
+        Some(hash) => Json(serde_json::json!({
+            "ok": true,
+            "event": event,
+            "entry_hash": hash,
+        })),
+        None => Json(serde_json::json!({
+            "ok": false,
+            "error": "Failed to append to audit chain",
+        })),
+    }
+}
+
+/// Return tool readiness state derived from the audit chain (GET).
+///
+/// This is the canonical view — the cockpit can call this to see
+/// which lifecycle receipts exist for each tool.
+async fn tools_chain_handler(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
+    let tools: Vec<&tool_chain::ToolChainState> = chain_state.values().collect();
+    Json(serde_json::json!({
+        "tools": tools,
+        "source": "audit_chain",
+    }))
+}
+
 // ============================================================================
 // Dashboard Handler (Verification Surface)
 // ============================================================================
 
-const DASHBOARD_HTML: &str = include_str!("../assets/dashboard.html");
+// Embedded fallbacks — used only if the on-disk file is missing.
+const DASHBOARD_HTML_FALLBACK: &str = include_str!("../assets/dashboard.html");
+const ONBOARD_HTML_FALLBACK: &str = include_str!("../assets/onboard.html");
+const SPEAK_HTML_FALLBACK: &str = include_str!("../assets/speak.html");
 
-async fn dashboard_handler() -> Html<&'static str> {
-    Html(DASHBOARD_HTML)
+/// Resolve an HTML asset: check $ZP_ASSETS_DIR or ~/.zeropoint/assets/{name}
+/// first (override), then fall back to the compiled-in copy.
+///
+/// Two-tier system:
+///   1. Override dir  — hot-reload via `./zp-dev.sh html`, or persistent files
+///   2. Compiled-in   — always available, matches last Rust build
+fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
+    // 1. Override: $ZP_ASSETS_DIR or ~/.zeropoint/assets/<name>
+    let override_dir = std::env::var("ZP_ASSETS_DIR")
+        .map(std::path::PathBuf::from)
+        .ok()
+        .or_else(|| dirs::home_dir().map(|h| h.join(".zeropoint").join("assets")));
+
+    if let Some(dir) = override_dir {
+        let path = dir.join(name);
+        if let Ok(contents) = std::fs::read_to_string(&path) {
+            return contents;
+        }
+    }
+
+    // 2. Compiled-in fallback
+    fallback.to_string()
+}
+
+async fn dashboard_handler() -> Html<String> {
+    Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK))
+}
+
+async fn onboard_page_handler() -> Html<String> {
+    Html(resolve_html_asset("onboard.html", ONBOARD_HTML_FALLBACK))
+}
+
+async fn speak_page_handler() -> Html<String> {
+    Html(resolve_html_asset("speak.html", SPEAK_HTML_FALLBACK))
 }
 
 // ============================================================================
@@ -1674,8 +2231,9 @@ async fn genesis_handler(State(_state): State<AppState>) -> Json<serde_json::Val
         .join("genesis.json");
 
     if let Ok(contents) = std::fs::read_to_string(&home) {
-        if let Ok(record) = serde_json::from_str::<GenesisRecord>(&contents) {
-            return Json(serde_json::to_value(record).unwrap_or_default());
+        // Return raw JSON — supports both server-genesis and onboard-genesis formats
+        if let Ok(record) = serde_json::from_str::<serde_json::Value>(&contents) {
+            return Json(record);
         }
     }
 
