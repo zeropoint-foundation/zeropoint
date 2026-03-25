@@ -40,7 +40,16 @@ impl OnboardState {
     /// Probes ~/.zeropoint/ for genesis, vault, configured tools,
     /// and inference posture. Returns the furthest step the user
     /// has actually completed.
+    ///
+    /// If `cached_vault_key` is provided (from AppState), uses it instead
+    /// of hitting the OS Keychain again. This eliminates repeated macOS
+    /// Keychain prompts during the session.
+    /// Convenience wrapper — resolves vault key from keychain (may prompt on macOS).
     pub fn from_filesystem() -> Self {
+        Self::from_filesystem_with_vault(None)
+    }
+
+    pub fn from_filesystem_with_vault(cached_vault_key: Option<&[u8; 32]>) -> Self {
         let mut state = Self::default();
         let home = match dirs::home_dir() {
             Some(h) => h.join(".zeropoint"),
@@ -67,12 +76,16 @@ impl OnboardState {
                 }
             }
 
-            // Resolve vault key from keyring so credential storage works
-            // even when the user reconnects past Genesis.
-            let keyring_path = home.join("keys");
-            if let Ok(keyring) = zp_keys::Keyring::open(keyring_path) {
-                if let Ok(resolved) = zp_keys::resolve_vault_key(&keyring) {
-                    state.vault_key = Some(*resolved.key);
+            // Use cached vault key from AppState (resolved once at startup).
+            // Falls back to keychain only if no cache was provided.
+            if let Some(key) = cached_vault_key {
+                state.vault_key = Some(*key);
+            } else {
+                let keyring_path = home.join("keys");
+                if let Ok(keyring) = zp_keys::Keyring::open(keyring_path) {
+                    if let Ok(resolved) = zp_keys::resolve_vault_key(&keyring) {
+                        state.vault_key = Some(*resolved.key);
+                    }
                 }
             }
         }

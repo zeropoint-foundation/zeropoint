@@ -5,342 +5,567 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZEROPOINT — Verification Surface</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm-addon-fit/0.8.0/xterm-addon-fit.min.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
     body {
-      background-color: #0A0A0C;
-      color: #E8E6E3;
+      background-color: #0A0A0C; color: #E8E6E3;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      line-height: 1.6;
-      overflow-y: auto;
-      padding: 0;
+      font-size: 14px; line-height: 1.6; overflow-y: auto;
     }
-
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 80px 40px;
-    }
+    .container { max-width: 900px; margin: 0 auto; padding: 80px 40px; }
 
     /* Header */
-    .header {
-      margin-bottom: 120px;
-      text-align: center;
-    }
-
-    .header-title {
-      font-size: 28px;
-      font-weight: 600;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-    }
-
-    .header-tagline {
-      color: #8B8984;
-      font-size: 13px;
-      letter-spacing: 0.05em;
-    }
+    .header { margin-bottom: 60px; text-align: center; }
+    .header-title { font-size: 28px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 12px; }
+    .header-tagline { color: #8B8984; font-size: 13px; letter-spacing: 0.05em; }
+    .header-operator { color: #7eb8da; font-size: 13px; margin-top: 8px; letter-spacing: 0.02em; }
 
     /* Section */
-    .section {
-      margin-bottom: 100px;
-    }
+    .section { margin-bottom: 100px; }
+    .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #B8B5B0; margin-bottom: 24px; }
+    .section-content { padding-left: 0; }
 
-    .section-title {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: #B8B5B0;
-      margin-bottom: 24px;
+    /* ── Cockpit / Launch Pad ─────────────────────────────── */
+    .cockpit { margin-bottom: 100px; }
+    .cockpit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
     }
-
-    .section-content {
-      padding-left: 0;
-    }
-
-    /* Identity Card */
-    .identity-row {
+    .cockpit-tile {
+      position: relative;
+      background: #111114;
+      border: 1px solid #1E1E22;
+      border-radius: 4px;
+      padding: 24px 20px 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-
-    .identity-field {
-      display: flex;
-      align-items: baseline;
-      gap: 16px;
-    }
-
-    .identity-label {
-      color: #8B8984;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      min-width: 140px;
-      flex-shrink: 0;
-    }
-
-    .identity-value {
-      color: #E8E6E3;
-      word-break: break-all;
-      font-size: 13px;
-    }
-
-    /* Gate Status */
-    .gate-section {
-      margin-bottom: 60px;
-    }
-
-    .gate-status {
-      display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 32px;
-      font-size: 14px;
-    }
-
-    .status-indicator {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .status-indicator.pass {
-      background-color: #00C896;
-    }
-
-    .status-indicator.fail {
-      background-color: #FF4444;
-    }
-
-    .gate-rules {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    .gate-rule {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 0;
-      font-size: 13px;
-    }
-
-    .gate-rule-dot {
-      width: 5px;
-      height: 5px;
-      background-color: #8B8984;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .gate-rule-name {
-      color: #E8E6E3;
-      flex: 1;
-    }
-
-    .gate-rule-category {
-      color: #8B8984;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-
-    .gate-rule.constitutional {
-      padding-left: 16px;
-      border-left: 2px solid #00C896;
-    }
-
-    .gate-rule.constitutional .gate-rule-name {
-      color: #00C896;
-    }
-
-    /* Chain Integrity */
-    .chain-status {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
-      font-size: 14px;
-    }
-
-    .chain-symbol {
-      font-size: 16px;
-      min-width: 20px;
       text-align: center;
+      min-height: 160px;
     }
-
-    .chain-details {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 20px;
-      padding-left: 16px;
+    .cockpit-tile:hover {
+      border-color: #7eb8da;
+      background: #13151a;
+      transform: translateY(-2px);
     }
+    .cockpit-tile.governed:hover { border-color: #00C896; }
 
-    .chain-detail-line {
-      font-size: 13px;
-      color: #E8E6E3;
-    }
-
-    .chain-detail-label {
-      color: #8B8984;
-      margin-right: 8px;
-    }
-
-    /* Security Posture */
-    .posture-score {
-      margin-bottom: 32px;
-    }
-
-    .score-value {
-      font-size: 32px;
-      font-weight: 600;
-      color: #E8E6E3;
-      margin-bottom: 8px;
-    }
-
-    .score-label {
-      font-size: 12px;
-      color: #8B8984;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .posture-checks {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      margin-bottom: 32px;
-    }
-
-    .posture-check {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 13px;
-    }
-
-    .check-indicator {
+    /* Health indicator — top-left dot */
+    .tile-health {
+      position: absolute;
+      top: 10px;
+      right: 10px;
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      flex-shrink: 0;
+      background: #00C896;
     }
+    .tile-health.unanchored { background: #FFB020; }
+    .tile-health.unconfigured { background: #555; }
 
-    .check-indicator.pass {
-      background-color: #00C896;
+    .tile-icon {
+      font-size: 28px;
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      background: rgba(126, 184, 218, 0.06);
+      margin-bottom: 14px;
     }
-
-    .check-indicator.warning {
-      background-color: #FFB020;
-    }
-
-    .check-indicator.fail {
-      background-color: #FF4444;
-    }
-
-    .check-name {
+    .tile-name {
       color: #E8E6E3;
-      flex: 1;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      margin-bottom: 6px;
     }
-
-    .posture-summary {
-      border-top: 1px solid #2A2A2E;
-      padding-top: 20px;
+    .tile-status {
       color: #8B8984;
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      line-height: 1.5;
+    }
+    .tile-badge {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 2px 10px;
+      border-radius: 2px;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .tile-badge.governed { background: rgba(0,200,150,0.1); color: #00C896; }
+    .tile-badge.unanchored { background: rgba(255,176,32,0.1); color: #FFB020; }
+    .tile-badge.pending { background: rgba(136,136,160,0.1); color: #555; }
+
+    /* ZP system tile — accent tint */
+    .cockpit-tile.zp-core { border-color: rgba(126,184,218,0.2); }
+    .cockpit-tile.zp-core:hover { border-color: #7eb8da; background: #0e1118; }
+    .cockpit-tile.zp-core .tile-icon { background: rgba(126,184,218,0.1); }
+
+    /* Add-tool tile */
+    .cockpit-tile.add-tile {
+      border-style: dashed;
+      border-color: #2A2A2E;
+      justify-content: center;
+    }
+    .cockpit-tile.add-tile:hover { border-color: #7eb8da; background: #0e1118; }
+    .cockpit-tile.add-tile .tile-icon {
+      font-size: 24px;
+      color: #555;
+      background: none;
+    }
+    .cockpit-tile.add-tile .tile-name { color: #555; font-weight: 400; }
+
+    /* Cockpit empty state */
+    .cockpit-empty {
+      text-align: center;
+      padding: 48px 24px;
+      color: #555;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .cockpit-empty code {
+      color: #7eb8da;
+      background: rgba(126,184,218,0.08);
+      padding: 2px 8px;
+      border-radius: 2px;
       font-size: 12px;
-      line-height: 1.7;
     }
 
-    /* Loading & Error States */
-    .loading {
-      color: #8B8984;
-      font-style: italic;
+    /* Launching pulse */
+    @keyframes tilePulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(126, 184, 218, 0); }
+      50% { box-shadow: 0 0 16px 2px rgba(126, 184, 218, 0.25); }
     }
 
-    .error {
+    /* Launch type hint on tile */
+    .tile-launch {
+      font-size: 9px;
+      color: #555;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .tile-launch.web { color: #7eb8da; }
+    .tile-launch.docker { color: #8B8984; }
+
+    /* Preflight readiness states */
+    .tile-health.not-ready { background: #E05252; }
+    .tile-preflight-issues {
+      font-size: 9px;
+      color: #E05252;
+      margin-top: 4px;
+      line-height: 1.4;
+      max-height: 32px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tile-badge.not-ready { background: rgba(224,82,82,0.1); color: #E05252; }
+    .cockpit-tile.not-ready { border-color: rgba(224,82,82,0.25); }
+    .cockpit-tile.not-ready:hover { border-color: #E05252; }
+    .tile-preflight-btn {
+      margin-top: 8px;
+      padding: 3px 12px;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #7eb8da;
+      background: rgba(126,184,218,0.08);
+      border: 1px solid rgba(126,184,218,0.2);
+      border-radius: 2px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .tile-preflight-btn:hover {
+      background: rgba(126,184,218,0.15);
+      border-color: #7eb8da;
+    }
+    @keyframes preflightSpin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Chain-verified indicator on tile status */
+    .tile-status .chain-icon {
+      font-size: 8px;
+      vertical-align: middle;
+      opacity: 0.6;
+    }
+
+    /* Toast notification */
+    .zp-toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #111114;
+      border: 1px solid #2A2A2E;
+      color: #E8E6E3;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 12px 24px;
+      border-radius: 4px;
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+      max-width: 500px;
+      text-align: center;
+    }
+    .zp-toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .zp-toast code {
+      color: #7eb8da;
+      background: rgba(126,184,218,0.08);
+      padding: 1px 6px;
+      border-radius: 2px;
+    }
+
+    /* ── Diagnostic Panel ─────────────────────────────────── */
+    .diag-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10, 10, 12, 0.88);
+      z-index: 1500;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; animation: fadeIn 0.3s ease forwards;
+    }
+    .diag-overlay.dismissing { animation: fadeOut 0.2s ease forwards; }
+    .diag-card {
+      max-width: 780px; width: 92%;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 36px;
+      background: #111114;
+      border: 1px solid #FF4444;
+      border-radius: 4px;
+    }
+    .diag-title {
+      font-size: 14px; font-weight: 600;
       color: #FF4444;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+    .diag-field { margin-bottom: 14px; }
+    .diag-label {
+      font-size: 10px; color: #8B8984;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .diag-value {
+      font-size: 12px; color: #E8E6E3;
+      line-height: 1.5;
+    }
+    .diag-value.error-text { color: #FF4444; }
+    .diag-value.hint-text { color: #FFB020; }
+    .diag-log {
+      background: #0A0A0C;
+      border: 1px solid #1E1E22;
+      border-radius: 2px;
+      padding: 12px 16px;
+      font-size: 11px;
+      color: #8B8984;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .diag-log .log-error { color: #FF4444; }
+    .diag-log .log-warn { color: #FFB020; }
+    .diag-actions {
+      margin-top: 24px;
+      display: flex; justify-content: flex-end; gap: 12px;
+    }
+    .diag-btn {
+      background: none;
+      border: 1px solid #2A2A2E;
+      color: #E8E6E3;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 8px 20px;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .diag-btn:hover { border-color: #7eb8da; color: #7eb8da; }
+    .diag-btn.retry { border-color: #00C896; color: #00C896; }
+    .diag-btn.retry:hover { background: rgba(0,200,150,0.08); }
+
+    /* ── Graduated terminal disclosure ────────────────────── */
+    .diag-suggested {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid #1E1E22;
+    }
+    .diag-suggested-label {
+      font-size: 10px; color: #8B8984;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .diag-cmd-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(126,184,218,0.06);
+      border: 1px solid rgba(126,184,218,0.15);
+      color: #7eb8da;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 6px 14px;
+      margin-right: 8px;
+      margin-bottom: 6px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .diag-cmd-btn:hover {
+      background: rgba(126,184,218,0.12);
+      border-color: #7eb8da;
+    }
+    .diag-cmd-btn .cmd-play {
+      font-size: 9px;
+      opacity: 0.7;
+    }
+    .diag-terminal-disclosure {
+      margin-top: 16px;
+      border-top: 1px solid #1E1E22;
+    }
+    .diag-terminal-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0;
+      cursor: pointer;
+      color: #8B8984;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      user-select: none;
+      transition: color 0.15s;
+    }
+    .diag-terminal-toggle:hover { color: #E8E6E3; }
+    .diag-terminal-toggle .chevron {
+      transition: transform 0.2s;
+      font-size: 8px;
+    }
+    .diag-terminal-toggle.open .chevron {
+      transform: rotate(90deg);
+    }
+    .diag-terminal-pane {
+      display: none;
+      background: #0A0A0C;
+      border: 1px solid #1E1E22;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .diag-terminal-pane.open {
+      display: block;
+    }
+    .diag-terminal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background: #0e0e11;
+      border-bottom: 1px solid #1E1E22;
+      font-size: 9px;
+      color: #555;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .diag-terminal-header .term-cwd {
+      color: #7eb8da;
+      text-transform: none;
+      font-size: 10px;
+    }
+    .diag-terminal-header .term-receipt {
+      color: #00C896;
+      font-size: 9px;
+    }
+    .diag-xterm-container {
+      height: 260px;
+    }
+    /* Override xterm.js defaults to match ZP theme */
+    .diag-xterm-container .xterm {
+      padding: 8px;
     }
 
-    .unreachable {
-      color: #FFB020;
+    /* Identity */
+    .identity-row { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+    .identity-field { display: flex; align-items: baseline; gap: 16px; }
+    .identity-label { color: #8B8984; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; min-width: 160px; flex-shrink: 0; }
+    .identity-value { color: #E8E6E3; word-break: break-all; font-size: 13px; }
+    .identity-value.accent { color: #7eb8da; }
+    .identity-value.sovereignty { color: #00C896; text-transform: capitalize; }
+
+    /* Gate Status */
+    .gate-section { margin-bottom: 60px; }
+    .gate-status { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; font-size: 14px; }
+    .status-indicator { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .status-indicator.pass { background-color: #00C896; }
+    .status-indicator.fail { background-color: #FF4444; }
+    .gate-rules { display: flex; flex-direction: column; gap: 14px; }
+    .gate-rule { display: flex; align-items: center; gap: 16px; font-size: 13px; }
+    .gate-rule-dot { width: 5px; height: 5px; background-color: #8B8984; border-radius: 50%; flex-shrink: 0; }
+    .gate-rule-name { color: #E8E6E3; flex: 1; }
+    .gate-rule-category { color: #8B8984; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .gate-rule.constitutional { padding-left: 16px; border-left: 2px solid #00C896; }
+    .gate-rule.constitutional .gate-rule-name { color: #00C896; }
+
+    /* Chain */
+    .chain-status { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; font-size: 14px; }
+    .chain-details { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; padding-left: 16px; }
+    .chain-detail-line { font-size: 13px; color: #E8E6E3; }
+    .chain-detail-label { color: #8B8984; margin-right: 8px; }
+
+    /* ── Security Posture ─────────────────────────────────── */
+    .posture-header { display: flex; align-items: flex-end; gap: 24px; margin-bottom: 32px; }
+    .posture-score { }
+    .score-value { font-size: 48px; font-weight: 600; line-height: 1; }
+    .score-value.green { color: #00C896; }
+    .score-value.yellow { color: #FFB020; }
+    .score-value.red { color: #FF4444; }
+    .score-label { font-size: 12px; color: #8B8984; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+    .posture-summary-inline { color: #8B8984; font-size: 12px; padding-bottom: 6px; }
+
+    .posture-checks { display: flex; flex-direction: column; gap: 0; margin-bottom: 32px; }
+    .posture-check { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; padding: 10px 0; border-bottom: 1px solid #1A1A1E; }
+    .posture-check:last-child { border-bottom: none; }
+    .check-indicator { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+    .check-indicator.pass { background-color: #00C896; }
+    .check-indicator.warning { background-color: #FFB020; }
+    .check-indicator.fail { background-color: #FF4444; }
+    .check-body { flex: 1; }
+    .check-name { color: #E8E6E3; }
+    .check-detail { color: #8B8984; font-size: 11px; margin-top: 2px; line-height: 1.5; }
+    .check-category { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+    /* ── Network Topology ─────────────────────────────────── */
+    .topology-map { position: relative; padding: 24px 0; }
+    .topology-node {
+      display: flex; align-items: center; gap: 16px;
+      padding: 14px 20px; margin-bottom: 2px;
+      background: #111114; border-left: 3px solid #2A2A2E;
+      transition: border-color 0.2s;
     }
+    .topology-node.active { border-left-color: #00C896; }
+    .topology-node.inactive { border-left-color: #555; }
+    .topology-node.zp-node { border-left-color: #7eb8da; background: #0e1118; }
+    .topo-icon { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+    .topo-info { flex: 1; }
+    .topo-name { color: #E8E6E3; font-size: 13px; }
+    .topo-role { color: #8B8984; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .topo-detail { color: #555; font-size: 11px; margin-top: 2px; }
+    .topo-address { color: #7eb8da; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .topology-connector { width: 3px; height: 12px; background: #2A2A2E; margin-left: 30px; }
+    .topology-desc { color: #8B8984; font-size: 12px; margin-top: 20px; line-height: 1.6; }
+
+    /* Loading & Error */
+    .loading { color: #8B8984; font-style: italic; }
+    .error { color: #FF4444; }
+    .unreachable { color: #FFB020; }
+    .success { color: #00C896; }
+    .warning-text { color: #FFB020; }
+    .error-text { color: #FF4444; }
 
     /* Footer */
-    .footer {
-      margin-top: 120px;
-      padding-top: 40px;
-      border-top: 1px solid #2A2A2E;
-      text-align: center;
-      color: #8B8984;
-    }
+    .footer { margin-top: 120px; padding-top: 40px; border-top: 1px solid #2A2A2E; text-align: center; color: #8B8984; }
+    .footer-tagline { font-size: 13px; margin-bottom: 16px; letter-spacing: 0.02em; }
+    .footer-link { color: #00C896; text-decoration: none; font-size: 12px; }
+    .footer-nav { margin-top: 16px; display: flex; justify-content: center; gap: 24px; }
+    .footer-nav a { color: #8B8984; text-decoration: none; font-size: 12px; border-bottom: 1px solid transparent; transition: color 0.2s, border-color 0.2s; }
+    .footer-nav a:hover { color: #7eb8da; border-bottom-color: rgba(126,184,218,0.3); }
 
-    .footer-tagline {
-      font-size: 13px;
-      margin-bottom: 16px;
-      letter-spacing: 0.02em;
-    }
-
-    .footer-link {
-      color: #00C896;
-      text-decoration: none;
-      font-size: 12px;
-    }
-
-    .footer-link:hover {
-      color: #00C896;
-    }
-
-    /* Utility */
-    .muted {
-      color: #8B8984;
-    }
-
-    .success {
-      color: #00C896;
-    }
-
-    .warning-text {
-      color: #FFB020;
-    }
-
-    .error-text {
-      color: #FF4444;
-    }
+    /* ── Welcome Overlay ─────────────────────────────────── */
+    .welcome-overlay { position: fixed; inset: 0; background: rgba(10, 10, 12, 0.92); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; animation: fadeIn 0.4s ease forwards; }
+    @keyframes fadeIn { to { opacity: 1; } }
+    .welcome-overlay.dismissing { animation: fadeOut 0.3s ease forwards; }
+    @keyframes fadeOut { to { opacity: 0; } }
+    .welcome-card { max-width: 560px; padding: 48px; background: #111114; border: 1px solid #2A2A2E; border-radius: 4px; }
+    .welcome-title { font-size: 20px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+    .welcome-subtitle { color: #7eb8da; font-size: 13px; margin-bottom: 32px; }
+    .welcome-section { margin-bottom: 20px; }
+    .welcome-section-title { color: #00C896; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .welcome-section-desc { color: #8B8984; font-size: 12px; line-height: 1.6; }
+    .welcome-actions { margin-top: 36px; display: flex; justify-content: flex-end; gap: 16px; }
+    .welcome-btn { background: none; border: 1px solid #2A2A2E; color: #E8E6E3; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 10px 24px; cursor: pointer; letter-spacing: 0.05em; transition: border-color 0.2s, color 0.2s; }
+    .welcome-btn:hover { border-color: #7eb8da; color: #7eb8da; }
+    .welcome-btn.primary { border-color: #00C896; color: #00C896; }
+    .welcome-btn.primary:hover { background: rgba(0, 200, 150, 0.08); }
   </style>
 </head>
 <body>
+  <!-- Welcome Overlay -->
+  <div class="welcome-overlay" id="welcomeOverlay" style="display:none;">
+    <div class="welcome-card">
+      <div class="welcome-title">Verification Surface</div>
+      <div class="welcome-subtitle" id="welcomeGreeting">Your node is live.</div>
+      <div class="welcome-section">
+        <div class="welcome-section-title">Cockpit</div>
+        <div class="welcome-section-desc">Your governed tools. Each tile is a tool configured through ZeroPoint, with credentials in the vault and traffic routed through the governance proxy.</div>
+      </div>
+      <div class="welcome-section">
+        <div class="welcome-section-title">Identity &amp; Topology</div>
+        <div class="welcome-section-desc">Your sovereign keys, operator identity, and where ZeroPoint sits in your network.</div>
+      </div>
+      <div class="welcome-section">
+        <div class="welcome-section-title">Security Posture</div>
+        <div class="welcome-section-desc">Honest assessment. Every check tests something real. Warnings count, gaps are visible, and the score reflects actual conditions.</div>
+      </div>
+      <div class="welcome-actions">
+        <button class="welcome-btn" onclick="dismissWelcome(true)">Don't show again</button>
+        <button class="welcome-btn primary" onclick="dismissWelcome(false)">Continue</button>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
-    <!-- Header -->
     <div class="header">
       <div class="header-title">ZEROPOINT</div>
       <div class="header-tagline">Trust is infrastructure.</div>
+      <div class="header-operator" id="headerOperator"></div>
     </div>
 
-    <!-- Identity Card -->
+    <!-- ── Cockpit / Launch Pad ──────────────────────────── -->
+    <div class="cockpit section">
+      <div class="section-title">Cockpit</div>
+      <div class="cockpit-grid" id="cockpitGrid">
+        <div class="loading">Scanning tools...</div>
+      </div>
+    </div>
+
+    <!-- Identity -->
     <div class="section">
       <div class="section-title">Identity</div>
       <div class="section-content">
-        <div class="identity-row">
+        <div class="identity-row" id="identityRow">
           <div class="identity-field">
-            <div class="identity-label">Public Key</div>
+            <div class="identity-label">Operator</div>
+            <div class="identity-value accent" id="operatorName">Loading...</div>
+          </div>
+          <div class="identity-field">
+            <div class="identity-label">Sovereignty</div>
+            <div class="identity-value sovereignty" id="sovereigntyMode">Loading...</div>
+          </div>
+          <div class="identity-field">
+            <div class="identity-label">Genesis Key</div>
             <div class="identity-value" id="publicKey">Loading...</div>
           </div>
           <div class="identity-field">
@@ -351,6 +576,16 @@
             <div class="identity-label">Algorithm</div>
             <div class="identity-value" id="algorithm">Loading...</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Network Topology -->
+    <div class="section">
+      <div class="section-title">Network Topology</div>
+      <div class="section-content">
+        <div class="topology-map" id="topologyMap">
+          <div class="loading">Loading topology...</div>
         </div>
       </div>
     </div>
@@ -385,14 +620,16 @@
     <div class="section">
       <div class="section-title">Security Posture</div>
       <div class="section-content">
-        <div class="posture-score">
-          <div class="score-value" id="postureScore">—</div>
-          <div class="score-label">Overall Score</div>
+        <div class="posture-header">
+          <div class="posture-score">
+            <div class="score-value" id="postureScore">&mdash;</div>
+            <div class="score-label">Posture Score</div>
+          </div>
+          <div class="posture-summary-inline" id="postureSummary"></div>
         </div>
         <div class="posture-checks" id="postureChecks">
           <div class="loading">Loading checks...</div>
         </div>
-        <div class="posture-summary" id="postureSummary"></div>
       </div>
     </div>
 
@@ -400,187 +637,836 @@
     <div class="footer">
       <div class="footer-tagline">Your keys. Your chain. Your trust.</div>
       <a href="https://zeropoint.global" class="footer-link">zeropoint.global</a>
+      <div class="footer-nav">
+        <a href="/onboard">Onboarding</a>
+        <a href="/speak">Speak</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="zp-toast" id="zpToast"></div>
+
+  <!-- Diagnostic panel for launch failures — graduated disclosure -->
+  <div class="diag-overlay" id="diagOverlay" style="display:none;">
+    <div class="diag-card">
+      <!-- Layer 1: Human-readable diagnostics -->
+      <div class="diag-title" id="diagTitle">Launch Failed</div>
+      <div id="diagBody"></div>
+
+      <!-- Layer 2: Suggested commands (contextual, clickable) -->
+      <div class="diag-suggested" id="diagSuggested" style="display:none;">
+        <div class="diag-suggested-label">Try</div>
+        <div id="diagSuggestedCmds"></div>
+      </div>
+
+      <!-- Layer 3: Terminal disclosure (depth on demand) -->
+      <div class="diag-terminal-disclosure" id="diagTermDisclosure" style="display:none;">
+        <div class="diag-terminal-toggle" id="diagTermToggle" onclick="toggleTerminal()">
+          <span class="chevron">&#9654;</span>
+          <span>Terminal output</span>
+        </div>
+        <div class="diag-terminal-pane" id="diagTermPane">
+          <div class="diag-terminal-header">
+            <span class="term-cwd" id="diagTermCwd">~/projects</span>
+            <span class="term-receipt" id="diagTermReceipt"></span>
+          </div>
+          <div class="diag-xterm-container" id="diagXterm"></div>
+        </div>
+      </div>
+
+      <div class="diag-actions">
+        <button class="diag-btn" onclick="dismissDiag()">Close</button>
+        <button class="diag-btn retry" id="diagRetryBtn" style="display:none;" onclick="diagRetry()">Retry</button>
+      </div>
     </div>
   </div>
 
   <script>
-    // API endpoints
+    // ── Toast helper ──────────────────────────────────────
+    function showToast(html, duration = 3000) {
+      const t = document.getElementById('zpToast');
+      t.innerHTML = html;
+      t.classList.add('visible');
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.remove('visible'), duration);
+    }
+
     const endpoints = {
       identity: '/api/v1/identity',
+      genesis: '/api/v1/genesis',
       rules: '/api/v1/policy/rules',
       audit: '/api/v1/audit/verify',
       stats: '/api/v1/stats',
-      security: '/api/v1/security/posture'
+      security: '/api/v1/security/posture',
+      topology: '/api/v1/security/topology',
+      tools: '/api/v1/tools'
     };
 
-    // Fetch function with error handling
     async function fetchEndpoint(url) {
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          return { error: `HTTP ${response.status}` };
-        }
-        return await response.json();
-      } catch (err) {
-        return { error: 'Unreachable' };
-      }
+        const r = await fetch(url);
+        if (!r.ok) return { error: `HTTP ${r.status}` };
+        return await r.json();
+      } catch (err) { return { error: 'Unreachable' }; }
     }
 
-    // Format truncated public key with ellipsis
     function truncateKey(key, length = 32) {
       if (!key || key.length <= length) return key;
-      const start = key.substring(0, Math.floor(length / 2));
-      const end = key.substring(key.length - Math.floor(length / 2));
-      return `${start}...${end}`;
+      return `${key.substring(0, Math.floor(length/2))}...${key.substring(key.length - Math.floor(length/2))}`;
     }
 
-    // Render identity section
-    function renderIdentity(data) {
-      const publicKeyEl = document.getElementById('publicKey');
-      const hashEl = document.getElementById('destinationHash');
-      const algoEl = document.getElementById('algorithm');
+    // ── Welcome ───────────────────────────────────────────
+    function showWelcome(op) {
+      if (localStorage.getItem('zp-welcome-dismissed') === 'true') return;
+      const o = document.getElementById('welcomeOverlay');
+      if (op) document.getElementById('welcomeGreeting').textContent = `Welcome, ${op}. Your node is live.`;
+      o.style.display = 'flex';
+    }
+    function dismissWelcome(perm) {
+      const o = document.getElementById('welcomeOverlay');
+      if (perm) localStorage.setItem('zp-welcome-dismissed', 'true');
+      o.classList.add('dismissing');
+      setTimeout(() => o.style.display = 'none', 300);
+    }
 
-      if (data.error) {
-        publicKeyEl.textContent = `Unreachable`;
-        publicKeyEl.classList.add('unreachable');
-        hashEl.textContent = `—`;
-        algoEl.textContent = `—`;
+    // ── Cockpit ───────────────────────────────────────────
+    const toolIcons = {
+      'openmaictool': '\u{1F916}', 'pentagi': '\u{1F6E1}', 'agent-zero': '\u{1F9E0}',
+      'autogpt': '\u26A1', 'langchain': '\u{1F517}', 'crewai': '\u{1F465}',
+      'bolt': '\u26A1', 'cline': '\u{1F4BB}', 'continue': '\u25B6',
+      'open-webui': '\u{1F310}', 'lmstudio': '\u{1F9EA}', 'anything-llm': '\u{1F4AC}',
+    };
+
+    // ── Port probe ─────────────────────────────────────────
+    async function isPortOpen(url) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1500);
+      try {
+        await fetch(url, { mode: 'no-cors', signal: controller.signal });
+        clearTimeout(timer);
+        return true;
+      } catch {
+        clearTimeout(timer);
+        return false;
+      }
+    }
+
+    async function waitForPort(url, maxWaitMs = 30000, intervalMs = 1000) {
+      const deadline = Date.now() + maxWaitMs;
+      while (Date.now() < deadline) {
+        if (await isPortOpen(url)) return true;
+        await new Promise(r => setTimeout(r, intervalMs));
+      }
+      return false;
+    }
+
+    // ── Diagnostic panel — graduated disclosure ────────────────
+    let _diagRetryTool = null;
+    let _diagTerm = null;       // xterm.js instance
+    let _diagFitAddon = null;   // fit addon
+    let _diagExecWs = null;     // WebSocket for governed exec
+    let _diagToolPath = null;   // cwd for terminal
+
+    function dismissDiag() {
+      // Clean up terminal
+      if (_diagExecWs) { _diagExecWs.close(); _diagExecWs = null; }
+      if (_diagTerm) { _diagTerm.dispose(); _diagTerm = null; _diagFitAddon = null; }
+      // Collapse terminal pane
+      const toggle = document.getElementById('diagTermToggle');
+      const pane = document.getElementById('diagTermPane');
+      if (toggle) toggle.classList.remove('open');
+      if (pane) pane.classList.remove('open');
+
+      const o = document.getElementById('diagOverlay');
+      o.classList.add('dismissing');
+      setTimeout(() => { o.style.display = 'none'; o.classList.remove('dismissing'); }, 200);
+    }
+
+    function diagRetry() {
+      dismissDiag();
+      if (_diagRetryTool) launchTool(_diagRetryTool);
+    }
+
+    function toggleTerminal() {
+      const toggle = document.getElementById('diagTermToggle');
+      const pane = document.getElementById('diagTermPane');
+      const isOpen = toggle.classList.toggle('open');
+      pane.classList.toggle('open');
+
+      if (isOpen && !_diagTerm) {
+        initTerminal();
+      }
+      if (isOpen && _diagFitAddon) {
+        setTimeout(() => _diagFitAddon.fit(), 50);
+      }
+    }
+
+    function initTerminal() {
+      const container = document.getElementById('diagXterm');
+      container.innerHTML = '';
+
+      _diagTerm = new Terminal({
+        theme: {
+          background: '#0A0A0C',
+          foreground: '#E8E6E3',
+          cursor: '#7eb8da',
+          selectionBackground: 'rgba(126,184,218,0.2)',
+          black: '#0A0A0C',
+          red: '#FF4444',
+          green: '#00C896',
+          yellow: '#FFB020',
+          blue: '#7eb8da',
+          magenta: '#B48EAD',
+          cyan: '#88C0D0',
+          white: '#E8E6E3',
+        },
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 12,
+        lineHeight: 1.4,
+        cursorBlink: false,
+        disableStdin: true,
+        scrollback: 1000,
+      });
+
+      _diagFitAddon = new FitAddon.FitAddon();
+      _diagTerm.loadAddon(_diagFitAddon);
+      _diagTerm.open(container);
+      setTimeout(() => _diagFitAddon.fit(), 50);
+    }
+
+    /// Run a command through the governed exec WebSocket, streaming output to the terminal.
+    function execInTerminal(cmd, cwd) {
+      if (!_diagTerm) initTerminal();
+      // Ensure terminal pane is open
+      const toggle = document.getElementById('diagTermToggle');
+      const pane = document.getElementById('diagTermPane');
+      if (!toggle.classList.contains('open')) {
+        toggle.classList.add('open');
+        pane.classList.add('open');
+        if (_diagFitAddon) setTimeout(() => _diagFitAddon.fit(), 50);
+      }
+
+      // Update cwd display
+      document.getElementById('diagTermCwd').textContent = cwd || '~';
+      document.getElementById('diagTermReceipt').textContent = '';
+
+      _diagTerm.clear();
+      _diagTerm.writeln('\x1b[90m$ ' + cmd + '\x1b[0m');
+      _diagTerm.writeln('');
+
+      // Connect via WebSocket
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      _diagExecWs = new WebSocket(`${proto}//${location.host}/ws/exec`);
+
+      _diagExecWs.onopen = () => {
+        _diagExecWs.send(JSON.stringify({
+          action: 'exec',
+          cmd: cmd,
+          cwd: cwd || '.',
+        }));
+      };
+
+      _diagExecWs.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'stdout') {
+            _diagTerm.write(msg.data);
+          } else if (msg.type === 'stderr') {
+            _diagTerm.write('\x1b[31m' + msg.data + '\x1b[0m');
+          } else if (msg.type === 'exit') {
+            _diagTerm.writeln('');
+            if (msg.code === 0) {
+              _diagTerm.writeln('\x1b[32m✓ Exited successfully\x1b[0m');
+            } else {
+              _diagTerm.writeln(`\x1b[31m✗ Exited with code ${msg.code}\x1b[0m`);
+            }
+          } else if (msg.type === 'exec_complete') {
+            if (msg.receipt_hash) {
+              document.getElementById('diagTermReceipt').textContent =
+                '⛓ ' + msg.receipt_hash.substring(0, 12);
+            }
+          } else if (msg.type === 'error') {
+            _diagTerm.writeln('\x1b[31m' + msg.message + '\x1b[0m');
+          }
+        } catch {}
+      };
+
+      _diagExecWs.onerror = () => {
+        _diagTerm.writeln('\x1b[31mWebSocket connection failed\x1b[0m');
+      };
+
+      _diagExecWs.onclose = () => {
+        _diagExecWs = null;
+      };
+    }
+
+    /// Generate contextual suggested commands based on the error.
+    function suggestCommands(tool, result) {
+      const cmds = [];
+      const toolPath = tool.path || `~/projects/${tool.name}`;
+      const launch = tool.launch || {};
+      const errorLower = ((result && result.error) || '').toLowerCase();
+      const hintLower = ((result && result.hint) || '').toLowerCase();
+
+      // Docker not running
+      if (errorLower.includes('docker') || errorLower.includes('daemon') || hintLower.includes('docker')) {
+        cmds.push({ label: 'docker ps', cmd: 'docker ps', cwd: toolPath,
+          hint: 'Check if Docker is running' });
+        cmds.push({ label: 'docker compose up -d', cmd: 'docker compose up -d', cwd: toolPath,
+          hint: 'Start containers' });
+      }
+
+      // Port not responding
+      if (errorLower.includes('port') || errorLower.includes('respond')) {
+        const port = result.port || launch.port;
+        if (port) {
+          cmds.push({ label: `lsof -i :${port}`, cmd: `lsof -i :${port}`, cwd: toolPath,
+            hint: 'Check what is using this port' });
+        }
+      }
+
+      // npm / node issues
+      if (errorLower.includes('npm') || errorLower.includes('node') || hintLower.includes('npm')) {
+        cmds.push({ label: 'npm install', cmd: 'npm install', cwd: toolPath,
+          hint: 'Install dependencies' });
+        cmds.push({ label: 'npm start', cmd: 'npm start', cwd: toolPath,
+          hint: 'Start the app' });
+      }
+
+      // Always offer: retry the original command
+      if (result && result.cmd) {
+        cmds.push({ label: 'Retry original', cmd: result.cmd, cwd: toolPath,
+          hint: 'Run the launch command again' });
+      }
+
+      // Always offer: check logs
+      cmds.push({ label: 'ls -la', cmd: 'ls -la', cwd: toolPath,
+        hint: 'List files in tool directory' });
+
+      return cmds;
+    }
+
+    // ── Main showDiagnostic — graduated disclosure ─────────────
+    async function showDiagnostic(tool, result) {
+      const body = document.getElementById('diagBody');
+      const overlay = document.getElementById('diagOverlay');
+      const title = document.getElementById('diagTitle');
+      const retryBtn = document.getElementById('diagRetryBtn');
+      const suggestedEl = document.getElementById('diagSuggested');
+      const suggestedCmds = document.getElementById('diagSuggestedCmds');
+      const termDisclosure = document.getElementById('diagTermDisclosure');
+      const termCwd = document.getElementById('diagTermCwd');
+
+      title.textContent = `${tool.name} — Launch Failed`;
+      _diagRetryTool = tool;
+      _diagToolPath = tool.path || `~/projects/${tool.name}`;
+      retryBtn.style.display = 'inline-block';
+
+      // ── Layer 1: Human-readable fields ───────────────────
+      let html = '';
+      if (result && result.error) {
+        html += `<div class="diag-field"><div class="diag-label">Error</div><div class="diag-value error-text">${result.error}</div></div>`;
+      }
+      if (result && result.hint) {
+        html += `<div class="diag-field"><div class="diag-label">Suggestion</div><div class="diag-value hint-text">${result.hint}</div></div>`;
+      }
+      if (result && result.cmd) {
+        html += `<div class="diag-field"><div class="diag-label">Command</div><div class="diag-value"><code>${result.cmd}</code></div></div>`;
+      }
+      if (result && result.port) {
+        html += `<div class="diag-field"><div class="diag-label">Expected Port</div><div class="diag-value">${result.port} (no response)</div></div>`;
+      }
+      body.innerHTML = html;
+
+      // ── Layer 2: Suggested commands ──────────────────────
+      const cmds = suggestCommands(tool, result);
+      if (cmds.length > 0) {
+        suggestedCmds.innerHTML = cmds.map(c =>
+          `<button class="diag-cmd-btn" title="${escapeHtml(c.hint)}" onclick="execInTerminal('${escapeHtml(c.cmd)}', '${escapeHtml(c.cwd || _diagToolPath)}')">` +
+          `<span class="cmd-play">&#9654;</span> ${escapeHtml(c.label)}</button>`
+        ).join('');
+        suggestedEl.style.display = 'block';
+      } else {
+        suggestedEl.style.display = 'none';
+      }
+
+      // ── Layer 3: Terminal disclosure (ready but collapsed) ──
+      termDisclosure.style.display = 'block';
+      termCwd.textContent = _diagToolPath;
+
+      // Show the overlay
+      overlay.style.display = 'flex';
+
+      // ── Auto-populate terminal with launch log (if available) ──
+      try {
+        const logResp = await fetch(`/api/v1/tools/log?name=${encodeURIComponent(tool.name)}`);
+        const logData = await logResp.json();
+        if (logData.log && logData.log.trim()) {
+          // Pre-populate the terminal with the log so it's ready when disclosed
+          if (!_diagTerm) initTerminal();
+          _diagTerm.clear();
+          _diagTerm.writeln('\x1b[90m── Launch output ──────────────────\x1b[0m');
+          logData.log.split('\n').forEach(line => {
+            const lower = line.toLowerCase();
+            if (lower.includes('error') || lower.includes('fatal') || lower.includes('failed')) {
+              _diagTerm.writeln('\x1b[31m' + line + '\x1b[0m');
+            } else if (lower.includes('warn') || lower.includes('timeout')) {
+              _diagTerm.writeln('\x1b[33m' + line + '\x1b[0m');
+            } else {
+              _diagTerm.writeln(line);
+            }
+          });
+          _diagTerm.writeln('\x1b[90m──────────────────────────────────\x1b[0m');
+          _diagTerm.writeln('');
+        }
+      } catch {}
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // ── Launch logic ─────────────────────────────────────────
+    const launching = new Set();
+
+    async function launchTool(tool) {
+      const launch = tool.launch || {};
+
+      if (tool.status === 'unconfigured') {
+        showToast(`<strong>${tool.name}</strong> needs configuration. Run <code>zp configure auto ~/projects</code>`, 4000);
         return;
       }
 
-      publicKeyEl.textContent = truncateKey(data.public_key);
-      hashEl.textContent = truncateKey(data.destination_hash);
-      algoEl.textContent = data.algorithm || 'Ed25519';
+      if (launching.has(tool.name)) return;
+
+      // ── Preflight gate: if not ready, run preflight first ──
+      const issues = tool.preflight_issues || [];
+      if (tool.ready === false || issues.length > 0) {
+        launching.add(tool.name);
+        showToast(`<strong>${tool.name}</strong> needs preflight &mdash; resolving issues...`, 30000);
+        setTileLaunching(tool.name, true);
+
+        try {
+          const pfResp = await fetch('/api/v1/tools/preflight', { method: 'POST' });
+          const pfResult = await pfResp.json();
+
+          // Check if this specific tool passed after preflight
+          const toolPf = (pfResult.tools || []).find(t => t.name === tool.name);
+          if (toolPf && toolPf.checks) {
+            const stillFailing = toolPf.checks.filter(c => c.status === 'fail');
+            if (stillFailing.length > 0) {
+              showToast('');
+              showDiagnostic(tool, {
+                error: `Preflight still failing for ${tool.name}`,
+                hint: stillFailing.map(c => c.detail || c.name).join('; '),
+              });
+              return;
+            }
+          }
+
+          // Preflight passed — update local tool state and continue to launch
+          showToast(`<strong>${tool.name}</strong> preflight passed — launching...`);
+          tool.ready = true;
+          tool.preflight_issues = [];
+          // Refresh the tile visuals
+          refreshTileState(tool);
+        } catch (err) {
+          showToast('');
+          showDiagnostic(tool, {
+            error: `Preflight request failed: ${err.message}`,
+            hint: 'Is the ZeroPoint server running?',
+          });
+          return;
+        } finally {
+          setTileLaunching(tool.name, false);
+          launching.delete(tool.name);
+        }
+      }
+
+      // ── Already running? Just open it. ──────────────────
+      if (launch.kind === 'web' && launch.url) {
+        showToast(`Checking <strong>${tool.name}</strong>...`);
+        if (await isPortOpen(launch.url)) {
+          showToast(`Opening <strong>${tool.name}</strong>`);
+          window.open(launch.url, '_blank');
+          return;
+        }
+      }
+
+      // ── Not running — ask the server to start it. ───────
+      launching.add(tool.name);
+      showToast(`Starting <strong>${tool.name}</strong>...`, 30000);
+      setTileLaunching(tool.name, true);
+
+      try {
+        const resp = await fetch('/api/v1/tools/launch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: tool.name }),
+        });
+        const result = await resp.json();
+
+        if (!resp.ok) {
+          showToast('');
+          showDiagnostic(tool, result);
+          return;
+        }
+
+        // Wait for the port to come up
+        const targetUrl = result.url || launch.url;
+        if (targetUrl) {
+          showToast(`<strong>${tool.name}</strong> starting &mdash; waiting for port ${result.port || ''}...`, 30000);
+          const ready = await waitForPort(targetUrl, 30000, 1500);
+          if (ready) {
+            showToast(`Opening <strong>${tool.name}</strong>`);
+            window.open(targetUrl, '_blank');
+          } else {
+            showToast('');
+            showDiagnostic(tool, {
+              error: `Port ${result.port} did not respond within 30 seconds`,
+              cmd: result.cmd,
+              port: result.port,
+              hint: 'The process may have crashed on startup. Check the log below.',
+            });
+          }
+        } else {
+          showToast(`<strong>${tool.name}</strong> launched (no web UI detected).`, 4000);
+        }
+      } catch (err) {
+        showToast('');
+        showDiagnostic(tool, {
+          error: `Request to ZeroPoint failed: ${err.message}`,
+          hint: 'Is the ZeroPoint server running?',
+        });
+      } finally {
+        setTileLaunching(tool.name, false);
+        launching.delete(tool.name);
+      }
     }
 
-    // Render gate status
-    function renderGates(rulesData, stats) {
-      const statusEl = document.getElementById('gateStatus');
-      const rulesEl = document.getElementById('gateRules');
+    // Update a tile's visual state after preflight resolves
+    function refreshTileState(tool) {
+      const tile = document.querySelector(`.cockpit-tile[data-tool-name="${tool.name}"]`);
+      if (!tile) return;
+      const healthEl = tile.querySelector('.tile-health');
+      const statusEl = tile.querySelector('.tile-status');
+      const badgeEl = tile.querySelector('.tile-badge');
+      const issuesEl = tile.querySelector('.tile-preflight-issues');
 
-      const hasError = rulesData.error || !rulesData.rules;
-      const isInstalled = !hasError && rulesData.rules && rulesData.rules.length > 0;
+      // Remove not-ready, apply governed if applicable
+      tile.classList.remove('not-ready');
+      if (tool.status === 'governed') tile.classList.add('governed');
 
-      statusEl.innerHTML = `
-        <div class="status-indicator ${isInstalled ? 'pass' : 'fail'}"></div>
-        <div>${isInstalled ? 'GATES INSTALLED' : 'GATES COMPROMISED'}</div>
-      `;
+      if (healthEl) healthEl.className = 'tile-health' + (tool.status === 'governed' ? '' : tool.governance === 'unanchored' ? ' unanchored' : '');
+      if (statusEl) statusEl.textContent = tool.status === 'governed' ? 'governed \u00B7 launch ready' : '.env present';
+      if (badgeEl) {
+        badgeEl.className = 'tile-badge governed';
+        badgeEl.textContent = tool.status === 'governed' ? '\u2713 genesis-bound' : 'configured';
+      }
+      if (issuesEl) issuesEl.remove();
+    }
 
-      if (hasError || !rulesData.rules || rulesData.rules.length === 0) {
-        rulesEl.innerHTML = `<div class="unreachable">No rules loaded</div>`;
+    // Visual feedback: pulse the tile while it's starting
+    function setTileLaunching(name, active) {
+      const tile = document.querySelector(`.cockpit-tile[data-tool-name="${name}"]`);
+      if (!tile) return;
+      if (active) {
+        tile.style.borderColor = '#7eb8da';
+        tile.style.animation = 'tilePulse 1.5s ease-in-out infinite';
+      } else {
+        tile.style.borderColor = '';
+        tile.style.animation = '';
+      }
+    }
+
+    function renderCockpit(data, hasGenesis) {
+      const grid = document.getElementById('cockpitGrid');
+
+      if (!data || data.error || !data.tools) {
+        grid.innerHTML = `<div class="cockpit-empty">Tools endpoint unavailable.</div>`;
         return;
       }
 
-      rulesEl.innerHTML = rulesData.rules.map(rule => {
-        const isConstitutional = rule.category === 'constitutional';
-        return `
-          <div class="gate-rule ${isConstitutional ? 'constitutional' : ''}">
-            <div class="gate-rule-dot"></div>
-            <div class="gate-rule-name">${rule.name || 'Unknown'}</div>
-            <div class="gate-rule-category">${rule.category || 'standard'}</div>
+      const tools = data.tools;
+      const chainBacked = !!data.chain_receipts;
+      grid.innerHTML = '';
+
+      if (tools.length === 0 && !hasGenesis) {
+        grid.innerHTML = `
+          <div class="cockpit-empty" style="grid-column: 1 / -1;">
+            No tools discovered yet.<br>
+            Complete <a href="/onboard" style="color:#7eb8da; text-decoration:none; border-bottom:1px solid rgba(126,184,218,0.3)">onboarding</a> to scan and configure your agentic tools.
           </div>
         `;
+        return;
+      }
+
+      // Tool tiles
+      tools.forEach(tool => {
+        const icon = toolIcons[tool.name.toLowerCase()] || '\u{1F527}';
+        const tile = document.createElement('div');
+        const isReady = tool.ready !== false; // default true if field absent
+        const issues = tool.preflight_issues || [];
+        const hasIssues = issues.length > 0;
+
+        let tileClass = 'cockpit-tile';
+        if (!isReady || hasIssues) tileClass += ' not-ready';
+        else if (tool.status === 'governed') tileClass += ' governed';
+        tile.className = tileClass;
+
+        let healthClass = '';
+        let badgeHtml = '';
+        let statusText = '';
+
+        if (!isReady || hasIssues) {
+          // Preflight failed — override governance display
+          healthClass = 'not-ready';
+          badgeHtml = '<div class="tile-badge not-ready">preflight failed</div>';
+          statusText = issues[0] || 'not launch-ready';
+        } else if (tool.status === 'governed') {
+          healthClass = '';
+          badgeHtml = '<div class="tile-badge governed">\u2713 genesis-bound</div>';
+          statusText = chainBacked ? 'governed \u00B7 chain-verified' : 'governed \u00B7 launch ready';
+        } else if (tool.status === 'configured' && tool.governance === 'unanchored') {
+          healthClass = 'unanchored';
+          badgeHtml = '<div class="tile-badge unanchored">unanchored</div>';
+          statusText = 'configured \u00B7 no genesis';
+        } else if (tool.status === 'configured') {
+          healthClass = '';
+          badgeHtml = '<div class="tile-badge governed">configured</div>';
+          statusText = '.env present';
+        } else {
+          healthClass = 'unconfigured';
+          badgeHtml = '<div class="tile-badge pending">needs setup</div>';
+          statusText = 'unconfigured';
+        }
+
+        // Launch type hint
+        const launch = tool.launch || {};
+        let launchHint = '';
+        if (launch.kind === 'web' && launch.port) {
+          launchHint = `<div class="tile-launch web">:${launch.port}</div>`;
+        } else if (launch.kind === 'docker') {
+          launchHint = '<div class="tile-launch docker">docker</div>';
+        } else if (launch.kind === 'cli') {
+          launchHint = '<div class="tile-launch">cli</div>';
+        }
+
+        // Preflight issues tooltip (show first 2 issues)
+        let issuesHtml = '';
+        if (hasIssues) {
+          const shown = issues.slice(0, 2).map(i => escapeHtml(i)).join('<br>');
+          const more = issues.length > 2 ? `<br>+${issues.length - 2} more` : '';
+          issuesHtml = `<div class="tile-preflight-issues">${shown}${more}</div>`;
+        }
+
+        tile.innerHTML = `
+          <div class="tile-health ${healthClass}"></div>
+          <div class="tile-icon">${icon}</div>
+          <div class="tile-name">${tool.name}</div>
+          <div class="tile-status">${statusText}</div>
+          ${launchHint}
+          ${issuesHtml}
+          ${badgeHtml}
+        `;
+
+        tile.onclick = () => launchTool(tool);
+        tile.dataset.toolName = tool.name;
+        grid.appendChild(tile);
+      });
+
+      // ZeroPoint system tile
+      const zpTile = document.createElement('div');
+      zpTile.className = 'cockpit-tile zp-core';
+      zpTile.innerHTML = `
+        <div class="tile-health ${hasGenesis ? '' : 'unanchored'}"></div>
+        <div class="tile-icon">\u2699\uFE0F</div>
+        <div class="tile-name">ZeroPoint</div>
+        <div class="tile-status">${hasGenesis ? 'governance engine \u00B7 genesis active' : 'governance engine \u00B7 no genesis'}</div>
+        <div class="tile-badge ${hasGenesis ? 'governed' : 'unanchored'}">${hasGenesis ? 'core' : 'incomplete'}</div>
+      `;
+      zpTile.onclick = () => {
+        document.getElementById('identityRow').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      grid.appendChild(zpTile);
+
+      // Add tool tile
+      const addTile = document.createElement('div');
+      addTile.className = 'cockpit-tile add-tile';
+      addTile.innerHTML = `
+        <div class="tile-icon">+</div>
+        <div class="tile-name">Add Tool</div>
+        <div class="tile-status">zp configure</div>
+      `;
+      addTile.onclick = () => {
+        showToast('Clone a tool to <code>~/projects/</code> with a <code>.env.example</code>, then run <code>zp configure auto</code>', 5000);
+      };
+      grid.appendChild(addTile);
+    }
+
+    // ── Identity ──────────────────────────────────────────
+    function renderIdentity(data, gen) {
+      const el = (id) => document.getElementById(id);
+      if (!gen || gen.error) {
+        el('operatorName').innerHTML = `<span class="unreachable">No Genesis established</span> &middot; <a href="/onboard" style="color:#7eb8da; text-decoration:none; border-bottom:1px solid rgba(126,184,218,0.3)">Begin Onboarding &rarr;</a>`;
+        ['sovereigntyMode','publicKey','destinationHash','algorithm'].forEach(id => el(id).textContent = '\u2014');
+        return;
+      }
+      const op = gen.operator || null;
+      el('operatorName').textContent = op || '\u2014';
+      el('headerOperator').textContent = op ? `Operator: ${op}` : '';
+      el('sovereigntyMode').textContent = gen.sovereignty_mode || '\u2014';
+      const gk = gen.genesis_public_key || gen.public_key || (data && data.public_key) || null;
+      el('publicKey').textContent = gk ? truncateKey(gk) : '\u2014';
+      el('destinationHash').textContent = (data && !data.error && data.destination_hash) ? truncateKey(data.destination_hash) : '\u2014';
+      el('algorithm').textContent = gen.algorithm || (data && data.algorithm) || 'Ed25519';
+      showWelcome(op);
+    }
+
+    // ── Topology ──────────────────────────────────────────
+    const roleIcons = {
+      gateway: '\u25C7',   // diamond
+      router: '\u25CE',    // bullseye
+      sentinel: '\u25C8',  // filled diamond in circle
+      node: '\u25C9',      // fisheye
+      device: '\u25CB',    // circle
+    };
+
+    function renderTopology(topo) {
+      const map = document.getElementById('topologyMap');
+      if (!topo || topo.error || !topo.nodes || topo.nodes.length === 0) {
+        map.innerHTML = `<div class="topology-desc">No topology data. Configure <code>~/.zeropoint/config/topology.toml</code> to map your network.</div>`;
+        return;
+      }
+
+      let html = '';
+      topo.nodes.forEach((node, i) => {
+        const icon = roleIcons[node.role] || roleIcons.device;
+        const statusClass = node.status === 'active' ? 'active' : 'inactive';
+        const isZP = node.role === 'node';
+        html += `
+          <div class="topology-node ${statusClass} ${isZP ? 'zp-node' : ''}">
+            <div class="topo-icon">${icon}</div>
+            <div class="topo-info">
+              <div class="topo-name">${node.name}</div>
+              <div class="topo-role">${node.role}${node.address ? ' &mdash; ' : ''}<span class="topo-address">${node.address || ''}</span></div>
+              ${node.detail ? `<div class="topo-detail">${node.detail}</div>` : ''}
+            </div>
+          </div>
+        `;
+        if (i < topo.nodes.length - 1) {
+          html += `<div class="topology-connector"></div>`;
+        }
+      });
+
+      if (topo.description) {
+        html += `<div class="topology-desc">${topo.description}</div>`;
+      }
+      map.innerHTML = html;
+    }
+
+    // ── Gates ─────────────────────────────────────────────
+    function renderGates(rulesData) {
+      const statusEl = document.getElementById('gateStatus');
+      const rulesEl = document.getElementById('gateRules');
+      const ok = !rulesData.error && rulesData.rules && rulesData.rules.length > 0;
+      statusEl.innerHTML = `<div class="status-indicator ${ok ? 'pass' : 'fail'}"></div><div>${ok ? 'GATES INSTALLED' : 'GATES COMPROMISED'}</div>`;
+      if (!ok) { rulesEl.innerHTML = `<div class="unreachable">No rules loaded</div>`; return; }
+      rulesEl.innerHTML = rulesData.rules.map(r => {
+        const c = r.category === 'constitutional';
+        return `<div class="gate-rule ${c ? 'constitutional' : ''}"><div class="gate-rule-dot"></div><div class="gate-rule-name">${r.name || 'Unknown'}</div><div class="gate-rule-category">${r.category || 'standard'}</div></div>`;
       }).join('');
     }
 
-    // Render chain integrity
-    function renderChain(auditData) {
-      const statusEl = document.getElementById('chainStatus');
-      const detailsEl = document.getElementById('chainDetails');
-
-      if (auditData.error) {
-        statusEl.innerHTML = `
-          <div class="status-indicator fail"></div>
-          <div>CHAIN UNREACHABLE</div>
-        `;
-        detailsEl.innerHTML = `<div class="chain-detail-line unreachable">Unable to verify chain</div>`;
+    // ── Chain ─────────────────────────────────────────────
+    function renderChain(audit) {
+      const s = document.getElementById('chainStatus');
+      const d = document.getElementById('chainDetails');
+      if (audit.error) {
+        s.innerHTML = `<div class="status-indicator fail"></div><div>CHAIN UNREACHABLE</div>`;
+        d.innerHTML = `<div class="chain-detail-line unreachable">Unable to verify chain</div>`;
         return;
       }
-
-      const isValid = auditData.valid === true;
-      const symbol = isValid ? '✓' : '✕';
-      const symbolClass = isValid ? 'success' : 'error-text';
-
-      statusEl.innerHTML = `
-        <div class="status-indicator ${isValid ? 'pass' : 'fail'}"></div>
-        <div>${isValid ? 'CHAIN VERIFIED' : 'CHAIN BROKEN'}</div>
-      `;
-
-      detailsEl.innerHTML = `
-        <div class="chain-detail-line">
-          <span class="chain-detail-label">Entries Examined:</span>
-          <span>${auditData.entries_examined || 0}</span>
-        </div>
-        <div class="chain-detail-line">
-          <span class="chain-detail-label">Validity:</span>
-          <span class="${symbolClass}">${symbol}</span>
-        </div>
-        ${auditData.error_message ? `<div class="chain-detail-line error">${auditData.error_message}</div>` : ''}
+      const ok = audit.valid === true;
+      s.innerHTML = `<div class="status-indicator ${ok?'pass':'fail'}"></div><div>${ok ? 'CHAIN VERIFIED' : 'CHAIN BROKEN'}</div>`;
+      d.innerHTML = `
+        <div class="chain-detail-line"><span class="chain-detail-label">Entries Examined:</span><span>${audit.entries_examined||0}</span></div>
+        <div class="chain-detail-line"><span class="chain-detail-label">Validity:</span><span class="${ok?'success':'error-text'}">${ok?'\u2713':'\u2715'}</span></div>
+        ${audit.error_message ? `<div class="chain-detail-line error">${audit.error_message}</div>` : ''}
       `;
     }
 
-    // Render security posture
-    function renderPosture(postureData) {
+    // ── Security Posture ──────────────────────────────────
+    function renderPosture(data) {
       const scoreEl = document.getElementById('postureScore');
       const checksEl = document.getElementById('postureChecks');
       const summaryEl = document.getElementById('postureSummary');
 
-      if (postureData.error) {
-        scoreEl.textContent = '—';
+      if (data.error) {
+        scoreEl.textContent = '\u2014';
         checksEl.innerHTML = `<div class="unreachable">Posture data unavailable</div>`;
-        summaryEl.innerHTML = `<span class="unreachable">Unable to assess security posture</span>`;
+        summaryEl.textContent = '';
         return;
       }
 
-      // Render score
-      const score = postureData.score !== undefined ? postureData.score : '—';
+      // Score with color
+      const score = data.score !== undefined ? data.score : 0;
       scoreEl.textContent = score;
+      scoreEl.className = 'score-value ' + (score >= 85 ? 'green' : score >= 60 ? 'yellow' : 'red');
 
-      // Render checks
-      if (postureData.checks && postureData.checks.length > 0) {
-        checksEl.innerHTML = postureData.checks.map(check => {
-          const status = check.status || 'pass';
-          const indicatorClass = status === 'pass' ? 'pass' : status === 'warning' ? 'warning' : 'fail';
+      // Summary
+      summaryEl.textContent = data.summary || '';
+
+      // Checks with full detail
+      if (data.checks && data.checks.length > 0) {
+        checksEl.innerHTML = data.checks.map(c => {
+          const st = c.status || 'pass';
+          const ic = st === 'pass' ? 'pass' : st === 'warning' ? 'warning' : 'fail';
           return `
             <div class="posture-check">
-              <div class="check-indicator ${indicatorClass}"></div>
-              <div class="check-name">${check.name || 'Unknown Check'}</div>
+              <div class="check-indicator ${ic}"></div>
+              <div class="check-body">
+                <div class="check-name">${c.name || 'Unknown'}</div>
+                <div class="check-detail">${c.detail || ''}</div>
+                <div class="check-category">${c.category || ''}</div>
+              </div>
             </div>
           `;
         }).join('');
       } else {
         checksEl.innerHTML = `<div class="loading">No checks available</div>`;
       }
-
-      // Render summary
-      if (postureData.summary) {
-        summaryEl.textContent = postureData.summary;
-      } else {
-        summaryEl.textContent = 'Security assessment complete.';
-      }
     }
 
-    // Initialize on page load
+    // ── Init ──────────────────────────────────────────────
     async function initialize() {
       try {
-        const [identityData, rulesData, auditData, statsData, postureData] = await Promise.all([
+        const [identity, genesis, rules, audit, stats, posture, topo, tools] = await Promise.all([
           fetchEndpoint(endpoints.identity),
+          fetchEndpoint(endpoints.genesis),
           fetchEndpoint(endpoints.rules),
           fetchEndpoint(endpoints.audit),
           fetchEndpoint(endpoints.stats),
-          fetchEndpoint(endpoints.security)
+          fetchEndpoint(endpoints.security),
+          fetchEndpoint(endpoints.topology),
+          fetchEndpoint(endpoints.tools)
         ]);
 
-        renderIdentity(identityData);
-        renderGates(rulesData, statsData);
-        renderChain(auditData);
-        renderPosture(postureData);
+        const hasGenesis = genesis && !genesis.error && (genesis.genesis_public_key || genesis.public_key);
+
+        renderCockpit(tools, !!hasGenesis);
+        renderIdentity(identity, genesis);
+        renderTopology(topo);
+        renderGates(rules);
+        renderChain(audit);
+        renderPosture(posture);
       } catch (err) {
         console.error('Verification surface error:', err);
       }
     }
 
-    // Run initialization when DOM is ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initialize);
     } else {
