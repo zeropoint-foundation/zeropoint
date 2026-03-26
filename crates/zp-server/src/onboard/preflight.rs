@@ -110,12 +110,34 @@ pub async fn run_preflight(
     events.push(OnboardEvent::terminal(""));
     events.push(OnboardEvent::terminal("── Preflight ──────────────────────────"));
 
-    // 1. Check Docker availability (once, shared across all tools)
-    let docker_available = check_docker_available().await;
+    // 1. Check Docker availability — attempt auto-start if not running
+    let mut docker_available = check_docker_available().await;
     if docker_available {
         events.push(OnboardEvent::terminal("  ✓ Docker daemon reachable"));
     } else {
-        events.push(OnboardEvent::terminal("  ⚠ Docker not available — docker-based tools won't launch"));
+        events.push(OnboardEvent::terminal("  ⚠ Docker not running — attempting to start..."));
+        if try_start_docker().await {
+            // Wait for daemon to become responsive (up to 30s)
+            for i in 0..15 {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                if check_docker_available().await {
+                    docker_available = true;
+                    events.push(OnboardEvent::terminal(&format!(
+                        "  ✓ Docker started (took ~{}s)", (i + 1) * 2
+                    )));
+                    break;
+                }
+            }
+            if !docker_available {
+                events.push(OnboardEvent::terminal(
+                    "  ✗ Docker installed but failed to start — check Docker Desktop or the docker service"
+                ));
+            }
+        } else {
+            events.push(OnboardEvent::terminal(
+                "  ✗ Docker not installed — install Docker Desktop from https://docker.com/get-started"
+            ));
+        }
     }
 
     // 2. Enumerate configured tools
@@ -283,6 +305,16 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
         else if has_makefile { "make" }
         else { "none" };
 
+    // ── .env bootstrap: copy from .env.example if missing ──
+    let env_path = path.join(".env");
+    let env_example = path.join(".env.example");
+    if !env_path.exists() && env_example.exists() {
+        if std::fs::copy(&env_example, &env_path).is_ok() {
+            auto_fixed.push("Created .env from .env.example".into());
+            events.push(OnboardEvent::terminal("    ✓ Created .env from .env.example"));
+        }
+    }
+
     // ── .env completeness ──────────────────────────────────
     let env_check = check_env_completeness(path);
     checks.push(env_check.clone());
@@ -346,7 +378,17 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
     // ── Node.js tools ──────────────────────────────────────
     if has_package_json {
         let node_modules = path.join("node_modules");
-        if !node_modules.exists() {
+        let needs_install = if !node_modules.exists() {
+            true
+        } else {
+            // Stale check: if package.json is newer than node_modules, re-install
+            let pkg_modified = std::fs::metadata(path.join("package.json"))
+                .and_then(|m| m.modified()).ok();
+            let nm_modified = std::fs::metadata(&node_modules)
+                .and_then(|m| m.modified()).ok();
+            matches!((pkg_modified, nm_modified), (Some(p), Some(n)) if p > n)
+        };
+        if needs_install {
             events.push(OnboardEvent::terminal("    Installing npm dependencies..."));
             let npm_ok = run_cmd(path, "npm", &["install", "--no-audit", "--no-fund"]).await;
             if npm_ok.success {
@@ -504,7 +546,7 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
 
     let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
 
-    // Count placeholder values (empty or containing "your_" or "changeme")
+    // Count placeholder values (empty, sentinel markers, or common placeholders)
     let mut total = 0;
     let mut placeholders = 0;
     for line in contents.lines() {
@@ -512,8 +554,15 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
         if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') { continue; }
         total += 1;
         if let Some((_key, val)) = trimmed.split_once('=') {
-            let v = val.trim().trim_matches('"').trim_matches('\'');
-            if v.is_empty() || v.contains("your_") || v.contains("changeme") || v.contains("PLACEHOLDER") {
+            // Strip inline comments before checking the value
+            let v = val.split('#').next().unwrap_or("")
+                .trim().trim_matches('"').trim_matches('\'');
+            if v.is_empty()
+                || v.contains("your_")
+                || v.contains("changeme")
+                || v.contains("PLACEHOLDER")
+                || val.contains("# MISSING")
+            {
                 placeholders += 1;
             }
         }
@@ -536,6 +585,66 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
 
 async fn check_docker_available() -> bool {
     run_cmd(Path::new("/"), "docker", &["info", "--format", "{{.ServerVersion}}"]).await.success
+}
+
+/// Attempt to start Docker daemon. Returns true if we found a way to start it
+/// (doesn't guarantee the daemon is ready — caller should poll check_docker_available).
+async fn try_start_docker() -> bool {
+    // macOS: Docker Desktop
+    #[cfg(target_os = "macos")]
+    {
+        // Try Docker Desktop first
+        if Path::new("/Applications/Docker.app").exists() {
+            let _ = tokio::process::Command::new("open")
+                .args(["-g", "-a", "Docker"])  // -g = don't bring to foreground
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+            return true;
+        }
+        // Colima (lightweight Docker runtime for macOS)
+        if run_cmd(Path::new("/"), "which", &["colima"]).await.success {
+            let _ = tokio::process::Command::new("colima")
+                .args(["start"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+            return true;
+        }
+    }
+
+    // Linux: systemd or direct service
+    #[cfg(target_os = "linux")]
+    {
+        // Try systemctl first (most modern distros)
+        if run_cmd(Path::new("/"), "which", &["systemctl"]).await.success {
+            let result = run_cmd(Path::new("/"), "systemctl", &["start", "docker"]).await;
+            if result.success { return true; }
+            // May need sudo — try via pkexec (non-interactive sudo for desktop)
+            let result = run_cmd(Path::new("/"), "sudo", &["-n", "systemctl", "start", "docker"]).await;
+            if result.success { return true; }
+        }
+        // Fallback: service command
+        if run_cmd(Path::new("/"), "which", &["service"]).await.success {
+            let result = run_cmd(Path::new("/"), "sudo", &["-n", "service", "docker", "start"]).await;
+            if result.success { return true; }
+        }
+    }
+
+    // Windows: Docker Desktop
+    #[cfg(target_os = "windows")]
+    {
+        let docker_desktop = Path::new("C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe");
+        if docker_desktop.exists() {
+            let _ = tokio::process::Command::new(docker_desktop)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+            return true;
+        }
+    }
+
+    false
 }
 
 struct CmdResult {
