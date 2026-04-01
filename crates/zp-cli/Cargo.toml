@@ -15,7 +15,8 @@ path = "src/main.rs"
 [dependencies]
 # Local workspace crates
 zp-core = { path = "../zp-core" }
-zp-keys = { path = "../zp-keys" }
+zp-engine = { path = "../zp-engine" }
+zp-keys = { path = "../zp-keys", features = ["os-keychain", "hw-trezor"] }
 zp-mesh = { path = "../zp-mesh" }
 zp-pipeline = { path = "../zp-pipeline" }
 zp-trust = { path = "../zp-trust" }

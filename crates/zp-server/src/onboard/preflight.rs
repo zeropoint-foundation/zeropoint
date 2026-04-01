@@ -26,7 +26,7 @@ pub struct ToolPreflight {
     pub name: String,
     pub path: String,
     pub ready: bool,
-    pub launch_method: String,  // "docker", "npm", "script", "make", "none"
+    pub launch_method: String,  // "native", "pnpm", "npm", "docker", "script", "make", "none"
     pub checks: Vec<PreflightCheck>,
     pub auto_fixed: Vec<String>,
 }
@@ -92,6 +92,10 @@ const PORT_VARS: &[&str] = &[
     "HTTP_PORT", "LISTEN_PORT", "WEBUI_PORT",
 ];
 
+/// How recently a tool must have passed preflight for us to skip re-checking.
+/// Receipts older than this are considered stale.
+const PREFLIGHT_FRESH_SECS: i64 = 3600; // 1 hour
+
 /// Run preflight on all tools in the scan path.
 /// Returns (results, streaming events).
 ///
@@ -99,13 +103,52 @@ const PORT_VARS: &[&str] = &[
 /// pass/fail summary are emitted as signed audit entries in the chain.
 /// This is the canonical source of truth; `preflight.json` is kept
 /// only as a read cache for fast cockpit rendering.
+///
+/// **Idempotent**: tools with a `tool:preflight:passed:{name}` receipt
+/// less than `PREFLIGHT_FRESH_SECS` old are skipped unless `force` is true.
 pub async fn run_preflight(
     scan_path: &Path,
     audit_store: Option<&Mutex<AuditStore>>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
+    run_preflight_inner(scan_path, audit_store, false, None).await
+}
+
+/// Force a full re-run of all tools, ignoring fresh chain receipts.
+pub async fn run_preflight_force(
+    scan_path: &Path,
+    audit_store: Option<&Mutex<AuditStore>>,
+) -> (PreflightResults, Vec<OnboardEvent>) {
+    run_preflight_inner(scan_path, audit_store, true, None).await
+}
+
+/// Run preflight scoped to a single tool. Other tools are skipped.
+/// Always forces a fresh run (never skips based on chain freshness).
+pub async fn run_preflight_single(
+    scan_path: &Path,
+    tool_name: &str,
+    audit_store: Option<&Mutex<AuditStore>>,
+) -> (PreflightResults, Vec<OnboardEvent>) {
+    run_preflight_inner(scan_path, audit_store, true, Some(tool_name)).await
+}
+
+async fn run_preflight_inner(
+    scan_path: &Path,
+    audit_store: Option<&Mutex<AuditStore>>,
+    force: bool,
+    only_tool: Option<&str>,
+) -> (PreflightResults, Vec<OnboardEvent>) {
     let mut events = Vec::new();
     let mut tool_results = Vec::new();
     let mut port_map: HashMap<u16, Vec<String>> = HashMap::new();
+
+    // Build set of tools that recently passed preflight (idempotent skip).
+    let fresh_tools: std::collections::HashSet<String> = if force {
+        std::collections::HashSet::new()
+    } else if let Some(store) = audit_store {
+        fresh_preflight_tools(store)
+    } else {
+        std::collections::HashSet::new()
+    };
 
     events.push(OnboardEvent::terminal(""));
     events.push(OnboardEvent::terminal("── Preflight ──────────────────────────"));
@@ -177,6 +220,34 @@ pub async fn run_preflight(
 
     // 3. Per-tool preflight
     for (name, path) in &tool_dirs {
+        // Single-tool scope: skip everything except the requested tool.
+        if let Some(target) = only_tool {
+            if !name.eq_ignore_ascii_case(target) {
+                continue;
+            }
+        }
+
+        // Idempotent: skip tools with a fresh passing receipt.
+        if fresh_tools.contains(name.as_str()) {
+            events.push(OnboardEvent::terminal(&format!(
+                "  ▸ {} — recently passed, skipping (use force to re-check)", name
+            )));
+            // Synthesize a passing result so the summary counts are correct.
+            tool_results.push(ToolPreflight {
+                name: name.clone(),
+                path: path.display().to_string(),
+                ready: true,
+                launch_method: "cached".to_string(),
+                checks: vec![PreflightCheck {
+                    name: "chain_fresh".into(),
+                    status: "pass".into(),
+                    detail: "Passed within the last hour — skipped".into(),
+                }],
+                auto_fixed: vec![],
+            });
+            continue;
+        }
+
         let (result, tool_events) = preflight_tool(name, path, docker_available).await;
 
         // Collect port for conflict detection
@@ -188,8 +259,10 @@ pub async fn run_preflight(
         tool_results.push(result);
     }
 
-    // 4. Port conflict detection
+    // 4. Port conflict detection — app ports AND compose infrastructure ports
     let mut port_conflicts = Vec::new();
+
+    // 4a. Check for tools claiming the same app port
     for (port, tools) in &port_map {
         if tools.len() > 1 {
             port_conflicts.push(PortConflict {
@@ -201,6 +274,44 @@ pub async fn run_preflight(
                 port,
                 tools.join(", ")
             )));
+        }
+    }
+
+    // 4b. Check compose infrastructure ports against the live system.
+    //     This catches the buried failure: tool A's postgres on 5432
+    //     collides with tool B's postgres already running on 5432.
+    if docker_available {
+        for (name, path) in &tool_dirs {
+            let compose_ports = extract_compose_ports(path);
+            for (host_port, service) in &compose_ports {
+                if let Some(occupant) = check_port_in_use(*host_port).await {
+                    // Is it occupied by THIS tool's own compose stack? That's fine.
+                    let own_container = occupant.to_lowercase().contains(&name.to_lowercase());
+                    if !own_container {
+                        port_conflicts.push(PortConflict {
+                            port: *host_port,
+                            tools: vec![
+                                format!("{}:{}", name, service),
+                                occupant.clone(),
+                            ],
+                        });
+                        events.push(OnboardEvent::terminal(&format!(
+                            "  ⚠ {}'s {} needs port {} — already held by {}",
+                            name, service, host_port, occupant
+                        )));
+
+                        // Emit dep receipt — this is a blocking conflict
+                        if let Some(store) = audit_store {
+                            use crate::tool_state::events as te;
+                            use crate::tool_chain::emit_tool_receipt;
+                            let event = te::dep(te::DEP_FAILED, name, &format!("port:{}", host_port));
+                            emit_tool_receipt(store, &event, Some(&format!(
+                                "service={} occupant={}", service, occupant
+                            )));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -224,6 +335,7 @@ pub async fn run_preflight(
     // ── Emit receipts into the audit chain ──────────────────
     if let Some(store) = audit_store {
         use crate::tool_chain::{ToolEvent, emit_tool_receipt};
+        use crate::tool_state::events as te;
 
         for tool in &results.tools {
             // Emit configured receipt for tools with .env
@@ -243,6 +355,54 @@ pub async fn run_preflight(
                     &check.status,
                 );
                 emit_tool_receipt(store, &event, Some(&check.detail));
+            }
+
+            // ── Dependency receipts ─────────────────────────────
+            // Infer dependencies from the checks that failed or passed.
+            // Docker-based tools depend on Docker.  Tools with compose
+            // depend on whatever services compose provides.
+            let tool_path = PathBuf::from(&tool.path);
+
+            // Docker daemon dependency
+            if tool.launch_method == "docker" || has_compose_file(&tool_path) {
+                let event = if docker_available {
+                    te::dep(te::DEP_SATISFIED, &tool.name, "docker")
+                } else {
+                    te::dep(te::DEP_NEEDED, &tool.name, "docker")
+                };
+                emit_tool_receipt(store, &event, None);
+            }
+
+            // Database dependency: infer from .env variables
+            if env_path.exists() {
+                if let Ok(env_contents) = std::fs::read_to_string(&env_path) {
+                    // Postgres
+                    if env_contents.contains("DATABASE_URL")
+                        || env_contents.contains("POSTGRES_")
+                        || env_contents.contains("PG_")
+                    {
+                        // Check if the docker_daemon check passed (implies compose deps work)
+                        let compose_ok = tool.checks.iter().any(|c|
+                            c.name == "compose_valid" && c.status == "pass"
+                        );
+                        let event = if compose_ok || docker_available {
+                            te::dep(te::DEP_SATISFIED, &tool.name, "postgres")
+                        } else {
+                            te::dep(te::DEP_NEEDED, &tool.name, "postgres")
+                        };
+                        emit_tool_receipt(store, &event, None);
+                    }
+
+                    // Redis
+                    if env_contents.contains("REDIS_URL") || env_contents.contains("REDIS_HOST") {
+                        let event = if docker_available {
+                            te::dep(te::DEP_SATISFIED, &tool.name, "redis")
+                        } else {
+                            te::dep(te::DEP_NEEDED, &tool.name, "redis")
+                        };
+                        emit_tool_receipt(store, &event, None);
+                    }
+                }
             }
 
             // Emit summary receipt
@@ -294,12 +454,20 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
     events.push(OnboardEvent::terminal(&format!("  ▸ {}", name)));
 
     // Detect launch method
+    let has_cargo = path.join("Cargo.toml").exists();
     let has_compose = has_compose_file(path);
     let has_package_json = path.join("package.json").exists();
+    let has_pnpm_lock = path.join("pnpm-lock.yaml").exists();
+    let has_npm_lock = path.join("package-lock.json").exists();
     let start_script = find_start_script(path);
     let has_makefile = path.join("Makefile").exists();
 
-    let launch_method = if has_compose { "docker" }
+    // Priority: native > local package manager (pnpm > npm) > docker > script > make
+    // Local-first: prefer pnpm/npm over Docker when lockfile present
+    let launch_method = if has_cargo { "native" }
+        else if has_package_json && has_pnpm_lock { "pnpm" }
+        else if has_package_json && has_npm_lock { "npm" }
+        else if has_compose { "docker" }
         else if has_package_json { "npm" }
         else if start_script.is_some() { "script" }
         else if has_makefile { "make" }
@@ -315,12 +483,44 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
         }
     }
 
-    // ── .env completeness ──────────────────────────────────
-    let env_check = check_env_completeness(path);
-    checks.push(env_check.clone());
+    // ── .env completeness (with vault auto-resolve) ────────
+    let mut env_check = check_env_completeness(path);
     if env_check.status == "fail" {
-        events.push(OnboardEvent::terminal(&format!("    ✗ {}", env_check.detail)));
+        // Critical env vars are missing — attempt vault resolution.
+        // Shell out to `zp configure tool` which reads the vault and
+        // resolves credentials semantically. This is the same pipeline
+        // as `zp configure auto` but targeted at a single tool.
+        events.push(OnboardEvent::terminal(&format!("    ⚠ {}", env_check.detail)));
+        events.push(OnboardEvent::terminal("    → Attempting vault auto-resolve..."));
+
+        let configure_result = run_cmd(
+            path,
+            "zp",
+            &["configure", "tool", "--path", &path.display().to_string(), "--name", name],
+        ).await;
+
+        if configure_result.success {
+            // Re-check after vault resolution
+            let recheck = check_env_completeness(path);
+            if recheck.status != "fail" {
+                env_check = recheck;
+                env_check.detail = format!("{} (auto-resolved from vault)", env_check.detail);
+                auto_fixed.push("Resolved credentials from vault".into());
+                events.push(OnboardEvent::terminal("    ✓ Credentials resolved from vault"));
+            } else {
+                // Vault didn't have what we needed — report what's still missing
+                env_check = recheck;
+                events.push(OnboardEvent::terminal(&format!("    ✗ {}", env_check.detail)));
+                events.push(OnboardEvent::terminal(
+                    "    → Store missing credentials: zp configure vault-add --provider <name> --field api_key"
+                ));
+            }
+        } else {
+            // zp binary not on PATH or configure failed — fall through with original check
+            events.push(OnboardEvent::terminal("    ⚠ Vault auto-resolve unavailable"));
+        }
     }
+    checks.push(env_check.clone());
 
     // ── Docker-based tools ─────────────────────────────────
     if has_compose {
@@ -377,6 +577,10 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
 
     // ── Node.js tools ──────────────────────────────────────
     if has_package_json {
+        // Detect package manager: pnpm (pnpm-lock.yaml) > npm (default)
+        let use_pnpm = path.join("pnpm-lock.yaml").exists();
+        let pkg_mgr = if use_pnpm { "pnpm" } else { "npm" };
+
         let node_modules = path.join("node_modules");
         let needs_install = if !node_modules.exists() {
             true
@@ -389,29 +593,38 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
             matches!((pkg_modified, nm_modified), (Some(p), Some(n)) if p > n)
         };
         if needs_install {
-            events.push(OnboardEvent::terminal("    Installing npm dependencies..."));
-            let npm_ok = run_cmd(path, "npm", &["install", "--no-audit", "--no-fund"]).await;
-            if npm_ok.success {
+            events.push(OnboardEvent::terminal(&format!(
+                "    Installing {} dependencies...", pkg_mgr
+            )));
+            let install_args: Vec<&str> = if use_pnpm {
+                vec!["install"]
+            } else {
+                vec!["install", "--no-audit", "--no-fund"]
+            };
+            let install_ok = run_cmd(path, pkg_mgr, &install_args).await;
+            if install_ok.success {
                 checks.push(PreflightCheck {
-                    name: "npm_deps".into(),
+                    name: "node_deps".into(),
                     status: "fixed".into(),
-                    detail: "Dependencies installed (npm install)".into(),
+                    detail: format!("Dependencies installed ({} install)", pkg_mgr),
                 });
-                auto_fixed.push("Installed npm dependencies".into());
-                events.push(OnboardEvent::terminal("    ✓ npm install complete"));
+                auto_fixed.push(format!("Installed {} dependencies", pkg_mgr));
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✓ {} install complete", pkg_mgr
+                )));
             } else {
                 checks.push(PreflightCheck {
-                    name: "npm_deps".into(),
+                    name: "node_deps".into(),
                     status: "fail".into(),
-                    detail: format!("npm install failed: {}", npm_ok.stderr_tail()),
+                    detail: format!("{} install failed: {}", pkg_mgr, install_ok.stderr_tail()),
                 });
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✗ npm install failed: {}", npm_ok.stderr_tail()
+                    "    ✗ {} install failed: {}", pkg_mgr, install_ok.stderr_tail()
                 )));
             }
         } else {
             checks.push(PreflightCheck {
-                name: "npm_deps".into(),
+                name: "node_deps".into(),
                 status: "pass".into(),
                 detail: "node_modules present".into(),
             });
@@ -475,6 +688,182 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
         });
     }
 
+    // ── Zombie container detection ────────────────────────
+    // If compose is present, check for orphan containers from a previous
+    // launch that might be holding ports or database locks.
+    if has_compose && docker_ok {
+        let ps_result = run_cmd(path, "docker", &["compose", "ps", "-q"]).await;
+        if ps_result.success && !ps_result.stdout.trim().is_empty() {
+            let container_count = ps_result.stdout.lines().count();
+            // Try to bring them down cleanly
+            let down_result = run_cmd(path, "docker", &["compose", "down", "--remove-orphans"]).await;
+            if down_result.success {
+                checks.push(PreflightCheck {
+                    name: "zombie_containers".into(),
+                    status: "fixed".into(),
+                    detail: format!("Cleaned up {} orphan container(s) from previous run", container_count),
+                });
+                auto_fixed.push(format!("Removed {} zombie containers", container_count));
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✓ Cleaned {} orphan container(s)", container_count
+                )));
+            } else {
+                checks.push(PreflightCheck {
+                    name: "zombie_containers".into(),
+                    status: "fail".into(),
+                    detail: format!("Found {} running container(s) that could not be stopped", container_count),
+                });
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✗ {} zombie container(s) — try: docker compose down", container_count
+                )));
+            }
+        }
+    }
+
+    // ── Stale PID file detection ──────────────────────────
+    // Native tools often write PID files (e.g., ~/.ironclaw/ironclaw.pid).
+    // A leftover PID file from a crash prevents the next startup.
+    if has_cargo {
+        let pid_dirs = [
+            // ~/.{toolname}/{toolname}.pid
+            dirs::home_dir().map(|h| h.join(format!(".{}", name))),
+            // ./tmp/{toolname}.pid
+            Some(path.join("tmp")),
+        ];
+        for dir_opt in &pid_dirs {
+            if let Some(dir) = dir_opt {
+                let pid_file = dir.join(format!("{}.pid", name));
+                if pid_file.exists() {
+                    // Read PID and check if process is still running
+                    let pid_content = std::fs::read_to_string(&pid_file).unwrap_or_default();
+                    let pid_str = pid_content.trim();
+                    let process_alive = if let Ok(pid) = pid_str.parse::<u32>() {
+                        // kill -0 checks existence without sending a signal
+                        run_cmd(Path::new("/"), "kill", &["-0", &pid.to_string()]).await.success
+                    } else {
+                        false
+                    };
+
+                    if !process_alive {
+                        // Stale PID — remove it
+                        if std::fs::remove_file(&pid_file).is_ok() {
+                            checks.push(PreflightCheck {
+                                name: "stale_pid".into(),
+                                status: "fixed".into(),
+                                detail: format!("Removed stale PID file: {}", pid_file.display()),
+                            });
+                            auto_fixed.push(format!("Removed stale {}.pid", name));
+                            events.push(OnboardEvent::terminal(&format!(
+                                "    ✓ Removed stale PID file ({})", pid_str
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Native binary pre-build check ────────────────────
+    // cargo run --release on a fresh clone takes 5–10 minutes.
+    // Detect whether the release binary exists so the cockpit can
+    // warn the user or pre-build.
+    if has_cargo {
+        // Detect the binary name from Cargo.toml
+        let binary_name = detect_cargo_binary(path).unwrap_or_else(|| name.to_string());
+        let release_binary = path.join("target").join("release").join(&binary_name);
+
+        if release_binary.exists() {
+            checks.push(PreflightCheck {
+                name: "native_binary".into(),
+                status: "pass".into(),
+                detail: format!("Release binary found: target/release/{}", binary_name),
+            });
+        } else {
+            // Not a hard failure — it'll just take a while on first launch
+            checks.push(PreflightCheck {
+                name: "native_binary".into(),
+                status: "pass".into(),  // warn, not fail
+                detail: format!(
+                    "No release binary yet — first launch will compile (3–10 min). \
+                     Pre-build with: cd {} && cargo build --release",
+                    path.display()
+                ),
+            });
+            events.push(OnboardEvent::terminal(&format!(
+                "    ⚠ No release binary — first launch will compile ({} min)",
+                "3–10"
+            )));
+        }
+    }
+
+    // ── Database connectivity smoke test ──────────────────
+    // If the tool uses compose with postgres/redis, verify the
+    // services can actually accept connections after `docker compose up -d`.
+    // This catches: wrong credentials, missing init scripts, volume
+    // permission issues — things image-pull alone can't detect.
+    if has_compose && docker_ok {
+        let compose_ports = extract_compose_ports(path);
+        let has_db_service = compose_ports.iter().any(|(p, _)| *p == 5432 || *p == 5433)
+            || env_mentions_db(path);
+
+        if has_db_service {
+            // Quick up → wait → check → down cycle
+            let up = run_cmd(path, "docker", &["compose", "up", "-d"]).await;
+            if up.success {
+                // Give services a few seconds to initialize
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+                // Try pg_isready against the compose network
+                let pg_check = run_cmd(
+                    path,
+                    "docker",
+                    &["compose", "exec", "-T", "db", "pg_isready", "-U", "postgres"],
+                ).await;
+
+                // Also try the service named "postgres" if "db" didn't work
+                let pg_ok = if pg_check.success {
+                    true
+                } else {
+                    run_cmd(
+                        path,
+                        "docker",
+                        &["compose", "exec", "-T", "postgres", "pg_isready", "-U", "postgres"],
+                    ).await.success
+                };
+
+                // Clean up — don't leave containers running after preflight
+                let _ = run_cmd(path, "docker", &["compose", "down"]).await;
+
+                if pg_ok {
+                    checks.push(PreflightCheck {
+                        name: "db_connectivity".into(),
+                        status: "pass".into(),
+                        detail: "Postgres accepts connections".into(),
+                    });
+                    events.push(OnboardEvent::terminal("    ✓ Database connectivity verified"));
+                } else {
+                    checks.push(PreflightCheck {
+                        name: "db_connectivity".into(),
+                        status: "fail".into(),
+                        detail: "Postgres container started but pg_isready failed — check credentials or init scripts".into(),
+                    });
+                    events.push(OnboardEvent::terminal(
+                        "    ✗ Database not accepting connections — check compose logs"
+                    ));
+                }
+            } else {
+                checks.push(PreflightCheck {
+                    name: "db_connectivity".into(),
+                    status: "fail".into(),
+                    detail: format!("docker compose up failed: {}", up.stderr_tail()),
+                });
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✗ Compose up failed: {}", up.stderr_tail()
+                )));
+            }
+        }
+    }
+
     // Determine readiness
     let has_failures = checks.iter().any(|c| c.status == "fail");
     let ready = !has_failures;
@@ -534,6 +923,21 @@ fn detect_port(tool_path: &Path) -> Option<u16> {
     None
 }
 
+/// Env var names that must have real values for the tool to function.
+/// Everything else is optional — a placeholder there is a warning, not a blocker.
+const CRITICAL_ENV_VARS: &[&str] = &[
+    // Database
+    "DATABASE_URL", "DB_URL", "POSTGRES_PASSWORD", "PG_PASSWORD",
+    // LLM / AI provider
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY",
+    "OPENROUTER_API_KEY", "TOGETHER_API_KEY",
+    // App identity
+    "PORT", "APP_PORT", "SERVER_PORT", "API_PORT",
+    "SECRET_KEY", "JWT_SECRET", "SESSION_SECRET",
+    // Auth (the tool's own gateway)
+    "GATEWAY_AUTH_TOKEN", "AUTH_TOKEN", "API_TOKEN",
+];
+
 fn check_env_completeness(path: &Path) -> PreflightCheck {
     let env_path = path.join(".env");
     if !env_path.exists() {
@@ -546,33 +950,54 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
 
     let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
 
-    // Count placeholder values (empty, sentinel markers, or common placeholders)
     let mut total = 0;
     let mut placeholders = 0;
+    let mut critical_missing: Vec<String> = Vec::new();
+
     for line in contents.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') { continue; }
         total += 1;
-        if let Some((_key, val)) = trimmed.split_once('=') {
+        if let Some((key, val)) = trimmed.split_once('=') {
+            let key = key.trim();
             // Strip inline comments before checking the value
             let v = val.split('#').next().unwrap_or("")
                 .trim().trim_matches('"').trim_matches('\'');
-            if v.is_empty()
+            let is_placeholder = v.is_empty()
                 || v.contains("your_")
                 || v.contains("changeme")
                 || v.contains("PLACEHOLDER")
-                || val.contains("# MISSING")
-            {
+                || val.contains("# MISSING");
+
+            if is_placeholder {
                 placeholders += 1;
+                // Only flag it as a blocker if it's a critical variable
+                if CRITICAL_ENV_VARS.iter().any(|&c| key == c) {
+                    critical_missing.push(key.to_string());
+                }
             }
         }
     }
 
-    if placeholders > 0 {
+    if !critical_missing.is_empty() {
         PreflightCheck {
             name: "env_file".into(),
             status: "fail".into(),
-            detail: format!("{}/{} env vars are placeholders — store credentials in vault first", placeholders, total),
+            detail: format!(
+                "Critical env vars missing: {} ({} optional placeholders remaining)",
+                critical_missing.join(", "),
+                placeholders - critical_missing.len()
+            ),
+        }
+    } else if placeholders > 0 {
+        // Non-critical placeholders — tool can probably run fine
+        PreflightCheck {
+            name: "env_file".into(),
+            status: "pass".into(),
+            detail: format!(
+                "{} env vars configured ({} optional placeholders — tool should still work)",
+                total - placeholders, placeholders
+            ),
         }
     } else {
         PreflightCheck {
@@ -581,6 +1006,203 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
             detail: format!("{} env vars configured", total),
         }
     }
+}
+
+/// Extract host port mappings from docker-compose.yml.
+///
+/// Parses the `ports:` section of each service for host:container port
+/// mappings.  Returns a vec of (host_port, service_name) pairs.
+///
+/// Handles formats:
+///   - "5432:5432"
+///   - "127.0.0.1:5432:5432"
+///   - "8080:80"
+///   - `5432` (short form — host=container)
+fn extract_compose_ports(tool_path: &Path) -> Vec<(u16, String)> {
+    let compose_files = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"];
+    let compose_path = compose_files.iter()
+        .map(|f| tool_path.join(f))
+        .find(|p| p.exists());
+
+    let contents = match compose_path.and_then(|p| std::fs::read_to_string(&p).ok()) {
+        Some(c) => c,
+        None => return vec![],
+    };
+
+    let mut results = Vec::new();
+    let mut current_service: Option<String> = None;
+    let mut in_ports = false;
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+
+        // Skip comments and empty
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Detect service name (top-level key under services:, 2-space indent)
+        // Simple YAML parsing — works for standard compose files
+        let indent = line.len() - line.trim_start().len();
+
+        if indent == 2 && trimmed.ends_with(':') && !trimmed.starts_with('-') {
+            current_service = Some(trimmed.trim_end_matches(':').to_string());
+            in_ports = false;
+        }
+
+        // Detect ports: section
+        if trimmed == "ports:" && current_service.is_some() {
+            in_ports = true;
+            continue;
+        }
+
+        // Non-list line at same or lower indent ends the ports section
+        if in_ports && !trimmed.starts_with('-') && indent <= 4 {
+            in_ports = false;
+        }
+
+        // Parse port entries
+        if in_ports && trimmed.starts_with('-') {
+            let port_spec = trimmed.trim_start_matches('-').trim()
+                .trim_matches('"').trim_matches('\'');
+            if let Some(host_port) = parse_host_port(port_spec) {
+                let service = current_service.clone().unwrap_or_default();
+                results.push((host_port, service));
+            }
+        }
+    }
+
+    results
+}
+
+/// Parse a Docker port mapping string and return the host port.
+///
+/// Formats: "5432:5432", "127.0.0.1:5432:5432", "8080:80", "5432"
+fn parse_host_port(spec: &str) -> Option<u16> {
+    let parts: Vec<&str> = spec.split(':').collect();
+    match parts.len() {
+        1 => parts[0].split('/').next()?.parse().ok(), // "5432" or "5432/tcp"
+        2 => parts[0].parse().ok(),                     // "5432:5432"
+        3 => parts[1].parse().ok(),                     // "127.0.0.1:5432:5432"
+        _ => None,
+    }
+}
+
+/// Detect the binary name from a Cargo.toml.
+///
+/// Checks in priority order:
+///   1. `[[bin]]` sections — returns the first `name` found
+///   2. `[package]` section — returns the `name` field
+///   3. Falls back to `None` (caller uses directory name)
+///
+/// This is a lightweight parse — we don't pull in `cargo_toml` crate
+/// since we only need the binary name for a readiness check.
+fn detect_cargo_binary(tool_path: &Path) -> Option<String> {
+    let cargo_toml = tool_path.join("Cargo.toml");
+    let contents = std::fs::read_to_string(&cargo_toml).ok()?;
+
+    // Pass 1: look for [[bin]] name = "..."
+    let mut in_bin_section = false;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[[bin]]" {
+            in_bin_section = true;
+            continue;
+        }
+        // Any other section header ends [[bin]]
+        if trimmed.starts_with('[') {
+            in_bin_section = false;
+        }
+        if in_bin_section {
+            if let Some(name) = parse_toml_string_value(trimmed, "name") {
+                return Some(name);
+            }
+        }
+    }
+
+    // Pass 2: fall back to [package] name
+    let mut in_package = false;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[package]" {
+            in_package = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_package = false;
+        }
+        if in_package {
+            if let Some(name) = parse_toml_string_value(trimmed, "name") {
+                return Some(name);
+            }
+        }
+    }
+
+    None
+}
+
+/// Extract a string value from a TOML key = "value" line.
+fn parse_toml_string_value(line: &str, key: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if let Some(rest) = trimmed.strip_prefix(key) {
+        let rest = rest.trim();
+        if let Some(rest) = rest.strip_prefix('=') {
+            let val = rest.trim().trim_matches('"').trim_matches('\'');
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Check if a tool's .env references database variables.
+fn env_mentions_db(tool_path: &Path) -> bool {
+    let env_path = tool_path.join(".env");
+    if let Ok(contents) = std::fs::read_to_string(&env_path) {
+        return contents.contains("DATABASE_URL")
+            || contents.contains("POSTGRES_")
+            || contents.contains("PG_HOST")
+            || contents.contains("PG_PORT");
+    }
+    false
+}
+
+/// Check if a port is in use on the system.
+/// Returns Some(description) if occupied, None if free.
+async fn check_port_in_use(port: u16) -> Option<String> {
+    // Try lsof first (macOS + Linux)
+    let result = run_cmd(
+        Path::new("/"),
+        "lsof",
+        &["-i", &format!(":{}", port), "-sTCP:LISTEN", "-P", "-n"],
+    ).await;
+
+    if result.success && !result.stdout.trim().is_empty() {
+        // Parse lsof output for process name
+        let lines: Vec<&str> = result.stdout.lines().collect();
+        if lines.len() > 1 {
+            let fields: Vec<&str> = lines[1].split_whitespace().collect();
+            let process = fields.first().unwrap_or(&"unknown");
+            let pid = fields.get(1).unwrap_or(&"?");
+            return Some(format!("{} (PID {})", process, pid));
+        }
+        return Some("unknown process".to_string());
+    }
+
+    // Also check docker containers
+    let docker_result = run_cmd(
+        Path::new("/"),
+        "docker",
+        &["ps", "--format", "{{.Names}} {{.Ports}}", "--filter", &format!("publish={}", port)],
+    ).await;
+
+    if docker_result.success && !docker_result.stdout.trim().is_empty() {
+        let container = docker_result.stdout.lines().next().unwrap_or("unknown container");
+        return Some(format!("container: {}", container.trim()));
+    }
+
+    None
 }
 
 async fn check_docker_available() -> bool {
@@ -661,40 +1283,127 @@ impl CmdResult {
     }
 }
 
+/// Default timeout for quick probes (docker info, lsof, kill -0, etc.)
+const CMD_TIMEOUT_PROBE: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Extended timeout for heavy operations (docker pull, npm install, cargo build).
+const CMD_TIMEOUT_HEAVY: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// Programs that get the extended 5-minute timeout.
+const HEAVY_PROGRAMS: &[&str] = &["pnpm", "npm", "yarn", "cargo"];
+/// Args that upgrade docker to the heavy timeout.
+const HEAVY_DOCKER_ARGS: &[&str] = &["pull", "build", "up", "install"];
+
 async fn run_cmd(cwd: &Path, program: &str, args: &[&str]) -> CmdResult {
-    match tokio::process::Command::new(program)
+    run_cmd_with_timeout(cwd, program, args, None).await
+}
+
+async fn run_cmd_with_timeout(
+    cwd: &Path,
+    program: &str,
+    args: &[&str],
+    timeout_override: Option<std::time::Duration>,
+) -> CmdResult {
+    // Pick timeout: explicit override > heavy heuristic > default probe
+    let timeout = timeout_override.unwrap_or_else(|| {
+        if HEAVY_PROGRAMS.contains(&program) {
+            return CMD_TIMEOUT_HEAVY;
+        }
+        if program == "docker" || program == "docker-compose" {
+            if args.iter().any(|a| HEAVY_DOCKER_ARGS.contains(a)) {
+                return CMD_TIMEOUT_HEAVY;
+            }
+        }
+        CMD_TIMEOUT_PROBE
+    });
+
+    let child_future = tokio::process::Command::new(program)
         .args(args)
         .current_dir(cwd)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .output()
-        .await
-    {
-        Ok(output) => CmdResult {
+        .output();
+
+    match tokio::time::timeout(timeout, child_future).await {
+        Ok(Ok(output)) => CmdResult {
             success: output.status.success(),
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
         },
-        Err(e) => CmdResult {
+        Ok(Err(e)) => CmdResult {
             success: false,
             stdout: String::new(),
             stderr: format!("Failed to run '{}': {}", program, e),
         },
+        Err(_) => CmdResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!(
+                "Command '{}' timed out after {}s",
+                program,
+                timeout.as_secs()
+            ),
+        },
     }
+}
+
+// ============================================================================
+// Chain-based freshness check
+// ============================================================================
+
+/// Scan the audit chain for `tool:preflight:passed:{name}` receipts
+/// that are less than `PREFLIGHT_FRESH_SECS` old.
+fn fresh_preflight_tools(audit_store: &Mutex<AuditStore>) -> std::collections::HashSet<String> {
+    use crate::tool_chain::tool_lifecycle_conv_id;
+    use zp_core::AuditAction;
+
+    let mut fresh = std::collections::HashSet::new();
+    let store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return fresh,
+    };
+
+    let entries = match store.get_entries(tool_lifecycle_conv_id(), 500) {
+        Ok(e) => e,
+        Err(_) => return fresh,
+    };
+
+    let cutoff = chrono::Utc::now()
+        - chrono::Duration::seconds(PREFLIGHT_FRESH_SECS);
+
+    for entry in &entries {
+        if let AuditAction::SystemEvent { event } = &entry.action {
+            // Match "tool:preflight:passed:{name}"
+            if let Some(rest) = event.strip_prefix("tool:preflight:passed:") {
+                if entry.timestamp >= cutoff {
+                    fresh.insert(rest.to_string());
+                }
+            }
+        }
+    }
+
+    fresh
 }
 
 // ============================================================================
 // Onboard handler — called as a WebSocket action after configure
 // ============================================================================
 
-pub async fn handle_preflight(_state: &mut OnboardState) -> Vec<OnboardEvent> {
+pub async fn handle_preflight(
+    _state: &mut OnboardState,
+    app_state: &crate::AppState,
+) -> Vec<OnboardEvent> {
     let scan_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
 
-    // WebSocket handler doesn't have access to AppState's audit store,
-    // so chain emission happens only through the REST endpoint.
-    // The JSON cache is still written for cockpit use.
-    let (_results, events) = run_preflight(&scan_path, None).await;
+    // Pass the audit store so preflight receipts are emitted into the
+    // canonical chain — not just the JSON cache.  Without this, tools
+    // preflighted during onboarding show "awaiting preflight" on the
+    // dashboard because chain-based readiness finds no entries.
+    let (_results, events) = run_preflight(
+        &scan_path,
+        Some(&app_state.0.audit_store),
+    ).await;
     events
 }

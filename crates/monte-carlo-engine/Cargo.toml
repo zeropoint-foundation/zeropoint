@@ -1,0 +1,35 @@
+[package]
+name = "monte-carlo-engine"
+version.workspace = true
+edition.workspace = true
+description = "Extensible Monte Carlo simulation engine for ZeroPoint"
+license.workspace = true
+
+[dependencies]
+# Statistical distributions and tests
+statrs = "0.16"
+
+# Random number generation
+rand = { workspace = true }
+rand_distr = "0.4"
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# CPU count for parallelism
+num_cpus = "1.16"
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+approx = "0.5"

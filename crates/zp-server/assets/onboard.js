@@ -1750,7 +1750,7 @@
   let configDone = false;
 
   const toolIcons = {
-    'openmaictool': '🤖', 'openMAIC': '🤖', 'pentagi': '🛡️',
+    'ember': '🔥', 'pentagi': '🛡️',
     'agent-zero': '🧠', 'autogpt': '⚡', 'langchain': '🔗',
     'crewai': '👥', 'zp-hedera': '⛓️', 'ironclaw': '🦀', 'deploy': '🚀',
   };
@@ -1977,7 +1977,7 @@
     grid.innerHTML = '';
 
     const toolIcons = {
-      'openmaictool': '🤖', 'pentagi': '🛡️', 'agent-zero': '🧠',
+      'ember': '🔥', 'pentagi': '🛡️', 'agent-zero': '🧠',
       'autogpt': '⚡', 'langchain': '🔗', 'crewai': '👥',
     };
 

@@ -48,6 +48,11 @@ pub enum MeshError {
     #[error("Link timed out after {elapsed_ms}ms")]
     LinkTimeout { elapsed_ms: u64 },
 
+    // === Peer ===
+    /// Peer not found in peer registry.
+    #[error("Peer not found: {0}")]
+    NoPeer(String),
+
     // === Destination ===
     /// Destination not found in routing table.
     #[error("Destination not found: {0}")]

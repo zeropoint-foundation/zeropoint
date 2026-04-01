@@ -17,6 +17,7 @@ mod scan;
 mod credentials;
 mod configure;
 pub mod preflight;
+pub mod verify;
 
 pub use state::OnboardState;
 
@@ -161,8 +162,8 @@ async fn handle_action(
         "validate_credential" => credentials::handle_validate_credential(action, state).await,
         "validate_all" => credentials::handle_validate_all(action, state).await,
         "configure" => configure::handle_configure(action, state).await,
-        "preflight" => preflight::handle_preflight(state).await,
-        "status" => vec![OnboardEvent::new("state", serde_json::to_value(&*state).unwrap_or_default())],
+        "preflight" => preflight::handle_preflight(state, _app_state).await,
+        "status" => vec![OnboardEvent::new("heartbeat_ack", serde_json::json!({ "ok": true }))],
         _ => vec![OnboardEvent::error(&format!("unknown action: {}", action.action))],
     }
 }

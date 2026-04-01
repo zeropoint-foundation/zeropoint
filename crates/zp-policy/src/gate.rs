@@ -355,6 +355,11 @@ impl GovernanceGate {
     pub fn name(&self) -> &str {
         &self.gate_name
     }
+
+    /// Number of policy rules loaded in this gate.
+    pub fn rule_count(&self) -> usize {
+        self.policy_engine.rule_count()
+    }
 }
 
 /// Determine the type name of a policy decision (for audit logging).

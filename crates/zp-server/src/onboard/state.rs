@@ -91,8 +91,11 @@ impl OnboardState {
         }
 
         // ── Vault ──
+        // Only count vault credentials when genesis exists — they're
+        // encrypted with a key derived from the genesis secret, so
+        // they're meaningless (and misleading) without one.
         let vault_path = home.join("vault.json");
-        if vault_path.exists() {
+        if state.genesis_complete && vault_path.exists() {
             if let Ok(content) = std::fs::read_to_string(&vault_path) {
                 if let Ok(vault) = serde_json::from_str::<serde_json::Value>(&content) {
                     if let Some(obj) = vault.as_object() {

@@ -44,6 +44,7 @@ HTML_FILES=(
     onboard.html
     dashboard.html
     speak.html
+    ecosystem.html
 )
 
 # Static files (CSS, JS) have NO compiled-in fallback — they're served
@@ -120,7 +121,7 @@ start_server() {
     kill_server
 
     echo "→ Starting server ($(basename "$binary"))..."
-    nohup "$binary" serve > "$SERVER_LOG" 2>&1 &
+    RUST_LOG=info nohup "$binary" serve > "$SERVER_LOG" 2>&1 &
     local server_pid=$!
 
     # Write PID file

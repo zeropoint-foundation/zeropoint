@@ -3,12 +3,17 @@
 //! Exposes the governance API as a library so it can be embedded
 //! in the unified `zp` binary.
 
+pub mod analysis;
 pub mod attestations;
+pub mod codebase;
 pub mod exec_ws;
 pub mod onboard;
 pub mod proxy;
 pub mod security;
 pub mod tool_chain;
+pub mod tool_ports;
+pub mod tool_proxy;
+pub mod tool_state;
 
 use axum::http::HeaderValue;
 use axum::{
@@ -17,7 +22,7 @@ use axum::{
         Query, State,
     },
     http::StatusCode,
-    response::Html,
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -29,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
-use tracing::info;
+use tracing::{info, warn};
 
 use zp_audit::AuditStore;
 use zp_core::{
@@ -102,65 +107,139 @@ pub struct GenesisRecord {
 }
 
 /// Load or create the node's persistent Ed25519 identity.
-/// On first run, performs the Genesis ceremony.
+///
+/// Priority:
+/// 1. **Operator key from keyring** (Genesis→Operator hierarchy) — the correct path.
+///    The signing key is the Operator's Ed25519 key from `~/.zeropoint/keys/`.
+/// 2. **Legacy `identity.key` file** — for deployments that predate the hierarchy.
+///    Loads the raw Ed25519 key and logs a migration notice.
+/// 3. **First run (Genesis)** — no identity exists. Generates a new Ed25519 key
+///    and writes `identity.key` as a bootstrap. The onboarding flow will later
+///    create the full hierarchy and the next server start will use path 1.
 fn load_or_create_identity(config: &ServerConfig) -> (ServerIdentity, bool) {
-    let identity_path = config.home_dir.join("identity.key");
-    let is_genesis;
+    use sha2::{Digest, Sha256};
+    let keyring_path = config.home_dir.join("keys");
 
-    let signing_key = if identity_path.exists() {
-        // Load existing identity
+    // ── Path 1: Operator key from the hierarchy ────────────────────────
+    if let Ok(keyring) = zp_keys::Keyring::open(&keyring_path) {
+        if let Ok(operator) = keyring.load_operator() {
+            let pub_bytes = operator.public_key();
+            let public_key_hex = hex::encode(pub_bytes);
+            let hash = Sha256::digest(&pub_bytes);
+            let destination_hash = hex::encode(&hash[..16]);
+
+            // Clone the signing key out for the struct (OperatorKey owns it)
+            let signing_key = SigningKey::from_bytes(&operator.secret_key());
+
+            info!(
+                "Identity from Operator key (hierarchy): {}...{}",
+                &public_key_hex[..12],
+                &public_key_hex[public_key_hex.len() - 8..]
+            );
+
+            // Migration: if legacy identity.key still exists, note it's superseded
+            let legacy_path = config.home_dir.join("identity.key");
+            if legacy_path.exists() {
+                info!(
+                    "Legacy identity.key found but superseded by Operator key hierarchy. \
+                     You can safely remove {:?}",
+                    legacy_path
+                );
+            }
+
+            return (
+                ServerIdentity {
+                    signing_key,
+                    public_key_hex,
+                    destination_hash,
+                    operator_key: Some(operator),
+                    from_hierarchy: true,
+                },
+                false,
+            );
+        }
+    }
+
+    // ── Path 2: Legacy identity.key file ───────────────────────────────
+    let identity_path = config.home_dir.join("identity.key");
+    if identity_path.exists() {
         let key_bytes = std::fs::read(&identity_path).expect("Failed to read identity key");
         if key_bytes.len() != 32 {
             panic!("Corrupted identity key at {:?}", identity_path);
         }
         let mut buf = [0u8; 32];
         buf.copy_from_slice(&key_bytes);
-        is_genesis = false;
-        SigningKey::from_bytes(&buf)
-    } else {
-        // Genesis: generate new identity
-        std::fs::create_dir_all(&config.home_dir).expect("Failed to create ~/.zeropoint");
-        let key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let signing_key = SigningKey::from_bytes(&buf);
 
-        // Write key with restrictive permissions
-        std::fs::write(&identity_path, key.to_bytes()).expect("Failed to write identity key");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&identity_path, std::fs::Permissions::from_mode(0o600)).ok();
-        }
-        is_genesis = true;
-        key
-    };
+        let verifying_key = signing_key.verifying_key();
+        let public_key_hex = hex::encode(verifying_key.as_bytes());
+        let hash = Sha256::digest(verifying_key.as_bytes());
+        let destination_hash = hex::encode(&hash[..16]);
 
-    let verifying_key = signing_key.verifying_key();
+        info!(
+            "Identity from legacy identity.key — run onboarding to migrate to key hierarchy"
+        );
+
+        return (
+            ServerIdentity {
+                signing_key,
+                public_key_hex,
+                destination_hash,
+                operator_key: None,
+                from_hierarchy: false,
+            },
+            false,
+        );
+    }
+
+    // ── Path 3: First run — bootstrap identity ─────────────────────────
+    std::fs::create_dir_all(&config.home_dir).expect("Failed to create ~/.zeropoint");
+    let key = SigningKey::generate(&mut rand::rngs::OsRng);
+
+    // Write bootstrap key with restrictive permissions.
+    // This is temporary — the onboarding flow creates the full hierarchy
+    // (Genesis→Operator) and the next server start will use Path 1.
+    std::fs::write(&identity_path, key.to_bytes()).expect("Failed to write identity key");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&identity_path, std::fs::Permissions::from_mode(0o600)).ok();
+    }
+
+    let verifying_key = key.verifying_key();
     let public_key_hex = hex::encode(verifying_key.as_bytes());
-
-    use sha2::{Digest, Sha256};
     let hash = Sha256::digest(verifying_key.as_bytes());
     let destination_hash = hex::encode(&hash[..16]);
 
-    let identity = ServerIdentity {
-        signing_key,
-        public_key_hex,
-        destination_hash,
-    };
-
-    (identity, is_genesis)
+    (
+        ServerIdentity {
+            signing_key: key,
+            public_key_hex,
+            destination_hash,
+            operator_key: None,
+            from_hierarchy: false,
+        },
+        true,
+    )
 }
 
 /// Perform the Genesis ceremony — canonicalize the initial state.
+///
+/// NOTE: This does NOT write genesis.json — that is the onboarding ceremony's
+/// responsibility. The onboarding flow writes a full genesis record with operator
+/// name, sovereignty mode, and constitutional gates. This function only logs the
+/// bootstrap banner and initializes the audit chain hash.
 fn perform_genesis(identity: &ServerIdentity, config: &ServerConfig) {
     let genesis_path = config.home_dir.join("genesis.json");
     if genesis_path.exists() {
-        return; // Already canonicalized
+        return; // Already canonicalized by onboarding
     }
 
     info!("═══════════════════════════════════════════════════════");
-    info!("  GENESIS CEREMONY");
+    info!("  ZEROPOINT — AWAITING GENESIS");
     info!("═══════════════════════════════════════════════════════");
     info!("");
-    info!("  Generating node identity...");
+    info!("  Bootstrap identity generated:");
     info!(
         "  Public key:    {}...{}",
         &identity.public_key_hex[..16],
@@ -169,44 +248,9 @@ fn perform_genesis(identity: &ServerIdentity, config: &ServerConfig) {
     info!("  Destination:   {}", identity.destination_hash);
     info!("  Algorithm:     Ed25519");
     info!("");
-    info!("  Installing governance gates...");
-    info!("    ✓ HarmPrincipleRule      [constitutional]");
-    info!("    ✓ SovereigntyRule         [constitutional]");
-    info!("    ✓ CatastrophicActionRule  [operational]");
-    info!("    ✓ BulkOperationRule       [operational]");
-    info!("    ✓ ReputationGateRule      [operational]");
-    info!("    ✓ DefaultAllowRule        [fallback]");
-    info!("");
-    info!("  Canonicalizing initial posture...");
-
-    let chain_genesis_hash = blake3::hash(b"genesis").to_hex().to_string();
-
-    let record = GenesisRecord {
-        timestamp: Utc::now().to_rfc3339(),
-        public_key: identity.public_key_hex.clone(),
-        destination_hash: identity.destination_hash.clone(),
-        algorithm: "Ed25519".to_string(),
-        initial_posture_score: 100,
-        constitutional_rules: vec![
-            "HarmPrincipleRule".to_string(),
-            "SovereigntyRule".to_string(),
-        ],
-        chain_genesis_hash: chain_genesis_hash.clone(),
-    };
-
-    let json = serde_json::to_string_pretty(&record).unwrap();
-    std::fs::write(&genesis_path, &json).expect("Failed to write genesis record");
-
-    // Sign the genesis record
-    let signature = identity.signing_key.sign(json.as_bytes());
-    let sig_path = config.home_dir.join("genesis.sig");
-    std::fs::write(&sig_path, hex::encode(signature.to_bytes()))
-        .expect("Failed to write genesis signature");
-
-    info!("  Genesis record written to {:?}", genesis_path);
-    info!("  Genesis signature: {:?}", sig_path);
-    info!("");
-    info!("  Gates installed. Chain initialized. Space secured.");
+    info!("  → Complete onboarding at /onboard to create your Genesis record.");
+    info!("    The Genesis ceremony establishes your operator identity,");
+    info!("    sovereignty provider, and constitutional bedrock.");
     info!("═══════════════════════════════════════════════════════");
     info!("");
 }
@@ -216,9 +260,19 @@ fn perform_genesis(identity: &ServerIdentity, config: &ServerConfig) {
 // ============================================================================
 
 pub struct ServerIdentity {
+    /// The Ed25519 signing key — sourced from the Operator key in the certificate
+    /// hierarchy (Genesis→Operator). Falls back to legacy `identity.key` file
+    /// for deployments that predate the hierarchy, with automatic migration.
     pub signing_key: SigningKey,
     pub public_key_hex: String,
     pub destination_hash: String,
+    /// The Operator key from the zp-keys hierarchy, if available.
+    /// Holds the certificate chain (Genesis→Operator) for verifiable signing.
+    /// `None` only during the Genesis ceremony itself (before the Operator key exists).
+    pub operator_key: Option<zp_keys::hierarchy::OperatorKey>,
+    /// Whether the identity was sourced from the key hierarchy (true) or
+    /// the legacy `identity.key` file (false). Used for migration awareness.
+    pub from_hierarchy: bool,
 }
 
 pub struct AppStateInner {
@@ -231,6 +285,12 @@ pub struct AppStateInner {
     /// Vault key resolved once at startup from the OS credential store.
     /// Cached here so we never hit the Keychain again during the session.
     pub vault_key: Option<zp_keys::ResolvedVaultKey>,
+    /// Manages port assignments for governed tools so they don't collide.
+    pub port_allocator: tool_ports::PortAllocator,
+    /// MLE STAR + Monte Carlo analysis engines fed by receipt chain data.
+    pub analysis: analysis::AnalysisEngines,
+    /// Server port — needed by proxy for subdomain URL generation.
+    pub config_port: u16,
 }
 
 #[derive(Clone)]
@@ -313,6 +373,11 @@ impl AppState {
             );
         }
 
+        // Port allocator — manages the 9100–9199 range for governed tools
+        let port_allocator = tool_ports::PortAllocator::new(
+            std::path::Path::new(&config.data_dir),
+        );
+
         AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -321,6 +386,9 @@ impl AppState {
             grants: std::sync::Mutex::new(Vec::new()),
             data_dir: config.data_dir.clone(),
             vault_key,
+            port_allocator,
+            analysis: analysis::AnalysisEngines::new(),
+            config_port: config.port,
         }))
     }
 }
@@ -330,22 +398,32 @@ impl AppState {
 // ============================================================================
 
 pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
-    // Determine CORS policy based on bind address
+    // CORS: allow *.localhost subdomains (tool proxies), localhost, and production.
+    // Subdomain proxy means tool pages at ember.localhost:3000 need to call
+    // ZP APIs at localhost:3000 — that's cross-origin, so CORS must allow it.
+    let port = config.port;
     let cors = if config.bind_addr == "127.0.0.1" || config.bind_addr == "localhost" {
-        // Localhost: allow local origins
-        let local_http = format!("http://localhost:{}", config.port)
-            .parse::<HeaderValue>()
-            .unwrap();
-        let local_ip = format!("http://127.0.0.1:{}", config.port)
-            .parse::<HeaderValue>()
-            .unwrap();
-        let public = "https://zeropoint.global".parse::<HeaderValue>().unwrap();
         CorsLayer::new()
-            .allow_origin([local_http, local_ip, public])
+            .allow_origin(tower_http::cors::AllowOrigin::predicate(
+                move |origin: &HeaderValue, _parts: &axum::http::request::Parts| {
+                    let Ok(origin_str) = origin.to_str() else { return false };
+                    if origin_str == format!("http://localhost:{}", port)
+                        || origin_str == format!("http://127.0.0.1:{}", port)
+                    {
+                        return true;
+                    }
+                    // Allow any *.localhost:{port} subdomain
+                    if origin_str.starts_with("http://")
+                        && origin_str.ends_with(&format!(".localhost:{}", port))
+                    {
+                        return true;
+                    }
+                    origin_str == "https://zeropoint.global"
+                },
+            ))
             .allow_methods(tower_http::cors::Any)
             .allow_headers(tower_http::cors::Any)
     } else {
-        // Non-localhost: restrictive CORS
         CorsLayer::new()
             .allow_origin("https://zeropoint.global".parse::<HeaderValue>().unwrap())
             .allow_methods(tower_http::cors::Any)
@@ -353,8 +431,9 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     };
 
     let mut router = Router::new()
-        // Verification surface (dashboard)
-        .route("/", get(dashboard_handler))
+        // Root: redirect to onboarding if no genesis, otherwise dashboard
+        .route("/", get(root_handler))
+        .route("/dashboard", get(dashboard_handler))
         // Health
         .route("/api/v1/health", get(health_handler))
         // Identity
@@ -394,11 +473,29 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Configured tools (cockpit)
         .route("/api/v1/tools", get(tools_handler))
         .route("/api/v1/tools/launch", post(tools_launch_handler))
+        .route("/api/v1/tools/stop", post(tools_stop_handler))
         .route("/api/v1/tools/log", get(tools_log_handler))
         .route("/api/v1/tools/preflight", post(tools_preflight_handler))
         .route("/api/v1/tools/preflight", get(tools_preflight_status_handler))
         .route("/api/v1/tools/receipt", post(tools_receipt_handler))
         .route("/api/v1/tools/chain", get(tools_chain_handler))
+        .route("/api/v1/tools/ports", get(tool_proxy::port_assignments_handler))
+        .route("/api/v1/tools/:tool_name/preflight", post(tools_single_preflight_handler))
+        .route("/api/v1/tools/:tool_name/configure", post(tools_configure_handler))
+        .route("/api/v1/tools/:tool_name/repair", post(tools_repair_handler))
+        // Governed codebase — self-describing trust infrastructure
+        .route("/api/v1/codebase/tree", get(codebase::tree_handler))
+        .route("/api/v1/codebase/read", get(codebase::read_handler))
+        .route("/api/v1/codebase/search", get(codebase::search_handler))
+        // Analysis engines — receipt chain intelligence (MLE STAR + Monte Carlo)
+        .route("/api/v1/analysis/index", get(analysis::index_handler))
+        .route("/api/v1/analysis/expertise", get(analysis::expertise_handler))
+        .route("/api/v1/analysis/tools", get(analysis::tools_handler))
+        .route("/api/v1/analysis/simulate", post(analysis::simulate_handler))
+        // System state — derived from receipt chain (the big one)
+        .route("/api/v1/system/state", get(tool_state::system_state_handler))
+        // Tool paths are now subdomain-based: http://{name}.localhost:3000/
+        // No legacy /tools/{name}/ routes — clean break.
         // Genesis record
         .route("/api/v1/genesis", get(genesis_handler))
         // Attestations
@@ -434,8 +531,77 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/onboard/ws", get(onboard::onboard_ws_handler))
         // Speak: live TTS reader (Piper voice-tuner-server companion)
         .route("/speak", get(speak_page_handler))
+        // Ecosystem: interactive knowledge graph + provenance chain + live state
+        .route("/ecosystem", get(ecosystem_page_handler))
         .layer(cors)
-        .with_state(state);
+        .with_state(state.clone());
+
+    // ── Subdomain proxy middleware ─────────────────────────────────
+    // This MUST wrap the entire router as an outer layer so it runs
+    // BEFORE route matching.  When Host is `{tool}.localhost:3000`,
+    // the request is proxied to the tool's port — explicit routes
+    // like "/" and "/dashboard" are never reached.  For bare
+    // `localhost:3000`, the middleware passes through to the router.
+    let proxy_state = state;
+    router = router.layer(axum::middleware::from_fn(
+        move |req: axum::extract::Request, next: axum::middleware::Next| {
+            let state = proxy_state.clone();
+            async move {
+                // Extract Host header
+                let host = req.headers()
+                    .get(axum::http::header::HOST)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+
+                if let Some(tool_name) = tool_proxy::extract_subdomain(&host) {
+                    // Subdomain request → proxy to tool, skip all routes.
+                    // We must inject CORS headers ourselves because the
+                    // CORS layer sits inside this middleware and never runs
+                    // for proxied responses.
+                    let origin = req.headers()
+                        .get(axum::http::header::ORIGIN)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+
+                    let path = req.uri().path().trim_start_matches('/').to_string();
+                    let mut resp = match tool_proxy::proxy_inner(&state, &tool_name, &path, req).await {
+                        Ok(resp) => resp,
+                        Err(status) => status.into_response(),
+                    };
+
+                    // Add CORS headers for allowed origins (dashboard at
+                    // localhost:{port} or sibling subdomains).
+                    let cfg_port = state.0.config_port;
+                    let allowed = origin == format!("http://localhost:{}", cfg_port)
+                        || origin == format!("http://127.0.0.1:{}", cfg_port)
+                        || (origin.starts_with("http://")
+                            && origin.ends_with(&format!(".localhost:{}", cfg_port)));
+                    if allowed {
+                        let headers = resp.headers_mut();
+                        headers.insert(
+                            axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                            origin.parse().unwrap_or_else(|_| HeaderValue::from_static("*")),
+                        );
+                        headers.insert(
+                            axum::http::header::ACCESS_CONTROL_ALLOW_METHODS,
+                            HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"),
+                        );
+                        headers.insert(
+                            axum::http::header::ACCESS_CONTROL_ALLOW_HEADERS,
+                            HeaderValue::from_static("*"),
+                        );
+                    }
+
+                    resp
+                } else {
+                    // Bare localhost → normal route matching
+                    next.run(req).await
+                }
+            }
+        },
+    ));
 
     // Serve static assets (CSS, JS, narration audio, etc.)
     // Single authoritative location: $ZP_ASSETS_DIR or ~/.zeropoint/assets/
@@ -454,12 +620,9 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     router = router.nest_service("/assets", assets_service);
 
     // Serve Bridge UI static files if configured.
-    // The Bridge assets use absolute paths (/assets/...) so we serve
-    // them as a fallback at root level — API routes take priority.
     if let Some(ref bridge_dir) = config.bridge_dir {
         if bridge_dir.exists() {
             info!("Bridge UI: http://localhost:{}/bridge", config.port);
-            // Serve index.html at /bridge
             let index_path = bridge_dir.join("index.html");
             let index_html: &'static str = Box::leak(
                 std::fs::read_to_string(&index_path)
@@ -467,8 +630,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
                     .into_boxed_str(),
             );
             router = router
-                .route("/bridge", get(move || async move { Html(index_html) }))
-                .fallback_service(ServeDir::new(bridge_dir));
+                .route("/bridge", get(move || async move { Html(index_html) }));
         } else {
             tracing::warn!(
                 "ZP_BRIDGE_DIR={:?} does not exist, Bridge UI disabled",
@@ -476,6 +638,8 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             );
         }
     }
+
+    info!("Tool proxy: http://{{tool}}.localhost:{}/", config.port);
 
     router
 }
@@ -564,14 +728,25 @@ struct IdentityResponse {
     destination_hash: String,
     trust_tier: String,
     algorithm: String,
+    /// Whether the identity is sourced from the key hierarchy (true) or legacy file (false).
+    from_hierarchy: bool,
+    /// The key role: "operator" if from hierarchy, "bootstrap" if legacy.
+    key_role: String,
 }
 
 async fn identity_handler(State(state): State<AppState>) -> Json<IdentityResponse> {
+    let key_role = if state.0.identity.from_hierarchy {
+        "operator"
+    } else {
+        "bootstrap"
+    };
     Json(IdentityResponse {
         public_key: state.0.identity.public_key_hex.clone(),
         destination_hash: state.0.identity.destination_hash.clone(),
         trust_tier: "Tier1".to_string(),
         algorithm: "Ed25519".to_string(),
+        from_hierarchy: state.0.identity.from_hierarchy,
+        key_role: key_role.to_string(),
     })
 }
 
@@ -1750,6 +1925,8 @@ struct CockpitTool {
     launch: ToolLaunch,      // how to open this tool
     ready: bool,             // preflight passed?
     preflight_issues: Vec<String>, // failures from last preflight
+    verified: bool,          // Tier 2: all required capabilities verified?
+    capabilities: Vec<tool_chain::CapabilityChainState>, // per-capability results
 }
 
 /// How a cockpit tile launches its tool.
@@ -1761,15 +1938,23 @@ struct ToolLaunch {
     cmd: Option<String>, // launch command if cli/docker
 }
 
-/// Port variable names we look for in .env / .env.example, in priority order.
+/// Port variable names to scan in .env, ordered by priority.
+/// Used by detect_tool_port() for the tools listing display.
+/// The actual launch port is managed by PortAllocator (tool_ports.rs).
 const PORT_VAR_NAMES: &[&str] = &[
-    "PORT", "APP_PORT", "SERVER_PORT", "API_PORT",
-    "HTTP_PORT", "LISTEN_PORT", "WEBUI_PORT",
+    "PORT", "GATEWAY_PORT", "APP_PORT", "SERVER_PORT", "API_PORT",
+    "WEBUI_PORT", "LISTEN_PORT", "HTTP_PORT",
 ];
 
 /// Try to detect a web port from a tool's .env or .env.example.
+///
+/// Scans for all recognised port variables then returns the one with the
+/// highest priority (earliest in `PORT_VAR_NAMES`).  This ensures tools
+/// that expose both a UI gateway and a webhook server resolve to the
+/// browsable port rather than whichever var appears first in the file.
 fn detect_tool_port(tool_path: &std::path::Path) -> Option<u16> {
-    // Check .env first, then .env.example
+    let mut best: Option<(usize, u16)> = None; // (priority index, port)
+
     for filename in &[".env", ".env.example"] {
         let file = tool_path.join(filename);
         if let Ok(contents) = std::fs::read_to_string(&file) {
@@ -1780,54 +1965,162 @@ fn detect_tool_port(tool_path: &std::path::Path) -> Option<u16> {
                 }
                 if let Some((key, val)) = trimmed.split_once('=') {
                     let key = key.trim();
-                    let val = val.trim().trim_matches('"').trim_matches('\'');
-                    if PORT_VAR_NAMES.iter().any(|&p| key == p) {
+                    let val = val.trim().trim_matches('"').trim_matches('\'')
+                        .split('#').next().unwrap_or("").trim();
+                    if let Some(priority) = PORT_VAR_NAMES.iter().position(|&p| p == key) {
                         if let Ok(port) = val.parse::<u16>() {
-                            return Some(port);
+                            if best.map_or(true, |(bp, _)| priority < bp) {
+                                best = Some((priority, port));
+                            }
                         }
                     }
                 }
             }
+            // If .env had a match, don't fall through to .env.example
+            if best.is_some() {
+                return best.map(|(_, p)| p);
+            }
         }
     }
-    None
+    best.map(|(_, p)| p)
 }
 
 /// Determine the launch method for a tool.
+///
+/// Priority logic:
+///   1. Cargo.toml present → native Rust tool (run via `cargo run --release`)
+///      - If docker-compose.yml also exists, it provides deps (Postgres, Redis, etc.)
+///        and gets started first automatically.
+///   2. Web tool with detectable port:
+///      a. pnpm-lock.yaml → local-first via `pnpm start` (preferred)
+///      b. package-lock.json → local-first via `npm start`
+///      c. docker-compose.yml → containerized
+///   3. docker-compose.yml only → containerized tool
+///   4. start.sh / package.json / Makefile → scripted tool (pnpm > npm)
+///   5. None of the above → CLI fallback
 fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
     let has_docker_compose = tool_path.join("docker-compose.yml").exists()
         || tool_path.join("docker-compose.yaml").exists()
         || tool_path.join("compose.yml").exists()
         || tool_path.join("compose.yaml").exists();
+    let has_cargo = tool_path.join("Cargo.toml").exists();
+    let port = detect_tool_port(tool_path);
 
-    if let Some(port) = detect_tool_port(tool_path) {
-        // Web tool — has a detectable port
-        let cmd = if has_docker_compose {
-            Some(format!("cd {} && docker compose up -d", tool_path.display()))
+    if has_cargo {
+        // Native Rust tool — compose provides deps, cargo runs the app
+        let deps_cmd = if has_docker_compose {
+            format!("docker compose down --remove-orphans 2>/dev/null; \
+                docker compose up -d && \
+                for i in $(seq 1 15); do \
+                    docker compose exec -T postgres pg_isready -q 2>/dev/null && break; \
+                    sleep 1; \
+                done && ")
+        } else {
+            String::new()
+        };
+        let cmd = format!("cd '{}' && {}cargo run --release", tool_path.display(), deps_cmd);
+        ToolLaunch {
+            kind: "native".to_string(),
+            url: port.map(|p| format!("http://localhost:{}", p)),
+            port,
+            cmd: Some(cmd),
+        }
+    } else if let Some(p) = port {
+        // Web tool with detectable port (non-Rust)
+        // Prefer local package manager execution when available (pnpm > npm > docker)
+        let has_package_json = tool_path.join("package.json").exists();
+        let has_pnpm_lock = tool_path.join("pnpm-lock.yaml").exists();
+        let has_npm_lock = tool_path.join("package-lock.json").exists();
+
+        let cmd = if has_package_json && (has_pnpm_lock || has_npm_lock) {
+            // Local-first: run via package manager (pnpm preferred)
+            let pkg_mgr = if has_pnpm_lock { "pnpm" } else { "npm" };
+            // Build-before-start: Next.js needs .next/BUILD_ID (dev mode creates .next/ without it)
+            let has_next_build = tool_path.join(".next").join("BUILD_ID").exists();
+            let has_dist = tool_path.join("dist").exists();
+            let has_build_dir = tool_path.join("build").exists();
+            let needs_build = !has_next_build && !has_dist && !has_build_dir;
+            let build_prefix = if needs_build {
+                format!("{} run build && ", pkg_mgr)
+            } else {
+                String::new()
+            };
+
+            // Next.js standalone: if .next/standalone/server.js exists
+            // (pre-built via CI or manual webpack build), use node directly
+            // since `next start` doesn't work with standalone output.
+            // In practice, Turbopack (Next 16 default) ignores standalone
+            // config, so most local tools just use `pnpm start` normally.
+            let standalone_server = tool_path.join(".next/standalone/server.js");
+            if standalone_server.exists() {
+                Some(format!(
+                    "cd '{}' && {}HOSTNAME=0.0.0.0 node .next/standalone/server.js",
+                    tool_path.display(), build_prefix
+                ))
+            } else {
+                Some(format!("cd '{}' && {}{} start", tool_path.display(), build_prefix, pkg_mgr))
+            }
+        } else if has_docker_compose {
+            Some(format!("cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d", tool_path.display()))
         } else {
             None
         };
+        let kind = if has_package_json && has_pnpm_lock {
+            "pnpm"
+        } else if has_package_json && has_npm_lock {
+            "npm"
+        } else if has_docker_compose {
+            "docker"
+        } else {
+            "web"
+        };
         ToolLaunch {
-            kind: "web".to_string(),
-            url: Some(format!("http://localhost:{}", port)),
-            port: Some(port),
+            kind: kind.to_string(),
+            url: Some(format!("http://localhost:{}", p)),
+            port: Some(p),
             cmd,
         }
     } else if has_docker_compose {
-        // Docker tool without a detectable web port — launch via compose
+        // Fully containerized tool
         ToolLaunch {
             kind: "docker".to_string(),
             url: None,
             port: None,
-            cmd: Some(format!("cd {} && docker compose up -d", tool_path.display())),
+            cmd: Some(format!("cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d", tool_path.display())),
         }
     } else {
-        // CLI / unknown — best we can do is open the directory
+        // Scripted or CLI — check for start.sh, npm, make
+        let scripts = ["start.sh", "run.sh", "launch.sh"];
+        let script = scripts.iter().find(|s| tool_path.join(s).exists());
+        let cmd = if let Some(s) = script {
+            format!("cd '{}' && bash '{}'", tool_path.display(), s)
+        } else if tool_path.join("package.json").exists() {
+            // Detect package manager: pnpm (pnpm-lock.yaml) > npm
+            let pkg_mgr = if tool_path.join("pnpm-lock.yaml").exists() {
+                "pnpm"
+            } else {
+                "npm"
+            };
+            let has_next_build = tool_path.join(".next").join("BUILD_ID").exists();
+            let has_dist = tool_path.join("dist").exists();
+            let has_build_dir = tool_path.join("build").exists();
+            let needs_build = !has_next_build && !has_dist && !has_build_dir;
+            let build_prefix = if needs_build {
+                format!("{} run build && ", pkg_mgr)
+            } else {
+                String::new()
+            };
+            format!("cd '{}' && {}{} start", tool_path.display(), build_prefix, pkg_mgr)
+        } else if tool_path.join("Makefile").exists() {
+            format!("cd '{}' && make start", tool_path.display())
+        } else {
+            format!("cd '{}'", tool_path.display())
+        };
         ToolLaunch {
             kind: "cli".to_string(),
             url: None,
             port: None,
-            cmd: Some(format!("cd {}", tool_path.display())),
+            cmd: Some(cmd),
         }
     }
 }
@@ -1860,6 +2153,30 @@ async fn tools_handler(
 
     // ── Fallback: JSON cache (for tools preflighted before chain was wired) ──
     let preflight_cache = onboard::preflight::PreflightResults::load();
+
+    // ── Port conflicts: compose infrastructure ports vs live system ──
+    // Build a map of tool → conflict descriptions from preflight results.
+    let port_conflict_map: std::collections::HashMap<String, Vec<String>> = preflight_cache
+        .as_ref()
+        .map(|pf| {
+            let mut map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+            for conflict in &pf.port_conflicts {
+                // conflict.tools = ["ironclaw:postgres", "pgvector (PID 1234)"]
+                // The first entry is the tool:service, the second is the occupant
+                if conflict.tools.len() >= 2 {
+                    let tool_service = &conflict.tools[0];
+                    let occupant = &conflict.tools[1];
+                    if let Some(tool_name) = tool_service.split(':').next() {
+                        let service = tool_service.split(':').nth(1).unwrap_or("service");
+                        map.entry(tool_name.to_string()).or_default().push(
+                            format!("Port {} ({}) blocked by {}", conflict.port, service, occupant)
+                        );
+                    }
+                }
+            }
+            map
+        })
+        .unwrap_or_default();
 
     let tools: Vec<CockpitTool> = results.tools.into_iter().map(|tool| {
         // Check if .env exists and was written by zp configure
@@ -1900,6 +2217,20 @@ async fn tools_handler(
             (false, vec!["Preflight not run".to_string()])
         };
 
+        // Merge any compose port conflicts into preflight issues
+        let mut all_issues = preflight_issues;
+        if let Some(conflicts) = port_conflict_map.get(&tool.name) {
+            all_issues.extend(conflicts.iter().cloned());
+        }
+        let effective_ready = ready && port_conflict_map.get(&tool.name).is_none();
+
+        // Derive verification state from chain
+        let (verified, capabilities) = if let Some(cs) = chain_state.get(&tool.name) {
+            (cs.verified, cs.capabilities.clone())
+        } else {
+            (false, vec![])
+        };
+
         CockpitTool {
             name: tool.name,
             path: tool.path.display().to_string(),
@@ -1907,8 +2238,10 @@ async fn tools_handler(
             governance,
             providers: tool.provider_vars,
             launch,
-            ready,
-            preflight_issues,
+            ready: effective_ready,
+            preflight_issues: all_issues,
+            verified,
+            capabilities,
         }
     }).collect();
 
@@ -1921,7 +2254,167 @@ async fn tools_handler(
     }))
 }
 
-// ── Tool Launch ─────────────────────────────────────────────────────────────
+// ── Tool Lifecycle ──────────────────────────────────────────────────────────
+
+/// PID file directory: ~/.zeropoint/pids/
+fn pid_dir() -> std::path::PathBuf {
+    let dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".zeropoint")
+        .join("pids");
+    std::fs::create_dir_all(&dir).ok();
+    dir
+}
+
+/// Write a PID file for a launched tool.
+fn write_pid_file(name: &str, pid: u32) {
+    let path = pid_dir().join(format!("{}.pid", name));
+    std::fs::write(&path, pid.to_string()).ok();
+}
+
+/// Read a stored PID for a tool, if it exists and the process is still alive.
+fn read_live_pid(name: &str) -> Option<u32> {
+    let path = pid_dir().join(format!("{}.pid", name));
+    let contents = std::fs::read_to_string(&path).ok()?;
+    let pid: u32 = contents.trim().parse().ok()?;
+    // Check if process is alive (kill -0)
+    let alive = std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if alive {
+        Some(pid)
+    } else {
+        // Stale PID file — clean it up
+        std::fs::remove_file(&path).ok();
+        None
+    }
+}
+
+/// Kill a tool's process tree gracefully (SIGTERM), then SIGKILL if needed.
+///
+/// IMPORTANT: We only kill the specific PID and its children — never the
+/// process group (negative PID).  The spawned `sh -c` inherits the ZP
+/// server's process group, so `kill -TERM -<pid>` would kill the server.
+fn kill_tool_process(name: &str, pid: u32) -> bool {
+    info!("Stopping {} (PID {})", name, pid);
+
+    // For docker-compose tools, try `docker compose down` first
+    let tool_path = dirs::home_dir()
+        .unwrap_or_default()
+        .join("projects")
+        .join(name);
+    let has_compose = tool_path.join("docker-compose.yml").exists()
+        || tool_path.join("docker-compose.yaml").exists()
+        || tool_path.join("compose.yml").exists()
+        || tool_path.join("compose.yaml").exists();
+
+    if has_compose {
+        info!("Compose tool detected — running docker compose down for {}", name);
+        let _ = std::process::Command::new("docker")
+            .args(["compose", "down"])
+            .current_dir(&tool_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+
+    // Find child processes first (they won't die when parent gets SIGTERM)
+    let children = find_child_pids(pid);
+
+    // SIGTERM the main process
+    let term_result = std::process::Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    // SIGTERM each child
+    for child_pid in &children {
+        let _ = std::process::Command::new("kill")
+            .args(["-TERM", &child_pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+
+    // Brief wait for graceful shutdown
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Check if still alive
+    let still_alive = std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if still_alive {
+        warn!("{} (PID {}) didn't stop gracefully, sending SIGKILL", name, pid);
+        let _ = std::process::Command::new("kill")
+            .args(["-9", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    // SIGKILL any surviving children
+    for child_pid in &children {
+        let _ = std::process::Command::new("kill")
+            .args(["-9", &child_pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+
+    // Clean up PID file
+    let pid_path = pid_dir().join(format!("{}.pid", name));
+    std::fs::remove_file(&pid_path).ok();
+
+    term_result.map(|s| s.success()).unwrap_or(false) || !still_alive
+}
+
+/// Find child PIDs of a given parent using `pgrep -P <pid>`.
+fn find_child_pids(parent: u32) -> Vec<u32> {
+    let output = std::process::Command::new("pgrep")
+        .args(["-P", &parent.to_string()])
+        .output();
+    match output {
+        Ok(out) if out.status.success() => {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter_map(|line| line.trim().parse::<u32>().ok())
+                .collect()
+        }
+        _ => vec![],
+    }
+}
+
+/// Also kill anything listening on the port (safety net for orphaned processes).
+fn kill_port_occupant(port: u16) {
+    // lsof -ti :<port> returns PIDs of anything on that port
+    if let Ok(output) = std::process::Command::new("lsof")
+        .args(["-ti", &format!(":{}", port)])
+        .output()
+    {
+        if output.status.success() {
+            let pids = String::from_utf8_lossy(&output.stdout);
+            for pid_str in pids.trim().lines() {
+                if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                    info!("Killing orphaned process {} on port {}", pid, port);
+                    let _ = std::process::Command::new("kill")
+                        .args(["-TERM", &pid.to_string()])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                }
+            }
+        }
+    }
+}
 
 #[derive(Deserialize)]
 struct LaunchRequest {
@@ -1951,35 +2444,60 @@ async fn tools_launch_handler(
         );
     }
 
+    // ── Preflight gate (server-side enforcement) ───────────────────
+    // The audit chain is the canonical source of tool readiness.
+    // If preflight hasn't passed, refuse to launch.  This prevents
+    // direct API calls from bypassing the dashboard's client-side gate.
+    let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
+    if let Some(cs) = chain_state.get(&req.name) {
+        if !cs.ready {
+            let issues = if cs.preflight_issues.is_empty() {
+                vec!["Preflight not passed".to_string()]
+            } else {
+                cs.preflight_issues.clone()
+            };
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "error": format!("{} is not ready — preflight required", req.name),
+                    "preflight_issues": issues,
+                    "configured": cs.configured,
+                    "preflight_passed": cs.preflight_passed,
+                })),
+            );
+        }
+    }
+    // If tool has no chain state at all, allow launch (first-time tools
+    // that were never preflighted can still be started manually).
+    // The dashboard will prompt for preflight, but the API stays permissive
+    // for tools that don't need it (simple scripts, etc.).
+
     let launch = detect_launch(&tool_path);
 
-    // Build the shell command to start the tool
-    let start_cmd = match launch.kind.as_str() {
-        "web" | "docker" => {
-            let compose_file = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]
-                .iter()
-                .find(|f| tool_path.join(f).exists());
-
-            if let Some(_compose) = compose_file {
-                Some(format!("cd '{}' && docker compose up -d", tool_path.display()))
-            } else {
-                let scripts = ["start.sh", "run.sh", "launch.sh"];
-                let script = scripts.iter().find(|s| tool_path.join(s).exists());
-                if let Some(s) = script {
-                    Some(format!("cd '{}' && bash '{}'", tool_path.display(), s))
-                } else if tool_path.join("Makefile").exists() {
-                    Some(format!("cd '{}' && make start", tool_path.display()))
-                } else if tool_path.join("package.json").exists() {
-                    Some(format!("cd '{}' && npm start", tool_path.display()))
-                } else {
-                    None
-                }
-            }
+    // ── Port allocation ─────────────────────────────────────────────
+    // Assign a ZP-managed port so tools don't collide on shared defaults
+    // (3000, 8080, etc.).  The .env.zp sidecar overrides the tool's port
+    // variable without touching .env.
+    let port_var = tool_ports::detect_port_var(&tool_path);
+    let assignment = match state.0.port_allocator.get_or_assign(&req.name, &port_var) {
+        Ok(a) => a,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Port allocation failed: {}", e),
+                })),
+            );
         }
-        _ => None,
     };
 
-    let start_cmd = match start_cmd {
+    if let Err(e) = tool_ports::write_env_zp(&tool_path, &req.name, &assignment) {
+        warn!("Failed to write .env.zp for {}: {}", req.name, e);
+        // Non-fatal — tool will use its default port
+    }
+
+    // Use the launch command from detect_launch (single source of truth)
+    let start_cmd = match launch.cmd.clone() {
         Some(cmd) => cmd,
         None => {
             let has_env = tool_path.join(".env").exists();
@@ -2005,14 +2523,56 @@ async fn tools_launch_handler(
     std::fs::create_dir_all(&log_dir).ok();
     let log_path = log_dir.join(format!("{}.log", req.name));
 
+    // Prepend .env.zp sourcing so the tool picks up ZP-assigned port
+    let full_cmd = format!(
+        "{}{}", tool_ports::env_zp_preamble(), start_cmd
+    );
+
     // Wrap the command so stdout+stderr go to the log file
     let logged_cmd = format!(
         "{{ {} ; }} > '{}' 2>&1",
-        start_cmd,
+        full_cmd,
         log_path.display()
     );
 
-    info!("Cockpit launch: {} → {}", req.name, start_cmd);
+    // ── Stop-before-start ──────────────────────────────────────────
+    // If the tool is already running, kill it cleanly before relaunching.
+    let mut restarted = false;
+    if let Some(old_pid) = read_live_pid(&req.name) {
+        info!(
+            "Cockpit relaunch: {} already running (PID {}), stopping first",
+            req.name, old_pid
+        );
+        kill_tool_process(&req.name, old_pid);
+        // Emit stopped receipt so the chain has no gap
+        let stopped_event = tool_chain::ToolEvent::stopped(&req.name);
+        let detail = format!("pid={} reason=relaunch", old_pid);
+        tool_chain::emit_tool_receipt(
+            &state.0.audit_store,
+            &stopped_event,
+            Some(&detail),
+        );
+        restarted = true;
+        // Brief pause to let the port release (async-safe)
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+    // Safety net: also clear anything squatting on the port
+    kill_port_occupant(assignment.port);
+    // Brief pause after port cleanup (async-safe)
+    if !restarted {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    info!(
+        "Cockpit launch: {} → {} (port :{})",
+        req.name, full_cmd, assignment.port
+    );
+    // Create the child in its own process group (PGID = child PID).
+    // This isolates the tool from the ZP server's process group so that
+    // killing the tool never accidentally kills the server.
+    #[cfg(unix)]
+    use std::os::unix::process::CommandExt;
+
     let spawn_result = std::process::Command::new("sh")
         .arg("-c")
         .arg(&logged_cmd)
@@ -2020,27 +2580,88 @@ async fn tools_launch_handler(
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .process_group(0) // new process group, isolated from ZP server
         .spawn();
 
     match spawn_result {
-        Ok(_child) => {
+        Ok(child) => {
+            // Track the PID so we can stop it later
+            write_pid_file(&req.name, child.id());
+            // Emit port assignment receipt
+            let port_event = tool_state::events::port_assigned(&req.name, assignment.port);
+            let port_detail = format!("var={}", assignment.port_var);
+            tool_chain::emit_tool_receipt(
+                &state.0.audit_store,
+                &port_event,
+                Some(&port_detail),
+            );
+
             // Emit launched receipt into the chain
             let event = tool_chain::ToolEvent::launched(&req.name);
+            let launch_detail = format!("cmd={} port={}", full_cmd, assignment.port);
             tool_chain::emit_tool_receipt(
                 &state.0.audit_store,
                 &event,
-                Some(&format!("cmd={}", start_cmd)),
+                Some(&launch_detail),
             );
+
+            // ── Capability Verification (Tier 1 + Tier 2) ──────────
+            // If the tool has a [verification] section in its manifest,
+            // spawn a background task that probes after health-up to confirm
+            // credentials are not just delivered but actually working.
+            {
+                let manifest_path = tool_path.join(".zp-configure.toml");
+                if manifest_path.exists() {
+                    if let Ok(manifest) = zp_engine::capability::load_manifest(&manifest_path) {
+                        if let Some(verification) = manifest.verification.clone() {
+                            let vname = req.name.clone();
+                            let vport = assignment.port;
+                            let vmanifest = manifest.clone();
+                            let vstate = state.clone(); // Clone the Arc<AppStateInner>
+                            tokio::spawn(async move {
+                                tracing::info!(
+                                    "verify[{}]: scheduled — will probe after {}s delay",
+                                    vname, verification.delay_secs
+                                );
+                                let result = onboard::verify::verify_tool_capabilities(
+                                    &vname,
+                                    vport,
+                                    &vmanifest,
+                                    &verification,
+                                    &vstate.0.audit_store,
+                                ).await;
+                                let verified = !result.capabilities.is_empty()
+                                    && result.capabilities.iter().all(|c| c.status != "failed");
+                                tracing::info!(
+                                    "verify[{}]: complete — providers={}, capabilities={}/{} verified={}",
+                                    vname,
+                                    if result.providers_resolved { "resolved" } else { "skipped" },
+                                    result.capabilities.iter().filter(|c| c.status == "verified").count(),
+                                    result.capabilities.len(),
+                                    verified,
+                                );
+                            });
+                        }
+                    }
+                }
+            }
+
+            // The proxy URL is the canonical way to reach the tool.
+            // Subdomain-based: http://{name}.localhost:{port}/
+            let proxy_url = format!("http://{}.localhost:{}/", req.name, state.0.config_port);
+            let raw_url = format!("http://127.0.0.1:{}", assignment.port);
 
             (
                 StatusCode::ACCEPTED,
                 Json(serde_json::json!({
-                    "status": "starting",
+                    "status": if restarted { "restarting" } else { "starting" },
                     "name": req.name,
-                    "cmd": start_cmd,
-                    "url": launch.url,
-                    "port": launch.port,
+                    "cmd": full_cmd,
+                    "url": proxy_url,
+                    "raw_url": raw_url,
+                    "port": assignment.port,
                     "kind": launch.kind,
+                    "pid": child.id(),
                 })),
             )
         }
@@ -2058,6 +2679,52 @@ async fn tools_launch_handler(
                     "error": format!("Failed to start: {}", e),
                     "cmd": start_cmd,
                     "hint": hint,
+                })),
+            )
+        }
+    }
+}
+
+/// Stop a running tool process.
+async fn tools_stop_handler(
+    State(state): State<AppState>,
+    Json(req): Json<LaunchRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match read_live_pid(&req.name) {
+        Some(pid) => {
+            let killed = kill_tool_process(&req.name, pid);
+
+            // Also clear the port if we know it
+            if let Some(assignment) = state.0.port_allocator.get_assigned(&req.name) {
+                kill_port_occupant(assignment.port);
+            }
+
+            // Emit stopped receipt into the audit chain
+            let event = tool_chain::ToolEvent::stopped(&req.name);
+            let detail = format!("pid={}", pid);
+            tool_chain::emit_tool_receipt(
+                &state.0.audit_store,
+                &event,
+                Some(&detail),
+            );
+
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "stopped",
+                    "name": req.name,
+                    "pid": pid,
+                    "killed": killed,
+                })),
+            )
+        }
+        None => {
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "status": "not_running",
+                    "name": req.name,
+                    "message": format!("No running process found for '{}'", req.name),
                 })),
             )
         }
@@ -2128,6 +2795,198 @@ async fn tools_preflight_status_handler() -> Json<serde_json::Value> {
     }
 }
 
+/// Run preflight scoped to a single tool (POST).
+///
+/// Unlike the full preflight endpoint, this targets one tool by name,
+/// always forces a fresh run, and returns that tool's result directly.
+async fn tools_single_preflight_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let scan_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("projects");
+
+    // Verify the tool directory exists before running preflight.
+    let tool_path = scan_path.join(&tool_name);
+    if !tool_path.is_dir() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("Tool '{}' not found in {}", tool_name, scan_path.display()),
+            })),
+        );
+    }
+
+    let (results, _events) = onboard::preflight::run_preflight_single(
+        &scan_path,
+        &tool_name,
+        Some(&state.0.audit_store),
+    ).await;
+
+    // Extract the single tool's result from the full results vec.
+    let tool_result = results.tools.iter()
+        .find(|t| t.name.eq_ignore_ascii_case(&tool_name));
+
+    match tool_result {
+        Some(result) => {
+            let status = if result.ready { StatusCode::OK } else { StatusCode::CONFLICT };
+            (status, Json(serde_json::json!({
+                "tool": result.name,
+                "ready": result.ready,
+                "launch_method": result.launch_method,
+                "checks": result.checks,
+                "auto_fixed": result.auto_fixed,
+            })))
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("Tool '{}' was not evaluated — may lack .env or .env.example", tool_name),
+            })),
+        ),
+    }
+}
+
+// ============================================================================
+// Tool configure / repair — ecosystem self-healing actions
+// ============================================================================
+
+/// POST /api/v1/tools/:tool_name/configure
+///
+/// Actions:
+///   - `reassign_port`: Release the tool's current port assignment and
+///     let the allocator pick a new one. Useful when a port is in use by
+///     another process.
+async fn tools_configure_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
+
+    match action {
+        "reassign_port" => {
+            // Release the old assignment
+            state.0.port_allocator.release(&tool_name);
+
+            // Detect the port var and tool path
+            let scan_path = dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("projects");
+            let tool_path = scan_path.join(&tool_name);
+            let port_var = tool_ports::detect_port_var(&tool_path);
+
+            // Re-assign to next free port
+            match state.0.port_allocator.get_or_assign(&tool_name, &port_var) {
+                Ok(assignment) => {
+                    // Re-write .env.zp with new port
+                    if tool_path.exists() {
+                        if let Err(e) = tool_ports::write_env_zp(
+                            &tool_path,
+                            &tool_name,
+                            &assignment,
+                        ) {
+                            tracing::warn!("Failed to write .env.zp for {}: {}", tool_name, e);
+                        }
+                    }
+
+                    tracing::info!(
+                        "Reassigned {}: new port {}",
+                        tool_name, assignment.port
+                    );
+
+                    (StatusCode::OK, Json(serde_json::json!({
+                        "ok": true,
+                        "tool": tool_name,
+                        "new_port": assignment.port,
+                        "port_var": port_var,
+                    })))
+                }
+                Err(e) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                        "error": format!("Port reassignment failed: {}", e),
+                    })))
+                }
+            }
+        }
+        _ => {
+            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": format!("Unknown configure action: '{}'", action),
+                "valid_actions": ["reassign_port"],
+            })))
+        }
+    }
+}
+
+/// POST /api/v1/tools/:tool_name/repair
+///
+/// Actions:
+///   - `fix_docker_network`: Remove orphaned Docker network so compose can adopt it.
+async fn tools_repair_handler(
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
+
+    match action {
+        "fix_docker_network" => {
+            // docker network rm <tool_name>_with (common pattern for compose networks)
+            let network_candidates = vec![
+                format!("{}_with", tool_name),
+                format!("{}_default", tool_name),
+                tool_name.clone(),
+            ];
+
+            let mut removed = Vec::new();
+            let mut errors = Vec::new();
+
+            for network in &network_candidates {
+                let output = std::process::Command::new("docker")
+                    .args(["network", "rm", network])
+                    .output();
+
+                match output {
+                    Ok(o) if o.status.success() => {
+                        removed.push(network.clone());
+                        tracing::info!("Removed Docker network: {}", network);
+                    }
+                    Ok(o) => {
+                        let stderr = String::from_utf8_lossy(&o.stderr);
+                        // "No such network" is expected for non-existent candidates
+                        if !stderr.contains("No such network") && !stderr.contains("not found") {
+                            errors.push(format!("{}: {}", network, stderr.trim()));
+                        }
+                    }
+                    Err(e) => {
+                        errors.push(format!("docker not available: {}", e));
+                        break;
+                    }
+                }
+            }
+
+            if !removed.is_empty() || errors.is_empty() {
+                (StatusCode::OK, Json(serde_json::json!({
+                    "ok": true,
+                    "removed_networks": removed,
+                    "hint": "Run preflight again to verify the fix.",
+                })))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                    "error": "Could not remove Docker networks",
+                    "details": errors,
+                })))
+            }
+        }
+        _ => {
+            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": format!("Unknown repair action: '{}'", action),
+                "valid_actions": ["fix_docker_network"],
+            })))
+        }
+    }
+}
+
 // ============================================================================
 // Tool-issued lifecycle receipts (tools attest to their own state)
 // ============================================================================
@@ -2183,6 +3042,7 @@ async fn tools_chain_handler(
 const DASHBOARD_HTML_FALLBACK: &str = include_str!("../assets/dashboard.html");
 const ONBOARD_HTML_FALLBACK: &str = include_str!("../assets/onboard.html");
 const SPEAK_HTML_FALLBACK: &str = include_str!("../assets/speak.html");
+const ECOSYSTEM_HTML_FALLBACK: &str = include_str!("../assets/ecosystem.html");
 
 /// Resolve an HTML asset: check $ZP_ASSETS_DIR or ~/.zeropoint/assets/{name}
 /// first (override), then fall back to the compiled-in copy.
@@ -2208,6 +3068,32 @@ fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
     fallback.to_string()
 }
 
+/// Root handler: redirect to /onboard if no genesis ceremony has been completed,
+/// otherwise serve the dashboard.
+async fn root_handler() -> Response {
+    let genesis_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".zeropoint")
+        .join("genesis.json");
+
+    // Check for a complete genesis record (one with an operator field from onboarding)
+    let has_complete_genesis = if let Ok(contents) = std::fs::read_to_string(&genesis_path) {
+        if let Ok(record) = serde_json::from_str::<serde_json::Value>(&contents) {
+            record.get("operator").and_then(|v| v.as_str()).is_some()
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if has_complete_genesis {
+        Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK)).into_response()
+    } else {
+        Redirect::temporary("/onboard").into_response()
+    }
+}
+
 async fn dashboard_handler() -> Html<String> {
     Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK))
 }
@@ -2220,11 +3106,15 @@ async fn speak_page_handler() -> Html<String> {
     Html(resolve_html_asset("speak.html", SPEAK_HTML_FALLBACK))
 }
 
+async fn ecosystem_page_handler() -> Html<String> {
+    Html(resolve_html_asset("ecosystem.html", ECOSYSTEM_HTML_FALLBACK))
+}
+
 // ============================================================================
 // Genesis Record Handler
 // ============================================================================
 
-async fn genesis_handler(State(_state): State<AppState>) -> Json<serde_json::Value> {
+async fn genesis_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     let home = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".zeropoint")
@@ -2232,7 +3122,20 @@ async fn genesis_handler(State(_state): State<AppState>) -> Json<serde_json::Val
 
     if let Ok(contents) = std::fs::read_to_string(&home) {
         // Return raw JSON — supports both server-genesis and onboard-genesis formats
-        if let Ok(record) = serde_json::from_str::<serde_json::Value>(&contents) {
+        if let Ok(mut record) = serde_json::from_str::<serde_json::Value>(&contents) {
+            // Annotate with live identity hierarchy status
+            if let Some(obj) = record.as_object_mut() {
+                obj.insert(
+                    "identity_from_hierarchy".to_string(),
+                    serde_json::Value::Bool(state.0.identity.from_hierarchy),
+                );
+                if state.0.identity.from_hierarchy {
+                    obj.insert(
+                        "active_operator_key".to_string(),
+                        serde_json::Value::String(state.0.identity.public_key_hex.clone()),
+                    );
+                }
+            }
             return Json(record);
         }
     }

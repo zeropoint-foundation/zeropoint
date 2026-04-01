@@ -81,6 +81,11 @@ impl PolicyEngine {
         ]
     }
 
+    /// Number of rules loaded (native only — WASM modules counted separately).
+    pub fn rule_count(&self) -> usize {
+        self.rules.len()
+    }
+
     /// Add a rule to the engine.
     pub fn add_rule(&mut self, rule: Box<dyn PolicyRule>) {
         self.rules.push(rule);

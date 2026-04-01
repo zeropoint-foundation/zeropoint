@@ -196,6 +196,20 @@ impl OperatorKey {
     pub fn secret_key(&self) -> [u8; 32] {
         *self.signing_key.as_bytes()
     }
+
+    /// Sign data with this operator's key.
+    pub fn sign(&self, data: &[u8]) -> [u8; 64] {
+        use ed25519_dalek::Signer;
+        self.signing_key.sign(data).to_bytes()
+    }
+
+    /// Borrow the internal Ed25519 signing key.
+    ///
+    /// Used by callers that need a `&SigningKey` reference (e.g., grant signing,
+    /// audit chain entries). Prefer `sign()` for simple data signing.
+    pub fn signing_key(&self) -> &SigningKey {
+        &self.signing_key
+    }
 }
 
 /// An agent key — represents a specific agent instance.
