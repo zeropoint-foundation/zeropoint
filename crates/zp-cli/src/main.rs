@@ -2,9 +2,11 @@
 
 mod chat;
 mod commands;
+mod configure;
 mod guard;
 mod init;
 mod mesh_commands;
+mod onboard;
 mod policy_commands;
 mod secure;
 
@@ -110,6 +112,10 @@ enum Commands {
     #[command(subcommand)]
     Policy(PolicyCmd),
 
+    /// Configure tools from vault (Semantic Sed)
+    #[command(subcommand)]
+    Configure(ConfigureCmd),
+
     /// Initialize a new ZeroPoint environment
     Init {
         /// Operator name (defaults to system username)
@@ -119,6 +125,29 @@ enum Commands {
         /// Directory to initialize (defaults to current directory)
         #[arg(long)]
         dir: Option<PathBuf>,
+
+        /// Sovereignty mode: how the genesis secret is gated.
+        /// Options: touch-id, fingerprint, face-enroll, windows-hello,
+        ///          yubikey, ledger, trezor, onlykey,
+        ///          login-password, file-based
+        /// Default: auto-detect (best available biometric/hardware, else login-password)
+        #[arg(long, default_value = "auto")]
+        sovereignty: String,
+    },
+
+    /// Interactive setup — discover tools, add credentials, configure everything
+    Onboard {
+        /// Directory to scan for tools (defaults to current directory)
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Scan depth (1 = immediate children, 2 = grandchildren)
+        #[arg(long, default_value = "2")]
+        depth: usize,
+
+        /// ZP server port for proxy mode (default: 3000)
+        #[arg(long, default_value = "3000")]
+        proxy_port: u16,
     },
 
     /// Key lifecycle management
@@ -244,6 +273,97 @@ enum GateCmd {
     List,
 }
 
+#[derive(Subcommand)]
+enum ConfigureCmd {
+    /// Configure a tool's .env from the ZP vault
+    Tool {
+        /// Path to the tool's project directory (containing .env.example)
+        #[arg(long)]
+        path: PathBuf,
+
+        /// Tool name (used for policy context and audit)
+        #[arg(long)]
+        name: String,
+
+        /// Dry run — show what would be resolved without writing
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// List providers registered in the vault
+    Providers,
+    /// Add a credential to the vault
+    VaultAdd {
+        /// Provider name (e.g., anthropic, openai, ollama)
+        #[arg(long)]
+        provider: String,
+
+        /// Field name (e.g., api_key, password, secret)
+        #[arg(long)]
+        field: String,
+
+        /// Credential value (omit to read from stdin)
+        #[arg(long)]
+        value: Option<String>,
+    },
+    /// Scan for configurable tools and report readiness
+    Scan {
+        /// Directory to scan (defaults to current directory)
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Scan depth: 1 = immediate children, 2 = grandchildren too
+        #[arg(long, default_value = "2")]
+        depth: usize,
+    },
+    /// Auto-configure all discovered tools that have sufficient vault credentials
+    Auto {
+        /// Directory to scan (defaults to current directory)
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Scan depth: 1 = immediate children, 2 = grandchildren too
+        #[arg(long, default_value = "2")]
+        depth: usize,
+
+        /// Dry run — show what would be configured without writing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Overwrite existing .env files (default: skip them)
+        #[arg(long)]
+        overwrite: bool,
+
+        /// Route API calls through ZP proxy for governance, metering, and receipts.
+        /// Rewrites all provider base URLs to http://localhost:{port}/api/v1/proxy/{provider}.
+        #[arg(long)]
+        proxy: bool,
+
+        /// ZP server port for proxy mode (default: 3000)
+        #[arg(long, default_value = "3000")]
+        proxy_port: u16,
+
+        /// Validate credentials against live APIs after configuration
+        #[arg(long)]
+        validate: bool,
+    },
+    /// Generate a .zp-configure.toml manifest for a tool (MVC)
+    Manifest {
+        /// Path to the tool's project directory
+        #[arg(long)]
+        path: PathBuf,
+    },
+    /// Validate vault credentials against provider APIs (live connection test)
+    Validate {
+        /// Only validate a specific provider (e.g., "openai", "anthropic")
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// Output results as JSON instead of formatted text
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -325,8 +445,195 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    // Configure — semantic sed for tool .env files, no pipeline needed
+    if let Some(Commands::Configure(cmd)) = &args.command {
+        // Resolve vault master key: Genesis secret (Keychain) → derive → vault key
+        let home_zp = commands::resolve_zp_home();
+        let keyring = zp_keys::Keyring::open(home_zp.join("keys")).ok();
+        let resolved = match &keyring {
+            Some(kr) => match zp_keys::resolve_vault_key(kr) {
+                Ok(r) => r,
+                Err(ref e) if e.to_string().contains("credential store") => {
+                    eprintln!();
+                    eprintln!("  \x1b[31mCould not access OS credential store.\x1b[0m");
+                    eprintln!("  {}", e);
+                    eprintln!();
+                    if cfg!(target_os = "macos") {
+                        eprintln!("  On macOS: Ensure Keychain Access is available and not locked.");
+                        eprintln!("  If you denied Keychain access, open Keychain Access → find");
+                        eprintln!("  'zeropoint-genesis' → delete it, then re-run `zp init`.");
+                    } else if cfg!(target_os = "linux") {
+                        eprintln!("  On Linux: Requires a running Secret Service (GNOME Keyring, KWallet).");
+                        eprintln!("  Install: `sudo apt install gnome-keyring` or `sudo dnf install gnome-keyring`");
+                        eprintln!("  For headless/CI: set SECRETS_MASTER_KEY env var (64 hex chars).");
+                    }
+                    eprintln!();
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!();
+                    eprintln!("  \x1b[31mCould not resolve vault key.\x1b[0m");
+                    eprintln!("  {}", e);
+                    eprintln!();
+                    eprintln!("  Run `zp init` to create your Genesis key.");
+                    eprintln!();
+                    std::process::exit(1);
+                }
+            },
+            None => {
+                eprintln!();
+                eprintln!("  \x1b[31mNo keyring found at ~/.zeropoint/keys/\x1b[0m");
+                eprintln!();
+                eprintln!("  Run `zp init` to create your Genesis key.");
+                eprintln!();
+                std::process::exit(1);
+            }
+        };
+        if resolved.source == zp_keys::VaultKeySource::LegacyEnvVar {
+            eprintln!();
+            eprintln!("  \x1b[33mNote:\x1b[0m Using SECRETS_MASTER_KEY env var (deprecated).");
+            eprintln!("  Run `zp init` to switch to Genesis-derived vault key.");
+        }
+        if resolved.source == zp_keys::VaultKeySource::LegacyFileMigrated {
+            eprintln!();
+            eprintln!("  \x1b[33mNote:\x1b[0m Genesis secret loaded from disk file (legacy).");
+            eprintln!("  It will auto-migrate to the OS credential store on next access with Keychain available.");
+        }
+        let padded_key = *resolved.key;
+
+        // Allow-all policy for configure operations (vault access is the gate)
+        fn configure_policy(
+            _skill_id: &str,
+            _credential_name: &str,
+            _context: &zp_trust::injector::PolicyContext,
+        ) -> Result<(), zp_trust::injector::InjectorError> {
+            Ok(())
+        }
+
+        let vault_path = commands::resolve_zp_home().join("vault.json");
+
+        let exit_code = match cmd {
+            ConfigureCmd::Tool { path, name, dry_run } => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(vault) => configure::run_tool(path, name, *dry_run, &vault, configure_policy),
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
+            ConfigureCmd::Providers => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(vault) => configure::run_providers(&vault),
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
+            ConfigureCmd::VaultAdd { provider, field, value } => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(mut vault) => {
+                        let val = value.clone().unwrap_or_else(|| {
+                            eprint!("Enter value for {}/{}: ", provider, field);
+                            let mut input = String::new();
+                            std::io::stdin().read_line(&mut input).unwrap_or(0);
+                            input.trim().to_string()
+                        });
+                        configure::run_vault_add(&mut vault, provider, field, &val, &vault_path)
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
+            ConfigureCmd::Scan { path, depth } => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(vault) => configure::run_scan(path, &vault, *depth),
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
+            ConfigureCmd::Auto { path, depth, dry_run, overwrite, proxy, proxy_port, validate } => {
+                let proxy_opt = if *proxy { Some(*proxy_port) } else { None };
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(vault) => {
+                        let exit = configure::run_auto(path, &vault, configure_policy, *depth, *dry_run, *overwrite, proxy_opt);
+                        if *validate && exit == 0 && !*dry_run {
+                            println!();
+                            let v_exit = configure::run_validate(&vault, None, false);
+                            if v_exit != 0 { v_exit } else { exit }
+                        } else {
+                            exit
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
+            ConfigureCmd::Manifest { path } => {
+                configure::run_manifest(path)
+            }
+            ConfigureCmd::Validate { provider, json } => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(vault) => configure::run_validate(&vault, provider.as_deref(), *json),
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
+        };
+        std::process::exit(exit_code);
+    }
+
+    // Onboard — interactive credential wizard, no pipeline needed
+    if let Some(Commands::Onboard { path, depth, proxy_port }) = &args.command {
+        let home_zp = commands::resolve_zp_home();
+        let keyring = zp_keys::Keyring::open(home_zp.join("keys")).ok();
+        let resolved = match &keyring {
+            Some(kr) => match zp_keys::resolve_vault_key(kr) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!();
+                    eprintln!("  \x1b[31mCould not resolve vault key.\x1b[0m {}", e);
+                    eprintln!("  Run `zp init` first to create your Genesis key.");
+                    eprintln!();
+                    std::process::exit(1);
+                }
+            },
+            None => {
+                eprintln!();
+                eprintln!("  \x1b[31mNo keyring found.\x1b[0m Run `zp init` first.");
+                eprintln!();
+                std::process::exit(1);
+            }
+        };
+        let padded_key = *resolved.key;
+        let vault_path = home_zp.join("vault.json");
+        let mut vault = match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Error loading vault: {}", e);
+                std::process::exit(1);
+            }
+        };
+        let config = onboard::OnboardConfig {
+            scan_path: path.clone(),
+            depth: *depth,
+            offer_proxy: true,
+            proxy_port: *proxy_port,
+        };
+        std::process::exit(onboard::run(&config, &mut vault, &padded_key, &vault_path));
+    }
+
     // Init — bootstrap a new ZeroPoint environment, no pipeline needed
-    if let Some(Commands::Init { name, dir }) = &args.command {
+    if let Some(Commands::Init { name, dir, sovereignty }) = &args.command {
         let operator_name = name.clone().unwrap_or_else(|| {
             std::env::var("USER")
                 .or_else(|_| std::env::var("USERNAME"))
@@ -335,10 +642,29 @@ async fn main() -> anyhow::Result<()> {
         let project_dir = dir
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        // Resolve sovereignty mode: "auto" detects the best available provider
+        let sovereignty_mode = if sovereignty == "auto" {
+            // Auto-detect: pick the best available provider
+            let caps = zp_keys::detect_all_providers();
+            if let Some(best) = caps.iter().find(|c| c.available && c.mode.requires_hardware()) {
+                eprintln!("  {} detected: {} — using {} sovereignty mode",
+                    best.mode.display_name(), best.description, best.mode.display_name());
+                best.mode
+            } else if caps.iter().any(|c| c.available && c.mode == zp_keys::SovereigntyMode::LoginPassword) {
+                zp_keys::SovereigntyMode::LoginPassword
+            } else {
+                zp_keys::SovereigntyMode::FileBased
+            }
+        } else {
+            zp_keys::SovereigntyMode::from_onboard_str(&sovereignty)
+        };
+
         let config = init::InitConfig {
             operator_name,
             project_dir,
             store_genesis_secret: true,
+            sovereignty_mode,
         };
         std::process::exit(init::run(&config));
     }
@@ -443,8 +769,10 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
         Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Policy(_)) => unreachable!(),    // handled above
-        Some(Commands::Init { .. }) => unreachable!(),  // handled above
-        Some(Commands::Keys(_)) => unreachable!(),      // handled above
+        Some(Commands::Configure(_)) => unreachable!(), // handled above
+        Some(Commands::Init { .. }) => unreachable!(),     // handled above
+        Some(Commands::Onboard { .. }) => unreachable!(), // handled above
+        Some(Commands::Keys(_)) => unreachable!(),       // handled above
         Some(Commands::Gate(_)) => unreachable!(),      // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,

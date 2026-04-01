@@ -1,0 +1,28 @@
+[package]
+name = "zp-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "ZeroPoint shared engine — scan, configure, vault, and provider logic used by both server and CLI"
+
+[dependencies]
+# Local workspace crates
+zp-core = { path = "../zp-core" }
+zp-trust = { path = "../zp-trust" }
+
+# Workspace dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+regex = { workspace = true }
+toml = { workspace = true }
+
+# HTTP (for credential validation probes)
+reqwest = { workspace = true }
+tokio = { workspace = true }
+
+# Filesystem
+dirs = "5"

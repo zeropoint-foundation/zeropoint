@@ -1,0 +1,492 @@
+# ─────────────────────────────────────────────────────────────
+# ZeroPoint — Default Provider Catalog
+# Embedded in the binary via include_str!
+# User overrides: ~/.zeropoint/config/providers.toml
+# ─────────────────────────────────────────────────────────────
+# Each [[providers]] entry is a known AI/LLM service.
+# The onboarding engine uses this catalog for:
+#   1. Environment variable scanning (detect which providers the user has keys for)
+#   2. Credential collection UI (show provider cards with "get your key" links)
+#   3. Governance proxy routing (know where each provider's API lives)
+#
+# Fields:
+#   id               — unique slug (used in vault refs, proxy config)
+#   name             — human-readable display name
+#   category         — "llm" | "embedding" | "platform" | "aggregator" | "search" | "ledger"
+#   env_patterns     — env var names the provider's SDK expects
+#   key_hint         — what the key looks like (prefix, length)
+#   base_url         — API base URL
+#   key_url          — where the user creates/manages keys
+#   docs_url         — main documentation
+#   supports_org     — whether org-level keys exist
+#   source_url       — canonical reference for this entry
+#   last_verified    — ISO date when this entry was last checked
+#   capabilities     — list of MVC capability IDs this provider satisfies
+#   openai_compatible — whether the provider exposes OpenAI-compatible /v1/chat/completions
+#   aggregator       — whether this is a multi-model routing service
+#   routing          — "intelligent" (auto-selects model) or "explicit" (user picks model)
+# ─────────────────────────────────────────────────────────────
+
+# ── LLM / Foundation Model APIs ─────────────────────────────
+
+[[providers]]
+id = "openai"
+name = "OpenAI"
+category = "llm"
+env_patterns = ["OPENAI_API_KEY"]
+key_hint = "starts with sk-proj-"
+base_url = "https://api.openai.com/v1"
+key_url = "https://platform.openai.com/api-keys"
+docs_url = "https://platform.openai.com/docs/api-reference"
+supports_org = true
+source_url = "https://platform.openai.com/docs/api-reference/introduction"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "image_gen", "image_edit", "tts", "asr", "embedding", "video_gen"]
+openai_compatible = true
+
+[[providers]]
+id = "anthropic"
+name = "Anthropic"
+category = "llm"
+env_patterns = ["ANTHROPIC_API_KEY"]
+key_hint = "starts with sk-ant-"
+base_url = "https://api.anthropic.com/v1"
+key_url = "https://console.anthropic.com/account/keys"
+docs_url = "https://docs.anthropic.com"
+supports_org = false
+source_url = "https://docs.anthropic.com"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision"]
+openai_compatible = false
+openai_proxy = true
+
+[[providers]]
+id = "gemini"
+name = "Google Gemini"
+category = "llm"
+env_patterns = ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+key_hint = "starts with AIza"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+key_url = "https://aistudio.google.com/apikey"
+docs_url = "https://ai.google.dev/gemini-api"
+supports_org = false
+source_url = "https://ai.google.dev/gemini-api/docs/api-key"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "embedding", "video_gen", "video_understanding"]
+openai_compatible = true
+
+[[providers]]
+id = "mistral"
+name = "Mistral AI"
+category = "llm"
+env_patterns = ["MISTRAL_API_KEY"]
+key_hint = ""
+base_url = "https://api.mistral.ai/v1"
+key_url = "https://console.mistral.ai/"
+docs_url = "https://docs.mistral.ai"
+supports_org = true
+source_url = "https://docs.mistral.ai/getting-started/quickstart"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "vision", "embedding"]
+openai_compatible = true
+
+[[providers]]
+id = "cohere"
+name = "Cohere"
+category = "llm"
+env_patterns = ["CO_API_KEY", "COHERE_API_KEY"]
+key_hint = "starts with co_"
+base_url = "https://api.cohere.ai/v1"
+key_url = "https://dashboard.cohere.ai/"
+docs_url = "https://docs.cohere.com"
+supports_org = false
+source_url = "https://docs.cohere.com"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "embedding", "reranking"]
+openai_compatible = true
+
+[[providers]]
+id = "xai"
+name = "xAI (Grok)"
+category = "llm"
+env_patterns = ["XAI_API_KEY", "GROK_API_KEY"]
+key_hint = "starts with xai-"
+base_url = "https://api.x.ai/v1"
+key_url = "https://console.x.ai/"
+docs_url = "https://docs.x.ai"
+supports_org = false
+source_url = "https://docs.x.ai/developers/quickstart"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "vision"]
+openai_compatible = true
+
+[[providers]]
+id = "deepseek"
+name = "DeepSeek"
+category = "llm"
+env_patterns = ["DEEPSEEK_API_KEY"]
+key_hint = ""
+base_url = "https://api.deepseek.com/v1"
+key_url = "https://platform.deepseek.com/api_keys"
+docs_url = "https://api-docs.deepseek.com"
+supports_org = false
+source_url = "https://api-docs.deepseek.com"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "code_llm"]
+openai_compatible = true
+
+[[providers]]
+id = "perplexity"
+name = "Perplexity"
+category = "llm"
+env_patterns = ["PERPLEXITY_API_KEY", "PPLX_API_KEY"]
+key_hint = "starts with pplx-"
+base_url = "https://api.perplexity.ai"
+key_url = "https://www.perplexity.ai/settings/api"
+docs_url = "https://docs.perplexity.ai"
+supports_org = false
+source_url = "https://docs.perplexity.ai"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "web_search"]
+openai_compatible = true
+
+[[providers]]
+id = "groq"
+name = "Groq"
+category = "llm"
+env_patterns = ["GROQ_API_KEY"]
+key_hint = "starts with gsk_"
+base_url = "https://api.groq.com/openai/v1"
+key_url = "https://console.groq.com/keys"
+docs_url = "https://console.groq.com/docs"
+supports_org = true
+source_url = "https://console.groq.com/docs/quickstart"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm"]
+openai_compatible = true
+
+[[providers]]
+id = "together"
+name = "Together AI"
+category = "llm"
+env_patterns = ["TOGETHER_API_KEY"]
+key_hint = ""
+base_url = "https://api.together.xyz/v1"
+key_url = "https://api.together.xyz/settings/api-keys"
+docs_url = "https://docs.together.ai"
+supports_org = false
+source_url = "https://docs.together.ai/docs/quickstart"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "image_gen", "embedding"]
+openai_compatible = true
+
+[[providers]]
+id = "fireworks"
+name = "Fireworks AI"
+category = "llm"
+env_patterns = ["FIREWORKS_API_KEY"]
+key_hint = ""
+base_url = "https://api.fireworks.ai/inference/v1"
+key_url = "https://fireworks.ai/api-keys"
+docs_url = "https://docs.fireworks.ai"
+supports_org = false
+source_url = "https://docs.fireworks.ai/getting-started/quickstart"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "embedding"]
+openai_compatible = true
+
+[[providers]]
+id = "ai21"
+name = "AI21 Labs"
+category = "llm"
+env_patterns = ["AI21_API_KEY"]
+key_hint = ""
+base_url = "https://api.ai21.com/studio/v1"
+key_url = "https://studio.ai21.com/account/api-key"
+docs_url = "https://docs.ai21.com"
+supports_org = false
+source_url = "https://docs.ai21.com"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm"]
+openai_compatible = true
+
+[[providers]]
+id = "abacus"
+name = "Abacus.ai"
+category = "aggregator"
+env_patterns = ["ABACUS_API_KEY"]
+key_hint = ""
+base_url = "https://api.abacus.ai/api/v0"
+key_url = "https://abacus.ai/app/profile/apikey"
+docs_url = "https://abacus.ai/help/python-sdk"
+supports_org = true
+source_url = "https://abacusai.github.io/api-python/"
+last_verified = "2026-03-22"
+coverage = "RouteLLM — intelligent routing across GPT-4o, Claude, Gemini, Llama, and more"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "image_gen", "embedding"]
+openai_compatible = true
+aggregator = true
+routing = "intelligent"
+
+# ── Embedding / Specialized ─────────────────────────────────
+
+[[providers]]
+id = "replicate"
+name = "Replicate"
+category = "llm"
+env_patterns = ["REPLICATE_API_TOKEN"]
+key_hint = "starts with r8_"
+base_url = "https://api.replicate.com/v1"
+key_url = "https://replicate.com/account/api-tokens"
+docs_url = "https://replicate.com/docs"
+supports_org = true
+source_url = "https://replicate.com/docs/reference/http"
+last_verified = "2026-03-22"
+capabilities = ["image_gen", "video_gen", "audio_gen", "3d_gen", "tts", "asr"]
+
+[[providers]]
+id = "huggingface"
+name = "Hugging Face"
+category = "llm"
+env_patterns = ["HF_TOKEN", "HUGGINGFACE_API_KEY"]
+key_hint = "starts with hf_"
+base_url = "https://api-inference.huggingface.co"
+key_url = "https://huggingface.co/settings/tokens"
+docs_url = "https://huggingface.co/docs/huggingface_hub"
+supports_org = false
+source_url = "https://huggingface.co/docs/hub/en/security-tokens"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "embedding", "image_gen"]
+
+[[providers]]
+id = "voyage"
+name = "Voyage AI"
+category = "embedding"
+env_patterns = ["VOYAGE_API_KEY"]
+key_hint = ""
+base_url = "https://api.voyageai.com/v1"
+key_url = "https://dash.voyageai.com/"
+docs_url = "https://docs.voyageai.com"
+supports_org = true
+source_url = "https://docs.voyageai.com/docs/api-key-and-installation"
+last_verified = "2026-03-22"
+capabilities = ["embedding", "reranking"]
+
+[[providers]]
+id = "nomic"
+name = "Nomic"
+category = "embedding"
+env_patterns = ["NOMIC_API_KEY", "ATLAS_API_KEY"]
+key_hint = ""
+base_url = "https://api-atlas.nomic.ai/v1"
+key_url = "https://atlas.nomic.ai/"
+docs_url = "https://docs.nomic.ai"
+supports_org = true
+source_url = "https://docs.nomic.ai"
+last_verified = "2026-03-22"
+capabilities = ["embedding"]
+
+# ── Cloud Platform AI ───────────────────────────────────────
+
+[[providers]]
+id = "bedrock"
+name = "AWS Bedrock"
+category = "platform"
+env_patterns = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+key_hint = "IAM credentials (access key + secret)"
+base_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
+key_url = "https://console.aws.amazon.com/iam/home#/security_credentials"
+docs_url = "https://docs.aws.amazon.com/bedrock/latest/userguide/"
+supports_org = true
+source_url = "https://docs.aws.amazon.com/bedrock/latest/userguide/"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "vision", "embedding", "image_gen"]
+
+[[providers]]
+id = "azure-openai"
+name = "Azure OpenAI"
+category = "platform"
+env_patterns = ["AZURE_API_KEY", "AZURE_OPENAI_API_KEY"]
+key_hint = "32-character hex string"
+base_url = "https://{resource}.openai.azure.com/openai"
+key_url = "https://portal.azure.com/"
+docs_url = "https://learn.microsoft.com/en-us/azure/ai-services/openai/"
+supports_org = true
+source_url = "https://learn.microsoft.com/en-us/azure/ai-services/openai/"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "vision", "embedding", "tts", "asr"]
+openai_compatible = true
+
+[[providers]]
+id = "vertex"
+name = "Google Vertex AI"
+category = "platform"
+env_patterns = ["GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_VERTEX_API_KEY"]
+key_hint = "service account JSON or AIza key"
+base_url = "https://us-central1-aiplatform.googleapis.com/v1"
+key_url = "https://console.cloud.google.com/apis/credentials"
+docs_url = "https://cloud.google.com/vertex-ai/generative-ai/docs"
+supports_org = true
+source_url = "https://cloud.google.com/vertex-ai/generative-ai/docs"
+last_verified = "2026-03-22"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "embedding", "image_gen", "video_gen"]
+
+# ── Aggregator ──────────────────────────────────────────────
+
+[[providers]]
+id = "openrouter"
+name = "OpenRouter"
+category = "aggregator"
+env_patterns = ["OPENROUTER_API_KEY"]
+key_hint = ""
+base_url = "https://openrouter.ai/api/v1"
+key_url = "https://openrouter.ai/settings/keys"
+docs_url = "https://openrouter.ai/docs/quickstart"
+supports_org = true
+source_url = "https://openrouter.ai/docs/quickstart"
+last_verified = "2026-03-22"
+coverage = "1 key → 200+ models across OpenAI, Anthropic, Google, Meta, Mistral, and more"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "image_gen", "tts", "embedding"]
+openai_compatible = true
+aggregator = true
+routing = "explicit"
+
+# ── Search / Tool APIs ─────────────────────────────────────
+
+[[providers]]
+id = "tavily"
+name = "Tavily"
+category = "search"
+env_patterns = ["TAVILY_API_KEY"]
+key_hint = "starts with tvly-"
+base_url = "https://api.tavily.com"
+key_url = "https://app.tavily.com/home"
+docs_url = "https://docs.tavily.com"
+supports_org = false
+source_url = "https://docs.tavily.com"
+last_verified = "2026-03-22"
+capabilities = ["web_search"]
+
+[[providers]]
+id = "serper"
+name = "Serper"
+category = "search"
+env_patterns = ["SERPER_API_KEY"]
+key_hint = ""
+base_url = "https://google.serper.dev"
+key_url = "https://serper.dev/api-key"
+docs_url = "https://serper.dev/docs"
+supports_org = false
+source_url = "https://serper.dev/docs"
+last_verified = "2026-03-22"
+capabilities = ["web_search"]
+
+# ── Ledger / DLT ───────────────────────────────────────────
+
+[[providers]]
+id = "hedera"
+name = "Hedera"
+category = "ledger"
+env_patterns = ["HEDERA_ACCOUNT_ID", "HEDERA_PRIVATE_KEY"]
+key_hint = "account ID like 0.0.12345, private key is 32-byte hex or DER"
+base_url = "https://mainnet.hedera.com"
+key_url = "https://portal.hedera.com/"
+docs_url = "https://docs.hedera.com"
+supports_org = false
+source_url = "https://docs.hedera.com/hedera/sdks-and-apis"
+last_verified = "2026-03-24"
+capabilities = ["ledger"]
+
+# ── Chinese / Asian LLM Providers ─────────────────────────────
+
+[[providers]]
+id = "qwen"
+name = "Qwen (Alibaba Cloud)"
+category = "llm"
+env_patterns = ["QWEN_API_KEY"]
+key_hint = "sk-... from DashScope console"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+key_url = "https://dashscope.console.aliyun.com/"
+docs_url = "https://help.aliyun.com/zh/model-studio/developer-reference/api-reference"
+supports_org = false
+source_url = "https://help.aliyun.com/zh/model-studio/"
+last_verified = "2026-03-31"
+capabilities = ["reasoning_llm", "vision", "embedding"]
+openai_compatible = true
+
+[[providers]]
+id = "kimi"
+name = "Kimi (Moonshot AI)"
+category = "llm"
+env_patterns = ["KIMI_API_KEY"]
+key_hint = "sk-... from Moonshot Platform"
+base_url = "https://api.moonshot.cn/v1"
+key_url = "https://platform.moonshot.cn/"
+docs_url = "https://platform.moonshot.cn/docs"
+supports_org = false
+source_url = "https://platform.moonshot.cn/docs"
+last_verified = "2026-03-31"
+capabilities = ["reasoning_llm", "long_context_llm"]
+openai_compatible = true
+
+[[providers]]
+id = "minimax"
+name = "MiniMax"
+category = "llm"
+env_patterns = ["MINIMAX_API_KEY"]
+key_hint = "API key from MiniMax platform"
+base_url = "https://api.minimax.chat/v1"
+key_url = "https://platform.minimaxi.com/"
+docs_url = "https://platform.minimaxi.com/document"
+supports_org = false
+source_url = "https://platform.minimaxi.com/document"
+last_verified = "2026-03-31"
+capabilities = ["reasoning_llm", "tts"]
+openai_compatible = true
+
+[[providers]]
+id = "glm"
+name = "GLM (Zhipu AI)"
+category = "llm"
+env_patterns = ["GLM_API_KEY"]
+key_hint = "API key from Zhipu AI open platform"
+base_url = "https://open.bigmodel.cn/api/paas/v4"
+key_url = "https://open.bigmodel.cn/"
+docs_url = "https://open.bigmodel.cn/dev/api"
+supports_org = false
+source_url = "https://open.bigmodel.cn/dev/api"
+last_verified = "2026-03-31"
+capabilities = ["reasoning_llm", "vision", "embedding"]
+openai_compatible = true
+
+[[providers]]
+id = "siliconflow"
+name = "SiliconFlow"
+category = "llm"
+env_patterns = ["SILICONFLOW_API_KEY"]
+key_hint = "sk-... from SiliconFlow console"
+base_url = "https://api.siliconflow.cn/v1"
+key_url = "https://cloud.siliconflow.cn/"
+docs_url = "https://docs.siliconflow.cn/"
+supports_org = false
+source_url = "https://docs.siliconflow.cn/"
+last_verified = "2026-03-31"
+capabilities = ["reasoning_llm", "embedding", "image_gen"]
+openai_compatible = true
+aggregator = true
+routing = "explicit"
+
+[[providers]]
+id = "doubao"
+name = "Doubao (ByteDance)"
+category = "llm"
+env_patterns = ["DOUBAO_API_KEY"]
+key_hint = "API key from Volcano Engine console"
+base_url = "https://ark.cn-beijing.volces.com/api/v3"
+key_url = "https://console.volcengine.com/ark"
+docs_url = "https://www.volcengine.com/docs/82379"
+supports_org = false
+source_url = "https://www.volcengine.com/docs/82379"
+last_verified = "2026-03-31"
+capabilities = ["reasoning_llm", "vision"]
+openai_compatible = true

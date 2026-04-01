@@ -108,6 +108,7 @@ impl CompactAuditEntry {
             zp_core::AuditAction::SkillProposed { .. } => "skillp".to_string(),
             zp_core::AuditAction::SkillApproved { .. } => "skilla".to_string(),
             zp_core::AuditAction::SystemEvent { .. } => "sys".to_string(),
+            zp_core::AuditAction::ApiCallProxied { .. } => "proxy".to_string(),
         };
 
         let pd = compact_decision(&entry.policy_decision);

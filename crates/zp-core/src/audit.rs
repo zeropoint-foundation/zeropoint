@@ -102,4 +102,12 @@ pub enum AuditAction {
     SkillApproved { skill_id: String, approver: String },
     /// System startup/shutdown
     SystemEvent { event: String },
+    /// An API call was proxied through ZP governance
+    ApiCallProxied {
+        provider: String,
+        endpoint: String,
+        tokens_input: u64,
+        tokens_output: u64,
+        cost_usd: f64,
+    },
 }

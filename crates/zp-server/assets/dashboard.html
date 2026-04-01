@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZEROPOINT — Verification Surface</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm-addon-fit/0.8.0/xterm-addon-fit.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
@@ -305,6 +305,10 @@
     .diag-btn:hover { border-color: #7eb8da; color: #7eb8da; }
     .diag-btn.retry { border-color: #00C896; color: #00C896; }
     .diag-btn.retry:hover { background: rgba(0,200,150,0.08); }
+    .diag-btn.resolve { border-color: #7eb8da; color: #7eb8da; font-size: 12px; padding: 10px 28px; }
+    .diag-btn.resolve:hover { background: rgba(126,184,218,0.12); }
+    .diag-btn.resolve:disabled { opacity: 0.4; cursor: not-allowed; }
+    .diag-btn.resolve .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(126,184,218,0.3); border-top-color: #7eb8da; border-radius: 50%; animation: preflightSpin 0.6s linear infinite; margin-right: 8px; vertical-align: middle; }
 
     /* ── Graduated terminal disclosure ────────────────────── */
     .diag-suggested {
@@ -654,13 +658,15 @@
       <div class="diag-title" id="diagTitle">Launch Failed</div>
       <div id="diagBody"></div>
 
-      <!-- Layer 2: Suggested commands (contextual, clickable) -->
-      <div class="diag-suggested" id="diagSuggested" style="display:none;">
-        <div class="diag-suggested-label">Try</div>
-        <div id="diagSuggestedCmds"></div>
+      <!-- Primary action — single resolve button -->
+      <div class="diag-actions" style="margin-top: 20px; justify-content: flex-start;">
+        <button class="diag-btn resolve" id="diagResolveBtn" style="display:none;" onclick="runResolve()">Resolve</button>
+        <button class="diag-btn retry" id="diagRetryBtn" style="display:none;" onclick="diagRetry()">Retry Launch</button>
+        <div style="flex:1;"></div>
+        <button class="diag-btn" onclick="dismissDiag()">Close</button>
       </div>
 
-      <!-- Layer 3: Terminal disclosure (depth on demand) -->
+      <!-- Terminal — always visible when resolve is running -->
       <div class="diag-terminal-disclosure" id="diagTermDisclosure" style="display:none;">
         <div class="diag-terminal-toggle" id="diagTermToggle" onclick="toggleTerminal()">
           <span class="chevron">&#9654;</span>
@@ -675,9 +681,15 @@
         </div>
       </div>
 
-      <div class="diag-actions">
-        <button class="diag-btn" onclick="dismissDiag()">Close</button>
-        <button class="diag-btn retry" id="diagRetryBtn" style="display:none;" onclick="diagRetry()">Retry</button>
+      <!-- Advanced: individual commands (collapsed by default) -->
+      <div class="diag-suggested" id="diagSuggested" style="display:none;">
+        <div class="diag-terminal-toggle" onclick="this.classList.toggle('open'); this.nextElementSibling.classList.toggle('open');">
+          <span class="chevron">&#9654;</span>
+          <span style="font-size:10px; color:#8B8984; text-transform:uppercase; letter-spacing:0.06em;">Advanced</span>
+        </div>
+        <div class="diag-terminal-pane" style="padding-top:8px;">
+          <div id="diagSuggestedCmds"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -741,10 +753,22 @@
     // ── Port probe ─────────────────────────────────────────
     async function isPortOpen(url) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 1500);
+      const timer = setTimeout(() => controller.abort(), 2000);
       try {
-        await fetch(url, { mode: 'no-cors', signal: controller.signal });
+        // Subdomain URLs (ember.localhost:3000) are cross-origin but
+        // our CORS predicate allows *.localhost:{port}, so use 'cors'
+        // mode to get a real status code back.
+        const isSubdomain = url.includes('.localhost');
+        const resp = await fetch(url, {
+          mode: isSubdomain ? 'cors' : 'no-cors',
+          signal: controller.signal,
+        });
         clearTimeout(timer);
+        // 502/503/504 = ZP proxy running but tool not up yet
+        // 404 = no port assignment for this tool
+        if (isSubdomain && (resp.status === 404 || resp.status === 502 || resp.status === 503 || resp.status === 504)) {
+          return false;
+        }
         return true;
       } catch {
         clearTimeout(timer);
@@ -901,6 +925,185 @@
       };
     }
 
+    // ── Resolve engine — builds and executes the right sequence ──
+    let _resolveToolRef = null;  // tool object for the current resolve
+    let _resolveResult = null;   // result object for the current resolve
+
+    function runResolve() {
+      const tool = _resolveToolRef;
+      const result = _resolveResult;
+      if (!tool) return;
+
+      const btn = document.getElementById('diagResolveBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Resolving...';
+
+      // Build the command sequence based on what's actually wrong
+      const toolPath = tool.path || `~/projects/${tool.name}`;
+      const steps = buildResolveSteps(tool, result);
+
+      // Open terminal and stream the sequence
+      const toggle = document.getElementById('diagTermToggle');
+      const pane = document.getElementById('diagTermPane');
+      if (!toggle.classList.contains('open')) {
+        toggle.classList.add('open');
+        pane.classList.add('open');
+      }
+      if (!_diagTerm) initTerminal();
+      if (_diagFitAddon) setTimeout(() => _diagFitAddon.fit(), 50);
+      _diagTerm.clear();
+
+      execSequence(steps, 0, toolPath, (allOk) => {
+        btn.disabled = false;
+        if (allOk) {
+          btn.innerHTML = '&#10003; Resolved';
+          btn.className = 'diag-btn retry';  // green
+          _diagTerm.writeln('');
+          _diagTerm.writeln('\x1b[32m═══ All steps completed successfully ═══\x1b[0m');
+
+          // Refresh the dashboard after a short delay
+          setTimeout(() => {
+            dismissDiag();
+            refreshAll();
+          }, 1500);
+        } else {
+          btn.innerHTML = 'Resolve';
+          _diagTerm.writeln('');
+          _diagTerm.writeln('\x1b[31m═══ Resolution stopped — see errors above ═══\x1b[0m');
+        }
+      });
+    }
+
+    function buildResolveSteps(tool, result) {
+      const toolPath = tool.path || `~/projects/${tool.name}`;
+      const errorLower = ((result && result.error) || '').toLowerCase();
+      const hintLower = ((result && result.hint) || '').toLowerCase();
+      const steps = [];
+
+      // 1. Configuration needed
+      if (tool.status === 'unconfigured' || errorLower.includes('needs configuration') ||
+          hintLower.includes('vault') || hintLower.includes('.env')) {
+        steps.push({
+          label: 'Resolving vault credentials',
+          cmd: `zp configure tool --path "${toolPath}" --name "${tool.name}"`,
+          cwd: toolPath,
+        });
+      }
+
+      // 2. Port didn't respond — likely needs build + restart
+      if (errorLower.includes('port') && errorLower.includes('did not respond')) {
+        const launch = tool.launch || {};
+        const isPnpm = launch.kind === 'pnpm';
+        const isNpm = launch.kind === 'npm' || (!isPnpm && launch.cmd && launch.cmd.includes('npm'));
+        const pm = isPnpm ? 'pnpm' : isNpm ? 'npm' : null;
+        const port = result.port || launch.port;
+
+        if (pm) {
+          steps.push({
+            label: `Building ${tool.name}`,
+            cmd: `${pm} run build`,
+            cwd: toolPath,
+          });
+          steps.push({
+            label: `Starting ${tool.name} on port ${port || '?'}`,
+            cmd: port ? `PORT=${port} ${pm} start` : `${pm} start`,
+            cwd: toolPath,
+          });
+        }
+      }
+
+      // 3. Docker not running
+      if (errorLower.includes('docker') || errorLower.includes('daemon')) {
+        steps.push({
+          label: 'Starting Docker containers',
+          cmd: 'docker compose up -d',
+          cwd: toolPath,
+        });
+      }
+
+      // 4. Port conflict — something else occupying the port
+      if (errorLower.includes('port') && (errorLower.includes('blocked') || errorLower.includes('conflict'))) {
+        const portMatch = (result.error || '').match(/Port (\d+)/);
+        if (portMatch) {
+          steps.push({
+            label: `Checking port ${portMatch[1]}`,
+            cmd: `lsof -i :${portMatch[1]} || echo "Port ${portMatch[1]} is free"`,
+            cwd: toolPath,
+          });
+        }
+      }
+
+      return steps;
+    }
+
+    /// Execute a sequence of commands, one at a time, streaming each to the terminal.
+    function execSequence(steps, index, defaultCwd, onComplete) {
+      if (index >= steps.length) {
+        onComplete(true);
+        return;
+      }
+
+      const step = steps[index];
+      const cwd = step.cwd || defaultCwd;
+
+      _diagTerm.writeln(`\x1b[36m── Step ${index + 1}/${steps.length}: ${step.label} ──\x1b[0m`);
+      _diagTerm.writeln('\x1b[90m$ ' + step.cmd + '\x1b[0m');
+      _diagTerm.writeln('');
+
+      document.getElementById('diagTermCwd').textContent = cwd;
+      document.getElementById('diagTermReceipt').textContent = '';
+
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${location.host}/ws/exec`);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ action: 'exec', cmd: step.cmd, cwd: cwd }));
+      };
+
+      let exitCode = null;
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'stdout') {
+            _diagTerm.write(msg.data);
+          } else if (msg.type === 'stderr') {
+            _diagTerm.write('\x1b[31m' + msg.data + '\x1b[0m');
+          } else if (msg.type === 'exit') {
+            exitCode = msg.code;
+            _diagTerm.writeln('');
+            if (msg.code === 0) {
+              _diagTerm.writeln('\x1b[32m✓ Done\x1b[0m');
+            } else {
+              _diagTerm.writeln(`\x1b[31m✗ Exited with code ${msg.code}\x1b[0m`);
+            }
+            _diagTerm.writeln('');
+          } else if (msg.type === 'exec_complete') {
+            if (msg.receipt_hash) {
+              document.getElementById('diagTermReceipt').textContent =
+                '⛓ ' + msg.receipt_hash.substring(0, 12);
+            }
+          } else if (msg.type === 'error') {
+            _diagTerm.writeln('\x1b[31m' + msg.message + '\x1b[0m');
+          }
+        } catch {}
+      };
+
+      ws.onerror = () => {
+        _diagTerm.writeln('\x1b[31mWebSocket connection failed\x1b[0m');
+        onComplete(false);
+      };
+
+      ws.onclose = () => {
+        // Proceed to next step if this one succeeded (or is optional)
+        if (exitCode === 0 || step.optional) {
+          execSequence(steps, index + 1, defaultCwd, onComplete);
+        } else {
+          onComplete(false);
+        }
+      };
+    }
+
     /// Generate contextual suggested commands based on the error.
     function suggestCommands(tool, result) {
       const cmds = [];
@@ -926,21 +1129,36 @@
         }
       }
 
-      // npm / node issues
-      if (errorLower.includes('npm') || errorLower.includes('node') || hintLower.includes('npm')) {
-        cmds.push({ label: 'npm install', cmd: 'npm install', cwd: toolPath,
+      // Node.js / package manager issues — detect pnpm vs npm
+      if (errorLower.includes('npm') || errorLower.includes('pnpm') ||
+          errorLower.includes('node') || hintLower.includes('npm') ||
+          hintLower.includes('pnpm') || (tool.launch && tool.launch.kind === 'pnpm')) {
+        const isPnpm = (tool.launch && tool.launch.kind === 'pnpm') || errorLower.includes('pnpm');
+        const pm = isPnpm ? 'pnpm' : 'npm';
+        cmds.push({ label: `${pm} install`, cmd: `${pm} install`, cwd: toolPath,
           hint: 'Install dependencies' });
-        cmds.push({ label: 'npm start', cmd: 'npm start', cwd: toolPath,
+        cmds.push({ label: `${pm} start`, cmd: `${pm} start`, cwd: toolPath,
           hint: 'Start the app' });
       }
 
+      // Configuration needed
+      if (errorLower.includes('needs configuration') || errorLower.includes('unconfigured') ||
+          hintLower.includes('vault') || hintLower.includes('.env')) {
+        cmds.push({ label: 'Configure tool', cmd: `zp configure tool --path "${toolPath}" --name "${tool.name}"`, cwd: toolPath,
+          hint: 'Resolve vault credentials and write .env' });
+        cmds.push({ label: 'Configure all', cmd: 'zp configure auto ~/projects', cwd: '~/projects',
+          hint: 'Auto-configure all discovered tools' });
+        cmds.push({ label: 'Check vault', cmd: 'zp configure providers', cwd: toolPath,
+          hint: 'List vault-stored credentials' });
+      }
+
       // Always offer: retry the original command
-      if (result && result.cmd) {
+      if (result && result.cmd && !errorLower.includes('needs configuration')) {
         cmds.push({ label: 'Retry original', cmd: result.cmd, cwd: toolPath,
           hint: 'Run the launch command again' });
       }
 
-      // Always offer: check logs
+      // Always offer: check files
       cmds.push({ label: 'ls -la', cmd: 'ls -la', cwd: toolPath,
         hint: 'List files in tool directory' });
 
@@ -958,24 +1176,40 @@
       const termDisclosure = document.getElementById('diagTermDisclosure');
       const termCwd = document.getElementById('diagTermCwd');
 
-      title.textContent = `${tool.name} — Launch Failed`;
-      _diagRetryTool = tool;
-      _diagToolPath = tool.path || `~/projects/${tool.name}`;
-      retryBtn.style.display = 'inline-block';
+      const errorLower = ((result && result.error) || '').toLowerCase();
+      const isConfigIssue = errorLower.includes('needs configuration') || errorLower.includes('add a tool');
+      const isLaunchFailure = !isConfigIssue;
 
-      // ── Layer 1: Human-readable fields ───────────────────
+      title.textContent = isConfigIssue
+        ? `${tool.name} — Configuration Required`
+        : `${tool.name} — Launch Failed`;
+      _diagRetryTool = isLaunchFailure ? tool : null;
+      _diagToolPath = tool.path || `~/projects/${tool.name}`;
+      _resolveToolRef = tool;
+      _resolveResult = result;
+
+      // Show Resolve as primary action; Retry only for launch failures
+      const resolveBtn = document.getElementById('diagResolveBtn');
+      resolveBtn.style.display = 'inline-block';
+      resolveBtn.disabled = false;
+      resolveBtn.innerHTML = 'Resolve';
+      resolveBtn.className = 'diag-btn resolve';
+      retryBtn.style.display = isLaunchFailure ? 'inline-block' : 'none';
+
+      // ── Layer 1: Human-readable summary ───────────────────
       let html = '';
-      if (result && result.error) {
-        html += `<div class="diag-field"><div class="diag-label">Error</div><div class="diag-value error-text">${result.error}</div></div>`;
-      }
-      if (result && result.hint) {
-        html += `<div class="diag-field"><div class="diag-label">Suggestion</div><div class="diag-value hint-text">${result.hint}</div></div>`;
-      }
-      if (result && result.cmd) {
-        html += `<div class="diag-field"><div class="diag-label">Command</div><div class="diag-value"><code>${result.cmd}</code></div></div>`;
-      }
-      if (result && result.port) {
-        html += `<div class="diag-field"><div class="diag-label">Expected Port</div><div class="diag-value">${result.port} (no response)</div></div>`;
+      if (isConfigIssue) {
+        html += `<div class="diag-field"><div class="diag-value hint-text" style="font-size:13px;">Vault credentials need to be resolved and <code>.env</code> written. Click <strong>Resolve</strong> to configure automatically.</div></div>`;
+      } else {
+        if (result && result.error) {
+          html += `<div class="diag-field"><div class="diag-label">Error</div><div class="diag-value error-text">${result.error}</div></div>`;
+        }
+        if (result && result.hint) {
+          html += `<div class="diag-field"><div class="diag-label">Suggestion</div><div class="diag-value hint-text">${result.hint}</div></div>`;
+        }
+        if (result && result.port) {
+          html += `<div class="diag-field"><div class="diag-label">Expected Port</div><div class="diag-value">${result.port} (no response)</div></div>`;
+        }
       }
       body.innerHTML = html;
 
@@ -1035,7 +1269,11 @@
       const launch = tool.launch || {};
 
       if (tool.status === 'unconfigured') {
-        showToast(`<strong>${tool.name}</strong> needs configuration. Run <code>zp configure auto ~/projects</code>`, 4000);
+        showDiagnostic(tool, {
+          error: `${tool.name} needs configuration`,
+          hint: 'Vault credentials need to be resolved and .env written before launch.',
+          cmd: `zp configure auto ~/projects`,
+        });
         return;
       }
 
@@ -1085,20 +1323,34 @@
         }
       }
 
-      // ── Already running? Just open it. ──────────────────
-      if (launch.kind === 'web' && launch.url) {
+      // ── Already running? Just open it via the ZP proxy. ───
+      const proxyUrl = `http://${tool.name}.localhost:${window.location.port || 3000}/`;
+      if (launch.url || launch.kind === 'web' || launch.kind === 'native') {
+        // Open tab synchronously (user gesture) before any async check
+        const earlyTab = window.open('about:blank', '_blank');
         showToast(`Checking <strong>${tool.name}</strong>...`);
-        if (await isPortOpen(launch.url)) {
+        if (await isPortOpen(proxyUrl)) {
           showToast(`Opening <strong>${tool.name}</strong>`);
-          window.open(launch.url, '_blank');
+          if (earlyTab && !earlyTab.closed) {
+            earlyTab.location.href = proxyUrl;
+          } else {
+            window.open(proxyUrl, '_blank');
+          }
           return;
         }
+        // Not actually running — close the blank tab and fall through to launch
+        if (earlyTab) earlyTab.close();
       }
 
       // ── Not running — ask the server to start it. ───────
       launching.add(tool.name);
       showToast(`Starting <strong>${tool.name}</strong>...`, 30000);
       setTileLaunching(tool.name, true);
+
+      // Open the tab NOW (synchronous with user click) to avoid popup
+      // blockers.  We'll navigate it once the tool is ready, or close it
+      // if something fails.
+      const pendingTab = window.open('about:blank', '_blank');
 
       try {
         const resp = await fetch('/api/v1/tools/launch', {
@@ -1110,28 +1362,45 @@
 
         if (!resp.ok) {
           showToast('');
+          if (pendingTab) pendingTab.close();
           showDiagnostic(tool, result);
           return;
         }
 
-        // Wait for the port to come up
-        const targetUrl = result.url || launch.url;
-        if (targetUrl) {
-          showToast(`<strong>${tool.name}</strong> starting &mdash; waiting for port ${result.port || ''}...`, 30000);
-          const ready = await waitForPort(targetUrl, 30000, 1500);
+        // Wait for the tool to come up via the ZP proxy URL.
+        // Native (cargo) builds can take minutes on first compile, so
+        // give them a much longer leash than container/script tools.
+        // result.url = subdomain URL (http://name.localhost:port/), result.raw_url = direct port
+        const openUrl = result.url || `http://${tool.name}.localhost:${window.location.port || 3000}/`;
+        const pollUrl = openUrl;  // poll the subdomain proxy — returns 502 until tool is up
+        if (openUrl) {
+          const isNative = result.kind === 'native';
+          const maxWait = isNative ? 180000 : 30000;   // 3 min vs 30 s
+          const pollInterval = isNative ? 3000 : 1500;
+          const timeLabel = isNative ? '3 minutes' : '30 seconds';
+          showToast(`<strong>${tool.name}</strong> starting &mdash; waiting for port ${result.port || ''}...`, maxWait);
+          const ready = await waitForPort(pollUrl, maxWait, pollInterval);
           if (ready) {
             showToast(`Opening <strong>${tool.name}</strong>`);
-            window.open(targetUrl, '_blank');
+            if (pendingTab && !pendingTab.closed) {
+              pendingTab.location.href = openUrl;
+            } else {
+              window.open(openUrl, '_blank');
+            }
           } else {
+            if (pendingTab) pendingTab.close();
             showToast('');
             showDiagnostic(tool, {
-              error: `Port ${result.port} did not respond within 30 seconds`,
+              error: `Port ${result.port} did not respond within ${timeLabel}`,
               cmd: result.cmd,
               port: result.port,
-              hint: 'The process may have crashed on startup. Check the log below.',
+              hint: isNative
+                ? 'Native tools may need a first-time build. Try `cargo build --release` in the tool directory, then retry.'
+                : 'The process may have crashed on startup. Check the log below.',
             });
           }
         } else {
+          if (pendingTab) pendingTab.close();
           showToast(`<strong>${tool.name}</strong> launched (no web UI detected).`, 4000);
         }
       } catch (err) {
@@ -1211,8 +1480,11 @@
         const issues = tool.preflight_issues || [];
         const hasIssues = issues.length > 0;
 
+        const neverPreflightedCheck = issues.length > 0 &&
+          issues.every(i => i.toLowerCase().includes('not preflighted') || i.toLowerCase().includes('preflight not run'));
         let tileClass = 'cockpit-tile';
-        if (!isReady || hasIssues) tileClass += ' not-ready';
+        if (neverPreflightedCheck) { /* neutral — no red border */ }
+        else if (!isReady || hasIssues) tileClass += ' not-ready';
         else if (tool.status === 'governed') tileClass += ' governed';
         tile.className = tileClass;
 
@@ -1220,8 +1492,17 @@
         let badgeHtml = '';
         let statusText = '';
 
-        if (!isReady || hasIssues) {
-          // Preflight failed — override governance display
+        // Distinguish "never preflighted" from "preflighted and failed"
+        const neverPreflighted = issues.length > 0 &&
+          issues.every(i => i.toLowerCase().includes('not preflighted') || i.toLowerCase().includes('preflight not run'));
+
+        if (neverPreflighted) {
+          // Tool discovered but preflight hasn't run yet — neutral state, not an error
+          healthClass = 'unconfigured';
+          badgeHtml = '<div class="tile-badge pending">awaiting preflight</div>';
+          statusText = 'discovered \u00B7 click to preflight';
+        } else if (!isReady || hasIssues) {
+          // Preflight actually ran and failed
           healthClass = 'not-ready';
           badgeHtml = '<div class="tile-badge not-ready">preflight failed</div>';
           statusText = issues[0] || 'not launch-ready';
@@ -1301,7 +1582,11 @@
         <div class="tile-status">zp configure</div>
       `;
       addTile.onclick = () => {
-        showToast('Clone a tool to <code>~/projects/</code> with a <code>.env.example</code>, then run <code>zp configure auto</code>', 5000);
+        showDiagnostic({ name: 'New Tool', path: '~/projects' }, {
+          error: 'Add a tool to ZeroPoint governance',
+          hint: 'Clone a tool to ~/projects/ with a .env.example, then configure it.',
+          cmd: 'zp configure auto ~/projects',
+        });
       };
       grid.appendChild(addTile);
     }

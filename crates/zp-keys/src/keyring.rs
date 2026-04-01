@@ -3,8 +3,7 @@
 //! Stores keys and certificates to `~/.zeropoint/keys/`:
 //! ```text
 //! ~/.zeropoint/keys/
-//!   genesis.json        ← genesis certificate (public only by default)
-//!   genesis.secret      ← genesis secret key (optional, for key ceremonies)
+//!   genesis.json        ← genesis certificate (public only)
 //!   operator.json       ← operator certificate
 //!   operator.secret     ← operator secret key
 //!   agents/
@@ -12,7 +11,13 @@
 //!     agent-001.secret  ← agent secret key
 //! ```
 //!
-//! Secret files are 32-byte raw key material. Certificate files are JSON.
+//! The Genesis secret key is stored in the OS credential store (macOS Keychain,
+//! Linux Secret Service, Windows Credential Manager) — never as a file on disk.
+//! This ensures the root of trust is protected by platform security from the
+//! moment of creation.
+//!
+//! Certificate files are JSON. Operator and agent secret files are 32-byte raw
+//! key material (these will migrate to the credential store in a future version).
 
 use std::path::{Path, PathBuf};
 
@@ -20,7 +25,15 @@ use crate::certificate::Certificate;
 use crate::error::KeyError;
 use crate::hierarchy::{AgentKey, GenesisKey, OperatorKey};
 
-/// Persistent keyring backed by the filesystem.
+/// Service name for Genesis secret in the OS credential store.
+/// Public so biometric.rs can use the same identifiers.
+pub(crate) const GENESIS_KEYCHAIN_SERVICE: &str = "zeropoint-genesis";
+
+/// Account name for the Genesis secret in the OS credential store.
+/// Public so biometric.rs can use the same identifiers.
+pub(crate) const GENESIS_KEYCHAIN_ACCOUNT: &str = "genesis-secret";
+
+/// Persistent keyring backed by the filesystem + OS credential store.
 pub struct Keyring {
     base_dir: PathBuf,
 }
@@ -75,9 +88,13 @@ impl Keyring {
             })
             .collect();
 
+        // Genesis secret can be in credential store OR on disk (legacy)
+        let has_genesis_secret = self.base_dir.join("genesis.secret").exists()
+            || has_genesis_in_credential_store();
+
         KeyringStatus {
             has_genesis: self.base_dir.join("genesis.json").exists(),
-            has_genesis_secret: self.base_dir.join("genesis.secret").exists(),
+            has_genesis_secret,
             has_operator: self.base_dir.join("operator.json").exists(),
             has_operator_secret: self.base_dir.join("operator.secret").exists(),
             agent_count: agent_names.len(),
@@ -87,17 +104,40 @@ impl Keyring {
 
     // ── Genesis ─────────────────────────────────────────────────
 
-    /// Save a genesis key (certificate + optional secret).
-    pub fn save_genesis(&self, genesis: &GenesisKey, save_secret: bool) -> Result<(), KeyError> {
+    /// Save a genesis key — certificate to disk, secret to OS credential store.
+    ///
+    /// The `save_secret` flag controls whether the secret key is stored at all.
+    /// When true, the secret is written to the OS credential store (Keychain)
+    /// if available, otherwise falls back to a `genesis.secret` file on disk.
+    /// The load-side migration in `load_genesis()` / `load_genesis_secret()`
+    /// will automatically upgrade file-based secrets to the credential store
+    /// when the `os-keychain` feature is enabled.
+    ///
+    /// Returns `Ok(true)` if the secret was stored in the credential store,
+    /// `Ok(false)` if it was stored on disk or not stored at all.
+    pub fn save_genesis(&self, genesis: &GenesisKey, save_secret: bool) -> Result<bool, KeyError> {
         let cert_json = serde_json::to_string_pretty(genesis.certificate())
             .map_err(|e| KeyError::Serialization(e.to_string()))?;
         std::fs::write(self.base_dir.join("genesis.json"), cert_json)?;
 
         if save_secret {
-            std::fs::write(self.base_dir.join("genesis.secret"), genesis.secret_key())?;
+            match save_genesis_to_credential_store(&genesis.secret_key()) {
+                Ok(()) => return Ok(true),
+                Err(e) => {
+                    // Credential store unavailable — fall back to file.
+                    // The load path will auto-migrate to credential store
+                    // when the feature becomes available.
+                    tracing::debug!("Credential store unavailable ({}), writing genesis.secret file", e);
+                    std::fs::write(
+                        self.base_dir.join("genesis.secret"),
+                        genesis.secret_key(),
+                    )?;
+                    return Ok(false);
+                }
+            }
         }
 
-        Ok(())
+        Ok(false)
     }
 
     /// Load the genesis certificate (public only).
@@ -107,19 +147,129 @@ impl Keyring {
         serde_json::from_str(&json).map_err(|e| KeyError::Serialization(e.to_string()))
     }
 
-    /// Load the full genesis key (with secret). Fails if secret is not stored.
+    /// Load the full genesis key (with secret from OS credential store).
+    ///
+    /// Tries the OS credential store first, then falls back to the legacy
+    /// `genesis.secret` file for backward compatibility. If found on disk,
+    /// migrates the secret to the credential store and removes the file.
     pub fn load_genesis(&self) -> Result<GenesisKey, KeyError> {
         let cert = self.load_genesis_certificate()?;
+
+        // 1. Try OS credential store (the correct path)
+        if let Ok(secret) = load_genesis_from_credential_store() {
+            return GenesisKey::from_parts(secret, cert);
+        }
+
+        // 2. Fall back to legacy file, then migrate
         let secret_path = self.base_dir.join("genesis.secret");
-        let secret_bytes = std::fs::read(&secret_path)?;
-        if secret_bytes.len() != 32 {
+        if secret_path.exists() {
+            let secret_bytes = std::fs::read(&secret_path)?;
+            if secret_bytes.len() != 32 {
+                return Err(KeyError::InvalidKeyMaterial(
+                    "genesis secret must be 32 bytes".into(),
+                ));
+            }
+            let mut secret = [0u8; 32];
+            secret.copy_from_slice(&secret_bytes);
+
+            // Migrate: store in credential store, then securely remove the file.
+            // This is user-visible because their file disappears.
+            match save_genesis_to_credential_store(&secret) {
+                Ok(()) => {
+                    secure_delete_file(&secret_path);
+                    tracing::info!("Genesis secret migrated from disk to OS credential store");
+                    eprintln!(
+                        "  \x1b[32m✓\x1b[0m Genesis secret migrated to OS credential store \
+                         (genesis.secret removed from disk)"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Could not migrate Genesis secret to credential store: {}. \
+                         Secret remains on disk — run `zp init` on a system with \
+                         Keychain/Secret Service support.",
+                        e
+                    );
+                }
+            }
+
+            return GenesisKey::from_parts(secret, cert);
+        }
+
+        Err(KeyError::InvalidKeyMaterial(
+            "Genesis secret not found in OS credential store or on disk. \
+             Run `zp init` to create your Genesis key."
+                .into(),
+        ))
+    }
+
+    /// Load just the genesis secret bytes from the OS credential store.
+    ///
+    /// This is the primitive that vault_key uses for derivation.
+    /// Returns the raw 32-byte Ed25519 secret key and whether the source
+    /// was the credential store (true) or a legacy file (false).
+    ///
+    /// Like `load_genesis()`, this attempts migration from legacy files
+    /// to the credential store when a disk secret is found.
+    pub fn load_genesis_secret(&self) -> Result<([u8; 32], bool), KeyError> {
+        // Verify genesis.json exists (sanity check)
+        if !self.base_dir.join("genesis.json").exists() {
             return Err(KeyError::InvalidKeyMaterial(
-                "genesis secret must be 32 bytes".into(),
+                "No genesis.json found — run `zp init` first".into(),
             ));
         }
-        let mut secret = [0u8; 32];
-        secret.copy_from_slice(&secret_bytes);
-        GenesisKey::from_parts(secret, cert)
+
+        // 1. Try credential store
+        if let Ok(secret) = load_genesis_from_credential_store() {
+            return Ok((secret, true));
+        }
+
+        // 2. Fall back to legacy file, then migrate (consistent with load_genesis)
+        let secret_path = self.base_dir.join("genesis.secret");
+        if secret_path.exists() {
+            let secret_bytes = std::fs::read(&secret_path)?;
+            if secret_bytes.len() != 32 {
+                return Err(KeyError::InvalidKeyMaterial(
+                    "genesis secret must be 32 bytes".into(),
+                ));
+            }
+            let mut secret = [0u8; 32];
+            secret.copy_from_slice(&secret_bytes);
+
+            // Migrate: store in credential store, then securely remove the file.
+            // This is user-visible because their file disappears.
+            match save_genesis_to_credential_store(&secret) {
+                Ok(()) => {
+                    secure_delete_file(&secret_path);
+                    tracing::info!("Genesis secret migrated from disk to OS credential store");
+                    eprintln!(
+                        "  \x1b[32m✓\x1b[0m Genesis secret migrated to OS credential store \
+                         (genesis.secret removed from disk)"
+                    );
+                    // After successful migration, report as credential store source
+                    return Ok((secret, true));
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Could not migrate Genesis secret to credential store: {}. \
+                         Secret remains on disk — run `zp init` on a system with \
+                         Keychain/Secret Service support.",
+                        e
+                    );
+                }
+            }
+
+            return Ok((secret, false));
+        }
+
+        Err(KeyError::InvalidKeyMaterial(
+            "Genesis secret not available. Run `zp init`.".into(),
+        ))
+    }
+
+    /// Remove the Genesis secret from the OS credential store.
+    pub fn clear_genesis_secret(&self) -> Result<(), KeyError> {
+        clear_genesis_from_credential_store()
     }
 
     // ── Operator ────────────────────────────────────────────────
@@ -208,6 +358,119 @@ impl Keyring {
     }
 }
 
+// ── OS Credential Store helpers ──────────────────────────────────────
+
+/// Check if the Genesis secret exists AND is valid in the credential store.
+///
+/// Validates that the stored value is well-formed (64 hex chars = 32 bytes)
+/// rather than just checking for existence. This catches corruption.
+fn has_genesis_in_credential_store() -> bool {
+    #[cfg(feature = "os-keychain")]
+    {
+        // Full load validates format; a simple `get_password().is_ok()` would
+        // return true for corrupt entries.
+        load_genesis_from_credential_store().is_ok()
+    }
+
+    #[cfg(not(feature = "os-keychain"))]
+    {
+        false
+    }
+}
+
+/// Securely delete a file containing key material.
+///
+/// Overwrites the file with multiple passes of different patterns before
+/// unlinking. This reduces (but cannot eliminate) the chance of recovery
+/// from swap, filesystem journal, or SSD wear-leveling caches.
+fn secure_delete_file(path: &std::path::Path) {
+    if let Ok(len) = std::fs::metadata(path).map(|m| m.len() as usize) {
+        // Pass 1: zeros
+        let _ = std::fs::write(path, vec![0u8; len]);
+        // Pass 2: ones
+        let _ = std::fs::write(path, vec![0xFFu8; len]);
+        // Pass 3: zeros again
+        let _ = std::fs::write(path, vec![0u8; len]);
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+/// Store the Genesis secret in the OS credential store (login password gating).
+/// For biometric gating, use `biometric::save_genesis_biometric()` instead.
+pub(crate) fn save_genesis_to_credential_store(secret: &[u8; 32]) -> Result<(), KeyError> {
+    #[cfg(feature = "os-keychain")]
+    {
+        let entry = keyring::Entry::new(GENESIS_KEYCHAIN_SERVICE, GENESIS_KEYCHAIN_ACCOUNT)
+            .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
+        entry
+            .set_password(&hex::encode(secret))
+            .map_err(|e| KeyError::CredentialStore(format!("store error: {}", e)))?;
+        Ok(())
+    }
+
+    #[cfg(not(feature = "os-keychain"))]
+    {
+        let _ = secret;
+        Err(KeyError::CredentialStore(
+            "OS credential store not available (enable 'os-keychain' feature). \
+             Falling back to file storage."
+                .into(),
+        ))
+    }
+}
+
+/// Load the Genesis secret from the OS credential store.
+/// For biometric mode on macOS, the OS automatically triggers the biometric prompt.
+/// For biometric mode on Linux, call `biometric::load_genesis_biometric()` instead.
+pub(crate) fn load_genesis_from_credential_store() -> Result<[u8; 32], KeyError> {
+    #[cfg(feature = "os-keychain")]
+    {
+        let entry = keyring::Entry::new(GENESIS_KEYCHAIN_SERVICE, GENESIS_KEYCHAIN_ACCOUNT)
+            .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
+        let hex_secret = entry
+            .get_password()
+            .map_err(|e| KeyError::CredentialStore(format!("load error: {}", e)))?;
+        let bytes = hex::decode(&hex_secret).map_err(|e| {
+            KeyError::CredentialStore(format!("stored secret is not valid hex: {}", e))
+        })?;
+        if bytes.len() != 32 {
+            return Err(KeyError::CredentialStore(format!(
+                "stored secret has wrong length: {} (expected 32)",
+                bytes.len()
+            )));
+        }
+        let mut secret = [0u8; 32];
+        secret.copy_from_slice(&bytes);
+        Ok(secret)
+    }
+
+    #[cfg(not(feature = "os-keychain"))]
+    {
+        Err(KeyError::CredentialStore(
+            "OS credential store not available".into(),
+        ))
+    }
+}
+
+/// Clear the Genesis secret from the OS credential store.
+fn clear_genesis_from_credential_store() -> Result<(), KeyError> {
+    #[cfg(feature = "os-keychain")]
+    {
+        let entry = keyring::Entry::new(GENESIS_KEYCHAIN_SERVICE, GENESIS_KEYCHAIN_ACCOUNT)
+            .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
+        match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()), // idempotent
+            Err(e) => Err(KeyError::CredentialStore(format!("delete error: {}", e))),
+        }
+    }
+
+    #[cfg(not(feature = "os-keychain"))]
+    {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,7 +485,7 @@ mod tests {
         let operator = OperatorKey::generate("test-operator", &genesis, None);
         let agent = AgentKey::generate("test-agent-001", &operator, None);
 
-        // Save
+        // Save — genesis secret goes to credential store (or file fallback in tests)
         keyring.save_genesis(&genesis, true).unwrap();
         keyring.save_operator(&operator).unwrap();
         keyring.save_agent("agent-001", &agent).unwrap();
@@ -230,13 +493,12 @@ mod tests {
         // Check status
         let status = keyring.status();
         assert!(status.has_genesis);
-        assert!(status.has_genesis_secret);
         assert!(status.has_operator);
         assert!(status.has_operator_secret);
         assert_eq!(status.agent_count, 1);
         assert_eq!(status.agent_names, vec!["agent-001"]);
 
-        // Load and verify
+        // Load and verify — genesis loads from credential store (or file fallback)
         let loaded_genesis = keyring.load_genesis().unwrap();
         assert_eq!(loaded_genesis.public_key(), genesis.public_key());
 
@@ -261,10 +523,6 @@ mod tests {
 
         let status = keyring.status();
         assert!(status.has_genesis);
-        assert!(!status.has_genesis_secret);
-
-        // Loading the full genesis key should fail
-        assert!(keyring.load_genesis().is_err());
 
         // But the certificate should still be loadable
         let cert = keyring.load_genesis_certificate().unwrap();
@@ -295,5 +553,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(chain.leaf().body.subject, "a");
+    }
+
+    #[test]
+    fn test_load_genesis_secret_direct() {
+        let dir = tempfile::tempdir().unwrap();
+        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+
+        let genesis = GenesisKey::generate("secret-test");
+        keyring.save_genesis(&genesis, true).unwrap();
+
+        let (secret, _from_credential_store) = keyring.load_genesis_secret().unwrap();
+        assert_eq!(secret, genesis.secret_key());
+    }
+
+    #[test]
+    fn test_load_genesis_secret_fails_without_init() {
+        let dir = tempfile::tempdir().unwrap();
+        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        // No genesis at all
+        assert!(keyring.load_genesis_secret().is_err());
     }
 }

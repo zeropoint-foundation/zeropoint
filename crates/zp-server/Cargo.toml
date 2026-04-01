@@ -5,10 +5,15 @@ edition = "2021"
 
 [dependencies]
 zp-core = { path = "../zp-core" }
+zp-engine = { path = "../zp-engine" }
+zp-keys = { path = "../zp-keys", features = ["os-keychain", "hw-trezor"] }
 zp-pipeline = { path = "../zp-pipeline" }
 zp-policy = { path = "../zp-policy" }
 zp-audit = { path = "../zp-audit" }
 zp-trust = { path = "../zp-trust" }
+zp-receipt = { path = "../zp-receipt" }
+mle-star-engine = { path = "../mle-star-engine" }
+monte-carlo-engine = { path = "../monte-carlo-engine" }
 
 axum = { workspace = true }
 tower-http = { workspace = true }
@@ -29,6 +34,9 @@ hex = { workspace = true }
 sha2 = { workspace = true }
 anyhow = { workspace = true }
 rusqlite = { workspace = true }
+reqwest = { workspace = true }
 dirs = "5"
+which = "7"
+toml = { workspace = true }
 
 [dev-dependencies]

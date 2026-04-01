@@ -1,0 +1,164 @@
+# .zp-configure.toml — Agent Zero
+# Minimum Viable Credentials manifest for ZeroPoint autoconfigure
+#
+# Agent Zero is a general-purpose AI agent framework built on LiteLLM.
+# It uses A0_SET_* env vars for config and API_KEY_* for credentials.
+# Needs ONE chat LLM to function. Memory/embedding is optional but recommended.
+# No database required — uses local file-based memory.
+#
+# Unique patterns:
+#   - API key format: API_KEY_{SERVICE} (e.g., API_KEY_OPENAI)
+#   - Config format: A0_SET_{setting} (e.g., A0_SET_chat_model_provider=openai)
+#   - Round-robin: comma-separated keys for load balancing
+#   - LiteLLM backend: supports 100+ providers through one abstraction
+
+[tool]
+name = "Agent Zero"
+version = "0.1"
+description = "General-purpose autonomous AI agent framework with memory and code execution"
+
+# ── Required capabilities ──────────────────────────────────
+
+[[required]]
+capability = "reasoning_llm"
+env_vars = ["API_KEY_OPENAI"]
+config_vars = { A0_SET_chat_model_provider = "${provider}", A0_SET_chat_model_name = "${model}" }
+prefer = ["anthropic", "openai", "openrouter", "groq", "deepseek"]
+model_env = "A0_SET_chat_model_name"
+model_default = "claude-sonnet-4-20250514"
+notes = """
+Agent Zero uses LiteLLM, so it supports virtually any LLM provider.
+The API key var follows the API_KEY_{SERVICE} pattern.
+NEW MANIFEST CONCEPT: config_vars — additional env vars set dynamically
+based on which provider is selected. ${provider} and ${model} are
+resolved by the engine.
+
+When resolved to anthropic:
+  API_KEY_ANTHROPIC=<key>
+  A0_SET_chat_model_provider=anthropic
+  A0_SET_chat_model_name=claude-sonnet-4-20250514
+
+When resolved to openai:
+  API_KEY_OPENAI=<key>
+  A0_SET_chat_model_provider=openai
+  A0_SET_chat_model_name=gpt-4o
+"""
+
+# ── Optional capabilities ──────────────────────────────────
+
+[[optional]]
+capability = "fast_llm"
+env_vars = []
+config_vars = { A0_SET_utility_model_provider = "${provider}", A0_SET_utility_model_name = "${model}" }
+prefer = ["openai", "groq", "anthropic"]
+shared_with = "reasoning_llm"
+model_default = "gpt-4o-mini"
+notes = """
+Agent Zero has a separate 'utility model' for internal tasks (summarization,
+classification, etc.). Can share the same provider as reasoning or use a
+cheaper/faster one. If not configured, falls back to the chat model.
+"""
+
+[[optional]]
+capability = "embedding"
+env_vars = []
+config_vars = { A0_SET_embedding_model_provider = "${provider}", A0_SET_embedding_model_name = "${model}" }
+prefer = ["openai", "huggingface"]
+model_default = "text-embedding-3-small"
+shared_with = "reasoning_llm"
+notes = """
+Used for Agent Zero's memory recall system (vector similarity search).
+Can use OpenAI embeddings (same key as chat), local HuggingFace
+SentenceTransformers, or any LiteLLM-supported embedding provider.
+If not configured, memory recall is disabled but agent still functions.
+"""
+
+[[optional]]
+capability = "vision"
+env_vars = []
+shared_with = "reasoning_llm"
+notes = "Enabled automatically when the chat model supports vision (most frontier models do)."
+
+[[optional]]
+capability = "code_execution"
+env_vars = ["CODE_EXEC_SSH_ADDR", "CODE_EXEC_SSH_PORT", "CODE_EXEC_SSH_USER", "CODE_EXEC_SSH_PASS"]
+defaults = { CODE_EXEC_SSH_ADDR = "localhost", CODE_EXEC_SSH_PORT = "2222" }
+auto_generate = ["CODE_EXEC_SSH_PASS"]
+notes = """
+Docker-based sandboxed code execution via SSH.
+Bundled in Agent Zero's docker-compose. Credentials are internal
+deployment secrets, not user-supplied.
+"""
+
+[[optional]]
+capability = "web_search"
+env_vars = []
+notes = """
+Agent Zero has built-in web browsing via its code execution sandbox.
+No separate search API key needed — it literally uses a browser.
+Additional search providers could be added through custom tools.
+"""
+
+# ── Auto-generatable secrets ───────────────────────────────
+
+[auto_generate]
+secrets = [
+    "AUTH_PASSWORD",
+    "RFC_PASSWORD",
+    "ROOT_PASSWORD",
+    "CODE_EXEC_SSH_PASS",
+]
+
+# ── Aggregator / Deluxe mode ──────────────────────────────
+
+[deluxe]
+prefer_aggregator = true
+notes = """
+Agent Zero + LiteLLM + aggregator is a natural fit.
+In deluxe mode with OpenRouter or Abacus:
+  API_KEY_OPENROUTER=<key>
+  A0_SET_chat_model_provider=openrouter
+  A0_SET_chat_model_name=anthropic/claude-sonnet-4-20250514
+  A0_SET_utility_model_provider=openrouter
+  A0_SET_utility_model_name=openai/gpt-4o-mini
+
+One key covers both chat and utility models through the aggregator.
+Embedding can also route through if the aggregator supports it.
+"""
+
+# ── Provider-specific mappings ─────────────────────────────
+
+[[provider_overrides]]
+provider = "anthropic"
+env_map = { API_KEY_ANTHROPIC = "${vault:anthropic/api_key}" }
+also_set = { A0_SET_chat_model_provider = "anthropic", A0_SET_chat_model_name = "claude-sonnet-4-20250514" }
+
+[[provider_overrides]]
+provider = "openai"
+env_map = { API_KEY_OPENAI = "${vault:openai/api_key}" }
+also_set = { A0_SET_chat_model_provider = "openai", A0_SET_chat_model_name = "gpt-4o" }
+shares = ["fast_llm", "embedding"]
+
+[[provider_overrides]]
+provider = "groq"
+env_map = { API_KEY_GROQ = "${vault:groq/api_key}" }
+also_set = { A0_SET_chat_model_provider = "groq", A0_SET_chat_model_name = "llama-3.3-70b-versatile" }
+
+[[provider_overrides]]
+provider = "openrouter"
+env_map = { API_KEY_OPENROUTER = "${vault:openrouter/api_key}" }
+also_set = { A0_SET_chat_model_provider = "openrouter", A0_SET_chat_model_name = "anthropic/claude-sonnet-4-20250514" }
+shares = ["fast_llm"]
+
+[[provider_overrides]]
+provider = "abacus"
+env_map = { API_KEY_OPENAI = "${vault:abacus/api_key}" }
+also_set = { A0_SET_chat_model_provider = "openai", A0_SET_chat_model_name = "auto" }
+custom_base_url = "https://api.abacus.ai/v0/openai"
+shares = ["fast_llm", "embedding"]
+
+[[provider_overrides]]
+provider = "ollama"
+env_map = {}
+also_set = { A0_SET_chat_model_provider = "ollama", A0_SET_chat_model_name = "llama3.2" }
+notes = "No API key needed for local Ollama."

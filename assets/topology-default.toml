@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────
+# ZeroPoint — Network Topology Configuration
+# Copy to ~/.zeropoint/config/topology.toml to customize.
+# ─────────────────────────────────────────────────────────────
+# Each [[nodes]] entry represents a network component.
+# Roles: gateway, router, sentinel, node, device
+# Status: active, inactive, unknown
+# ─────────────────────────────────────────────────────────────
+
+description = "Main House → Barn → Studio"
+
+[[nodes]]
+id = "gateway"
+name = "AT&T BGW210-700"
+role = "gateway"
+address = "192.168.1.254"
+status = "active"
+detail = "IP Passthrough mode — dumb modem to ASUS router"
+
+[[nodes]]
+id = "router"
+name = "ASUS RT-AX58U"
+role = "router"
+address = "192.168.1.1"
+status = "active"
+detail = "Merlin firmware — primary router in the Barn. DNS: Cloudflare 1.1.1.1 / 1.0.0.1"
+
+[[nodes]]
+id = "sentinel"
+name = "ZP Network Sentinel"
+role = "sentinel"
+address = "192.168.1.1"
+status = "active"
+detail = "DNS filtering, device monitoring, anomaly detection, mesh peer via AgentAnnounce"
+
+[[nodes]]
+id = "zp-core"
+name = "ZeroPoint Node"
+role = "node"
+address = "localhost:3000"
+status = "active"
+detail = "Governance proxy + verification surface — all agent traffic governed"
+
+[[nodes]]
+id = "apollo-3"
+name = "APOLLO-3"
+role = "device"
+address = "192.168.1.170"
+status = "inactive"
+detail = "Mac Mini — retired from DNS duty. Available for repurposing as ledger node or monitoring collector"

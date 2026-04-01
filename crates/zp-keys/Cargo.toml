@@ -8,6 +8,17 @@ repository.workspace = true
 
 description = "ZeroPoint key hierarchy — genesis → operator → agent key derivation, signing, and verification"
 
+[features]
+default = []
+os-keychain = ["keyring"]
+# Cross-platform face enrollment via OpenCV webcam
+face-enroll = ["dep:opencv"]
+# Hardware wallet providers
+hw-yubikey = []
+hw-ledger = []
+hw-trezor = ["dep:trezor-client"]
+hw-onlykey = []
+
 [dependencies]
 ed25519-dalek = { workspace = true }
 blake3 = { workspace = true }
@@ -20,6 +31,20 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 zeroize = { workspace = true }
 uuid = { workspace = true }
+chacha20poly1305 = { workspace = true }
+keyring = { workspace = true, optional = true }
+dirs = "5"
+
+# Hardware wallet: Trezor (optional, behind hw-trezor feature)
+trezor-client = { workspace = true, optional = true }
+
+# OpenCV for face enrollment (optional, heavy dependency)
+opencv = { version = "0.92", optional = true, default-features = false, features = ["videoio", "imgproc", "objdetect"] }
+
+# Linux biometric — whoami for username detection (fprintd-verify)
+# v0.2 will add security-framework for macOS Secure Enclave biometric gating
+[target.'cfg(target_os = "linux")'.dependencies]
+whoami = { version = "1.5" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

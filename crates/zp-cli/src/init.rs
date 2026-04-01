@@ -7,8 +7,10 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
+use zp_keys::sovereignty::SovereigntyMode;
 use zp_keys::hierarchy::{GenesisKey, OperatorKey};
 use zp_keys::keyring::Keyring;
+use zp_keys::recovery;
 
 use crate::commands::resolve_zp_home;
 
@@ -20,6 +22,8 @@ pub struct InitConfig {
     pub project_dir: PathBuf,
     /// Whether to store the genesis secret key (default: true for dev).
     pub store_genesis_secret: bool,
+    /// How the genesis secret is gated (biometric / login password / file).
+    pub sovereignty_mode: SovereigntyMode,
 }
 
 /// Run the init command.
@@ -32,14 +36,25 @@ pub fn run(config: &InitConfig) -> i32 {
     // The project-local .zeropoint/ holds config, policies, and data only.
 
     // ── Guard: don't re-init ────────────────────────────────────
-    // Check the canonical home keyring, not the project-local dir
+    // Check both the certificate file AND the credential store. A previous
+    // `zp init` that succeeded fully will have both; a partial init might
+    // have only the credential store entry or only the file.
     let home_zp = resolve_zp_home();
-    if home_zp.join("keys").join("genesis.json").exists() {
+    let has_genesis_cert = home_zp.join("keys").join("genesis.json").exists();
+    let has_genesis_secret = {
+        let kr = Keyring::open(home_zp.join("keys")).ok();
+        kr.map_or(false, |k| k.status().has_genesis_secret)
+    };
+    if has_genesis_cert || has_genesis_secret {
         eprintln!();
         eprintln!("  ZeroPoint is already initialized.");
         eprintln!("  Keyring: {}", home_zp.join("keys").display());
         eprintln!();
         eprintln!("  Remove ~/.zeropoint/ to re-initialize (this destroys all keys).");
+        if has_genesis_secret && !has_genesis_cert {
+            eprintln!("  Note: Genesis secret found in credential store but genesis.json is missing.");
+            eprintln!("  Run `zp init --force` to repair, or clear with `zp keys clear`.");
+        }
         eprintln!();
         return 1;
     }
@@ -61,21 +76,103 @@ pub fn run(config: &InitConfig) -> i32 {
     eprintln!("\x1b[32m✓\x1b[0m 5 gates installed");
 
     // ── Step 3: Persist keys to ~/.zeropoint/keys/ ──────────────
-    eprint!("  Writing genesis record...             ");
     let keyring = match Keyring::open(home_zp.join("keys")) {
         Ok(k) => k,
         Err(e) => {
-            eprintln!("\x1b[31m✗\x1b[0m");
-            eprintln!("  Failed to create keyring: {}", e);
+            eprintln!("  \x1b[31m✗\x1b[0m Failed to create keyring: {}", e);
             return 1;
         }
     };
 
-    if let Err(e) = keyring.save_genesis(&genesis, config.store_genesis_secret) {
-        eprintln!("\x1b[31m✗\x1b[0m");
-        eprintln!("  Failed to save genesis key: {}", e);
-        return 1;
+    // Tell the user what's about to happen BEFORE the OS dialog appears.
+    if config.store_genesis_secret {
+        let provider = zp_keys::provider_for(config.sovereignty_mode);
+        eprint!("  Sealing secret via {} provider...", provider.display_name());
+        eprintln!();
+        match config.sovereignty_mode {
+            SovereigntyMode::TouchId => {
+                eprintln!("  \x1b[2m(Touch ID will be requested — place your finger on the sensor)\x1b[0m");
+            }
+            SovereigntyMode::WindowsHello => {
+                eprintln!("  \x1b[2m(Windows Hello will be requested — verify your identity)\x1b[0m");
+            }
+            SovereigntyMode::Fingerprint => {
+                eprintln!("  \x1b[2m(Fingerprint will be requested — place your finger on the reader)\x1b[0m");
+            }
+            SovereigntyMode::FaceEnroll => {
+                eprintln!("  \x1b[2m(Camera will activate — look at the webcam for face enrollment)\x1b[0m");
+            }
+            SovereigntyMode::LoginPassword => {
+                if cfg!(target_os = "macos") {
+                    eprintln!("  \x1b[2m(Your system may ask permission to access the keychain — click Allow)\x1b[0m");
+                }
+            }
+            mode if mode.requires_external_device() => {
+                eprintln!("  \x1b[2m(Ensure your {} is connected via USB)\x1b[0m", mode.display_name());
+            }
+            _ => {}
+        }
+    } else {
+        eprint!("  Writing genesis record...             ");
     }
+
+    // Save genesis key with sovereignty-mode-aware storage via provider system.
+    // Track actual_mode so genesis record reflects what actually happened after any fallback.
+    let (secret_in_credential_store, actual_mode) = if config.store_genesis_secret {
+        let provider = zp_keys::provider_for(config.sovereignty_mode);
+        let mut enrollment_failed = false;
+
+        // Run enrollment if needed (face capture, hardware wallet pairing, etc.)
+        if provider.detect().requires_enrollment {
+            if let Err(e) = provider.enroll() {
+                eprintln!("  \x1b[33m⚠\x1b[0m {} enrollment failed: {}", provider.display_name(), e);
+                eprintln!("  Falling back to login password mode...");
+                enrollment_failed = true;
+            }
+        }
+
+        if enrollment_failed {
+            // Fall back to login password
+            match keyring.save_genesis(&genesis, true) {
+                Ok(in_cred) => (in_cred, SovereigntyMode::LoginPassword),
+                Err(e2) => {
+                    eprintln!("  \x1b[31m✗\x1b[0m Failed to save genesis key: {}", e2);
+                    return 1;
+                }
+            }
+        } else {
+            // Save secret through the provider
+            match provider.save_secret(&genesis.secret_key()) {
+                Ok(()) => {
+                    // Also save the certificate (public part) normally
+                    if let Err(e) = keyring.save_genesis(&genesis, false) {
+                        eprintln!("  \x1b[31m✗\x1b[0m Failed to save genesis certificate: {}", e);
+                        return 1;
+                    }
+                    (config.sovereignty_mode != SovereigntyMode::FileBased, config.sovereignty_mode)
+                }
+                Err(e) => {
+                    eprintln!("  \x1b[33m⚠\x1b[0m {} save failed: {}", provider.display_name(), e);
+                    eprintln!("  Falling back to login password mode...");
+                    match keyring.save_genesis(&genesis, true) {
+                        Ok(in_cred) => (in_cred, SovereigntyMode::LoginPassword),
+                        Err(e2) => {
+                            eprintln!("  \x1b[31m✗\x1b[0m Failed to save genesis key: {}", e2);
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        match keyring.save_genesis(&genesis, false) {
+            Ok(in_cred_store) => (in_cred_store, config.sovereignty_mode),
+            Err(e) => {
+                eprintln!("  \x1b[31m✗\x1b[0m Failed to save genesis key: {}", e);
+                return 1;
+            }
+        }
+    };
     if let Err(e) = keyring.save_operator(&operator) {
         eprintln!("\x1b[31m✗\x1b[0m");
         eprintln!("  Failed to save operator key: {}", e);
@@ -92,6 +189,7 @@ pub fn run(config: &InitConfig) -> i32 {
         "constitutional_hash": constitutional_hash,
         "algorithm": "Ed25519",
         "audit_chain": "BLAKE3",
+        "sovereignty_mode": actual_mode.to_string(),
         "constitutional_gates": [
             "HarmPrincipleRule",
             "SovereigntyRule",
@@ -119,7 +217,13 @@ pub fn run(config: &InitConfig) -> i32 {
     let _ = std::fs::create_dir_all(zp_dir.join("policies"));
     let _ = std::fs::create_dir_all(zp_dir.join("data"));
 
-    eprintln!("\x1b[32m✓\x1b[0m ~/.zeropoint/genesis.json");
+    if secret_in_credential_store {
+        eprintln!("\x1b[32m✓\x1b[0m genesis record + secret sealed in OS credential store");
+    } else if config.store_genesis_secret {
+        eprintln!("\x1b[32m✓\x1b[0m genesis record + secret written (file fallback)");
+    } else {
+        eprintln!("\x1b[32m✓\x1b[0m genesis record written (certificate only)");
+    }
 
     // ── Step 4: Write zeropoint.toml ────────────────────────────
     if !toml_path.exists() {
@@ -134,6 +238,8 @@ port = 3000
 [identity]
 operator = "{}"
 key_path = "~/.zeropoint/keys"
+# How the genesis secret is gated: "biometric", "login_password", or "file_based"
+sovereignty_mode = "{}"
 
 [policy]
 # Custom WASM gates, evaluated after constitutional bedrock.
@@ -145,6 +251,7 @@ data_dir = ".zeropoint/data"
 "#,
             Utc::now().format("%Y-%m-%d"),
             config.operator_name,
+            config.sovereignty_mode,
         );
         let _ = std::fs::write(&toml_path, toml_content);
     }
@@ -161,7 +268,64 @@ data_dir = ".zeropoint/data"
     );
     eprintln!();
     eprintln!("  Your environment is ready.");
-    eprintln!("  Run \x1b[1m`zp keys issue`\x1b[0m to create your first agent key.");
+    if secret_in_credential_store {
+        let store_name = if cfg!(target_os = "macos") {
+            "macOS Keychain"
+        } else if cfg!(target_os = "linux") {
+            "Secret Service"
+        } else if cfg!(target_os = "windows") {
+            "Windows Credential Manager"
+        } else {
+            "OS credential store"
+        };
+        eprintln!("  Genesis secret sealed in {}, gated by {}.", store_name, actual_mode.display_name());
+        if actual_mode != SovereigntyMode::FileBased {
+            eprintln!("  No secret key files on disk. {} required for vault access.", actual_mode.display_name());
+        }
+    } else if config.store_genesis_secret {
+        if actual_mode == SovereigntyMode::FileBased {
+            eprintln!("  Genesis secret stored in ~/.zeropoint/keys/genesis.secret");
+        } else {
+            eprintln!("  \x1b[33mNote:\x1b[0m Genesis secret stored in ~/.zeropoint/keys/genesis.secret");
+            eprintln!("  (OS credential store unavailable — will auto-migrate when available)");
+        }
+    }
+
+    // ── Recovery kit (hardware-gated modes) ─────────────────────
+    if actual_mode.requires_hardware() && config.store_genesis_secret {
+        match recovery::encode_mnemonic(&genesis.secret_key()) {
+            Ok(mnemonic) => {
+                eprintln!();
+                eprintln!("  \x1b[1;33m┌─ Recovery Kit ──────────────────────────────────────────┐\x1b[0m");
+                eprintln!("  \x1b[33m│\x1b[0m                                                        \x1b[33m│\x1b[0m");
+                eprintln!("  \x1b[33m│\x1b[0m  Write down these 24 words. Store them offline.         \x1b[33m│\x1b[0m");
+                eprintln!("  \x1b[33m│\x1b[0m  This screen will not appear again.                     \x1b[33m│\x1b[0m");
+                eprintln!("  \x1b[33m│\x1b[0m                                                        \x1b[33m│\x1b[0m");
+                for row in 0..6 {
+                    let i = row * 4;
+                    eprintln!(
+                        "  \x1b[33m│\x1b[0m  {:>2}. {:<12} {:>2}. {:<12} {:>2}. {:<12} {:>2}. {:<12}\x1b[33m│\x1b[0m",
+                        i + 1, mnemonic[i],
+                        i + 2, mnemonic[i + 1],
+                        i + 3, mnemonic[i + 2],
+                        i + 4, mnemonic[i + 3],
+                    );
+                }
+                eprintln!("  \x1b[33m│\x1b[0m                                                        \x1b[33m│\x1b[0m");
+                eprintln!("  \x1b[33m│\x1b[0m  These words ARE your Genesis secret.                   \x1b[33m│\x1b[0m");
+                eprintln!("  \x1b[33m│\x1b[0m  Recovery: `zp recover --biometric-reset`                \x1b[33m│\x1b[0m");
+                eprintln!("  \x1b[1;33m└────────────────────────────────────────────────────────┘\x1b[0m");
+            }
+            Err(e) => {
+                eprintln!("  \x1b[33m⚠\x1b[0m Could not generate recovery mnemonic: {}", e);
+                eprintln!("  You can generate it later with `zp keys recovery-kit`");
+            }
+        }
+    }
+
+    eprintln!();
+    eprintln!("  Sovereignty: \x1b[1m{}\x1b[0m", config.sovereignty_mode);
+    eprintln!("  Next: \x1b[1m`zp onboard`\x1b[0m to set up your AI tools.");
     eprintln!();
 
     0
