@@ -13,12 +13,17 @@ members = [
     "crates/zp-trust",
     "crates/zp-learning",
     "crates/zp-mesh",
+    "crates/zp-engine",
     "crates/zp-server",
     "crates/zp-cli",
     "crates/zp-receipt",
     "crates/execution-engine",
     "policies/default-gate",
     "crates/course-examples",
+    "crates/mle-star-engine",
+    "crates/monte-carlo-engine",
+    # "crates/zp-agent-bridge",  # temporarily excluded: depends on missing cross-workspace path
+    "crates/zp-observation",
 ]
 
 [workspace.package]
@@ -53,7 +58,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 wasmtime = "27.0"
 
 # HTTP client (for LLM APIs)
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream", "gzip", "brotli", "deflate"] }
 
 # HTTP server
 axum = { version = "0.7", features = ["tokio", "json", "ws"] }
@@ -95,6 +100,12 @@ hkdf = "0.12"
 aes = "0.8"
 cbc = "0.1"
 hmac = "0.12"
+
+# OS credential store (Keychain / Secret Service / Credential Manager)
+keyring = { version = "3", features = ["apple-native", "sync-secret-service", "windows-native"] }
+
+# Hardware wallet: Trezor
+trezor-client = { version = "0.1", default-features = false }
 
 # Regex
 regex = "1.10"
