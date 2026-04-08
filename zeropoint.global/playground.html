@@ -960,10 +960,28 @@ document.addEventListener('click', function(e) {
 // ============================================================
 // CONFIG
 // ============================================================
+// Map credentials are injected at deploy time — never committed.
+// Provide via one of:
+//   1. <meta name="zp-google-api-key" content="..."> / <meta name="zp-cesium-token" content="...">
+//   2. window.__ZP_PLAYGROUND_CONFIG__ = { googleApiKey, cesiumToken } (inline script from server)
+//   3. Runtime fetch of /api/v1/playground/config (populated from env vars on the server)
+// If none resolve, the 3D map is disabled and a notice is shown in its place.
+function readMapCredentials() {
+  const meta = (name) => {
+    const el = document.querySelector(`meta[name="${name}"]`);
+    const v = el && el.getAttribute('content');
+    return v && v.trim() ? v.trim() : '';
+  };
+  const injected = (typeof window !== 'undefined' && window.__ZP_PLAYGROUND_CONFIG__) || {};
+  return {
+    googleApiKey: meta('zp-google-api-key') || injected.googleApiKey || '',
+    cesiumToken:  meta('zp-cesium-token')   || injected.cesiumToken  || '',
+  };
+}
+const __ZP_MAP_CREDS = readMapCredentials();
 const CONFIG = {
-  // REPLACE THESE WITH REAL KEYS
-  googleApiKey: 'AIzaSyBdKLfc6vAiCtkOYiUBL4cYfIWeOmGrmSk',
-  cesiumToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3NDY5ZTlhMS04NTJiLTRkODYtYTQwZC1lYTk3NzI4ZjkyZjciLCJpZCI6Mzk5NjE4LCJpYXQiOjE3NzI4NjA0MTZ9.5SZl3k4FNwhpoHOi3hcKEJO5k__1hyTbV75DDCizFro',
+  googleApiKey: __ZP_MAP_CREDS.googleApiKey,
+  cesiumToken:  __ZP_MAP_CREDS.cesiumToken,
 
   // San Francisco — Financial District / SoMa / Embarcadero
   camera: {
@@ -2893,8 +2911,17 @@ const camControls = {
 var viewer; // var (not let) so it's accessible from devtools/console
 
 async function initCesium() {
+  // Graceful degradation: if no map credentials are configured, show a notice
+  // and skip 3D tile loading. Agents/sim still run on the 2D street graph.
+  if (!CONFIG.cesiumToken && !CONFIG.googleApiKey) {
+    const container = document.getElementById('cesiumContainer');
+    if (container) {
+      container.innerHTML = '<div style="padding:24px;font-family:JetBrains Mono,monospace;color:#888;font-size:12px;line-height:1.6;">3D map disabled — no map credentials configured.<br>Set <code>zp-google-api-key</code> / <code>zp-cesium-token</code> meta tags or <code>window.__ZP_PLAYGROUND_CONFIG__</code> to enable.</div>';
+    }
+    return;
+  }
   // Set Cesium token
-  if (CONFIG.cesiumToken !== 'YOUR_CESIUM_ION_TOKEN') {
+  if (CONFIG.cesiumToken) {
     Cesium.Ion.defaultAccessToken = CONFIG.cesiumToken;
   }
 
@@ -2932,7 +2959,7 @@ async function initCesium() {
     console.log('Google 3D Tiles loaded via Ion asset 2275207');
   } catch (e) {
     console.warn('Ion 3D Tiles failed, trying Google API key fallback:', e);
-    if (CONFIG.googleApiKey !== 'YOUR_GOOGLE_MAPS_API_KEY') {
+    if (CONFIG.googleApiKey) {
       try {
         const tileset = await Cesium.createGooglePhotorealistic3DTileset(CONFIG.googleApiKey);
         viewer.scene.primitives.add(tileset);
