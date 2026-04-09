@@ -3,8 +3,17 @@ name = "zp-audit"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+# Exposes `AuditStore::tamper_entry_hash` / `restore_entry_hash` for the
+# pentest/demo UI. Never enable in a production server build. The old
+# `execute_raw` SQL back door was removed in Stage 4 of the AUDIT-03
+# recanonicalization — see docs/audit-invariant.md.
+pentest-demo = []
+
 [dependencies]
 zp-core = { path = "../zp-core" }
+zp-verify = { path = "../zp-verify" }
 rusqlite = { workspace = true }
 blake3 = { workspace = true }
 chrono = { workspace = true }
@@ -16,6 +25,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 tokio = { workspace = true }
+regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
