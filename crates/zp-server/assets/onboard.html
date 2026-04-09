@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — Onboard</title>
+<link rel="stylesheet" href="/assets/onboard.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>zeropoint</h1>
+    <p>portable trust for the agentic age</p>
+  </div>
+
+  <!-- Step Navigation -->
+  <div class="step-nav" id="stepNav">
+    <div class="step-tab active" data-step="0">00 welcome</div>
+    <div class="step-tab disabled" data-step="1">01 sovereignty</div>
+    <div class="step-tab disabled" data-step="2">02 identity</div>
+    <div class="step-tab disabled" data-step="3">03 vault</div>
+    <div class="step-tab disabled" data-step="4">04 inference</div>
+    <div class="step-tab disabled" data-step="5">05 discover</div>
+    <div class="step-tab disabled" data-step="6">06 credentials</div>
+    <div class="step-tab disabled" data-step="7">07 configure</div>
+    <div class="step-tab disabled" data-step="8">08 governed</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 0: Welcome                                     -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step active" id="step-0">
+    <div class="step-header">00 — welcome</div>
+
+    <div class="paradigm-box old-model">
+      <h4>the old model</h4>
+      Your identity is issued by authorities. Your credentials are stored by platforms. Your trust depends on institutions you don't control. In the Agentic Age, that model breaks — because the agents acting on your behalf inherit whatever trust model you're using. If you don't own your keys, whoever does owns your agents.
+    </div>
+
+    <div class="paradigm-box new-model">
+      <h4>the new model</h4>
+      You create your own cryptographic root of trust. Your credentials live in a vault only you can unlock. Your governance rules are yours to write. Everything — vault, policies, agent certificates — derives from one key, created right now, by you.
+    </div>
+
+    <p style="color: var(--text-dim); font-size: 0.82rem; margin-top: 1.5rem;">Under 5 minutes. One sitting. No accounts to create.</p>
+
+    <div class="btn-row">
+      <button class="btn" onclick="startOnboard()">Begin Genesis</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 1: Sovereignty Boundary                        -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-1">
+    <div class="step-header">01 — sovereignty boundary</div>
+    <h2>How will you prove it's you?</h2>
+
+    <p>Your Genesis secret needs a guardian — something that proves <em>you</em> authorized an action, not just a process running on your machine.</p>
+
+    <div id="sovereigntyCards">
+
+      <!-- Biometric category -->
+      <div class="card-category-label" id="cat-biometric-label">Biometric</div>
+
+      <div class="card recommended" id="card-touch_id" onclick="selectSovereignty('touch_id')" style="cursor:pointer">
+        <h3>Touch ID / Face ID</h3>
+        <p>Your body is the credential. The Genesis secret is locked in the Secure Enclave — agents can't act without your fingerprint or face.</p>
+        <div class="detail" id="touch_id-detail">Detecting hardware...</div>
+      </div>
+
+      <div class="card" id="card-fingerprint" onclick="selectSovereignty('fingerprint')" style="cursor:pointer;display:none">
+        <h3>Fingerprint (fprintd)</h3>
+        <p>Linux fingerprint reader gates the Genesis secret. Physical presence required for every operation.</p>
+        <div class="detail" id="fingerprint-detail">Detecting...</div>
+      </div>
+
+      <div class="card" id="card-face_enroll" onclick="selectSovereignty('face_enroll')" style="cursor:pointer">
+        <h3>Face Enrollment</h3>
+        <p>Your webcam captures a face template during setup. Every unlock requires a live face match — no stored images, just a compact local template.</p>
+        <div class="detail" id="face_enroll-detail">Detecting camera...</div>
+      </div>
+
+      <div class="card" id="card-windows_hello" onclick="selectSovereignty('windows_hello')" style="cursor:pointer;display:none">
+        <h3>Windows Hello</h3>
+        <p>Fingerprint, face, or PIN backed by TPM 2.0. The Genesis secret is locked in Windows Credential Manager — agents can't act without your Hello verification.</p>
+        <div class="detail" id="windows_hello-detail">Detecting...</div>
+      </div>
+
+      <!-- Hardware Wallet category -->
+      <div class="card-category-label" id="cat-hw-label">Hardware Wallet</div>
+
+      <div class="card" id="card-yubi_key" onclick="selectSovereignty('yubi_key')" style="cursor:pointer">
+        <h3>YubiKey</h3>
+        <p>FIDO2 hardware key gates the Genesis secret. Tap to authorize — the secret never leaves your machine, but can't be unlocked without the physical key.</p>
+        <div class="detail" id="yubi_key-detail">Scanning USB...</div>
+      </div>
+
+      <div class="card" id="card-ledger" onclick="selectSovereignty('ledger')" style="cursor:pointer">
+        <h3>Ledger</h3>
+        <p>Ledger hardware wallet derives a wrapping key for the Genesis secret. Confirm on the device to authorize.</p>
+        <div class="detail" id="ledger-detail">Scanning USB...</div>
+      </div>
+
+      <div class="card" id="card-trezor" onclick="selectSovereignty('trezor')" style="cursor:pointer">
+        <h3>Trezor</h3>
+        <p>Trezor hardware wallet provides deterministic key derivation for the Genesis secret. PIN + physical confirmation.</p>
+        <div class="detail" id="trezor-detail">Scanning USB...</div>
+      </div>
+
+      <div class="card" id="card-only_key" onclick="selectSovereignty('only_key')" style="cursor:pointer">
+        <h3>OnlyKey</h3>
+        <p>OnlyKey hardware token uses challenge-response to gate the Genesis secret. Physical touch required.</p>
+        <div class="detail" id="only_key-detail">Scanning USB...</div>
+      </div>
+
+      <!-- Software category -->
+      <div class="card-category-label">Software</div>
+
+      <div class="card" id="card-login_password" onclick="selectSovereignty('login_password')" style="cursor:pointer">
+        <h3>Login Password</h3>
+        <p>Your login password gates the Genesis secret via your OS credential store. Solid default. Can upgrade to biometric or hardware wallet later without re-keying.</p>
+        <div class="detail" id="login_password-detail"></div>
+      </div>
+
+      <div class="card" id="card-file_based" onclick="selectSovereignty('file_based')" style="cursor:pointer">
+        <h3>File on Disk</h3>
+        <p>For headless servers, CI, or systems without a credential store. The secret is on disk. Functional but weaker — any process with user privileges can read the file.</p>
+        <div class="detail" id="file_based-detail">Recommended only for servers and CI</div>
+      </div>
+
+    </div>
+
+    <div class="paradigm-box old-model">
+      <h4>the old model</h4>
+      Proving your identity means presenting credentials issued by someone else — a password stored in a corporate database, a token from an OAuth provider, a certificate signed by an authority. Someone else holds the keys. They can revoke, surveil, or lose them in a breach.
+    </div>
+
+    <div class="paradigm-box new-model">
+      <h4>the new model</h4>
+      Your body is the credential. No institution mediates. No platform can revoke. If an agent runs on your machine, it can access files and env vars — but it can't fake your fingerprint or your face. Your physical presence is the boundary between authorized and unauthorized.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="sovereigntyNext" onclick="goGenesis()" disabled>Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 2: Identity — Genesis Ceremony                 -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-2">
+    <div class="step-header">02 — identity</div>
+    <h2>The Genesis Ceremony</h2>
+
+    <p>Your operator name identifies you in certificate chains and audit logs. It's the subject line on your root certificate — signed by you, not issued by an authority.</p>
+
+    <div class="input-group">
+      <label>operator name</label>
+      <input type="text" id="operatorName" placeholder="your name or handle" autocomplete="off">
+    </div>
+
+    <!-- Hardware connection prompt (shown for HW wallet modes) -->
+    <div class="hw-connect-prompt" id="hwConnectPrompt" style="display:none">
+      <div class="hw-connect-icon" id="hwConnectIcon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="12" width="24" height="16" rx="3" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+          <rect x="32" y="17" width="4" height="6" rx="1" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+          <circle cx="20" cy="20" r="4" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+        </svg>
+      </div>
+      <p class="hw-connect-title" id="hwConnectTitle">Connect your hardware wallet</p>
+      <p class="hw-connect-detail" id="hwConnectDetail">Plug in your device via USB before starting the Genesis ceremony. ZeroPoint will derive a wrapping key from it to seal your Genesis secret.</p>
+      <div class="hw-connect-status" id="hwConnectStatus">
+        <span class="hw-status-dot"></span>
+        <span id="hwStatusText">Waiting for device...</span>
+      </div>
+    </div>
+
+    <button class="btn" id="genesisBtn" onclick="runGenesis()">Create Genesis Key</button>
+
+    <div class="terminal" id="genesisTerm" style="display:none"></div>
+
+    <div class="info-box" id="genesisInfo" style="display:none">
+      <h4>what just happened</h4>
+      <div id="genesisInfoContent"></div>
+    </div>
+
+    <!-- Recovery kit (biometric users only) -->
+    <div class="recovery-kit" id="recoveryKit" style="display:none">
+      <h3>Recovery Kit</h3>
+      <p style="font-size:0.82rem; color:var(--text)">Write down these 24 words. Store them offline.</p>
+      <div class="recovery-words" id="recoveryWords"></div>
+      <p class="warning-text">This screen will not appear again.</p>
+      <p style="font-size:0.72rem; color:var(--text-dim); margin-top:0.5rem; font-family:var(--mono)">Recovery: zp recover --biometric-reset</p>
+    </div>
+
+    <div class="btn-row" id="genesisNext" style="display:none">
+      <button class="btn" onclick="goStep(3)">Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 3: Vault                                       -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-3">
+    <div class="step-header">03 — your vault</div>
+    <h2>Understanding Your Vault</h2>
+
+    <p>Right now, your API keys probably live in .env files, password managers, or cloud secrets services — all mediated by someone else's infrastructure. ZeroPoint replaces that. It derives a vault key from your Genesis secret and encrypts every credential you store with ChaCha20-Poly1305 authenticated encryption. No cloud. No intermediary.</p>
+
+    <div class="diagram"><span class="highlight glow-pulse">Genesis Secret</span> (in credential store)
+      |
+      v
+  BLAKE3-keyed("<span class="highlight">zp-credential-vault-v1</span>")
+      |
+      v
+  <span class="highlight">Vault Key</span> (ephemeral — exists only in memory)
+      |
+      v
+  ChaCha20-Poly1305 → Your encrypted credentials</div>
+
+    <p>You don't manage the vault key. It's derived on demand from your Genesis secret, used, then wiped from memory. There is nothing to remember, back up, or rotate.</p>
+
+    <div class="info-box">
+      <h4>what you can change later</h4>
+      <code style="font-size:0.75rem; color:var(--text-dim)">zp vault export --encrypted</code> — portable backup<br>
+      <code style="font-size:0.75rem; color:var(--text-dim)">zp vault import</code> — restore on new machine
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="goStep(4)">Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 4: Inference Posture                           -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-4">
+    <div class="step-header">04 — inference source</div>
+    <h2>Where Does Your Inference Run?</h2>
+
+    <p>This determines what credentials you need and how ZeroPoint governs your agent traffic.</p>
+
+    <div class="paradigm-box old-model">
+      <h4>the old model</h4>
+      Your prompts, your data, your chain-of-thought — all sent to someone else's hardware. Every inference call is visible to the provider. You pay per token. They decide the terms.
+    </div>
+
+    <div class="paradigm-box new-model">
+      <h4>the new model</h4>
+      You choose where computation happens. Local models keep everything on your hardware. Cloud models give you access to frontier capability. Mixed gives you both — and your governance proxy routes each call to the right place.
+    </div>
+
+    <div class="card" id="localInferenceStatus" style="display:none">
+      <h4 id="localInferenceTitle" style="font-family:var(--mono); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem">local inference status</h4>
+      <p id="localInferenceText" style="font-size:0.82rem; line-height:1.7; margin:0"></p>
+    </div>
+
+    <!-- Setup assistant (shown when no runtime detected and hardware is capable) -->
+    <div class="card" id="setupAssistant" style="display:none">
+      <h4 style="font-family:var(--mono); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.75rem; color:var(--accent)">set up local inference</h4>
+
+      <!-- Phase 1: Choose a runtime -->
+      <div id="setupPhase1">
+        <p style="font-size:0.82rem; line-height:1.6; margin:0 0 0.75rem 0; color:var(--text-dim)">
+          Your hardware can run local models. Choose a runtime and ZeroPoint will walk you through it.
+        </p>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.5rem">
+          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('ollama')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+            Ollama<br><span style="font-size:0.62rem; color:var(--text-dim)">CLI · lightweight</span>
+          </button>
+          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('lm-studio')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+            LM Studio<br><span style="font-size:0.62rem; color:var(--text-dim)">visual · beginner-friendly</span>
+          </button>
+          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('jan')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+            Jan<br><span style="font-size:0.62rem; color:var(--text-dim)">desktop · one-click</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 2: Install instructions (populated by JS) -->
+      <div id="setupPhase2" style="display:none">
+        <div id="setupInstructions" style="font-size:0.82rem; line-height:1.7"></div>
+        <div id="setupCommands" class="terminal" style="margin:0.75rem 0; min-height:auto; max-height:none"></div>
+        <div id="setupNotes" style="font-size:0.72rem; color:var(--text-dim); margin-bottom:0.75rem"></div>
+        <div style="display:flex; gap:0.5rem; align-items:center">
+          <button class="btn" onclick="redetectRuntimes()" style="font-size:0.75rem; padding:0.4rem 0.8rem">
+            I've installed it — check again
+          </button>
+          <button class="btn btn-dim" onclick="showSetupPhase1()" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
+            ← pick a different runtime
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 3: Model recommendation (shown after runtime detected but no models) -->
+      <div id="setupPhase3" style="display:none">
+        <p style="font-size:0.82rem; color:var(--green); margin:0 0 0.5rem 0">
+          <span style="color:var(--green)">✓</span> Runtime is running.
+        </p>
+        <p id="modelRecTitle" style="font-size:0.82rem; line-height:1.6; margin:0 0 0.5rem 0"></p>
+        <div id="modelRecPrimary" class="card" style="margin:0.5rem 0; padding:0.6rem; cursor:default"></div>
+        <div id="modelRecAlt" style="margin:0.5rem 0; display:none">
+          <p style="font-size:0.72rem; color:var(--text-dim); margin:0.25rem 0">or try:</p>
+          <div id="modelRecAltCard" class="card" style="padding:0.5rem; cursor:default; border-color:var(--border)"></div>
+        </div>
+        <div id="modelRecCommand" class="terminal" style="margin:0.75rem 0; min-height:auto; max-height:none"></div>
+        <div id="modelPullActions" style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem">
+          <button class="btn" id="pullAndContinueBtn" onclick="startModelPull()" style="font-size:0.75rem; padding:0.4rem 0.8rem">
+            Pull model & continue
+          </button>
+          <button class="btn btn-dim" onclick="redetectRuntimes()" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
+            I've already pulled one — check again
+          </button>
+        </div>
+        <div id="modelPullStatus" style="display:none; margin-top:0.5rem">
+          <p id="modelPullMessage" style="font-size:0.78rem; line-height:1.5; margin:0"></p>
+        </div>
+      </div>
+
+      <!-- Phase 4: skip option (always visible at bottom) -->
+      <div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border)">
+        <p style="font-size:0.72rem; color:var(--text-dim); margin:0">
+          You can also skip this — choose <strong>Cloud</strong> or <strong>Mixed</strong> below and add local inference anytime with <code>zp configure inference</code>.
+        </p>
+      </div>
+    </div>
+
+    <div class="card-grid" style="display:grid; grid-template-columns:1fr; gap:0.75rem; margin:1rem 0">
+      <div class="card posture-card" id="posture-local" onclick="selectPosture('local')" style="cursor:pointer; transition:border-color 0.2s">
+        <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Local Only</h3>
+        <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">All inference stays on your hardware. No API keys needed. No data leaves your machine. Maximum privacy.</p>
+        <p id="local-models" style="font-size:0.72rem; color:var(--text-dim); margin:0.25rem 0 0 0; display:none"></p>
+      </div>
+
+      <div class="card posture-card" id="posture-cloud" onclick="selectPosture('cloud')" style="cursor:pointer; transition:border-color 0.2s">
+        <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Cloud Only</h3>
+        <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">Use OpenAI, Anthropic, Google, etc. Frontier models. API keys required. All calls governed through the proxy.</p>
+      </div>
+
+      <div class="card posture-card recommended" id="posture-mixed" onclick="selectPosture('mixed')" style="cursor:pointer; transition:border-color 0.2s">
+        <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Mixed</h3>
+        <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">Local models for routine tasks. Cloud models for frontier capability. The governance proxy routes each call — you set the rules for what stays local.</p>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="postureBtn" onclick="goDiscover()" disabled>Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 5: Discover Tools                              -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-5">
+    <div class="step-header">05 — discover tools</div>
+    <h2>Tool Discovery</h2>
+
+    <p>ZeroPoint scans your project directories for AI tools that use .env files for configuration.</p>
+
+    <div class="input-group">
+      <label>scan directory</label>
+      <div style="display:flex; gap:0.5rem">
+        <input type="text" id="scanPath" value="~/projects" style="flex:1">
+        <button class="btn" id="scanBtn" onclick="runScan()">Scan</button>
+      </div>
+    </div>
+
+    <div class="terminal" id="scanTerm" style="display:none"></div>
+
+    <div id="scanResults" style="display:none">
+      <div id="scanResultsList"></div>
+      <p id="scanSummary" style="font-size:0.82rem; color:var(--text-dim); margin-top:0.75rem"></p>
+    </div>
+
+    <div class="btn-row" id="scanNext" style="display:none">
+      <button class="btn" onclick="goStep(6)">Add Credentials</button>
+      <button class="btn btn-secondary" onclick="goStep(7)">Skip</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 6: Credential Collection                       -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-6">
+    <div class="step-header">06 — add credentials</div>
+    <h2>Credential Collection</h2>
+
+    <p>Each credential is encrypted in your vault the moment you press Store — no plaintext on disk, no cloud intermediary. The key goes straight from this page to your local vault. Skip any you don't have yet.</p>
+
+    <!-- Found in plaintext (scraped from .env files) -->
+    <div id="foundPlaintextSection" class="found-creds-section" style="display:none">
+      <h3>
+        <span>⚠ Found in Plaintext</span>
+        <span class="count-badge" id="foundPlaintextCount">0</span>
+      </h3>
+      <p style="font-size:0.78rem; color:var(--text-dim); margin-bottom:0.75rem">
+        These API keys are sitting unencrypted in your project <code>.env</code> files.
+        Select which to vault — drag to reorder priority.
+      </p>
+      <div id="foundPlaintextCards"></div>
+      <div class="vault-all-bar">
+        <span class="vault-all-status" id="vaultAllStatus">Select credentials to secure</span>
+        <button class="vault-all-btn" id="vaultAllBtn" onclick="vaultAllFound()" disabled>Vault All Found</button>
+      </div>
+    </div>
+
+    <!-- Detected providers (env vars found) -->
+    <div id="detectedProviders" style="display:none">
+      <h3 style="font-size:0.85rem; color:var(--accent); margin:1.5rem 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em">Detected in your environment</h3>
+      <div id="detectedCards"></div>
+    </div>
+
+    <!-- All other providers by category -->
+    <div id="catalogProviders" style="display:none">
+      <h3 id="catalogHeading" style="font-size:0.85rem; color:var(--text-dim); margin:1.5rem 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer" onclick="toggleCatalog()">
+        <span id="catalogToggle">▸</span> <span id="catalogLabel">All providers</span> (<span id="catalogCount">0</span>)
+      </h3>
+      <div id="catalogCards" style="display:none"></div>
+    </div>
+
+    <p id="credentialSummary" style="font-size:0.82rem; color:var(--text-dim); margin-top:1rem"></p>
+
+    <!-- Validation status badges (updated per-credential after store) -->
+    <div id="validationStatus" style="display:none; margin-top:1rem">
+      <h3 style="font-size:0.82rem; color:var(--accent); margin-bottom:0.5rem; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.04em">Credential Health</h3>
+      <div id="validationStatusCards"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="goStep(7)">Continue</button>
+      <button class="btn btn-secondary" onclick="goStep(7)">Skip remaining</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 7: Configure                                   -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-7">
+    <div class="step-header">07 — configure</div>
+    <h2>Bring Your Tools Under Governance</h2>
+
+    <p>This is the moment everything connects. Your vault credentials flow into your discovered tools. The governance proxy wraps every API call with policy enforcement, cost metering, and cryptographic receipts. Watch each tool come online.</p>
+
+    <div class="card" style="margin-bottom:1rem">
+      <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.82rem; cursor:pointer">
+        <input type="checkbox" id="proxyEnabled" checked>
+        <span>Route all API calls through governance proxy <span style="color:var(--text-dim)">(port 3000)</span></span>
+      </label>
+    </div>
+
+    <!-- Credential health check (runs on step entry) -->
+    <div id="configHealthCheck" style="display:none; margin-bottom:1.25rem">
+      <div class="card" style="padding:0.75rem 1rem">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem">
+          <h4 style="font-family:var(--mono); font-size:0.72rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.06em; margin:0">credential health check</h4>
+          <span id="healthCheckStatus" style="font-size:0.72rem; color:var(--text-dim)">checking...</span>
+        </div>
+        <div id="healthCheckResults"></div>
+      </div>
+    </div>
+
+    <div id="configToolCards" class="tool-config-grid"></div>
+
+    <div class="btn-row">
+      <button class="btn" id="configureBtn" onclick="runConfigure()">Secure &amp; Configure</button>
+    </div>
+
+    <div class="terminal" id="configureTerm" style="display:none; margin-top:1rem; max-height:150px; overflow-y:auto; font-size:0.72rem"></div>
+
+    <div class="btn-row" id="configureNext" style="display:none">
+      <button class="btn" onclick="goStep(8)">See Your Launch Pad →</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 8: You're Governed                             -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-8">
+    <div class="step-header">08 — your launch pad</div>
+    <h2 style="margin-bottom:0.5rem">Mission Control</h2>
+    <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:1.5rem">Every tool governed. Every call receipted. Every key sovereign.</p>
+
+    <!-- Operator identity bar -->
+    <div class="card" style="padding:0.75rem 1rem; margin-bottom:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem">
+      <div style="display:flex; align-items:center; gap:0.75rem">
+        <div style="width:36px; height:36px; border-radius:50%; background:var(--accent-dim); display:flex; align-items:center; justify-content:center; font-size:0.85rem; color:var(--accent); font-weight:600" id="sumAvatarInitial">?</div>
+        <div>
+          <div style="font-size:0.85rem; font-weight:500; color:var(--text-bright)" id="sumOperator">—</div>
+          <div style="font-size:0.7rem; color:var(--text-dim); font-family:var(--mono)" id="sumGenesis">—</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+        <span class="governance-badge" id="sumSovereigntyBadge">—</span>
+        <span class="governance-badge" id="sumInferenceBadge">—</span>
+        <span class="governance-badge" style="background:rgba(126,184,218,0.1); color:var(--accent)" id="sumVaultBadge">—</span>
+      </div>
+    </div>
+
+    <!-- Launch pad grid -->
+    <div class="launchpad-grid" id="launchpadGrid"></div>
+
+    <!-- Act 3 — Open the Money Pipe -->
+    <div style="margin-top:2rem; border:1px solid var(--yellow); border-radius:8px; overflow:hidden">
+      <div style="background:rgba(221,168,85,0.08); padding:1.25rem 1.5rem; border-bottom:1px solid rgba(221,168,85,0.15)">
+        <h3 style="color:var(--yellow); font-size:0.95rem; margin-bottom:0.25rem; font-weight:600">Act 3 — Open the Money Pipe</h3>
+        <p style="font-size:0.78rem; color:var(--text-dim); margin:0">Anchoring turns your governance chain into a revenue channel</p>
+      </div>
+      <div style="padding:1.25rem 1.5rem">
+        <p style="font-size:0.85rem; line-height:1.8; color:var(--text); margin-bottom:1rem">
+          Everything you've built so far is local — powerful, but invisible. No one can pay you through a governance chain they can't verify. <strong style="color:var(--yellow)">Anchoring opens the pipe.</strong>
+        </p>
+        <p style="font-size:0.85rem; line-height:1.8; color:var(--text); margin-bottom:1.25rem">
+          When your genesis key is anchored to a public ledger, your agents can prove their identity and governance posture to <em>any other agent on the network</em> — in milliseconds. That proof is the prerequisite for autonomous payments, binding agreements, and machine-speed commerce. No attestation, no deal.
+        </p>
+
+        <div style="display:grid; gap:0.75rem; margin-bottom:1.25rem">
+          <div style="display:flex; gap:0.75rem; align-items:flex-start">
+            <span style="color:var(--yellow); font-size:1rem; line-height:1.5; flex-shrink:0">💰</span>
+            <div>
+              <div style="font-size:0.82rem; color:var(--text-bright); font-weight:500">Agents that can transact</div>
+              <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">Your agent needs a service from another agent. Before any money moves, both sides verify the other's attestation chain — identity, policies, track record. Verified in milliseconds. Payment authorized. Settlement on Hedera. No invoices, no net-30, no accounts receivable. Money moves at the speed of trust.</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:0.75rem; align-items:flex-start">
+            <span style="color:var(--yellow); font-size:1rem; line-height:1.5; flex-shrink:0">📈</span>
+            <div>
+              <div style="font-size:0.82rem; color:var(--text-bright); font-weight:500">Reputation is your credit score</div>
+              <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">Every governed transaction extends your attestation chain. Six months of policy-compliant operations is six months of cryptographic proof — not a pitch deck, not a reference call. New partners offer better terms because your track record is math, not promises. Your reputation compounds like interest.</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:0.75rem; align-items:flex-start">
+            <span style="color:var(--yellow); font-size:1rem; line-height:1.5; flex-shrink:0">⚡</span>
+            <div>
+              <div style="font-size:0.82rem; color:var(--text-bright); font-weight:500">The commerce layer for the Agentic Age</div>
+              <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">When billions of agents buy, sell, and negotiate autonomously, the bottleneck isn't intelligence — it's trust. Can this agent prove who it works for? Can it prove its governance in real time? Public attestation is that proof. It's the difference between an agent that can browse and an agent that can do business.</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:rgba(221,168,85,0.06); border-radius:6px; padding:1rem; margin-bottom:0.5rem">
+          <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem">
+            <code style="font-size:0.82rem; color:var(--yellow); font-weight:500">zp anchor genesis</code>
+            <span style="font-size:0.72rem; color:var(--text-dim)">~$0.0001 on Hedera testnet</span>
+          </div>
+          <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">
+            Anchoring is irreversible — your cryptographic root becomes permanently, publicly verifiable. Your agents become capable of autonomous commerce. This is the on-ramp.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top: 1px solid var(--border); margin-top: 2rem; padding-top: 1.5rem; text-align: center;">
+      <p style="color: var(--text); font-size: 0.92rem; line-height: 1.8; max-width: 520px; margin: 0 auto;">
+        You own your keys. You govern your tools. Your attestation chain is growing.<br>
+        The only question left is when you open the pipe.
+      </p>
+      <p style="color: var(--accent); font-size: 0.95rem; margin-top: 1.25rem; font-weight: 500; letter-spacing:0.02em">
+        Your agents are ready to do business.
+      </p>
+      <div style="margin-top: 2rem;">
+        <a href="/" style="
+          display: inline-block;
+          padding: 12px 32px;
+          border: 1px solid var(--accent);
+          color: var(--accent);
+          text-decoration: none;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 0.85rem;
+          letter-spacing: 0.05em;
+          transition: background 0.2s, color 0.2s;
+        " onmouseover="this.style.background='rgba(126,184,218,0.1)'" onmouseout="this.style.background='none'">View Verification Surface &rarr;</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Narration bar (inserted into active step by JS) -->
+<div class="narration-bar" id="narrationBar" style="display:none">
+  <button class="narrate-toggle" id="narrateToggle" onclick="toggleNarration()" title="Play / Pause">&#9654;</button>
+  <span class="narrate-label" id="narrateLabel">Narrating...</span>
+  <div class="narrate-progress"><div class="narrate-progress-fill" id="narrateProgress"></div></div>
+  <button class="narrate-mute" id="narrateMute" onclick="toggleMute()" title="Mute narration">&#x1f50a;</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- JavaScript                                             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script src="/assets/tts.js"></script>
+<script src="/assets/onboard.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — Speak</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --bg-input: #1e1e26;
+  --text: #e0ded9;
+  --text-muted: #9a9a9e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --accent-glow: rgba(126, 184, 218, 0.15);
+  --green: #6ec87a;
+  --red: #d45858;
+  --rule: #222228;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg-elevated);
+}
+.topbar h1 {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+.topbar h1 span { color: var(--accent); }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.3s;
+}
+.status-dot.connected { background: var(--green); }
+.status-dot.error { background: var(--red); }
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem;
+  gap: 1rem;
+}
+
+.textarea-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 200px;
+  background: var(--bg-input);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1rem;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.65;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+textarea:focus { border-color: var(--accent-dim); }
+textarea::placeholder { color: var(--text-dim); }
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.btn-speak {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.5rem;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-speak:hover { filter: brightness(1.1); }
+.btn-speak:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-speak.speaking {
+  background: var(--red);
+  color: #fff;
+}
+.btn-speak svg { width: 16px; height: 16px; }
+
+.voice-select {
+  background: var(--bg-input);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  outline: none;
+  cursor: pointer;
+}
+.voice-select:focus { border-color: var(--accent-dim); }
+
+.info {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.progress-bar {
+  height: 3px;
+  background: var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.progress-bar.active { opacity: 1; }
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.hint {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding-top: 0.5rem;
+}
+.hint kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1><span>zeropoint</span> speak</h1>
+  <div class="status-dot" id="statusDot" title="TTS server status"></div>
+</div>
+
+<div class="main">
+  <div class="textarea-wrap">
+    <textarea id="textInput" placeholder="Paste text here — or it auto-reads from clipboard on focus..."></textarea>
+  </div>
+
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-speak" id="speakBtn" onclick="toggleSpeak()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+      </svg>
+      Speak
+    </button>
+
+    <select class="voice-select" id="voiceSelect">
+      <option value="en_US-kusal-medium">Kusal (primary)</option>
+      <option value="en_US-amy-medium">Amy</option>
+      <option value="en_US-ryan-medium">Ryan</option>
+      <option value="en_US-joe-medium">Joe</option>
+      <option value="en_US-lessac-medium">Lessac</option>
+      <option value="en_GB-alan-medium">Alan</option>
+      <option value="en_GB-cori-medium">Cori</option>
+    </select>
+
+    <span class="info" id="infoText"></span>
+  </div>
+
+  <div class="hint">
+    <kbd>Cmd</kbd> + <kbd>Enter</kbd> to speak &nbsp;·&nbsp; <kbd>Esc</kbd> to stop &nbsp;·&nbsp; auto-reads clipboard on focus
+  </div>
+</div>
+
+<script>
+const TTS_SERVER = 'http://localhost:8473';
+const VOICE_PARAMS = {
+  length_scale: '0.7692',
+  noise_scale: '0.360',
+  noise_w: '0.930',
+  sentence_silence: '0.30',
+};
+const CHUNK_SIZE = 800;
+
+let speaking = false;
+let aborted = false;
+let audio = null;
+let totalChunks = 0;
+let currentChunk = 0;
+
+// ── Server probe ─────────────────────────────────────────────
+async function probe() {
+  const dot = document.getElementById('statusDot');
+  try {
+    const r = await fetch(TTS_SERVER + '/health', { signal: AbortSignal.timeout(2000) });
+    if (r.ok) {
+      dot.className = 'status-dot connected';
+      dot.title = 'TTS server connected';
+      return true;
+    }
+  } catch {}
+  dot.className = 'status-dot error';
+  dot.title = 'TTS server not responding — run: python3 voice-tuner-server.py';
+  return false;
+}
+
+// ── Text chunking ────────────────────────────────────────────
+function chunkText(text) {
+  // Clean up markdown-ish formatting for spoken form
+  text = text
+    .replace(/```[\s\S]*?```/g, ' (code block omitted) ')  // skip code blocks
+    .replace(/`([^`]+)`/g, '$1')                             // inline code → plain
+    .replace(/\*\*([^*]+)\*\*/g, '$1')                       // bold → plain
+    .replace(/\*([^*]+)\*/g, '$1')                           // italic → plain
+    .replace(/^#{1,6}\s+/gm, '')                             // strip markdown headers
+    .replace(/^[-*]\s+/gm, '')                               // strip list markers
+    .replace(/^\d+\.\s+/gm, '')                              // strip numbered lists
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')                 // links → text
+    .replace(/\n{2,}/g, '. ')                                // paragraph breaks → sentence pause
+    .replace(/\n/g, ' ')                                     // newlines → space
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const sentences = text.match(/[^.!?]+[.!?]+[\s]*/g) || [text];
+  const chunks = [];
+  let buf = '';
+  for (const s of sentences) {
+    if (buf.length + s.length > CHUNK_SIZE && buf.length > 0) {
+      chunks.push(buf.trim());
+      buf = '';
+    }
+    buf += s;
+  }
+  if (buf.trim()) chunks.push(buf.trim());
+  return chunks;
+}
+
+// ── Synthesis ────────────────────────────────────────────────
+async function synthesize(text) {
+  const voice = document.getElementById('voiceSelect').value;
+  const resp = await fetch(TTS_SERVER + '/synthesize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text,
+      voice_file: voice,
+      ...VOICE_PARAMS,
+    }),
+  });
+  if (!resp.ok) throw new Error(`TTS ${resp.status}`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
+function playBlob(url) {
+  return new Promise((resolve, reject) => {
+    audio = new Audio(url);
+    audio.onended = resolve;
+    audio.onerror = reject;
+    audio.play().catch(reject);
+  });
+}
+
+// ── Speak pipeline ───────────────────────────────────────────
+async function startSpeak() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) return;
+
+  aborted = false;
+  speaking = true;
+  updateUI();
+
+  const chunks = chunkText(text);
+  totalChunks = chunks.length;
+  currentChunk = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (aborted) break;
+    currentChunk = i;
+    updateProgress();
+
+    try {
+      const url = await synthesize(chunks[i]);
+      if (aborted) { URL.revokeObjectURL(url); break; }
+      await playBlob(url);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.warn('TTS chunk error:', e);
+      document.getElementById('infoText').textContent = 'TTS error — is the server running?';
+      break;
+    }
+  }
+
+  speaking = false;
+  aborted = false;
+  audio = null;
+  updateUI();
+  document.getElementById('progressBar').classList.remove('active');
+  document.getElementById('progressFill').style.width = '0%';
+}
+
+function stopSpeak() {
+  aborted = true;
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+    audio = null;
+  }
+  speaking = false;
+  updateUI();
+}
+
+function toggleSpeak() {
+  if (speaking) stopSpeak();
+  else startSpeak();
+}
+
+// ── UI updates ───────────────────────────────────────────────
+function updateUI() {
+  const btn = document.getElementById('speakBtn');
+  if (speaking) {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Stop`;
+    btn.classList.add('speaking');
+    document.getElementById('progressBar').classList.add('active');
+    document.getElementById('infoText').textContent = '';
+  } else {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg> Speak`;
+    btn.classList.remove('speaking');
+    document.getElementById('progressBar').classList.remove('active');
+  }
+}
+
+function updateProgress() {
+  const pct = totalChunks > 0 ? ((currentChunk + 1) / totalChunks) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+// ── Auto-paste on focus ──────────────────────────────────────
+let lastPaste = '';
+window.addEventListener('focus', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text && text !== lastPaste && text.length > 20) {
+      lastPaste = text;
+      const ta = document.getElementById('textInput');
+      // Only auto-fill if the textarea is empty or unchanged
+      if (!ta.value.trim() || ta.dataset.autofilled === 'true') {
+        ta.value = text;
+        ta.dataset.autofilled = 'true';
+        document.getElementById('infoText').textContent = `Clipboard: ${text.length} chars`;
+      }
+    }
+  } catch {
+    // Clipboard permission denied — that's fine
+  }
+});
+
+// Mark as user-edited when they type
+document.getElementById('textInput').addEventListener('input', function() {
+  this.dataset.autofilled = 'false';
+});
+
+// ── Keyboard shortcuts ───────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && speaking) {
+    stopSpeak();
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    toggleSpeak();
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────
+probe();
+setInterval(probe, 15000);  // re-probe every 15s
+</script>
+</body>
+</html>
