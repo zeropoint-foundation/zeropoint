@@ -3,6 +3,13 @@ name = "zp-server"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["pentest-demo"]
+# Turns on the /audit/tamper and /audit/restore demo routes and the
+# narrow tamper API in zp-audit. Strip this feature for production
+# builds. See crates/zp-audit/Cargo.toml and docs/audit-invariant.md.
+pentest-demo = ["zp-audit/pentest-demo"]
+
 [dependencies]
 zp-core = { path = "../zp-core" }
 zp-engine = { path = "../zp-engine" }
@@ -37,6 +44,8 @@ rusqlite = { workspace = true }
 reqwest = { workspace = true }
 dirs = "5"
 which = "7"
+shlex = "1"
+parking_lot = { workspace = true }
 toml = { workspace = true }
 zeroize = { workspace = true }
 
