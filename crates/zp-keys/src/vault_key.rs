@@ -226,8 +226,15 @@ mod tests {
 
     // ── Keyring integration tests ────────────────────────────────────
 
+    // The seven tests below touch process-global state (the
+    // `SECRETS_MASTER_KEY` env var and / or the macOS Keychain
+    // `zeropoint-genesis` entry) and must run serially.
+
+    #[cfg(feature = "os-keychain")]
     #[test]
     fn test_resolve_vault_key_from_genesis() {
+        let _serial = crate::test_sync::serial_guard();
+        std::env::remove_var("SECRETS_MASTER_KEY");
         let dir = tempfile::tempdir().unwrap();
         let keyring = Keyring::open(dir.path().join("keys")).unwrap();
 
@@ -237,10 +244,12 @@ mod tests {
         let resolved = resolve_vault_key(&keyring).unwrap();
         let expected = derive_vault_key(&genesis.secret_key());
         assert_eq!(*resolved.key, *expected);
+        let _ = keyring.clear_genesis_secret();
     }
 
     #[test]
     fn test_resolve_vault_key_errors_without_genesis() {
+        let _serial = crate::test_sync::serial_guard();
         let dir = tempfile::tempdir().unwrap();
         let keyring = Keyring::open(dir.path().join("keys")).unwrap();
         std::env::remove_var("SECRETS_MASTER_KEY");
@@ -249,6 +258,7 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_env_var_fallback() {
+        let _serial = crate::test_sync::serial_guard();
         let dir = tempfile::tempdir().unwrap();
         let keyring = Keyring::open(dir.path().join("keys")).unwrap();
         let test_key = [0xAB_u8; 32];
@@ -261,6 +271,7 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_rejects_short_env_var() {
+        let _serial = crate::test_sync::serial_guard();
         let dir = tempfile::tempdir().unwrap();
         let keyring = Keyring::open(dir.path().join("keys")).unwrap();
         // Too short (< 16 bytes) and not valid hex for 32 bytes
@@ -272,6 +283,7 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_rejects_wrong_length_hex() {
+        let _serial = crate::test_sync::serial_guard();
         let dir = tempfile::tempdir().unwrap();
         let keyring = Keyring::open(dir.path().join("keys")).unwrap();
         // Valid hex but only 16 bytes (32 hex chars) — not 32 bytes
@@ -283,6 +295,7 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_hashes_long_raw_string() {
+        let _serial = crate::test_sync::serial_guard();
         let dir = tempfile::tempdir().unwrap();
         let keyring = Keyring::open(dir.path().join("keys")).unwrap();
         // Long enough raw string (>= 16 bytes), not valid hex
@@ -296,8 +309,11 @@ mod tests {
         assert_eq!(&resolved.key[..], expected.as_bytes());
     }
 
+    #[cfg(feature = "os-keychain")]
     #[test]
     fn test_derive_and_resolve_consistency() {
+        let _serial = crate::test_sync::serial_guard();
+        std::env::remove_var("SECRETS_MASTER_KEY");
         let dir = tempfile::tempdir().unwrap();
         let keyring = Keyring::open(dir.path().join("keys")).unwrap();
 
@@ -307,5 +323,6 @@ mod tests {
         let resolved = resolve_vault_key(&keyring).unwrap();
         let direct = derive_vault_key(&genesis.secret_key());
         assert_eq!(*resolved.key, *direct, "resolve and derive must match");
+        let _ = keyring.clear_genesis_secret();
     }
 }

@@ -38,5 +38,6 @@ reqwest = { workspace = true }
 dirs = "5"
 which = "7"
 toml = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
