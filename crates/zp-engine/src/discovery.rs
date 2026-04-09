@@ -493,6 +493,7 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
         auto_generate,
         deluxe: None,
         provider_overrides: Vec::new(),
+        verification: None,
     };
 
     DiscoveryResult {
