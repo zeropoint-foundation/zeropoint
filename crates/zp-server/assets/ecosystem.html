@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZeroPoint Ecosystem Graph + Provenance Chain</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;600&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0c; color: #e4e4e7; overflow: hidden; }
+
+#container { display: flex; height: 100vh; }
+#graph-panel { flex: 1; position: relative; }
+#side-panel {
+  width: 400px; background: #111114; border-left: 1px solid #2a2a30;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* Tabs */
+.tab-bar {
+  display: flex; border-bottom: 1px solid #2a2a30; flex-shrink: 0;
+}
+.tab {
+  flex: 1; padding: 10px 8px; text-align: center; cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #52525b; border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+.tab:hover { color: #71717a; }
+.tab.active { color: #7eb8da; border-bottom-color: #7eb8da; }
+.tab-content { display: none; flex: 1; overflow-y: auto; padding: 16px; }
+.tab-content.active { display: block; }
+
+/* Headers */
+h1 { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #7eb8da; margin-bottom: 4px; letter-spacing: 0.12em; text-transform: uppercase; }
+h2 { font-size: 11px; color: #52525b; margin-bottom: 16px; font-weight: 300; }
+h3 { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #7eb8da; margin: 16px 0 8px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Stats */
+.stats { display: flex; gap: 16px; margin-bottom: 16px; }
+.stat { text-align: center; flex: 1; padding: 8px; background: #18181c; border-radius: 6px; border: 1px solid #2a2a30; }
+.stat-val { font-family: 'JetBrains Mono', monospace; font-size: 22px; color: #7eb8da; font-weight: 600; }
+.stat-label { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+/* Receipt cards */
+.receipt-card {
+  background: #18181c; border: 1px solid #2a2a30; border-radius: 6px;
+  padding: 12px; margin-bottom: 8px; font-size: 11px; transition: border-color 0.2s; cursor: default;
+}
+.receipt-card:hover { border-color: #7eb8da; }
+.receipt-id { font-family: 'JetBrains Mono', monospace; color: #7eb8da; font-weight: 600; font-size: 10px; }
+.receipt-hash { font-family: 'JetBrains Mono', monospace; color: #52525b; font-size: 9px; word-break: break-all; margin-top: 2px; }
+.receipt-desc { color: #a1a1aa; margin-top: 6px; line-height: 1.4; }
+.receipt-meta { font-family: 'JetBrains Mono', monospace; color: #3f3f46; font-size: 9px; margin-top: 4px; }
+.chain-arrow { text-align: center; color: #2a2a30; font-size: 16px; margin: 2px 0; }
+.chain-arrow.valid { color: #4ade80; }
+
+/* Live state */
+.live-tool {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 10px; background: #18181c; border-radius: 6px; border: 1px solid #2a2a30; margin-bottom: 6px;
+}
+.live-tool-name { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.status-pill {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 2px 8px;
+  border-radius: 10px; letter-spacing: 0.05em;
+}
+.status-running { background: rgba(74,222,128,0.12); color: #4ade80; }
+.status-configured { background: rgba(251,191,36,0.12); color: #fbbf24; }
+.status-stopped { background: rgba(113,113,122,0.12); color: #71717a; }
+.status-error { background: rgba(248,113,113,0.12); color: #f87171; }
+.engine-card {
+  padding: 10px; background: #18181c; border: 1px solid #2a2a30; border-radius: 6px; margin-bottom: 8px;
+}
+.engine-name { font-family: 'JetBrains Mono', monospace; color: #a78bfa; font-size: 11px; font-weight: 600; }
+.engine-detail { font-size: 10px; color: #71717a; margin-top: 4px; }
+.refresh-btn {
+  background: #18181c; border: 1px solid #2a2a30; color: #e4e4e7; font-family: 'JetBrains Mono', monospace;
+  padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: all 0.2s;
+}
+.refresh-btn:hover { border-color: #7eb8da; color: #7eb8da; }
+.offline-msg { color: #52525b; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 12px; text-align: center; }
+
+/* Tool card expanded */
+.tool-card {
+  background: #18181c; border: 1px solid #2a2a30; border-radius: 6px; margin-bottom: 8px;
+  overflow: hidden; transition: border-color 0.2s;
+}
+.tool-card:hover { border-color: #3f3f46; }
+.tool-card.has-issues { border-color: rgba(248,113,113,0.3); }
+.tool-card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px; cursor: pointer; user-select: none;
+}
+.tool-card-header:hover { background: #1c1c20; }
+.tool-name-row { display: flex; align-items: center; gap: 8px; }
+.tool-card-body { display: none; padding: 0 12px 12px; }
+.tool-card.expanded .tool-card-body { display: block; }
+.tool-chevron { color: #3f3f46; font-size: 10px; transition: transform 0.2s; }
+.tool-card.expanded .tool-chevron { transform: rotate(90deg); }
+
+/* Issue cards */
+.issue-card {
+  background: #0a0a0c; border: 1px solid #2a2a30; border-radius: 4px;
+  padding: 8px 10px; margin-top: 6px; font-size: 10px;
+}
+.issue-card.severity-critical { border-left: 3px solid #f87171; }
+.issue-card.severity-warning { border-left: 3px solid #fbbf24; }
+.issue-card.severity-info { border-left: 3px solid #52525b; }
+.issue-type { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+.issue-text { color: #a1a1aa; line-height: 1.4; word-break: break-word; }
+.issue-remedy {
+  margin-top: 6px; padding-top: 6px; border-top: 1px solid #2a2a30;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.remedy-text { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #71717a; }
+.remedy-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 3px 10px;
+  border-radius: 4px; cursor: pointer; border: 1px solid; transition: all 0.2s;
+}
+.remedy-btn.action { background: rgba(126,184,218,0.08); border-color: #4a7a9a; color: #7eb8da; }
+.remedy-btn.action:hover { background: rgba(126,184,218,0.18); border-color: #7eb8da; }
+.remedy-btn.manual { background: rgba(113,113,122,0.08); border-color: #3f3f46; color: #71717a; }
+.remedy-btn.manual:hover { background: rgba(113,113,122,0.15); }
+.remedy-btn.destructive { background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.3); color: #f87171; }
+.remedy-btn.destructive:hover { background: rgba(248,113,113,0.18); }
+.remedy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Tool meta */
+.tool-meta-row {
+  display: flex; gap: 12px; padding: 4px 0; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #52525b;
+}
+.tool-meta-row span { color: #71717a; }
+.tool-providers {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
+}
+.provider-pill {
+  font-family: 'JetBrains Mono', monospace; font-size: 8px; padding: 2px 6px;
+  border-radius: 3px; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); color: #fbbf24;
+}
+.provider-pill.resolved { background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.2); color: #4ade80; }
+
+/* Graph */
+svg { width: 100%; height: 100%; }
+.node circle { stroke-width: 2; cursor: pointer; transition: stroke-width 0.15s; }
+.node circle:hover { stroke-width: 3; }
+.node text { font-family: 'Inter', sans-serif; font-size: 10px; fill: #a1a1aa; pointer-events: none; }
+.link { stroke-opacity: 0.4; }
+.link-label { font-family: 'JetBrains Mono', monospace; font-size: 8px; fill: #3f3f46; pointer-events: none; }
+
+.node-tooltip {
+  position: absolute; background: #18181c; border: 1px solid #7eb8da; border-radius: 6px;
+  padding: 10px 14px; font-size: 11px; pointer-events: none; display: none; z-index: 10;
+  max-width: 280px; line-height: 1.4; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.tooltip-type { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.08em; }
+.tooltip-name { font-weight: 600; color: #e4e4e7; margin: 2px 0 4px; }
+.tooltip-desc { color: #a1a1aa; font-size: 10px; }
+
+.legend { position: absolute; bottom: 20px; left: 20px; font-size: 10px; background: rgba(17,17,20,0.85); padding: 12px 16px; border-radius: 8px; border: 1px solid #2a2a30; }
+.legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #71717a; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+.title-bar { position: absolute; top: 16px; left: 20px; z-index: 5; }
+
+/* Search */
+.search-bar {
+  position: absolute; top: 16px; right: 420px; z-index: 5;
+}
+.search-input {
+  background: #18181c; border: 1px solid #2a2a30; border-radius: 6px; color: #e4e4e7;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 8px 12px; width: 220px;
+  outline: none; transition: border-color 0.2s;
+}
+.search-input:focus { border-color: #7eb8da; }
+.search-input::placeholder { color: #3f3f46; }
+
+/* Filter pills */
+.filter-bar {
+  position: absolute; top: 60px; left: 20px; z-index: 5; display: flex; gap: 6px; flex-wrap: wrap;
+}
+.filter-pill {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 3px 10px; border-radius: 12px;
+  cursor: pointer; border: 1px solid #2a2a30; background: transparent; color: #52525b;
+  transition: all 0.2s; letter-spacing: 0.04em;
+}
+.filter-pill.active { border-color: currentColor; background: rgba(126,184,218,0.08); }
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="graph-panel">
+    <div class="title-bar">
+      <h1>ZeroPoint Ecosystem</h1>
+      <h2>Architecture + Knowledge Graph + Live State</h2>
+    </div>
+    <div class="search-bar">
+      <input type="text" class="search-input" id="search" placeholder="Search nodes..." />
+    </div>
+    <div class="filter-bar" id="filters"></div>
+    <svg id="graph"></svg>
+    <div class="legend" id="legend"></div>
+    <div class="node-tooltip" id="tooltip"></div>
+  </div>
+  <div id="side-panel">
+    <div class="tab-bar">
+      <div class="tab active" data-tab="receipts">Receipts</div>
+      <div class="tab" data-tab="live">Live State</div>
+      <div class="tab" data-tab="detail">Node Detail</div>
+    </div>
+
+    <!-- Receipts tab -->
+    <div class="tab-content active" id="tab-receipts">
+      <div class="stats">
+        <div class="stat"><div class="stat-val" id="node-count">0</div><div class="stat-label">Nodes</div></div>
+        <div class="stat"><div class="stat-val" id="edge-count">0</div><div class="stat-label">Edges</div></div>
+        <div class="stat"><div class="stat-val" id="receipt-count">0</div><div class="stat-label">Receipts</div></div>
+      </div>
+      <h3>Chain Integrity</h3>
+      <div id="chain-status" style="font-size:11px;margin-bottom:12px;"></div>
+      <h3>Provenance Trail</h3>
+      <div id="receipt-list"></div>
+    </div>
+
+    <!-- Live State tab -->
+    <div class="tab-content" id="tab-live">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="margin:0">System State</h3>
+        <button class="refresh-btn" id="refresh-btn" onclick="fetchLiveState()">Refresh</button>
+      </div>
+      <div id="live-tools"></div>
+      <h3>Analysis Engines</h3>
+      <div id="live-engines"></div>
+      <h3>Server</h3>
+      <div id="live-server"></div>
+    </div>
+
+    <!-- Node Detail tab -->
+    <div class="tab-content" id="tab-detail">
+      <div id="detail-content">
+        <div class="offline-msg">Click a node in the graph to see details</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── ZeroPoint Design Tokens ──────────────────────────────────────────────
+const C = {
+  core: '#7eb8da', engine: '#a78bfa', tool: '#4ade80', service: '#22d3ee',
+  person: '#f472b6', external: '#fbbf24', concept: '#71717a', hardware: '#f97316', crate: '#4a7a9a',
+  datastore: '#38bdf8', runtime: '#94a3b8',
+};
+
+// ── Knowledge Graph Data ─────────────────────────────────────────────────
+const DATA = {
+  nodes: [
+    // Core
+    { id: "zeropoint", label: "ZeroPoint", type: "core", desc: "Cryptographic governance primitives for autonomous agent systems" },
+    { id: "zp-server", label: "ZP Server", type: "core", desc: "Governance API on localhost:3000 \u2014 routes: tools, codebase, analysis, system" },
+    { id: "receipt-chain", label: "Receipt Chain", type: "core", desc: "Tamper-evident hash-linked audit chain \u2014 single source of truth" },
+    { id: "audit-store", label: "Audit Store", type: "core", desc: "SQLite-backed chain storage. All state is derived, never stored directly" },
+    // Engines
+    { id: "mle-star", label: "MLE STAR", type: "engine", desc: "Expertise pre-learning \u2014 builds statistical profiles from receipt chain observations" },
+    { id: "monte-carlo", label: "Monte Carlo", type: "engine", desc: "Probabilistic risk simulation \u2014 VaR, CVaR, confidence intervals" },
+    { id: "analysis-bridge", label: "Analysis Bridge", type: "engine", desc: "Receipt \u2192 Observation converter. Ingests chain events into MLE STAR" },
+    // APIs / Services
+    { id: "codebase-api", label: "Codebase API", type: "service", desc: "/api/v1/codebase/* \u2014 governed project access with receipt auditing" },
+    { id: "analysis-api", label: "Analysis API", type: "service", desc: "/api/v1/analysis/* \u2014 progressive disclosure: index \u2192 expertise \u2192 simulate" },
+    { id: "tools-api", label: "Tools API", type: "service", desc: "/api/v1/tools/* \u2014 launch, stop, configure, preflight" },
+    { id: "port-allocator", label: "Port Allocator", type: "service", desc: "Collision-free port assignment. Writes .env.zp per tool" },
+    { id: "tool-proxy", label: "Tool Proxy", type: "service", desc: "Reverse proxy \u2014 governed traffic to tools through ZP" },
+    { id: "sentinel", label: "ZP Sentinel", type: "service", desc: "Network Sentinel on ASUS Merlin \u2014 DNS filtering, device monitoring, mesh peer" },
+    // Tools
+    { id: "ironclaw", label: "IronClaw", type: "tool", desc: "AI agent tool \u2014 Anthropic claude-sonnet-4, port 8080" },
+    { id: "zp-hedera", label: "zp-hedera", type: "tool", desc: "Hedera Hashgraph integration \u2014 native Rust, genesis-bound" },
+    { id: "ember", label: "Ember", type: "tool", desc: "Local-first generative learning \u2014 sovereign OpenMAIC fork by Mark Qvist" },
+    { id: "pentagi", label: "PentAGI", type: "tool", desc: "Pentesting agent \u2014 Docker, port 8443, multi-provider" },
+    // Crates
+    { id: "zp-core", label: "zp-core", type: "crate", desc: "AuditEntry, ActorId, PolicyDecision \u2014 foundation types" },
+    { id: "zp-audit", label: "zp-audit", type: "crate", desc: "ChainBuilder, AuditStore, chain verification" },
+    { id: "zp-keys", label: "zp-keys", type: "crate", desc: "Sovereignty providers, Genesis ceremony, biometric/HW wallet" },
+    { id: "zp-trust", label: "zp-trust", type: "crate", desc: "Trust scoring and attestation framework" },
+    { id: "zp-receipt", label: "zp-receipt", type: "crate", desc: "Receipt types and Grade A/B/C generation" },
+    { id: "zp-policy", label: "zp-policy", type: "crate", desc: "WASM policy engine \u2014 governance gate for all actions" },
+    { id: "zp-engine", label: "zp-engine", type: "crate", desc: "Core governance engine orchestrating policy evaluation" },
+    // Sovereignty
+    { id: "sovereignty", label: "Sovereignty", type: "concept", desc: "Genesis secret storage \u2014 provider controls HOW stored, WHO unlocks" },
+    { id: "touchid", label: "Touch ID", type: "hardware", desc: "v0.1 application-layer via bioutil. v0.2 = Secure Enclave" },
+    { id: "trezor", label: "Trezor", type: "hardware", desc: "CipherKeyValue wrapping key derivation" },
+    { id: "genesis", label: "Genesis Ceremony", type: "concept", desc: "32-byte Ed25519 seed generation. BIP-39 mnemonic backup" },
+    { id: "quorum", label: "Quorum Sovereignty", type: "concept", desc: "M-of-N multi-device signing \u2014 Shamir + threshold sigs (future)" },
+    // People
+    { id: "ken", label: "Ken Romero", type: "person", desc: "Founder, ThinkStream Labs. Portable trust for the Agentic Age" },
+    // Infrastructure
+    { id: "apollo3", label: "APOLLO-3", type: "hardware", desc: "Mac Mini @ 192.168.1.170 \u2014 available for ZP Core server" },
+    { id: "artemis", label: "ARTEMIS", type: "hardware", desc: "M4 MacBook Pro \u2014 travel system + clean install testing" },
+    { id: "zp-playground", label: "zp-playground", type: "external", desc: "Hetzner CX23, Helsinki \u2014 remote ZP server" },
+    // External
+    { id: "anthropic", label: "Anthropic", type: "external", desc: "LLM provider for IronClaw \u2014 claude-sonnet-4" },
+    { id: "cloudflare", label: "Cloudflare", type: "external", desc: "Workers hosting zeropoint.global + thinkstreamlabs.ai" },
+    // Crypto primitives
+    { id: "ed25519", label: "Ed25519", type: "concept", desc: "Signature scheme \u2014 all receipts cryptographically signed" },
+    { id: "blake3", label: "BLAKE3", type: "concept", desc: "Hash function \u2014 chain linking, content addressing" },
+    // Architecture concepts
+    { id: "progressive-disclosure", label: "Progressive Disclosure", type: "concept", desc: "Three-tier: index \u2192 details \u2192 deep resources" },
+    { id: "process-lifecycle", label: "Process Lifecycle", type: "concept", desc: "PID tracking, stop-before-start, process group isolation" },
+    // Datastores
+    { id: "sqlite", label: "SQLite", type: "datastore", desc: "Audit chain persistence \u2014 append-only, single-writer, WAL mode" },
+    { id: "postgres-ic", label: "PostgreSQL (IC)", type: "datastore", desc: "IronClaw\u2019s operational database \u2014 conversation state, tool configs" },
+    { id: "genesis-json", label: "genesis.json", type: "datastore", desc: "Genesis record \u2014 operator identity, sovereignty provider, ceremony timestamp" },
+    { id: "env-zp", label: ".env.zp", type: "datastore", desc: "Per-tool sidecar \u2014 ZP-assigned port, auth token, env var overrides" },
+    { id: "enrollment-files", label: "Enrollment Files", type: "datastore", desc: "{mode}_enrollment.json + {mode}_genesis.encrypted \u2014 per-provider sovereignty data" },
+    // Runtimes
+    { id: "docker", label: "Docker", type: "runtime", desc: "Container runtime for PentAGI, IronClaw\u2019s Postgres" },
+    { id: "wasm-runtime", label: "WASM Runtime", type: "runtime", desc: "Policy engine execution sandbox \u2014 deterministic, isolated governance evaluation" },
+    { id: "piper-tts", label: "Piper TTS", type: "runtime", desc: "Voice synthesis \u2014 Kusal + Amy models, localhost:8473" },
+    // External chains / protocols
+    { id: "hedera", label: "Hedera Hashgraph", type: "external", desc: "DLT target for zp-hedera \u2014 receipt anchoring, public verifiability" },
+    { id: "bip39", label: "BIP-39", type: "concept", desc: "Mnemonic word list standard \u2014 24-word recovery phrase for Genesis secret" },
+    // Data flow concepts
+    { id: "receipt-flow", label: "Receipt Flow", type: "concept", desc: "Action \u2192 Receipt \u2192 Chain \u2192 Store \u2192 Bridge \u2192 Observation \u2192 Profile" },
+    { id: "governance-gate", label: "Governance Gate", type: "concept", desc: "Every action passes through policy evaluation before execution" },
+    // Exec surface
+    { id: "exec-ws", label: "Exec WebSocket", type: "service", desc: "/ws/exec \u2014 governed command execution with streamed output and receipt audit" },
+  ],
+  edges: [
+    // Core
+    { source: "ken", target: "zeropoint", label: "FOUNDED" },
+    { source: "zeropoint", target: "receipt-chain", label: "BUILT_ON" },
+    { source: "receipt-chain", target: "audit-store", label: "PERSISTED_IN" },
+    { source: "receipt-chain", target: "ed25519", label: "SIGNED_WITH" },
+    { source: "receipt-chain", target: "blake3", label: "LINKED_WITH" },
+    // Server
+    { source: "zp-server", target: "tools-api", label: "EXPOSES" },
+    { source: "zp-server", target: "codebase-api", label: "EXPOSES" },
+    { source: "zp-server", target: "analysis-api", label: "EXPOSES" },
+    { source: "zp-server", target: "tool-proxy", label: "INCLUDES" },
+    { source: "zp-server", target: "port-allocator", label: "INCLUDES" },
+    { source: "zp-server", target: "audit-store", label: "OWNS" },
+    // Analysis
+    { source: "analysis-bridge", target: "receipt-chain", label: "INGESTS" },
+    { source: "analysis-bridge", target: "mle-star", label: "FEEDS" },
+    { source: "mle-star", target: "monte-carlo", label: "INFORMS" },
+    { source: "analysis-api", target: "analysis-bridge", label: "TRIGGERS" },
+    { source: "analysis-api", target: "progressive-disclosure", label: "IMPLEMENTS" },
+    // Tool governance
+    { source: "tools-api", target: "ironclaw", label: "GOVERNS" },
+    { source: "tools-api", target: "zp-hedera", label: "GOVERNS" },
+    { source: "tools-api", target: "ember", label: "GOVERNS" },
+    { source: "tools-api", target: "pentagi", label: "GOVERNS" },
+    { source: "ironclaw", target: "anthropic", label: "USES_LLM" },
+    { source: "tools-api", target: "receipt-chain", label: "EMITS_TO" },
+    { source: "tools-api", target: "process-lifecycle", label: "IMPLEMENTS" },
+    { source: "tool-proxy", target: "ironclaw", label: "PROXIES" },
+    { source: "port-allocator", target: "ironclaw", label: "ASSIGNS_PORT" },
+    { source: "codebase-api", target: "receipt-chain", label: "AUDITS_VIA" },
+    // Crate deps
+    { source: "zp-server", target: "zp-core", label: "DEPENDS" },
+    { source: "zp-server", target: "zp-audit", label: "DEPENDS" },
+    { source: "zp-server", target: "zp-keys", label: "DEPENDS" },
+    { source: "zp-server", target: "zp-policy", label: "DEPENDS" },
+    { source: "zp-server", target: "zp-trust", label: "DEPENDS" },
+    { source: "zp-server", target: "zp-engine", label: "DEPENDS" },
+    { source: "zp-server", target: "zp-receipt", label: "DEPENDS" },
+    { source: "zp-audit", target: "zp-core", label: "DEPENDS" },
+    // Sovereignty
+    { source: "zp-keys", target: "sovereignty", label: "PROVIDES" },
+    { source: "sovereignty", target: "touchid", label: "PROVIDER" },
+    { source: "sovereignty", target: "trezor", label: "PROVIDER" },
+    { source: "sovereignty", target: "genesis", label: "CEREMONY" },
+    { source: "genesis", target: "ed25519", label: "GENERATES" },
+    { source: "quorum", target: "sovereignty", label: "EVOLVES" },
+    // Infra
+    { source: "ken", target: "artemis", label: "OPERATES" },
+    { source: "ken", target: "apollo3", label: "OPERATES" },
+    { source: "zp-playground", target: "zp-server", label: "RUNS" },
+    { source: "sentinel", target: "zeropoint", label: "PART_OF" },
+    { source: "cloudflare", target: "zeropoint", label: "HOSTS" },
+    { source: "artemis", target: "touchid", label: "HAS" },
+    // Datastores
+    { source: "audit-store", target: "sqlite", label: "BACKED_BY" },
+    { source: "ironclaw", target: "postgres-ic", label: "STORES_IN" },
+    { source: "port-allocator", target: "env-zp", label: "WRITES" },
+    { source: "genesis", target: "genesis-json", label: "PERSISTS_TO" },
+    { source: "sovereignty", target: "enrollment-files", label: "PERSISTS_TO" },
+    { source: "genesis", target: "bip39", label: "ENCODES_VIA" },
+    // Runtimes
+    { source: "ironclaw", target: "docker", label: "RUNS_ON" },
+    { source: "ember", target: "piper-tts", label: "USES_TTS" },
+    { source: "pentagi", target: "docker", label: "RUNS_ON" },
+    { source: "postgres-ic", target: "docker", label: "RUNS_ON" },
+    { source: "zp-policy", target: "wasm-runtime", label: "EXECUTES_IN" },
+    { source: "zp-server", target: "piper-tts", label: "INTEGRATES" },
+    // External chains
+    { source: "zp-hedera", target: "hedera", label: "ANCHORS_TO" },
+    { source: "receipt-chain", target: "hedera", label: "VERIFIABLE_ON" },
+    // Data flows
+    { source: "tools-api", target: "receipt-flow", label: "INITIATES" },
+    { source: "receipt-flow", target: "receipt-chain", label: "PRODUCES" },
+    { source: "receipt-chain", target: "analysis-bridge", label: "FLOWS_TO" },
+    { source: "analysis-bridge", target: "mle-star", label: "TRANSFORMS_FOR" },
+    { source: "mle-star", target: "monte-carlo", label: "PARAMETERIZES" },
+    // Governance flow
+    { source: "zp-engine", target: "governance-gate", label: "ENFORCES" },
+    { source: "governance-gate", target: "zp-policy", label: "EVALUATES_VIA" },
+    { source: "governance-gate", target: "receipt-chain", label: "RECORDS_IN" },
+    // Exec surface
+    { source: "zp-server", target: "exec-ws", label: "EXPOSES" },
+    { source: "exec-ws", target: "receipt-chain", label: "AUDITS_VIA" },
+    { source: "exec-ws", target: "blake3", label: "HASHES_WITH" },
+  ],
+  receipts: [
+    { id: "rcpt-genesis", seq: 1, hash: "a7f30e1c", prev: "genesis", event: "system:genesis", desc: "Genesis ceremony \u2014 Ed25519 identity created, BIP-39 mnemonic generated", ts: "2026-01-15T10:00:00Z" },
+    { id: "rcpt-cfg-ic", seq: 2, hash: "b2d14f8a", prev: "a7f30e1c", event: "tool:configured:ironclaw", desc: "IronClaw configured \u2014 .env written, Anthropic as LLM backend", ts: "2026-03-28T15:00:00Z" },
+    { id: "rcpt-preflight", seq: 3, hash: "c9e47b2d", prev: "b2d14f8a", event: "tool:preflight:passed:ironclaw", desc: "Preflight passed \u2014 Docker, Postgres, port 9100 all green", ts: "2026-03-28T15:01:00Z" },
+    { id: "rcpt-port", seq: 4, hash: "d5a81c3e", prev: "c9e47b2d", event: "tool:port:assigned:ironclaw:9100", desc: "Port 9100 assigned to IronClaw from governance range", ts: "2026-03-28T15:01:01Z" },
+    { id: "rcpt-launched", seq: 5, hash: "e1b79d4f", prev: "d5a81c3e", event: "tool:launched:ironclaw", desc: "IronClaw launched \u2014 PID tracked, process group isolated", ts: "2026-03-28T15:01:05Z" },
+    { id: "rcpt-health", seq: 6, hash: "f8c23a6b", prev: "e1b79d4f", event: "tool:health:up:ironclaw", desc: "Health check \u2014 gateway channel healthy", ts: "2026-03-28T15:02:00Z" },
+    { id: "rcpt-codebase", seq: 7, hash: "0d9e5f7c", prev: "f8c23a6b", event: "tool:codebase:tree", desc: "Codebase tree queried \u2014 depth=1, 42 entries returned", ts: "2026-03-28T16:30:00Z" },
+    { id: "rcpt-discover", seq: 8, hash: "1a4f8e2d", prev: "0d9e5f7c", event: "tool:analysis:discover", desc: "Analysis index discovered \u2014 MLE STAR + Monte Carlo available", ts: "2026-03-28T17:00:00Z" },
+    { id: "rcpt-expertise", seq: 9, hash: "2b5c0f3a", prev: "1a4f8e2d", event: "tool:analysis:expertise:ironclaw", desc: "Expertise profile built for IronClaw \u2014 7 observations", ts: "2026-03-28T17:05:00Z" },
+    { id: "rcpt-stopped", seq: 10, hash: "3c6d1e4b", prev: "2b5c0f3a", event: "tool:stopped:ironclaw", desc: "IronClaw stopped \u2014 PID terminated, port released", ts: "2026-03-28T20:00:00Z" },
+  ]
+};
+
+// Sort receipts
+DATA.receipts.sort((a, b) => a.seq - b.seq);
+
+// ── Tab switching ────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => { t.classList.toggle('active', t.dataset.tab === name); });
+  document.querySelectorAll('.tab-content').forEach(tc => { tc.classList.toggle('active', tc.id === 'tab-' + name); });
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────
+document.getElementById('node-count').textContent = DATA.nodes.length;
+document.getElementById('edge-count').textContent = DATA.edges.length;
+document.getElementById('receipt-count').textContent = DATA.receipts.length;
+
+// ── Chain verification ───────────────────────────────────────────────────
+let chainValid = true;
+for (let i = 1; i < DATA.receipts.length; i++) {
+  if (DATA.receipts[i].prev !== DATA.receipts[i-1].hash) { chainValid = false; break; }
+}
+document.getElementById('chain-status').innerHTML = chainValid
+  ? '<span style="color:#4ade80">VERIFIED</span> \u2014 all hashes link correctly'
+  : '<span style="color:#f87171">BROKEN</span> \u2014 hash mismatch detected';
+
+// ── Receipt list ─────────────────────────────────────────────────────────
+const receiptList = document.getElementById('receipt-list');
+DATA.receipts.forEach((r, i) => {
+  if (i > 0) {
+    const arrow = document.createElement('div');
+    arrow.className = 'chain-arrow valid';
+    arrow.textContent = '\u2193';
+    receiptList.appendChild(arrow);
+  }
+  const card = document.createElement('div');
+  card.className = 'receipt-card';
+  const time = new Date(r.ts).toLocaleString();
+  card.innerHTML = `
+    <div class="receipt-id">#${r.seq} ${r.id}</div>
+    <div class="receipt-hash">hash: ${r.hash} \u2190 prev: ${r.prev}</div>
+    <div class="receipt-desc">${r.desc}</div>
+    <div class="receipt-meta">${r.event} | ${time}</div>
+  `;
+  receiptList.appendChild(card);
+});
+
+// ── Live State ───────────────────────────────────────────────────────────
+async function fetchLiveState() {
+  const btn = document.getElementById('refresh-btn');
+  btn.textContent = '...';
+  const toolsDiv = document.getElementById('live-tools');
+  const enginesDiv = document.getElementById('live-engines');
+  const serverDiv = document.getElementById('live-server');
+
+  try {
+    // Fetch tools state — response is {tools: [...], chain_receipts, has_genesis, scan_path}
+    const toolsRes = await fetch('/api/v1/tools', { signal: AbortSignal.timeout(3000) });
+    const data = await toolsRes.json();
+    const toolList = data.tools || (Array.isArray(data) ? data : []);
+    toolsDiv.innerHTML = '';
+    if (toolList.length === 0) {
+      toolsDiv.innerHTML = '<div class="offline-msg">No tools registered</div>';
+    } else {
+      // Server meta
+      if (data.has_genesis !== undefined) {
+        const meta = document.createElement('div');
+        meta.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:9px;color:#52525b;margin-bottom:8px;padding:6px 8px;background:#0a0a0c;border-radius:4px;border:1px solid #2a2a30';
+        meta.innerHTML = `Genesis: <span style="color:${data.has_genesis ? '#4ade80' : '#f87171'}">${data.has_genesis ? 'YES' : 'NO'}</span> | Scan: ${data.scan_path || '?'} | Chain receipts: ${data.chain_receipts ? 'ON' : 'OFF'}`;
+        toolsDiv.appendChild(meta);
+      }
+      toolList.forEach(tool => {
+        const issues = tool.preflight_issues || [];
+        const ready = tool.ready;
+        const card = document.createElement('div');
+        card.className = 'tool-card' + (issues.length > 0 ? ' has-issues' : '');
+
+        // Status
+        let statusClass, statusText;
+        if (tool.status === 'governed' && ready) {
+          statusClass = 'status-running'; statusText = 'READY';
+        } else if (tool.status === 'governed' && !ready) {
+          statusClass = 'status-error'; statusText = `${issues.length} ISSUE${issues.length !== 1 ? 'S' : ''}`;
+        } else {
+          statusClass = 'status-configured'; statusText = tool.status?.toUpperCase() || 'UNKNOWN';
+        }
+        const port = tool.launch?.port ? ` :${tool.launch.port}` : '';
+
+        // Header (always visible)
+        const header = document.createElement('div');
+        header.className = 'tool-card-header';
+        header.innerHTML = `
+          <div class="tool-name-row">
+            <span class="tool-chevron">\u25B6</span>
+            <span class="live-tool-name">${tool.name}${port}</span>
+            <span style="font-size:8px;color:#52525b">${tool.governance || ''}</span>
+          </div>
+          <span class="status-pill ${statusClass}">${statusText}</span>
+        `;
+        header.onclick = () => card.classList.toggle('expanded');
+        card.appendChild(header);
+
+        // Body (expandable)
+        const body = document.createElement('div');
+        body.className = 'tool-card-body';
+
+        // Meta info
+        body.innerHTML = `
+          <div class="tool-meta-row">
+            <span>kind:</span> ${tool.launch?.kind || '?'}
+            ${tool.launch?.url ? `<span>url:</span> <a href="${tool.launch.url}" style="color:#7eb8da;text-decoration:none">${tool.launch.url}</a>` : ''}
+            <span>path:</span> ${tool.path || '?'}
+          </div>
+        `;
+
+        // Provider pills
+        if (tool.providers && tool.providers.length > 0) {
+          const provDiv = document.createElement('div');
+          provDiv.className = 'tool-providers';
+          tool.providers.forEach(p => {
+            const pill = document.createElement('span');
+            pill.className = 'provider-pill';
+            pill.textContent = p;
+            provDiv.appendChild(pill);
+          });
+          body.appendChild(provDiv);
+        }
+
+        // Issues with diagnostics and remediation
+        if (issues.length > 0) {
+          const issuesHeader = document.createElement('div');
+          issuesHeader.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:9px;color:#f87171;margin-top:10px;letter-spacing:0.06em;text-transform:uppercase';
+          issuesHeader.textContent = `Preflight Issues (${issues.length})`;
+          body.appendChild(issuesHeader);
+
+          issues.forEach(issue => {
+            const parsed = parseIssue(issue, tool);
+            const issueEl = document.createElement('div');
+            issueEl.className = `issue-card severity-${parsed.severity}`;
+            let remedyHtml = '';
+            if (parsed.remedy) {
+              const btnClass = parsed.remedy.destructive ? 'destructive' : parsed.remedy.auto ? 'action' : 'manual';
+              const btnLabel = parsed.remedy.auto ? parsed.remedy.label : parsed.remedy.label;
+              remedyHtml = `
+                <div class="issue-remedy">
+                  <span class="remedy-text">${parsed.remedy.hint}</span>
+                  <button class="remedy-btn ${btnClass}" onclick="executeRemedy('${tool.name}', '${parsed.remedy.action}', this)" ${parsed.remedy.auto ? '' : ''}>${btnLabel}</button>
+                </div>
+              `;
+            }
+            issueEl.innerHTML = `
+              <div class="issue-type">${parsed.type}</div>
+              <div class="issue-text">${parsed.text}</div>
+              ${remedyHtml}
+            `;
+            body.appendChild(issueEl);
+          });
+        } else {
+          const ok = document.createElement('div');
+          ok.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:9px;color:#4ade80;margin-top:8px';
+          ok.textContent = 'All preflight checks passed';
+          body.appendChild(ok);
+        }
+
+        card.appendChild(body);
+        // Auto-expand tools with issues
+        if (issues.length > 0) card.classList.add('expanded');
+        toolsDiv.appendChild(card);
+      });
+    }
+  } catch(e) {
+    toolsDiv.innerHTML = '<div class="offline-msg">Server offline or unreachable</div>';
+  }
+
+  try {
+    // Fetch analysis state
+    const analysisRes = await fetch('/api/v1/analysis/index', { signal: AbortSignal.timeout(3000) });
+    const analysis = await analysisRes.json();
+    enginesDiv.innerHTML = '';
+    if (analysis.engines) {
+      analysis.engines.forEach(eng => {
+        const el = document.createElement('div');
+        el.className = 'engine-card';
+        el.innerHTML = `<div class="engine-name">${eng.name || eng}</div><div class="engine-detail">${eng.description || eng.status || 'available'}</div>`;
+        enginesDiv.appendChild(el);
+      });
+    } else {
+      enginesDiv.innerHTML = `<div class="engine-card"><div class="engine-name">MLE STAR + Monte Carlo</div><div class="engine-detail">${JSON.stringify(analysis).substring(0, 120)}...</div></div>`;
+    }
+  } catch(e) {
+    enginesDiv.innerHTML = '<div class="offline-msg">Analysis API unreachable</div>';
+  }
+
+  try {
+    const stateRes = await fetch('/api/v1/system/state', { signal: AbortSignal.timeout(3000) });
+    const state = await stateRes.json();
+    serverDiv.innerHTML = `<div class="engine-card"><div class="engine-name">ZP Server</div><div class="engine-detail">Uptime: ${state.uptime || 'unknown'} | Tools: ${state.tool_count || '?'} | Chain: ${state.chain_length || '?'} entries</div></div>`;
+  } catch(e) {
+    serverDiv.innerHTML = '<div class="offline-msg">System state unavailable</div>';
+  }
+
+  btn.textContent = 'Refresh';
+}
+
+// ── Issue Parser + Remediation Engine ────────────────────────────────────
+function parseIssue(issueText, tool) {
+  const lower = issueText.toLowerCase();
+
+  // Missing env vars
+  const envMatch = issueText.match(/Critical env vars missing:\s*(.+?)(?:\s*\(|$)/);
+  if (envMatch) {
+    const vars = envMatch[1].split(',').map(v => v.trim());
+    return {
+      type: 'Missing Environment Variables',
+      severity: 'critical',
+      text: `Required: ${vars.join(', ')}`,
+      remedy: {
+        hint: `Set via .env in ${tool.path || 'tool directory'}`,
+        label: 'Copy .env Template',
+        action: 'copy_env_template',
+        auto: false,
+      }
+    };
+  }
+
+  // Port conflict
+  const portMatch = issueText.match(/Port (\d+) \(([^)]+)\) blocked by (\w+) \(PID (\d+)\)/);
+  if (portMatch) {
+    const [, port, service, blocker, pid] = portMatch;
+    return {
+      type: 'Port Conflict',
+      severity: 'critical',
+      text: `Port ${port} needed by ${service} is held by ${blocker} (PID ${pid})`,
+      remedy: {
+        hint: `Reassign ${tool.name} to a free port via ZP port allocator`,
+        label: 'Reassign Port',
+        action: 'reassign_port',
+        auto: true,
+      }
+    };
+  }
+
+  // Docker compose failure
+  const dockerMatch = issueText.match(/docker compose up failed/i);
+  if (dockerMatch) {
+    // Network label mismatch
+    if (lower.includes('incorrect label') || lower.includes('network') && lower.includes('was found')) {
+      const netMatch = issueText.match(/network (\S+)/);
+      const netName = netMatch ? netMatch[1] : 'unknown';
+      return {
+        type: 'Docker Network Conflict',
+        severity: 'critical',
+        text: `Network "${netName}" exists with wrong labels. Docker Compose can't adopt it.`,
+        remedy: {
+          hint: `Remove orphaned network and retry`,
+          label: 'Fix Network',
+          action: 'fix_docker_network',
+          auto: true,
+          destructive: true,
+        }
+      };
+    }
+    return {
+      type: 'Docker Compose Failure',
+      severity: 'critical',
+      text: issueText.replace(/docker compose up failed:\s*/i, ''),
+      remedy: {
+        hint: 'Check docker logs for details',
+        label: 'View Logs',
+        action: 'view_docker_logs',
+        auto: false,
+      }
+    };
+  }
+
+  // Optional placeholders remaining
+  const placeholderMatch = issueText.match(/(\d+) optional placeholders remaining/);
+  if (placeholderMatch) {
+    return {
+      type: 'Optional Configuration',
+      severity: 'info',
+      text: `${placeholderMatch[1]} optional .env placeholders not yet configured`,
+      remedy: null,
+    };
+  }
+
+  // Fallback
+  return {
+    type: 'Preflight Issue',
+    severity: 'warning',
+    text: issueText,
+    remedy: {
+      hint: 'Manual investigation required',
+      label: 'Details',
+      action: 'show_details',
+      auto: false,
+    }
+  };
+}
+
+async function executeRemedy(toolName, action, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    switch (action) {
+      case 'reassign_port': {
+        // Ask ZP to reassign port for this tool
+        const res = await fetch(`/api/v1/tools/${toolName}/configure`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reassign_port' }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          btn.textContent = 'Done';
+          btn.className = 'remedy-btn action';
+          setTimeout(() => fetchLiveState(), 1000);
+        } else {
+          const err = await res.text();
+          btn.textContent = 'Failed';
+          btn.title = err;
+          console.error('Reassign port failed:', err);
+        }
+        break;
+      }
+      case 'fix_docker_network': {
+        const res = await fetch(`/api/v1/tools/${toolName}/repair`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'fix_docker_network' }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) {
+          btn.textContent = 'Fixed';
+          setTimeout(() => fetchLiveState(), 1000);
+        } else {
+          btn.textContent = 'Failed';
+          btn.title = await res.text();
+        }
+        break;
+      }
+      case 'copy_env_template': {
+        // Copy the tool's .env.example or .env.template path to clipboard
+        const envPath = `${toolName}/.env`;
+        try {
+          await navigator.clipboard.writeText(`cp ${envPath}.example ${envPath} && $EDITOR ${envPath}`);
+          btn.textContent = 'Copied!';
+        } catch(e) {
+          btn.textContent = 'See terminal';
+          btn.title = `cp ${envPath}.example ${envPath}`;
+        }
+        break;
+      }
+      case 'view_docker_logs': {
+        try {
+          await navigator.clipboard.writeText(`cd ${toolName} && docker compose logs --tail=50`);
+          btn.textContent = 'Copied!';
+        } catch(e) {
+          btn.textContent = 'See terminal';
+        }
+        break;
+      }
+      default:
+        btn.textContent = 'N/A';
+    }
+  } catch(e) {
+    btn.textContent = 'Error';
+    btn.title = e.message;
+    console.error('Remedy failed:', e);
+  }
+
+  setTimeout(() => {
+    btn.disabled = false;
+    if (['Done', 'Fixed', 'Copied!', 'Failed', 'Error', 'N/A', 'See terminal'].includes(btn.textContent)) {
+      btn.textContent = original;
+    }
+  }, 3000);
+}
+
+// Auto-fetch on tab switch to Live
+document.querySelector('[data-tab="live"]').addEventListener('click', fetchLiveState);
+
+// ── Legend + Filters ─────────────────────────────────────────────────────
+const types = [...new Set(DATA.nodes.map(n => n.type))].sort();
+const legend = document.getElementById('legend');
+const filterBar = document.getElementById('filters');
+const activeFilters = new Set(types);
+
+types.forEach(t => {
+  // Legend
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.innerHTML = `<div class="legend-dot" style="background:${C[t]}"></div> ${t}`;
+  legend.appendChild(item);
+  // Filter pill
+  const pill = document.createElement('button');
+  pill.className = 'filter-pill active';
+  pill.style.color = C[t];
+  pill.textContent = t;
+  pill.addEventListener('click', () => {
+    if (activeFilters.has(t)) { activeFilters.delete(t); pill.classList.remove('active'); }
+    else { activeFilters.add(t); pill.classList.add('active'); }
+    applyFilters();
+  });
+  filterBar.appendChild(pill);
+});
+
+// ── Graph Visualization ──────────────────────────────────────────────────
+const svg = d3.select('#graph');
+const graphPanel = document.getElementById('graph-panel');
+const width = graphPanel.clientWidth;
+const height = graphPanel.clientHeight;
+
+function nodeRadius(d) {
+  const conn = DATA.edges.filter(e =>
+    (e.source.id || e.source) === d.id || (e.target.id || e.target) === d.id
+  ).length;
+  return Math.max(7, Math.min(22, 5 + conn * 2.5));
+}
+
+const simulation = d3.forceSimulation(DATA.nodes)
+  .force('link', d3.forceLink(DATA.edges).id(d => d.id).distance(130))
+  .force('charge', d3.forceManyBody().strength(-350))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collision', d3.forceCollide().radius(35))
+  .force('x', d3.forceX(width / 2).strength(0.03))
+  .force('y', d3.forceY(height / 2).strength(0.03));
+
+const g = svg.append('g');
+svg.call(d3.zoom().scaleExtent([0.2, 5]).on('zoom', (e) => g.attr('transform', e.transform)));
+
+// Arrow markers
+svg.append('defs').selectAll('marker')
+  .data(['arrow']).enter().append('marker')
+  .attr('id', 'arrow').attr('viewBox', '0 -5 10 10')
+  .attr('refX', 20).attr('refY', 0)
+  .attr('markerWidth', 6).attr('markerHeight', 6)
+  .attr('orient', 'auto')
+  .append('path').attr('d', 'M0,-4L10,0L0,4').attr('fill', '#2a2a30');
+
+const link = g.append('g').selectAll('line')
+  .data(DATA.edges).enter().append('line')
+  .attr('class', 'link')
+  .attr('stroke', '#2a2a30')
+  .attr('stroke-width', 1.2)
+  .attr('marker-end', 'url(#arrow)');
+
+const linkLabel = g.append('g').selectAll('text')
+  .data(DATA.edges).enter().append('text')
+  .attr('class', 'link-label')
+  .text(d => d.label.replace(/_/g, ' ').toLowerCase());
+
+const node = g.append('g').selectAll('g')
+  .data(DATA.nodes).enter().append('g')
+  .attr('class', 'node')
+  .call(d3.drag()
+    .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+    .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+    .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+  );
+
+node.append('circle')
+  .attr('r', d => nodeRadius(d))
+  .attr('fill', d => C[d.type])
+  .attr('fill-opacity', 0.12)
+  .attr('stroke', d => C[d.type]);
+
+node.append('text')
+  .attr('dy', d => nodeRadius(d) + 13)
+  .attr('text-anchor', 'middle')
+  .text(d => d.label);
+
+// ── Tooltip ──────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+node.on('mouseover', (e, d) => {
+  const edges = DATA.edges.filter(edge =>
+    (edge.source.id || edge.source) === d.id || (edge.target.id || edge.target) === d.id
+  );
+  tooltip.style.display = 'block';
+  tooltip.style.left = (e.pageX + 14) + 'px';
+  tooltip.style.top = (e.pageY - 14) + 'px';
+  tooltip.innerHTML = `<div class="tooltip-type">${d.type}</div><div class="tooltip-name">${d.label}</div><div class="tooltip-desc">${d.desc}</div><div style="margin-top:4px;color:#52525b;font-size:9px">${edges.length} connection${edges.length !== 1 ? 's' : ''}</div>`;
+}).on('mousemove', (e) => {
+  tooltip.style.left = (e.pageX + 14) + 'px';
+  tooltip.style.top = (e.pageY - 14) + 'px';
+}).on('mouseout', () => { tooltip.style.display = 'none'; });
+
+// ── Node click: detail panel ─────────────────────────────────────────────
+node.on('click', (e, d) => {
+  showTab('detail');
+  const edges = DATA.edges.filter(edge =>
+    (edge.source.id || edge.source) === d.id || (edge.target.id || edge.target) === d.id
+  );
+  const incoming = edges.filter(edge => (edge.target.id || edge.target) === d.id);
+  const outgoing = edges.filter(edge => (edge.source.id || edge.source) === d.id);
+
+  let html = `
+    <div style="margin-bottom:16px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${C[d.type]};text-transform:uppercase;letter-spacing:0.08em">${d.type}</div>
+      <div style="font-size:16px;font-weight:600;margin:4px 0">${d.label}</div>
+      <div style="font-size:11px;color:#a1a1aa;line-height:1.5">${d.desc}</div>
+    </div>
+    <h3>Connections (${edges.length})</h3>
+  `;
+  if (outgoing.length > 0) {
+    html += '<div style="margin-bottom:8px">';
+    outgoing.forEach(edge => {
+      const target = typeof edge.target === 'object' ? edge.target : DATA.nodes.find(n => n.id === edge.target);
+      html += `<div style="font-size:10px;padding:4px 0;color:#a1a1aa"><span style="color:${C[d.type]}">\u2192</span> <span style="color:#e4e4e7">${target ? target.label : edge.target}</span> <span style="color:#3f3f46">${edge.label.replace(/_/g,' ').toLowerCase()}</span></div>`;
+    });
+    html += '</div>';
+  }
+  if (incoming.length > 0) {
+    html += '<div>';
+    incoming.forEach(edge => {
+      const source = typeof edge.source === 'object' ? edge.source : DATA.nodes.find(n => n.id === edge.source);
+      html += `<div style="font-size:10px;padding:4px 0;color:#a1a1aa"><span style="color:#52525b">\u2190</span> <span style="color:#e4e4e7">${source ? source.label : edge.source}</span> <span style="color:#3f3f46">${edge.label.replace(/_/g,' ').toLowerCase()}</span></div>`;
+    });
+    html += '</div>';
+  }
+
+  // Related receipts
+  const related = DATA.receipts.filter(r => r.event.includes(d.id) || r.desc.toLowerCase().includes(d.label.toLowerCase()));
+  if (related.length > 0) {
+    html += '<h3 style="margin-top:16px">Related Receipts</h3>';
+    related.forEach(r => {
+      html += `<div class="receipt-card" style="margin-top:6px"><div class="receipt-id">#${r.seq} ${r.id}</div><div class="receipt-desc">${r.desc}</div></div>`;
+    });
+  }
+
+  document.getElementById('detail-content').innerHTML = html;
+});
+
+// ── Tick ──────────────────────────────────────────────────────────────────
+simulation.on('tick', () => {
+  link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  linkLabel.attr('x', d => (d.source.x + d.target.x) / 2)
+           .attr('y', d => (d.source.y + d.target.y) / 2);
+  node.attr('transform', d => `translate(${d.x},${d.y})`);
+});
+
+// ── Search ───────────────────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  node.style('opacity', d => !q || d.label.toLowerCase().includes(q) || d.type.includes(q) || d.desc.toLowerCase().includes(q) ? 1 : 0.1);
+  link.style('opacity', d => {
+    if (!q) return 1;
+    const s = typeof d.source === 'object' ? d.source : DATA.nodes.find(n => n.id === d.source);
+    const t = typeof d.target === 'object' ? d.target : DATA.nodes.find(n => n.id === d.target);
+    return (s && (s.label.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))) ||
+           (t && (t.label.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q))) ? 1 : 0.05;
+  });
+  linkLabel.style('opacity', d => {
+    if (!q) return 1;
+    const s = typeof d.source === 'object' ? d.source : DATA.nodes.find(n => n.id === d.source);
+    const t = typeof d.target === 'object' ? d.target : DATA.nodes.find(n => n.id === d.target);
+    return (s && s.label.toLowerCase().includes(q)) || (t && t.label.toLowerCase().includes(q)) ? 1 : 0.05;
+  });
+});
+
+// ── Filter by type ───────────────────────────────────────────────────────
+function applyFilters() {
+  node.style('opacity', d => activeFilters.has(d.type) ? 1 : 0.08);
+  link.style('opacity', d => {
+    const s = typeof d.source === 'object' ? d.source : DATA.nodes.find(n => n.id === d.source);
+    const t = typeof d.target === 'object' ? d.target : DATA.nodes.find(n => n.id === d.target);
+    return (s && activeFilters.has(s.type)) && (t && activeFilters.has(t.type)) ? 0.5 : 0.03;
+  });
+  linkLabel.style('opacity', d => {
+    const s = typeof d.source === 'object' ? d.source : DATA.nodes.find(n => n.id === d.source);
+    const t = typeof d.target === 'object' ? d.target : DATA.nodes.find(n => n.id === d.target);
+    return (s && activeFilters.has(s.type)) && (t && activeFilters.has(t.type)) ? 1 : 0.03;
+  });
+}
+</script>
+</body>
+</html>
