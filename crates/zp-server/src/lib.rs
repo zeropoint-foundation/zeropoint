@@ -5,6 +5,7 @@
 
 pub mod analysis;
 pub mod attestations;
+pub mod auth;
 pub mod codebase;
 pub mod exec_ws;
 pub mod onboard;
@@ -116,44 +117,45 @@ pub struct GenesisRecord {
 /// 3. **First run (Genesis)** — no identity exists. Generates a new Ed25519 key
 ///    and writes `identity.key` as a bootstrap. The onboarding flow will later
 ///    create the full hierarchy and the next server start will use path 1.
-/// Canon permission check run at server startup. Refuses to boot if:
-/// - `~/.zeropoint` or `~/.zeropoint/keys` is not 0700
-/// - any `*.secret` or `*.secret.enc` file is group- or world-readable
-/// - a plaintext `genesis.secret` or `operator.secret` filename exists
+/// Hard-fail if `~/.zeropoint` or `~/.zeropoint/keys/` are not owner-only,
+/// or if any secret material in the keyring is world- or group-readable.
+/// Canon posture: these permissions are maintained by `Keyring::open`, and
+/// any drift is treated as a security incident rather than self-healed.
 #[cfg(unix)]
 fn enforce_canon_permissions(home_dir: &std::path::Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
-    for dir in [home_dir.to_path_buf(), home_dir.join("keys")] {
-        if dir.exists() {
-            let mode = std::fs::metadata(&dir)
-                .map_err(|e| format!("failed to stat {:?}: {}", dir, e))?
-                .permissions()
-                .mode()
-                & 0o777;
-            if mode != 0o700 {
-                return Err(format!(
-                    "refusing to start: {:?} has mode {:o}, expected 0700 (canon). \
-                     Run `chmod 700 {:?}` to fix.",
-                    dir, mode, dir
-                ));
-            }
+    let keys_dir = home_dir.join("keys");
+    for d in [home_dir, &keys_dir] {
+        if !d.exists() {
+            continue;
+        }
+        let mode = std::fs::metadata(d)
+            .map_err(|e| format!("cannot stat {:?}: {}", d, e))?
+            .permissions()
+            .mode()
+            & 0o777;
+        if mode & 0o077 != 0 {
+            return Err(format!(
+                "refusing to start: {:?} has mode {:o}, expected 0700 (canon). \
+                 Fix with `chmod 700 {}` and re-run.",
+                d,
+                mode,
+                d.display()
+            ));
         }
     }
-    let keys_dir = home_dir.join("keys");
-    if keys_dir.exists() {
-        for entry in std::fs::read_dir(&keys_dir)
-            .map_err(|e| format!("failed to read {:?}: {}", keys_dir, e))?
-        {
-            let entry = entry.map_err(|e| format!("dir entry error: {}", e))?;
+    // Any file matching *.secret or *.secret.enc under keys/ must be 0600.
+    if let Ok(entries) = std::fs::read_dir(&keys_dir) {
+        for entry in entries.flatten() {
             let path = entry.path();
-            let name = entry.file_name().into_string().unwrap_or_default();
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name.ends_with(".secret") || name.ends_with(".secret.enc") {
                 let mode = std::fs::metadata(&path)
-                    .map_err(|e| format!("failed to stat {:?}: {}", path, e))?
+                    .map_err(|e| format!("cannot stat {:?}: {}", path, e))?
                     .permissions()
                     .mode()
                     & 0o777;
-                if mode != 0o600 {
+                if mode & 0o077 != 0 {
                     return Err(format!(
                         "refusing to start: {:?} has mode {:o}, expected 0600 (canon). \
                          A root-owned secret is group- or world-readable.",
@@ -405,7 +407,10 @@ pub struct ServerIdentity {
 
 pub struct AppStateInner {
     pub gate: GovernanceGate,
-    pub audit_store: std::sync::Mutex<AuditStore>,
+    /// Single process-wide audit store. Shared (via `Arc::clone`) with
+    /// `Pipeline` so there is exactly one `AuditStore` per process.
+    /// See docs/audit-invariant.md and Stage 3 of the AUDIT-03 remediation.
+    pub audit_store: Arc<std::sync::Mutex<AuditStore>>,
     pub identity: ServerIdentity,
     pub pipeline: Option<Pipeline>,
     pub grants: std::sync::Mutex<Vec<CapabilityGrant>>,
@@ -419,6 +424,10 @@ pub struct AppStateInner {
     pub analysis: analysis::AnalysisEngines,
     /// Server port — needed by proxy for subdomain URL generation.
     pub config_port: u16,
+    /// Session authentication — bearer token for API access.
+    pub session_auth: Arc<auth::SessionAuth>,
+    /// Per-IP failed-auth rate limiter (AUTH-VULN-04).
+    pub rate_limiter: Arc<auth::FailedAuthLimiter>,
 }
 
 #[derive(Clone)]
@@ -435,18 +444,21 @@ impl AppState {
             info!("Server identity: {}", &identity.destination_hash);
         }
 
-        // Audit store
+        // Audit store — Stage 3 (AUDIT-03): exactly one process-wide handle.
+        // Wrapped in `Arc<Mutex<_>>` so the pipeline can share the same
+        // instance instead of opening a second handle to the same DB file.
         std::fs::create_dir_all(&config.data_dir).ok();
         let audit_path = std::path::Path::new(&config.data_dir).join("audit.db");
         let audit_store = AuditStore::open(&audit_path).expect("Failed to open audit store");
+        let audit_store: Arc<std::sync::Mutex<AuditStore>> =
+            Arc::new(std::sync::Mutex::new(audit_store));
 
-        // Governance gate
-        let mut gate = GovernanceGate::new(&identity.destination_hash);
-        if let Ok(latest) = audit_store.get_latest_hash() {
-            gate.set_audit_chain_head(latest);
-        }
+        // Governance gate. The gate no longer owns any audit chain state —
+        // chain position is assigned by AuditStore::append inside a
+        // BEGIN IMMEDIATE transaction. See docs/audit-invariant.md.
+        let gate = GovernanceGate::new(&identity.destination_hash);
 
-        // Optional pipeline
+        // Optional pipeline — shares `audit_store` with `AppState`.
         let pipeline = if config.llm_enabled {
             let pipeline_config = PipelineConfig {
                 operator_identity: OperatorIdentity {
@@ -457,7 +469,7 @@ impl AppState {
                 data_dir: std::path::PathBuf::from(&config.data_dir),
                 mesh: None,
             };
-            Pipeline::new(pipeline_config).ok()
+            Pipeline::new(pipeline_config, Arc::clone(&audit_store)).ok()
         } else {
             None
         };
@@ -487,8 +499,6 @@ impl AppState {
             }
         };
 
-        let audit_store = std::sync::Mutex::new(audit_store);
-
         // Receipt: keychain access is a trust-relevant event on the chain
         if vault_key.is_some() {
             let source_str = vault_key.as_ref()
@@ -506,6 +516,14 @@ impl AppState {
             std::path::Path::new(&config.data_dir),
         );
 
+        // Session authentication — derive token from server identity
+        let session_auth = Arc::new(auth::SessionAuth::new(
+            &identity.signing_key.to_bytes(),
+        ));
+
+        // AUTH-VULN-04: per-IP failed-auth rate limiter.
+        let rate_limiter = Arc::new(auth::FailedAuthLimiter::new());
+
         AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -517,6 +535,8 @@ impl AppState {
             port_allocator,
             analysis: analysis::AnalysisEngines::new(),
             config_port: config.port,
+            session_auth,
+            rate_limiter,
         }))
     }
 }
@@ -582,6 +602,9 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/audit/entries", get(audit_entries_handler))
         .route("/api/v1/audit/chain-head", get(audit_chain_head_handler))
         .route("/api/v1/audit/verify", get(audit_verify_handler))
+        // Demo-only tamper/restore routes. The handler bodies are gated
+        // behind the `pentest-demo` feature; production builds compile
+        // disabled stubs that return 404.
         .route(
             "/api/v1/audit/simulate-tamper",
             post(audit_simulate_tamper_handler),
@@ -597,6 +620,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/stats", get(stats_handler))
         // Security posture + topology
         .route("/api/v1/security/posture", get(security_posture_handler))
+        .route("/api/v1/session/logout", post(logout_handler))
         .route("/api/v1/security/topology", get(topology_handler))
         // Configured tools (cockpit)
         .route("/api/v1/tools", get(tools_handler))
@@ -609,6 +633,8 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/chain", get(tools_chain_handler))
         .route("/api/v1/tools/ports", get(tool_proxy::port_assignments_handler))
         .route("/api/v1/tools/:tool_name/preflight", post(tools_single_preflight_handler))
+        .route("/api/v1/tools/register", post(tools_register_handler))
+        .route("/api/v1/tools/:tool_name/unregister", post(tools_unregister_handler))
         .route("/api/v1/tools/:tool_name/configure", post(tools_configure_handler))
         .route("/api/v1/tools/:tool_name/repair", post(tools_repair_handler))
         // Governed codebase — self-describing trust infrastructure
@@ -663,6 +689,33 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/ecosystem", get(ecosystem_page_handler))
         .layer(cors)
         .with_state(state.clone());
+
+    // ── Authentication middleware ──────────────────────────────────
+    // Wraps all API routes. Exempt paths (health, onboard) pass through.
+    // The dashboard HTML has the token injected so fetch() calls include it.
+    let auth_state = state.0.session_auth.clone();
+    let auth_limiter = state.0.rate_limiter.clone();
+    router = router.layer(axum::middleware::from_fn(
+        move |req: axum::extract::Request, next: axum::middleware::Next| {
+            let session_auth = auth_state.clone();
+            let rate_limiter = auth_limiter.clone();
+            async move { auth::require_auth(req, next, session_auth, rate_limiter).await }
+        },
+    ));
+
+    // AUDIT-05 / INFO-01: global `Cache-Control: no-store` so sensitive
+    // responses (audit entries, posture, tools log) never land in a
+    // shared proxy cache or browser disk cache.
+    router = router.layer(axum::middleware::from_fn(
+        |req: axum::extract::Request, next: axum::middleware::Next| async move {
+            let mut resp = next.run(req).await;
+            resp.headers_mut().insert(
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("no-store"),
+            );
+            resp
+        },
+    ));
 
     // ── Subdomain proxy middleware ─────────────────────────────────
     // This MUST wrap the entire router as an outer layer so it runs
@@ -791,6 +844,7 @@ pub async fn run_server(config: ServerConfig) -> anyhow::Result<()> {
     let open_dashboard = config.open_dashboard;
     let dashboard_port = config.port;
     let state = AppState::init(&config).await;
+    let preflight_state = state.clone();
     let app = build_app(state, &config);
 
     info!("ZeroPoint server on {}", addr);
@@ -802,6 +856,28 @@ pub async fn run_server(config: ServerConfig) -> anyhow::Result<()> {
     if open_dashboard {
         let url = format!("http://localhost:{}", dashboard_port);
         open_browser(&url);
+    }
+
+    // Spawn startup preflight in the background so the dashboard is
+    // immediately available while checks run.  This ensures stale chain
+    // receipts are superseded by fresh results on every restart.
+    {
+        let app_state = preflight_state;
+        tokio::spawn(async move {
+            let scan_path = std::env::var("ZP_PREFLIGHT_SCAN_PATH")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| dirs::home_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    .join("projects"));
+            info!("Running startup preflight...");
+            let (results, _events) = onboard::preflight::run_preflight_force(
+                &scan_path,
+                Some(&app_state.0.audit_store),
+            ).await;
+            let ready = results.tools.iter().filter(|t| t.ready).count();
+            let total = results.tools.len();
+            info!("Startup preflight complete: {}/{} tools ready", ready, total);
+        });
     }
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -980,11 +1056,12 @@ async fn guard_evaluate_handler(
     let actor = ActorId::User("playground-visitor".to_string());
     let result: GateResult = state.0.gate.evaluate(&context, actor.clone());
 
-    // Persist to audit store
-    {
-        let store = state.0.audit_store.lock().unwrap();
-        store.append(result.audit_entry.clone()).ok();
-    }
+    // Persist to audit store and capture the sealed entry so we can
+    // report its chain-position fields back to the caller.
+    let sealed = {
+        let mut store = state.0.audit_store.lock().unwrap();
+        store.append(result.unsealed.clone()).ok()
+    };
 
     let (decision_str, rationale) = match &result.decision {
         PolicyDecision::Allow { conditions } => {
@@ -1037,9 +1114,18 @@ async fn guard_evaluate_handler(
         trust_tier: format!("{:?}", result.trust_tier),
         rationale,
         applied_rules: result.applied_rules.clone(),
-        audit_entry_id: format!("{}", result.audit_entry.id.0),
-        audit_entry_hash: result.audit_entry.entry_hash.clone(),
-        audit_prev_hash: result.audit_entry.prev_hash.clone(),
+        audit_entry_id: sealed
+            .as_ref()
+            .map(|e| format!("{}", e.id.0))
+            .unwrap_or_default(),
+        audit_entry_hash: sealed
+            .as_ref()
+            .map(|e| e.entry_hash.clone())
+            .unwrap_or_default(),
+        audit_prev_hash: sealed
+            .as_ref()
+            .map(|e| e.prev_hash.clone())
+            .unwrap_or_default(),
         receipt_id: result.receipt_id.clone(),
         action_evaluated: body.action,
         timestamp: Utc::now().to_rfc3339(),
@@ -1522,6 +1608,7 @@ struct TamperResponse {
     corrupted_hash: Option<String>,
 }
 
+#[cfg(feature = "pentest-demo")]
 fn truncate_for_display(s: &str) -> String {
     if s.len() > 40 {
         format!("{}...{}", &s[..20], &s[s.len() - 12..])
@@ -1530,9 +1617,44 @@ fn truncate_for_display(s: &str) -> String {
     }
 }
 
+#[cfg(not(feature = "pentest-demo"))]
 async fn audit_simulate_tamper_handler(
+    _headers: axum::http::HeaderMap,
+    State(_state): State<AppState>,
+) -> Result<Json<TamperResponse>, (StatusCode, String)> {
+    Err((
+        StatusCode::NOT_FOUND,
+        "tamper demo endpoints are disabled in this build (pentest-demo feature off)"
+            .to_string(),
+    ))
+}
+
+#[cfg(not(feature = "pentest-demo"))]
+async fn audit_restore_handler(
+    State(_state): State<AppState>,
+) -> Result<Json<TamperResponse>, (StatusCode, String)> {
+    Err((
+        StatusCode::NOT_FOUND,
+        "tamper demo endpoints are disabled in this build (pentest-demo feature off)"
+            .to_string(),
+    ))
+}
+
+#[cfg(feature = "pentest-demo")]
+async fn audit_simulate_tamper_handler(
+    headers: axum::http::HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<TamperResponse>, (StatusCode, String)> {
+    // Destructive operation — require explicit confirmation header
+    let confirmed = headers.get("x-zp-confirm")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v == "destructive")
+        .unwrap_or(false);
+    if !confirmed {
+        return Err((StatusCode::BAD_REQUEST,
+            "Destructive operation requires X-ZP-Confirm: destructive header".to_string()));
+    }
+
     let store = state.0.audit_store.lock().unwrap();
 
     // Get all entries, tamper with the middle one
@@ -1556,12 +1678,11 @@ async fn audit_simulate_tamper_handler(
     // Encode the original hash in the corrupted value so restore can recover it
     let corrupted_hash = format!("TAMPERED_{}", original_hash);
 
-    // Corrupt the entry_hash in the database
+    // Corrupt the entry_hash via the narrow, parameterized demo API.
+    // The old `execute_raw` back door was removed in Stage 4 of the
+    // AUDIT-03 recanonicalization.
     store
-        .execute_raw(&format!(
-            "UPDATE audit_entries SET entry_hash = '{}' WHERE id = '{}'",
-            corrupted_hash, entry_id
-        ))
+        .tamper_entry_hash(&entry_id, &corrupted_hash)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", e)))?;
 
     Ok(Json(TamperResponse {
@@ -1577,6 +1698,7 @@ async fn audit_simulate_tamper_handler(
     }))
 }
 
+#[cfg(feature = "pentest-demo")]
 async fn audit_restore_handler(
     State(state): State<AppState>,
 ) -> Result<Json<TamperResponse>, (StatusCode, String)> {
@@ -1594,10 +1716,7 @@ async fn audit_restore_handler(
             let original_hash = entry.entry_hash.strip_prefix("TAMPERED_").unwrap();
             let entry_id = format!("{}", entry.id.0);
             store
-                .execute_raw(&format!(
-                    "UPDATE audit_entries SET entry_hash = '{}' WHERE id = '{}'",
-                    original_hash, entry_id
-                ))
+                .restore_entry_hash(&entry_id, original_hash)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", e)))?;
             restored += 1;
         }
@@ -1631,8 +1750,19 @@ struct AuditClearResponse {
 }
 
 async fn audit_clear_handler(
+    headers: axum::http::HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<AuditClearResponse>, (StatusCode, String)> {
+    // Destructive operation — require explicit confirmation header
+    let confirmed = headers.get("x-zp-confirm")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v == "destructive")
+        .unwrap_or(false);
+    if !confirmed {
+        return Err((StatusCode::BAD_REQUEST,
+            "Destructive operation requires X-ZP-Confirm: destructive header".to_string()));
+    }
+
     let store = state.0.audit_store.lock().unwrap();
 
     let count = store
@@ -1641,8 +1771,9 @@ async fn audit_clear_handler(
 
     drop(store);
 
-    // Reset the gate's chain head to genesis so new entries chain correctly
-    state.0.gate.reset_audit_chain_head();
+    // No gate-side chain state to reset — the next `AuditStore::append`
+    // will read an empty `audit_entries` table and start a fresh chain
+    // from genesis atomically. See docs/audit-invariant.md.
 
     Ok(Json(AuditClearResponse {
         cleared: true,
@@ -1801,7 +1932,9 @@ async fn ws_upgrade_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> axum::response::Response {
-    ws.on_upgrade(move |socket| ws_connection(socket, state))
+    ws.max_frame_size(256 * 1024)  // 256 KB per frame
+        .max_message_size(1024 * 1024)  // 1 MB total message
+        .on_upgrade(move |socket| ws_connection(socket, state))
 }
 
 /// Handle a single WebSocket connection from the Bridge UI.
@@ -2030,8 +2163,25 @@ async fn stats_handler(State(state): State<AppState>) -> Json<StatsResponse> {
 
 async fn security_posture_handler(
     State(state): State<AppState>,
-) -> Json<security::SecurityPosture> {
-    Json(security::assess(&state))
+) -> Json<serde_json::Value> {
+    // INFO-01: by default, expose only the aggregate score + summary over
+    // the network. The detailed posture (which lists individual hardening
+    // items, file paths, and OS capabilities) is useful locally for
+    // operators but was flagged in the 2026-04-06 pentest as
+    // reconnaissance-friendly output for remote callers. Set
+    // `ZP_EXPOSE_POSTURE_DETAIL=1` to restore the full payload.
+    let full = security::assess(&state);
+    let expose_detail = std::env::var("ZP_EXPOSE_POSTURE_DETAIL")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if expose_detail {
+        Json(serde_json::to_value(&full).unwrap_or_default())
+    } else {
+        Json(serde_json::json!({
+            "score": full.score,
+            "summary": full.summary,
+        }))
+    }
 }
 
 async fn topology_handler() -> Json<security::NetworkTopology> {
@@ -2055,6 +2205,7 @@ struct CockpitTool {
     preflight_issues: Vec<String>, // failures from last preflight
     verified: bool,          // Tier 2: all required capabilities verified?
     capabilities: Vec<tool_chain::CapabilityChainState>, // per-capability results
+    running_pid: Option<u32>, // PID if the tool process is alive
 }
 
 /// How a cockpit tile launches its tool.
@@ -2359,6 +2510,9 @@ async fn tools_handler(
             (false, vec![])
         };
 
+        // Check for a live process (PID file)
+        let running_pid = read_live_pid(&tool.name);
+
         CockpitTool {
             name: tool.name,
             path: tool.path.display().to_string(),
@@ -2370,6 +2524,7 @@ async fn tools_handler(
             preflight_issues: all_issues,
             verified,
             capabilities,
+            running_pid,
         }
     }).collect();
 
@@ -2603,26 +2758,36 @@ async fn tools_launch_handler(
     let launch = detect_launch(&tool_path);
 
     // ── Port allocation ─────────────────────────────────────────────
-    // Assign a ZP-managed port so tools don't collide on shared defaults
-    // (3000, 8080, etc.).  The .env.zp sidecar overrides the tool's port
-    // variable without touching .env.
-    let port_var = tool_ports::detect_port_var(&tool_path);
-    let assignment = match state.0.port_allocator.get_or_assign(&req.name, &port_var) {
-        Ok(a) => a,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": format!("Port allocation failed: {}", e),
-                })),
-            );
-        }
-    };
+    // Only assign a ZP-managed port for tools that actually serve a web UI.
+    // Docker-only and CLI tools don't need one — assigning a port and then
+    // polling it causes false "port did not respond" failures.
+    let needs_port = launch.port.is_some()
+        || launch.kind == "native"
+        || launch.kind == "pnpm"
+        || launch.kind == "npm"
+        || launch.kind == "web";
 
-    if let Err(e) = tool_ports::write_env_zp(&tool_path, &req.name, &assignment) {
-        warn!("Failed to write .env.zp for {}: {}", req.name, e);
-        // Non-fatal — tool will use its default port
-    }
+    let assignment = if needs_port {
+        let port_var = tool_ports::detect_port_var(&tool_path);
+        match state.0.port_allocator.get_or_assign(&req.name, &port_var) {
+            Ok(a) => {
+                if let Err(e) = tool_ports::write_env_zp(&tool_path, &req.name, &a) {
+                    warn!("Failed to write .env.zp for {}: {}", req.name, e);
+                }
+                Some(a)
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("Port allocation failed: {}", e),
+                    })),
+                );
+            }
+        }
+    } else {
+        None
+    };
 
     // Use the launch command from detect_launch (single source of truth)
     let start_cmd = match launch.cmd.clone() {
@@ -2651,10 +2816,12 @@ async fn tools_launch_handler(
     std::fs::create_dir_all(&log_dir).ok();
     let log_path = log_dir.join(format!("{}.log", req.name));
 
-    // Prepend .env.zp sourcing so the tool picks up ZP-assigned port
-    let full_cmd = format!(
-        "{}{}", tool_ports::env_zp_preamble(), start_cmd
-    );
+    // Prepend .env.zp sourcing for tools that have a port assignment
+    let full_cmd = if assignment.is_some() {
+        format!("{}{}", tool_ports::env_zp_preamble(), start_cmd)
+    } else {
+        start_cmd.clone()
+    };
 
     // Wrap the command so stdout+stderr go to the log file
     let logged_cmd = format!(
@@ -2685,15 +2852,18 @@ async fn tools_launch_handler(
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     }
     // Safety net: also clear anything squatting on the port
-    kill_port_occupant(assignment.port);
+    if let Some(ref a) = assignment {
+        kill_port_occupant(a.port);
+    }
     // Brief pause after port cleanup (async-safe)
     if !restarted {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
+    let assigned_port = assignment.as_ref().map(|a| a.port);
     info!(
-        "Cockpit launch: {} → {} (port :{})",
-        req.name, full_cmd, assignment.port
+        "Cockpit launch: {} → {} (port {:?})",
+        req.name, full_cmd, assigned_port
     );
     // Create the child in its own process group (PGID = child PID).
     // This isolates the tool from the ZP server's process group so that
@@ -2715,18 +2885,26 @@ async fn tools_launch_handler(
         Ok(child) => {
             // Track the PID so we can stop it later
             write_pid_file(&req.name, child.id());
-            // Emit port assignment receipt
-            let port_event = tool_state::events::port_assigned(&req.name, assignment.port);
-            let port_detail = format!("var={}", assignment.port_var);
-            tool_chain::emit_tool_receipt(
-                &state.0.audit_store,
-                &port_event,
-                Some(&port_detail),
-            );
+
+            // Emit port assignment receipt (only for tools with ports)
+            if let Some(ref a) = assignment {
+                let port_event = tool_state::events::port_assigned(&req.name, a.port);
+                let port_detail = format!("var={}", a.port_var);
+                tool_chain::emit_tool_receipt(
+                    &state.0.audit_store,
+                    &port_event,
+                    Some(&port_detail),
+                );
+            }
 
             // Emit launched receipt into the chain
             let event = tool_chain::ToolEvent::launched(&req.name);
-            let launch_detail = format!("cmd={} port={}", full_cmd, assignment.port);
+            let launch_detail = format!(
+                "cmd={} port={} kind={}",
+                full_cmd,
+                assigned_port.map(|p| p.to_string()).unwrap_or_else(|| "none".to_string()),
+                launch.kind
+            );
             tool_chain::emit_tool_receipt(
                 &state.0.audit_store,
                 &event,
@@ -2737,15 +2915,15 @@ async fn tools_launch_handler(
             // If the tool has a [verification] section in its manifest,
             // spawn a background task that probes after health-up to confirm
             // credentials are not just delivered but actually working.
-            {
+            if let Some(ref a) = assignment {
                 let manifest_path = tool_path.join(".zp-configure.toml");
                 if manifest_path.exists() {
                     if let Ok(manifest) = zp_engine::capability::load_manifest(&manifest_path) {
                         if let Some(verification) = manifest.verification.clone() {
                             let vname = req.name.clone();
-                            let vport = assignment.port;
+                            let vport = a.port;
                             let vmanifest = manifest.clone();
-                            let vstate = state.clone(); // Clone the Arc<AppStateInner>
+                            let vstate = state.clone();
                             tokio::spawn(async move {
                                 tracing::info!(
                                     "verify[{}]: scheduled — will probe after {}s delay",
@@ -2774,10 +2952,16 @@ async fn tools_launch_handler(
                 }
             }
 
-            // The proxy URL is the canonical way to reach the tool.
-            // Subdomain-based: http://{name}.localhost:{port}/
-            let proxy_url = format!("http://{}.localhost:{}/", req.name, state.0.config_port);
-            let raw_url = format!("http://127.0.0.1:{}", assignment.port);
+            // Build response — headless tools (docker-only, CLI) don't get
+            // a proxy URL or port since they don't serve HTTP.
+            let (proxy_url, raw_url) = if let Some(ref a) = assignment {
+                (
+                    Some(format!("http://{}.localhost:{}/", req.name, state.0.config_port)),
+                    Some(format!("http://127.0.0.1:{}", a.port)),
+                )
+            } else {
+                (None, None)
+            };
 
             (
                 StatusCode::ACCEPTED,
@@ -2787,7 +2971,7 @@ async fn tools_launch_handler(
                     "cmd": full_cmd,
                     "url": proxy_url,
                     "raw_url": raw_url,
-                    "port": assignment.port,
+                    "port": assigned_port,
                     "kind": launch.kind,
                     "pid": child.id(),
                 })),
@@ -2867,6 +3051,24 @@ async fn tools_log_handler(
         Some(n) => n,
         None => return Json(serde_json::json!({ "error": "Missing 'name' parameter" })),
     };
+
+    // TOOL-LOG-01: prevent path traversal via the `name` parameter. We
+    // only allow a conservative tool-name alphabet; anything else gets a
+    // hard reject rather than being interpolated into a filesystem path.
+    fn is_safe_tool_name(s: &str) -> bool {
+        !s.is_empty()
+            && s.len() <= 64
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+            && s != "."
+            && s != ".."
+            && !s.starts_with('.')
+    }
+    if !is_safe_tool_name(name) {
+        return Json(serde_json::json!({
+            "error": "invalid tool name",
+        }));
+    }
 
     let log_path = dirs::home_dir()
         .unwrap_or_default()
@@ -2977,6 +3179,257 @@ async fn tools_single_preflight_handler(
 }
 
 // ============================================================================
+// Tool registration — add external projects to governance
+// ============================================================================
+
+/// POST /api/v1/tools/register
+///
+/// Accepts an absolute path to a project directory anywhere on the filesystem.
+/// If the project is not already under ~/projects, creates a symlink so the
+/// scan engine discovers it. Returns a detection summary: project type, files
+/// found, credentials needed, and launch strategy.
+///
+/// This is the backend for the "Add Tool" dialog in the cockpit dashboard.
+async fn tools_register_handler(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let raw_path = match body.get("path").and_then(|p| p.as_str()) {
+        Some(p) if !p.is_empty() => p.to_string(),
+        _ => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": "Missing required field: path",
+            })));
+        }
+    };
+
+    // 1. Validate and canonicalize — rejects system paths, traversal, etc.
+    let abs_path = match auth::validate_register_path(&raw_path) {
+        Ok(p) => p,
+        Err(reason) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": reason,
+            })));
+        }
+    };
+
+    // 2. Derive tool name from directory name
+    let tool_name = abs_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // 3. Ensure it's discoverable under ~/projects
+    let scan_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("projects");
+
+    // Create ~/projects if it doesn't exist
+    if !scan_path.exists() {
+        let _ = std::fs::create_dir_all(&scan_path);
+    }
+
+    let target_in_scan = scan_path.join(&tool_name);
+    let mut symlinked = false;
+
+    if abs_path != target_in_scan && !target_in_scan.exists() {
+        // Not already under ~/projects — create a symlink
+        #[cfg(unix)]
+        {
+            if let Err(e) = std::os::unix::fs::symlink(&abs_path, &target_in_scan) {
+                tracing::warn!("Failed to symlink {} → {}: {}", abs_path.display(), target_in_scan.display(), e);
+                // Non-fatal: we can still report detection results
+            } else {
+                symlinked = true;
+                tracing::info!("Symlinked {} → {}", target_in_scan.display(), abs_path.display());
+            }
+        }
+    }
+
+    // 4. Detect project characteristics
+    let has_env_example = abs_path.join(".env.example").exists();
+    let has_env = abs_path.join(".env").exists();
+    let has_package_json = abs_path.join("package.json").exists();
+    let has_cargo_toml = abs_path.join("Cargo.toml").exists();
+    let has_docker_compose = abs_path.join("docker-compose.yml").exists()
+        || abs_path.join("docker-compose.yaml").exists()
+        || abs_path.join("compose.yml").exists()
+        || abs_path.join("compose.yaml").exists();
+    let has_dockerfile = abs_path.join("Dockerfile").exists();
+    let has_requirements_txt = abs_path.join("requirements.txt").exists();
+    let has_pyproject = abs_path.join("pyproject.toml").exists();
+    let has_makefile = abs_path.join("Makefile").exists();
+    let has_pnpm_lock = abs_path.join("pnpm-lock.yaml").exists();
+    let has_npm_lock = abs_path.join("package-lock.json").exists();
+    let has_yarn_lock = abs_path.join("yarn.lock").exists();
+    let has_go_mod = abs_path.join("go.mod").exists();
+
+    // Infer project ecosystem
+    let ecosystem = if has_cargo_toml {
+        "rust"
+    } else if has_go_mod {
+        "go"
+    } else if has_package_json && has_pnpm_lock {
+        "node-pnpm"
+    } else if has_package_json && has_yarn_lock {
+        "node-yarn"
+    } else if has_package_json && has_npm_lock {
+        "node-npm"
+    } else if has_package_json {
+        "node"
+    } else if has_pyproject || has_requirements_txt {
+        "python"
+    } else if has_docker_compose || has_dockerfile {
+        "docker"
+    } else {
+        "unknown"
+    };
+
+    // 5. Extract provider vars from .env.example if present
+    let mut providers: Vec<String> = Vec::new();
+    if has_env_example {
+        if let Ok(content) = std::fs::read_to_string(abs_path.join(".env.example")) {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(key) = line.split('=').next() {
+                    let key = key.trim();
+                    if zp_engine::providers::detect_provider(key).is_some() {
+                        providers.push(key.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // 6. Detect launch strategy
+    let launch = detect_launch(&abs_path);
+
+    // 7. Determine configuration status
+    let needs_config = has_env_example && !has_env;
+    let status = if has_env {
+        let is_zp = std::fs::read_to_string(abs_path.join(".env"))
+            .map(|c| c.contains("Generated by: zp configure"))
+            .unwrap_or(false);
+        if is_zp { "configured" } else { "has_env" }
+    } else if has_env_example {
+        "unconfigured"
+    } else {
+        "no_env_template"
+    };
+
+    // 8. Emit a receipt into the trust fabric
+    let event = tool_chain::ToolEvent::registered(&tool_name);
+    let detail = format!(
+        "path={}, ecosystem={}, symlinked={}, providers={}",
+        abs_path.display(), ecosystem, symlinked, providers.len(),
+    );
+    let _ = tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        &event,
+        Some(&detail),
+    );
+
+    tracing::info!("Registered tool '{}' from {}", tool_name, abs_path.display());
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "ok": true,
+        "tool": {
+            "name": tool_name,
+            "path": abs_path.display().to_string(),
+            "ecosystem": ecosystem,
+            "status": status,
+            "needs_config": needs_config,
+            "symlinked": symlinked,
+            "providers": providers,
+            "launch": {
+                "kind": launch.kind,
+                "url": launch.url,
+                "port": launch.port,
+                "cmd": launch.cmd,
+            },
+        },
+        "detection": {
+            "env_example": has_env_example,
+            "env": has_env,
+            "package_json": has_package_json,
+            "cargo_toml": has_cargo_toml,
+            "docker_compose": has_docker_compose,
+            "dockerfile": has_dockerfile,
+            "requirements_txt": has_requirements_txt,
+            "pyproject_toml": has_pyproject,
+            "makefile": has_makefile,
+            "go_mod": has_go_mod,
+        },
+    })))
+}
+
+/// POST /api/v1/tools/:tool_name/unregister
+///
+/// Removes a tool from the governance scan path. If the tool directory
+/// under ~/projects is a symlink, the symlink is removed (the original
+/// project directory is preserved). If it's a real directory, it is NOT
+/// deleted — the tool is simply hidden from the scan by placing a
+/// `.zp-ignore` marker file.
+async fn tools_unregister_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let scan_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("projects");
+    let tool_path = scan_path.join(&tool_name);
+
+    if !tool_path.exists() && !tool_path.is_symlink() {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": format!("Tool not found: {}", tool_name),
+        })));
+    }
+
+    let method = if tool_path.is_symlink() {
+        // Safe removal: just delete the symlink, original project untouched
+        if let Err(e) = std::fs::remove_file(&tool_path) {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": format!("Failed to remove symlink: {}", e),
+            })));
+        }
+        "symlink_removed"
+    } else {
+        // Real directory — don't delete it, just mark it ignored for scans.
+        // The scan engine skips directories containing .zp-ignore.
+        let marker = tool_path.join(".zp-ignore");
+        if let Err(e) = std::fs::write(&marker, "Removed from ZeroPoint governance.\n") {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": format!("Failed to write ignore marker: {}", e),
+            })));
+        }
+        "ignored"
+    };
+
+    // Release port assignment if one exists
+    state.0.port_allocator.release(&tool_name);
+
+    // Emit receipt
+    let event = format!("tool:unregistered:{}", tool_name);
+    let detail = format!("method={}", method);
+    let _ = tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        &event,
+        Some(&detail),
+    );
+
+    tracing::info!("Unregistered tool '{}' ({})", tool_name, method);
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "ok": true,
+        "tool": tool_name,
+        "method": method,
+    })))
+}
+
+// ============================================================================
 // Tool configure / repair — ecosystem self-healing actions
 // ============================================================================
 
@@ -2999,9 +3452,11 @@ async fn tools_configure_handler(
             state.0.port_allocator.release(&tool_name);
 
             // Detect the port var and tool path
-            let scan_path = dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("projects");
+            let scan_path = std::env::var("ZP_PREFLIGHT_SCAN_PATH")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| dirs::home_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    .join("projects"));
             let tool_path = scan_path.join(&tool_name);
             let port_var = tool_ports::detect_port_var(&tool_path);
 
@@ -3198,7 +3653,7 @@ fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
 
 /// Root handler: redirect to /onboard if no genesis ceremony has been completed,
 /// otherwise serve the dashboard.
-async fn root_handler() -> Response {
+async fn root_handler(State(state): State<AppState>) -> Response {
     let genesis_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".zeropoint")
@@ -3216,14 +3671,44 @@ async fn root_handler() -> Response {
     };
 
     if has_complete_genesis {
-        Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK)).into_response()
+        let html = resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK);
+        dashboard_response(&state, html)
     } else {
         Redirect::temporary("/onboard").into_response()
     }
 }
 
-async fn dashboard_handler() -> Html<String> {
-    Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK))
+async fn dashboard_handler(State(state): State<AppState>) -> Response {
+    let html = resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK);
+    dashboard_response(&state, html)
+}
+
+/// AUTH-VULN-02: build a dashboard response that sets the session cookie as
+/// `HttpOnly; SameSite=Strict` so the token is invisible to page JavaScript
+/// and cannot be exfiltrated via XSS. Replaces the prior
+/// `inject_session_token` mechanism which wrote the raw bearer token into a
+/// `<script>` tag readable by any injected script.
+fn dashboard_response(state: &AppState, html: String) -> Response {
+    let token = state.0.session_auth.current_token();
+    let cookie = auth::build_session_cookie(&token, state.0.session_auth.max_age_secs());
+    let mut resp = Html(html).into_response();
+    if let Ok(val) = axum::http::HeaderValue::from_str(&cookie) {
+        resp.headers_mut().insert(axum::http::header::SET_COOKIE, val);
+    }
+    resp
+}
+
+/// AUTH-VULN-03: rotate the session token and clear the session cookie on
+/// the client. After this call, any token previously captured (e.g. via
+/// XSS, screen share, or shoulder-surfing) stops working on the next
+/// request.
+async fn logout_handler(State(state): State<AppState>) -> Response {
+    let _ = state.0.session_auth.rotate();
+    let mut resp = Json(serde_json::json!({ "status": "logged_out" })).into_response();
+    if let Ok(val) = axum::http::HeaderValue::from_str(auth::build_logout_cookie()) {
+        resp.headers_mut().insert(axum::http::header::SET_COOKIE, val);
+    }
+    resp
 }
 
 async fn onboard_page_handler() -> Html<String> {
