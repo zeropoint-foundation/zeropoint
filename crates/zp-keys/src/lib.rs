@@ -27,6 +27,26 @@ pub mod recovery;
 pub mod sovereignty;
 pub mod vault_key;
 
+#[cfg(test)]
+pub(crate) mod test_sync {
+    //! Shared lock to serialize tests that touch process-global state —
+    //! the OS credential store entries (`zeropoint-genesis` /
+    //! `zeropoint-operator`) and the `ZP_VAULT_KEY` env var. Without this,
+    //! parallel tests clobber each other on macOS Keychain.
+    use std::sync::{Mutex, MutexGuard};
+
+    static LOCK: Mutex<()> = Mutex::new(());
+
+    pub fn serial_guard() -> MutexGuard<'static, ()> {
+        match LOCK.lock() {
+            Ok(g) => g,
+            // If a previous test panicked while holding the lock,
+            // reset and continue — we still want serialization.
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+}
+
 // ── Sovereignty system (new) ──
 pub use sovereignty::{
     SovereigntyMode, SovereigntyProvider, SovereigntyCategory,

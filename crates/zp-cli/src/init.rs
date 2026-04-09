@@ -144,7 +144,11 @@ pub fn run(config: &InitConfig) -> i32 {
             // Save secret through the provider
             match provider.save_secret(&genesis.secret_key()) {
                 Ok(()) => {
-                    // Also save the certificate (public part) normally
+                    // The provider already stored the secret (HW wallet,
+                    // biometric enclave, FileBased chmod-600 file, etc.).
+                    // Keyring holds only the certificate; the Genesis secret
+                    // we still have in memory is passed to save_operator
+                    // explicitly below to derive the vault key.
                     if let Err(e) = keyring.save_genesis(&genesis, false) {
                         eprintln!("  \x1b[31m✗\x1b[0m Failed to save genesis certificate: {}", e);
                         return 1;
@@ -173,7 +177,11 @@ pub fn run(config: &InitConfig) -> i32 {
             }
         }
     };
-    if let Err(e) = keyring.save_operator(&operator) {
+    // Canon save: pass the Genesis secret we still have in memory so the
+    // operator secret can be vaulted under a derived key — works across
+    // every sovereignty provider (Keychain, Touch ID, Trezor, biometrics,
+    // FileBased) without the keyring having to know which one owns root.
+    if let Err(e) = keyring.save_operator_with_genesis_secret(&operator, &genesis.secret_key()) {
         eprintln!("\x1b[31m✗\x1b[0m");
         eprintln!("  Failed to save operator key: {}", e);
         return 1;

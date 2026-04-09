@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use zp_audit::AuditStore;
 use zp_core::{
@@ -116,83 +116,211 @@ pub struct GenesisRecord {
 /// 3. **First run (Genesis)** — no identity exists. Generates a new Ed25519 key
 ///    and writes `identity.key` as a bootstrap. The onboarding flow will later
 ///    create the full hierarchy and the next server start will use path 1.
+/// Canon permission check run at server startup. Refuses to boot if:
+/// - `~/.zeropoint` or `~/.zeropoint/keys` is not 0700
+/// - any `*.secret` or `*.secret.enc` file is group- or world-readable
+/// - a plaintext `genesis.secret` or `operator.secret` filename exists
+#[cfg(unix)]
+fn enforce_canon_permissions(home_dir: &std::path::Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    for dir in [home_dir.to_path_buf(), home_dir.join("keys")] {
+        if dir.exists() {
+            let mode = std::fs::metadata(&dir)
+                .map_err(|e| format!("failed to stat {:?}: {}", dir, e))?
+                .permissions()
+                .mode()
+                & 0o777;
+            if mode != 0o700 {
+                return Err(format!(
+                    "refusing to start: {:?} has mode {:o}, expected 0700 (canon). \
+                     Run `chmod 700 {:?}` to fix.",
+                    dir, mode, dir
+                ));
+            }
+        }
+    }
+    let keys_dir = home_dir.join("keys");
+    if keys_dir.exists() {
+        for entry in std::fs::read_dir(&keys_dir)
+            .map_err(|e| format!("failed to read {:?}: {}", keys_dir, e))?
+        {
+            let entry = entry.map_err(|e| format!("dir entry error: {}", e))?;
+            let path = entry.path();
+            let name = entry.file_name().into_string().unwrap_or_default();
+            if name.ends_with(".secret") || name.ends_with(".secret.enc") {
+                let mode = std::fs::metadata(&path)
+                    .map_err(|e| format!("failed to stat {:?}: {}", path, e))?
+                    .permissions()
+                    .mode()
+                    & 0o777;
+                if mode != 0o600 {
+                    return Err(format!(
+                        "refusing to start: {:?} has mode {:o}, expected 0600 (canon). \
+                         A root-owned secret is group- or world-readable.",
+                        path, mode
+                    ));
+                }
+                if name == "genesis.secret" || name == "operator.secret" {
+                    return Err(format!(
+                        "refusing to start: plaintext secret {:?} found. \
+                         Canon stores root keys in the OS credential store or encrypted \
+                         at rest ({}.enc). Run the rotation runbook.",
+                        path, name
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn enforce_canon_permissions(_home_dir: &std::path::Path) -> Result<(), String> {
+    Ok(())
+}
+
+/// Build a `ServerIdentity` from a loaded `OperatorKey` and log the source.
+fn finalize_operator_identity(
+    operator: zp_keys::hierarchy::OperatorKey,
+    source: &str,
+) -> (ServerIdentity, bool) {
+    use sha2::{Digest, Sha256};
+    let pub_bytes = operator.public_key();
+    let public_key_hex = hex::encode(pub_bytes);
+    let hash = Sha256::digest(&pub_bytes);
+    let destination_hash = hex::encode(&hash[..16]);
+    let signing_key = SigningKey::from_bytes(&operator.secret_key());
+
+    info!(
+        "Identity from Operator key ({}): {}...{}",
+        source,
+        &public_key_hex[..12],
+        &public_key_hex[public_key_hex.len() - 8..]
+    );
+
+    (
+        ServerIdentity {
+            signing_key,
+            public_key_hex,
+            destination_hash,
+            operator_key: Some(operator),
+            from_hierarchy: true,
+        },
+        false,
+    )
+}
+
+/// Sovereignty-aware Operator load.
+///
+/// Reads the configured sovereignty mode from `genesis.json`, asks the
+/// matching provider to unwrap the Genesis secret (which may trigger a
+/// biometric scan or hardware-wallet confirmation), then hands that
+/// secret to the keyring to decrypt the on-disk `operator.secret.enc`
+/// blob. The Genesis secret is zeroized before this function returns.
+fn load_operator_via_sovereignty_provider(
+    keyring: &zp_keys::Keyring,
+    genesis_record_path: &std::path::Path,
+) -> Result<zp_keys::hierarchy::OperatorKey, String> {
+    use zeroize::Zeroize;
+
+    let raw = std::fs::read_to_string(genesis_record_path)
+        .map_err(|e| format!("failed to read genesis.json: {}", e))?;
+    let record: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("failed to parse genesis.json: {}", e))?;
+    let mode_str = record
+        .get("sovereignty_mode")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "genesis.json missing sovereignty_mode".to_string())?;
+    let mode = zp_keys::SovereigntyMode::from_onboard_str(mode_str).resolve();
+
+    let provider = zp_keys::provider_for(mode);
+    let mut genesis_secret = provider
+        .load_secret()
+        .map_err(|e| format!("{} provider could not unlock Genesis: {}", mode.display_name(), e))?;
+
+    let result = keyring
+        .load_operator_with_genesis_secret(&genesis_secret)
+        .map_err(|e| format!("operator decrypt failed: {}", e));
+
+    genesis_secret.zeroize();
+    result
+}
+
 fn load_or_create_identity(config: &ServerConfig) -> (ServerIdentity, bool) {
     use sha2::{Digest, Sha256};
+    if let Err(msg) = enforce_canon_permissions(&config.home_dir) {
+        error!("{}", msg);
+        eprintln!("\x1b[31m✗\x1b[0m {}", msg);
+        std::process::exit(1);
+    }
     let keyring_path = config.home_dir.join("keys");
+    let genesis_record_path = config.home_dir.join("genesis.json");
+    let identity_path = config.home_dir.join("identity.key");
 
     // ── Path 1: Operator key from the hierarchy ────────────────────────
+    //
+    // Canon order:
+    //   1a. Fast path — credential store. Works for Keychain / Touch ID /
+    //       Windows Hello / Secret Service where the OS holds the Operator
+    //       secret directly. No Genesis unwrap needed.
+    //   1b. Sovereignty-provider path — for hardware wallets, file-based,
+    //       and biometric modes that don't stage the Operator secret in
+    //       the OS credential store, read the sovereignty mode from
+    //       genesis.json, ask that provider to unwrap the Genesis secret
+    //       (which may trigger a biometric / HW presence prompt), then
+    //       decrypt the on-disk operator.secret.enc blob with a vault key
+    //       derived from the Genesis secret.
+    //
+    // If genesis.json exists but both paths fail, the identity is set up
+    // but unreachable — we hard-error instead of silently bootstrapping a
+    // new temp key, which would split the identity.
     if let Ok(keyring) = zp_keys::Keyring::open(&keyring_path) {
+        // 1a — credential store fast path
         if let Ok(operator) = keyring.load_operator() {
-            let pub_bytes = operator.public_key();
-            let public_key_hex = hex::encode(pub_bytes);
-            let hash = Sha256::digest(&pub_bytes);
-            let destination_hash = hex::encode(&hash[..16]);
+            return finalize_operator_identity(operator, "credential store");
+        }
 
-            // Clone the signing key out for the struct (OperatorKey owns it)
-            let signing_key = SigningKey::from_bytes(&operator.secret_key());
-
-            info!(
-                "Identity from Operator key (hierarchy): {}...{}",
-                &public_key_hex[..12],
-                &public_key_hex[public_key_hex.len() - 8..]
-            );
-
-            // Migration: if legacy identity.key still exists, note it's superseded
-            let legacy_path = config.home_dir.join("identity.key");
-            if legacy_path.exists() {
-                info!(
-                    "Legacy identity.key found but superseded by Operator key hierarchy. \
-                     You can safely remove {:?}",
-                    legacy_path
-                );
+        // 1b — sovereignty-provider unwrap path
+        if genesis_record_path.exists() {
+            match load_operator_via_sovereignty_provider(&keyring, &genesis_record_path) {
+                Ok(operator) => {
+                    return finalize_operator_identity(operator, "sovereignty provider");
+                }
+                Err(msg) => {
+                    let err = format!(
+                        "refusing to start: genesis.json is present but the Operator key \
+                         could not be unlocked ({}). Run `zp init` only if you intend to \
+                         reinitialize, or follow the rotation runbook to recover.",
+                        msg
+                    );
+                    error!("{}", err);
+                    eprintln!("\x1b[31m✗\x1b[0m {}", err);
+                    std::process::exit(1);
+                }
             }
-
-            return (
-                ServerIdentity {
-                    signing_key,
-                    public_key_hex,
-                    destination_hash,
-                    operator_key: Some(operator),
-                    from_hierarchy: true,
-                },
-                false,
-            );
         }
     }
 
-    // ── Path 2: Legacy identity.key file ───────────────────────────────
-    let identity_path = config.home_dir.join("identity.key");
-    if identity_path.exists() {
-        let key_bytes = std::fs::read(&identity_path).expect("Failed to read identity key");
-        if key_bytes.len() != 32 {
-            panic!("Corrupted identity key at {:?}", identity_path);
-        }
-        let mut buf = [0u8; 32];
-        buf.copy_from_slice(&key_bytes);
-        let signing_key = SigningKey::from_bytes(&buf);
-
-        let verifying_key = signing_key.verifying_key();
-        let public_key_hex = hex::encode(verifying_key.as_bytes());
-        let hash = Sha256::digest(verifying_key.as_bytes());
-        let destination_hash = hex::encode(&hash[..16]);
-
-        info!(
-            "Identity from legacy identity.key — run onboarding to migrate to key hierarchy"
+    // Canon: no legacy identity.key migration. If it's sitting on disk
+    // without a genesis record it's a leftover from a pre-canon build and
+    // the operator should rotate, not silently adopt it.
+    if identity_path.exists() && !genesis_record_path.exists() {
+        let err = format!(
+            "refusing to start: legacy plaintext {:?} is present without a genesis \
+             record. Archive and remove it, then run `zp init` to establish a \
+             canonical identity.",
+            identity_path
         );
-
-        return (
-            ServerIdentity {
-                signing_key,
-                public_key_hex,
-                destination_hash,
-                operator_key: None,
-                from_hierarchy: false,
-            },
-            false,
-        );
+        error!("{}", err);
+        eprintln!("\x1b[31m✗\x1b[0m {}", err);
+        std::process::exit(1);
     }
 
-    // ── Path 3: First run — bootstrap identity ─────────────────────────
+    // ── Path 2: First run — bootstrap identity ─────────────────────────
+    // Pre-onboarding the server still needs *some* signing key so the
+    // /onboard HTTP surface can respond. This is NOT Genesis and NOT
+    // Operator — it's a disposable transport key, rotated away the moment
+    // `zp init` completes and writes genesis.json.
     std::fs::create_dir_all(&config.home_dir).expect("Failed to create ~/.zeropoint");
     let key = SigningKey::generate(&mut rand::rngs::OsRng);
 

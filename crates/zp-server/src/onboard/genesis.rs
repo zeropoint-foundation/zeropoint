@@ -182,7 +182,9 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     // Save the secret via the provider
     let secret_in_credential_store = match provider.save_secret(&genesis.secret_key()) {
         Ok(()) => {
-            // Provider stored the secret. Save certificate (no secret) to keyring.
+            // Provider owns the Genesis secret (Trezor, biometrics, etc.).
+            // Keyring holds the certificate only; the Genesis secret we
+            // still have in memory is passed to save_operator below.
             if let Err(e) = keyring.save_genesis(&genesis, false) {
                 events.push(OnboardEvent::error(&format!("Failed to save certificate: {}", e)));
                 return events;
@@ -223,8 +225,10 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         }
     };
 
-    // Save operator key
-    if let Err(e) = keyring.save_operator(&operator) {
+    // Save operator key — pass Genesis secret in memory so the vault key
+    // can be derived without this path assuming the credential store owns
+    // the root (which it does not in HW-wallet / biometric modes).
+    if let Err(e) = keyring.save_operator_with_genesis_secret(&operator, &genesis.secret_key()) {
         events.push(OnboardEvent::error(&format!("Failed to save operator: {}", e)));
         return events;
     }
