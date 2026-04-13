@@ -25,6 +25,7 @@ pub mod hierarchy;
 pub mod keyring;
 pub mod recovery;
 pub mod revocation;
+pub mod rotation;
 pub mod sovereignty;
 pub mod vault_key;
 
@@ -76,4 +77,5 @@ pub use revocation::{
     RevocationCertificate, RevocationReason, RevocationStatus, RevocationStore,
     verify_chain_with_revocation,
 };
+pub use rotation::{RotationCertificate, RotationChain};
 pub use vault_key::{derive_vault_key, resolve_vault_key, ResolvedVaultKey, VaultKeySource};
