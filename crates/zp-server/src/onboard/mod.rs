@@ -148,24 +148,142 @@ async fn handle_action(
     state: &mut OnboardState,
     _app_state: &AppState,
 ) -> Vec<OnboardEvent> {
+    // ── Step-ordering enforcement (Phase 0.5: AUTH-VULN-05, AUTHZ-VULN-19/20, INJ-VULN-05) ──
+    // Certain actions have prerequisites. Without enforcement, an attacker
+    // could skip directly to vault_store or configure without completing
+    // the genesis ceremony, injecting credentials or scanning arbitrary paths.
     match action.action.as_str() {
+        // ── Actions with no prerequisites ─────────────────────────
         "detect" => detect::handle_detect(state).await,
         "genesis" => genesis::handle_genesis(action, state).await,
-        "vault_check" => genesis::handle_vault_check(state).await,
-        "detect_local_inference" => detect::handle_detect_local_inference(state).await,
-        "detect_ollama" => detect::handle_detect_local_inference(state).await,
-        "get_setup_guidance" => inference::handle_setup_guidance(action).await,
-        "start_model_pull" => inference::handle_start_model_pull(action).await,
-        "set_inference_posture" => inference::handle_set_inference_posture(action, state).await,
-        "get_provider_catalog" => credentials::handle_get_provider_catalog(state).await,
-        "scan" => scan::handle_scan(action, state).await,
-        "vault_store" => credentials::handle_vault_store(action, state).await,
-        "vault_import_all" => credentials::handle_vault_import_all(action, state).await,
-        "validate_credential" => credentials::handle_validate_credential(action, state).await,
-        "validate_all" => credentials::handle_validate_all(action, state).await,
-        "configure" => configure::handle_configure(action, state).await,
-        "preflight" => preflight::handle_preflight(state, _app_state).await,
         "status" => vec![OnboardEvent::new("heartbeat_ack", serde_json::json!({ "ok": true }))],
+
+        // ── Requires genesis_complete ─────────────────────────────
+        "vault_check" if state.genesis_complete => genesis::handle_vault_check(state).await,
+        "vault_check" => vec![OnboardEvent::error("Genesis must be completed before vault check")],
+
+        "detect_local_inference" if state.genesis_complete => detect::handle_detect_local_inference(state).await,
+        "detect_local_inference" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        "detect_ollama" if state.genesis_complete => detect::handle_detect_local_inference(state).await,
+        "detect_ollama" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        "get_setup_guidance" if state.genesis_complete => inference::handle_setup_guidance(action).await,
+        "get_setup_guidance" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        "start_model_pull" if state.genesis_complete => inference::handle_start_model_pull(action).await,
+        "start_model_pull" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        "set_inference_posture" if state.genesis_complete => inference::handle_set_inference_posture(action, state).await,
+        "set_inference_posture" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        "get_provider_catalog" if state.genesis_complete => credentials::handle_get_provider_catalog(state).await,
+        "get_provider_catalog" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        // ── Scan: requires genesis, MUST validate scan_path ───────
+        "scan" if state.genesis_complete => {
+            // INJ-VULN-05 / AUTHZ-VULN-20: validate scan_path before allowing scan.
+            if let Some(scan_path) = action.params.get("scan_path").and_then(|v| v.as_str()) {
+                if let Err(reason) = validate_scan_path(scan_path) {
+                    return vec![OnboardEvent::error(&format!("🛡 {}", reason))];
+                }
+            }
+            scan::handle_scan(action, state).await
+        }
+        "scan" => vec![OnboardEvent::error("Genesis must be completed before scanning")],
+
+        // ── Vault store: requires genesis + vault key ─────────────
+        "vault_store" if state.genesis_complete => credentials::handle_vault_store(action, state).await,
+        "vault_store" => vec![OnboardEvent::error("Genesis must be completed before storing credentials")],
+
+        "vault_import_all" if state.genesis_complete => credentials::handle_vault_import_all(action, state).await,
+        "vault_import_all" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        "validate_credential" if state.genesis_complete => credentials::handle_validate_credential(action, state).await,
+        "validate_credential" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        "validate_all" if state.genesis_complete => credentials::handle_validate_all(action, state).await,
+        "validate_all" => vec![OnboardEvent::error("Genesis must be completed first")],
+
+        // ── Configure: requires genesis + scan + path validation ──
+        "configure" if state.genesis_complete => {
+            // AUTHZ-VULN-20: validate scan_path in configure action too.
+            if let Some(scan_path) = action.params.get("scan_path").and_then(|v| v.as_str()) {
+                if let Err(reason) = validate_scan_path(scan_path) {
+                    return vec![OnboardEvent::error(&format!("🛡 {}", reason))];
+                }
+            }
+            configure::handle_configure(action, state).await
+        }
+        "configure" => vec![OnboardEvent::error("Genesis must be completed before configuring tools")],
+
+        "preflight" => preflight::handle_preflight(state, _app_state).await,
+
         _ => vec![OnboardEvent::error(&format!("unknown action: {}", action.action))],
     }
+}
+
+// ── Scan path validation (INJ-VULN-05, AUTHZ-VULN-20) ──────────────────
+
+/// Validate that a scan_path is safe for tool discovery.
+///
+/// Returns `Ok(())` if the path is within the user's home directory,
+/// `Err(reason)` if it points to a system or sensitive location.
+fn validate_scan_path(path: &str) -> Result<(), String> {
+    let path = path.trim();
+
+    if path.is_empty() {
+        return Err("Empty scan path".to_string());
+    }
+
+    // Reject path traversal
+    if path.contains("..") {
+        return Err("Path traversal (..) not allowed in scan path".to_string());
+    }
+
+    // Expand tilde
+    let expanded = if path.starts_with("~/") || path == "~" {
+        match dirs::home_dir() {
+            Some(home) => home.join(path.strip_prefix("~/").unwrap_or("")).to_string_lossy().to_string(),
+            None => path.to_string(),
+        }
+    } else {
+        path.to_string()
+    };
+
+    // Block sensitive paths
+    let blocked_prefixes = &[
+        "/etc", "/var", "/usr", "/bin", "/sbin", "/boot", "/dev", "/proc",
+        "/sys", "/tmp", "/root", "/lib", "/lib64", "/opt",
+        "/private/etc", "/private/var", "/private/tmp",
+    ];
+    let blocked_components = &[
+        ".ssh", ".gnupg", ".aws", ".azure", ".gcloud", ".kube",
+        ".docker", "id_rsa", "id_ed25519", ".zeropoint/keys",
+    ];
+
+    for prefix in blocked_prefixes {
+        if expanded == *prefix || expanded.starts_with(&format!("{}/", prefix)) {
+            return Err(format!("System path '{}' cannot be scanned", prefix));
+        }
+    }
+
+    for component in blocked_components {
+        if expanded.contains(component) {
+            return Err(format!("Path contains sensitive component '{}' — cannot scan", component));
+        }
+    }
+
+    // Must be under home directory
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.to_string_lossy();
+        if !expanded.starts_with(home_str.as_ref()) && expanded != "." {
+            return Err(format!(
+                "Scan path must be within your home directory ({})",
+                home_str
+            ));
+        }
+    }
+
+    Ok(())
 }
