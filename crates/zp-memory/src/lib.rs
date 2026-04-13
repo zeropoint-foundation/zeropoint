@@ -16,6 +16,7 @@
 
 pub mod lifecycle;
 pub mod promotion;
+pub mod sharing;
 pub mod types;
 
 pub use lifecycle::{
@@ -23,4 +24,7 @@ pub use lifecycle::{
     reaffirm, review_interval, sweep_lifecycle, ExpirySweepResult,
 };
 pub use promotion::PromotionEngine;
+pub use sharing::{
+    can_share, format_for_delegation, merge_memories, MergeResult, SharedMemory, SharingContext,
+};
 pub use types::*;
