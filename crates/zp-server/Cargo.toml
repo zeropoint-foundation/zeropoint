@@ -44,6 +44,7 @@ anyhow = { workspace = true }
 rusqlite = { workspace = true }
 reqwest = { workspace = true }
 dirs = "5"
+parking_lot = { workspace = true }
 which = "7"
 toml = { workspace = true }
 zeroize = { workspace = true }

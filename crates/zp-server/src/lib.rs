@@ -5,6 +5,7 @@
 
 pub mod analysis;
 pub mod attestations;
+pub mod auth;
 pub mod codebase;
 pub mod exec_ws;
 pub mod onboard;
@@ -437,6 +438,11 @@ pub struct AppStateInner {
     pub analysis: analysis::AnalysisEngines,
     /// Server port — needed by proxy for subdomain URL generation.
     pub config_port: u16,
+    /// Session authentication — bearer token verification + rotation.
+    /// Initialized at server start from the Ed25519 signing key.
+    pub session_auth: Arc<auth::SessionAuth>,
+    /// Per-IP failed-auth rate limiter (AUTH-VULN-04 mitigation).
+    pub rate_limiter: Arc<auth::FailedAuthLimiter>,
 }
 
 #[derive(Clone)]
@@ -524,6 +530,11 @@ impl AppState {
             std::path::Path::new(&config.data_dir),
         );
 
+        // Session auth — derives HMAC key from the signing key, mints first token.
+        // AUTH-VULN-01: this is the foundation for protecting all API endpoints.
+        let session_auth = Arc::new(auth::SessionAuth::new(&identity.signing_key.to_bytes()));
+        let rate_limiter = Arc::new(auth::FailedAuthLimiter::new());
+
         AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -535,6 +546,8 @@ impl AppState {
             port_allocator,
             analysis: analysis::AnalysisEngines::new(),
             config_port: config.port,
+            session_auth,
+            rate_limiter,
         }))
     }
 }
@@ -680,6 +693,20 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Ecosystem: interactive knowledge graph + provenance chain + live state
         .route("/ecosystem", get(ecosystem_page_handler))
         .layer(cors)
+        // ── Auth middleware (AUTH-VULN-01) ─────────────────────────────
+        // Requires valid session token on all protected routes.
+        // Exempt: /api/v1/health, /, /onboard, /api/onboard/ws, /assets/*
+        .layer(axum::middleware::from_fn({
+            let session_auth = state.0.session_auth.clone();
+            let rate_limiter = state.0.rate_limiter.clone();
+            move |req: axum::extract::Request, next: axum::middleware::Next| {
+                let session_auth = session_auth.clone();
+                let rate_limiter = rate_limiter.clone();
+                async move {
+                    auth::require_auth(req, next, session_auth, rate_limiter).await
+                }
+            }
+        }))
         .with_state(state.clone());
 
     // ── Subdomain proxy middleware ─────────────────────────────────
@@ -3216,7 +3243,7 @@ fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
 
 /// Root handler: redirect to /onboard if no genesis ceremony has been completed,
 /// otherwise serve the dashboard.
-async fn root_handler() -> Response {
+async fn root_handler(State(state): State<AppState>) -> Response {
     let genesis_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".zeropoint")
@@ -3233,19 +3260,50 @@ async fn root_handler() -> Response {
         false
     };
 
-    if has_complete_genesis {
+    // Set the session cookie on page loads so the dashboard's JS can call
+    // authenticated API endpoints. The cookie is HttpOnly + SameSite=Strict
+    // so it's invisible to JavaScript and immune to CSRF.
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+
+    let mut resp = if has_complete_genesis {
         Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK)).into_response()
     } else {
         Redirect::temporary("/onboard").into_response()
-    }
+    };
+    resp.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        cookie.parse().unwrap_or_else(|_| HeaderValue::from_static("")),
+    );
+    resp
 }
 
-async fn dashboard_handler() -> Html<String> {
-    Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK))
+async fn dashboard_handler(State(state): State<AppState>) -> Response {
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK)).into_response();
+    resp.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        cookie.parse().unwrap_or_else(|_| HeaderValue::from_static("")),
+    );
+    resp
 }
 
-async fn onboard_page_handler() -> Html<String> {
-    Html(resolve_html_asset("onboard.html", ONBOARD_HTML_FALLBACK))
+async fn onboard_page_handler(State(state): State<AppState>) -> Response {
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset("onboard.html", ONBOARD_HTML_FALLBACK)).into_response();
+    resp.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        cookie.parse().unwrap_or_else(|_| HeaderValue::from_static("")),
+    );
+    resp
 }
 
 async fn speak_page_handler() -> Html<String> {
