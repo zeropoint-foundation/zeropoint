@@ -122,12 +122,83 @@ async fn execute_and_stream(
         cwd.to_string()
     };
 
-    // Ensure the working directory exists before spawning — a missing cwd
-    // causes ENOENT which is indistinguishable from a missing shell binary.
+    // ── CWD governance (INJ-VULN-02, INJ-VULN-03) ──────────────────────
+    // Canonicalize the path and reject anything outside the operator's
+    // home directory. This prevents path traversal and execution in
+    // attacker-controlled directories.
     let resolved_path = std::path::Path::new(&resolved_cwd);
-    if !resolved_path.exists() {
-        tracing::warn!("exec_ws: cwd does not exist, creating: {}", resolved_cwd);
-        let _ = std::fs::create_dir_all(resolved_path);
+
+    // Reject path traversal sequences BEFORE canonicalization.
+    if cwd.contains("..") {
+        let msg = "🛡 Path traversal (..) not permitted in cwd";
+        tracing::warn!("exec_ws: BLOCKED cwd '{}' — path traversal", cwd);
+        let _ = tx.send(WsMessage::Text(
+            serde_json::json!({ "type": "error", "message": msg }).to_string()
+        )).await;
+        tool_chain::emit_tool_receipt(
+            &app_state.0.audit_store,
+            "tool:cmd:blocked",
+            Some(&format!("reason=cwd_traversal, cwd={}", cwd)),
+        );
+        return None;
+    }
+
+    // Canonicalize and validate the path is within allowed boundaries.
+    let canonical_cwd = match resolved_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) if !resolved_path.exists() => {
+            let msg = format!("🛡 Working directory does not exist: {}", resolved_cwd);
+            tracing::warn!("exec_ws: BLOCKED — cwd does not exist: {}", resolved_cwd);
+            let _ = tx.send(WsMessage::Text(
+                serde_json::json!({ "type": "error", "message": msg }).to_string()
+            )).await;
+            return None;
+        }
+        Err(e) => {
+            let msg = format!("🛡 Cannot resolve working directory: {}", e);
+            let _ = tx.send(WsMessage::Text(
+                serde_json::json!({ "type": "error", "message": msg }).to_string()
+            )).await;
+            return None;
+        }
+    };
+
+    // The cwd must be under the operator's home directory.
+    // System paths (/etc, /var, /usr, /tmp, /root, etc.) are never permitted.
+    let home_dir = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/nonexistent"));
+    let canonical_str = canonical_cwd.to_string_lossy();
+    let is_under_home = canonical_cwd.starts_with(&home_dir);
+    let is_system_path = canonical_str.starts_with("/etc")
+        || canonical_str.starts_with("/var")
+        || canonical_str.starts_with("/usr")
+        || canonical_str.starts_with("/bin")
+        || canonical_str.starts_with("/sbin")
+        || canonical_str.starts_with("/root")
+        || canonical_str.starts_with("/boot")
+        || canonical_str.starts_with("/dev")
+        || canonical_str.starts_with("/proc")
+        || canonical_str.starts_with("/sys")
+        || canonical_str.starts_with("/tmp")
+        || canonical_str.starts_with("/private/etc")
+        || canonical_str.starts_with("/private/var")
+        || canonical_str.starts_with("/private/tmp");
+
+    if is_system_path || (!is_under_home && canonical_str != ".") {
+        let msg = format!(
+            "🛡 Working directory '{}' is outside the permitted area. \
+             Commands may only execute within your home directory.",
+            canonical_str
+        );
+        tracing::warn!("exec_ws: BLOCKED cwd '{}' — outside home", canonical_str);
+        let _ = tx.send(WsMessage::Text(
+            serde_json::json!({ "type": "error", "message": msg }).to_string()
+        )).await;
+        tool_chain::emit_tool_receipt(
+            &app_state.0.audit_store,
+            "tool:cmd:blocked",
+            Some(&format!("reason=cwd_outside_home, cwd={}", canonical_str)),
+        );
+        return None;
     }
 
     // ── Command governance: check allowlist before spawning ──────────
