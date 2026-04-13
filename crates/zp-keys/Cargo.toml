@@ -9,7 +9,7 @@ repository.workspace = true
 description = "ZeroPoint key hierarchy — genesis → operator → agent key derivation, signing, and verification"
 
 [features]
-default = []
+default = ["os-keychain"]
 os-keychain = ["keyring"]
 # Cross-platform face enrollment via OpenCV webcam
 face-enroll = ["dep:opencv"]

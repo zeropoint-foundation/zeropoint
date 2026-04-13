@@ -29,8 +29,7 @@ fn main() {
 
     // Block a known-bad actor
     let blocked_actor = ActorId::User("malicious-actor".into());
-    let blocked_key = format!("{:?}", &blocked_actor);
-    guard.block_actor(&blocked_key);
+    guard.block_actor(&blocked_actor);
 
     // Create a GovernanceGate with custom guard
     let engine = PolicyEngine::new();
