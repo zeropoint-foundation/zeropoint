@@ -164,7 +164,28 @@ impl ReceiptVerifier {
             None
         };
 
-        // 5. Expiry check
+        // 5. Revocation check
+        if receipt.revoked_at.is_some() {
+            checks.push(VerificationCheck {
+                name: "revocation".to_string(),
+                passed: false,
+                detail: format!(
+                    "Receipt was revoked at {}",
+                    receipt.revoked_at.unwrap()
+                ),
+            });
+        }
+
+        // 5b. Supersession check
+        if let Some(ref superseder) = receipt.superseded_by {
+            checks.push(VerificationCheck {
+                name: "supersession".to_string(),
+                passed: false,
+                detail: format!("Receipt superseded by {}", superseder),
+            });
+        }
+
+        // 7. Expiry check
         if let Some(expires_at) = receipt.expires_at {
             let expired = chrono::Utc::now() > expires_at;
             checks.push(VerificationCheck {
@@ -178,7 +199,7 @@ impl ReceiptVerifier {
             });
         }
 
-        // 6. Claim metadata type consistency
+        // 8. Claim metadata type consistency
         if let Some(ref meta) = receipt.claim_metadata {
             let type_matches = match (&receipt.receipt_type, meta) {
                 (crate::ReceiptType::ObservationClaim, crate::ClaimMetadata::Observation { .. }) => true,

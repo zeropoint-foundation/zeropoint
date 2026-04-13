@@ -33,6 +33,8 @@ pub fn canonical_hash(receipt: &Receipt) -> String {
         "extensions": receipt.extensions,
         "expires_at": receipt.expires_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
         "claim_metadata": receipt.claim_metadata,
+        "superseded_by": receipt.superseded_by,
+        "revoked_at": receipt.revoked_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
     });
 
     let canonical = serde_json::to_string(&hash_input).unwrap_or_default();
@@ -76,6 +78,8 @@ mod tests {
             extensions: None,
             expires_at: None,
             claim_metadata: None,
+            superseded_by: None,
+            revoked_at: None,
         }
     }
 
