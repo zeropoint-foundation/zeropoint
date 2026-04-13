@@ -27,3 +27,11 @@ hex = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+
+[features]
+default = []
+# Sweep 6 — enable inbound mesh payload signature verification via PeerKeyStore.
+# See docs/rfc-mesh-inbound-auth-v1.md. Defaults off so v0 behavior is preserved.
+mesh-auth-v1 = ["zp-mesh/mesh-auth-v1"]

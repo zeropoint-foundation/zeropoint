@@ -70,6 +70,7 @@ pub mod identity;
 pub mod interface;
 pub mod link;
 pub mod packet;
+pub mod peer_keystore;
 pub mod policy_sync;
 pub mod reputation;
 pub mod reticulum_discovery;
