@@ -207,6 +207,81 @@ impl FailedAuthLimiter {
     }
 }
 
+// ============================================================================
+// Per-endpoint rate limiter (Phase 1.7: AUTH-VULN-04)
+// ============================================================================
+
+/// Per-endpoint sliding window rate limiter.
+///
+/// Tracks (endpoint, IP) pairs and rejects requests that exceed the
+/// configured limit within the window. This protects expensive operations
+/// (tool launch, capability grants, audit export) from abuse.
+pub struct EndpointRateLimiter {
+    /// Map of (endpoint_key, ip) → (count, window_start)
+    map: Mutex<HashMap<(String, IpAddr), (u32, Instant)>>,
+    /// Per-endpoint limits: (window_secs, max_requests)
+    limits: HashMap<String, (Duration, u32)>,
+}
+
+impl EndpointRateLimiter {
+    pub fn new() -> Self {
+        let mut limits = HashMap::new();
+        // Tool launch: 5 per minute
+        limits.insert("/api/v1/tools/launch".to_string(), (Duration::from_secs(60), 5));
+        // Tool stop: 5 per minute
+        limits.insert("/api/v1/tools/stop".to_string(), (Duration::from_secs(60), 5));
+        // Capability grant: 10 per minute
+        limits.insert("/api/v1/capabilities/grant".to_string(), (Duration::from_secs(60), 10));
+        // Delegation: 10 per minute
+        limits.insert("/api/v1/capabilities/delegate".to_string(), (Duration::from_secs(60), 10));
+        // Chat/LLM proxy: 30 per minute
+        limits.insert("/api/v1/chat".to_string(), (Duration::from_secs(60), 30));
+
+        Self {
+            map: Mutex::new(HashMap::new()),
+            limits,
+        }
+    }
+
+    /// Check whether a request to `path` from `ip` is allowed.
+    /// Returns `Ok(())` if allowed, `Err(retry_after)` if rate-limited.
+    pub fn check(&self, path: &str, ip: IpAddr) -> Result<(), Duration> {
+        // Find the matching limit (exact match or prefix for /api/v1/proxy/*)
+        let (key, window, limit) = match self.limits.get(path) {
+            Some(&(w, l)) => (path.to_string(), w, l),
+            None if path.starts_with("/api/v1/proxy/") => {
+                // LLM proxy: 30 per minute
+                ("/api/v1/proxy/*".to_string(), Duration::from_secs(60), 30)
+            }
+            None => return Ok(()), // No limit configured for this endpoint
+        };
+
+        let mut map = self.map.lock();
+        let now = Instant::now();
+        let entry = map.entry((key, ip)).or_insert((0, now));
+
+        if now.duration_since(entry.1) >= window {
+            // Window expired — reset
+            *entry = (1, now);
+            return Ok(());
+        }
+
+        entry.0 += 1;
+        if entry.0 > limit {
+            let retry_after = window.saturating_sub(now.duration_since(entry.1));
+            Err(retry_after)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Default for EndpointRateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Default for FailedAuthLimiter {
     fn default() -> Self {
         Self::new()
@@ -259,6 +334,7 @@ pub async fn require_auth(
     next: Next,
     session_auth: Arc<SessionAuth>,
     rate_limiter: Arc<FailedAuthLimiter>,
+    endpoint_limiter: Arc<EndpointRateLimiter>,
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path().to_string();
 
@@ -325,7 +401,17 @@ pub async fn require_auth(
     let token = bearer.or(cookie_token).or(query_token);
 
     match token {
-        Some(t) if session_auth.verify(&t) => Ok(next.run(req).await),
+        Some(t) if session_auth.verify(&t) => {
+            // Phase 1.7: per-endpoint rate limiting for expensive operations.
+            if let Err(retry_after) = endpoint_limiter.check(&path, client_ip) {
+                warn!(
+                    "Endpoint rate limit: {} on {} — retry in {}s",
+                    client_ip, path, retry_after.as_secs()
+                );
+                return Err(StatusCode::TOO_MANY_REQUESTS);
+            }
+            Ok(next.run(req).await)
+        }
         Some(_) => {
             warn!("Auth rejected: invalid token for {}", path);
             if let Err(retry) = rate_limiter.record_failure(client_ip) {
