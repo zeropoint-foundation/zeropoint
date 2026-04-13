@@ -40,8 +40,8 @@ use tracing::{error, info, warn};
 use zp_audit::AuditStore;
 use zp_core::{
     ActionType as CoreActionType, ActorId, CapabilityGrant, Channel, ConversationId,
-    DelegationChain, GrantedCapability, OperatorIdentity, PolicyContext, PolicyDecision, Request,
-    TrustTier,
+    DelegationChain, GrantProvenance, GrantedCapability, OperatorIdentity, PolicyContext,
+    PolicyDecision, Request, TrustTier,
 };
 use zp_pipeline::{Pipeline, PipelineConfig};
 use zp_policy::{GateResult, GovernanceGate};
@@ -1402,6 +1402,8 @@ async fn grant_handler(
 struct DelegateRequest {
     /// ID of the parent grant to delegate from
     parent_grant_id: String,
+    /// Identity of the delegator (must match the parent grant's grantee)
+    delegator_identity: String,
     /// Who receives the delegated grant
     grantee: String,
     /// Capability type (must be subset of parent)
@@ -1433,6 +1435,27 @@ async fn delegate_handler(
         .clone();
     drop(grants);
 
+    // --- Phase 3.4: Ownership verification ---
+    // The delegator must be the current holder (grantee) of the parent grant.
+    // This prevents AUTHZ-VULN-16: ownership-free capability delegation.
+    if body.delegator_identity != parent.grantee {
+        return Err((
+            StatusCode::FORBIDDEN,
+            format!(
+                "Delegation denied: delegator '{}' is not the holder of grant '{}'",
+                body.delegator_identity, parent.id
+            ),
+        ));
+    }
+
+    // SystemGenerated grants cannot be delegated (Phase 3.2 provenance check).
+    if !parent.provenance.is_delegable() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Delegation denied: system-generated grants cannot be delegated".to_string(),
+        ));
+    }
+
     let scope = body.scope.unwrap_or_else(|| match &parent.capability {
         GrantedCapability::Read { scope } => scope.clone(),
         GrantedCapability::Write { scope } => scope.clone(),
@@ -1456,13 +1479,19 @@ async fn delegate_handler(
         }
     };
 
-    let child = parent
+    let mut child = parent
         .delegate(
             body.grantee.clone(),
             capability,
             format!("rcpt-{}", uuid::Uuid::now_v7()),
         )
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Delegation failed: {}", e)))?;
+
+    // Phase 3.2: Set provenance to Delegated with parent linkage.
+    child.provenance = GrantProvenance::Delegated {
+        parent_grant_id: parent.id.clone(),
+        delegator_key: body.delegator_identity.clone(),
+    };
 
     let depth = child.delegation_depth;
     let child_json = serde_json::to_value(&child).unwrap_or_default();
