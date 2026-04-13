@@ -95,3 +95,13 @@ DATABASE_*.txt
 substack-draft*
 *.mobileconfig
 voice-tuner-server.py
+
+# ── Pentest artifacts — LOCAL ONLY, never pushed to the public repo.
+# Findings, POCs, forensic DB dumps, and remediation plans describe
+# live attack surface and cannot go to github.com/zeropoint-foundation
+# until they are fully closed and publicly disclosed on our schedule.
+security/pentest-*/
+*.forensic
+audit.db.pre-*
+audit-*-forensic*
+*.pentest-notes.md

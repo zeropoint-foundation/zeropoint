@@ -5,7 +5,7 @@
 
 use chrono::{Duration, Utc};
 use std::time::Duration as StdDuration;
-use zp_audit::{AuditStore, ChainBuilder, ChainVerifier};
+use zp_audit::{AuditStore, ChainVerifier, UnsealedEntry};
 use zp_core::audit::ActorId;
 use zp_core::capability_grant::{CapabilityGrant, Constraint, GrantedCapability};
 use zp_core::delegation_chain::DelegationChain;
@@ -180,21 +180,19 @@ fn main() {
     // 4. Audit trail
     println!("\nAUDIT");
     println!("─────");
-    let store = AuditStore::open("./capstone-audit.db").expect("Should open audit store");
+    let mut store = AuditStore::open("./capstone-audit.db").expect("Should open audit store");
     let conv_id = ConversationId::new();
 
-    let entry = ChainBuilder::build_entry_from_genesis(
+    let unsealed = UnsealedEntry::new(
         ActorId::User("alice".into()),
         zp_core::audit::AuditAction::MessageReceived {
             content_hash: "abc".into(),
         },
         conv_id.clone(),
         zp_core::policy::PolicyDecision::Allow { conditions: vec![] },
-        "default-allow".into(),
-        None,
-        None,
+        "default-allow",
     );
-    store.append(entry).expect("Should append");
+    store.append(unsealed).expect("Should append");
 
     let entries = store.get_entries(&conv_id, 100).expect("Should retrieve");
     println!("Entries: {}", entries.len());

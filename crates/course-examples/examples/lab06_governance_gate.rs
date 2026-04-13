@@ -90,11 +90,8 @@ fn main() {
     }
 
     // Test 5: Audit chain integrity
-    println!(
-        "\nAudit chain head: {}...{}",
-        &gate.audit_chain_head()[..8],
-        &gate.audit_chain_head()[gate.audit_chain_head().len() - 8..]
-    );
-    println!("✓ Every evaluation produces a hash-chained audit entry");
+    // (Gate no longer owns a chain head — the canonical chain lives in
+    // AuditStore. See docs/audit-invariant.md.)
+    println!("\n✓ Every evaluation produces an UnsealedEntry for AuditStore::append");
     println!("✓ Full pipeline (Guard → Policy → Audit) operational");
 }
