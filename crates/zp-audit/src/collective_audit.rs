@@ -153,6 +153,12 @@ pub struct PeerAuditAttestation {
 
 impl PeerAuditAttestation {
     /// Compute a deterministic hash for this attestation.
+    ///
+    /// The preimage is canonical JSON with fields in fixed order. The
+    /// `signature` field is deliberately excluded so the hash is stable
+    /// across signing (matches the pattern used by
+    /// `zp_receipt::hasher::canonical_hash` and
+    /// `zp_audit::chain::compute_entry_hash`).
     pub fn compute_hash(&self) -> String {
         let canonical = serde_json::json!({
             "id": self.id,
@@ -164,8 +170,22 @@ impl PeerAuditAttestation {
             "signatures_valid": self.signatures_valid,
             "timestamp": self.timestamp.to_rfc3339(),
         });
-        let bytes = serde_json::to_vec(&canonical).unwrap_or_default();
+        // Canonical JSON of a statically-shaped struct cannot fail; any
+        // serialization error here is a programmer bug, not runtime data.
+        let bytes = serde_json::to_vec(&canonical)
+            .expect("canonical JSON serialization of PeerAuditAttestation cannot fail");
         blake3::hash(&bytes).to_hex().to_string()
+    }
+
+    /// Verify that a freshly recomputed hash matches the caller's expected
+    /// value. Any code that receives a `PeerAuditAttestation` from a peer
+    /// (e.g. over the mesh) MUST call this against the transported hash
+    /// before trusting the attestation.
+    ///
+    /// Added by Sweep 1 (2026-04-07) to close the AUDIT-02-class
+    /// "write-only hash" pattern.
+    pub fn verify_hash(&self, expected: &str) -> bool {
+        self.compute_hash() == expected
     }
 }
 
@@ -407,6 +427,61 @@ mod tests {
         let mut att2 = att1.clone();
         att2.chain_valid = false;
         assert_ne!(att1.compute_hash(), att2.compute_hash()); // different when fields differ
+    }
+
+    // ========================================================================
+    // Sweep 1 (2026-04-07): verify_hash + round-trip regression tests
+    // ========================================================================
+
+    fn sample_attestation() -> PeerAuditAttestation {
+        PeerAuditAttestation {
+            id: "att-roundtrip".to_string(),
+            peer: "peer-xyz".to_string(),
+            oldest_hash: "o".to_string(),
+            newest_hash: "n".to_string(),
+            entries_verified: 42,
+            chain_valid: true,
+            signatures_valid: 40,
+            timestamp: DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
+            signature: None,
+        }
+    }
+
+    #[test]
+    fn test_verify_hash_passes_when_hashes_match() {
+        let att = sample_attestation();
+        let h = att.compute_hash();
+        assert!(att.verify_hash(&h));
+    }
+
+    #[test]
+    fn test_verify_hash_rejects_mismatch() {
+        let att = sample_attestation();
+        assert!(!att.verify_hash("definitely_not_the_hash"));
+    }
+
+    #[test]
+    fn test_verify_hash_signature_independent() {
+        // The signature field must not affect compute_hash — signing an
+        // attestation after construction must leave the hash stable.
+        let mut att = sample_attestation();
+        let h1 = att.compute_hash();
+        att.signature = Some("ed25519sig".to_string());
+        let h2 = att.compute_hash();
+        assert_eq!(h1, h2, "signature must be excluded from hash preimage");
+        assert!(att.verify_hash(&h1));
+    }
+
+    #[test]
+    fn test_attestation_roundtrip_preserves_hash() {
+        // JSON round-trip: serialize → deserialize → recompute hash.
+        // Regression guard for the AUDIT-02 Debug-format class of bug.
+        let att = sample_attestation();
+        let expected = att.compute_hash();
+        let json = serde_json::to_string(&att).unwrap();
+        let att2: PeerAuditAttestation = serde_json::from_str(&json).unwrap();
+        assert_eq!(att2.compute_hash(), expected);
+        assert!(att2.verify_hash(&expected));
     }
 
     #[test]

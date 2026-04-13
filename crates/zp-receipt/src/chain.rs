@@ -2,6 +2,29 @@
 //!
 //! The chain provides an immutable audit trail where each entry's hash
 //! incorporates the previous entry's hash, making tampering detectable.
+//!
+//! # ⚠️ Pedagogical use only
+//!
+//! This `ReceiptChain` is an in-memory, single-writer teaching abstraction
+//! used by the `course-examples` crate (labs 07, 14, 16) to illustrate
+//! hash-linked chains. **It is not the canonical ZeroPoint audit chain.**
+//!
+//! The canonical production chain is [`zp_audit::AuditStore`], which:
+//!
+//! - persists to SQLite with `user_version = 2`,
+//! - serializes writers via `BEGIN IMMEDIATE`,
+//! - enforces `prev_hash` uniqueness at the storage layer,
+//! - is verified under strict P1–P4 by the catalog verifier, and
+//! - has a single owner per process (`Arc<Mutex<AuditStore>>`).
+//!
+//! Do NOT use `ReceiptChain` in production code paths. If you need a
+//! persistent, multi-writer receipt chain, use `zp_audit::AuditStore`.
+//! A ripple audit tracked this as finding **R3** (see
+//! `docs/audit-architecture.md` §7 and
+//! `security/pentest-2026-04-06/RIPPLE-AUDIT.md`). Sweep 2 of the
+//! 2026-04-07 remediation confirmed that `ReceiptChain` has zero
+//! non-test consumers outside `course-examples`, and retained it as a
+//! pedagogical artifact under this visibility constraint.
 
 use crate::Receipt;
 use serde::{Deserialize, Serialize};

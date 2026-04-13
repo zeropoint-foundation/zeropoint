@@ -114,6 +114,13 @@ impl ConfigField {
 // ============================================================================
 
 /// The result of resolving a single env variable.
+///
+/// Some variant fields (notably `pattern_name`) and the `is_resolved`
+/// helper are retained for diagnostic output and upcoming `zp configure
+/// explain` surfaces. They are deliberately kept on the enum so the
+/// resolution pipeline threads the information end-to-end; silence the
+/// current dead-code noise without deleting the scaffolding.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Resolution {
     /// Resolved from vault via a matched pattern
@@ -249,6 +256,7 @@ impl ConfigEngine {
     }
 
     /// Create a ConfigEngine with custom patterns (for testing or extension).
+    #[allow(dead_code)]
     pub fn with_patterns(rules: Vec<ConfigPattern>) -> Self {
         let patterns = rules
             .into_iter()
@@ -508,9 +516,15 @@ impl ConfigEngine {
                         }
 
                         // Default field (model, URL) — activate if the provider
-                        // has credentials available (known from Pass 1)
+                        // has credentials available (known from Pass 1).
+                        // Url-field defaults are only activated in proxy mode;
+                        // otherwise we'd write provider base-URL vars (e.g.
+                        // ANTHROPIC_BASE_URL) that flip SDKs into "custom
+                        // endpoint" mode and break native API-key auth.
                         if let Some(ref default) = pattern.default {
-                            if available_providers.contains(&pattern.provider) {
+                            let is_url_without_proxy = pattern.field == ConfigField::Url
+                                && self.proxy_port.is_none();
+                            if available_providers.contains(&pattern.provider) && !is_url_without_proxy {
                                 info!(
                                     "Activating dormant {} with default (provider {} available)",
                                     key, pattern.provider
@@ -611,16 +625,26 @@ impl ConfigEngine {
                             }
                         }
                     } else if let Some(ref default) = pattern.default {
-                        let resolved_value = if pattern.field == ConfigField::Url && self.proxy_port.is_some() {
-                            self.proxy_url(&pattern.provider, default)
+                        // Url-field defaults are only emitted in proxy mode.
+                        // Otherwise we'd activate provider base-URL vars (e.g.
+                        // ANTHROPIC_BASE_URL) that flip SDKs into "custom
+                        // endpoint" mode and break native API-key auth.
+                        if pattern.field == ConfigField::Url && self.proxy_port.is_none() {
+                            resolutions.push(Resolution::Passthrough {
+                                line: line.to_string(),
+                            });
                         } else {
-                            default.clone()
-                        };
-                        resolutions.push(Resolution::DefaultResolved {
-                            var_name,
-                            pattern_name: pattern.name.clone(),
-                            value: resolved_value,
-                        });
+                            let resolved_value = if pattern.field == ConfigField::Url && self.proxy_port.is_some() {
+                                self.proxy_url(&pattern.provider, default)
+                            } else {
+                                default.clone()
+                            };
+                            resolutions.push(Resolution::DefaultResolved {
+                                var_name,
+                                pattern_name: pattern.name.clone(),
+                                value: resolved_value,
+                            });
+                        }
                     } else if !clean_value.is_empty() {
                         resolutions.push(Resolution::Preserved {
                             var_name,
@@ -1881,7 +1905,10 @@ pub fn run_scan(
 // Auto — scan + configure all ready tools in one shot
 // ============================================================================
 
-/// Result of auto-configuring one tool.
+/// Result of auto-configuring one tool. `name` and `path` are retained
+/// for the upcoming summary/reporting surface; silence dead-code until
+/// the reporter is wired up.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct AutoResult {
     pub name: String,

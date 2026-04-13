@@ -3,6 +3,7 @@
 //! Instead of caching tool readiness in a JSON file, every meaningful
 //! state transition for a tool produces a hash-linked audit entry:
 //!
+//!   tool:registered:<name>                — added to governance via Add Tool flow
 //!   tool:configured:<name>                — .env written, credentials resolved
 //!   tool:preflight:passed:<name>          — all infra checks green
 //!   tool:preflight:failed:<name>          — one or more checks failed
@@ -23,10 +24,10 @@
 
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use uuid::Uuid;
 
-use zp_audit::{chain::ChainBuilder, AuditStore};
+use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
 
 // ── Well-known namespace ────────────────────────────────────────────────
@@ -47,6 +48,9 @@ pub(crate) fn tool_lifecycle_conv_id() -> &'static ConversationId {
 pub struct ToolEvent;
 
 impl ToolEvent {
+    pub fn registered(name: &str) -> String {
+        format!("tool:registered:{}", name)
+    }
     pub fn configured(name: &str) -> String {
         format!("tool:configured:{}", name)
     }
@@ -88,14 +92,11 @@ impl ToolEvent {
 ///
 /// Returns the entry_hash of the appended entry.
 pub fn emit_tool_receipt(
-    audit_store: &Mutex<AuditStore>,
+    audit_store: &Arc<Mutex<AuditStore>>,
     event: &str,
     detail: Option<&str>,
 ) -> Option<String> {
-    let store = audit_store.lock().ok()?;
-    let prev_hash = store
-        .get_latest_hash()
-        .unwrap_or_else(|_| blake3::hash(b"").to_hex().to_string());
+    let mut store = audit_store.lock().ok()?;
 
     let action = AuditAction::SystemEvent {
         event: event.to_string(),
@@ -109,29 +110,24 @@ pub fn emit_tool_receipt(
         },
     };
 
-    let entry = ChainBuilder::build_entry(
-        &prev_hash,
+    // AUDIT-03: caller no longer computes prev_hash. The store reads the
+    // tip and seals the entry atomically inside a BEGIN IMMEDIATE
+    // transaction, eliminating the concurrent-append race.
+    let unsealed = UnsealedEntry::new(
         ActorId::System("zp-preflight".to_string()),
         action,
         tool_lifecycle_conv_id().clone(),
         policy_decision,
-        "tool-lifecycle".to_string(),
-        None, // receipt object — we can attach a full Receipt later for Grade B+
-        None, // signature — the entry_hash provides integrity for now
+        "tool-lifecycle",
     );
 
-    let hash = entry.entry_hash.clone();
-    if store.append(entry).is_ok() {
-        Some(hash)
-    } else {
-        None
-    }
+    store.append(unsealed).ok().map(|sealed| sealed.entry_hash)
 }
 
 /// Emit a batch of tool lifecycle receipts (e.g., during preflight).
 /// Returns the number of entries successfully appended.
 pub fn emit_tool_receipts(
-    audit_store: &Mutex<AuditStore>,
+    audit_store: &Arc<Mutex<AuditStore>>,
     events: &[(&str, Option<&str>)],
 ) -> usize {
     let mut count = 0;
@@ -185,7 +181,7 @@ pub struct CapabilityChainState {
 /// extracts the latest event for each tool, and returns a map
 /// of tool name → readiness state.
 pub fn query_tool_readiness(
-    audit_store: &Mutex<AuditStore>,
+    audit_store: &Arc<Mutex<AuditStore>>,
 ) -> HashMap<String, ToolChainState> {
     let store = match audit_store.lock() {
         Ok(s) => s,

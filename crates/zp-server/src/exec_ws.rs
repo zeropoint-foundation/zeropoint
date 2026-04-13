@@ -27,17 +27,22 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-use crate::{tool_chain, AppState};
+use crate::{auth, tool_chain, AppState};
 
 /// Axum handler: upgrade HTTP → WebSocket for governed exec.
 pub async fn exec_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_exec_ws(socket, state))
+    // Limit inbound WebSocket frame size to 64 KB — exec commands should
+    // never be larger than a few hundred bytes. This prevents memory
+    // exhaustion from malicious oversized frames.
+    ws.max_frame_size(64 * 1024)
+        .max_message_size(64 * 1024)
+        .on_upgrade(move |socket| handle_exec_ws(socket, state))
 }
 
 /// Handle a governed execution WebSocket session.
@@ -106,12 +111,113 @@ async fn execute_and_stream(
     cwd: &str,
     app_state: &AppState,
 ) -> Option<String> {
-    tracing::info!("exec_ws: running '{}' in '{}'", cmd, cwd);
+    // Expand leading `~` or `~/` — Rust's Command::current_dir() takes paths
+    // literally and does not perform shell-style tilde expansion.
+    let resolved_cwd = if cwd.starts_with("~/") || cwd == "~" {
+        match dirs::home_dir() {
+            Some(home) => home.join(cwd.strip_prefix("~/").unwrap_or("")).to_string_lossy().to_string(),
+            None => cwd.to_string(),
+        }
+    } else {
+        cwd.to_string()
+    };
 
-    let mut child = match Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
-        .current_dir(cwd)
+    // Ensure the working directory exists before spawning — a missing cwd
+    // causes ENOENT which is indistinguishable from a missing shell binary.
+    let resolved_path = std::path::Path::new(&resolved_cwd);
+    if !resolved_path.exists() {
+        tracing::warn!("exec_ws: cwd does not exist, creating: {}", resolved_cwd);
+        let _ = std::fs::create_dir_all(resolved_path);
+    }
+
+    // ── Command governance: check allowlist before spawning ──────────
+    if let Err(reason) = auth::check_command(cmd) {
+        tracing::warn!("exec_ws: BLOCKED '{}' — {}", cmd, reason);
+        let _ = tx.send(WsMessage::Text(
+            serde_json::json!({
+                "type": "error",
+                "message": format!("🛡 {}", reason)
+            }).to_string()
+        )).await;
+
+        // Emit a blocked-command receipt for the audit chain
+        tool_chain::emit_tool_receipt(
+            &app_state.0.audit_store,
+            "tool:cmd:blocked",
+            Some(&format!("cmd_prefix={}, reason={}", cmd.split_whitespace().next().unwrap_or("?"), reason)),
+        );
+
+        return None;
+    }
+
+    // ── EXEC-01 fix: NO SHELL. ────────────────────────────────────────
+    // The previous implementation passed `cmd` to `sh -c`, which made
+    // every metacharacter an injection vector and made command
+    // governance fundamentally unsound (auth::check_command saw the
+    // string but the shell saw a different parse tree). The new path:
+    //
+    //   1. Reject any string containing shell metacharacters outright,
+    //      even if some downstream tool would have wanted them. This is
+    //      defense in depth — we cannot represent these meanings in a
+    //      structured argv anyway.
+    //   2. Tokenize with shlex (POSIX shell-quoting rules without any
+    //      execution semantics) so quoted strings still work.
+    //   3. exec the resulting argv directly via `Command::new(argv[0])`
+    //      with no shell anywhere in the chain.
+    //
+    // Catalog mapping: this is a P3 (the gate) hardening — closing the
+    // gap where the gate's view of the action and the executor's view
+    // of the action could differ. See INVARIANT-CATALOG-v0.md §M1.
+    const SHELL_METACHARS: &[char] = &[
+        '|', '&', ';', '<', '>', '$', '`', '\\', '\n', '\r', '(', ')', '{', '}',
+    ];
+    if let Some(c) = cmd.chars().find(|c| SHELL_METACHARS.contains(c)) {
+        let msg = format!(
+            "🛡 Command rejected: shell metacharacter '{}' is not permitted in structured exec. \
+             Compound commands, redirections, and substitutions must be expressed as separate exec calls.",
+            c
+        );
+        tracing::warn!("exec_ws: BLOCKED metachar '{}' in cmd '{}'", c, cmd);
+        let _ = tx.send(WsMessage::Text(
+            serde_json::json!({ "type": "error", "message": msg }).to_string()
+        )).await;
+        tool_chain::emit_tool_receipt(
+            &app_state.0.audit_store,
+            "tool:cmd:blocked",
+            Some(&format!("reason=metachar, char={}", c)),
+        );
+        return None;
+    }
+
+    let argv: Vec<String> = match shlex::split(cmd) {
+        Some(v) if !v.is_empty() => v,
+        Some(_) => {
+            let _ = tx.send(WsMessage::Text(
+                serde_json::json!({ "type": "error", "message": "🛡 Empty command after tokenization" }).to_string()
+            )).await;
+            return None;
+        }
+        None => {
+            let _ = tx.send(WsMessage::Text(
+                serde_json::json!({ "type": "error", "message": "🛡 Command failed to parse (unbalanced quotes?)" }).to_string()
+            )).await;
+            tool_chain::emit_tool_receipt(
+                &app_state.0.audit_store,
+                "tool:cmd:blocked",
+                Some("reason=tokenize_failed"),
+            );
+            return None;
+        }
+    };
+
+    tracing::info!("exec_ws: running argv {:?} in '{}'", argv, resolved_cwd);
+
+    let program = &argv[0];
+    let args = &argv[1..];
+
+    let mut child = match Command::new(program)
+        .args(args)
+        .current_dir(&resolved_cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null())
