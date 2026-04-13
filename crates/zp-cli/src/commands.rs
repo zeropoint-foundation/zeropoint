@@ -584,16 +584,11 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     }
     let store = AuditStore::open(&db_path).ok();
 
-    // Create the real governance gate (default PolicyEngine with 6 rules)
-    let mut gate = GovernanceGate::new("cli-gate");
-
-    // Sync the gate's chain head with the store's actual latest hash
-    // so prev_hash on the new entry continues the real chain
-    if let Some(ref s) = store {
-        if let Ok(latest) = s.get_latest_hash() {
-            gate.set_audit_chain_head(latest);
-        }
-    }
+    // Create the real governance gate (default PolicyEngine with 6 rules).
+    // The gate no longer maintains its own chain head — chain position is
+    // assigned by `AuditStore::append` inside a BEGIN IMMEDIATE transaction.
+    // See docs/audit-invariant.md.
+    let gate = GovernanceGate::new("cli-gate");
 
     // Evaluate through the full gate stack
     let result = gate.evaluate(&context, actor);
@@ -651,8 +646,8 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
 
     // Persist the audit entry to the append-only chain
     match store {
-        Some(s) => {
-            if let Err(e) = s.append(result.audit_entry) {
+        Some(mut s) => {
+            if let Err(e) = s.append(result.unsealed) {
                 eprintln!("  \x1b[33m⚠\x1b[0m  Failed to persist audit entry: {}", e);
             } else {
                 eprintln!("  \x1b[2mAudit entry persisted.\x1b[0m");

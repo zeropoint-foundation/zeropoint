@@ -33,6 +33,7 @@
 //!
 //! Every query emits a receipt, so the analysis itself is auditable.
 
+use std::sync::Arc;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
@@ -83,7 +84,7 @@ impl AnalysisEngines {
     ///
     /// `get_entries` returns newest-first, so we reverse to process in order.
     /// We track the total count to avoid re-processing entries.
-    pub async fn ingest_receipts(&self, audit_store: &std::sync::Mutex<AuditStore>) {
+    pub async fn ingest_receipts(&self, audit_store: &Arc<std::sync::Mutex<AuditStore>>) {
         let entries = {
             let store = match audit_store.lock() {
                 Ok(s) => s,

@@ -81,7 +81,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use zp_audit::AuditStore;
 use zp_core::{AuditAction, PolicyDecision};
@@ -243,7 +243,7 @@ const HEALTH_STALE_SECS: i64 = 120; // 2 minutes
 /// This is a pure function: same chain → same output.
 /// It can be called by dashboards, agents, CLIs, or remote auditors.
 pub fn derive_system_state(
-    audit_store: &Mutex<AuditStore>,
+    audit_store: &Arc<Mutex<AuditStore>>,
 ) -> SystemState {
     let now = Utc::now();
 

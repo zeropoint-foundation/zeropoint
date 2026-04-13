@@ -1,135 +1,240 @@
-use chrono::Utc;
+//! Chain construction for audit entries.
+//!
+//! # Architecture (post-AUDIT-03)
+//!
+//! As of the AUDIT-03 fix (see `security/pentest-2026-04-06/REMEDIATION-NOTES.md`),
+//! the audit chain is **owned by `AuditStore::append`**, not by callers. Callers
+//! construct an [`UnsealedEntry`] containing only the application-level fields
+//! (actor, action, conversation_id, policy_decision, policy_module, receipt,
+//! signature) and hand it to `AuditStore::append`. The store then, inside a
+//! `BEGIN IMMEDIATE` transaction:
+//!
+//! 1. Reads the current chain tip from SQLite by `MAX(rowid)`.
+//! 2. Assigns `id` and `timestamp`.
+//! 3. Computes `entry_hash` via [`seal_entry`].
+//! 4. Inserts the row.
+//! 5. Commits.
+//!
+//! `BEGIN IMMEDIATE` acquires SQLite's RESERVED lock, which serializes writers
+//! at the *file* level — not the connection level — so this is correct across
+//! both concurrent in-process handles and concurrent OS processes.
+//!
+//! # Hashing
+//!
+//! [`seal_entry`] hashes a JSON representation of the entry. Unlike the
+//! pre-AUDIT-03 layout (which used `format!("{:?}", actor)` and hit AUDIT-02),
+//! this layout uses proper [`serde_json`] serialization for `actor`,
+//! `action`, `conversation_id`, and `policy_decision`. New entries written
+//! through `AuditStore::append` round-trip bit-exactly through the database.
+//!
+//! Historical entries (written by the legacy `ChainBuilder::build_entry`
+//! path) used the Debug-format layout and will not match this hash function.
+//! The catalog verifier (`crate::catalog_verify`) currently leaves the
+//! content-hash check disabled because of this; re-enabling it requires
+//! either a fresh database or a one-time hash-rebuild migration.
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
 use zp_core::{ActorId, AuditAction, AuditEntry, AuditId, ConversationId, PolicyDecision, Receipt};
 
-/// ChainBuilder constructs audit entries with deterministic hash chains.
-pub struct ChainBuilder;
+/// An audit entry that has not yet been linked into the chain.
+///
+/// Construct one of these and pass it to [`crate::AuditStore::append`]. The
+/// store assigns `id`, `timestamp`, `prev_hash`, and `entry_hash` atomically
+/// inside a transaction; callers must NOT compute these themselves.
+///
+/// This is the only sanctioned way to add entries to the audit chain. The
+/// pre-AUDIT-03 `ChainBuilder::build_entry` API is gone because it allowed
+/// callers to read the chain tip outside of any serialization, which produced
+/// the concurrent-append race documented in REMEDIATION-NOTES.md.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnsealedEntry {
+    pub actor: ActorId,
+    pub action: AuditAction,
+    pub conversation_id: ConversationId,
+    pub policy_decision: PolicyDecision,
+    pub policy_module: String,
+    pub receipt: Option<Receipt>,
+    pub signature: Option<String>,
+}
 
-impl ChainBuilder {
-    /// Builds an audit entry with a computed hash based on all fields.
-    /// The entry_hash is computed deterministically from a JSON serialization
-    /// of all entry fields in a stable order.
-    #[allow(clippy::too_many_arguments)]
-    pub fn build_entry(
-        prev_hash: &str,
+impl UnsealedEntry {
+    /// Convenience constructor for the common case (no receipt, no signature).
+    pub fn new(
         actor: ActorId,
         action: AuditAction,
         conversation_id: ConversationId,
         policy_decision: PolicyDecision,
-        policy_module: String,
-        receipt: Option<Receipt>,
-        signature: Option<String>,
-    ) -> AuditEntry {
-        let id = AuditId(Uuid::now_v7());
-        let timestamp = Utc::now();
-
-        // Build a deterministic JSON representation of the entry (without the hash fields themselves)
-        // This ensures the hash computation is reproducible.
-        let entry_data = json!({
-            "id": format!("{:?}", id.0),
-            "timestamp": timestamp.to_rfc3339(),
-            "prev_hash": prev_hash,
-            "actor": format!("{:?}", actor),
-            "action": serde_json::to_value(&action).unwrap_or(json!(null)),
-            "conversation_id": format!("{:?}", conversation_id.0),
-            "policy_decision": serde_json::to_value(&policy_decision).unwrap_or(json!(null)),
-            "policy_module": policy_module,
-            "receipt": receipt.as_ref().map(|r| serde_json::to_value(r).unwrap_or(json!(null))),
-            "signature": signature,
-        });
-
-        // Serialize to JSON bytes and hash with blake3
-        let entry_bytes = serde_json::to_vec(&entry_data).unwrap_or_default();
-        let entry_hash = blake3::hash(&entry_bytes).to_hex().to_string();
-
-        AuditEntry {
-            id,
-            timestamp,
-            prev_hash: prev_hash.to_string(),
-            entry_hash,
+        policy_module: impl Into<String>,
+    ) -> Self {
+        Self {
             actor,
             action,
             conversation_id,
             policy_decision,
-            policy_module,
-            receipt,
-            signature,
+            policy_module: policy_module.into(),
+            receipt: None,
+            signature: None,
         }
     }
 
-    /// Convenience method: builds an entry starting from the genesis hash.
-    pub fn build_entry_from_genesis(
-        actor: ActorId,
-        action: AuditAction,
-        conversation_id: ConversationId,
-        policy_decision: PolicyDecision,
-        policy_module: String,
-        receipt: Option<Receipt>,
-        signature: Option<String>,
-    ) -> AuditEntry {
-        let genesis = blake3::hash(b"").to_hex().to_string();
-        Self::build_entry(
-            &genesis,
-            actor,
-            action,
-            conversation_id,
-            policy_decision,
-            policy_module,
-            receipt,
-            signature,
-        )
+    /// Attach a receipt to this unsealed entry.
+    pub fn with_receipt(mut self, receipt: Receipt) -> Self {
+        self.receipt = Some(receipt);
+        self
     }
+
+    /// Attach a signature to this unsealed entry.
+    pub fn with_signature(mut self, signature: impl Into<String>) -> Self {
+        self.signature = Some(signature.into());
+        self
+    }
+
+}
+
+/// The blake3 hash of the empty byte string. Used as `prev_hash` for the
+/// genesis entry of any chain.
+pub fn genesis_hash() -> String {
+    blake3::hash(b"").to_hex().to_string()
+}
+
+/// Seal an [`UnsealedEntry`] into a fully-linked [`AuditEntry`] using the
+/// supplied `prev_hash`, `id`, and `timestamp`.
+///
+/// **This is an internal helper for [`crate::AuditStore::append`].** Callers
+/// outside of `zp-audit` should not invoke it directly — doing so is exactly
+/// the failure mode AUDIT-03 was about. It's `pub` only because the catalog
+/// verifier needs to be able to recompute hashes for the content-hash check.
+pub fn seal_entry(
+    unsealed: &UnsealedEntry,
+    prev_hash: &str,
+    id: AuditId,
+    timestamp: DateTime<Utc>,
+) -> AuditEntry {
+    let entry_hash = compute_entry_hash(unsealed, prev_hash, &id, &timestamp);
+    AuditEntry {
+        id,
+        timestamp,
+        prev_hash: prev_hash.to_string(),
+        entry_hash,
+        actor: unsealed.actor.clone(),
+        action: unsealed.action.clone(),
+        conversation_id: unsealed.conversation_id.clone(),
+        policy_decision: unsealed.policy_decision.clone(),
+        policy_module: unsealed.policy_module.clone(),
+        receipt: unsealed.receipt.clone(),
+        signature: unsealed.signature.clone(),
+    }
+}
+
+/// Compute the `entry_hash` for an unsealed entry given its `prev_hash`,
+/// `id`, and `timestamp`. Pure function — does not touch the database.
+///
+/// The hash is blake3 over a JSON object with all entry fields in a stable
+/// key order. All identity and policy fields are serialized via
+/// `serde_json::to_value` so the same bytes are reproducible from a database
+/// round-trip — the AUDIT-02 fix.
+///
+/// **The signature field is hashed as `null`**, never as the actual signature.
+/// Signatures are computed *over* the entry_hash, so the hash must be
+/// well-defined before any signature exists. The pre-AUDIT-03 ChainBuilder
+/// included `signature` in the hash, which was inconsistent with the verifier
+/// (verifier always set it to null). Every caller in the tree passed
+/// `signature: None` so the inconsistency was latent. The new path is
+/// internally consistent: hash never depends on signature.
+fn compute_entry_hash(
+    unsealed: &UnsealedEntry,
+    prev_hash: &str,
+    id: &AuditId,
+    timestamp: &DateTime<Utc>,
+) -> String {
+    let entry_data = json!({
+        "id": id.0.to_string(),
+        "timestamp": timestamp.to_rfc3339(),
+        "prev_hash": prev_hash,
+        "actor": serde_json::to_value(&unsealed.actor).unwrap_or(json!(null)),
+        "action": serde_json::to_value(&unsealed.action).unwrap_or(json!(null)),
+        "conversation_id": unsealed.conversation_id.0.to_string(),
+        "policy_decision": serde_json::to_value(&unsealed.policy_decision).unwrap_or(json!(null)),
+        "policy_module": unsealed.policy_module,
+        "receipt": unsealed.receipt.as_ref().map(|r| serde_json::to_value(r).unwrap_or(json!(null))),
+        "signature": Option::<String>::None,
+    });
+    let entry_bytes = serde_json::to_vec(&entry_data).unwrap_or_default();
+    blake3::hash(&entry_bytes).to_hex().to_string()
+}
+
+/// Recompute the `entry_hash` for an existing [`AuditEntry`].
+///
+/// Used by the catalog verifier (`crate::catalog_verify`) for the P1
+/// content-hash check: a stored entry is well-formed iff
+/// `recompute_entry_hash(&entry) == entry.entry_hash`.
+///
+/// **Only valid for entries written by the post-AUDIT-03 `AuditStore::append`
+/// path.** Pre-AUDIT-03 entries used a different (Debug-formatted) layout
+/// and will not round-trip through this function. See the module docs.
+pub fn recompute_entry_hash(entry: &AuditEntry) -> String {
+    let unsealed = UnsealedEntry {
+        actor: entry.actor.clone(),
+        action: entry.action.clone(),
+        conversation_id: entry.conversation_id.clone(),
+        policy_decision: entry.policy_decision.clone(),
+        policy_module: entry.policy_module.clone(),
+        receipt: entry.receipt.clone(),
+        signature: entry.signature.clone(),
+    };
+    compute_entry_hash(&unsealed, &entry.prev_hash, &entry.id, &entry.timestamp)
+}
+
+/// Allocate a fresh `AuditId` (v7 UUID, monotonic with wall clock).
+pub(crate) fn new_audit_id() -> AuditId {
+    AuditId(Uuid::now_v7())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn sample_unsealed(module: &str) -> UnsealedEntry {
+        UnsealedEntry::new(
+            ActorId::System("test-actor".to_string()),
+            AuditAction::SystemEvent {
+                event: "test".to_string(),
+            },
+            ConversationId(Uuid::now_v7()),
+            PolicyDecision::Allow { conditions: vec![] },
+            module,
+        )
+    }
+
     #[test]
-    fn test_chain_linkage() {
-        let actor = ActorId::System("test-actor".to_string());
-        let action = AuditAction::SystemEvent {
-            event: "test".to_string(),
-        };
-        let conversation_id = ConversationId(Uuid::now_v7());
-        let policy_decision = PolicyDecision::Allow { conditions: vec![] };
+    fn seal_is_deterministic() {
+        let unsealed = sample_unsealed("m1");
+        let id = AuditId(Uuid::now_v7());
+        let ts = Utc::now();
+        let prev = genesis_hash();
+        let a = seal_entry(&unsealed, &prev, id.clone(), ts);
+        let b = seal_entry(&unsealed, &prev, id, ts);
+        assert_eq!(a.entry_hash, b.entry_hash);
+    }
 
-        let entry1 = ChainBuilder::build_entry_from_genesis(
-            actor.clone(),
-            action.clone(),
-            conversation_id.clone(),
-            policy_decision.clone(),
-            "module1".to_string(),
-            None,
-            None,
-        );
+    #[test]
+    fn recompute_matches_seal() {
+        let unsealed = sample_unsealed("m1");
+        let sealed = seal_entry(&unsealed, &genesis_hash(), new_audit_id(), Utc::now());
+        assert_eq!(recompute_entry_hash(&sealed), sealed.entry_hash);
+    }
 
-        let entry2 = ChainBuilder::build_entry(
-            &entry1.entry_hash,
-            actor.clone(),
-            action.clone(),
-            conversation_id.clone(),
-            policy_decision.clone(),
-            "module2".to_string(),
-            None,
-            None,
-        );
-
-        let entry3 = ChainBuilder::build_entry(
-            &entry2.entry_hash,
-            actor,
-            action,
-            conversation_id,
-            policy_decision,
-            "module3".to_string(),
-            None,
-            None,
-        );
-
-        // Verify the chain is properly linked
-        assert_eq!(entry2.prev_hash, entry1.entry_hash);
-        assert_eq!(entry3.prev_hash, entry2.entry_hash);
+    #[test]
+    fn different_prev_hash_produces_different_entry_hash() {
+        let unsealed = sample_unsealed("m1");
+        let id = AuditId(Uuid::now_v7());
+        let ts = Utc::now();
+        let a = seal_entry(&unsealed, &genesis_hash(), id.clone(), ts);
+        let b = seal_entry(&unsealed, "deadbeef", id, ts);
+        assert_ne!(a.entry_hash, b.entry_hash);
     }
 }

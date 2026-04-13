@@ -17,7 +17,7 @@ use super::{OnboardEvent, OnboardState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use zp_audit::AuditStore;
 
 /// Result of preflight for a single tool.
@@ -106,34 +106,34 @@ const PREFLIGHT_FRESH_SECS: i64 = 3600; // 1 hour
 ///
 /// **Idempotent**: tools with a `tool:preflight:passed:{name}` receipt
 /// less than `PREFLIGHT_FRESH_SECS` old are skipped unless `force` is true.
-pub async fn run_preflight(
+pub(crate) async fn run_preflight(
     scan_path: &Path,
-    audit_store: Option<&Mutex<AuditStore>>,
+    audit_store: Option<&Arc<Mutex<AuditStore>>>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
     run_preflight_inner(scan_path, audit_store, false, None).await
 }
 
 /// Force a full re-run of all tools, ignoring fresh chain receipts.
-pub async fn run_preflight_force(
+pub(crate) async fn run_preflight_force(
     scan_path: &Path,
-    audit_store: Option<&Mutex<AuditStore>>,
+    audit_store: Option<&Arc<Mutex<AuditStore>>>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
     run_preflight_inner(scan_path, audit_store, true, None).await
 }
 
 /// Run preflight scoped to a single tool. Other tools are skipped.
 /// Always forces a fresh run (never skips based on chain freshness).
-pub async fn run_preflight_single(
+pub(crate) async fn run_preflight_single(
     scan_path: &Path,
     tool_name: &str,
-    audit_store: Option<&Mutex<AuditStore>>,
+    audit_store: Option<&Arc<Mutex<AuditStore>>>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
     run_preflight_inner(scan_path, audit_store, true, Some(tool_name)).await
 }
 
 async fn run_preflight_inner(
     scan_path: &Path,
-    audit_store: Option<&Mutex<AuditStore>>,
+    audit_store: Option<&Arc<Mutex<AuditStore>>>,
     force: bool,
     only_tool: Option<&str>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
@@ -280,8 +280,16 @@ async fn run_preflight_inner(
     // 4b. Check compose infrastructure ports against the live system.
     //     This catches the buried failure: tool A's postgres on 5432
     //     collides with tool B's postgres already running on 5432.
+    //     Only applies to tools that actually launch via Docker compose.
+    //     Tools running via pnpm/npm/native may have a compose file for
+    //     dev purposes but don't use it at runtime.
+    let docker_launched: std::collections::HashSet<String> = tool_results.iter()
+        .filter(|t| t.launch_method == "docker")
+        .map(|t| t.name.clone())
+        .collect();
     if docker_available {
         for (name, path) in &tool_dirs {
+            if !docker_launched.contains(name.as_str()) { continue; }
             let compose_ports = extract_compose_ports(path);
             for (host_port, service) in &compose_ports {
                 if let Some(occupant) = check_port_in_use(*host_port).await {
@@ -902,7 +910,9 @@ fn find_start_script(path: &Path) -> Option<String> {
 }
 
 fn detect_port(tool_path: &Path) -> Option<u16> {
-    for filename in &[".env", ".env.example"] {
+    // .env.zp is the ZP-assigned override and takes highest priority.
+    // It's sourced at launch via the preamble, so preflight must respect it too.
+    for filename in &[".env.zp", ".env", ".env.example"] {
         let file = tool_path.join(filename);
         if let Ok(contents) = std::fs::read_to_string(&file) {
             for line in contents.lines() {
@@ -950,6 +960,22 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
 
     let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
 
+    // Collect ZP sidecar overrides — these take priority over .env values.
+    // If .env.zp provides a real value for a variable, it's not "missing".
+    let mut zp_overrides = std::collections::HashSet::new();
+    if let Ok(zp_contents) = std::fs::read_to_string(path.join(".env.zp")) {
+        for line in zp_contents.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') { continue; }
+            if let Some((key, val)) = trimmed.split_once('=') {
+                let v = val.trim();
+                if !v.is_empty() {
+                    zp_overrides.insert(key.trim().to_string());
+                }
+            }
+        }
+    }
+
     let mut total = 0;
     let mut placeholders = 0;
     let mut critical_missing: Vec<String> = Vec::new();
@@ -960,6 +986,10 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
         total += 1;
         if let Some((key, val)) = trimmed.split_once('=') {
             let key = key.trim();
+
+            // Skip if .env.zp provides a real value for this variable
+            if zp_overrides.contains(key) { continue; }
+
             // Strip inline comments before checking the value
             let v = val.split('#').next().unwrap_or("")
                 .trim().trim_matches('"').trim_matches('\'');
@@ -1353,7 +1383,7 @@ async fn run_cmd_with_timeout(
 
 /// Scan the audit chain for `tool:preflight:passed:{name}` receipts
 /// that are less than `PREFLIGHT_FRESH_SECS` old.
-fn fresh_preflight_tools(audit_store: &Mutex<AuditStore>) -> std::collections::HashSet<String> {
+fn fresh_preflight_tools(audit_store: &Arc<Mutex<AuditStore>>) -> std::collections::HashSet<String> {
     use crate::tool_chain::tool_lifecycle_conv_id;
     use zp_core::AuditAction;
 
@@ -1389,7 +1419,7 @@ fn fresh_preflight_tools(audit_store: &Mutex<AuditStore>) -> std::collections::H
 // Onboard handler — called as a WebSocket action after configure
 // ============================================================================
 
-pub async fn handle_preflight(
+pub(crate) async fn handle_preflight(
     _state: &mut OnboardState,
     app_state: &crate::AppState,
 ) -> Vec<OnboardEvent> {

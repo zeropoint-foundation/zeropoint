@@ -12,10 +12,9 @@ use agent_zp::{
 use async_trait::async_trait;
 use tracing;
 
-use zp_audit::AuditStore;
-use zp_audit::ChainBuilder;
+use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::{
-    ActorId, AuditAction, AuditEntry, ConversationId, PolicyDecision,
+    ActorId, AuditAction, ConversationId, PolicyDecision,
 };
 
 /// Concrete `AuditSink` implementation backed by ZP's `AuditStore`.
@@ -49,23 +48,15 @@ impl ZpAuditSink {
         &self.conversation_id
     }
 
-    /// Append an audit entry to the store.
-    fn append_entry(&self, entry: AuditEntry) -> anyhow::Result<()> {
-        let store = self
+    /// Append an unsealed entry to the store. The store seals it atomically
+    /// inside a BEGIN IMMEDIATE transaction (AUDIT-03 fix).
+    fn append_unsealed(&self, unsealed: UnsealedEntry) -> anyhow::Result<()> {
+        let mut store = self
             .store
             .lock()
             .map_err(|e| anyhow::anyhow!("audit store lock poisoned: {}", e))?;
-        store.append(entry)?;
+        store.append(unsealed)?;
         Ok(())
-    }
-
-    /// Get the latest hash from the chain for linking.
-    fn latest_hash(&self) -> String {
-        self.store
-            .lock()
-            .ok()
-            .and_then(|s| s.get_latest_hash().ok())
-            .unwrap_or_else(|| "genesis".to_string())
     }
 }
 
@@ -75,20 +66,16 @@ impl agent_zp::AuditSink for ZpAuditSink {
         let actor = map_actor(&record.actor);
         let action = map_governance_action(&record);
         let decision = map_decision(&record.decision);
-        let prev_hash = self.latest_hash();
 
-        let entry = ChainBuilder::build_entry(
-            &prev_hash,
+        let unsealed = UnsealedEntry::new(
             actor,
             action,
             self.conversation_id.clone(),
             decision,
-            "agent-zp".to_string(),
-            None, // receipt — governance records don't carry portable receipts
-            None, // signature — added when sovereignty signing is wired
+            "agent-zp",
         );
 
-        self.append_entry(entry)?;
+        self.append_unsealed(unsealed)?;
 
         tracing::trace!(
             record_id = %record.id,
@@ -112,23 +99,19 @@ impl agent_zp::AuditSink for ZpAuditSink {
                 policy_module: "agent-zp".to_string(),
             }
         };
-        let prev_hash = self.latest_hash();
-
         // Build a portable receipt from the execution receipt
         let portable_receipt = build_portable_receipt(receipt);
 
-        let entry = ChainBuilder::build_entry(
-            &prev_hash,
+        let unsealed = UnsealedEntry::new(
             actor,
             action,
             self.conversation_id.clone(),
             decision,
-            "agent-zp".to_string(),
-            Some(portable_receipt),
-            None,
-        );
+            "agent-zp",
+        )
+        .with_receipt(portable_receipt);
 
-        self.append_entry(entry)?;
+        self.append_unsealed(unsealed)?;
 
         tracing::trace!(
             receipt_id = %receipt.receipt_id,

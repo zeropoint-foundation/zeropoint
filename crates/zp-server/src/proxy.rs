@@ -231,8 +231,8 @@ pub async fn proxy_handler(
         }
 
         // Append the gate's audit entry
-        if let Ok(audit) = state.0.audit_store.lock() {
-            if let Err(e) = audit.append(gate_result.audit_entry) {
+        if let Ok(mut audit) = state.0.audit_store.lock() {
+            if let Err(e) = audit.append(gate_result.unsealed.clone()) {
                 warn!(error = %e, "Failed to append gate audit entry");
             }
         }
@@ -341,14 +341,14 @@ pub async fn proxy_handler(
     );
 
     // 6. Log to audit trail
+    //
+    // AUDIT-03: store seals the entry atomically inside a BEGIN IMMEDIATE
+    // transaction, so the proxy and tool-lifecycle paths can no longer race
+    // even when they go through different AuditStore handles on the same
+    // file. Caller does not compute prev_hash any more.
     {
-        if let Ok(audit) = state.0.audit_store.lock() {
-            let prev_hash = audit
-                .get_latest_hash()
-                .unwrap_or_else(|_| "genesis".to_string());
-
-            let entry = zp_audit::chain::ChainBuilder::build_entry(
-                &prev_hash,
+        if let Ok(mut audit) = state.0.audit_store.lock() {
+            let unsealed = zp_audit::UnsealedEntry::new(
                 zp_core::ActorId::System(format!("proxy:{}", provider)),
                 zp_core::AuditAction::ApiCallProxied {
                     provider: provider.clone(),
@@ -359,12 +359,11 @@ pub async fn proxy_handler(
                 },
                 zp_core::ConversationId::new(),
                 zp_core::PolicyDecision::Allow { conditions: vec![] },
-                "zp-proxy".to_string(),
-                Some(receipt.clone()),
-                None,
-            );
+                "zp-proxy",
+            )
+            .with_receipt(receipt.clone());
 
-            if let Err(e) = audit.append(entry) {
+            if let Err(e) = audit.append(unsealed) {
                 warn!(error = %e, "Failed to append proxy audit entry");
             }
         }

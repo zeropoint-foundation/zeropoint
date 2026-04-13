@@ -392,6 +392,24 @@ impl GovernanceEvent {
         hash.to_hex().to_string()
     }
 
+    /// Verify that the stored `audit_hash` matches a freshly recomputed hash.
+    ///
+    /// Returns `Ok(true)` if the hash matches, `Ok(false)` if it does not,
+    /// and `Err(...)` if no `audit_hash` has been stamped (i.e. the event
+    /// was never sealed). Any code path that reads a `GovernanceEvent` from
+    /// a persistent store or across a network boundary MUST call this
+    /// before trusting the event's contents.
+    ///
+    /// Added by Sweep 1 (2026-04-07) to close the AUDIT-02-class
+    /// "write-only hash" pattern — previously `compute_hash` was called
+    /// during construction but never re-verified on read.
+    pub fn verify_hash(&self) -> Result<bool, &'static str> {
+        match self.audit_hash.as_deref() {
+            Some(stored) => Ok(self.compute_hash() == stored),
+            None => Err("GovernanceEvent has no audit_hash — never sealed"),
+        }
+    }
+
     /// Set the receipt ID for this event.
     pub fn with_receipt_id(mut self, receipt_id: String) -> Self {
         self.receipt_id = Some(receipt_id);
@@ -1404,5 +1422,68 @@ mod tests {
             event.event_type,
             GovernanceEventType::ReputationGateReview
         ));
+    }
+
+    // ========================================================================
+    // Sweep 1 (2026-04-07): verify_hash + round-trip regression tests
+    // ========================================================================
+
+    fn sealed_sample_event() -> GovernanceEvent {
+        let actor = GovernanceActor::Human {
+            id: "alice".into(),
+        };
+        let action_context = ActionContext {
+            action_type: "Read".into(),
+            target: Some("/etc/passwd".into()),
+            trust_tier: 0,
+            risk_level: "Low".into(),
+        };
+        let decision = GovernanceDecision::Allow {
+            conditions: vec![],
+        };
+        let event = GovernanceEvent::guard_evaluation(actor, action_context, decision);
+        let hash = event.compute_hash();
+        event.with_audit_hash(hash)
+    }
+
+    #[test]
+    fn test_verify_hash_passes_on_sealed_event() {
+        let e = sealed_sample_event();
+        assert_eq!(e.verify_hash(), Ok(true));
+    }
+
+    #[test]
+    fn test_verify_hash_errors_when_unsealed() {
+        let actor = GovernanceActor::Human {
+            id: "bob".into(),
+        };
+        let ctx = ActionContext {
+            action_type: "Write".into(),
+            target: None,
+            trust_tier: 1,
+            risk_level: "Low".into(),
+        };
+        let decision = GovernanceDecision::Allow { conditions: vec![] };
+        let e = GovernanceEvent::guard_evaluation(actor, ctx, decision);
+        assert!(e.verify_hash().is_err());
+    }
+
+    #[test]
+    fn test_verify_hash_detects_tamper() {
+        let mut e = sealed_sample_event();
+        // Mutate a field after sealing
+        e.action_context.action_type = "TAMPERED".into();
+        assert_eq!(e.verify_hash(), Ok(false));
+    }
+
+    #[test]
+    fn test_roundtrip_preserves_hash() {
+        // JSON round-trip: serialize → deserialize → re-verify.
+        // Regression guard for the AUDIT-02 Debug-format class of bug.
+        let e = sealed_sample_event();
+        let json = serde_json::to_string(&e).unwrap();
+        let e2: GovernanceEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(e2.verify_hash(), Ok(true));
+        assert_eq!(e2.compute_hash(), e.compute_hash());
     }
 }

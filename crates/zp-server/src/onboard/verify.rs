@@ -16,7 +16,7 @@
 //! Tools without this section skip verification entirely (Tier 0 only).
 
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use zp_audit::AuditStore;
@@ -60,7 +60,7 @@ pub async fn verify_tool_capabilities(
     tool_port: u16,
     manifest: &ToolManifest,
     verification: &VerificationConfig,
-    audit_store: &Mutex<AuditStore>,
+    audit_store: &Arc<Mutex<AuditStore>>,
 ) -> VerificationResult {
     let base = format!("http://127.0.0.1:{}", tool_port);
     let client = match reqwest::Client::builder()

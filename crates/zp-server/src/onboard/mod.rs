@@ -81,7 +81,9 @@ pub async fn onboard_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_onboard_ws(socket, state))
+    ws.max_frame_size(128 * 1024)  // 128 KB — onboard payloads include credentials
+        .max_message_size(256 * 1024)
+        .on_upgrade(move |socket| handle_onboard_ws(socket, state))
 }
 
 async fn handle_onboard_ws(socket: WebSocket, app_state: AppState) {

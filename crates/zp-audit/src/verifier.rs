@@ -29,7 +29,6 @@
 //! - Returns a detailed report, not just pass/fail
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use zp_core::AuditEntry;
 
 /// Result of verifying a single audit entry.
@@ -245,28 +244,13 @@ impl Default for ChainVerifier {
 
 /// Recompute the entry hash for verification.
 ///
-/// Uses the exact same algorithm as `ChainBuilder::build_entry` —
-/// a deterministic JSON serialization hashed with blake3.
-///
-/// Note: the signature field is always hashed as `null` because the entry_hash
-/// is computed before the signature exists. The signature covers the entry_hash,
-/// not the other way around.
+/// Delegates to the canonical [`crate::chain::recompute_entry_hash`], which
+/// uses the post-AUDIT-03 layout (proper JSON serialization for actor/policy,
+/// signature always hashed as null). The pre-AUDIT-03 Debug-format layout
+/// is permanently retired — historical entries written under the old layout
+/// will not round-trip through this function. See `chain.rs` for context.
 fn recompute_entry_hash(entry: &AuditEntry) -> String {
-    let entry_data = json!({
-        "id": format!("{:?}", entry.id.0),
-        "timestamp": entry.timestamp.to_rfc3339(),
-        "prev_hash": entry.prev_hash,
-        "actor": format!("{:?}", entry.actor),
-        "action": serde_json::to_value(&entry.action).unwrap_or(json!(null)),
-        "conversation_id": format!("{:?}", entry.conversation_id.0),
-        "policy_decision": serde_json::to_value(&entry.policy_decision).unwrap_or(json!(null)),
-        "policy_module": entry.policy_module,
-        "receipt": entry.receipt.as_ref().map(|r| serde_json::to_value(r).unwrap_or(json!(null))),
-        "signature": Option::<String>::None,
-    });
-
-    let entry_bytes = serde_json::to_vec(&entry_data).unwrap_or_default();
-    blake3::hash(&entry_bytes).to_hex().to_string()
+    crate::chain::recompute_entry_hash(entry)
 }
 
 /// Verify chain linkage and produce a report (no hash recomputation).
@@ -352,7 +336,8 @@ pub fn verify_linkage(entries: &[AuditEntry]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chain::ChainBuilder;
+    use crate::chain::{genesis_hash, new_audit_id, seal_entry, UnsealedEntry};
+    use chrono::Utc;
     use ed25519_dalek::{Signer as DalekSigner, SigningKey};
     use uuid::Uuid;
     use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
@@ -368,21 +353,19 @@ mod tests {
         let mut chain: Vec<AuditEntry> = Vec::new();
         for i in 0..n {
             let prev_hash = if i == 0 {
-                blake3::hash(b"").to_hex().to_string()
+                genesis_hash()
             } else {
                 chain[i - 1].entry_hash.clone()
             };
 
-            let entry = ChainBuilder::build_entry(
-                &prev_hash,
+            let unsealed = UnsealedEntry::new(
                 actor.clone(),
                 action.clone(),
                 conv_id.clone(),
                 decision.clone(),
                 format!("module-{}", i),
-                None,
-                None,
             );
+            let entry = seal_entry(&unsealed, &prev_hash, new_audit_id(), Utc::now());
             chain.push(entry);
         }
         chain
@@ -475,16 +458,8 @@ mod tests {
         let conv_id = ConversationId(Uuid::now_v7());
         let decision = PolicyDecision::Allow { conditions: vec![] };
 
-        let entry = ChainBuilder::build_entry(
-            &anchor_hash,
-            actor,
-            action,
-            conv_id,
-            decision,
-            "mod".to_string(),
-            None,
-            None,
-        );
+        let unsealed = UnsealedEntry::new(actor, action, conv_id, decision, "mod");
+        let entry = seal_entry(&unsealed, &anchor_hash, new_audit_id(), Utc::now());
 
         let verifier = ChainVerifier::new();
 

@@ -50,7 +50,12 @@ pub struct AuditEntry {
 }
 
 /// Who performed an action.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `ActorId` is used as a map/set key (e.g. `Guard`'s blocklist, rate limiter).
+/// It therefore derives `Hash` + `Eq` and **must not** be keyed by a
+/// `format!("{:?}", ...)` string. The prior pattern — hashing Debug output as
+/// a canonical identity — is forbidden by `docs/audit-invariant.md` §Non-negotiables.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActorId {
     User(String),
     Operator,
