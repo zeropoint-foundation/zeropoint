@@ -28,6 +28,7 @@ pub struct ReceiptBuilder {
     extensions: HashMap<String, serde_json::Value>,
     expires_at: Option<chrono::DateTime<Utc>>,
     claim_metadata: Option<ClaimMetadata>,
+    claim_semantics: ClaimSemantics,
     #[cfg(feature = "signing")]
     #[allow(dead_code)] // Placeholder for future auto-signing on finalize()
     signer: Option<&'static crate::Signer>,
@@ -58,6 +59,7 @@ impl ReceiptBuilder {
             extensions: HashMap::new(),
             expires_at: None,
             claim_metadata: None,
+            claim_semantics: ClaimSemantics::default(),
             #[cfg(feature = "signing")]
             signer: None,
         }
@@ -225,6 +227,13 @@ impl ReceiptBuilder {
         self
     }
 
+    /// Set the epistemic semantics of the signature.
+    /// Defaults to AuthorshipProof. Use TruthAssertion for memory promotion claims.
+    pub fn claim_semantics(mut self, semantics: ClaimSemantics) -> Self {
+        self.claim_semantics = semantics;
+        self
+    }
+
     /// Set type-specific claim metadata.
     pub fn claim_metadata(mut self, metadata: ClaimMetadata) -> Self {
         self.claim_metadata = Some(metadata);
@@ -290,6 +299,7 @@ impl ReceiptBuilder {
             extensions,
             expires_at,
             claim_metadata: self.claim_metadata,
+            claim_semantics: self.claim_semantics,
             superseded_by: None,
             revoked_at: None,
         };

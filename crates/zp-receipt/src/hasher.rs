@@ -33,6 +33,7 @@ pub fn canonical_hash(receipt: &Receipt) -> String {
         "extensions": receipt.extensions,
         "expires_at": receipt.expires_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
         "claim_metadata": receipt.claim_metadata,
+        "claim_semantics": receipt.claim_semantics,
         "superseded_by": receipt.superseded_by,
         "revoked_at": receipt.revoked_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
     });
@@ -78,6 +79,7 @@ mod tests {
             extensions: None,
             expires_at: None,
             claim_metadata: None,
+            claim_semantics: crate::ClaimSemantics::default(),
             superseded_by: None,
             revoked_at: None,
         }
