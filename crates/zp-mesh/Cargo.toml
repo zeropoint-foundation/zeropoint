@@ -46,3 +46,10 @@ rusqlite.workspace = true
 [dev-dependencies]
 tokio-test.workspace = true
 tempfile = "3"
+
+[features]
+default = []
+# Enable inbound mesh payload authentication (RFC: docs/rfc-mesh-inbound-auth-v1.md).
+# When off, MeshBridge accepts unsigned inbound receipts as-is (legacy v0 behavior).
+# When on, CompactReceipt signatures are verified against a PeerKeyStore where keys are known.
+mesh-auth-v1 = []

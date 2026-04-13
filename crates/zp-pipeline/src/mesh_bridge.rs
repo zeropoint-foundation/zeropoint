@@ -46,6 +46,7 @@ use zp_core::CapabilityGrant;
 use zp_mesh::capability_exchange::{CapabilityPolicy, CapabilityRequest, NegotiationResult};
 use zp_mesh::envelope::{CompactDelegation, CompactReceipt};
 use zp_mesh::identity::MeshIdentity;
+use zp_mesh::peer_keystore::PeerKeyStore;
 use zp_mesh::transport::{AgentTransport, MeshNode};
 use zp_receipt::Receipt;
 
@@ -70,6 +71,20 @@ impl Default for MeshBridgeConfig {
     }
 }
 
+/// Sweep 6 (RFC §3.2) — authentication outcome for an inbound payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthState {
+    /// Signed and verified against a known peer key.
+    Verified,
+    /// Payload carried a signature but we had no key for the sender; the
+    /// signature was not checked. Treated as accepted with reduced trust.
+    UnverifiedNoKey,
+    /// Payload carried no signature (`sg = None`). Legacy v0 path.
+    Unsigned,
+    /// Authentication was not attempted (feature off).
+    NotChecked,
+}
+
 /// A receipt received from a mesh peer, stored for governance purposes.
 #[derive(Debug, Clone)]
 pub struct ReceivedReceipt {
@@ -79,8 +94,11 @@ pub struct ReceivedReceipt {
     pub sender_hash: [u8; 16],
     /// When this receipt was received.
     pub received_at: DateTime<Utc>,
-    /// Whether the receipt was accepted (vs. rejected by reputation gate).
+    /// Whether the receipt was accepted (vs. rejected by reputation gate
+    /// or by signature verification).
     pub accepted: bool,
+    /// Sweep 6: authentication outcome (see `AuthState`).
+    pub auth: AuthState,
 }
 
 /// Composite trust snapshot for a single peer.
@@ -129,6 +147,11 @@ pub struct MeshBridge {
     config: MeshBridgeConfig,
     /// Receipts received from mesh peers (Phase 4 Step 3).
     received_receipts: RwLock<Vec<ReceivedReceipt>>,
+    /// Sweep 6 (RFC §3.1) — optional peer verifying-key registry.
+    /// When present **and** the `mesh-auth-v1` feature is enabled,
+    /// `handle_inbound_receipt` runs signatures through this store.
+    /// When absent, the bridge preserves v0 behavior.
+    key_store: Option<Arc<dyn PeerKeyStore>>,
 }
 
 impl MeshBridge {
@@ -144,12 +167,26 @@ impl MeshBridge {
             node,
             config,
             received_receipts: RwLock::new(Vec::new()),
+            key_store: None,
         }
     }
 
     /// Create a bridge with default configuration.
     pub fn with_defaults(node: Arc<MeshNode>) -> Self {
         Self::new(node, MeshBridgeConfig::default())
+    }
+
+    /// Sweep 6 (RFC §3.1) — attach a peer verifying-key registry. When the
+    /// `mesh-auth-v1` feature is enabled, inbound receipts will be verified
+    /// against this store. Returns the bridge for chaining.
+    pub fn with_key_store(mut self, store: Arc<dyn PeerKeyStore>) -> Self {
+        self.key_store = Some(store);
+        self
+    }
+
+    /// Returns a handle to the registered peer keystore, if any.
+    pub fn key_store(&self) -> Option<&Arc<dyn PeerKeyStore>> {
+        self.key_store.as_ref()
     }
 
     /// Get the mesh node's address.
@@ -281,6 +318,53 @@ impl MeshBridge {
     // Inbound receipt handling (Phase 4 Step 3)
     // ========================================================================
 
+    /// Sweep 6 — classify the authentication state of an inbound compact
+    /// receipt without gating acceptance. Acceptance policy for each cell
+    /// is applied in `handle_inbound_receipt`:
+    ///
+    /// | sg present | key known | auth state         | accepted? |
+    /// | ---        | ---       | ---                | ---       |
+    /// | no         | —         | Unsigned           | yes (v0)  |
+    /// | yes        | no        | UnverifiedNoKey    | yes (warn)|
+    /// | yes        | yes valid | Verified           | yes       |
+    /// | yes        | yes bad   | (handled as Err)   | no        |
+    ///
+    /// When the `mesh-auth-v1` feature is off, all inbound payloads are
+    /// classified as `NotChecked` regardless of `sg`.
+    #[allow(unused_variables)]
+    fn classify_inbound_auth(
+        &self,
+        receipt: &CompactReceipt,
+        sender_hash: &[u8; 16],
+    ) -> AuthState {
+        #[cfg(not(feature = "mesh-auth-v1"))]
+        {
+            AuthState::NotChecked
+        }
+        #[cfg(feature = "mesh-auth-v1")]
+        {
+            if receipt.sg.is_none() {
+                return AuthState::Unsigned;
+            }
+            let Some(store) = self.key_store.as_ref() else {
+                return AuthState::UnverifiedNoKey;
+            };
+            match store.verifying_key(sender_hash) {
+                None => AuthState::UnverifiedNoKey,
+                Some(key) => match receipt.verify_signature(&key) {
+                    Ok(zp_mesh::envelope::SignatureStatus::Valid) => AuthState::Verified,
+                    // Unsigned here would require `sg.is_some()` to be false
+                    // which we checked above; treat as UnverifiedNoKey for safety.
+                    Ok(zp_mesh::envelope::SignatureStatus::Unsigned) => AuthState::Unsigned,
+                    // Verification error → caller turns this into Err; we
+                    // still return UnverifiedNoKey to keep the classifier
+                    // total. The hard-reject path doesn't consume this value.
+                    Err(_) => AuthState::UnverifiedNoKey,
+                },
+            }
+        }
+    }
+
     /// Handle an inbound receipt from a mesh peer.
     ///
     /// Validates the receipt, checks the sender's reputation, records a
@@ -314,6 +398,40 @@ impl MeshBridge {
             return Err(format!("receipt has invalid status: {}", receipt.st));
         }
 
+        // Sweep 6 (RFC §3.2) — signature verification policy table.
+        // Only active when the `mesh-auth-v1` feature is compiled in AND
+        // a keystore is attached. Otherwise we fall through to the legacy
+        // v0 behavior with `auth = NotChecked`.
+        let auth = self.classify_inbound_auth(receipt, sender_hash);
+        if matches!(auth, AuthState::Verified) {
+            debug!(sender = %sender_hex, receipt_id = %receipt.id, "Inbound receipt signature verified");
+        } else if matches!(auth, AuthState::UnverifiedNoKey) {
+            warn!(sender = %sender_hex, receipt_id = %receipt.id,
+                  "Inbound receipt signed but sender key unknown; accepted with reduced trust");
+        } else if matches!(auth, AuthState::Unsigned) {
+            warn!(sender = %sender_hex, receipt_id = %receipt.id,
+                  "Inbound receipt has no signature (v0 behavior)");
+        }
+
+        // Signature *mismatch* is a hard reject (different from "no key").
+        #[cfg(feature = "mesh-auth-v1")]
+        if let Some(store) = self.key_store.as_ref() {
+            if receipt.sg.is_some() {
+                if let Some(key) = store.verifying_key(sender_hash) {
+                    if receipt.verify_signature(&key).is_err() {
+                        warn!(sender = %sender_hex, receipt_id = %receipt.id,
+                              "Rejected inbound receipt: signature verification failed");
+                        // Record a negative reputation signal on verify failure.
+                        let signal = zp_mesh::reputation::signal_from_receipt(
+                            &receipt.id, false, Utc::now(),
+                        );
+                        self.node.record_reputation_signal(sender_hash, signal).await;
+                        return Err("signature verification failed".to_string());
+                    }
+                }
+            }
+        }
+
         // Step 2: Check sender reputation (reputation gate)
         let peer_score = self.node.compute_peer_reputation(sender_hash).await;
         let min_grade = zp_mesh::reputation::ReputationGrade::Poor;
@@ -330,6 +448,7 @@ impl MeshBridge {
             sender_hash: *sender_hash,
             received_at: Utc::now(),
             accepted,
+            auth,
         };
 
         self.received_receipts.write().await.push(received);
@@ -1284,6 +1403,100 @@ mod tests {
     // ========================================================================
     // Inbound Receipt Tests (Phase 4 Step 3)
     // ========================================================================
+
+    // ------------------------------------------------------------
+    // Sweep 6 (RFC §3.2) — signature policy table, feature-gated
+    // ------------------------------------------------------------
+
+    #[cfg(feature = "mesh-auth-v1")]
+    mod sweep6_auth {
+        use super::*;
+        use std::sync::Arc;
+        use zp_mesh::peer_keystore::{InMemoryPeerKeyStore, PeerKeyStore};
+
+        fn keypair() -> (ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
+            use rand::rngs::OsRng;
+            let s = ed25519_dalek::SigningKey::generate(&mut OsRng);
+            let v = s.verifying_key();
+            (s, v)
+        }
+
+        fn signed_receipt(id: &str, signing: &ed25519_dalek::SigningKey) -> CompactReceipt {
+            let mut r = super::make_compact_receipt(id, "success");
+            r.sign_content_hash(signing);
+            r
+        }
+
+        #[tokio::test]
+        async fn test_sweep6_verified_when_key_known_and_signed() {
+            let node = super::make_node();
+            let (signing, verifying) = keypair();
+            let sender = [0x11u8; 16];
+            let mem = InMemoryPeerKeyStore::new();
+            mem.insert(sender, verifying);
+            let store: Arc<dyn PeerKeyStore> = Arc::new(mem);
+
+            let bridge = MeshBridge::with_defaults(node).with_key_store(store);
+            let r = signed_receipt("rcpt-auth-verified", &signing);
+
+            let accepted = bridge.handle_inbound_receipt(&r, &sender).await.unwrap();
+            assert!(accepted);
+            let stored = bridge.received_receipts().await;
+            assert_eq!(stored.len(), 1);
+            assert_eq!(stored[0].auth, AuthState::Verified);
+        }
+
+        #[tokio::test]
+        async fn test_sweep6_unverified_when_key_unknown() {
+            let node = super::make_node();
+            let store: Arc<dyn PeerKeyStore> = Arc::new(InMemoryPeerKeyStore::new());
+            let bridge = MeshBridge::with_defaults(node).with_key_store(store);
+            let (signing, _) = keypair();
+            let sender = [0x22u8; 16];
+            let r = signed_receipt("rcpt-auth-unk", &signing);
+
+            let accepted = bridge.handle_inbound_receipt(&r, &sender).await.unwrap();
+            assert!(accepted, "unknown-key path should still accept with reduced trust");
+            let stored = bridge.received_receipts().await;
+            assert_eq!(stored[0].auth, AuthState::UnverifiedNoKey);
+        }
+
+        #[tokio::test]
+        async fn test_sweep6_unsigned_path() {
+            let node = super::make_node();
+            let bridge = MeshBridge::with_defaults(node)
+                .with_key_store(Arc::new(InMemoryPeerKeyStore::new()));
+            let r = super::make_compact_receipt("rcpt-auth-unsigned", "success");
+            assert!(r.sg.is_none());
+            let sender = [0x33u8; 16];
+
+            let accepted = bridge.handle_inbound_receipt(&r, &sender).await.unwrap();
+            assert!(accepted);
+            let stored = bridge.received_receipts().await;
+            assert_eq!(stored[0].auth, AuthState::Unsigned);
+        }
+
+        #[tokio::test]
+        async fn test_sweep6_bad_signature_rejected_hard() {
+            let node = super::make_node();
+            let mem = InMemoryPeerKeyStore::new();
+            let (_signing_correct, verifying_correct) = keypair();
+            let sender = [0x44u8; 16];
+            mem.insert(sender, verifying_correct);
+            let store: Arc<dyn PeerKeyStore> = Arc::new(mem);
+
+            let bridge = MeshBridge::with_defaults(node).with_key_store(store);
+
+            // Sign with the WRONG key.
+            let (wrong_signing, _) = keypair();
+            let r = signed_receipt("rcpt-auth-bad", &wrong_signing);
+
+            let err = bridge.handle_inbound_receipt(&r, &sender).await;
+            assert!(err.is_err(), "bad signature must hard-reject");
+            // Nothing stored.
+            assert_eq!(bridge.received_receipt_count().await, 0);
+        }
+    }
 
     fn make_compact_receipt(id: &str, status: &str) -> CompactReceipt {
         CompactReceipt {

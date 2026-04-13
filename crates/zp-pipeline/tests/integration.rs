@@ -1909,7 +1909,11 @@ async fn test_e2e_pipeline_init_mesh_from_config() {
     };
 
     let mesh_config = config.mesh.clone().unwrap();
-    let mut pipeline = Pipeline::new(config).expect("pipeline init");
+    std::fs::create_dir_all(&config.data_dir).ok();
+    let audit_store = Arc::new(std::sync::Mutex::new(
+        zp_audit::AuditStore::open(&config.data_dir.join("audit.db")).unwrap(),
+    ));
+    let mut pipeline = Pipeline::new(config, audit_store).expect("pipeline init");
     pipeline.init_mesh(&mesh_config).await.expect("mesh init");
 
     assert!(pipeline.has_mesh());
@@ -2127,7 +2131,11 @@ async fn test_e2e_pipeline_mesh_store_lifecycle() {
             data_dir: data_dir.clone(),
             mesh: None,
         };
-        let mut pipeline = zp_pipeline::Pipeline::new(config).unwrap();
+        std::fs::create_dir_all(&config.data_dir).ok();
+        let audit_store = Arc::new(std::sync::Mutex::new(
+            zp_audit::AuditStore::open(&config.data_dir.join("audit.db")).unwrap(),
+        ));
+        let mut pipeline = zp_pipeline::Pipeline::new(config, audit_store).unwrap();
 
         let mesh_config = MeshConfig {
             poll_interval_ms: 50,
@@ -2744,4 +2752,192 @@ async fn test_e2e_multinode_persist_and_restore() {
         score_b.positive_signals, 1,
         "Restored node B should have 1 positive signal for peer A"
     );
+}
+
+// ============================================================================
+// Stage 5 (AUDIT-03): end-to-end concurrent-writer regression
+// ============================================================================
+
+/// Regression test for AUDIT-03 at the integration level.
+///
+/// Before Stage 3, the server's `AppState` and the `Pipeline` each
+/// opened their own `AuditStore` handle on the same DB file. Two writers
+/// with independent `Mutex`es produced the 4 P1 fork rows we found in
+/// the historical DB. Stage 3 collapsed this to a single
+/// `Arc<Mutex<AuditStore>>` shared between both owners. This test pins
+/// the invariant by simulating both writers concurrently through the
+/// *same* shared handle and asserting the catalog verifier (now in
+/// strict P2 mode) finds zero violations.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_stage3_shared_audit_store_no_forks_under_load() {
+    use std::thread;
+    use zp_audit::{AuditStore, UnsealedEntry};
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let audit_path = tmp.path().join("audit.db");
+
+    // The single, canonical store. Both the "server" and "pipeline"
+    // sides below clone this Arc — exactly what AppState::init and
+    // Pipeline::new do after Stage 3.
+    let shared: Arc<std::sync::Mutex<AuditStore>> =
+        Arc::new(std::sync::Mutex::new(AuditStore::open(&audit_path).unwrap()));
+
+    // Two "halves" of the system, both clones of the same Arc. Any
+    // attempt to re-open the DB here would be a regression of Stage 3.
+    let server_side = Arc::clone(&shared);
+    let pipeline_side = Arc::clone(&shared);
+
+    const THREADS_PER_SIDE: usize = 4;
+    const APPENDS_PER_THREAD: usize = 50;
+
+    let mut handles = vec![];
+    for (tag, side) in [("server", &server_side), ("pipeline", &pipeline_side)] {
+        for t in 0..THREADS_PER_SIDE {
+            let s = Arc::clone(side);
+            handles.push(thread::spawn(move || {
+                for i in 0..APPENDS_PER_THREAD {
+                    let u = UnsealedEntry::new(
+                        ActorId::System(format!("{tag}-worker-{t}")),
+                        AuditAction::SystemEvent {
+                            event: format!("{tag}-evt-{i}"),
+                        },
+                        ConversationId::new(),
+                        PolicyDecision::Allow { conditions: vec![] },
+                        "stage3-e2e",
+                    );
+                    s.lock().unwrap().append(u).unwrap();
+                }
+            }));
+        }
+    }
+    for h in handles {
+        h.join().unwrap();
+    }
+
+    let expected = 2 * THREADS_PER_SIDE * APPENDS_PER_THREAD;
+    let report = shared.lock().unwrap().verify_with_catalog().unwrap();
+    assert_eq!(
+        report.receipts_checked, expected,
+        "expected {expected} receipts, got {}",
+        report.receipts_checked
+    );
+    assert!(
+        report.violations().is_empty(),
+        "Stage 3 regression: shared AuditStore produced {} violations under load: {:?}",
+        report.violations().len(),
+        report.violations()
+    );
+}
+
+/// Sweep 4 (2026-04-07): full-construction end-to-end coherence test.
+///
+/// This test goes one level higher than `test_stage3_shared_audit_store_no_forks_under_load`:
+/// instead of opening an `AuditStore` directly, it walks the *exact* construction
+/// path that `zp_server::AppState::init` and `zp_cli::main` take in production:
+///
+/// 1. Create a `PipelineConfig` with a real temp data_dir
+/// 2. Open the canonical `AuditStore` once, wrap in `Arc<Mutex<_>>`
+/// 3. Pass that Arc into `Pipeline::new` (Stage 3 API)
+/// 4. Concurrently append through BOTH the pipeline's `audit_store` handle AND
+///    a separately-cloned "server-side" Arc — the two-owner topology that
+///    caused the original AUDIT-03 P1 forks
+/// 5. Run `verify_with_catalog` against the shared store
+///
+/// A single violation here means either the Stage 3 Arc-share regressed, the
+/// Stage 4 schema v2 + `BEGIN IMMEDIATE` regressed, or the Stage 5 strict P2
+/// verifier drifted. This is the canonical "ZP is coherent end-to-end" gate.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_sweep4_full_construction_end_to_end_coherence() {
+    use std::thread;
+    use zp_audit::{AuditStore, UnsealedEntry};
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_pipeline::{Pipeline, PipelineConfig};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    std::fs::create_dir_all(&data_dir).ok();
+
+    // Step 1-2: open the single canonical store, exactly as AppState::init does.
+    let audit_path = data_dir.join("audit.db");
+    let audit_store: Arc<std::sync::Mutex<AuditStore>> = Arc::new(std::sync::Mutex::new(
+        AuditStore::open(&audit_path).expect("open canonical audit store"),
+    ));
+
+    // Step 3: construct a real Pipeline with the shared Arc.
+    // This exercises the full Pipeline::new setup (policy engine, skill
+    // registry, provider pool, etc.) — everything AppState does except
+    // the HTTP surface. If Pipeline::new ever secretly re-opens the store
+    // or wraps it in a new Mutex, this test catches it.
+    let config = PipelineConfig {
+        data_dir: data_dir.clone(),
+        ..Default::default()
+    };
+    let pipeline = Pipeline::new(config, Arc::clone(&audit_store))
+        .expect("Pipeline::new with shared AuditStore must succeed");
+
+    // Sanity: the pipeline's audit_store must be the SAME Arc we passed in.
+    // Stage 3 guarantees this — any regression that clones-into-new-Mutex
+    // would break reference equality here.
+    assert!(
+        Arc::ptr_eq(&pipeline.audit_store, &audit_store),
+        "Pipeline::new must store the exact Arc passed in (not clone underlying store)"
+    );
+
+    // Step 4: two-owner concurrent append topology.
+    // "server-side" = AppState-style Arc clone
+    // "pipeline-side" = Pipeline's own audit_store field
+    let server_side = Arc::clone(&audit_store);
+    let pipeline_side = Arc::clone(&pipeline.audit_store);
+
+    const THREADS_PER_SIDE: usize = 4;
+    const APPENDS_PER_THREAD: usize = 25;
+
+    let mut handles = vec![];
+    for (tag, side) in [("server", &server_side), ("pipeline", &pipeline_side)] {
+        for t in 0..THREADS_PER_SIDE {
+            let s = Arc::clone(side);
+            handles.push(thread::spawn(move || {
+                for i in 0..APPENDS_PER_THREAD {
+                    let u = UnsealedEntry::new(
+                        ActorId::System(format!("{tag}-sweep4-{t}")),
+                        AuditAction::SystemEvent {
+                            event: format!("sweep4-{tag}-{i}"),
+                        },
+                        ConversationId::new(),
+                        PolicyDecision::Allow { conditions: vec![] },
+                        "sweep4-e2e",
+                    );
+                    s.lock().unwrap().append(u).expect("append must succeed");
+                }
+            }));
+        }
+    }
+    for h in handles {
+        h.join().unwrap();
+    }
+
+    // Step 5: catalog verification under strict P2.
+    let expected = 2 * THREADS_PER_SIDE * APPENDS_PER_THREAD;
+    let report = audit_store
+        .lock()
+        .unwrap()
+        .verify_with_catalog()
+        .expect("verify_with_catalog must not error");
+
+    assert_eq!(
+        report.receipts_checked, expected,
+        "expected {expected} receipts through the full-construction path, got {}",
+        report.receipts_checked
+    );
+    assert!(
+        report.violations().is_empty(),
+        "Sweep 4 full-construction coherence failure: {} violations: {:?}",
+        report.violations().len(),
+        report.violations()
+    );
+    // Note: strict P2 (content_hash_valid) is already asserted inside
+    // verify_with_catalog — every receipt that passes catalog verification
+    // has been re-hashed via `recompute_entry_hash` and compared against
+    // its stored `entry_hash`. No extra loop is needed.
 }

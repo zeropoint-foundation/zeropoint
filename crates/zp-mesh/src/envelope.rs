@@ -127,6 +127,62 @@ impl CompactReceipt {
         let encoded = self.to_msgpack()?;
         Ok(encoded.len() <= MAX_COMPACT_RECEIPT_SIZE)
     }
+
+    /// Sweep 6 (RFC §3.2) — verify the ed25519 signature in `sg` over the
+    /// content hash `ch` using the supplied verifying key.
+    ///
+    /// Returns:
+    /// * `Ok(SignatureStatus::Valid)`     — `sg` present, signature checks.
+    /// * `Ok(SignatureStatus::Unsigned)`  — `sg` is `None`.
+    /// * `Err(MeshError::Serialization)`  — `sg` is present but malformed
+    ///   (not hex, wrong length) or verification failed.
+    ///
+    /// The signed preimage is exactly the bytes of the hex `ch` string.
+    /// This matches the producer contract: peers sign `ch.as_bytes()` with
+    /// their ed25519 signing key at receipt-compaction time.
+    pub fn verify_signature(
+        &self,
+        key: &ed25519_dalek::VerifyingKey,
+    ) -> MeshResult<SignatureStatus> {
+        use ed25519_dalek::{Signature, Verifier};
+
+        let Some(sig_hex) = self.sg.as_deref() else {
+            return Ok(SignatureStatus::Unsigned);
+        };
+
+        let sig_bytes = hex::decode(sig_hex)
+            .map_err(|e| MeshError::Serialization(format!("signature hex: {e}")))?;
+        if sig_bytes.len() != 64 {
+            return Err(MeshError::Serialization(format!(
+                "signature length: expected 64, got {}",
+                sig_bytes.len()
+            )));
+        }
+        let mut fixed = [0u8; 64];
+        fixed.copy_from_slice(&sig_bytes);
+        let sig = Signature::from_bytes(&fixed);
+
+        key.verify(self.ch.as_bytes(), &sig)
+            .map(|()| SignatureStatus::Valid)
+            .map_err(|e| MeshError::Serialization(format!("signature verify: {e}")))
+    }
+
+    /// Sign this compact receipt's content hash with the supplied signing
+    /// key, populating `self.sg`. Used by senders and by Sweep 6 tests.
+    pub fn sign_content_hash(&mut self, signing: &ed25519_dalek::SigningKey) {
+        use ed25519_dalek::Signer;
+        let sig = signing.sign(self.ch.as_bytes());
+        self.sg = Some(hex::encode(sig.to_bytes()));
+    }
+}
+
+/// Result of verifying a `CompactReceipt` signature against a peer key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignatureStatus {
+    /// `sg` field was present and verified against the supplied key.
+    Valid,
+    /// `sg` field was absent; nothing to verify.
+    Unsigned,
 }
 
 /// Compact wire representation of a capability delegation grant.
@@ -621,6 +677,81 @@ mod tests {
                 rationale: Some("Safe command".into()),
             })
             .finalize()
+    }
+
+    // ------------------------------------------------------------
+    // Sweep 6 (RFC §3.2) — CompactReceipt signature policy table
+    // ------------------------------------------------------------
+
+    fn signing_pair() -> (ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
+        use rand::rngs::OsRng;
+        let signing = ed25519_dalek::SigningKey::generate(&mut OsRng);
+        let verifying = signing.verifying_key();
+        (signing, verifying)
+    }
+
+    #[test]
+    fn test_sweep6_verify_signature_unsigned() {
+        let receipt = make_test_receipt();
+        let compact = CompactReceipt::from_receipt(&receipt);
+        assert!(compact.sg.is_none());
+        let (_s, v) = signing_pair();
+        assert_eq!(
+            compact.verify_signature(&v).unwrap(),
+            SignatureStatus::Unsigned
+        );
+    }
+
+    #[test]
+    fn test_sweep6_verify_signature_valid() {
+        let receipt = make_test_receipt();
+        let mut compact = CompactReceipt::from_receipt(&receipt);
+        let (signing, verifying) = signing_pair();
+        compact.sign_content_hash(&signing);
+        assert_eq!(
+            compact.verify_signature(&verifying).unwrap(),
+            SignatureStatus::Valid
+        );
+    }
+
+    #[test]
+    fn test_sweep6_verify_signature_wrong_key_rejected() {
+        let receipt = make_test_receipt();
+        let mut compact = CompactReceipt::from_receipt(&receipt);
+        let (signing, _) = signing_pair();
+        let (_, other_verify) = signing_pair();
+        compact.sign_content_hash(&signing);
+        assert!(compact.verify_signature(&other_verify).is_err());
+    }
+
+    #[test]
+    fn test_sweep6_verify_signature_tampered_ch_rejected() {
+        let receipt = make_test_receipt();
+        let mut compact = CompactReceipt::from_receipt(&receipt);
+        let (signing, verifying) = signing_pair();
+        compact.sign_content_hash(&signing);
+        // Tamper with the content hash after signing.
+        compact.ch = "0".repeat(64);
+        assert!(compact.verify_signature(&verifying).is_err());
+    }
+
+    #[test]
+    fn test_sweep6_verify_signature_malformed_hex_rejected() {
+        let receipt = make_test_receipt();
+        let mut compact = CompactReceipt::from_receipt(&receipt);
+        compact.sg = Some("not-hex!!!".to_string());
+        let (_, verifying) = signing_pair();
+        assert!(compact.verify_signature(&verifying).is_err());
+    }
+
+    #[test]
+    fn test_sweep6_verify_signature_wrong_length_rejected() {
+        let receipt = make_test_receipt();
+        let mut compact = CompactReceipt::from_receipt(&receipt);
+        // Valid hex, but only 32 bytes instead of 64.
+        compact.sg = Some("aa".repeat(32));
+        let (_, verifying) = signing_pair();
+        assert!(compact.verify_signature(&verifying).is_err());
     }
 
     #[test]

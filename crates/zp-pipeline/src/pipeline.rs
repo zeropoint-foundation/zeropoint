@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use execution_engine::{ExecutionEngine, ExecutionRequest as ExecRequest, Runtime};
-use zp_audit::{AuditStore, ChainBuilder};
+use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::policy::PolicyContext;
 use zp_core::{
     ActionType, ActorId, AuditAction, ConversationId, Episode, EpisodeId, Message, MessageId,
@@ -59,7 +59,11 @@ pub struct Pipeline {
     pub config: PipelineConfig,
     pub policy_engine: PolicyEngine,
     pub skill_registry: SkillRegistry,
-    pub audit_store: Mutex<AuditStore>,
+    /// Shared audit store. Stage 3 (AUDIT-03): exactly one `AuditStore`
+    /// per process, shared by the server's `AppState` and this pipeline.
+    /// Opening a second handle to the same DB file is forbidden —
+    /// see docs/audit-invariant.md.
+    pub audit_store: Arc<Mutex<AuditStore>>,
     pub provider_pool: RwLock<ProviderPool>,
     pub episode_store: Mutex<Option<EpisodeStore>>,
     pub execution_engine: Option<ExecutionEngine>,
@@ -85,16 +89,20 @@ pub struct Pipeline {
 
 impl Pipeline {
     /// Initialize a new pipeline.
-    pub fn new(config: PipelineConfig) -> Result<Self, PipelineError> {
+    ///
+    /// `audit_store` must be the *single* process-wide `AuditStore` handle.
+    /// Stage 3 (AUDIT-03): opening a second handle inside `Pipeline::new`
+    /// was the root cause of the concurrent-append race; callers (the
+    /// server's `AppState`, the CLI) own the store and pass it in.
+    pub fn new(
+        config: PipelineConfig,
+        audit_store: Arc<Mutex<AuditStore>>,
+    ) -> Result<Self, PipelineError> {
         info!("Initializing ZeroPoint pipeline");
 
         // Create data directory
         std::fs::create_dir_all(&config.data_dir)
             .map_err(|e| PipelineError::Internal(format!("Failed to create data dir: {}", e)))?;
-
-        let audit_path = config.data_dir.join("audit.db");
-        let audit_store =
-            AuditStore::open(&audit_path).map_err(|e| PipelineError::AuditError(e.to_string()))?;
 
         let episode_path = config.data_dir.join("episodes.db");
         let episode_store = EpisodeStore::open(&episode_path).ok();
@@ -105,7 +113,7 @@ impl Pipeline {
             config,
             policy_engine: PolicyEngine::new(),
             skill_registry: SkillRegistry::new(),
-            audit_store: Mutex::new(audit_store),
+            audit_store,
             provider_pool: RwLock::new(ProviderPool::new()),
             episode_store: Mutex::new(episode_store),
             execution_engine: None, // Initialized lazily via init_execution_engine()
@@ -884,25 +892,22 @@ impl Pipeline {
         conversation_id: &ConversationId,
         policy_decision: &PolicyDecision,
     ) {
-        let store = match self.audit_store.lock() {
+        let mut store = match self.audit_store.lock() {
             Ok(s) => s,
             Err(e) => {
                 warn!("Failed to lock audit store: {}", e);
                 return;
             }
         };
-        let prev_hash = store.get_latest_hash().unwrap_or_default();
-        let entry = ChainBuilder::build_entry(
-            &prev_hash,
+        // AUDIT-03: store seals atomically inside BEGIN IMMEDIATE.
+        let unsealed = UnsealedEntry::new(
             actor,
             action,
             conversation_id.clone(),
             policy_decision.clone(),
-            "default-gate".to_string(),
-            None,
-            None,
+            "default-gate",
         );
-        if let Err(e) = store.append(entry) {
+        if let Err(e) = store.append(unsealed) {
             warn!("Failed to write audit entry: {}", e);
         }
     }
