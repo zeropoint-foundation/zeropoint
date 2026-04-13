@@ -105,6 +105,16 @@ pub struct Receipt {
     /// Each claim type carries metadata appropriate to its semantics.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claim_metadata: Option<ClaimMetadata>,
+
+    /// ID of the receipt that supersedes this one (soft replacement).
+    /// The original claim still exists but is no longer the active version.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub superseded_by: Option<String>,
+
+    /// Timestamp when this receipt was revoked.
+    /// A revoked receipt is permanently invalidated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revoked_at: Option<DateTime<Utc>>,
 }
 
 impl Receipt {
@@ -182,6 +192,37 @@ impl Receipt {
     /// Check if this receipt has expired.
     pub fn is_expired(&self) -> bool {
         self.expires_at.map_or(false, |exp| Utc::now() > exp)
+    }
+
+    /// Check if this receipt is still active (not revoked, superseded, or expired).
+    pub fn is_active(&self) -> bool {
+        !self.is_expired()
+            && self.revoked_at.is_none()
+            && self.superseded_by.is_none()
+    }
+
+    /// Mark this receipt as superseded by another receipt.
+    /// The original claim still exists for auditability but `is_active()` returns false.
+    pub fn supersede(&mut self, new_receipt_id: &str) {
+        self.superseded_by = Some(new_receipt_id.to_string());
+    }
+
+    /// Revoke this receipt. Returns a RevocationClaim receipt that should be
+    /// appended to the chain as proof of revocation.
+    pub fn revoke(
+        &mut self,
+        revoker_id: &str,
+        reason: &str,
+    ) -> crate::ReceiptBuilder {
+        self.revoked_at = Some(Utc::now());
+
+        Receipt::revocation(revoker_id)
+            .parent(&self.id)
+            .claim_metadata(ClaimMetadata::Revocation {
+                revoked_receipt_id: self.id.clone(),
+                reason: reason.to_string(),
+                revoker_id: revoker_id.to_string(),
+            })
     }
 
     /// Verify the Ed25519 signature.

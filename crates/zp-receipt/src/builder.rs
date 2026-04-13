@@ -290,6 +290,8 @@ impl ReceiptBuilder {
             extensions,
             expires_at,
             claim_metadata: self.claim_metadata,
+            superseded_by: None,
+            revoked_at: None,
         };
 
         receipt.content_hash = crate::canonical_hash(&receipt);
