@@ -1359,8 +1359,8 @@ async fn delegate_handler(
     let child_json = serde_json::to_value(&child).unwrap_or_default();
     let receipt_id = child.receipt_id.clone();
 
-    // Verify the chain (parent + child)
-    let chain_valid = DelegationChain::verify(vec![parent, child.clone()], false).is_ok();
+    // Verify the chain (parent + child) — AUTHZ-VULN-17: signatures MUST be verified.
+    let chain_valid = DelegationChain::verify(vec![parent, child.clone()], true).is_ok();
 
     state.0.grants.lock().unwrap().push(child);
 
@@ -1425,10 +1425,14 @@ async fn verify_chain_handler(
         "Expiration inheritance".to_string(),
         "Max delegation depth".to_string(),
         "Grantor-grantee continuity".to_string(),
-        "Signature verification".to_string(),
+        "Ed25519 signature verification (enforced)".to_string(),
     ];
 
-    match DelegationChain::verify(chain_grants, false) {
+    // AUTHZ-VULN-17: verify_signatures MUST be true in production.
+    // Shannon found that passing false here caused forged chains to
+    // be reported as "verified: true" with "Signature verification"
+    // listed in the invariants_checked array — a false safety claim.
+    match DelegationChain::verify(chain_grants, true) {
         Ok(chain) => Json(VerifyChainResponse {
             valid: true,
             chain_length: chain.len(),
