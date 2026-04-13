@@ -601,6 +601,27 @@ async fn security_headers_middleware(
         "strict-origin-when-cross-origin".parse().unwrap(),
     );
 
+    // Phase 1.6 (AUTH-VULN-03): prevent caching of API responses.
+    // Sensitive data (tokens, posture, topology) must not be cached
+    // by browsers, proxies, or CDNs.
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        "no-store, no-cache, must-revalidate, max-age=0".parse().unwrap(),
+    );
+    headers.insert(
+        axum::http::header::PRAGMA,
+        "no-cache".parse().unwrap(),
+    );
+
+    // Phase 1.6 (AUTH-VULN-02): HSTS when TLS is enabled.
+    // Tells browsers to only connect via HTTPS for 1 year.
+    if auth::is_tls_enabled() {
+        headers.insert(
+            axum::http::header::STRICT_TRANSPORT_SECURITY,
+            "max-age=31536000; includeSubDomains".parse().unwrap(),
+        );
+    }
+
     resp
 }
 
