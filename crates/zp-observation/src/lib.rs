@@ -10,6 +10,7 @@
 
 pub mod config;
 pub mod observer;
+pub mod pipeline;
 pub mod receipts;
 pub mod reflector;
 pub mod store;
@@ -17,6 +18,7 @@ pub mod types;
 
 pub use config::*;
 pub use observer::{build_observer_prompt, parse_observer_output, OBSERVER_SYSTEM_PROMPT};
+pub use pipeline::{CognitionPipeline, ObserverResult, ReflectorResult};
 pub use receipts::{
     generate_observation_receipt, generate_observation_receipts, generate_reflection_receipt,
     verify_observation_receipt_consistency, verify_source_range,
