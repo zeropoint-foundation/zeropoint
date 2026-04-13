@@ -349,6 +349,7 @@ impl CompactDelegation {
             parent_grant_id: self.pi.clone(),
             delegation_depth: self.dd,
             max_delegation_depth: self.md,
+            provenance: zp_core::GrantProvenance::default(),
         }
     }
 

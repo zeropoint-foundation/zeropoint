@@ -453,9 +453,7 @@ async fn main() -> anyhow::Result<()> {
         {
             // Without the embedded-server feature, launch zp-server as a subprocess
             let mut cmd = std::process::Command::new("zp-server");
-            if let Some(b) = bind {
-                cmd.env("ZP_BIND", b);
-            }
+            cmd.env("ZP_BIND", bind);
             cmd.env("ZP_PORT", port.to_string());
             if *no_open {
                 cmd.env("ZP_NO_OPEN", "1");
@@ -744,11 +742,11 @@ async fn main() -> anyhow::Result<()> {
                 }
             };
             let cfg_name = parsed.get("operator")
-                .and_then(|v| v.as_str())
+                .and_then(|v: &toml::Value| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| operator_name.clone());
             let cfg_sov = parsed.get("sovereignty")
-                .and_then(|v| v.as_str())
+                .and_then(|v: &toml::Value| v.as_str())
                 .map(|s| zp_keys::SovereigntyMode::from_onboard_str(s))
                 .unwrap_or_else(zp_keys::SovereigntyMode::auto_detect);
 
@@ -877,7 +875,7 @@ async fn main() -> anyhow::Result<()> {
             println!("zp-verify v0 — catalog rules: P1, M3, M4");
             println!("audit_db:        {}", db_path.display());
             println!("receipts_checked: {}", report.receipts_checked);
-            if report.is_well_formed() {
+            if report.violations().is_empty() {
                 println!("result:          \x1b[32mACCEPT\x1b[0m — chain parses against the v0 grammar");
             } else {
                 println!(
@@ -888,15 +886,15 @@ async fn main() -> anyhow::Result<()> {
                 println!("violations:");
                 for v in report.violations() {
                     println!(
-                        "  [{}] index={} {}",
+                        "  [{}] entry={} {}",
                         v.rule,
-                        v.index,
-                        v.message
+                        v.entry_id,
+                        v.description
                     );
                 }
             }
         }
-        std::process::exit(if report.is_well_formed() { 0 } else { 1 });
+        std::process::exit(if report.violations().is_empty() { 0 } else { 1 });
     }
 
     // Config subcommand — unified configuration management
@@ -1060,7 +1058,7 @@ async fn main() -> anyhow::Result<()> {
             if let Ok(store) = zp_audit::AuditStore::open(&audit_db) {
                 match store.verify_with_catalog() {
                     Ok(report) => {
-                        if report.is_well_formed() {
+                        if report.violations().is_empty() {
                             checks.push(Check {
                                 label: "Audit chain".into(),
                                 status: "pass",

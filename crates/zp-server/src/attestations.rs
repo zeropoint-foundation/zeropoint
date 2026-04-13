@@ -357,6 +357,7 @@ pub async fn issue_attestation_handler(
         signer_public_key: signer_public_key.clone(),
         epoch,
         prev_attestation_hash: prev_hash.clone(),
+        verified: false,
     };
 
     // Persist

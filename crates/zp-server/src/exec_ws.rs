@@ -261,7 +261,7 @@ async fn execute_and_stream(
     }
 
     let argv: Vec<String> = match shlex::split(cmd) {
-        Some(v) if !v.is_empty() => v,
+        Some(v) if !v.is_empty() => v.into_iter().map(String::from).collect(),
         Some(_) => {
             let _ = tx.send(WsMessage::Text(
                 serde_json::json!({ "type": "error", "message": "🛡 Empty command after tokenization" }).to_string()

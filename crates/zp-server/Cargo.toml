@@ -51,5 +51,6 @@ parking_lot = { workspace = true }
 which = "7"
 toml = { workspace = true }
 zeroize = { workspace = true }
+shlex = "1"
 
 [dev-dependencies]
