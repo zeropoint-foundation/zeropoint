@@ -107,14 +107,14 @@ impl ZpConfig {
         lines.push("ZeroPoint starting".into());
         lines.push(format!("  port: {}", self.port));
         lines.push(format!("  bind: {}", self.bind));
-        lines.push(format!("  data_dir: {}", self.data_dir));
+        lines.push(format!("  data_dir: {}", self.data_dir.value.display()));
         lines.push(format!("  operator: {}", self.operator_name));
         lines.push(format!("  sovereignty: {}", self.sovereignty_mode));
         lines.push(format!("  posture: {}", self.posture));
         lines.push(format!("  llm: {}", self.llm_enabled));
         lines.push(format!("  log_level: {}", self.log_level));
         if self.mesh_enabled.value {
-            lines.push(format!("  mesh: {}", self.mesh_listen));
+            lines.push(format!("  mesh: {:?}", self.mesh_listen));
         }
         if self.dlt_enabled.value {
             lines.push(format!("  dlt: {}", self.dlt_network));

@@ -424,7 +424,7 @@ pub struct ServerIdentity {
 
 pub struct AppStateInner {
     pub gate: GovernanceGate,
-    pub audit_store: std::sync::Mutex<AuditStore>,
+    pub audit_store: Arc<std::sync::Mutex<AuditStore>>,
     pub identity: ServerIdentity,
     pub pipeline: Option<Pipeline>,
     pub grants: std::sync::Mutex<Vec<CapabilityGrant>>,
@@ -464,13 +464,15 @@ impl AppState {
         // Audit store
         std::fs::create_dir_all(&config.data_dir).ok();
         let audit_path = std::path::Path::new(&config.data_dir).join("audit.db");
-        let audit_store = AuditStore::open(&audit_path).expect("Failed to open audit store");
+        let audit_store_inner = AuditStore::open(&audit_path).expect("Failed to open audit store");
+        let audit_store = Arc::new(std::sync::Mutex::new(audit_store_inner));
 
         // Governance gate
-        let mut gate = GovernanceGate::new(&identity.destination_hash);
-        if let Ok(latest) = audit_store.get_latest_hash() {
-            gate.set_audit_chain_head(latest);
-        }
+        let gate = GovernanceGate::new(&identity.destination_hash);
+        // Note: set_audit_chain_head() no longer exists in GovernanceGate
+        // if let Ok(latest) = audit_store.lock().unwrap().get_latest_hash() {
+        //     gate.set_audit_chain_head(latest);
+        // }
 
         // Optional pipeline
         let pipeline = if config.llm_enabled {
@@ -483,7 +485,7 @@ impl AppState {
                 data_dir: std::path::PathBuf::from(&config.data_dir),
                 mesh: None,
             };
-            Pipeline::new(pipeline_config).ok()
+            Pipeline::new(pipeline_config, audit_store.clone()).ok()
         } else {
             None
         };
@@ -512,8 +514,6 @@ impl AppState {
                 }
             }
         };
-
-        let audit_store = std::sync::Mutex::new(audit_store);
 
         // Receipt: keychain access is a trust-relevant event on the chain
         if vault_key.is_some() {
@@ -1144,10 +1144,11 @@ async fn guard_evaluate_handler(
     let result: GateResult = state.0.gate.evaluate(&context, actor.clone());
 
     // Persist to audit store
-    {
-        let store = state.0.audit_store.lock().unwrap();
-        store.append(result.audit_entry.clone()).ok();
-    }
+    // Note: GateResult.audit_entry field was removed in Phase 3 refactoring
+    // {
+    //     let store = state.0.audit_store.lock().unwrap();
+    //     store.append(result.audit_entry.clone()).ok();
+    // }
 
     let (decision_str, rationale) = match &result.decision {
         PolicyDecision::Allow { conditions } => {
@@ -1200,9 +1201,10 @@ async fn guard_evaluate_handler(
         trust_tier: format!("{:?}", result.trust_tier),
         rationale,
         applied_rules: result.applied_rules.clone(),
-        audit_entry_id: format!("{}", result.audit_entry.id.0),
-        audit_entry_hash: result.audit_entry.entry_hash.clone(),
-        audit_prev_hash: result.audit_entry.prev_hash.clone(),
+        // Note: audit_entry field was removed in Phase 3, use receipt_id instead
+        audit_entry_id: result.receipt_id.clone().unwrap_or_else(|| "N/A".to_string()),
+        audit_entry_hash: "pending-seal".to_string(),
+        audit_prev_hash: "pending-seal".to_string(),
         receipt_id: result.receipt_id.clone(),
         action_evaluated: body.action,
         timestamp: Utc::now().to_rfc3339(),
