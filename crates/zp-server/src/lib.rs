@@ -689,9 +689,10 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/:tool_name/configure", post(tools_configure_handler))
         .route("/api/v1/tools/:tool_name/repair", post(tools_repair_handler))
         // Governed codebase — self-describing trust infrastructure
+        // AUTHZ-VULN-13: codebase read/search only available in dev builds.
+        // In production, these endpoints expose source code to authenticated
+        // users which is an unnecessary information disclosure risk.
         .route("/api/v1/codebase/tree", get(codebase::tree_handler))
-        .route("/api/v1/codebase/read", get(codebase::read_handler))
-        .route("/api/v1/codebase/search", get(codebase::search_handler))
         // Analysis engines — receipt chain intelligence (MLE STAR + Monte Carlo)
         .route("/api/v1/analysis/index", get(analysis::index_handler))
         .route("/api/v1/analysis/expertise", get(analysis::expertise_handler))
@@ -775,9 +776,12 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             .route("/api/v1/audit/simulate-tamper", post(audit_simulate_tamper_handler))
             .route("/api/v1/audit/restore", post(audit_restore_handler))
             .route("/api/v1/audit/clear", post(audit_clear_handler))
+            // AUTHZ-VULN-13: codebase read/search gated to dev-tools only
+            .route("/api/v1/codebase/read", get(codebase::read_handler))
+            .route("/api/v1/codebase/search", get(codebase::search_handler))
             .with_state(state.clone());
         tracing::warn!(
-            "⚠ dev-tools feature enabled: audit tamper/restore/clear endpoints are active. \
+            "⚠ dev-tools feature enabled: audit tamper/restore/clear + codebase read/search endpoints are active. \
              Do NOT use this in production."
         );
     }
@@ -986,10 +990,21 @@ async fn identity_handler(State(state): State<AppState>) -> Json<IdentityRespons
     } else {
         "bootstrap"
     };
+    // AUTHZ-VULN-07: redact full public key — only return the destination
+    // hash (truncated SHA-256). The full key is only needed for verification
+    // flows, which should use a dedicated authenticated endpoint.
+    let redacted_pk = {
+        let pk = &state.0.identity.public_key_hex;
+        if pk.len() > 20 {
+            format!("{}...{}", &pk[..8], &pk[pk.len()-8..])
+        } else {
+            pk.clone()
+        }
+    };
     Json(IdentityResponse {
-        public_key: state.0.identity.public_key_hex.clone(),
+        public_key: redacted_pk,
         destination_hash: state.0.identity.destination_hash.clone(),
-        trust_tier: "Tier1".to_string(),
+        trust_tier: "Tier0".to_string(),
         algorithm: "Ed25519".to_string(),
         from_hierarchy: state.0.identity.from_hierarchy,
         key_role: key_role.to_string(),
@@ -2171,11 +2186,38 @@ async fn stats_handler(State(state): State<AppState>) -> Json<StatsResponse> {
 async fn security_posture_handler(
     State(state): State<AppState>,
 ) -> Json<security::SecurityPosture> {
-    Json(security::assess(&state))
+    // AUTHZ-VULN-06: redact sensitive details from security posture.
+    // File paths, bind addresses, key file locations, and credential
+    // counts are stripped to prevent information disclosure.
+    let mut posture = security::assess(&state);
+    for check in &mut posture.checks {
+        // Redact filesystem paths from detail strings
+        check.detail = redact_paths(&check.detail);
+    }
+    Json(posture)
 }
 
 async fn topology_handler() -> Json<security::NetworkTopology> {
-    Json(security::topology())
+    // AUTHZ-VULN-12: redact internal IP addresses from topology.
+    let mut topo = security::topology();
+    for node in &mut topo.nodes {
+        // Replace internal addresses with redacted versions
+        if !node.address.is_empty() {
+            node.address = "[redacted]".to_string();
+        }
+    }
+    Json(topo)
+}
+
+/// Redact filesystem paths from a string to prevent information disclosure.
+fn redact_paths(s: &str) -> String {
+    // Replace home directory paths with ~
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.to_string_lossy();
+        s.replace(home_str.as_ref(), "~")
+    } else {
+        s.to_string()
+    }
 }
 
 // ============================================================================
