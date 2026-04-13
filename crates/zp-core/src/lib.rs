@@ -12,6 +12,7 @@ pub mod delegation_chain;
 pub mod episode;
 pub mod epistemic;
 pub mod error;
+pub mod internal_token;
 pub mod governance;
 pub mod policy;
 pub mod provider;
@@ -29,6 +30,7 @@ pub use delegation_chain::{ChainError, DelegationChain};
 pub use episode::{Episode, EpisodeId, Feedback, FeedbackRating, Outcome, Pattern};
 pub use epistemic::{Epistemic, EpistemicError, EpistemicStatus, StatusTransition};
 pub use error::ZpError;
+pub use internal_token::{InternalCapabilityToken, InternalScope, InternalTokenAuthority, TokenError};
 pub use governance::{
     ConsensusThreshold, GovernanceActor, GovernanceDecision, GovernanceEvent, GovernanceEventType,
 };
