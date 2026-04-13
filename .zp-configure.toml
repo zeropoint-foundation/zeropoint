@@ -4,8 +4,8 @@
 
 [tool]
 name = "ember"
-version = "0.1.0"
-description = "AI learning environment with multi-provider LLM, voice, and media capabilities"
+version = "0.6.0"
+description = "AI learning environment with multi-provider LLM, voice, media, and image analysis capabilities"
 
 # ── Required capabilities ──────────────────────────────────
 
@@ -74,6 +74,11 @@ env_vars = [
     "VIDEO_SORA_API_KEY", "VIDEO_SORA_BASE_URL",
 ]
 notes = "Video generation — all providers optional"
+
+[[optional]]
+capability = "image_analysis"
+env_vars = []
+notes = "Vision-based image analysis for pedagogical relevance — uses the reasoning_llm provider's vision-capable model. No additional env vars needed beyond reasoning_llm."
 
 [[optional]]
 capability = "web_search"

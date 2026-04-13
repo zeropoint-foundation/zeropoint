@@ -17,7 +17,13 @@
 use super::super::{ProviderCapability, SovereigntyMode, SovereigntyProvider, EnrollmentResult};
 use crate::error::KeyError;
 
+// These on-disk filenames are only referenced inside the `hw-yubikey`
+// feature-gated enroll/load paths. Without the feature, the provider is a
+// detection-only stub and the constants are unused — silence dead-code here
+// rather than at every call site.
+#[cfg_attr(not(feature = "hw-yubikey"), allow(dead_code))]
 const ENCRYPTED_SECRET_FILE: &str = "yubikey_wrapped.bin";
+#[cfg_attr(not(feature = "hw-yubikey"), allow(dead_code))]
 const YUBIKEY_CREDENTIAL_ID_FILE: &str = "yubikey_credential.bin";
 
 /// YubiKey sovereignty provider.

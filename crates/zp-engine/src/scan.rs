@@ -120,6 +120,11 @@ pub fn scan_tools(scan_path: &Path) -> ScanResults {
                 continue;
             }
 
+            // Skip tools explicitly removed from governance
+            if path.join(".zp-ignore").exists() {
+                continue;
+            }
+
             let env_example = path.join(".env.example");
             if !env_example.exists() {
                 continue;

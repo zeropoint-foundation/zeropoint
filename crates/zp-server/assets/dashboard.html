@@ -55,6 +55,15 @@
       background: #13151a;
       transform: translateY(-2px);
     }
+    .cockpit-tile .tile-remove {
+      position: absolute; top: 6px; right: 8px;
+      background: none; border: none; color: #333; font-size: 14px;
+      cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 2px;
+      opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .cockpit-tile:hover .tile-remove { opacity: 1; }
+    .cockpit-tile .tile-remove:hover { color: #FF4444; background: rgba(255, 68, 68, 0.1); }
     .cockpit-tile.governed:hover { border-color: #00C896; }
 
     /* Health indicator — top-left dot */
@@ -251,7 +260,10 @@
       background: #111114;
       border: 1px solid #FF4444;
       border-radius: 4px;
+      transition: border-color 0.2s;
     }
+    .diag-card.running { border-color: #7CDB8A; }
+    .diag-card.config  { border-color: #E8C547; }
     .diag-title {
       font-size: 14px; font-weight: 600;
       color: #FF4444;
@@ -513,6 +525,35 @@
     .welcome-btn:hover { border-color: #7eb8da; color: #7eb8da; }
     .welcome-btn.primary { border-color: #00C896; color: #00C896; }
     .welcome-btn.primary:hover { background: rgba(0, 200, 150, 0.08); }
+
+    /* ── Add Tool Overlay ───────────────────────────────── */
+    .addtool-overlay { position: fixed; inset: 0; background: rgba(10, 10, 12, 0.88); z-index: 1600; display: flex; align-items: center; justify-content: center; opacity: 0; animation: fadeIn 0.3s ease forwards; }
+    .addtool-overlay.dismissing { animation: fadeOut 0.2s ease forwards; }
+    .addtool-card { max-width: 640px; width: 92%; max-height: 88vh; overflow-y: auto; padding: 36px; background: #111114; border: 1px solid #7eb8da; border-radius: 4px; }
+    .addtool-title { font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #7eb8da; margin-bottom: 8px; }
+    .addtool-subtitle { color: #8B8984; font-size: 12px; margin-bottom: 24px; line-height: 1.5; }
+    .addtool-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #8B8984; margin-bottom: 6px; }
+    .addtool-input { width: 100%; box-sizing: border-box; background: #0A0A0C; border: 1px solid #2A2A2E; color: #E8E6E3; font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 12px 14px; border-radius: 2px; outline: none; transition: border-color 0.2s; }
+    .addtool-input:focus { border-color: #7eb8da; }
+    .addtool-input::placeholder { color: #444; }
+    .addtool-input.error { border-color: #FF4444; }
+    .addtool-error { color: #FF4444; font-size: 11px; margin-top: 6px; min-height: 16px; }
+    .addtool-actions { margin-top: 24px; display: flex; justify-content: flex-start; gap: 12px; }
+    .addtool-btn { background: none; border: 1px solid #2A2A2E; color: #E8E6E3; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 10px 24px; cursor: pointer; letter-spacing: 0.05em; transition: border-color 0.2s, color 0.2s, background 0.2s; }
+    .addtool-btn:hover { border-color: #7eb8da; color: #7eb8da; }
+    .addtool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .addtool-btn.primary { border-color: #00C896; color: #00C896; }
+    .addtool-btn.primary:hover:not(:disabled) { background: rgba(0, 200, 150, 0.08); }
+    .addtool-detection { margin-top: 20px; padding: 16px; background: #0A0A0C; border: 1px solid #1E1E22; border-radius: 2px; display: none; }
+    .addtool-detection.visible { display: block; }
+    .addtool-detect-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #00C896; margin-bottom: 10px; }
+    .addtool-detect-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; color: #8B8984; }
+    .addtool-detect-row .val { color: #E8E6E3; }
+    .addtool-detect-row .val.warn { color: #FFB020; }
+    .addtool-detect-row .val.good { color: #00C896; }
+    .addtool-providers { margin-top: 12px; }
+    .addtool-provider-tag { display: inline-block; font-size: 10px; padding: 3px 8px; margin: 2px 4px 2px 0; border: 1px solid #2A2A2E; border-radius: 2px; color: #8B8984; }
+    .addtool-receipt { margin-top: 12px; font-size: 10px; color: #444; }
   </style>
 </head>
 <body>
@@ -651,6 +692,36 @@
   <!-- Toast -->
   <div class="zp-toast" id="zpToast"></div>
 
+  <!-- Add Tool overlay — project path selection and detection -->
+  <div class="addtool-overlay" id="addToolOverlay" style="display:none;">
+    <div class="addtool-card">
+      <div class="addtool-title">Add Tool to Governance</div>
+      <div class="addtool-subtitle">
+        Point ZeroPoint at any project directory on your machine. It will be
+        scanned for configuration files, credentials, and launch strategy.
+      </div>
+
+      <div class="addtool-label">Project path</div>
+      <input type="text" class="addtool-input" id="addToolPath"
+             placeholder="/Users/you/projects/my-tool"
+             spellcheck="false" autocomplete="off" />
+      <div class="addtool-error" id="addToolError"></div>
+
+      <!-- Detection results (shown after successful scan) -->
+      <div class="addtool-detection" id="addToolDetection">
+        <div class="addtool-detect-title">Detection Results</div>
+        <div id="addToolDetectBody"></div>
+      </div>
+
+      <div class="addtool-actions">
+        <button class="addtool-btn primary" id="addToolScanBtn" onclick="addToolScan()">Scan</button>
+        <button class="addtool-btn primary" id="addToolRegisterBtn" style="display:none;" onclick="addToolRegister()">Register &amp; Configure</button>
+        <div style="flex:1;"></div>
+        <button class="addtool-btn" onclick="dismissAddTool()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Diagnostic panel for launch failures — graduated disclosure -->
   <div class="diag-overlay" id="diagOverlay" style="display:none;">
     <div class="diag-card">
@@ -695,6 +766,24 @@
   </div>
 
   <script>
+    // ── Session auth ─────────────────────────────────────
+    // AUTH-VULN-02: session token now lives in an HttpOnly cookie set by
+    // the dashboard response. It is intentionally NOT reachable from page
+    // JavaScript so that an injected script cannot exfiltrate it. Every
+    // API call goes through `zpFetch`, which forwards same-origin
+    // credentials automatically.
+
+    /** Authenticated fetch — the HttpOnly session cookie rides along. */
+    function zpFetch(url, opts = {}) {
+      if (!opts.credentials) opts.credentials = 'same-origin';
+      return fetch(url, opts);
+    }
+
+    /** Authenticated WebSocket — cookies attach automatically on same-origin. */
+    function zpWebSocket(url) {
+      return new WebSocket(url);
+    }
+
     // ── Toast helper ──────────────────────────────────────
     function showToast(html, duration = 3000) {
       const t = document.getElementById('zpToast');
@@ -717,7 +806,7 @@
 
     async function fetchEndpoint(url) {
       try {
-        const r = await fetch(url);
+        const r = await zpFetch(url);
         if (!r.ok) return { error: `HTTP ${r.status}` };
         return await r.json();
       } catch (err) { return { error: 'Unreachable' }; }
@@ -881,7 +970,7 @@
 
       // Connect via WebSocket
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      _diagExecWs = new WebSocket(`${proto}//${location.host}/ws/exec`);
+      _diagExecWs = zpWebSocket(`${proto}//${location.host}/ws/exec`);
 
       _diagExecWs.onopen = () => {
         _diagExecWs.send(JSON.stringify({
@@ -1054,7 +1143,7 @@
       document.getElementById('diagTermReceipt').textContent = '';
 
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${location.host}/ws/exec`);
+      const ws = zpWebSocket(`${proto}//${location.host}/ws/exec`);
 
       ws.onopen = () => {
         ws.send(JSON.stringify({ action: 'exec', cmd: step.cmd, cwd: cwd }));
@@ -1083,6 +1172,9 @@
               document.getElementById('diagTermReceipt').textContent =
                 '⛓ ' + msg.receipt_hash.substring(0, 12);
             }
+            // Command fully complete — close the socket so onclose fires
+            // and the sequence can advance to the next step.
+            ws.close();
           } else if (msg.type === 'error') {
             _diagTerm.writeln('\x1b[31m' + msg.message + '\x1b[0m');
           }
@@ -1178,19 +1270,32 @@
 
       const errorLower = ((result && result.error) || '').toLowerCase();
       const isConfigIssue = errorLower.includes('needs configuration') || errorLower.includes('add a tool');
-      const isLaunchFailure = !isConfigIssue;
+      const isRunning = result && result.status === 'running';
+      const isLaunchFailure = !isConfigIssue && !isRunning;
 
       title.textContent = isConfigIssue
         ? `${tool.name} — Configuration Required`
+        : isRunning
+        ? `${tool.name} — Running`
         : `${tool.name} — Launch Failed`;
+      // Color the title and card border: green for running, amber for config, red for failure
+      title.style.color = isRunning ? '#7CDB8A' : isConfigIssue ? '#E8C547' : '#FF4444';
+      const card = overlay.querySelector('.diag-card');
+      if (card) {
+        card.classList.toggle('running', isRunning);
+        card.classList.toggle('config', isConfigIssue);
+      }
       _diagRetryTool = isLaunchFailure ? tool : null;
       _diagToolPath = tool.path || `~/projects/${tool.name}`;
       _resolveToolRef = tool;
       _resolveResult = result;
 
-      // Show Resolve as primary action; Retry only for launch failures
+      // Show action buttons based on state:
+      //   Running  → only Close (nothing to resolve or retry)
+      //   Config   → Resolve only
+      //   Failure  → Resolve + Retry Launch
       const resolveBtn = document.getElementById('diagResolveBtn');
-      resolveBtn.style.display = 'inline-block';
+      resolveBtn.style.display = isRunning ? 'none' : 'inline-block';
       resolveBtn.disabled = false;
       resolveBtn.innerHTML = 'Resolve';
       resolveBtn.className = 'diag-btn resolve';
@@ -1200,6 +1305,13 @@
       let html = '';
       if (isConfigIssue) {
         html += `<div class="diag-field"><div class="diag-value hint-text" style="font-size:13px;">Vault credentials need to be resolved and <code>.env</code> written. Click <strong>Resolve</strong> to configure automatically.</div></div>`;
+      } else if (isRunning) {
+        if (result && result.error) {
+          html += `<div class="diag-field"><div class="diag-label">Status</div><div class="diag-value" style="color:#7CDB8A;">${result.error}</div></div>`;
+        }
+        if (result && result.hint) {
+          html += `<div class="diag-field"><div class="diag-label">Details</div><div class="diag-value hint-text">${result.hint}</div></div>`;
+        }
       } else {
         if (result && result.error) {
           html += `<div class="diag-field"><div class="diag-label">Error</div><div class="diag-value error-text">${result.error}</div></div>`;
@@ -1234,7 +1346,7 @@
 
       // ── Auto-populate terminal with launch log (if available) ──
       try {
-        const logResp = await fetch(`/api/v1/tools/log?name=${encodeURIComponent(tool.name)}`);
+        const logResp = await zpFetch(`/api/v1/tools/log?name=${encodeURIComponent(tool.name)}`);
         const logData = await logResp.json();
         if (logData.log && logData.log.trim()) {
           // Pre-populate the terminal with the log so it's ready when disclosed
@@ -1287,7 +1399,7 @@
         setTileLaunching(tool.name, true);
 
         try {
-          const pfResp = await fetch('/api/v1/tools/preflight', { method: 'POST' });
+          const pfResp = await zpFetch('/api/v1/tools/preflight', { method: 'POST' });
           const pfResult = await pfResp.json();
 
           // Check if this specific tool passed after preflight
@@ -1342,7 +1454,59 @@
         if (earlyTab) earlyTab.close();
       }
 
-      // ── Not running — ask the server to start it. ───────
+      // ── Non-web tools: launch via API, show status instead of browser tab ──
+      const hasWebUI = launch.url || launch.port || launch.kind === 'web' || launch.kind === 'native' || launch.kind === 'pnpm' || launch.kind === 'npm';
+
+      if (!hasWebUI) {
+        // Check if already running (avoid re-launching on repeat clicks)
+        if (tool.running_pid) {
+          showDiagnostic(tool, {
+            status: 'running',
+            error: `${tool.name} — ${launch.kind || 'headless'} tool running`,
+            hint: `Already running (PID ${tool.running_pid}). This tool doesn't serve a web UI — use the terminal below to interact with it.`,
+            cmd: launch.cmd,
+          });
+          return;
+        }
+
+        // Not running yet — launch via API
+        launching.add(tool.name);
+        showToast(`Starting <strong>${tool.name}</strong>...`, 15000);
+        setTileLaunching(tool.name, true);
+        try {
+          const resp = await zpFetch('/api/v1/tools/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: tool.name }),
+          });
+          const result = await resp.json();
+          if (!resp.ok) {
+            showToast('');
+            showDiagnostic(tool, result);
+          } else {
+            tool.running_pid = result.pid;  // cache PID to prevent re-launch on next click
+            showToast(`<strong>${tool.name}</strong> started (PID ${result.pid})`, 5000);
+            showDiagnostic(tool, {
+              status: 'running',
+              error: `${tool.name} — ${launch.kind || 'headless'} tool running`,
+              hint: `Process started (PID ${result.pid}). This tool doesn't serve a web UI — use the terminal below to interact with it.`,
+              cmd: result.cmd,
+            });
+          }
+        } catch (err) {
+          showToast('');
+          showDiagnostic(tool, {
+            error: `Launch failed: ${err.message}`,
+            hint: 'Is the ZeroPoint server running?',
+          });
+        } finally {
+          setTileLaunching(tool.name, false);
+          launching.delete(tool.name);
+        }
+        return;
+      }
+
+      // ── Web tools: ask the server to start, then open in browser ──
       launching.add(tool.name);
       showToast(`Starting <strong>${tool.name}</strong>...`, 30000);
       setTileLaunching(tool.name, true);
@@ -1353,7 +1517,7 @@
       const pendingTab = window.open('about:blank', '_blank');
 
       try {
-        const resp = await fetch('/api/v1/tools/launch', {
+        const resp = await zpFetch('/api/v1/tools/launch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: tool.name }),
@@ -1370,10 +1534,11 @@
         // Wait for the tool to come up via the ZP proxy URL.
         // Native (cargo) builds can take minutes on first compile, so
         // give them a much longer leash than container/script tools.
-        // result.url = subdomain URL (http://name.localhost:port/), result.raw_url = direct port
-        const openUrl = result.url || `http://${tool.name}.localhost:${window.location.port || 3000}/`;
+        // result.url = subdomain URL (http://name.localhost:port/) — null for headless tools
+        // result.port = ZP-assigned port — null for headless tools
+        const openUrl = result.url || (result.port ? `http://${tool.name}.localhost:${window.location.port || 3000}/` : null);
         const pollUrl = openUrl;  // poll the subdomain proxy — returns 502 until tool is up
-        if (openUrl) {
+        if (openUrl && result.port) {
           const isNative = result.kind === 'native';
           const maxWait = isNative ? 180000 : 30000;   // 3 min vs 30 s
           const pollInterval = isNative ? 3000 : 1500;
@@ -1401,7 +1566,14 @@
           }
         } else {
           if (pendingTab) pendingTab.close();
-          showToast(`<strong>${tool.name}</strong> launched (no web UI detected).`, 4000);
+          showToast(`<strong>${tool.name}</strong> started (PID ${result.pid || '?'})`, 4000);
+          // Show diagnostic panel for headless tools so user can see logs
+          showDiagnostic(tool, {
+            status: 'running',
+            error: `${tool.name} — ${result.kind || 'headless'} tool running`,
+            hint: `Process started (PID ${result.pid}). This tool doesn't expose a web UI. Check the terminal below for output.`,
+            cmd: result.cmd,
+          });
         }
       } catch (err) {
         showToast('');
@@ -1449,6 +1621,216 @@
         tile.style.animation = '';
       }
     }
+
+    // ── Add Tool Dialog ───────────────────────────────────
+    let _addToolResult = null; // stash register response for the configure step
+
+    function showAddTool() {
+      const overlay = document.getElementById('addToolOverlay');
+      overlay.style.display = 'flex';
+      _addToolResult = null;
+      document.getElementById('addToolPath').value = '';
+      document.getElementById('addToolError').textContent = '';
+      document.getElementById('addToolDetection').classList.remove('visible');
+      document.getElementById('addToolScanBtn').style.display = '';
+      document.getElementById('addToolRegisterBtn').style.display = 'none';
+      // Focus the input after animation
+      setTimeout(() => document.getElementById('addToolPath').focus(), 100);
+    }
+
+    function dismissAddTool() {
+      const overlay = document.getElementById('addToolOverlay');
+      overlay.classList.add('dismissing');
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        overlay.classList.remove('dismissing');
+      }, 300);
+    }
+
+    async function addToolScan() {
+      const pathInput = document.getElementById('addToolPath');
+      const errorEl = document.getElementById('addToolError');
+      const scanBtn = document.getElementById('addToolScanBtn');
+      const registerBtn = document.getElementById('addToolRegisterBtn');
+      const detectionEl = document.getElementById('addToolDetection');
+      const detBody = document.getElementById('addToolDetectBody');
+      const rawPath = pathInput.value.trim();
+
+      // Clear previous state
+      errorEl.textContent = '';
+      pathInput.classList.remove('error');
+      detectionEl.classList.remove('visible');
+      registerBtn.style.display = 'none';
+
+      if (!rawPath) {
+        errorEl.textContent = 'Enter a path to a project directory.';
+        pathInput.classList.add('error');
+        return;
+      }
+
+      // Disable button during scan
+      scanBtn.disabled = true;
+      scanBtn.textContent = 'Scanning…';
+
+      try {
+        const resp = await zpFetch('/api/v1/tools/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: rawPath }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+          errorEl.textContent = data.error || `HTTP ${resp.status}`;
+          pathInput.classList.add('error');
+          return;
+        }
+
+        // Success — show detection results
+        _addToolResult = data;
+        const tool = data.tool;
+        const det = data.detection;
+
+        // Build detection summary
+        const ecosystemLabels = {
+          'rust': 'Rust (Cargo)',
+          'go': 'Go',
+          'node-pnpm': 'Node.js (pnpm)',
+          'node-yarn': 'Node.js (Yarn)',
+          'node-npm': 'Node.js (npm)',
+          'node': 'Node.js',
+          'python': 'Python',
+          'docker': 'Docker',
+          'unknown': 'Unknown',
+        };
+
+        let html = '';
+        html += `<div class="addtool-detect-row"><span>Name</span><span class="val">${tool.name}</span></div>`;
+        html += `<div class="addtool-detect-row"><span>Ecosystem</span><span class="val">${ecosystemLabels[tool.ecosystem] || tool.ecosystem}</span></div>`;
+        html += `<div class="addtool-detect-row"><span>Launch</span><span class="val">${tool.launch.kind}${tool.launch.port ? ' :' + tool.launch.port : ''}</span></div>`;
+
+        // Config status
+        const statusLabels = {
+          'configured': '✓ .env present',
+          'has_env': '✓ .env present (manual)',
+          'unconfigured': '.env.example found — needs credentials',
+          'no_env_template': 'No .env.example',
+        };
+        const statusClass = (tool.status === 'configured' || tool.status === 'has_env') ? 'good' : 'warn';
+        html += `<div class="addtool-detect-row"><span>Config</span><span class="val ${statusClass}">${statusLabels[tool.status] || tool.status}</span></div>`;
+
+        // Files detected
+        const files = [];
+        if (det.package_json) files.push('package.json');
+        if (det.cargo_toml) files.push('Cargo.toml');
+        if (det.docker_compose) files.push('docker-compose.yml');
+        if (det.dockerfile) files.push('Dockerfile');
+        if (det.requirements_txt) files.push('requirements.txt');
+        if (det.pyproject_toml) files.push('pyproject.toml');
+        if (det.go_mod) files.push('go.mod');
+        if (det.makefile) files.push('Makefile');
+        if (det.env_example) files.push('.env.example');
+        if (det.env) files.push('.env');
+        html += `<div class="addtool-detect-row"><span>Files</span><span class="val">${files.join(', ') || 'none detected'}</span></div>`;
+
+        if (tool.symlinked) {
+          html += `<div class="addtool-detect-row"><span>Linked</span><span class="val">symlinked into ~/projects/</span></div>`;
+        }
+
+        // Provider tags
+        if (tool.providers && tool.providers.length > 0) {
+          html += '<div class="addtool-providers">';
+          html += '<div class="addtool-label" style="margin-top:8px;">Required Credentials</div>';
+          for (const p of tool.providers) {
+            html += `<span class="addtool-provider-tag">${p}</span>`;
+          }
+          html += '</div>';
+        }
+
+        detBody.innerHTML = html;
+        detectionEl.classList.add('visible');
+
+        // Show register button, hide scan
+        scanBtn.style.display = 'none';
+        registerBtn.style.display = '';
+
+      } catch (err) {
+        errorEl.textContent = `Connection error: ${err.message}`;
+        pathInput.classList.add('error');
+      } finally {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Scan';
+      }
+    }
+
+    function addToolRegister() {
+      // Dismiss the Add Tool dialog and flow into the existing diagnostic/configure path
+      const result = _addToolResult;
+      if (!result || !result.tool) return;
+
+      dismissAddTool();
+
+      const tool = {
+        name: result.tool.name,
+        path: result.tool.path,
+        status: result.tool.needs_config ? 'unconfigured' : result.tool.status,
+        launch: result.tool.launch,
+        providers: result.tool.providers,
+      };
+
+      // If the tool needs configuration, go to the diagnostic panel
+      if (result.tool.needs_config) {
+        setTimeout(() => {
+          showDiagnostic(tool, {
+            error: `${tool.name} needs configuration`,
+            hint: 'Vault credentials need to be resolved and .env written.',
+          });
+        }, 400);
+      } else {
+        // Already configured — just refresh the cockpit
+        showToast(`<span style="color:#00C896">✓</span> <b>${tool.name}</b> added to governance`);
+        initialize();
+      }
+    }
+
+    async function removeTool(toolName) {
+      if (!confirm(`Remove "${toolName}" from ZeroPoint governance?\n\nThe project files will not be deleted.`)) {
+        return;
+      }
+      try {
+        const resp = await zpFetch(`/api/v1/tools/${encodeURIComponent(toolName)}/unregister`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          showToast(`<span style="color:#FF4444">✗</span> ${data.error || 'Failed to remove tool'}`);
+          return;
+        }
+        showToast(`<span style="color:#8B8984">✓</span> <b>${toolName}</b> removed from governance`);
+        initialize();
+      } catch (err) {
+        showToast(`<span style="color:#FF4444">✗</span> Connection error: ${err.message}`);
+      }
+    }
+
+    // Handle Enter key in path input
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('addToolPath');
+      if (input) {
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (_addToolResult) {
+              addToolRegister();
+            } else {
+              addToolScan();
+            }
+          }
+        });
+      }
+    });
 
     function renderCockpit(data, hasGenesis) {
       const grid = document.getElementById('cockpitGrid');
@@ -1544,6 +1926,7 @@
         }
 
         tile.innerHTML = `
+          <button class="tile-remove" title="Remove from governance" onclick="event.stopPropagation(); removeTool('${tool.name}')">&times;</button>
           <div class="tile-health ${healthClass}"></div>
           <div class="tile-icon">${icon}</div>
           <div class="tile-name">${tool.name}</div>
@@ -1581,13 +1964,7 @@
         <div class="tile-name">Add Tool</div>
         <div class="tile-status">zp configure</div>
       `;
-      addTile.onclick = () => {
-        showDiagnostic({ name: 'New Tool', path: '~/projects' }, {
-          error: 'Add a tool to ZeroPoint governance',
-          hint: 'Clone a tool to ~/projects/ with a .env.example, then configure it.',
-          cmd: 'zp configure auto ~/projects',
-        });
-      };
+      addTile.onclick = () => showAddTool();
       grid.appendChild(addTile);
     }
 
@@ -1726,6 +2103,7 @@
     }
 
     // ── Init ──────────────────────────────────────────────
+    const refreshAll = () => initialize();
     async function initialize() {
       try {
         const [identity, genesis, rules, audit, stats, posture, topo, tools] = await Promise.all([
