@@ -1,6 +1,12 @@
 (function() {
   'use strict';
 
+  // ── HTML escaping (XSS-VULN-09, XSS-VULN-10, XSS-VULN-11) ──
+  function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   // ── State ───────────────────────────────────────────────
   let ws = null;
   let currentStep = 0;
@@ -709,7 +715,7 @@
     data.words.forEach((word, i) => {
       const div = document.createElement('div');
       div.className = 'word';
-      div.innerHTML = `<span class="word-num">${i + 1}.</span> ${word}`;
+      div.innerHTML = `<span class="word-num">${i + 1}.</span> ${escapeHtml(word)}`;
       container.appendChild(div);
     });
 
@@ -787,11 +793,11 @@
 
       // Show each detected runtime
       runtimes.forEach(rt => {
-        let rtLine = `<span style="color:var(--green)">✓</span> ${rt.name} detected`;
-        if (rt.version) rtLine += ` (v${rt.version})`;
-        rtLine += ` <span style="color:var(--text-dim)">at ${rt.endpoint}</span>`;
+        let rtLine = `<span style="color:var(--green)">✓</span> ${escapeHtml(rt.name)} detected`;
+        if (rt.version) rtLine += ` (v${escapeHtml(rt.version)})`;
+        rtLine += ` <span style="color:var(--text-dim)">at ${escapeHtml(rt.endpoint)}</span>`;
         if (rt.models && rt.models.length > 0) {
-          rtLine += `<br><span style="color:var(--text-dim)">${rt.models.length} model(s): ${rt.models.join(', ')}</span>`;
+          rtLine += `<br><span style="color:var(--text-dim)">${rt.models.length} model(s): ${rt.models.map(m => escapeHtml(m)).join(', ')}</span>`;
         }
         statusLines.unshift(rtLine);
       });
@@ -901,22 +907,22 @@
 
     // Build install instructions
     const instrEl = document.getElementById('setupInstructions');
-    instrEl.innerHTML = `<span style="color:var(--accent)">▸</span> Install <strong>${install.runtime}</strong> <span style="color:var(--text-dim)">(${install.method})</span>`;
+    instrEl.innerHTML = `<span style="color:var(--accent)">▸</span> Install <strong>${escapeHtml(install.runtime)}</strong> <span style="color:var(--text-dim)">(${escapeHtml(install.method)})</span>`;
 
     // Build command block
     const cmdEl = document.getElementById('setupCommands');
     if (install.commands && install.commands.length > 0) {
       cmdEl.style.display = 'block';
       cmdEl.innerHTML = install.commands
-        .map(cmd => `<div style="margin:0.15rem 0"><span style="color:var(--accent)">$</span> <code>${cmd}</code></div>`)
+        .map(cmd => `<div style="margin:0.15rem 0"><span style="color:var(--accent)">$</span> <code>${escapeHtml(cmd)}</code></div>`)
         .join('');
 
       if (install.alt_url) {
-        cmdEl.innerHTML += `<div style="margin:0.35rem 0 0 0; font-size:0.72rem; color:var(--text-dim)">or download directly: <a href="${install.alt_url}" target="_blank" style="color:var(--accent)">${install.alt_url}</a></div>`;
+        cmdEl.innerHTML += `<div style="margin:0.35rem 0 0 0; font-size:0.72rem; color:var(--text-dim)">or download directly: <a href="${escapeHtml(install.alt_url)}" target="_blank" style="color:var(--accent)">${escapeHtml(install.alt_url)}</a></div>`;
       }
     } else if (install.alt_url) {
       cmdEl.style.display = 'block';
-      cmdEl.innerHTML = `<div style="margin:0.15rem 0"><span style="color:var(--accent)">→</span> <a href="${install.alt_url}" target="_blank" style="color:var(--accent)">${install.alt_url}</a></div>`;
+      cmdEl.innerHTML = `<div style="margin:0.15rem 0"><span style="color:var(--accent)">→</span> <a href="${escapeHtml(install.alt_url)}" target="_blank" style="color:var(--accent)">${escapeHtml(install.alt_url)}</a></div>`;
     } else {
       cmdEl.style.display = 'none';
     }
@@ -992,9 +998,9 @@
     let sourceHtml = '';
     if (model.source_url) {
       sourceHtml = `<div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.35rem; border-top:1px solid var(--border); padding-top:0.3rem">` +
-        `<a href="${model.source_url}" target="_blank" style="color:var(--accent); text-decoration:none">model card ↗</a>`;
+        `<a href="${escapeHtml(model.source_url)}" target="_blank" style="color:var(--accent); text-decoration:none">model card ↗</a>`;
       if (model.last_verified) {
-        sourceHtml += ` · verified ${model.last_verified}`;
+        sourceHtml += ` · verified ${escapeHtml(model.last_verified)}`;
       }
       sourceHtml += `</div>`;
     }
@@ -1002,15 +1008,15 @@
     const primaryEl = document.getElementById('modelRecPrimary');
     primaryEl.innerHTML =
       `<div style="display:flex; justify-content:space-between; align-items:baseline">` +
-      `<strong style="font-size:0.85rem">${model.display_name}</strong>` +
-      `<span style="font-size:0.68rem; color:var(--text-dim)">${model.size}</span>` +
+      `<strong style="font-size:0.85rem">${escapeHtml(model.display_name)}</strong>` +
+      `<span style="font-size:0.68rem; color:var(--text-dim)">${escapeHtml(model.size)}</span>` +
       `</div>` +
-      `<p style="font-size:0.75rem; color:var(--text-dim); margin:0.25rem 0 0 0; line-height:1.5">${model.rationale}</p>` +
+      `<p style="font-size:0.75rem; color:var(--text-dim); margin:0.25rem 0 0 0; line-height:1.5">${escapeHtml(model.rationale)}</p>` +
       sourceHtml;
 
     // Pull command
     const cmdEl = document.getElementById('modelRecCommand');
-    cmdEl.innerHTML = `<div style="margin:0.15rem 0"><span style="color:var(--accent)">$</span> <code>${model.pull_command}</code></div>`;
+    cmdEl.innerHTML = `<div style="margin:0.15rem 0"><span style="color:var(--accent)">$</span> <code>${escapeHtml(model.pull_command)}</code></div>`;
 
     // Alternative model
     if (model.alternative) {
@@ -1020,16 +1026,16 @@
 
       let altSourceHtml = '';
       if (alt.source_url) {
-        altSourceHtml = ` · <a href="${alt.source_url}" target="_blank" style="color:var(--accent); text-decoration:none; font-size:0.62rem">model card ↗</a>`;
+        altSourceHtml = ` · <a href="${escapeHtml(alt.source_url)}" target="_blank" style="color:var(--accent); text-decoration:none; font-size:0.62rem">model card ↗</a>`;
       }
 
       document.getElementById('modelRecAltCard').innerHTML =
         `<div style="display:flex; justify-content:space-between; align-items:baseline">` +
-        `<strong style="font-size:0.78rem">${alt.display_name}</strong>` +
-        `<span style="font-size:0.68rem; color:var(--text-dim)">${alt.size}${altSourceHtml}</span>` +
+        `<strong style="font-size:0.78rem">${escapeHtml(alt.display_name)}</strong>` +
+        `<span style="font-size:0.68rem; color:var(--text-dim)">${escapeHtml(alt.size)}${altSourceHtml}</span>` +
         `</div>` +
-        `<p style="font-size:0.72rem; color:var(--text-dim); margin:0.15rem 0 0 0; line-height:1.4">${alt.rationale}</p>` +
-        `<div style="font-size:0.72rem; margin-top:0.25rem"><span style="color:var(--accent)">$</span> <code>${alt.pull_command}</code></div>`;
+        `<p style="font-size:0.72rem; color:var(--text-dim); margin:0.15rem 0 0 0; line-height:1.4">${escapeHtml(alt.rationale)}</p>` +
+        `<div style="font-size:0.72rem; margin-top:0.25rem"><span style="color:var(--accent)">$</span> <code>${escapeHtml(alt.pull_command)}</code></div>`;
     }
   }
 
@@ -1069,7 +1075,7 @@
     if (data.error) {
       // Pull failed — show the manual command
       msgEl.innerHTML =
-        `<span style="color:var(--yellow)">⚠</span> ${data.message}`;
+        `<span style="color:var(--yellow)">⚠</span> ${escapeHtml(data.message)}`;
       // Re-enable the button
       const btn = document.getElementById('pullAndContinueBtn');
       btn.disabled = false;
@@ -1077,7 +1083,7 @@
     } else {
       // Pull started successfully — show status and enable continue
       msgEl.innerHTML =
-        `<span style="color:var(--green)">✓</span> <span style="color:var(--green)">${data.message}</span>`;
+        `<span style="color:var(--green)">✓</span> <span style="color:var(--green)">${escapeHtml(data.message)}</span>`;
 
       // Replace action buttons with a "Continue" that moves on + optional notification
       actionsEl.innerHTML =
@@ -1136,7 +1142,7 @@
     }
 
     div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center">
-      <strong style="font-size:0.85rem">${data.tool_name}</strong>
+      <strong style="font-size:0.85rem">${escapeHtml(data.tool_name)}</strong>
       <span style="font-size:0.75rem">${status}</span>
     </div>`;
 
@@ -1280,37 +1286,37 @@
 
     let metaHtml = '';
     if (isDetected && provider.detected_vars && provider.detected_vars.length) {
-      metaHtml += `<div style="font-size:0.72rem; color:var(--green); margin-bottom:0.3rem">✓ Found: ${provider.detected_vars.join(', ')}</div>`;
+      metaHtml += `<div style="font-size:0.72rem; color:var(--green); margin-bottom:0.3rem">✓ Found: ${provider.detected_vars.map(v => escapeHtml(v)).join(', ')}</div>`;
     }
     if (toolNames.length) {
-      metaHtml += `<div class="used-by">Used by: ${toolNames.join(', ')}</div>`;
+      metaHtml += `<div class="used-by">Used by: ${toolNames.map(t => escapeHtml(t)).join(', ')}</div>`;
     }
     if (p.coverage) {
-      metaHtml += `<div style="font-size:0.72rem; color:var(--accent); margin-bottom:0.3rem; font-style:italic">${p.coverage}</div>`;
+      metaHtml += `<div style="font-size:0.72rem; color:var(--accent); margin-bottom:0.3rem; font-style:italic">${escapeHtml(p.coverage)}</div>`;
     }
     if (p.key_hint) {
-      metaHtml += `<div style="font-size:0.72rem; color:var(--text-dim)">${p.key_hint}</div>`;
+      metaHtml += `<div style="font-size:0.72rem; color:var(--text-dim)">${escapeHtml(p.key_hint)}</div>`;
     }
 
     let sourceHtml = '';
     if (p.source_url) {
       sourceHtml = `<div style="font-size:0.68rem; color:var(--text-dim); margin-top:0.3rem">`;
-      sourceHtml += `<a href="${p.source_url}" target="_blank" style="color:var(--accent); text-decoration:none">docs ↗</a>`;
+      sourceHtml += `<a href="${escapeHtml(p.source_url)}" target="_blank" style="color:var(--accent); text-decoration:none">docs ↗</a>`;
       if (p.last_verified) {
-        sourceHtml += ` · verified ${p.last_verified}`;
+        sourceHtml += ` · verified ${escapeHtml(p.last_verified)}`;
       }
       sourceHtml += `</div>`;
     }
 
     div.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:baseline">
-        <div class="provider">${p.name}</div>
-        ${p.key_url ? `<a class="help-link" href="${p.key_url}" target="_blank" style="font-size:0.75rem; color:var(--accent); text-decoration:none">get key ↗</a>` : ''}
+        <div class="provider">${escapeHtml(p.name)}</div>
+        ${p.key_url ? `<a class="help-link" href="${escapeHtml(p.key_url)}" target="_blank" style="font-size:0.75rem; color:var(--accent); text-decoration:none">get key ↗</a>` : ''}
       </div>
       ${metaHtml}
       <div class="input-row">
-        <input type="password" id="cred-input-${id}" placeholder="${p.env_patterns?.[0] || 'API Key'}">
-        <button class="store-btn" onclick="storeCred('${id}', '${vaultRef}')">Store</button>
+        <input type="password" id="cred-input-${escapeHtml(id)}" placeholder="${escapeHtml(p.env_patterns?.[0] || 'API Key')}">
+        <button class="store-btn" onclick="storeCred('${escapeHtml(id)}', '${escapeHtml(vaultRef)}')">Store</button>
       </div>
       ${sourceHtml}
     `;
@@ -1403,12 +1409,12 @@
       let headerHtml = `
         <div class="found-provider-header">
           <div>
-            <span class="found-provider-name">${provider}</span>
+            <span class="found-provider-name">${escapeHtml(provider)}</span>
             ${hasConflict ? '<span style="font-size:0.68rem; color:var(--yellow); margin-left:0.5rem">⚠ conflicting values</span>' : ''}
           </div>
           <div class="priority-controls">
-            <button class="priority-btn" onclick="moveProviderUp('${provider}')" title="Move up">▲</button>
-            <button class="priority-btn" onclick="moveProviderDown('${provider}')" title="Move down">▼</button>
+            <button class="priority-btn" onclick="moveProviderUp('${escapeHtml(provider)}')" title="Move up">▲</button>
+            <button class="priority-btn" onclick="moveProviderDown('${escapeHtml(provider)}')" title="Move down">▼</button>
           </div>
         </div>
       `;
@@ -1427,22 +1433,22 @@
           // Show radio buttons when values conflict
           valuesHtml += `
             <div class="found-value-row">
-              <input type="radio" name="${radioName}" value="${vi}" ${isSelected ? 'checked' : ''}
-                     onchange="selectFoundCred('${provider}', ${vi})">
-              <span class="found-var-name">${v.var_name}</span>
-              <span class="found-masked-value">${v.masked_value}</span>
-              <span class="found-source-tag">${sources}</span>
+              <input type="radio" name="${escapeHtml(radioName)}" value="${vi}" ${isSelected ? 'checked' : ''}
+                     onchange="selectFoundCred('${escapeHtml(provider)}', ${vi})">
+              <span class="found-var-name">${escapeHtml(v.var_name)}</span>
+              <span class="found-masked-value">${escapeHtml(v.masked_value)}</span>
+              <span class="found-source-tag">${escapeHtml(sources)}</span>
             </div>
           `;
         } else {
           // Single value — just show it with checkbox to include/exclude
           valuesHtml += `
             <div class="found-value-row">
-              <input type="checkbox" checked onchange="toggleFoundCred('${provider}', this.checked, ${vi})"
+              <input type="checkbox" checked onchange="toggleFoundCred('${escapeHtml(provider)}', this.checked, ${vi})"
                      style="accent-color:var(--accent)">
-              <span class="found-var-name">${v.var_name}</span>
-              <span class="found-masked-value">${v.masked_value}</span>
-              <span class="found-source-tag">${sources}</span>
+              <span class="found-var-name">${escapeHtml(v.var_name)}</span>
+              <span class="found-masked-value">${escapeHtml(v.masked_value)}</span>
+              <span class="found-source-tag">${escapeHtml(sources)}</span>
             </div>
           `;
         }
