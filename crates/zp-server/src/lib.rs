@@ -90,6 +90,24 @@ impl Default for ServerConfig {
     }
 }
 
+impl ServerConfig {
+    /// Construct from the unified `ZpConfig` (new canonical path).
+    pub fn from_zp_config(cfg: &zp_config::ZpConfig) -> Self {
+        Self {
+            bind_addr: cfg.bind.value.clone(),
+            port: cfg.port.value,
+            data_dir: cfg.data_dir.value.to_string_lossy().to_string(),
+            home_dir: cfg.home_dir.value.clone(),
+            open_dashboard: cfg.open_dashboard.value,
+            llm_enabled: cfg.llm_enabled.value,
+            operator_name: cfg.operator_name.value.clone(),
+            bridge_dir: std::env::var("ZP_BRIDGE_DIR")
+                .ok()
+                .map(std::path::PathBuf::from),
+        }
+    }
+}
+
 // ============================================================================
 // Genesis Ceremony
 // ============================================================================
