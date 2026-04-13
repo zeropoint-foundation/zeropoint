@@ -8,6 +8,9 @@ default = []
 policy-wasm = ["zp-policy/policy-wasm"]
 os-keychain = ["zp-keys/os-keychain"]
 hw-trezor = ["zp-keys/hw-trezor"]
+## Development-only features — NEVER enable in production builds.
+## Exposes audit tamper/restore/clear endpoints for testing.
+dev-tools = []
 full = ["policy-wasm", "os-keychain", "hw-trezor"]
 
 [dependencies]

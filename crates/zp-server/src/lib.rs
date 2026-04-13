@@ -609,16 +609,10 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             "/api/v1/capabilities/verify-chain",
             post(verify_chain_handler),
         )
-        // Audit
+        // Audit (read-only — always available)
         .route("/api/v1/audit/entries", get(audit_entries_handler))
         .route("/api/v1/audit/chain-head", get(audit_chain_head_handler))
         .route("/api/v1/audit/verify", get(audit_verify_handler))
-        .route(
-            "/api/v1/audit/simulate-tamper",
-            post(audit_simulate_tamper_handler),
-        )
-        .route("/api/v1/audit/restore", post(audit_restore_handler))
-        .route("/api/v1/audit/clear", post(audit_clear_handler))
         // Receipts
         .route("/api/v1/receipts/generate", post(receipt_generate_handler))
         // Pipeline (chat)
@@ -708,6 +702,23 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             }
         }))
         .with_state(state.clone());
+
+    // ── Dev-tools routes (AUTHZ-VULN-03, AUTHZ-VULN-04) ──────────────
+    // Audit tamper/restore/clear endpoints exist ONLY when the dev-tools
+    // feature flag is enabled at compile time. Production binaries
+    // (`cargo build --release`) never include these routes.
+    #[cfg(feature = "dev-tools")]
+    {
+        router = router
+            .route("/api/v1/audit/simulate-tamper", post(audit_simulate_tamper_handler))
+            .route("/api/v1/audit/restore", post(audit_restore_handler))
+            .route("/api/v1/audit/clear", post(audit_clear_handler))
+            .with_state(state.clone());
+        tracing::warn!(
+            "⚠ dev-tools feature enabled: audit tamper/restore/clear endpoints are active. \
+             Do NOT use this in production."
+        );
+    }
 
     // ── Subdomain proxy middleware ─────────────────────────────────
     // This MUST wrap the entire router as an outer layer so it runs
@@ -1558,6 +1569,7 @@ async fn audit_verify_handler(State(state): State<AppState>) -> Json<ChainVerify
 // Audit Tampering Simulation (demo only)
 // ============================================================================
 
+#[cfg(feature = "dev-tools")]
 #[derive(Serialize)]
 struct TamperResponse {
     tampered: bool,
@@ -1567,6 +1579,7 @@ struct TamperResponse {
     corrupted_hash: Option<String>,
 }
 
+#[cfg(feature = "dev-tools")]
 fn truncate_for_display(s: &str) -> String {
     if s.len() > 40 {
         format!("{}...{}", &s[..20], &s[s.len() - 12..])
@@ -1575,6 +1588,11 @@ fn truncate_for_display(s: &str) -> String {
     }
 }
 
+// ── Dev-tools only: tamper/restore/clear (gated behind feature flag) ──────
+// AUTHZ-VULN-03: These endpoints allowed unauthenticated audit trail destruction.
+// AUTHZ-VULN-04: These endpoints allowed unauthenticated audit chain corruption.
+// Now completely removed from production binaries.
+#[cfg(feature = "dev-tools")]
 async fn audit_simulate_tamper_handler(
     State(state): State<AppState>,
 ) -> Result<Json<TamperResponse>, (StatusCode, String)> {
@@ -1622,6 +1640,7 @@ async fn audit_simulate_tamper_handler(
     }))
 }
 
+#[cfg(feature = "dev-tools")]
 async fn audit_restore_handler(
     State(state): State<AppState>,
 ) -> Result<Json<TamperResponse>, (StatusCode, String)> {
@@ -1665,9 +1684,10 @@ async fn audit_restore_handler(
 }
 
 // ============================================================================
-// Audit Clear (reset chain)
+// Audit Clear (reset chain) — dev-tools only
 // ============================================================================
 
+#[cfg(feature = "dev-tools")]
 #[derive(Serialize)]
 struct AuditClearResponse {
     cleared: bool,
@@ -1675,6 +1695,7 @@ struct AuditClearResponse {
     message: String,
 }
 
+#[cfg(feature = "dev-tools")]
 async fn audit_clear_handler(
     State(state): State<AppState>,
 ) -> Result<Json<AuditClearResponse>, (StatusCode, String)> {
