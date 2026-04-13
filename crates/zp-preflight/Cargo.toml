@@ -1,0 +1,27 @@
+[package]
+name = "zp-preflight"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pre-flight diagnostic tool for ZeroPoint installation readiness"
+
+[[bin]]
+name = "zp-preflight"
+path = "src/main.rs"
+
+[lib]
+name = "zp_preflight"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+chrono = { workspace = true }
+
+# Kept minimal on purpose — this binary must compile fast and
+# have almost zero dependencies beyond std.  We shell out to
+# system tools (pkg-config, rustc, etc.) rather than linking
+# native crates.
