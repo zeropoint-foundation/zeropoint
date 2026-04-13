@@ -7,11 +7,14 @@ mod guard;
 mod init;
 mod mesh_commands;
 mod onboard;
+#[cfg(feature = "policy-wasm")]
 mod policy_commands;
 mod secure;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use tracing_subscriber::EnvFilter;
 use zp_core::{OperatorIdentity, TrustTier};
 use zp_pipeline::{MeshConfig, Pipeline, PipelineConfig};
@@ -117,6 +120,11 @@ enum Commands {
     Configure(ConfigureCmd),
 
     /// Initialize a new ZeroPoint environment
+    ///
+    /// Three tiers:
+    ///   zp init                        Tier A: Quick Start (30 seconds, auto-detect everything)
+    ///   zp init --wizard               Tier B: Guided Setup (choose sovereignty, posture, etc.)
+    ///   zp init --config genesis.toml  Tier C: Headless (CI/CD, fleet deploy)
     Init {
         /// Operator name (defaults to system username)
         #[arg(long)]
@@ -127,12 +135,18 @@ enum Commands {
         dir: Option<PathBuf>,
 
         /// Sovereignty mode: how the genesis secret is gated.
-        /// Options: touch-id, fingerprint, face-enroll, windows-hello,
-        ///          yubikey, ledger, trezor, onlykey,
-        ///          login-password, file-based
-        /// Default: auto-detect (best available biometric/hardware, else login-password)
+        /// Options: auto (default), touch-id, fingerprint, face-enroll, windows-hello,
+        ///          yubikey, ledger, trezor, onlykey, login-password, file-based
         #[arg(long, default_value = "auto")]
         sovereignty: String,
+
+        /// Tier B: Interactive wizard — choose sovereignty mode, posture, mesh, DLT
+        #[arg(long)]
+        wizard: bool,
+
+        /// Tier C: Headless — read all answers from a TOML file (no interactive prompts)
+        #[arg(long)]
+        config: Option<PathBuf>,
     },
 
     /// Interactive setup — discover tools, add credentials, configure everything
@@ -157,6 +171,28 @@ enum Commands {
     /// Gate evaluation and management
     #[command(subcommand)]
     Gate(GateCmd),
+
+    /// Run the catalog grammar verifier (zp-verify v0: P1, M3, M4) over the audit chain
+    Verify {
+        /// Path to the audit SQLite store (default: <data-dir>/audit.db)
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
+
+        /// Emit machine-readable JSON instead of formatted text
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Manage ZeroPoint configuration
+    #[command(subcommand, name = "config")]
+    Cfg(CfgCmd),
+
+    /// Run post-install diagnostics — check everything and report problems
+    Doctor {
+        /// Output as JSON (machine-readable)
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -364,6 +400,25 @@ enum ConfigureCmd {
     },
 }
 
+#[derive(Subcommand)]
+enum CfgCmd {
+    /// Show all configuration with provenance (where each value came from)
+    Show,
+    /// Set a configuration value in ~/.zeropoint/config.toml
+    Set {
+        /// Config key (e.g. "port", "posture", "log_level")
+        key: String,
+        /// New value
+        value: String,
+    },
+    /// Validate configuration for internal consistency
+    Validate {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -380,17 +435,41 @@ async fn main() -> anyhow::Result<()> {
         no_open,
     }) = &args.command
     {
-        let config = zp_server::ServerConfig {
-            bind_addr: bind.clone(),
-            port: *port,
-            open_dashboard: !no_open,
-            ..zp_server::ServerConfig::default()
-        };
-        if let Err(e) = zp_server::run_server(config).await {
-            eprintln!("Server error: {}", e);
-            std::process::exit(1);
+        #[cfg(feature = "embedded-server")]
+        {
+            let config = zp_server::ServerConfig {
+                bind_addr: bind.clone(),
+                port: *port,
+                open_dashboard: !no_open,
+                ..zp_server::ServerConfig::default()
+            };
+            if let Err(e) = zp_server::run_server(config).await {
+                eprintln!("Server error: {}", e);
+                std::process::exit(1);
+            }
+            return Ok(());
         }
-        return Ok(());
+        #[cfg(not(feature = "embedded-server"))]
+        {
+            // Without the embedded-server feature, launch zp-server as a subprocess
+            let mut cmd = std::process::Command::new("zp-server");
+            if let Some(b) = bind {
+                cmd.env("ZP_BIND", b);
+            }
+            cmd.env("ZP_PORT", port.to_string());
+            if *no_open {
+                cmd.env("ZP_NO_OPEN", "1");
+            }
+            match cmd.status() {
+                Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+                Err(e) => {
+                    eprintln!("Failed to launch zp-server: {}", e);
+                    eprintln!("Ensure zp-server is installed and on your PATH,");
+                    eprintln!("or rebuild zp-cli with: cargo build -p zp-cli --features embedded-server");
+                    std::process::exit(1);
+                }
+            }
+        }
     }
 
     // Guard runs synchronously without needing the pipeline
@@ -633,7 +712,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Init — bootstrap a new ZeroPoint environment, no pipeline needed
-    if let Some(Commands::Init { name, dir, sovereignty }) = &args.command {
+    if let Some(Commands::Init { name, dir, sovereignty, wizard, config: genesis_config }) = &args.command {
         let operator_name = name.clone().unwrap_or_else(|| {
             std::env::var("USER")
                 .or_else(|_| std::env::var("USERNAME"))
@@ -643,30 +722,94 @@ async fn main() -> anyhow::Result<()> {
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-        // Resolve sovereignty mode: "auto" detects the best available provider
-        let sovereignty_mode = if sovereignty == "auto" {
-            // Auto-detect: pick the best available provider
-            let caps = zp_keys::detect_all_providers();
-            if let Some(best) = caps.iter().find(|c| c.available && c.mode.requires_hardware()) {
-                eprintln!("  {} detected: {} — using {} sovereignty mode",
-                    best.mode.display_name(), best.description, best.mode.display_name());
-                best.mode
-            } else if caps.iter().any(|c| c.available && c.mode == zp_keys::SovereigntyMode::LoginPassword) {
-                zp_keys::SovereigntyMode::LoginPassword
-            } else {
-                zp_keys::SovereigntyMode::FileBased
+        // ── Tier C: Headless (from TOML config file) ──
+        if let Some(config_path) = genesis_config {
+            if !config_path.exists() {
+                eprintln!("\x1b[31m✗\x1b[0m Genesis config not found: {}", config_path.display());
+                std::process::exit(1);
             }
+            let toml_str = match std::fs::read_to_string(config_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("\x1b[31m✗\x1b[0m Failed to read genesis config: {}", e);
+                    std::process::exit(1);
+                }
+            };
+            // Parse operator name and sovereignty mode from TOML
+            let parsed: toml::Value = match toml_str.parse() {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("\x1b[31m✗\x1b[0m Invalid TOML: {}", e);
+                    std::process::exit(1);
+                }
+            };
+            let cfg_name = parsed.get("operator")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| operator_name.clone());
+            let cfg_sov = parsed.get("sovereignty")
+                .and_then(|v| v.as_str())
+                .map(|s| zp_keys::SovereigntyMode::from_onboard_str(s))
+                .unwrap_or_else(zp_keys::SovereigntyMode::auto_detect);
+
+            let init_config = init::InitConfig {
+                operator_name: cfg_name,
+                project_dir,
+                store_genesis_secret: true,
+                sovereignty_mode: cfg_sov,
+            };
+            std::process::exit(init::run(&init_config));
+        }
+
+        // ── Tier B: Interactive Wizard ──
+        if *wizard {
+            eprintln!();
+            eprintln!("  \x1b[1mZeroPoint Genesis — Guided Setup\x1b[0m");
+            eprintln!("  \x1b[2m(Tier B: deliberate choices with sensible defaults)\x1b[0m");
+            eprintln!();
+
+            // Detect available providers and let the user choose
+            let caps = zp_keys::detect_all_providers();
+            let available: Vec<_> = caps.iter().filter(|c| c.available).collect();
+
+            eprintln!("  Available sovereignty providers:");
+            for (i, cap) in available.iter().enumerate() {
+                let marker = if i == 0 { " (recommended)" } else { "" };
+                eprintln!("    [{}] {} — {}{}", i + 1, cap.mode.display_name(), cap.description, marker);
+            }
+            eprint!("  Choose [1]: ");
+            let mut choice = String::new();
+            let _ = std::io::stdin().read_line(&mut choice);
+            let idx: usize = choice.trim().parse().unwrap_or(1);
+            let sovereignty_mode = available
+                .get(idx.saturating_sub(1))
+                .map(|c| c.mode)
+                .unwrap_or_else(zp_keys::SovereigntyMode::auto_detect);
+
+            let init_config = init::InitConfig {
+                operator_name,
+                project_dir,
+                store_genesis_secret: true,
+                sovereignty_mode,
+            };
+            std::process::exit(init::run(&init_config));
+        }
+
+        // ── Tier A: Quick Start (default) ──
+        // Auto-detect everything. Single question: operator name.
+        let sovereignty_mode = if sovereignty == "auto" {
+            zp_keys::SovereigntyMode::auto_detect()
         } else {
-            zp_keys::SovereigntyMode::from_onboard_str(&sovereignty)
+            zp_keys::SovereigntyMode::from_onboard_str(sovereignty)
         };
 
-        let config = init::InitConfig {
+        let init_config = init::InitConfig {
             operator_name,
             project_dir,
             store_genesis_secret: true,
             sovereignty_mode,
         };
-        std::process::exit(init::run(&config));
+        std::process::exit(init::run(&init_config));
     }
 
     // Keys — key lifecycle management, no pipeline needed
@@ -691,20 +834,328 @@ async fn main() -> anyhow::Result<()> {
                 resource,
                 agent,
             } => commands::gate_eval(action, resource.as_deref(), agent.as_deref()),
+            #[cfg(feature = "policy-wasm")]
             GateCmd::Add { path } => policy_commands::load(path),
+            #[cfg(not(feature = "policy-wasm"))]
+            GateCmd::Add { .. } => {
+                eprintln!("WASM policy loading requires the 'policy-wasm' feature.\nRebuild with: cargo build --features policy-wasm");
+                1
+            }
             GateCmd::List => commands::gate_list(),
         };
         std::process::exit(exit_code);
     }
 
-    // Policy subcommand — manages WASM policy modules, no pipeline needed
-    if let Some(Commands::Policy(cmd)) = &args.command {
-        let exit_code = match cmd {
+    // Verify — run the catalog grammar verifier over the audit chain. No pipeline needed.
+    if let Some(Commands::Verify { audit_db, json }) = &args.command {
+        let db_path = audit_db
+            .clone()
+            .unwrap_or_else(|| args.data_dir.join("audit.db"));
+        let store = match zp_audit::AuditStore::open(&db_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error opening audit store at {}: {}", db_path.display(), e);
+                std::process::exit(2);
+            }
+        };
+        let report = match store.verify_with_catalog() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Error verifying chain: {}", e);
+                std::process::exit(2);
+            }
+        };
+        if *json {
+            match serde_json::to_string_pretty(&report) {
+                Ok(s) => println!("{}", s),
+                Err(e) => {
+                    eprintln!("Error serializing report: {}", e);
+                    std::process::exit(2);
+                }
+            }
+        } else {
+            println!("zp-verify v0 — catalog rules: P1, M3, M4");
+            println!("audit_db:        {}", db_path.display());
+            println!("receipts_checked: {}", report.receipts_checked);
+            if report.is_well_formed() {
+                println!("result:          \x1b[32mACCEPT\x1b[0m — chain parses against the v0 grammar");
+            } else {
+                println!(
+                    "result:          \x1b[31mREJECT\x1b[0m — {} violation(s)",
+                    report.violations().len()
+                );
+                println!();
+                println!("violations:");
+                for v in report.violations() {
+                    println!(
+                        "  [{}] index={} {}",
+                        v.rule,
+                        v.index,
+                        v.message
+                    );
+                }
+            }
+        }
+        std::process::exit(if report.is_well_formed() { 0 } else { 1 });
+    }
+
+    // Config subcommand — unified configuration management
+    if let Some(Commands::Cfg(cmd)) = &args.command {
+        match cmd {
+            CfgCmd::Show => {
+                let cfg = zp_config::ConfigResolver::resolve_standard();
+                println!("{}", cfg.show());
+            }
+            CfgCmd::Set { key, value } => {
+                match zp_config::resolve::config_set(key, value) {
+                    Ok(()) => {
+                        println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
+                        println!("  Written to ~/.zeropoint/config.toml");
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[31m✗\x1b[0m {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            CfgCmd::Validate { json } => {
+                let cfg = zp_config::ConfigResolver::resolve_standard();
+                let errors = zp_config::validate(&cfg);
+                if *json {
+                    let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+                    println!("{}", serde_json::json!({
+                        "valid": errors.is_empty(),
+                        "errors": msgs
+                    }));
+                } else if errors.is_empty() {
+                    println!("\x1b[32m✓\x1b[0m Configuration is valid");
+                } else {
+                    for e in &errors {
+                        eprintln!("\x1b[31m✗\x1b[0m {}", e);
+                    }
+                    std::process::exit(1);
+                }
+            }
+        }
+        std::process::exit(0);
+    }
+
+    // Doctor — post-install diagnostics
+    if let Some(Commands::Doctor { json }) = &args.command {
+        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let home = &cfg.home_dir.value;
+        let data = &cfg.data_dir.value;
+
+        struct Check {
+            label: String,
+            status: &'static str, // "pass", "fail", "warn"
+            detail: String,
+            fix: String,
+        }
+
+        let mut checks: Vec<Check> = Vec::new();
+
+        // 1. Binary version
+        let ver = env!("CARGO_PKG_VERSION");
+        checks.push(Check {
+            label: "Binary version".into(),
+            status: "pass",
+            detail: format!("zp {ver}"),
+            fix: String::new(),
+        });
+
+        // 2. Genesis key
+        let genesis_path = home.join("genesis.json");
+        if genesis_path.exists() {
+            checks.push(Check {
+                label: "Genesis key".into(),
+                status: "pass",
+                detail: format!("{}", genesis_path.display()),
+                fix: String::new(),
+            });
+        } else {
+            checks.push(Check {
+                label: "Genesis key".into(),
+                status: "fail",
+                detail: "genesis.json not found".into(),
+                fix: "Run: zp init".into(),
+            });
+        }
+
+        // 3. Config file
+        let config_path = home.join("config.toml");
+        if config_path.exists() {
+            let cfg_errors = zp_config::validate(&cfg);
+            if cfg_errors.is_empty() {
+                checks.push(Check {
+                    label: "Configuration".into(),
+                    status: "pass",
+                    detail: format!("{} (valid)", config_path.display()),
+                    fix: String::new(),
+                });
+            } else {
+                checks.push(Check {
+                    label: "Configuration".into(),
+                    status: "warn",
+                    detail: format!("{} ({} issue(s))", config_path.display(), cfg_errors.len()),
+                    fix: "Run: zp config validate".into(),
+                });
+            }
+        } else {
+            checks.push(Check {
+                label: "Configuration".into(),
+                status: "warn",
+                detail: "No config file — using defaults".into(),
+                fix: format!("Run: zp config set port {}", cfg.port.value),
+            });
+        }
+
+        // 4. Data directory
+        if data.exists() {
+            let perms = {
+                #[cfg(unix)]
+                { std::fs::metadata(data).map(|m| format!("{:o}", m.permissions().mode() & 0o777)).unwrap_or_else(|_| "?".into()) }
+                #[cfg(not(unix))]
+                { "n/a".to_string() }
+            };
+            checks.push(Check {
+                label: "Data directory".into(),
+                status: "pass",
+                detail: format!("{} (mode {})", data.display(), perms),
+                fix: String::new(),
+            });
+        } else {
+            checks.push(Check {
+                label: "Data directory".into(),
+                status: "warn",
+                detail: "Not created yet — will be created on first run".into(),
+                fix: format!("mkdir -p {}", data.display()),
+            });
+        }
+
+        // 5. Port availability
+        let port = cfg.port.value;
+        match std::net::TcpListener::bind(("127.0.0.1", port)) {
+            Ok(_) => {
+                checks.push(Check {
+                    label: format!("Port {port}"),
+                    status: "pass",
+                    detail: "available".into(),
+                    fix: String::new(),
+                });
+            }
+            Err(_) => {
+                checks.push(Check {
+                    label: format!("Port {port}"),
+                    status: "warn",
+                    detail: "in use (server may already be running)".into(),
+                    fix: format!("Kill the process or: zp config set port <other>"),
+                });
+            }
+        }
+
+        // 6. Audit chain
+        let audit_db = data.join("audit.db");
+        if audit_db.exists() {
+            if let Ok(store) = zp_audit::AuditStore::open(&audit_db) {
+                match store.verify_with_catalog() {
+                    Ok(report) => {
+                        if report.is_well_formed() {
+                            checks.push(Check {
+                                label: "Audit chain".into(),
+                                status: "pass",
+                                detail: format!("{} entries, integrity verified", report.receipts_checked),
+                                fix: String::new(),
+                            });
+                        } else {
+                            checks.push(Check {
+                                label: "Audit chain".into(),
+                                status: "fail",
+                                detail: format!("{} violation(s) found", report.violations().len()),
+                                fix: "Run: zp verify --audit-db for details".into(),
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        checks.push(Check {
+                            label: "Audit chain".into(),
+                            status: "warn",
+                            detail: format!("verification error: {e}"),
+                            fix: String::new(),
+                        });
+                    }
+                }
+            }
+        } else {
+            checks.push(Check {
+                label: "Audit chain".into(),
+                status: "pass",
+                detail: "No audit data yet (clean install)".into(),
+                fix: String::new(),
+            });
+        }
+
+        // ── Output ──
+        let fail_count = checks.iter().filter(|c| c.status == "fail").count();
+        let warn_count = checks.iter().filter(|c| c.status == "warn").count();
+
+        if *json {
+            let entries: Vec<serde_json::Value> = checks.iter().map(|c| {
+                serde_json::json!({
+                    "label": c.label,
+                    "status": c.status,
+                    "detail": c.detail,
+                    "fix": c.fix
+                })
+            }).collect();
+            println!("{}", serde_json::json!({
+                "checks": entries,
+                "failures": fail_count,
+                "warnings": warn_count,
+                "healthy": fail_count == 0
+            }));
+        } else {
+            println!();
+            println!("  \x1b[1mzp doctor\x1b[0m");
+            println!("  ─────────────────────────────────────────");
+            for c in &checks {
+                let icon = match c.status {
+                    "pass" => "\x1b[32m✓\x1b[0m",
+                    "fail" => "\x1b[31m✗\x1b[0m",
+                    "warn" => "\x1b[33m⚠\x1b[0m",
+                    _ => "?",
+                };
+                println!("  {icon} {}: {}", c.label, c.detail);
+                if !c.fix.is_empty() && c.status != "pass" {
+                    println!("    → Fix: {}", c.fix);
+                }
+            }
+            println!();
+            if fail_count == 0 {
+                println!("  \x1b[32m✓ System healthy\x1b[0m ({warn_count} warning(s))");
+            } else {
+                println!("  \x1b[31m✗ {fail_count} failure(s), {warn_count} warning(s)\x1b[0m");
+            }
+            println!();
+        }
+
+        std::process::exit(if fail_count == 0 { 0 } else { 1 });
+    }
+
+    // Policy subcommand — manages WASM policy modules (requires policy-wasm feature)
+    if let Some(Commands::Policy(_cmd)) = &args.command {
+        #[cfg(feature = "policy-wasm")]
+        let exit_code = match _cmd {
             PolicyCmd::Load { path } => policy_commands::load(path),
             PolicyCmd::List => policy_commands::list(),
             PolicyCmd::Status => policy_commands::status(),
             PolicyCmd::Verify => policy_commands::verify(),
             PolicyCmd::Remove { identifier } => policy_commands::remove(identifier),
+        };
+        #[cfg(not(feature = "policy-wasm"))]
+        let exit_code = {
+            eprintln!("WASM policy management requires the 'policy-wasm' feature.\nRebuild with: cargo build --features policy-wasm");
+            1
         };
         std::process::exit(exit_code);
     }
@@ -742,7 +1193,15 @@ async fn main() -> anyhow::Result<()> {
         mesh: mesh_config.clone(),
     };
 
-    let mut pipeline = Pipeline::new(config)?;
+    // Stage 3 (AUDIT-03): CLI owns the single AuditStore and hands it to
+    // the pipeline. No second handle is ever opened for the same process.
+    let audit_db = config.data_dir.join("audit.db");
+    std::fs::create_dir_all(&config.data_dir).ok();
+    let audit_store = std::sync::Arc::new(std::sync::Mutex::new(
+        zp_audit::AuditStore::open(&audit_db)
+            .map_err(|e| anyhow::anyhow!("audit store open: {}", e))?,
+    ));
+    let mut pipeline = Pipeline::new(config, audit_store)?;
 
     // Initialize execution engine (detect available runtimes)
     if let Err(e) = pipeline.init_execution_engine().await {
@@ -774,6 +1233,9 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Onboard { .. }) => unreachable!(), // handled above
         Some(Commands::Keys(_)) => unreachable!(),       // handled above
         Some(Commands::Gate(_)) => unreachable!(),      // handled above
+        Some(Commands::Verify { .. }) => unreachable!(), // handled above
+        Some(Commands::Cfg(_)) => unreachable!(),        // handled above
+        Some(Commands::Doctor { .. }) => unreachable!(), // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,
