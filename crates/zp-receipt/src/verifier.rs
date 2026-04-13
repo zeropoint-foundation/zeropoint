@@ -164,6 +164,46 @@ impl ReceiptVerifier {
             None
         };
 
+        // 5. Expiry check
+        if let Some(expires_at) = receipt.expires_at {
+            let expired = chrono::Utc::now() > expires_at;
+            checks.push(VerificationCheck {
+                name: "expiry".to_string(),
+                passed: !expired,
+                detail: if expired {
+                    format!("Receipt expired at {}", expires_at)
+                } else {
+                    format!("Receipt valid until {}", expires_at)
+                },
+            });
+        }
+
+        // 6. Claim metadata type consistency
+        if let Some(ref meta) = receipt.claim_metadata {
+            let type_matches = match (&receipt.receipt_type, meta) {
+                (crate::ReceiptType::ObservationClaim, crate::ClaimMetadata::Observation { .. }) => true,
+                (crate::ReceiptType::PolicyClaim, crate::ClaimMetadata::Policy { .. }) => true,
+                (crate::ReceiptType::AuthorizationClaim, crate::ClaimMetadata::Authorization { .. }) => true,
+                (crate::ReceiptType::MemoryPromotionClaim, crate::ClaimMetadata::MemoryPromotion { .. }) => true,
+                (crate::ReceiptType::DelegationClaim, crate::ClaimMetadata::Delegation { .. }) => true,
+                (crate::ReceiptType::NarrativeSynthesisClaim, crate::ClaimMetadata::NarrativeSynthesis { .. }) => true,
+                (crate::ReceiptType::RevocationClaim, crate::ClaimMetadata::Revocation { .. }) => true,
+                _ => false,
+            };
+            checks.push(VerificationCheck {
+                name: "claim_metadata_type".to_string(),
+                passed: type_matches,
+                detail: if type_matches {
+                    "Claim metadata matches receipt type".to_string()
+                } else {
+                    format!(
+                        "Claim metadata variant does not match receipt type '{}'",
+                        receipt.receipt_type
+                    )
+                },
+            });
+        }
+
         Ok(VerificationResult {
             hash_valid,
             signature_valid: None,
