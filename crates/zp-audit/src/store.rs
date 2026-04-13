@@ -597,6 +597,211 @@ impl AuditStore {
         info!("Chain verification succeeded for {} entries", entries.len());
         Ok(true)
     }
+
+    // ========================================================================
+    // Phase 2.4: Typed receipt queries
+    // ========================================================================
+
+    /// Query audit entries whose attached receipt has a specific receipt_type.
+    ///
+    /// Uses SQLite's json_extract to filter on the receipt JSON without
+    /// requiring a schema migration. For large chains, consider adding a
+    /// denormalized `receipt_type` column in a future schema version.
+    pub fn query_by_claim_type(
+        &self,
+        claim_type: &str,
+        limit: usize,
+    ) -> Result<Vec<AuditEntry>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                        conversation_id, policy_decision, policy_module, receipt, signature
+                 FROM audit_entries
+                 WHERE json_extract(receipt, '$.receipt_type') = ?1
+                 ORDER BY rowid DESC
+                 LIMIT ?2",
+            )
+            .map_err(StoreError::Database)?;
+
+        let entries = stmt
+            .query_map(params![claim_type, limit], |row| {
+                let id_str: String = row.get(0)?;
+                let timestamp_str: String = row.get(1)?;
+                let prev_hash: String = row.get(2)?;
+                let entry_hash: String = row.get(3)?;
+                let actor_json: String = row.get(4)?;
+                let action_json: String = row.get(5)?;
+                let conv_id_str: String = row.get(6)?;
+                let policy_decision_json: String = row.get(7)?;
+                let policy_module: String = row.get(8)?;
+                let receipt_json: Option<String> = row.get(9)?;
+                let signature: Option<String> = row.get(10)?;
+
+                Ok((
+                    id_str, timestamp_str, prev_hash, entry_hash,
+                    actor_json, action_json, conv_id_str,
+                    policy_decision_json, policy_module, receipt_json, signature,
+                ))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        self.hydrate_entries(entries)
+    }
+
+    /// Query revocation claims that target a specific receipt ID.
+    ///
+    /// Scans audit entries for RevocationClaim receipts whose claim_metadata
+    /// contains the given receipt_id as the revoked target.
+    pub fn query_revocations(
+        &self,
+        receipt_id: &str,
+        limit: usize,
+    ) -> Result<Vec<AuditEntry>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                        conversation_id, policy_decision, policy_module, receipt, signature
+                 FROM audit_entries
+                 WHERE json_extract(receipt, '$.receipt_type') = 'revocation_claim'
+                   AND json_extract(receipt, '$.claim_metadata.revoked_receipt_id') = ?1
+                 ORDER BY rowid DESC
+                 LIMIT ?2",
+            )
+            .map_err(StoreError::Database)?;
+
+        let entries = stmt
+            .query_map(params![receipt_id, limit], |row| {
+                let id_str: String = row.get(0)?;
+                let timestamp_str: String = row.get(1)?;
+                let prev_hash: String = row.get(2)?;
+                let entry_hash: String = row.get(3)?;
+                let actor_json: String = row.get(4)?;
+                let action_json: String = row.get(5)?;
+                let conv_id_str: String = row.get(6)?;
+                let policy_decision_json: String = row.get(7)?;
+                let policy_module: String = row.get(8)?;
+                let receipt_json: Option<String> = row.get(9)?;
+                let signature: Option<String> = row.get(10)?;
+
+                Ok((
+                    id_str, timestamp_str, prev_hash, entry_hash,
+                    actor_json, action_json, conv_id_str,
+                    policy_decision_json, policy_module, receipt_json, signature,
+                ))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        self.hydrate_entries(entries)
+    }
+
+    /// Query audit entries whose attached receipt has expired.
+    pub fn query_expired_receipts(&self, limit: usize) -> Result<Vec<AuditEntry>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                        conversation_id, policy_decision, policy_module, receipt, signature
+                 FROM audit_entries
+                 WHERE json_extract(receipt, '$.expires_at') IS NOT NULL
+                   AND json_extract(receipt, '$.expires_at') < ?1
+                 ORDER BY rowid DESC
+                 LIMIT ?2",
+            )
+            .map_err(StoreError::Database)?;
+
+        let entries = stmt
+            .query_map(params![now, limit], |row| {
+                let id_str: String = row.get(0)?;
+                let timestamp_str: String = row.get(1)?;
+                let prev_hash: String = row.get(2)?;
+                let entry_hash: String = row.get(3)?;
+                let actor_json: String = row.get(4)?;
+                let action_json: String = row.get(5)?;
+                let conv_id_str: String = row.get(6)?;
+                let policy_decision_json: String = row.get(7)?;
+                let policy_module: String = row.get(8)?;
+                let receipt_json: Option<String> = row.get(9)?;
+                let signature: Option<String> = row.get(10)?;
+
+                Ok((
+                    id_str, timestamp_str, prev_hash, entry_hash,
+                    actor_json, action_json, conv_id_str,
+                    policy_decision_json, policy_module, receipt_json, signature,
+                ))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        self.hydrate_entries(entries)
+    }
+
+    /// Internal helper to convert raw row tuples into AuditEntry structs.
+    /// Extracted to avoid duplicating the deserialization logic across query methods.
+    fn hydrate_entries(
+        &self,
+        entries: Vec<(
+            String, String, String, String,
+            String, String, String,
+            String, String, Option<String>, Option<String>,
+        )>,
+    ) -> Result<Vec<AuditEntry>> {
+        let mut result = Vec::with_capacity(entries.len());
+        for (
+            id_str, timestamp_str, prev_hash, entry_hash,
+            actor_json, action_json, conv_id_str,
+            policy_decision_json, policy_module, receipt_json, signature,
+        ) in entries
+        {
+            let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
+            let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(chrono::Utc::now);
+            let actor = serde_json::from_str(&actor_json)
+                .unwrap_or_else(|_| zp_core::ActorId::System("unknown".to_string()));
+            let action = serde_json::from_str(&action_json).unwrap_or_else(|_| {
+                zp_core::AuditAction::SystemEvent {
+                    event: "unknown".to_string(),
+                }
+            });
+            let conversation_id = ConversationId(
+                uuid::Uuid::parse_str(&conv_id_str).unwrap_or_else(|_| uuid::Uuid::nil()),
+            );
+            let policy_decision =
+                serde_json::from_str(&policy_decision_json).unwrap_or_else(|_| {
+                    zp_core::PolicyDecision::Block {
+                        reason: "unknown".to_string(),
+                        policy_module: "unknown".to_string(),
+                    }
+                });
+            let receipt = receipt_json
+                .as_ref()
+                .and_then(|json| serde_json::from_str(json).ok());
+
+            result.push(AuditEntry {
+                id: AuditId(id),
+                timestamp,
+                prev_hash,
+                entry_hash,
+                actor,
+                action,
+                conversation_id,
+                policy_decision,
+                policy_module,
+                receipt,
+                signature,
+            });
+        }
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
