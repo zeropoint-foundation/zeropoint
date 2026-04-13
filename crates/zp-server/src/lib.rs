@@ -553,6 +553,58 @@ impl AppState {
 }
 
 // ============================================================================
+// Security Headers Middleware (Phase 0.6 — XSS-VULN-01/06/09)
+// ============================================================================
+
+/// Middleware that adds security headers to every response.
+///
+/// - **Content-Security-Policy**: restricts script/style sources to 'self',
+///   blocking inline event handlers like `<img onerror=...>` that Shannon
+///   exploited for stored XSS via tool.name in innerHTML.
+/// - **X-Content-Type-Options**: prevents MIME sniffing.
+/// - **X-Frame-Options**: prevents clickjacking via iframes.
+/// - **Referrer-Policy**: limits referrer leakage.
+async fn security_headers_middleware(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let mut resp = next.run(req).await;
+    let headers = resp.headers_mut();
+
+    // CSP: 'self' for scripts (no inline), 'unsafe-inline' for styles only
+    // (Tailwind/inline styles need it), data: for inline images/icons.
+    // WebSocket connections to localhost are permitted for exec_ws/onboard_ws.
+    headers.insert(
+        axum::http::header::HeaderName::from_static("content-security-policy"),
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+         img-src 'self' data:; connect-src 'self' ws://localhost:* wss://localhost:*; \
+         frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+            .parse()
+            .unwrap(),
+    );
+
+    // Prevent MIME-type sniffing
+    headers.insert(
+        axum::http::header::HeaderName::from_static("x-content-type-options"),
+        "nosniff".parse().unwrap(),
+    );
+
+    // Prevent framing (clickjacking defense)
+    headers.insert(
+        axum::http::header::HeaderName::from_static("x-frame-options"),
+        "DENY".parse().unwrap(),
+    );
+
+    // Limit referrer information leakage
+    headers.insert(
+        axum::http::header::HeaderName::from_static("referrer-policy"),
+        "strict-origin-when-cross-origin".parse().unwrap(),
+    );
+
+    resp
+}
+
+// ============================================================================
 // Build Application Router (public)
 // ============================================================================
 
@@ -687,6 +739,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Ecosystem: interactive knowledge graph + provenance chain + live state
         .route("/ecosystem", get(ecosystem_page_handler))
         .layer(cors)
+        // ── Security headers (XSS-VULN-01, XSS-VULN-06, XSS-VULN-09) ──
+        // Content-Security-Policy prevents inline script execution, which
+        // neutralizes the stored XSS attacks Shannon found (tool.name in
+        // innerHTML → auto-firing <img onerror> payloads).
+        .layer(axum::middleware::from_fn(security_headers_middleware))
         // ── Auth middleware (AUTH-VULN-01) ─────────────────────────────
         // Requires valid session token on all protected routes.
         // Exempt: /api/v1/health, /, /onboard, /api/onboard/ws, /assets/*
