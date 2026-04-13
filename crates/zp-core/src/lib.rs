@@ -23,7 +23,7 @@ pub use audit::{ActorId, AuditAction, AuditEntry, AuditId};
 pub use capability::{Capability, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
 pub use capability_grant::{
     CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation, DelegationError,
-    GrantedCapability,
+    GrantProvenance, GrantedCapability,
 };
 pub use delegation_chain::{ChainError, DelegationChain};
 pub use episode::{Episode, EpisodeId, Feedback, FeedbackRating, Outcome, Pattern};
