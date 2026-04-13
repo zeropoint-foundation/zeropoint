@@ -10,6 +10,7 @@ pub mod capability;
 pub mod capability_grant;
 pub mod delegation_chain;
 pub mod episode;
+pub mod epistemic;
 pub mod error;
 pub mod governance;
 pub mod policy;
@@ -26,6 +27,7 @@ pub use capability_grant::{
 };
 pub use delegation_chain::{ChainError, DelegationChain};
 pub use episode::{Episode, EpisodeId, Feedback, FeedbackRating, Outcome, Pattern};
+pub use epistemic::{Epistemic, EpistemicError, EpistemicStatus, StatusTransition};
 pub use error::ZpError;
 pub use governance::{
     ConsensusThreshold, GovernanceActor, GovernanceDecision, GovernanceEvent, GovernanceEventType,
