@@ -358,19 +358,31 @@ pub async fn require_auth(
 ///
 /// The cookie is `HttpOnly` (JS cannot read it — neutralizes XSS token
 /// theft), `SameSite=Strict` (no cross-site CSRF), and scoped to `/`.
-/// We do not set `Secure` because ZeroPoint runs on plain HTTP loopback
-/// by default; this is explicitly documented.
+///
+/// Phase 1.6 (AUTH-VULN-08): The `Secure` flag is set when TLS is enabled
+/// (detected via ZP_TLS_CERT env var). When TLS is active, the cookie is
+/// only sent over HTTPS, preventing interception on the wire.
 pub fn build_session_cookie(token: &str, max_age_secs: i64) -> String {
+    let secure_flag = if is_tls_enabled() { "; Secure" } else { "" };
     format!(
-        "zp_session={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}",
-        token, max_age_secs
+        "zp_session={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
+        token, max_age_secs, secure_flag
     )
 }
 
 /// Cookie that immediately invalidates the session on the client — used by
 /// the logout handler.
-pub fn build_logout_cookie() -> &'static str {
-    "zp_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"
+pub fn build_logout_cookie() -> String {
+    let secure_flag = if is_tls_enabled() { "; Secure" } else { "" };
+    format!(
+        "zp_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{}",
+        secure_flag
+    )
+}
+
+/// Check whether TLS is configured (cert + key paths set).
+pub fn is_tls_enabled() -> bool {
+    std::env::var("ZP_TLS_CERT").is_ok() && std::env::var("ZP_TLS_KEY").is_ok()
 }
 
 // ── Command governance for /ws/exec ────────────────────────────────────
