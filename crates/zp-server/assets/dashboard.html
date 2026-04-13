@@ -1395,7 +1395,7 @@
       const issues = tool.preflight_issues || [];
       if (tool.ready === false || issues.length > 0) {
         launching.add(tool.name);
-        showToast(`<strong>${tool.name}</strong> needs preflight &mdash; resolving issues...`, 30000);
+        showToast(`<strong>${escapeHtml(tool.name)}</strong> needs preflight &mdash; resolving issues...`, 30000);
         setTileLaunching(tool.name, true);
 
         try {
@@ -1417,7 +1417,7 @@
           }
 
           // Preflight passed — update local tool state and continue to launch
-          showToast(`<strong>${tool.name}</strong> preflight passed — launching...`);
+          showToast(`<strong>${escapeHtml(tool.name)}</strong> preflight passed — launching...`);
           tool.ready = true;
           tool.preflight_issues = [];
           // Refresh the tile visuals
@@ -1440,9 +1440,9 @@
       if (launch.url || launch.kind === 'web' || launch.kind === 'native') {
         // Open tab synchronously (user gesture) before any async check
         const earlyTab = window.open('about:blank', '_blank');
-        showToast(`Checking <strong>${tool.name}</strong>...`);
+        showToast(`Checking <strong>${escapeHtml(tool.name)}</strong>...`);
         if (await isPortOpen(proxyUrl)) {
-          showToast(`Opening <strong>${tool.name}</strong>`);
+          showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
           if (earlyTab && !earlyTab.closed) {
             earlyTab.location.href = proxyUrl;
           } else {
@@ -1471,7 +1471,7 @@
 
         // Not running yet — launch via API
         launching.add(tool.name);
-        showToast(`Starting <strong>${tool.name}</strong>...`, 15000);
+        showToast(`Starting <strong>${escapeHtml(tool.name)}</strong>...`, 15000);
         setTileLaunching(tool.name, true);
         try {
           const resp = await zpFetch('/api/v1/tools/launch', {
@@ -1485,7 +1485,7 @@
             showDiagnostic(tool, result);
           } else {
             tool.running_pid = result.pid;  // cache PID to prevent re-launch on next click
-            showToast(`<strong>${tool.name}</strong> started (PID ${result.pid})`, 5000);
+            showToast(`<strong>${escapeHtml(tool.name)}</strong> started (PID ${result.pid})`, 5000);
             showDiagnostic(tool, {
               status: 'running',
               error: `${tool.name} — ${launch.kind || 'headless'} tool running`,
@@ -1508,7 +1508,7 @@
 
       // ── Web tools: ask the server to start, then open in browser ──
       launching.add(tool.name);
-      showToast(`Starting <strong>${tool.name}</strong>...`, 30000);
+      showToast(`Starting <strong>${escapeHtml(tool.name)}</strong>...`, 30000);
       setTileLaunching(tool.name, true);
 
       // Open the tab NOW (synchronous with user click) to avoid popup
@@ -1543,10 +1543,10 @@
           const maxWait = isNative ? 180000 : 30000;   // 3 min vs 30 s
           const pollInterval = isNative ? 3000 : 1500;
           const timeLabel = isNative ? '3 minutes' : '30 seconds';
-          showToast(`<strong>${tool.name}</strong> starting &mdash; waiting for port ${result.port || ''}...`, maxWait);
+          showToast(`<strong>${escapeHtml(tool.name)}</strong> starting &mdash; waiting for port ${escapeHtml(String(result.port || ''))}...`, maxWait);
           const ready = await waitForPort(pollUrl, maxWait, pollInterval);
           if (ready) {
-            showToast(`Opening <strong>${tool.name}</strong>`);
+            showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
             if (pendingTab && !pendingTab.closed) {
               pendingTab.location.href = openUrl;
             } else {
@@ -1566,7 +1566,7 @@
           }
         } else {
           if (pendingTab) pendingTab.close();
-          showToast(`<strong>${tool.name}</strong> started (PID ${result.pid || '?'})`, 4000);
+          showToast(`<strong>${escapeHtml(tool.name)}</strong> started (PID ${result.pid || '?'})`, 4000);
           // Show diagnostic panel for headless tools so user can see logs
           showDiagnostic(tool, {
             status: 'running',
@@ -1788,7 +1788,7 @@
         }, 400);
       } else {
         // Already configured — just refresh the cockpit
-        showToast(`<span style="color:#00C896">✓</span> <b>${tool.name}</b> added to governance`);
+        showToast(`<span style="color:#00C896">✓</span> <b>${escapeHtml(tool.name)}</b> added to governance`);
         initialize();
       }
     }
@@ -1808,7 +1808,7 @@
           showToast(`<span style="color:#FF4444">✗</span> ${data.error || 'Failed to remove tool'}`);
           return;
         }
-        showToast(`<span style="color:#8B8984">✓</span> <b>${toolName}</b> removed from governance`);
+        showToast(`<span style="color:#8B8984">✓</span> <b>${escapeHtml(toolName)}</b> removed from governance`);
         initialize();
       } catch (err) {
         showToast(`<span style="color:#FF4444">✗</span> Connection error: ${err.message}`);
@@ -1926,11 +1926,11 @@
         }
 
         tile.innerHTML = `
-          <button class="tile-remove" title="Remove from governance" onclick="event.stopPropagation(); removeTool('${tool.name}')">&times;</button>
+          <button class="tile-remove" title="Remove from governance" onclick="event.stopPropagation(); removeTool('${escapeHtml(tool.name)}')">&times;</button>
           <div class="tile-health ${healthClass}"></div>
           <div class="tile-icon">${icon}</div>
-          <div class="tile-name">${tool.name}</div>
-          <div class="tile-status">${statusText}</div>
+          <div class="tile-name">${escapeHtml(tool.name)}</div>
+          <div class="tile-status">${escapeHtml(statusText)}</div>
           ${launchHint}
           ${issuesHtml}
           ${badgeHtml}
@@ -2012,9 +2012,9 @@
           <div class="topology-node ${statusClass} ${isZP ? 'zp-node' : ''}">
             <div class="topo-icon">${icon}</div>
             <div class="topo-info">
-              <div class="topo-name">${node.name}</div>
-              <div class="topo-role">${node.role}${node.address ? ' &mdash; ' : ''}<span class="topo-address">${node.address || ''}</span></div>
-              ${node.detail ? `<div class="topo-detail">${node.detail}</div>` : ''}
+              <div class="topo-name">${escapeHtml(node.name || '')}</div>
+              <div class="topo-role">${escapeHtml(node.role || '')}${node.address ? ' &mdash; ' : ''}<span class="topo-address">${escapeHtml(node.address || '')}</span></div>
+              ${node.detail ? `<div class="topo-detail">${escapeHtml(node.detail)}</div>` : ''}
             </div>
           </div>
         `;
@@ -2024,7 +2024,7 @@
       });
 
       if (topo.description) {
-        html += `<div class="topology-desc">${topo.description}</div>`;
+        html += `<div class="topology-desc">${escapeHtml(topo.description)}</div>`;
       }
       map.innerHTML = html;
     }
@@ -2038,7 +2038,7 @@
       if (!ok) { rulesEl.innerHTML = `<div class="unreachable">No rules loaded</div>`; return; }
       rulesEl.innerHTML = rulesData.rules.map(r => {
         const c = r.category === 'constitutional';
-        return `<div class="gate-rule ${c ? 'constitutional' : ''}"><div class="gate-rule-dot"></div><div class="gate-rule-name">${r.name || 'Unknown'}</div><div class="gate-rule-category">${r.category || 'standard'}</div></div>`;
+        return `<div class="gate-rule ${c ? 'constitutional' : ''}"><div class="gate-rule-dot"></div><div class="gate-rule-name">${escapeHtml(r.name || 'Unknown')}</div><div class="gate-rule-category">${escapeHtml(r.category || 'standard')}</div></div>`;
       }).join('');
     }
 
@@ -2090,9 +2090,9 @@
             <div class="posture-check">
               <div class="check-indicator ${ic}"></div>
               <div class="check-body">
-                <div class="check-name">${c.name || 'Unknown'}</div>
-                <div class="check-detail">${c.detail || ''}</div>
-                <div class="check-category">${c.category || ''}</div>
+                <div class="check-name">${escapeHtml(c.name || 'Unknown')}</div>
+                <div class="check-detail">${escapeHtml(c.detail || '')}</div>
+                <div class="check-category">${escapeHtml(c.category || '')}</div>
               </div>
             </div>
           `;

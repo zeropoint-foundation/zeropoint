@@ -524,10 +524,10 @@ async function fetchLiveState() {
         header.innerHTML = `
           <div class="tool-name-row">
             <span class="tool-chevron">\u25B6</span>
-            <span class="live-tool-name">${tool.name}${port}</span>
-            <span style="font-size:8px;color:#52525b">${tool.governance || ''}</span>
+            <span class="live-tool-name">${escapeHtml(tool.name)}${escapeHtml(port)}</span>
+            <span style="font-size:8px;color:#52525b">${escapeHtml(tool.governance || '')}</span>
           </div>
-          <span class="status-pill ${statusClass}">${statusText}</span>
+          <span class="status-pill ${statusClass}">${escapeHtml(statusText)}</span>
         `;
         header.onclick = () => card.classList.toggle('expanded');
         card.appendChild(header);
@@ -539,9 +539,9 @@ async function fetchLiveState() {
         // Meta info
         body.innerHTML = `
           <div class="tool-meta-row">
-            <span>kind:</span> ${tool.launch?.kind || '?'}
-            ${tool.launch?.url ? `<span>url:</span> <a href="${tool.launch.url}" style="color:#7eb8da;text-decoration:none">${tool.launch.url}</a>` : ''}
-            <span>path:</span> ${tool.path || '?'}
+            <span>kind:</span> ${escapeHtml(tool.launch?.kind || '?')}
+            ${tool.launch?.url ? `<span>url:</span> <a href="${escapeHtml(tool.launch.url)}" style="color:#7eb8da;text-decoration:none">${escapeHtml(tool.launch.url)}</a>` : ''}
+            <span>path:</span> ${escapeHtml(tool.path || '?')}
           </div>
         `;
 
@@ -575,14 +575,14 @@ async function fetchLiveState() {
               const btnLabel = parsed.remedy.auto ? parsed.remedy.label : parsed.remedy.label;
               remedyHtml = `
                 <div class="issue-remedy">
-                  <span class="remedy-text">${parsed.remedy.hint}</span>
-                  <button class="remedy-btn ${btnClass}" onclick="executeRemedy('${tool.name}', '${parsed.remedy.action}', this)" ${parsed.remedy.auto ? '' : ''}>${btnLabel}</button>
+                  <span class="remedy-text">${escapeHtml(parsed.remedy.hint)}</span>
+                  <button class="remedy-btn ${btnClass}" onclick="executeRemedy('${escapeHtml(tool.name)}', '${escapeHtml(parsed.remedy.action)}', this)" ${parsed.remedy.auto ? '' : ''}>${escapeHtml(btnLabel)}</button>
                 </div>
               `;
             }
             issueEl.innerHTML = `
-              <div class="issue-type">${parsed.type}</div>
-              <div class="issue-text">${parsed.text}</div>
+              <div class="issue-type">${escapeHtml(parsed.type)}</div>
+              <div class="issue-text">${escapeHtml(parsed.text)}</div>
               ${remedyHtml}
             `;
             body.appendChild(issueEl);
@@ -632,6 +632,12 @@ async function fetchLiveState() {
   }
 
   btn.textContent = 'Refresh';
+}
+
+// ── HTML escaping (XSS-VULN-06, XSS-VULN-08) ──────────────────────────
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ── Issue Parser + Remediation Engine ────────────────────────────────────
