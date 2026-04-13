@@ -219,6 +219,20 @@ async fn handle_action(
 
         "preflight" => preflight::handle_preflight(state, _app_state).await,
 
+        // Phase 1.8: Hedera DLT onramp — optional external anchoring.
+        // The operator can provision a Hedera testnet account during
+        // onboarding. If skipped, ZP operates without DLT anchoring.
+        "hedera_provision" if state.genesis_complete => {
+            // TODO: implement when zp-hedera crate is available.
+            // For now, acknowledge the action and note DLT is optional.
+            vec![OnboardEvent::new("hedera_status", serde_json::json!({
+                "status": "not_available",
+                "message": "DLT anchoring is not yet configured. Your audit chain remains fully functional without external anchoring. This feature will be available in a future update.",
+                "skippable": true,
+            }))]
+        }
+        "hedera_provision" => vec![OnboardEvent::error("Genesis must be completed before DLT provisioning")],
+
         _ => vec![OnboardEvent::error(&format!("unknown action: {}", action.action))],
     }
 }
