@@ -200,9 +200,63 @@ impl std::fmt::Display for SovereigntyMode {
     }
 }
 
+impl SovereigntyMode {
+    /// Auto-detect the best available sovereignty provider for this platform.
+    ///
+    /// Priority: biometric (platform-native) > OS credential store > file fallback.
+    /// This is the Tier A quick-start path — no questions asked.
+    pub fn auto_detect() -> Self {
+        #[cfg(target_os = "macos")]
+        {
+            // Touch ID is available on all modern Macs (T2 chip or Apple Silicon).
+            // `security` command presence is a reliable proxy.
+            if std::process::Command::new("security")
+                .arg("list-keychains")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                return SovereigntyMode::TouchId;
+            }
+            return SovereigntyMode::LoginPassword;
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            return SovereigntyMode::WindowsHello;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Check for Secret Service (gnome-keyring / KWallet)
+            let has_secret_service = std::process::Command::new("dbus-send")
+                .args([
+                    "--session",
+                    "--dest=org.freedesktop.secrets",
+                    "--print-reply",
+                    "/org/freedesktop/secrets",
+                    "org.freedesktop.DBus.Peer.Ping",
+                ])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if has_secret_service {
+                return SovereigntyMode::LoginPassword;
+            }
+
+            // No credential store — file fallback (headless server scenario)
+            return SovereigntyMode::FileBased;
+        }
+
+        #[allow(unreachable_code)]
+        SovereigntyMode::LoginPassword
+    }
+}
+
 impl Default for SovereigntyMode {
     fn default() -> Self {
-        SovereigntyMode::LoginPassword
+        SovereigntyMode::auto_detect()
     }
 }
 
