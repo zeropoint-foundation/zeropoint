@@ -3,7 +3,7 @@
 //! Every field is a [`Sourced<T>`] so we track provenance. The TOML file
 //! uses a flat-ish structure that mirrors the `zp config show` output.
 
-use crate::provenance::{Source, Sourced};
+use crate::provenance::Sourced;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -126,8 +126,14 @@ impl ZpConfig {
     pub fn show(&self) -> String {
         let mut lines = Vec::new();
         lines.push("[server]".into());
-        lines.push(format!("  port = {}  # {}", self.port.value, self.port.source));
-        lines.push(format!("  bind = \"{}\"  # {}", self.bind.value, self.bind.source));
+        lines.push(format!(
+            "  port = {}  # {}",
+            self.port.value, self.port.source
+        ));
+        lines.push(format!(
+            "  bind = \"{}\"  # {}",
+            self.bind.value, self.bind.source
+        ));
         lines.push(format!(
             "  open_dashboard = {}  # {}",
             self.open_dashboard.value, self.open_dashboard.source
@@ -196,7 +202,10 @@ impl ZpConfig {
             self.mesh_enabled.value, self.mesh_enabled.source
         ));
         if let Some(ref listen) = self.mesh_listen.value {
-            lines.push(format!("  listen = \"{}\"  # {}", listen, self.mesh_listen.source));
+            lines.push(format!(
+                "  listen = \"{}\"  # {}",
+                listen, self.mesh_listen.source
+            ));
         }
         if !self.mesh_peers.value.is_empty() {
             lines.push(format!(
@@ -281,21 +290,11 @@ pub struct ConfigFile {
     pub docker: DockerSection,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServerSection {
     pub port: Option<u16>,
     pub bind: Option<String>,
     pub open_dashboard: Option<bool>,
-}
-
-impl Default for ServerSection {
-    fn default() -> Self {
-        Self {
-            port: None,
-            bind: None,
-            open_dashboard: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

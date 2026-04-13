@@ -276,7 +276,7 @@ pub fn create_ci_calculator(
         "standard" | "t" | "parametric" => Box::new(StandardCICalculator::new()),
         "bootstrap" | "nonparametric" => {
             Box::new(BootstrapCICalculator::new(n_bootstrap.unwrap_or(10000)))
-        },
+        }
         _ => Box::new(StandardCICalculator::new()),
     }
 }

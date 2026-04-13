@@ -8,8 +8,6 @@
 //! each vulnerability is closed. Before the fix lands, the corresponding
 //! test MUST FAIL (Shannon succeeded). After the fix, it MUST PASS.
 
-use serde_json::json;
-
 // ============================================================================
 // AUTH-VULN payloads — Authentication bypass
 // ============================================================================
@@ -51,10 +49,7 @@ pub mod auth {
     ];
 
     /// Endpoints that SHOULD be accessible without auth (health, root, onboard).
-    pub const EXEMPT_ENDPOINTS: &[&str] = &[
-        "/api/v1/health",
-        "/",
-    ];
+    pub const EXEMPT_ENDPOINTS: &[&str] = &["/api/v1/health", "/"];
 }
 
 // ============================================================================

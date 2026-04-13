@@ -9,14 +9,14 @@
 //!   - credentials.rs — Vault store, import, provider catalog
 //!   - configure.rs   — Configure engine dispatch
 
-mod state;
+mod configure;
+mod credentials;
 mod detect;
 mod genesis;
 mod inference;
-mod scan;
-mod credentials;
-mod configure;
 pub mod preflight;
+mod scan;
+mod state;
 pub mod verify;
 
 pub use state::OnboardState;
@@ -67,9 +67,8 @@ impl OnboardEvent {
     }
 
     pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| {
-            r#"{"event":"error","message":"serialize failed"}"#.to_string()
-        })
+        serde_json::to_string(self)
+            .unwrap_or_else(|_| r#"{"event":"error","message":"serialize failed"}"#.to_string())
     }
 }
 
@@ -81,9 +80,21 @@ pub async fn onboard_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    ws.max_frame_size(128 * 1024)  // 128 KB — onboard payloads include credentials
+    // Post-genesis: reject onboard WebSocket connections
+    let home = dirs::home_dir().unwrap_or_default();
+    let genesis_path = home.join(".zeropoint").join("genesis.json");
+    if genesis_path.exists() {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "Onboarding is disabled after genesis is complete",
+        )
+            .into_response();
+    }
+
+    ws.max_frame_size(128 * 1024) // 128 KB — onboard payloads include credentials
         .max_message_size(256 * 1024)
         .on_upgrade(move |socket| handle_onboard_ws(socket, state))
+        .into_response()
 }
 
 async fn handle_onboard_ws(socket: WebSocket, app_state: AppState) {
@@ -95,8 +106,11 @@ async fn handle_onboard_ws(socket: WebSocket, app_state: AppState) {
 
     tracing::info!(
         "onboard ws: reconstructed state — step={}, genesis={}, vault={}, tools={}/{}",
-        onboard.step, onboard.genesis_complete, onboard.credentials_stored,
-        onboard.tools_configured, onboard.tools_discovered
+        onboard.step,
+        onboard.genesis_complete,
+        onboard.credentials_stored,
+        onboard.tools_configured,
+        onboard.tools_discovered
     );
 
     // Send initial state so frontend can resume at the right step
@@ -156,28 +170,45 @@ async fn handle_action(
         // ── Actions with no prerequisites ─────────────────────────
         "detect" => detect::handle_detect(state).await,
         "genesis" => genesis::handle_genesis(action, state).await,
-        "status" => vec![OnboardEvent::new("heartbeat_ack", serde_json::json!({ "ok": true }))],
+        "status" => vec![OnboardEvent::new(
+            "heartbeat_ack",
+            serde_json::json!({ "ok": true }),
+        )],
 
         // ── Requires genesis_complete ─────────────────────────────
         "vault_check" if state.genesis_complete => genesis::handle_vault_check(state).await,
-        "vault_check" => vec![OnboardEvent::error("Genesis must be completed before vault check")],
+        "vault_check" => vec![OnboardEvent::error(
+            "Genesis must be completed before vault check",
+        )],
 
-        "detect_local_inference" if state.genesis_complete => detect::handle_detect_local_inference(state).await,
+        "detect_local_inference" if state.genesis_complete => {
+            detect::handle_detect_local_inference(state).await
+        }
         "detect_local_inference" => vec![OnboardEvent::error("Genesis must be completed first")],
 
-        "detect_ollama" if state.genesis_complete => detect::handle_detect_local_inference(state).await,
+        "detect_ollama" if state.genesis_complete => {
+            detect::handle_detect_local_inference(state).await
+        }
         "detect_ollama" => vec![OnboardEvent::error("Genesis must be completed first")],
 
-        "get_setup_guidance" if state.genesis_complete => inference::handle_setup_guidance(action).await,
+        "get_setup_guidance" if state.genesis_complete => {
+            inference::handle_setup_guidance(action).await
+        }
         "get_setup_guidance" => vec![OnboardEvent::error("Genesis must be completed first")],
 
-        "start_model_pull" if state.genesis_complete => inference::handle_start_model_pull(action).await,
+        "start_model_pull" if state.genesis_complete => {
+            inference::handle_start_model_pull(action).await
+        }
         "start_model_pull" => vec![OnboardEvent::error("Genesis must be completed first")],
 
-        "set_inference_posture" if state.genesis_complete => inference::handle_set_inference_posture(action, state).await,
+        "set_inference_posture" if state.genesis_complete => {
+            inference::handle_set_inference_posture(action, state).await
+        }
         "set_inference_posture" => vec![OnboardEvent::error("Genesis must be completed first")],
 
-        "get_provider_catalog" if state.genesis_complete => credentials::handle_get_provider_catalog(state).await,
+        "get_provider_catalog" if state.genesis_complete => {
+            credentials::handle_get_provider_catalog(state).await
+        }
         "get_provider_catalog" => vec![OnboardEvent::error("Genesis must be completed first")],
 
         // ── Scan: requires genesis, MUST validate scan_path ───────
@@ -190,19 +221,31 @@ async fn handle_action(
             }
             scan::handle_scan(action, state).await
         }
-        "scan" => vec![OnboardEvent::error("Genesis must be completed before scanning")],
+        "scan" => vec![OnboardEvent::error(
+            "Genesis must be completed before scanning",
+        )],
 
         // ── Vault store: requires genesis + vault key ─────────────
-        "vault_store" if state.genesis_complete => credentials::handle_vault_store(action, state).await,
-        "vault_store" => vec![OnboardEvent::error("Genesis must be completed before storing credentials")],
+        "vault_store" if state.genesis_complete => {
+            credentials::handle_vault_store(action, state).await
+        }
+        "vault_store" => vec![OnboardEvent::error(
+            "Genesis must be completed before storing credentials",
+        )],
 
-        "vault_import_all" if state.genesis_complete => credentials::handle_vault_import_all(action, state).await,
+        "vault_import_all" if state.genesis_complete => {
+            credentials::handle_vault_import_all(action, state).await
+        }
         "vault_import_all" => vec![OnboardEvent::error("Genesis must be completed first")],
 
-        "validate_credential" if state.genesis_complete => credentials::handle_validate_credential(action, state).await,
+        "validate_credential" if state.genesis_complete => {
+            credentials::handle_validate_credential(action, state).await
+        }
         "validate_credential" => vec![OnboardEvent::error("Genesis must be completed first")],
 
-        "validate_all" if state.genesis_complete => credentials::handle_validate_all(action, state).await,
+        "validate_all" if state.genesis_complete => {
+            credentials::handle_validate_all(action, state).await
+        }
         "validate_all" => vec![OnboardEvent::error("Genesis must be completed first")],
 
         // ── Configure: requires genesis + scan + path validation ──
@@ -215,7 +258,9 @@ async fn handle_action(
             }
             configure::handle_configure(action, state).await
         }
-        "configure" => vec![OnboardEvent::error("Genesis must be completed before configuring tools")],
+        "configure" => vec![OnboardEvent::error(
+            "Genesis must be completed before configuring tools",
+        )],
 
         "preflight" => preflight::handle_preflight(state, _app_state).await,
 
@@ -225,15 +270,23 @@ async fn handle_action(
         "hedera_provision" if state.genesis_complete => {
             // TODO: implement when zp-hedera crate is available.
             // For now, acknowledge the action and note DLT is optional.
-            vec![OnboardEvent::new("hedera_status", serde_json::json!({
-                "status": "not_available",
-                "message": "DLT anchoring is not yet configured. Your audit chain remains fully functional without external anchoring. This feature will be available in a future update.",
-                "skippable": true,
-            }))]
+            vec![OnboardEvent::new(
+                "hedera_status",
+                serde_json::json!({
+                    "status": "not_available",
+                    "message": "DLT anchoring is not yet configured. Your audit chain remains fully functional without external anchoring. This feature will be available in a future update.",
+                    "skippable": true,
+                }),
+            )]
         }
-        "hedera_provision" => vec![OnboardEvent::error("Genesis must be completed before DLT provisioning")],
+        "hedera_provision" => vec![OnboardEvent::error(
+            "Genesis must be completed before DLT provisioning",
+        )],
 
-        _ => vec![OnboardEvent::error(&format!("unknown action: {}", action.action))],
+        _ => vec![OnboardEvent::error(&format!(
+            "unknown action: {}",
+            action.action
+        ))],
     }
 }
 
@@ -258,7 +311,10 @@ fn validate_scan_path(path: &str) -> Result<(), String> {
     // Expand tilde
     let expanded = if path.starts_with("~/") || path == "~" {
         match dirs::home_dir() {
-            Some(home) => home.join(path.strip_prefix("~/").unwrap_or("")).to_string_lossy().to_string(),
+            Some(home) => home
+                .join(path.strip_prefix("~/").unwrap_or(""))
+                .to_string_lossy()
+                .to_string(),
             None => path.to_string(),
         }
     } else {
@@ -267,13 +323,35 @@ fn validate_scan_path(path: &str) -> Result<(), String> {
 
     // Block sensitive paths
     let blocked_prefixes = &[
-        "/etc", "/var", "/usr", "/bin", "/sbin", "/boot", "/dev", "/proc",
-        "/sys", "/tmp", "/root", "/lib", "/lib64", "/opt",
-        "/private/etc", "/private/var", "/private/tmp",
+        "/etc",
+        "/var",
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/boot",
+        "/dev",
+        "/proc",
+        "/sys",
+        "/tmp",
+        "/root",
+        "/lib",
+        "/lib64",
+        "/opt",
+        "/private/etc",
+        "/private/var",
+        "/private/tmp",
     ];
     let blocked_components = &[
-        ".ssh", ".gnupg", ".aws", ".azure", ".gcloud", ".kube",
-        ".docker", "id_rsa", "id_ed25519", ".zeropoint/keys",
+        ".ssh",
+        ".gnupg",
+        ".aws",
+        ".azure",
+        ".gcloud",
+        ".kube",
+        ".docker",
+        "id_rsa",
+        "id_ed25519",
+        ".zeropoint/keys",
     ];
 
     for prefix in blocked_prefixes {
@@ -284,7 +362,10 @@ fn validate_scan_path(path: &str) -> Result<(), String> {
 
     for component in blocked_components {
         if expanded.contains(component) {
-            return Err(format!("Path contains sensitive component '{}' — cannot scan", component));
+            return Err(format!(
+                "Path contains sensitive component '{}' — cannot scan",
+                component
+            ));
         }
     }
 

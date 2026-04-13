@@ -82,8 +82,7 @@ impl PromotionEngine {
             entry.reinforcement_count += 1;
             // Weighted average: existing confidence has more weight as reinforcement grows.
             let weight = entry.reinforcement_count as f64;
-            entry.confidence =
-                (entry.confidence * (weight - 1.0) + additional_confidence) / weight;
+            entry.confidence = (entry.confidence * (weight - 1.0) + additional_confidence) / weight;
             entry.last_reinforced_at = Utc::now();
             true
         } else {
@@ -164,7 +163,7 @@ impl PromotionEngine {
         }
 
         // Generate the promotion receipt.
-        let receipt = self.generate_promotion_receipt(entry, &request);
+        let receipt = self.generate_promotion_receipt(entry, request);
         let receipt_id = receipt.id.clone();
 
         // Apply the promotion.
@@ -212,9 +211,7 @@ impl PromotionEngine {
 
         self.memories
             .values()
-            .filter(|e| {
-                e.stage == required_current && self.meets_threshold(e, target)
-            })
+            .filter(|e| e.stage == required_current && self.meets_threshold(e, target))
             .collect()
     }
 
@@ -261,10 +258,7 @@ impl PromotionEngine {
                 "zp.memory.memory_id",
                 serde_json::Value::String(entry.id.clone()),
             )
-            .extension(
-                "zp.memory.confidence",
-                serde_json::json!(entry.confidence),
-            )
+            .extension("zp.memory.confidence", serde_json::json!(entry.confidence))
             .extension(
                 "zp.memory.reinforcement_count",
                 serde_json::json!(entry.reinforcement_count),
@@ -324,9 +318,7 @@ mod tests {
     #[test]
     fn cannot_skip_stages() {
         let mut engine = make_engine();
-        let mem_id = engine.register_from_observation(
-            "obs-1", "test", "general", 0.9, "rcpt-1",
-        );
+        let mem_id = engine.register_from_observation("obs-1", "test", "general", 0.9, "rcpt-1");
 
         // Try to skip from Observed directly to Trusted.
         let result = engine.promote(&PromotionRequest {
@@ -342,9 +334,7 @@ mod tests {
     #[test]
     fn remembered_requires_reinforcement() {
         let mut engine = make_engine();
-        let mem_id = engine.register_from_observation(
-            "obs-1", "test", "general", 0.9, "rcpt-1",
-        );
+        let mem_id = engine.register_from_observation("obs-1", "test", "general", 0.9, "rcpt-1");
 
         // Fast-promote to Trusted.
         engine.promote(&PromotionRequest {
@@ -370,7 +360,9 @@ mod tests {
             requestor: "engine".to_string(),
             reviewer: None,
         });
-        assert!(matches!(result, PromotionResult::Denied { reason } if reason.contains("Reinforcement count")));
+        assert!(
+            matches!(result, PromotionResult::Denied { reason } if reason.contains("Reinforcement count"))
+        );
 
         // Reinforce to meet threshold.
         engine.reinforce(&mem_id, 0.9);
@@ -389,9 +381,7 @@ mod tests {
     #[test]
     fn identity_bearing_requires_human_review() {
         let mut engine = make_engine();
-        let mem_id = engine.register_from_observation(
-            "obs-1", "test", "general", 0.95, "rcpt-1",
-        );
+        let mem_id = engine.register_from_observation("obs-1", "test", "general", 0.95, "rcpt-1");
 
         // Fast-promote to Remembered.
         for (stage, evidence) in [
@@ -424,7 +414,9 @@ mod tests {
             requestor: "operator".to_string(),
             reviewer: None,
         });
-        assert!(matches!(result, PromotionResult::Denied { reason } if reason.contains("human reviewer")));
+        assert!(
+            matches!(result, PromotionResult::Denied { reason } if reason.contains("human reviewer"))
+        );
 
         // With reviewer — should succeed.
         let result = engine.promote(&PromotionRequest {
@@ -441,7 +433,11 @@ mod tests {
     fn confidence_threshold_gates_trusted() {
         let mut engine = make_engine();
         let mem_id = engine.register_from_observation(
-            "obs-1", "low confidence memory", "general", 0.3, "rcpt-1",
+            "obs-1",
+            "low confidence memory",
+            "general",
+            0.3,
+            "rcpt-1",
         );
 
         engine.promote(&PromotionRequest {
@@ -460,7 +456,9 @@ mod tests {
             requestor: "policy".to_string(),
             reviewer: None,
         });
-        assert!(matches!(result, PromotionResult::Denied { reason } if reason.contains("Confidence")));
+        assert!(
+            matches!(result, PromotionResult::Denied { reason } if reason.contains("Confidence"))
+        );
     }
 
     #[test]
@@ -468,12 +466,10 @@ mod tests {
         let mut engine = make_engine();
 
         // Create two memories: one high confidence, one low.
-        let high = engine.register_from_observation(
-            "obs-1", "high confidence", "security", 0.9, "rcpt-1",
-        );
-        let low = engine.register_from_observation(
-            "obs-2", "low confidence", "general", 0.3, "rcpt-2",
-        );
+        let high =
+            engine.register_from_observation("obs-1", "high confidence", "security", 0.9, "rcpt-1");
+        let low =
+            engine.register_from_observation("obs-2", "low confidence", "general", 0.3, "rcpt-2");
 
         // Both at Observed, promote to Interpreted.
         for id in [&high, &low] {
@@ -495,9 +491,7 @@ mod tests {
     #[test]
     fn reinforcement_updates_confidence() {
         let mut engine = make_engine();
-        let mem_id = engine.register_from_observation(
-            "obs-1", "test", "general", 0.8, "rcpt-1",
-        );
+        let mem_id = engine.register_from_observation("obs-1", "test", "general", 0.8, "rcpt-1");
 
         engine.reinforce(&mem_id, 1.0);
         let entry = engine.get(&mem_id).unwrap();
@@ -509,9 +503,7 @@ mod tests {
     #[test]
     fn promotion_receipt_has_truth_assertion_for_remembered() {
         let mut engine = make_engine();
-        let mem_id = engine.register_from_observation(
-            "obs-1", "test", "general", 0.95, "rcpt-1",
-        );
+        let mem_id = engine.register_from_observation("obs-1", "test", "general", 0.95, "rcpt-1");
 
         // Fast track to Trusted.
         engine.promote(&PromotionRequest {

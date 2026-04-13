@@ -7,10 +7,10 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
-use zp_keys::sovereignty::SovereigntyMode;
 use zp_keys::hierarchy::{GenesisKey, OperatorKey};
 use zp_keys::keyring::Keyring;
 use zp_keys::recovery;
+use zp_keys::sovereignty::SovereigntyMode;
 
 use crate::commands::resolve_zp_home;
 
@@ -43,7 +43,7 @@ pub fn run(config: &InitConfig) -> i32 {
     let has_genesis_cert = home_zp.join("keys").join("genesis.json").exists();
     let has_genesis_secret = {
         let kr = Keyring::open(home_zp.join("keys")).ok();
-        kr.map_or(false, |k| k.status().has_genesis_secret)
+        kr.is_some_and(|k| k.status().has_genesis_secret)
     };
     if has_genesis_cert || has_genesis_secret {
         eprintln!();
@@ -52,7 +52,9 @@ pub fn run(config: &InitConfig) -> i32 {
         eprintln!();
         eprintln!("  Remove ~/.zeropoint/ to re-initialize (this destroys all keys).");
         if has_genesis_secret && !has_genesis_cert {
-            eprintln!("  Note: Genesis secret found in credential store but genesis.json is missing.");
+            eprintln!(
+                "  Note: Genesis secret found in credential store but genesis.json is missing."
+            );
             eprintln!("  Run `zp init --force` to repair, or clear with `zp keys clear`.");
         }
         eprintln!();
@@ -87,14 +89,19 @@ pub fn run(config: &InitConfig) -> i32 {
     // Tell the user what's about to happen BEFORE the OS dialog appears.
     if config.store_genesis_secret {
         let provider = zp_keys::provider_for(config.sovereignty_mode);
-        eprint!("  Sealing secret via {} provider...", provider.display_name());
+        eprint!(
+            "  Sealing secret via {} provider...",
+            provider.display_name()
+        );
         eprintln!();
         match config.sovereignty_mode {
             SovereigntyMode::TouchId => {
                 eprintln!("  \x1b[2m(Touch ID will be requested — place your finger on the sensor)\x1b[0m");
             }
             SovereigntyMode::WindowsHello => {
-                eprintln!("  \x1b[2m(Windows Hello will be requested — verify your identity)\x1b[0m");
+                eprintln!(
+                    "  \x1b[2m(Windows Hello will be requested — verify your identity)\x1b[0m"
+                );
             }
             SovereigntyMode::Fingerprint => {
                 eprintln!("  \x1b[2m(Fingerprint will be requested — place your finger on the reader)\x1b[0m");
@@ -108,7 +115,10 @@ pub fn run(config: &InitConfig) -> i32 {
                 }
             }
             mode if mode.requires_external_device() => {
-                eprintln!("  \x1b[2m(Ensure your {} is connected via USB)\x1b[0m", mode.display_name());
+                eprintln!(
+                    "  \x1b[2m(Ensure your {} is connected via USB)\x1b[0m",
+                    mode.display_name()
+                );
             }
             _ => {}
         }
@@ -125,7 +135,11 @@ pub fn run(config: &InitConfig) -> i32 {
         // Run enrollment if needed (face capture, hardware wallet pairing, etc.)
         if provider.detect().requires_enrollment {
             if let Err(e) = provider.enroll() {
-                eprintln!("  \x1b[33m⚠\x1b[0m {} enrollment failed: {}", provider.display_name(), e);
+                eprintln!(
+                    "  \x1b[33m⚠\x1b[0m {} enrollment failed: {}",
+                    provider.display_name(),
+                    e
+                );
                 eprintln!("  Falling back to login password mode...");
                 enrollment_failed = true;
             }
@@ -150,13 +164,23 @@ pub fn run(config: &InitConfig) -> i32 {
                     // we still have in memory is passed to save_operator
                     // explicitly below to derive the vault key.
                     if let Err(e) = keyring.save_genesis(&genesis, false) {
-                        eprintln!("  \x1b[31m✗\x1b[0m Failed to save genesis certificate: {}", e);
+                        eprintln!(
+                            "  \x1b[31m✗\x1b[0m Failed to save genesis certificate: {}",
+                            e
+                        );
                         return 1;
                     }
-                    (config.sovereignty_mode != SovereigntyMode::FileBased, config.sovereignty_mode)
+                    (
+                        config.sovereignty_mode != SovereigntyMode::FileBased,
+                        config.sovereignty_mode,
+                    )
                 }
                 Err(e) => {
-                    eprintln!("  \x1b[33m⚠\x1b[0m {} save failed: {}", provider.display_name(), e);
+                    eprintln!(
+                        "  \x1b[33m⚠\x1b[0m {} save failed: {}",
+                        provider.display_name(),
+                        e
+                    );
                     eprintln!("  Falling back to login password mode...");
                     match keyring.save_genesis(&genesis, true) {
                         Ok(in_cred) => (in_cred, SovereigntyMode::LoginPassword),
@@ -286,15 +310,24 @@ data_dir = ".zeropoint/data"
         } else {
             "OS credential store"
         };
-        eprintln!("  Genesis secret sealed in {}, gated by {}.", store_name, actual_mode.display_name());
+        eprintln!(
+            "  Genesis secret sealed in {}, gated by {}.",
+            store_name,
+            actual_mode.display_name()
+        );
         if actual_mode != SovereigntyMode::FileBased {
-            eprintln!("  No secret key files on disk. {} required for vault access.", actual_mode.display_name());
+            eprintln!(
+                "  No secret key files on disk. {} required for vault access.",
+                actual_mode.display_name()
+            );
         }
     } else if config.store_genesis_secret {
         if actual_mode == SovereigntyMode::FileBased {
             eprintln!("  Genesis secret stored in ~/.zeropoint/keys/genesis.secret");
         } else {
-            eprintln!("  \x1b[33mNote:\x1b[0m Genesis secret stored in ~/.zeropoint/keys/genesis.secret");
+            eprintln!(
+                "  \x1b[33mNote:\x1b[0m Genesis secret stored in ~/.zeropoint/keys/genesis.secret"
+            );
             eprintln!("  (OS credential store unavailable — will auto-migrate when available)");
         }
     }
@@ -322,10 +355,15 @@ data_dir = ".zeropoint/data"
                 eprintln!("  \x1b[33m│\x1b[0m                                                        \x1b[33m│\x1b[0m");
                 eprintln!("  \x1b[33m│\x1b[0m  These words ARE your Genesis secret.                   \x1b[33m│\x1b[0m");
                 eprintln!("  \x1b[33m│\x1b[0m  Recovery: `zp recover --biometric-reset`                \x1b[33m│\x1b[0m");
-                eprintln!("  \x1b[1;33m└────────────────────────────────────────────────────────┘\x1b[0m");
+                eprintln!(
+                    "  \x1b[1;33m└────────────────────────────────────────────────────────┘\x1b[0m"
+                );
             }
             Err(e) => {
-                eprintln!("  \x1b[33m⚠\x1b[0m Could not generate recovery mnemonic: {}", e);
+                eprintln!(
+                    "  \x1b[33m⚠\x1b[0m Could not generate recovery mnemonic: {}",
+                    e
+                );
                 eprintln!("  You can generate it later with `zp keys recovery-kit`");
             }
         }

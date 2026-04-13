@@ -378,8 +378,12 @@ mod tests {
         // Store credentials and save to disk
         {
             let mut vault = CredentialVault::new(&master_key);
-            vault.store("anthropic/api_key", b"sk-ant-test-key-123").unwrap();
-            vault.store("openai/api_key", b"sk-openai-test-456").unwrap();
+            vault
+                .store("anthropic/api_key", b"sk-ant-test-key-123")
+                .unwrap();
+            vault
+                .store("openai/api_key", b"sk-openai-test-456")
+                .unwrap();
             vault.store("postgres/password", b"hunter2").unwrap();
             vault.save(&vault_path).unwrap();
         }
@@ -390,8 +394,14 @@ mod tests {
             vault.load(&vault_path).unwrap();
 
             assert_eq!(vault.count(), 3);
-            assert_eq!(vault.retrieve("anthropic/api_key").unwrap(), b"sk-ant-test-key-123");
-            assert_eq!(vault.retrieve("openai/api_key").unwrap(), b"sk-openai-test-456");
+            assert_eq!(
+                vault.retrieve("anthropic/api_key").unwrap(),
+                b"sk-ant-test-key-123"
+            );
+            assert_eq!(
+                vault.retrieve("openai/api_key").unwrap(),
+                b"sk-openai-test-456"
+            );
             assert_eq!(vault.retrieve("postgres/password").unwrap(), b"hunter2");
         }
 
@@ -487,7 +497,10 @@ mod tests {
         vault.save(&vault_path).unwrap();
 
         // After a successful save, the .tmp file should NOT exist
-        assert!(!tmp_path.exists(), "Temporary file should be cleaned up after save");
+        assert!(
+            !tmp_path.exists(),
+            "Temporary file should be cleaned up after save"
+        );
         assert!(vault_path.exists(), "Final vault file should exist");
 
         // Cleanup

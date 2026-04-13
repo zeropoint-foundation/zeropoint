@@ -159,7 +159,9 @@ fn verify_fprintd() -> Result<(), KeyError> {
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
-        .map_err(|e| KeyError::CredentialStore(format!("fprintd-verify failed to launch: {}", e)))?;
+        .map_err(|e| {
+            KeyError::CredentialStore(format!("fprintd-verify failed to launch: {}", e))
+        })?;
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);

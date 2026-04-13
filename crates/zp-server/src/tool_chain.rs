@@ -36,9 +36,7 @@ use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
 pub(crate) fn tool_lifecycle_conv_id() -> &'static ConversationId {
     static ID: OnceLock<ConversationId> = OnceLock::new();
     ID.get_or_init(|| {
-        ConversationId(
-            Uuid::parse_str("00000000-0000-7000-8000-746f6f6c6c63").unwrap()
-        )
+        ConversationId(Uuid::parse_str("00000000-0000-7000-8000-746f6f6c6c63").unwrap())
     })
 }
 
@@ -215,7 +213,9 @@ pub fn query_tool_readiness(
             match parts[1] {
                 "configured" => {
                     let name = parts[2].to_string();
-                    let state = states.entry(name.clone()).or_insert_with(|| empty_state(&name));
+                    let state = states
+                        .entry(name.clone())
+                        .or_insert_with(|| empty_state(&name));
                     if !state.configured {
                         state.configured = true;
                         state.configured_at = Some(timestamp);
@@ -230,7 +230,9 @@ pub fn query_tool_readiness(
 
                     match sub {
                         "passed" => {
-                            let state = states.entry(name.clone()).or_insert_with(|| empty_state(&name));
+                            let state = states
+                                .entry(name.clone())
+                                .or_insert_with(|| empty_state(&name));
                             if state.preflight_at.is_none() {
                                 // Only take the most recent
                                 state.preflight_passed = true;
@@ -238,12 +240,15 @@ pub fn query_tool_readiness(
                             }
                         }
                         "failed" => {
-                            let state = states.entry(name.clone()).or_insert_with(|| empty_state(&name));
+                            let state = states
+                                .entry(name.clone())
+                                .or_insert_with(|| empty_state(&name));
                             if state.preflight_at.is_none() {
                                 state.preflight_passed = false;
                                 state.preflight_at = Some(timestamp);
                                 // Extract failure details from policy conditions
-                                if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
+                                if let PolicyDecision::Allow { conditions } = &entry.policy_decision
+                                {
                                     state.preflight_issues = conditions.clone();
                                 }
                             }
@@ -257,7 +262,9 @@ pub fn query_tool_readiness(
                 }
                 "launched" => {
                     let name = parts[2].to_string();
-                    let state = states.entry(name.clone()).or_insert_with(|| empty_state(&name));
+                    let state = states
+                        .entry(name.clone())
+                        .or_insert_with(|| empty_state(&name));
                     if !state.launched {
                         state.launched = true;
                         state.launched_at = Some(timestamp);
@@ -267,7 +274,9 @@ pub fn query_tool_readiness(
                     // tool:setup:complete:<name>
                     if parts.len() >= 4 && parts[2] == "complete" {
                         let name = parts[3].to_string();
-                        let state = states.entry(name.clone()).or_insert_with(|| empty_state(&name));
+                        let state = states
+                            .entry(name.clone())
+                            .or_insert_with(|| empty_state(&name));
                         if !state.setup_complete {
                             state.setup_complete = true;
                             state.setup_at = Some(timestamp);
@@ -278,7 +287,9 @@ pub fn query_tool_readiness(
                     // tool:providers:resolved:<name>
                     if parts.len() >= 4 && parts[2] == "resolved" {
                         let name = parts[3].to_string();
-                        let state = states.entry(name.clone()).or_insert_with(|| empty_state(&name));
+                        let state = states
+                            .entry(name.clone())
+                            .or_insert_with(|| empty_state(&name));
                         if !state.providers_resolved {
                             state.providers_resolved = true;
                             state.providers_resolved_at = Some(timestamp);
@@ -293,17 +304,21 @@ pub fn query_tool_readiness(
                     // tool:capability:{verified|degraded|failed}:<name>:<capability>
                     if parts.len() >= 4 {
                         let sub = parts[2]; // "verified", "degraded", or "failed"
-                        // parts[3] = "<name>:<capability>" — need to split further
+                                            // parts[3] = "<name>:<capability>" — need to split further
                         let rest = parts[3];
                         if let Some((name, cap)) = rest.split_once(':') {
                             let name = name.to_string();
                             let cap = cap.to_string();
-                            let state = states.entry(name.clone()).or_insert_with(|| empty_state(&name));
+                            let state = states
+                                .entry(name.clone())
+                                .or_insert_with(|| empty_state(&name));
 
                             // Only take the most recent receipt per capability
                             let already = state.capabilities.iter().any(|c| c.capability == cap);
                             if !already {
-                                let detail = if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
+                                let detail = if let PolicyDecision::Allow { conditions } =
+                                    &entry.policy_decision
+                                {
                                     conditions.first().cloned()
                                 } else {
                                     None
@@ -331,8 +346,7 @@ pub fn query_tool_readiness(
         state.verified = state.ready
             && state.providers_resolved
             && !state.capabilities.is_empty()
-            && state.capabilities.iter()
-                .all(|c| c.status != "failed");
+            && state.capabilities.iter().all(|c| c.status != "failed");
     }
 
     states

@@ -214,9 +214,7 @@ pub(crate) async fn proxy_inner(
     // Forward relevant headers (skip hop-by-hop).
     for (key, value) in req.headers() {
         let k = key.as_str().to_lowercase();
-        if k == "host" || k == "connection" || k == "transfer-encoding"
-            || k == "accept-encoding"
-        {
+        if k == "host" || k == "connection" || k == "transfer-encoding" || k == "accept-encoding" {
             continue;
         }
         if let Ok(v) = value.to_str() {
@@ -230,10 +228,7 @@ pub(crate) async fn proxy_inner(
 
     // Inject auth token — ZP owns the trust boundary, so the user
     // never needs to see a login screen for governed tools.
-    builder = builder.header(
-        "Authorization",
-        format!("Bearer {}", assignment.auth_token),
-    );
+    builder = builder.header("Authorization", format!("Bearer {}", assignment.auth_token));
 
     // Forward the body
     let body_bytes = axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024) // 10 MB limit
@@ -250,7 +245,7 @@ pub(crate) async fn proxy_inner(
             let resp_status = resp.status().as_u16();
 
             // ── Emit health receipt based on response ───────────────
-            let health_kind = if resp_status >= 200 && resp_status < 400 {
+            let health_kind = if (200..400).contains(&resp_status) {
                 HealthKind::Up
             } else if resp_status >= 500 {
                 HealthKind::Degraded
@@ -267,21 +262,18 @@ pub(crate) async fn proxy_inner(
                 let detail = format!("status={} method={} path=/{}", resp_status, method, path);
                 let audit_store = state.0.audit_store.lock().ok();
                 drop(audit_store);
-                tool_chain::emit_tool_receipt(
-                    &state.0.audit_store,
-                    &event,
-                    Some(&detail),
-                );
+                tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
             }
 
             emit_traffic_receipt(state, tool_name, resp_status);
 
             // ── Build the axum response ─────────────────────────────
-            let status = StatusCode::from_u16(resp_status)
-                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            let status =
+                StatusCode::from_u16(resp_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
             // ── SSE streaming fast-path ──────────────────────────────
-            let is_sse = resp.headers()
+            let is_sse = resp
+                .headers()
                 .get("content-type")
                 .and_then(|v| v.to_str().ok())
                 .map(|v| v.contains("text/event-stream"))
@@ -308,7 +300,8 @@ pub(crate) async fn proxy_inner(
             // ── Standard response — pass through unchanged ──────────
             let mut response = Response::builder().status(status);
 
-            let is_html = resp.headers()
+            let is_html = resp
+                .headers()
                 .get("content-type")
                 .and_then(|v| v.to_str().ok())
                 .map(|v| v.contains("text/html"))
@@ -364,11 +357,7 @@ pub(crate) async fn proxy_inner(
             if sampler().should_emit(tool_name, HealthKind::Down) {
                 let event = events::for_tool(events::HEALTH_DOWN, tool_name);
                 let detail = format!("error={} target={}", e, target_url);
-                tool_chain::emit_tool_receipt(
-                    &state.0.audit_store,
-                    &event,
-                    Some(&detail),
-                );
+                tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
             }
 
             Err(StatusCode::BAD_GATEWAY)
@@ -447,9 +436,7 @@ fn emit_traffic_receipt(state: &AppState, tool_name: &str, status: u16) {
 // ── Port assignments API ────────────────────────────────────────────────
 
 /// API endpoint to list current port assignments (for dashboard / debugging).
-pub async fn port_assignments_handler(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn port_assignments_handler(State(state): State<AppState>) -> impl IntoResponse {
     let port = state.0.config_port;
     let assignments = state.0.port_allocator.list();
     let entries: Vec<serde_json::Value> = assignments
@@ -474,10 +461,19 @@ mod tests {
 
     #[test]
     fn test_extract_subdomain() {
-        assert_eq!(extract_subdomain("ember.localhost:3000"), Some("ember".into()));
+        assert_eq!(
+            extract_subdomain("ember.localhost:3000"),
+            Some("ember".into())
+        );
         assert_eq!(extract_subdomain("ember.localhost"), Some("ember".into()));
-        assert_eq!(extract_subdomain("my-tool.localhost:3000"), Some("my-tool".into()));
-        assert_eq!(extract_subdomain("EMBER.localhost:3000"), Some("EMBER".into()));
+        assert_eq!(
+            extract_subdomain("my-tool.localhost:3000"),
+            Some("my-tool".into())
+        );
+        assert_eq!(
+            extract_subdomain("EMBER.localhost:3000"),
+            Some("EMBER".into())
+        );
         assert_eq!(extract_subdomain("localhost:3000"), None);
         assert_eq!(extract_subdomain("localhost"), None);
         assert_eq!(extract_subdomain("127.0.0.1:3000"), None);

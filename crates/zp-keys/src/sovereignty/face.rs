@@ -16,9 +16,7 @@
 //
 // Dependencies: opencv crate (feature-gated behind `face-enroll`)
 
-use super::{
-    EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider,
-};
+use super::{EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;
 
 /// Face enrollment provider (OpenCV webcam).
@@ -179,13 +177,7 @@ fn detect_camera() -> ProviderCapability {
 /// No raw images are stored. Only the compact embedding vector persists.
 #[cfg(feature = "face-enroll")]
 fn enroll_face() -> Result<EnrollmentResult, KeyError> {
-    use opencv::{
-        core,
-        imgproc,
-        objdetect,
-        prelude::*,
-        videoio,
-    };
+    use opencv::{core, imgproc, objdetect, prelude::*, videoio};
 
     // Open camera
     let mut cap = videoio::VideoCapture::new(0, videoio::CAP_ANY)
@@ -225,28 +217,37 @@ fn enroll_face() -> Result<EnrollmentResult, KeyError> {
             .detect_multi_scale(
                 &gray,
                 &mut faces,
-                1.1,  // scale factor
-                3,    // min neighbors
-                0,    // flags
-                core::Size::new(80, 80),  // min size
-                core::Size::new(0, 0),    // max size (0 = unlimited)
+                1.1,                     // scale factor
+                3,                       // min neighbors
+                0,                       // flags
+                core::Size::new(80, 80), // min size
+                core::Size::new(0, 0),   // max size (0 = unlimited)
             )
             .map_err(|e| KeyError::CredentialStore(format!("Face detection failed: {}", e)))?;
 
         if faces.len() == 1 {
             // Exactly one face — extract ROI and hash it
-            let face_rect = faces.get(0)
+            let face_rect = faces
+                .get(0)
                 .map_err(|e| KeyError::CredentialStore(format!("Face rect error: {}", e)))?;
             let roi = core::Mat::roi(&gray, face_rect)
                 .map_err(|e| KeyError::CredentialStore(format!("ROI error: {}", e)))?;
 
             // Resize to fixed dimensions for consistent hashing
             let mut resized = core::Mat::default();
-            imgproc::resize(&roi, &mut resized, core::Size::new(128, 128), 0.0, 0.0, imgproc::INTER_LINEAR)
-                .map_err(|e| KeyError::CredentialStore(format!("Resize error: {}", e)))?;
+            imgproc::resize(
+                &roi,
+                &mut resized,
+                core::Size::new(128, 128),
+                0.0,
+                0.0,
+                imgproc::INTER_LINEAR,
+            )
+            .map_err(|e| KeyError::CredentialStore(format!("Resize error: {}", e)))?;
 
             // Hash the face region with BLAKE3
-            let data = resized.data_bytes()
+            let data = resized
+                .data_bytes()
                 .map_err(|e| KeyError::CredentialStore(format!("Data bytes error: {}", e)))?;
             let hash = blake3::hash(data);
             face_hashes.push(*hash.as_bytes());
@@ -284,7 +285,10 @@ fn enroll_face() -> Result<EnrollmentResult, KeyError> {
     std::fs::create_dir_all(&home)?;
     std::fs::write(home.join("face_template.bin"), &template_bytes)?;
 
-    tracing::info!("Face enrollment complete: {} frames captured, template stored", face_hashes.len());
+    tracing::info!(
+        "Face enrollment complete: {} frames captured, template stored",
+        face_hashes.len()
+    );
 
     Ok(EnrollmentResult {
         enrollment_data: template_bytes,
@@ -306,13 +310,7 @@ fn enroll_face() -> Result<EnrollmentResult, KeyError> {
 /// ArcFace via ONNX runtime) for robust, lighting-invariant matching.
 #[cfg(feature = "face-enroll")]
 fn verify_face() -> Result<(), KeyError> {
-    use opencv::{
-        core,
-        imgproc,
-        objdetect,
-        prelude::*,
-        videoio,
-    };
+    use opencv::{core, imgproc, objdetect, prelude::*, videoio};
 
     let home = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -320,8 +318,9 @@ fn verify_face() -> Result<(), KeyError> {
         .join("sovereignty");
     let template_path = home.join("face_template.bin");
 
-    let template = std::fs::read(&template_path)
-        .map_err(|_| KeyError::CredentialStore("No face template found — run enrollment first".into()))?;
+    let template = std::fs::read(&template_path).map_err(|_| {
+        KeyError::CredentialStore("No face template found — run enrollment first".into())
+    })?;
 
     if template.len() != 32 {
         return Err(KeyError::CredentialStore("Corrupted face template".into()));
@@ -352,20 +351,37 @@ fn verify_face() -> Result<(), KeyError> {
 
         let mut faces = core::Vector::<core::Rect>::new();
         face_cascade
-            .detect_multi_scale(&gray, &mut faces, 1.1, 3, 0, core::Size::new(80, 80), core::Size::new(0, 0))
+            .detect_multi_scale(
+                &gray,
+                &mut faces,
+                1.1,
+                3,
+                0,
+                core::Size::new(80, 80),
+                core::Size::new(0, 0),
+            )
             .map_err(|e| KeyError::CredentialStore(format!("Face detection failed: {}", e)))?;
 
         if faces.len() == 1 {
-            let face_rect = faces.get(0)
+            let face_rect = faces
+                .get(0)
                 .map_err(|e| KeyError::CredentialStore(format!("Face rect error: {}", e)))?;
             let roi = core::Mat::roi(&gray, face_rect)
                 .map_err(|e| KeyError::CredentialStore(format!("ROI error: {}", e)))?;
 
             let mut resized = core::Mat::default();
-            imgproc::resize(&roi, &mut resized, core::Size::new(128, 128), 0.0, 0.0, imgproc::INTER_LINEAR)
-                .map_err(|e| KeyError::CredentialStore(format!("Resize error: {}", e)))?;
+            imgproc::resize(
+                &roi,
+                &mut resized,
+                core::Size::new(128, 128),
+                0.0,
+                0.0,
+                imgproc::INTER_LINEAR,
+            )
+            .map_err(|e| KeyError::CredentialStore(format!("Resize error: {}", e)))?;
 
-            let data = resized.data_bytes()
+            let data = resized
+                .data_bytes()
                 .map_err(|e| KeyError::CredentialStore(format!("Data bytes error: {}", e)))?;
 
             // v0.1: Hash comparison. This is a basic liveness check, not

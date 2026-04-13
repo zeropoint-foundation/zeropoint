@@ -242,9 +242,7 @@ const HEALTH_STALE_SECS: i64 = 120; // 2 minutes
 ///
 /// This is a pure function: same chain → same output.
 /// It can be called by dashboards, agents, CLIs, or remote auditors.
-pub fn derive_system_state(
-    audit_store: &Arc<Mutex<AuditStore>>,
-) -> SystemState {
+pub fn derive_system_state(audit_store: &Arc<Mutex<AuditStore>>) -> SystemState {
     let now = Utc::now();
 
     let store = match audit_store.lock() {
@@ -287,7 +285,9 @@ pub fn derive_system_state(
                 "configured" => {
                     if parts.len() >= 3 {
                         let name = parts[2];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         if b.configured_at.is_none() {
                             b.configured_at = Some(ts);
                         }
@@ -297,7 +297,9 @@ pub fn derive_system_state(
                     if parts.len() >= 4 {
                         let sub = parts[2];
                         let name = parts[3];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         match sub {
                             "passed" => {
                                 if b.preflight_at.is_none() {
@@ -319,7 +321,9 @@ pub fn derive_system_state(
                 "launched" => {
                     if parts.len() >= 3 {
                         let name = parts[2];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         if b.launched_at.is_none() {
                             b.launched_at = Some(ts);
                         }
@@ -328,7 +332,9 @@ pub fn derive_system_state(
                 "stopped" => {
                     if parts.len() >= 3 {
                         let name = parts[2];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         if b.stopped_at.is_none() {
                             b.stopped_at = Some(ts);
                         }
@@ -337,7 +343,9 @@ pub fn derive_system_state(
                 "crashed" => {
                     if parts.len() >= 3 {
                         let name = parts[2];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         if b.crashed_at.is_none() {
                             b.crashed_at = Some(ts);
                         }
@@ -346,7 +354,9 @@ pub fn derive_system_state(
                 "setup" => {
                     if parts.len() >= 4 && parts[2] == "complete" {
                         let name = parts[3];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         if b.setup_at.is_none() {
                             b.setup_at = Some(ts);
                         }
@@ -356,7 +366,9 @@ pub fn derive_system_state(
                     if parts.len() >= 4 {
                         let sub = parts[2]; // up, down, degraded
                         let name = parts[3];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         match sub {
                             "up" => {
                                 if b.last_healthy_at.is_none() {
@@ -384,11 +396,16 @@ pub fn derive_system_state(
                         let sub = parts[2];
                         let name = parts[3];
                         let dep = parts[4];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
-                        let d = b.deps.entry(dep.to_string()).or_insert_with(|| DepStateBuilder {
-                            satisfied: false,
-                            last_checked_at: None,
-                        });
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
+                        let d = b
+                            .deps
+                            .entry(dep.to_string())
+                            .or_insert_with(|| DepStateBuilder {
+                                satisfied: false,
+                                last_checked_at: None,
+                            });
                         match sub {
                             "satisfied" => {
                                 if d.last_checked_at.is_none() {
@@ -410,7 +427,9 @@ pub fn derive_system_state(
                     if parts.len() >= 4 {
                         let sub = parts[2]; // assigned, released
                         let name = parts[3];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         if sub == "assigned" && parts.len() >= 5 {
                             if b.assigned_port.is_none() {
                                 b.assigned_port = parts[4].parse().ok();
@@ -426,7 +445,9 @@ pub fn derive_system_state(
                     if parts.len() >= 4 {
                         let sub = parts[2];
                         let name = parts[3];
-                        let b = tools.entry(name.to_string()).or_insert_with(|| ToolStateBuilder::new(name));
+                        let b = tools
+                            .entry(name.to_string())
+                            .or_insert_with(|| ToolStateBuilder::new(name));
                         match sub {
                             "request" => {
                                 b.total_requests += 1;
@@ -532,7 +553,9 @@ impl ToolStateBuilder {
         // The most recent event determines the phase.
         let mut events: Vec<(DateTime<Utc>, &str)> = Vec::new();
 
-        if let Some(t) = self.configured_at { events.push((t, "configured")); }
+        if let Some(t) = self.configured_at {
+            events.push((t, "configured"));
+        }
         if let Some(t) = self.preflight_at {
             if self.preflight_passed {
                 events.push((t, "preflight_passed"));
@@ -540,12 +563,24 @@ impl ToolStateBuilder {
                 events.push((t, "preflight_failed"));
             }
         }
-        if let Some(t) = self.launched_at { events.push((t, "launched")); }
-        if let Some(t) = self.stopped_at { events.push((t, "stopped")); }
-        if let Some(t) = self.crashed_at { events.push((t, "crashed")); }
-        if let Some(t) = self.last_healthy_at { events.push((t, "healthy")); }
-        if let Some(t) = self.last_unhealthy_at { events.push((t, "unhealthy")); }
-        if let Some(t) = self.last_degraded_at { events.push((t, "degraded")); }
+        if let Some(t) = self.launched_at {
+            events.push((t, "launched"));
+        }
+        if let Some(t) = self.stopped_at {
+            events.push((t, "stopped"));
+        }
+        if let Some(t) = self.crashed_at {
+            events.push((t, "crashed"));
+        }
+        if let Some(t) = self.last_healthy_at {
+            events.push((t, "healthy"));
+        }
+        if let Some(t) = self.last_unhealthy_at {
+            events.push((t, "unhealthy"));
+        }
+        if let Some(t) = self.last_degraded_at {
+            events.push((t, "degraded"));
+        }
 
         if events.is_empty() {
             return ToolPhase::Unknown;
@@ -556,7 +591,7 @@ impl ToolStateBuilder {
 
         // The newest event determines the base phase
         let (newest_ts, newest_event) = events[0];
-        let base_phase = match newest_event {
+        match newest_event {
             "configured" => ToolPhase::Configured,
             "preflight_passed" => ToolPhase::Ready,
             "preflight_failed" => ToolPhase::Blocked,
@@ -571,7 +606,10 @@ impl ToolStateBuilder {
                     // Health receipt is old — tool might be idle or dead.
                     // If we also have a recent launched, it's still "Running"
                     // with stale health.  If not, mark as Down.
-                    if self.launched_at.map_or(false, |l| (now - l).num_seconds() < HEALTH_STALE_SECS * 5) {
+                    if self
+                        .launched_at
+                        .is_some_and(|l| (now - l).num_seconds() < HEALTH_STALE_SECS * 5)
+                    {
                         ToolPhase::Running // benefit of the doubt
                     } else {
                         ToolPhase::Down
@@ -585,22 +623,21 @@ impl ToolStateBuilder {
             "stopped" => ToolPhase::Stopped,
             "crashed" => ToolPhase::Crashed,
             _ => ToolPhase::Unknown,
-        };
-
-        base_phase
+        }
     }
 
     fn finalize(self, now: DateTime<Utc>) -> ToolState {
         let phase = self.derive_phase(now);
 
-        let health_age_secs = self.last_healthy_at
+        let health_age_secs = self
+            .last_healthy_at
             .or(self.last_unhealthy_at)
             .map(|t| (now - t).num_seconds());
 
-        let health_stale = health_age_secs
-            .map_or(true, |age| age > HEALTH_STALE_SECS);
+        let health_stale = health_age_secs.is_none_or(|age| age > HEALTH_STALE_SECS);
 
-        let dependencies: Vec<DepState> = self.deps
+        let dependencies: Vec<DepState> = self
+            .deps
             .into_iter()
             .map(|(name, d)| DepState {
                 name,
@@ -667,14 +704,23 @@ impl SystemState {
 
     /// Tools that need attention (Down, Crashed, Blocked).
     pub fn attention_needed(&self) -> Vec<&ToolState> {
-        self.tools.values().filter(|t| {
-            matches!(t.phase, ToolPhase::Down | ToolPhase::Crashed | ToolPhase::Blocked)
-        }).collect()
+        self.tools
+            .values()
+            .filter(|t| {
+                matches!(
+                    t.phase,
+                    ToolPhase::Down | ToolPhase::Crashed | ToolPhase::Blocked
+                )
+            })
+            .collect()
     }
 
     /// Tools eligible for automatic recovery.
     pub fn recoverable(&self) -> Vec<&ToolState> {
-        self.tools.values().filter(|t| t.phase.should_auto_recover()).collect()
+        self.tools
+            .values()
+            .filter(|t| t.phase.should_auto_recover())
+            .collect()
     }
 
     /// Check if a dependency is satisfied across the system.
@@ -682,9 +728,9 @@ impl SystemState {
     /// or any tool that provides that service.
     pub fn is_service_available(&self, service: &str) -> bool {
         let service_lower = service.to_lowercase();
-        self.tools.values().any(|t| {
-            t.name.to_lowercase().contains(&service_lower) && t.phase.is_live()
-        })
+        self.tools
+            .values()
+            .any(|t| t.name.to_lowercase().contains(&service_lower) && t.phase.is_live())
     }
 
     /// Pre-launch dependency check: given a tool's dependency list,
@@ -726,16 +772,11 @@ impl SystemState {
 ///   - Smart launch ordering (start deps before dependents)
 ///   - Cascade detection (postgres down → ironclaw + pentagi affected)
 ///   - Recovery prioritization (restart the root cause first)
-pub fn derive_dependency_graph(
-    state: &SystemState,
-) -> HashMap<String, Vec<String>> {
+pub fn derive_dependency_graph(state: &SystemState) -> HashMap<String, Vec<String>> {
     let mut graph: HashMap<String, Vec<String>> = HashMap::new();
 
     for tool in state.tools.values() {
-        let deps: Vec<String> = tool.dependencies
-            .iter()
-            .map(|d| d.name.clone())
-            .collect();
+        let deps: Vec<String> = tool.dependencies.iter().map(|d| d.name.clone()).collect();
         if !deps.is_empty() {
             graph.insert(tool.name.clone(), deps);
         }
@@ -762,10 +803,9 @@ pub fn launch_order(graph: &HashMap<String, Vec<String>>) -> Vec<Vec<String>> {
 
     loop {
         // Find nodes with no remaining dependencies
-        let ready: Vec<String> = all_nodes.iter()
-            .filter(|n| {
-                remaining.get(*n).map_or(true, |deps| deps.is_empty())
-            })
+        let ready: Vec<String> = all_nodes
+            .iter()
+            .filter(|n| remaining.get(*n).is_none_or(|deps| deps.is_empty()))
             .cloned()
             .collect();
 

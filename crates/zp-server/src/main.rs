@@ -13,7 +13,13 @@ async fn main() {
     // Initialise logging at the configured level
     let filter = format!("zp=debug,{}", zp_cfg.log_level.value);
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(filter.parse().unwrap_or_else(|_| "zp=debug".parse().unwrap())))
+        .with_env_filter(
+            EnvFilter::from_default_env().add_directive(
+                filter
+                    .parse()
+                    .unwrap_or_else(|_| "zp=debug".parse().unwrap()),
+            ),
+        )
         .init();
 
     // Log the provenance banner so operators can see where each setting came from

@@ -397,8 +397,12 @@ pub struct VerificationConfig {
     pub retries: u32,
 }
 
-fn default_verify_delay() -> u64 { 5 }
-fn default_verify_retries() -> u32 { 3 }
+fn default_verify_delay() -> u64 {
+    5
+}
+fn default_verify_retries() -> u32 {
+    3
+}
 
 /// How to probe a specific capability's verify endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -416,7 +420,9 @@ pub struct ProbeConfig {
     pub body: Option<String>,
 }
 
-fn default_probe_method() -> String { "GET".to_string() }
+fn default_probe_method() -> String {
+    "GET".to_string()
+}
 
 /// Tool metadata from [tool] section.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -570,10 +576,9 @@ pub struct ProviderOverride {
 
 /// Load and parse a `.zp-configure.toml` manifest from disk.
 pub fn load_manifest(path: &Path) -> Result<ToolManifest, ManifestError> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| ManifestError::Io(path.to_path_buf(), e))?;
-    toml::from_str(&content)
-        .map_err(|e| ManifestError::Parse(path.to_path_buf(), e))
+    let content =
+        std::fs::read_to_string(path).map_err(|e| ManifestError::Io(path.to_path_buf(), e))?;
+    toml::from_str(&content).map_err(|e| ManifestError::Parse(path.to_path_buf(), e))
 }
 
 /// Errors from manifest loading.
@@ -622,7 +627,10 @@ pub enum ResolutionStatus {
     /// Resolved — provider found in vault, env vars populated
     Resolved { provider_id: String },
     /// Shared — reusing another capability's provider
-    Shared { shared_with: String, provider_id: String },
+    Shared {
+        shared_with: String,
+        provider_id: String,
+    },
     /// Default — using local or built-in default (no vault key needed)
     DefaultLocal,
     /// Auto-generated — random secrets filled in
@@ -727,19 +735,17 @@ pub fn resolve_capability(
 
     // Try preferred providers in order
     for pref in &requirement.prefer {
-        if vault_providers.contains(pref) {
-            if provider_has_capability(catalog, pref, &target_cap) {
-                return CapabilityResolution {
-                    capability: capability_str.clone(),
-                    required: true,
-                    status: ResolutionStatus::Resolved {
-                        provider_id: pref.clone(),
-                    },
-                    confidence: Confidence::High,
-                    env_vars: HashMap::new(), // caller applies provider_overrides
-                    notes: vec![format!("Resolved to preferred provider: {pref}")],
-                };
-            }
+        if vault_providers.contains(pref) && provider_has_capability(catalog, pref, &target_cap) {
+            return CapabilityResolution {
+                capability: capability_str.clone(),
+                required: true,
+                status: ResolutionStatus::Resolved {
+                    provider_id: pref.clone(),
+                },
+                confidence: Confidence::High,
+                env_vars: HashMap::new(), // caller applies provider_overrides
+                notes: vec![format!("Resolved to preferred provider: {pref}")],
+            };
         }
     }
 

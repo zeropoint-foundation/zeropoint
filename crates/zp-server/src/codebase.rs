@@ -36,7 +36,7 @@ const SENSITIVE_PATTERNS: &[&str] = &[
     "secrets",
     "credentials",
     ".git",
-    "target",        // build artifacts — huge, not useful
+    "target", // build artifacts — huge, not useful
     "node_modules",
     ".cargo",
     "*.pem",
@@ -127,9 +127,8 @@ fn is_sensitive(path: &str) -> bool {
     let components: Vec<&str> = path.split('/').collect();
     for component in &components {
         for pattern in SENSITIVE_PATTERNS {
-            if pattern.starts_with('*') {
+            if let Some(suffix) = pattern.strip_prefix('*') {
                 // Glob suffix match: "*.pem" matches "server.pem"
-                let suffix = &pattern[1..];
                 if component.ends_with(suffix) {
                     return true;
                 }
@@ -167,6 +166,7 @@ fn detect_language(path: &Path) -> Option<String> {
 
 // ── Tree builder ────────────────────────────────────────────────────────
 
+#[allow(clippy::only_used_in_recursion)]
 fn build_tree(
     root: &Path,
     dir: &Path,
@@ -290,12 +290,13 @@ pub async fn tree_handler(
 
     // Emit receipt
     let event = format!("tool:codebase:tree:{}", tool);
-    let detail = format!("path={} depth={} entries={}", subpath, max_depth, count_entries(&tree));
-    tool_chain::emit_tool_receipt(
-        &state.0.audit_store,
-        &event,
-        Some(&detail),
+    let detail = format!(
+        "path={} depth={} entries={}",
+        subpath,
+        max_depth,
+        count_entries(&tree)
     );
+    tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
     (
         StatusCode::OK,
@@ -395,11 +396,7 @@ pub async fn read_handler(
     // Emit receipt
     let event = format!("tool:codebase:read:{}", tool);
     let detail = format!("path={} size={} lines={}", path, metadata.len(), lines);
-    tool_chain::emit_tool_receipt(
-        &state.0.audit_store,
-        &event,
-        Some(&detail),
-    );
+    tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
     (
         StatusCode::OK,
@@ -442,7 +439,14 @@ pub async fn search_handler(
     // Walk the source tree and grep
     let mut results = Vec::new();
     let mut files_searched = 0u32;
-    search_recursive(&root, &root, pattern, &mut results, &mut files_searched, max_results);
+    search_recursive(
+        &root,
+        &root,
+        pattern,
+        &mut results,
+        &mut files_searched,
+        max_results,
+    );
 
     // Emit receipt
     let event = format!("tool:codebase:search:{}", tool);
@@ -452,11 +456,7 @@ pub async fn search_handler(
         results.len(),
         files_searched
     );
-    tool_chain::emit_tool_receipt(
-        &state.0.audit_store,
-        &event,
-        Some(&detail),
-    );
+    tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
     (
         StatusCode::OK,
@@ -501,8 +501,8 @@ fn search_recursive(
 
     // Known source extensions
     let source_exts: HashSet<&str> = [
-        "rs", "toml", "json", "js", "ts", "html", "css", "py", "sh",
-        "sql", "md", "yml", "yaml", "txt",
+        "rs", "toml", "json", "js", "ts", "html", "css", "py", "sh", "sql", "md", "yml", "yaml",
+        "txt",
     ]
     .into_iter()
     .collect();
@@ -528,7 +528,14 @@ fn search_recursive(
         };
 
         if metadata.is_dir() {
-            search_recursive(root, &entry.path(), pattern, results, files_searched, max_results);
+            search_recursive(
+                root,
+                &entry.path(),
+                pattern,
+                results,
+                files_searched,
+                max_results,
+            );
         } else if metadata.is_file() && metadata.len() <= MAX_FILE_SIZE {
             // Only search text source files
             let has_ext = entry
@@ -563,7 +570,5 @@ fn search_recursive(
 
 /// Count total entries in a tree (for receipt detail).
 fn count_entries(tree: &[TreeEntry]) -> usize {
-    tree.iter()
-        .map(|e| 1 + count_entries(&e.children))
-        .sum()
+    tree.iter().map(|e| 1 + count_entries(&e.children)).sum()
 }

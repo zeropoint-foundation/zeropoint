@@ -70,42 +70,24 @@ pub fn provider_base_url(provider: &str) -> Option<&'static str> {
 fn allowed_path_prefixes(provider: &str) -> &'static [&'static str] {
     match provider {
         "openai" => &[
-            "v1/chat/completions", "v1/completions", "v1/embeddings",
-            "v1/models", "v1/moderations", "v1/images/generations",
-        ],
-        "anthropic" => &[
-            "v1/messages", "v1/complete",
-        ],
-        "groq" => &[
-            "v1/chat/completions", "v1/models",
-        ],
-        "mistral" => &[
-            "v1/chat/completions", "v1/embeddings", "v1/models",
-        ],
-        "together" => &[
-            "v1/chat/completions", "v1/completions", "v1/embeddings",
-        ],
-        "deepseek" => &[
             "v1/chat/completions",
+            "v1/completions",
+            "v1/embeddings",
+            "v1/models",
+            "v1/moderations",
+            "v1/images/generations",
         ],
-        "fireworks" => &[
-            "v1/chat/completions", "v1/completions", "v1/embeddings",
-        ],
-        "perplexity" => &[
-            "chat/completions",
-        ],
-        "cohere" => &[
-            "v1/chat", "v1/generate", "v1/embed", "v2/chat",
-        ],
-        "google" => &[
-            "v1beta/models", "v1/models",
-        ],
-        "openrouter" => &[
-            "v1/chat/completions",
-        ],
-        "siliconflow" => &[
-            "v1/chat/completions",
-        ],
+        "anthropic" => &["v1/messages", "v1/complete"],
+        "groq" => &["v1/chat/completions", "v1/models"],
+        "mistral" => &["v1/chat/completions", "v1/embeddings", "v1/models"],
+        "together" => &["v1/chat/completions", "v1/completions", "v1/embeddings"],
+        "deepseek" => &["v1/chat/completions"],
+        "fireworks" => &["v1/chat/completions", "v1/completions", "v1/embeddings"],
+        "perplexity" => &["chat/completions"],
+        "cohere" => &["v1/chat", "v1/generate", "v1/embed", "v2/chat"],
+        "google" => &["v1beta/models", "v1/models"],
+        "openrouter" => &["v1/chat/completions"],
+        "siliconflow" => &["v1/chat/completions"],
         _ => &[], // Unknown providers have no allowed paths
     }
 }
@@ -146,12 +128,15 @@ fn validate_proxy_path(provider: &str, path: &str) -> Result<String, String> {
     // Check against allowlist
     let prefixes = allowed_path_prefixes(provider);
     if prefixes.is_empty() {
-        return Err(format!("No allowed paths configured for provider '{}'", provider));
+        return Err(format!(
+            "No allowed paths configured for provider '{}'",
+            provider
+        ));
     }
 
-    let allowed = prefixes.iter().any(|prefix| {
-        normalized == *prefix || normalized.starts_with(&format!("{}/", prefix))
-    });
+    let allowed = prefixes
+        .iter()
+        .any(|prefix| normalized == *prefix || normalized.starts_with(&format!("{}/", prefix)));
 
     if !allowed {
         return Err(format!(
@@ -181,23 +166,44 @@ pub struct UsageMetrics {
 fn extract_openai_usage(body: &Value) -> UsageMetrics {
     let usage = body.get("usage").unwrap_or(&Value::Null);
     UsageMetrics {
-        prompt_tokens: usage.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
-        completion_tokens: usage.get("completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
-        total_tokens: usage.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
-        model: body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        prompt_tokens: usage
+            .get("prompt_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        completion_tokens: usage
+            .get("completion_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        total_tokens: usage
+            .get("total_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        model: body
+            .get("model")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
     }
 }
 
 /// Extract token usage from an Anthropic-format response.
 fn extract_anthropic_usage(body: &Value) -> UsageMetrics {
     let usage = body.get("usage").unwrap_or(&Value::Null);
-    let input = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-    let output = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let input = usage
+        .get("input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let output = usage
+        .get("output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     UsageMetrics {
         prompt_tokens: input,
         completion_tokens: output,
         total_tokens: input + output,
-        model: body.get("model").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        model: body
+            .get("model")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
     }
 }
 
@@ -218,8 +224,12 @@ pub fn extract_usage(provider: &str, body: &Value) -> UsageMetrics {
 pub fn estimate_cost_usd(provider: &str, model: Option<&str>, usage: &UsageMetrics) -> f64 {
     let (input_per_m, output_per_m) = match (provider, model) {
         // Anthropic
-        (_, Some(m)) if m.contains("claude-3-5-sonnet") || m.contains("claude-sonnet-4") => (3.0, 15.0),
-        (_, Some(m)) if m.contains("claude-3-5-haiku") || m.contains("claude-haiku-4") => (0.80, 4.0),
+        (_, Some(m)) if m.contains("claude-3-5-sonnet") || m.contains("claude-sonnet-4") => {
+            (3.0, 15.0)
+        }
+        (_, Some(m)) if m.contains("claude-3-5-haiku") || m.contains("claude-haiku-4") => {
+            (0.80, 4.0)
+        }
         (_, Some(m)) if m.contains("claude-3-opus") || m.contains("claude-opus-4") => (15.0, 75.0),
         // OpenAI
         (_, Some(m)) if m.contains("gpt-4o-mini") => (0.15, 0.60),
@@ -322,7 +332,9 @@ pub async fn proxy_handler(
     // 2. Policy check — rate limit via governance gate
     {
         let context = zp_core::PolicyContext {
-            action: zp_core::ActionType::ApiCall { endpoint: target_url.clone() },
+            action: zp_core::ActionType::ApiCall {
+                endpoint: target_url.clone(),
+            },
             trust_tier: zp_core::TrustTier::Tier1,
             channel: zp_core::Channel::Api,
             conversation_id: zp_core::ConversationId::new(),
@@ -371,8 +383,14 @@ pub async fn proxy_handler(
     for (key, value) in headers.iter() {
         let name = key.as_str().to_lowercase();
         match name.as_str() {
-            "authorization" | "x-api-key" | "anthropic-version" | "anthropic-beta"
-            | "content-type" | "accept" | "openai-organization" | "openai-project" => {
+            "authorization"
+            | "x-api-key"
+            | "anthropic-version"
+            | "anthropic-beta"
+            | "content-type"
+            | "accept"
+            | "openai-organization"
+            | "openai-project" => {
                 if let Ok(v) = value.to_str() {
                     req_builder = req_builder.header(key.clone(), v);
                 }
@@ -529,8 +547,14 @@ mod tests {
     #[test]
     fn test_provider_base_urls() {
         assert_eq!(provider_base_url("openai"), Some("https://api.openai.com"));
-        assert_eq!(provider_base_url("anthropic"), Some("https://api.anthropic.com"));
-        assert_eq!(provider_base_url("groq"), Some("https://api.groq.com/openai"));
+        assert_eq!(
+            provider_base_url("anthropic"),
+            Some("https://api.anthropic.com")
+        );
+        assert_eq!(
+            provider_base_url("groq"),
+            Some("https://api.groq.com/openai")
+        );
         assert_eq!(provider_base_url("unknown"), None);
     }
 

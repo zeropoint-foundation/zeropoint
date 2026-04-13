@@ -23,7 +23,9 @@ use zp_hardening_tests::payloads::authz;
 #[tokio::test]
 async fn test_authz_vuln_03_unauth_audit_clear() {
     let app = TestApp::new().await;
-    let (status, _body) = app.post_json("/api/v1/audit/clear", authz::audit_clear()).await;
+    let (status, _body) = app
+        .post_json("/api/v1/audit/clear", authz::audit_clear())
+        .await;
 
     // After Phase 0.3: endpoint is removed entirely (404) or requires auth (401).
     // Before Phase 0.1 (auth middleware): it returns 200 (vulnerable).
@@ -46,7 +48,9 @@ async fn test_authz_vuln_03_audit_entries_survive_clear() {
     let app = TestApp::new().await;
 
     // Attempt to clear the audit trail (should fail)
-    let _ = app.post_json("/api/v1/audit/clear", authz::audit_clear()).await;
+    let _ = app
+        .post_json("/api/v1/audit/clear", authz::audit_clear())
+        .await;
 
     // Audit entries should still exist. If auth blocks us from reading too,
     // that's also acceptable (the point is the clear didn't succeed).
@@ -76,7 +80,10 @@ async fn test_authz_vuln_03_audit_entries_survive_clear() {
 async fn test_authz_vuln_04_unauth_audit_tamper() {
     let app = TestApp::new().await;
     let (status, _body) = app
-        .post_json("/api/v1/audit/simulate-tamper", authz::audit_simulate_tamper())
+        .post_json(
+            "/api/v1/audit/simulate-tamper",
+            authz::audit_simulate_tamper(),
+        )
         .await;
 
     assert!(

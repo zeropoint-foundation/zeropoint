@@ -28,9 +28,7 @@
 //! The engine NEVER silently drops variables it doesn't understand. Every env var
 //! falls into exactly one of: resolved, defaulted, inferred, or attention.
 
-use crate::capability::{
-    AutoGenerate, CapabilityRequirement, Confidence, ToolManifest, ToolMeta,
-};
+use crate::capability::{AutoGenerate, CapabilityRequirement, Confidence, ToolManifest, ToolMeta};
 use crate::providers::{self, ProviderProfile};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -312,10 +310,7 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
                         let inferred = providers::infer_provider_from_var(&var_name);
                         // Check if this inferred provider is in the catalog
                         if catalog.iter().any(|p| p.id == inferred) {
-                            provider_vars
-                                .entry(inferred)
-                                .or_default()
-                                .push(info);
+                            provider_vars.entry(inferred).or_default().push(info);
                         } else {
                             unrecognized.push(info);
                         }
@@ -333,9 +328,8 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
                             });
                         } else {
                             // Append to existing database requirement
-                            if let Some(db_req) = required
-                                .iter_mut()
-                                .find(|r| r.capability == "database")
+                            if let Some(db_req) =
+                                required.iter_mut().find(|r| r.capability == "database")
                             {
                                 db_req.env_vars.push(var_name.clone());
                             }
@@ -357,22 +351,20 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
     let non_llm_providers = collect_non_llm_providers(&provider_vars, &catalog);
 
     // Collapse multiple LLM providers into a single reasoning_llm requirement
-    if !llm_providers.is_empty() {
-        if !seen_capabilities.contains("reasoning_llm") {
-            seen_capabilities.insert("reasoning_llm".into());
-            let all_llm_vars: Vec<String> = llm_providers
-                .iter()
-                .flat_map(|(_, vars)| vars.iter().map(|v| v.name.clone()))
-                .collect();
-            let prefer: Vec<String> = llm_providers.iter().map(|(id, _)| id.clone()).collect();
+    if !llm_providers.is_empty() && !seen_capabilities.contains("reasoning_llm") {
+        seen_capabilities.insert("reasoning_llm".into());
+        let all_llm_vars: Vec<String> = llm_providers
+            .iter()
+            .flat_map(|(_, vars)| vars.iter().map(|v| v.name.clone()))
+            .collect();
+        let prefer: Vec<String> = llm_providers.iter().map(|(id, _)| id.clone()).collect();
 
-            required.push(CapabilityRequirement {
-                capability: "reasoning_llm".into(),
-                env_vars: all_llm_vars,
-                prefer,
-                ..default_requirement()
-            });
-        }
+        required.push(CapabilityRequirement {
+            capability: "reasoning_llm".into(),
+            env_vars: all_llm_vars,
+            prefer,
+            ..default_requirement()
+        });
     }
 
     // Non-LLM capabilities (embedding, search, observability, etc.)
@@ -459,9 +451,9 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
                 "Looks like a credential but matches no known provider (inferred: {})",
                 providers::infer_provider_from_var(&var.name)
             ),
-            suggestion: Some(format!(
-                "Add to vault manually, or add a pattern for this provider"
-            )),
+            suggestion: Some(
+                "Add to vault manually, or add a pattern for this provider".to_string(),
+            ),
         });
     }
 
@@ -486,7 +478,7 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
         tool: ToolMeta {
             name: tool_name.to_string(),
             version: String::new(),
-            description: format!("Auto-inferred from .env.example — review and commit"),
+            description: "Auto-inferred from .env.example — review and commit".to_string(),
         },
         required,
         optional,
@@ -696,7 +688,11 @@ fn emit_capability_requirement(out: &mut String, req: &CapabilityRequirement, se
 fn validate_manifest(manifest: &ToolManifest, attention: &mut Vec<AttentionItem>) {
     // Check for unknown capabilities
     for req in manifest.required.iter().chain(manifest.optional.iter()) {
-        if req.capability.parse::<crate::capability::Capability>().is_err() {
+        if req
+            .capability
+            .parse::<crate::capability::Capability>()
+            .is_err()
+        {
             attention.push(AttentionItem {
                 kind: AttentionKind::UnknownCapability,
                 subject: req.capability.clone(),
@@ -704,9 +700,7 @@ fn validate_manifest(manifest: &ToolManifest, attention: &mut Vec<AttentionItem>
                     "Capability '{}' is not in the ZeroPoint taxonomy",
                     req.capability
                 ),
-                suggestion: Some(
-                    "Check spelling, or add this as a custom capability".into(),
-                ),
+                suggestion: Some("Check spelling, or add this as a custom capability".into()),
             });
         }
     }
@@ -723,7 +717,9 @@ fn validate_manifest(manifest: &ToolManifest, attention: &mut Vec<AttentionItem>
                 subject: req.capability.clone(),
                 reason: "Required capability has no env_vars, no shared_with, and no local_default"
                     .into(),
-                suggestion: Some("Add env_vars mapping or mark as shared_with another capability".into()),
+                suggestion: Some(
+                    "Add env_vars mapping or mark as shared_with another capability".into(),
+                ),
             });
         }
     }
@@ -778,14 +774,13 @@ fn classify_var(var_name: &str, template_value: &str) -> VarClass {
     {
         return VarClass::DatabaseUrl;
     }
-    if upper.starts_with("POSTGRES_")
+    if (upper.starts_with("POSTGRES_")
         || upper.starts_with("MYSQL_")
         || upper.starts_with("DB_")
-        || upper.starts_with("DATABASE_")
+        || upper.starts_with("DATABASE_"))
+        && (upper.contains("PASSWORD") || upper.contains("USER") || upper.contains("NAME"))
     {
-        if upper.contains("PASSWORD") || upper.contains("USER") || upper.contains("NAME") {
-            return VarClass::DatabaseCredential;
-        }
+        return VarClass::DatabaseCredential;
     }
 
     // Auto-generatable secrets (salts, internal passwords, encryption keys)
@@ -827,10 +822,7 @@ fn classify_var(var_name: &str, template_value: &str) -> VarClass {
     }
 
     // Model selectors
-    if upper.ends_with("_MODEL")
-        || upper.ends_with("_MODELS")
-        || upper.contains("_MODEL_")
-    {
+    if upper.ends_with("_MODEL") || upper.ends_with("_MODELS") || upper.contains("_MODEL_") {
         return VarClass::Model;
     }
 
@@ -904,11 +896,7 @@ fn collect_non_llm_providers(
             catalog
                 .iter()
                 .find(|p| &p.id == *id)
-                .map(|p| {
-                    p.capabilities
-                        .iter()
-                        .any(|c| !is_llm_capability(c))
-                })
+                .map(|p| p.capabilities.iter().any(|c| !is_llm_capability(c)))
                 .unwrap_or(false)
         })
         .map(|(id, vars)| (id.clone(), vars.clone()))
@@ -1053,10 +1041,7 @@ mod tests {
 
     #[test]
     fn classify_var_urls() {
-        assert_eq!(
-            classify_var("OPENAI_BASE_URL", ""),
-            VarClass::ProbableUrl
-        );
+        assert_eq!(classify_var("OPENAI_BASE_URL", ""), VarClass::ProbableUrl);
         assert_eq!(
             classify_var("RANDOM_THING", "https://example.com"),
             VarClass::ProbableUrl
@@ -1065,26 +1050,17 @@ mod tests {
 
     #[test]
     fn classify_var_secrets() {
-        assert_eq!(
-            classify_var("JWT_SECRET", ""),
-            VarClass::ProbableSecret
-        );
+        assert_eq!(classify_var("JWT_SECRET", ""), VarClass::ProbableSecret);
         assert_eq!(
             classify_var("NEXTAUTH_SECRET", ""),
             VarClass::ProbableSecret
         );
-        assert_eq!(
-            classify_var("ENCRYPTION_KEY", ""),
-            VarClass::ProbableSecret
-        );
+        assert_eq!(classify_var("ENCRYPTION_KEY", ""), VarClass::ProbableSecret);
     }
 
     #[test]
     fn classify_var_database() {
-        assert_eq!(
-            classify_var("DATABASE_URL", ""),
-            VarClass::DatabaseUrl
-        );
+        assert_eq!(classify_var("DATABASE_URL", ""), VarClass::DatabaseUrl);
         assert_eq!(
             classify_var("POSTGRES_PASSWORD", ""),
             VarClass::DatabaseCredential
@@ -1093,14 +1069,8 @@ mod tests {
 
     #[test]
     fn classify_var_toggles() {
-        assert_eq!(
-            classify_var("ENABLE_SEARCH", ""),
-            VarClass::Toggle
-        );
-        assert_eq!(
-            classify_var("SOMETHING", "true"),
-            VarClass::Toggle
-        );
+        assert_eq!(classify_var("ENABLE_SEARCH", ""), VarClass::Toggle);
+        assert_eq!(classify_var("SOMETHING", "true"), VarClass::Toggle);
     }
 
     #[test]
@@ -1150,7 +1120,10 @@ prefer = ["anthropic", "openai"]
         .unwrap();
 
         let result = discover_tool(&dir);
-        assert_eq!(result.source, ManifestSource::File(dir.join(".zp-configure.toml")));
+        assert_eq!(
+            result.source,
+            ManifestSource::File(dir.join(".zp-configure.toml"))
+        );
         assert_eq!(result.confidence, Confidence::High);
         assert_eq!(result.manifest.required.len(), 1);
         assert!(result.attention_items.is_empty());
@@ -1183,7 +1156,11 @@ prefer = ["anthropic", "openai"]
             .iter()
             .map(|r| r.capability.as_str())
             .collect();
-        assert!(caps.contains(&"reasoning_llm"), "missing reasoning_llm: {:?}", caps);
+        assert!(
+            caps.contains(&"reasoning_llm"),
+            "missing reasoning_llm: {:?}",
+            caps
+        );
         assert!(caps.contains(&"database"), "missing database: {:?}", caps);
 
         let _ = fs::remove_dir_all(&dir);

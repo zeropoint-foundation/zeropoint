@@ -245,10 +245,18 @@ pub struct AnchoringConfig {
     pub enabled: bool,
 }
 
-fn default_cadence_receipts() -> u64 { 100 }
-fn default_cadence_minutes() -> u64 { 15 }
-fn default_max_cost_usd() -> f64 { 0.001 }
-fn default_enabled() -> bool { true }
+fn default_cadence_receipts() -> u64 {
+    100
+}
+fn default_cadence_minutes() -> u64 {
+    15
+}
+fn default_max_cost_usd() -> f64 {
+    0.001
+}
+fn default_enabled() -> bool {
+    true
+}
 
 impl Default for AnchoringConfig {
     fn default() -> Self {

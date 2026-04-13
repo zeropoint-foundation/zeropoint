@@ -165,14 +165,11 @@ impl ReceiptVerifier {
         };
 
         // 5. Revocation check
-        if receipt.revoked_at.is_some() {
+        if let Some(revoked_at) = receipt.revoked_at {
             checks.push(VerificationCheck {
                 name: "revocation".to_string(),
                 passed: false,
-                detail: format!(
-                    "Receipt was revoked at {}",
-                    receipt.revoked_at.unwrap()
-                ),
+                detail: format!("Receipt was revoked at {}", revoked_at),
             });
         }
 
@@ -212,16 +209,31 @@ impl ReceiptVerifier {
 
         // 9. Claim metadata type consistency
         if let Some(ref meta) = receipt.claim_metadata {
-            let type_matches = match (&receipt.receipt_type, meta) {
-                (crate::ReceiptType::ObservationClaim, crate::ClaimMetadata::Observation { .. }) => true,
-                (crate::ReceiptType::PolicyClaim, crate::ClaimMetadata::Policy { .. }) => true,
-                (crate::ReceiptType::AuthorizationClaim, crate::ClaimMetadata::Authorization { .. }) => true,
-                (crate::ReceiptType::MemoryPromotionClaim, crate::ClaimMetadata::MemoryPromotion { .. }) => true,
-                (crate::ReceiptType::DelegationClaim, crate::ClaimMetadata::Delegation { .. }) => true,
-                (crate::ReceiptType::NarrativeSynthesisClaim, crate::ClaimMetadata::NarrativeSynthesis { .. }) => true,
-                (crate::ReceiptType::RevocationClaim, crate::ClaimMetadata::Revocation { .. }) => true,
-                _ => false,
-            };
+            let type_matches = matches!(
+                (&receipt.receipt_type, meta),
+                (
+                    crate::ReceiptType::ObservationClaim,
+                    crate::ClaimMetadata::Observation { .. }
+                ) | (
+                    crate::ReceiptType::PolicyClaim,
+                    crate::ClaimMetadata::Policy { .. }
+                ) | (
+                    crate::ReceiptType::AuthorizationClaim,
+                    crate::ClaimMetadata::Authorization { .. },
+                ) | (
+                    crate::ReceiptType::MemoryPromotionClaim,
+                    crate::ClaimMetadata::MemoryPromotion { .. },
+                ) | (
+                    crate::ReceiptType::DelegationClaim,
+                    crate::ClaimMetadata::Delegation { .. }
+                ) | (
+                    crate::ReceiptType::NarrativeSynthesisClaim,
+                    crate::ClaimMetadata::NarrativeSynthesis { .. },
+                ) | (
+                    crate::ReceiptType::RevocationClaim,
+                    crate::ClaimMetadata::Revocation { .. }
+                )
+            );
             checks.push(VerificationCheck {
                 name: "claim_metadata_type".to_string(),
                 passed: type_matches,

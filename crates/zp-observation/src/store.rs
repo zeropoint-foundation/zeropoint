@@ -234,7 +234,10 @@ impl ObservationStore {
         }
         tx.commit()?;
 
-        debug!(count = observation_ids.len(), "observations marked superseded");
+        debug!(
+            count = observation_ids.len(),
+            "observations marked superseded"
+        );
         Ok(())
     }
 
@@ -398,16 +401,10 @@ impl ObservationStore {
         for obs in &observations {
             if current_priority != Some(obs.priority) {
                 current_priority = Some(obs.priority);
-                summary.push_str(&format!(
-                    "\n## {} Priority\n",
-                    obs.priority.emoji()
-                ));
+                summary.push_str(&format!("\n## {} Priority\n", obs.priority.emoji()));
             }
 
-            let time_str = obs
-                .relative_time
-                .as_deref()
-                .unwrap_or("unknown time");
+            let time_str = obs.relative_time.as_deref().unwrap_or("unknown time");
 
             summary.push_str(&format!(
                 "- [{}] {} ({})\n",
@@ -434,8 +431,8 @@ impl ObservationStore {
         let token_estimate_raw: i64 = row.get(9).map_err(StoreError::Database)?;
         let receipt_id: Option<String> = row.get(10).map_err(StoreError::Database)?;
 
-        let priority = ObservationPriority::from_str_loose(&priority_str)
-            .unwrap_or(ObservationPriority::Low);
+        let priority =
+            ObservationPriority::from_str_loose(&priority_str).unwrap_or(ObservationPriority::Low);
 
         let referenced_at = DateTime::parse_from_rfc3339(&referenced_at_str)
             .map(|dt| dt.with_timezone(&Utc))
@@ -511,13 +508,25 @@ mod tests {
     fn priority_filtering() {
         let store = ObservationStore::in_memory().unwrap();
         store
-            .append(&make_observation("o1", "low priority", ObservationPriority::Low))
+            .append(&make_observation(
+                "o1",
+                "low priority",
+                ObservationPriority::Low,
+            ))
             .unwrap();
         store
-            .append(&make_observation("o2", "high priority", ObservationPriority::High))
+            .append(&make_observation(
+                "o2",
+                "high priority",
+                ObservationPriority::High,
+            ))
             .unwrap();
         store
-            .append(&make_observation("o3", "medium priority", ObservationPriority::Medium))
+            .append(&make_observation(
+                "o3",
+                "medium priority",
+                ObservationPriority::Medium,
+            ))
             .unwrap();
 
         let high_only = store.get_by_priority(ObservationPriority::High).unwrap();
@@ -556,9 +565,7 @@ mod tests {
 
         assert_eq!(store.active_count().unwrap(), 2);
 
-        store
-            .mark_superseded(&["o1".to_string()])
-            .unwrap();
+        store.mark_superseded(&["o1".to_string()]).unwrap();
 
         assert_eq!(store.active_count().unwrap(), 1);
         let active = store.get_active().unwrap();
@@ -611,19 +618,35 @@ mod tests {
 
         // Add initial observations
         store
-            .append(&make_observation("o1", "fact about X", ObservationPriority::Low))
+            .append(&make_observation(
+                "o1",
+                "fact about X",
+                ObservationPriority::Low,
+            ))
             .unwrap();
         store
-            .append(&make_observation("o2", "fact about X updated", ObservationPriority::Medium))
+            .append(&make_observation(
+                "o2",
+                "fact about X updated",
+                ObservationPriority::Medium,
+            ))
             .unwrap();
         store
-            .append(&make_observation("o3", "stale fact", ObservationPriority::Completed))
+            .append(&make_observation(
+                "o3",
+                "stale fact",
+                ObservationPriority::Completed,
+            ))
             .unwrap();
 
         assert_eq!(store.active_count().unwrap(), 3);
 
         // Create a reflection that merges o1+o2 and drops o3
-        let merged = make_observation("o4", "comprehensive fact about X", ObservationPriority::Medium);
+        let merged = make_observation(
+            "o4",
+            "comprehensive fact about X",
+            ObservationPriority::Medium,
+        );
 
         let reflection = Reflection {
             id: "r1".to_string(),
@@ -649,10 +672,18 @@ mod tests {
     fn format_summary_output() {
         let store = ObservationStore::in_memory().unwrap();
         store
-            .append(&make_observation("o1", "critical blocker", ObservationPriority::High))
+            .append(&make_observation(
+                "o1",
+                "critical blocker",
+                ObservationPriority::High,
+            ))
             .unwrap();
         store
-            .append(&make_observation("o2", "user likes Rust", ObservationPriority::Low))
+            .append(&make_observation(
+                "o2",
+                "user likes Rust",
+                ObservationPriority::Low,
+            ))
             .unwrap();
 
         let summary = store.format_summary().unwrap();

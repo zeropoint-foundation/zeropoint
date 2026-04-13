@@ -45,7 +45,8 @@ struct ScrubRule {
 
 fn rules() -> &'static [ScrubRule] {
     static RULES: OnceLock<Vec<ScrubRule>> = OnceLock::new();
-    RULES.get_or_init(|| vec![
+    RULES.get_or_init(|| {
+        vec![
         // `Bearer <hex-or-base64-ish>` — the classic Authorization-header leak.
         ScrubRule {
             pattern: Regex::new(r"(?i)Bearer\s+[A-Za-z0-9._\-/+=]{8,}").unwrap(),
@@ -92,7 +93,8 @@ fn rules() -> &'static [ScrubRule] {
             pattern: Regex::new(r"(?i)(x-api-key|x-auth-token)\s*:\s*[^\s,;]+").unwrap(),
             replacement: "$1: <redacted>",
         },
-    ])
+    ]
+    })
 }
 
 /// Apply every redaction rule to `input`, returning the scrubbed string.
@@ -103,7 +105,10 @@ pub fn scrub_secrets(input: &str) -> String {
     let mut out = std::borrow::Cow::Borrowed(input);
     for rule in rules().iter() {
         if rule.pattern.is_match(&out) {
-            let replaced = rule.pattern.replace_all(&out, rule.replacement).into_owned();
+            let replaced = rule
+                .pattern
+                .replace_all(&out, rule.replacement)
+                .into_owned();
             out = std::borrow::Cow::Owned(replaced);
         }
     }

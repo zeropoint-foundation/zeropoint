@@ -76,11 +76,30 @@ pub struct ValidationReport {
 impl ValidationReport {
     pub fn from_results(results: Vec<ValidationResult>) -> Self {
         let total = results.len();
-        let valid = results.iter().filter(|r| r.status == ValidationStatus::Valid).count();
-        let invalid = results.iter().filter(|r| r.status == ValidationStatus::Invalid).count();
-        let unreachable = results.iter().filter(|r| r.status == ValidationStatus::Unreachable).count();
-        let unsupported = results.iter().filter(|r| r.status == ValidationStatus::Unsupported).count();
-        ValidationReport { results, total, valid, invalid, unreachable, unsupported }
+        let valid = results
+            .iter()
+            .filter(|r| r.status == ValidationStatus::Valid)
+            .count();
+        let invalid = results
+            .iter()
+            .filter(|r| r.status == ValidationStatus::Invalid)
+            .count();
+        let unreachable = results
+            .iter()
+            .filter(|r| r.status == ValidationStatus::Unreachable)
+            .count();
+        let unsupported = results
+            .iter()
+            .filter(|r| r.status == ValidationStatus::Unsupported)
+            .count();
+        ValidationReport {
+            results,
+            total,
+            valid,
+            invalid,
+            unreachable,
+            unsupported,
+        }
     }
 }
 
@@ -105,9 +124,7 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 /// credential to a provider profile, and runs the appropriate probe.
 ///
 /// Credentials are tested concurrently (up to 8 at a time).
-pub async fn validate_credentials(
-    creds: &[CredentialToValidate],
-) -> ValidationReport {
+pub async fn validate_credentials(creds: &[CredentialToValidate]) -> ValidationReport {
     let catalog = providers::load_catalog();
     let catalog_map: HashMap<String, &ProviderProfile> =
         catalog.iter().map(|p| (p.id.clone(), p)).collect();
@@ -163,16 +180,39 @@ async fn validate_single(
 
     let (status, detail) = match cred.provider_id.as_str() {
         // ── OpenAI-compatible providers ─────────────────────────
-        "openai" => probe_openai_models(client, "https://api.openai.com/v1/models", &cred.value).await,
-        "mistral" => probe_openai_models(client, "https://api.mistral.ai/v1/models", &cred.value).await,
-        "groq" => probe_openai_models(client, "https://api.groq.com/openai/v1/models", &cred.value).await,
-        "together" => probe_openai_models(client, "https://api.together.xyz/v1/models", &cred.value).await,
-        "fireworks" => probe_openai_models(client, "https://api.fireworks.ai/inference/v1/models", &cred.value).await,
-        "deepseek" => probe_openai_models(client, "https://api.deepseek.com/v1/models", &cred.value).await,
+        "openai" => {
+            probe_openai_models(client, "https://api.openai.com/v1/models", &cred.value).await
+        }
+        "mistral" => {
+            probe_openai_models(client, "https://api.mistral.ai/v1/models", &cred.value).await
+        }
+        "groq" => {
+            probe_openai_models(client, "https://api.groq.com/openai/v1/models", &cred.value).await
+        }
+        "together" => {
+            probe_openai_models(client, "https://api.together.xyz/v1/models", &cred.value).await
+        }
+        "fireworks" => {
+            probe_openai_models(
+                client,
+                "https://api.fireworks.ai/inference/v1/models",
+                &cred.value,
+            )
+            .await
+        }
+        "deepseek" => {
+            probe_openai_models(client, "https://api.deepseek.com/v1/models", &cred.value).await
+        }
         "xai" => probe_openai_models(client, "https://api.x.ai/v1/models", &cred.value).await,
-        "perplexity" => probe_openai_models(client, "https://api.perplexity.ai/models", &cred.value).await,
-        "ai21" => probe_openai_models(client, "https://api.ai21.com/studio/v1/models", &cred.value).await,
-        "openrouter" => probe_openai_models(client, "https://openrouter.ai/api/v1/models", &cred.value).await,
+        "perplexity" => {
+            probe_openai_models(client, "https://api.perplexity.ai/models", &cred.value).await
+        }
+        "ai21" => {
+            probe_openai_models(client, "https://api.ai21.com/studio/v1/models", &cred.value).await
+        }
+        "openrouter" => {
+            probe_openai_models(client, "https://openrouter.ai/api/v1/models", &cred.value).await
+        }
         "abacus" => probe_abacus(client, &cred.value).await,
 
         // ── Anthropic (non-OpenAI protocol) ────────────────────
@@ -182,26 +222,40 @@ async fn validate_single(
         "gemini" => probe_gemini(client, &cred.value).await,
 
         // ── Cohere ─────────────────────────────────────────────
-        "cohere" => probe_openai_models(client, "https://api.cohere.ai/v2/models", &cred.value).await,
+        "cohere" => {
+            probe_openai_models(client, "https://api.cohere.ai/v2/models", &cred.value).await
+        }
 
         // ── Embedding / Specialized ────────────────────────────
-        "voyage" => probe_openai_models(client, "https://api.voyageai.com/v1/models", &cred.value).await,
+        "voyage" => {
+            probe_openai_models(client, "https://api.voyageai.com/v1/models", &cred.value).await
+        }
         "replicate" => probe_replicate(client, &cred.value).await,
         "huggingface" => probe_huggingface(client, &cred.value).await,
-        "nomic" => probe_bearer_get(client, "https://api-atlas.nomic.ai/v1/models", &cred.value).await,
+        "nomic" => {
+            probe_bearer_get(client, "https://api-atlas.nomic.ai/v1/models", &cred.value).await
+        }
 
         // ── Cloud Platforms ────────────────────────────────────
         "azure-openai" => {
             // Azure needs the resource name from the key, skip for now
-            (ValidationStatus::Unsupported, "Azure requires resource endpoint — use zp configure validate --azure-endpoint".into())
+            (
+                ValidationStatus::Unsupported,
+                "Azure requires resource endpoint — use zp configure validate --azure-endpoint"
+                    .into(),
+            )
         }
         "bedrock" => {
             // AWS IAM validation needs SigV4 signing — heavyweight
-            (ValidationStatus::Unsupported, "AWS Bedrock requires STS GetCallerIdentity (not yet implemented)".into())
+            (
+                ValidationStatus::Unsupported,
+                "AWS Bedrock requires STS GetCallerIdentity (not yet implemented)".into(),
+            )
         }
-        "vertex" => {
-            (ValidationStatus::Unsupported, "Vertex AI requires service account validation (not yet implemented)".into())
-        }
+        "vertex" => (
+            ValidationStatus::Unsupported,
+            "Vertex AI requires service account validation (not yet implemented)".into(),
+        ),
 
         // ── Search APIs ────────────────────────────────────────
         "tavily" => probe_tavily(client, &cred.value).await,
@@ -213,7 +267,10 @@ async fn validate_single(
                 probe_hedera_account(client, &cred.value).await
             } else {
                 // Private key can't be validated without signing a transaction
-                (ValidationStatus::Skipped, "Private key validation requires transaction signing".into())
+                (
+                    ValidationStatus::Skipped,
+                    "Private key validation requires transaction signing".into(),
+                )
             }
         }
 
@@ -225,10 +282,16 @@ async fn validate_single(
                     let url = format!("{}/models", p.base_url.trim_end_matches('/'));
                     probe_openai_models(client, &url, &cred.value).await
                 } else {
-                    (ValidationStatus::Unsupported, format!("No validation probe for provider '{}'", cred.provider_id))
+                    (
+                        ValidationStatus::Unsupported,
+                        format!("No validation probe for provider '{}'", cred.provider_id),
+                    )
                 }
             } else {
-                (ValidationStatus::Unsupported, format!("Unknown provider '{}'", cred.provider_id))
+                (
+                    ValidationStatus::Unsupported,
+                    format!("Unknown provider '{}'", cred.provider_id),
+                )
             }
         }
     };
@@ -273,17 +336,33 @@ async fn probe_openai_models(
                             .and_then(|d| d.as_array())
                             .map(|a| a.len())
                             .unwrap_or(0);
-                        (ValidationStatus::Valid, format!("{count} model(s) available"))
+                        (
+                            ValidationStatus::Valid,
+                            format!("{count} model(s) available"),
+                        )
                     } else {
                         (ValidationStatus::Valid, "Key accepted".into())
                     }
                 }
-                401 | 403 => (ValidationStatus::Invalid, format!("HTTP {status_code} — authentication failed")),
-                429 => (ValidationStatus::Valid, "Key accepted (rate limited — but auth passed)".into()),
+                401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {status_code} — authentication failed"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "Key accepted (rate limited — but auth passed)".into(),
+                ),
                 _ => {
                     let body = resp.text().await.unwrap_or_default();
-                    let snippet = if body.len() > 120 { &body[..120] } else { &body };
-                    (ValidationStatus::Unreachable, format!("HTTP {status_code}: {snippet}"))
+                    let snippet = if body.len() > 120 {
+                        &body[..120]
+                    } else {
+                        &body
+                    };
+                    (
+                        ValidationStatus::Unreachable,
+                        format!("HTTP {status_code}: {snippet}"),
+                    )
                 }
             }
         }
@@ -294,10 +373,7 @@ async fn probe_openai_models(
 /// Probe Abacus.ai via their native REST API.
 /// Abacus uses `apiKey` as an HTTP header (not Bearer, not body).
 /// `listApiKeys` is a lightweight read-only endpoint that validates the key.
-async fn probe_abacus(
-    client: &reqwest::Client,
-    api_key: &str,
-) -> (ValidationStatus, String) {
+async fn probe_abacus(client: &reqwest::Client, api_key: &str) -> (ValidationStatus, String) {
     match client
         .get("https://api.abacus.ai/api/v0/listApiKeys")
         .header("apiKey", api_key)
@@ -309,28 +385,50 @@ async fn probe_abacus(
             match code {
                 200 => {
                     if let Ok(body) = resp.json::<serde_json::Value>().await {
-                        let success = body.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
+                        let success = body
+                            .get("success")
+                            .and_then(|s| s.as_bool())
+                            .unwrap_or(false);
                         if success {
                             let count = body
                                 .get("result")
                                 .and_then(|r| r.as_array())
                                 .map(|a| a.len())
                                 .unwrap_or(0);
-                            (ValidationStatus::Valid, format!("API key accepted ({count} key(s) on account)"))
+                            (
+                                ValidationStatus::Valid,
+                                format!("API key accepted ({count} key(s) on account)"),
+                            )
                         } else {
-                            let err = body.get("error").and_then(|e| e.as_str()).unwrap_or("unknown");
+                            let err = body
+                                .get("error")
+                                .and_then(|e| e.as_str())
+                                .unwrap_or("unknown");
                             (ValidationStatus::Invalid, format!("API rejected: {err}"))
                         }
                     } else {
                         (ValidationStatus::Valid, "Key accepted".into())
                     }
                 }
-                401 | 403 => (ValidationStatus::Invalid, format!("HTTP {code} — API key rejected")),
-                429 => (ValidationStatus::Valid, "Key accepted (rate limited)".into()),
+                401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {code} — API key rejected"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "Key accepted (rate limited)".into(),
+                ),
                 _ => {
                     let body = resp.text().await.unwrap_or_default();
-                    let snippet = if body.len() > 120 { &body[..120] } else { &body };
-                    (ValidationStatus::Unreachable, format!("HTTP {code}: {snippet}"))
+                    let snippet = if body.len() > 120 {
+                        &body[..120]
+                    } else {
+                        &body
+                    };
+                    (
+                        ValidationStatus::Unreachable,
+                        format!("HTTP {code}: {snippet}"),
+                    )
                 }
             }
         }
@@ -354,8 +452,14 @@ async fn probe_bearer_get(
             let code = resp.status().as_u16();
             match code {
                 200..=299 => (ValidationStatus::Valid, "Key accepted".into()),
-                401 | 403 => (ValidationStatus::Invalid, format!("HTTP {code} — authentication failed")),
-                429 => (ValidationStatus::Valid, "Key accepted (rate limited)".into()),
+                401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {code} — authentication failed"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "Key accepted (rate limited)".into(),
+                ),
                 _ => (ValidationStatus::Unreachable, format!("HTTP {code}")),
             }
         }
@@ -365,10 +469,7 @@ async fn probe_bearer_get(
 
 /// Probe Anthropic's API via the models list endpoint.
 /// Anthropic uses `x-api-key` header, not Bearer token.
-async fn probe_anthropic(
-    client: &reqwest::Client,
-    api_key: &str,
-) -> (ValidationStatus, String) {
+async fn probe_anthropic(client: &reqwest::Client, api_key: &str) -> (ValidationStatus, String) {
     match client
         .get("https://api.anthropic.com/v1/models")
         .header("x-api-key", api_key)
@@ -386,17 +487,33 @@ async fn probe_anthropic(
                             .and_then(|d| d.as_array())
                             .map(|a| a.len())
                             .unwrap_or(0);
-                        (ValidationStatus::Valid, format!("{count} model(s) available"))
+                        (
+                            ValidationStatus::Valid,
+                            format!("{count} model(s) available"),
+                        )
                     } else {
                         (ValidationStatus::Valid, "Key accepted".into())
                     }
                 }
-                401 | 403 => (ValidationStatus::Invalid, format!("HTTP {code} — authentication failed")),
-                429 => (ValidationStatus::Valid, "Key accepted (rate limited)".into()),
+                401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {code} — authentication failed"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "Key accepted (rate limited)".into(),
+                ),
                 _ => {
                     let body = resp.text().await.unwrap_or_default();
-                    let snippet = if body.len() > 120 { &body[..120] } else { &body };
-                    (ValidationStatus::Unreachable, format!("HTTP {code}: {snippet}"))
+                    let snippet = if body.len() > 120 {
+                        &body[..120]
+                    } else {
+                        &body
+                    };
+                    (
+                        ValidationStatus::Unreachable,
+                        format!("HTTP {code}: {snippet}"),
+                    )
                 }
             }
         }
@@ -406,13 +523,8 @@ async fn probe_anthropic(
 
 /// Probe Google Gemini via model listing.
 /// Gemini uses `?key=` query parameter, not headers.
-async fn probe_gemini(
-    client: &reqwest::Client,
-    api_key: &str,
-) -> (ValidationStatus, String) {
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-    );
+async fn probe_gemini(client: &reqwest::Client, api_key: &str) -> (ValidationStatus, String) {
+    let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={api_key}");
     match client.get(&url).send().await {
         Ok(resp) => {
             let code = resp.status().as_u16();
@@ -424,13 +536,22 @@ async fn probe_gemini(
                             .and_then(|m| m.as_array())
                             .map(|a| a.len())
                             .unwrap_or(0);
-                        (ValidationStatus::Valid, format!("{count} model(s) available"))
+                        (
+                            ValidationStatus::Valid,
+                            format!("{count} model(s) available"),
+                        )
                     } else {
                         (ValidationStatus::Valid, "Key accepted".into())
                     }
                 }
-                400 | 401 | 403 => (ValidationStatus::Invalid, format!("HTTP {code} — API key rejected")),
-                429 => (ValidationStatus::Valid, "Key accepted (rate limited)".into()),
+                400 | 401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {code} — API key rejected"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "Key accepted (rate limited)".into(),
+                ),
                 _ => (ValidationStatus::Unreachable, format!("HTTP {code}")),
             }
         }
@@ -439,10 +560,7 @@ async fn probe_gemini(
 }
 
 /// Probe Replicate via their models endpoint.
-async fn probe_replicate(
-    client: &reqwest::Client,
-    api_token: &str,
-) -> (ValidationStatus, String) {
+async fn probe_replicate(client: &reqwest::Client, api_token: &str) -> (ValidationStatus, String) {
     match client
         .get("https://api.replicate.com/v1/models")
         .header("Authorization", format!("Bearer {api_token}"))
@@ -454,8 +572,14 @@ async fn probe_replicate(
             let code = resp.status().as_u16();
             match code {
                 200 => (ValidationStatus::Valid, "Token accepted".into()),
-                401 | 403 => (ValidationStatus::Invalid, format!("HTTP {code} — token rejected")),
-                429 => (ValidationStatus::Valid, "Token accepted (rate limited)".into()),
+                401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {code} — token rejected"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "Token accepted (rate limited)".into(),
+                ),
                 _ => (ValidationStatus::Unreachable, format!("HTTP {code}")),
             }
         }
@@ -464,10 +588,7 @@ async fn probe_replicate(
 }
 
 /// Probe Hugging Face via their whoami endpoint.
-async fn probe_huggingface(
-    client: &reqwest::Client,
-    token: &str,
-) -> (ValidationStatus, String) {
+async fn probe_huggingface(client: &reqwest::Client, token: &str) -> (ValidationStatus, String) {
     match client
         .get("https://huggingface.co/api/whoami-v2")
         .header("Authorization", format!("Bearer {token}"))
@@ -483,7 +604,10 @@ async fn probe_huggingface(
                             .get("name")
                             .and_then(|n| n.as_str())
                             .unwrap_or("unknown");
-                        (ValidationStatus::Valid, format!("Authenticated as '{name}'"))
+                        (
+                            ValidationStatus::Valid,
+                            format!("Authenticated as '{name}'"),
+                        )
                     } else {
                         (ValidationStatus::Valid, "Token accepted".into())
                     }
@@ -497,10 +621,7 @@ async fn probe_huggingface(
 }
 
 /// Probe Tavily search API with a minimal query.
-async fn probe_tavily(
-    client: &reqwest::Client,
-    api_key: &str,
-) -> (ValidationStatus, String) {
+async fn probe_tavily(client: &reqwest::Client, api_key: &str) -> (ValidationStatus, String) {
     let body = serde_json::json!({
         "api_key": api_key,
         "query": "test",
@@ -516,8 +637,14 @@ async fn probe_tavily(
             let code = resp.status().as_u16();
             match code {
                 200 => (ValidationStatus::Valid, "API key accepted".into()),
-                401 | 403 => (ValidationStatus::Invalid, format!("HTTP {code} — API key rejected")),
-                429 => (ValidationStatus::Valid, "API key accepted (rate limited)".into()),
+                401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {code} — API key rejected"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "API key accepted (rate limited)".into(),
+                ),
                 _ => (ValidationStatus::Unreachable, format!("HTTP {code}")),
             }
         }
@@ -526,10 +653,7 @@ async fn probe_tavily(
 }
 
 /// Probe Serper search API with a minimal query.
-async fn probe_serper(
-    client: &reqwest::Client,
-    api_key: &str,
-) -> (ValidationStatus, String) {
+async fn probe_serper(client: &reqwest::Client, api_key: &str) -> (ValidationStatus, String) {
     let body = serde_json::json!({
         "q": "test",
         "num": 1,
@@ -545,8 +669,14 @@ async fn probe_serper(
             let code = resp.status().as_u16();
             match code {
                 200 => (ValidationStatus::Valid, "API key accepted".into()),
-                401 | 403 => (ValidationStatus::Invalid, format!("HTTP {code} — API key rejected")),
-                429 => (ValidationStatus::Valid, "API key accepted (rate limited)".into()),
+                401 | 403 => (
+                    ValidationStatus::Invalid,
+                    format!("HTTP {code} — API key rejected"),
+                ),
+                429 => (
+                    ValidationStatus::Valid,
+                    "API key accepted (rate limited)".into(),
+                ),
                 _ => (ValidationStatus::Unreachable, format!("HTTP {code}")),
             }
         }
@@ -559,9 +689,7 @@ async fn probe_hedera_account(
     client: &reqwest::Client,
     account_id: &str,
 ) -> (ValidationStatus, String) {
-    let url = format!(
-        "https://mainnet-public.mirrornode.hedera.com/api/v1/accounts/{account_id}"
-    );
+    let url = format!("https://mainnet-public.mirrornode.hedera.com/api/v1/accounts/{account_id}");
     match client.get(&url).send().await {
         Ok(resp) => {
             let code = resp.status().as_u16();
@@ -574,13 +702,22 @@ async fn probe_hedera_account(
                             .and_then(|b| b.as_u64())
                             .unwrap_or(0);
                         let hbar = balance as f64 / 100_000_000.0;
-                        (ValidationStatus::Valid, format!("Account exists ({hbar:.4} ℏ)"))
+                        (
+                            ValidationStatus::Valid,
+                            format!("Account exists ({hbar:.4} ℏ)"),
+                        )
                     } else {
                         (ValidationStatus::Valid, "Account exists on mainnet".into())
                     }
                 }
-                404 => (ValidationStatus::Invalid, "Account not found on mainnet".into()),
-                _ => (ValidationStatus::Unreachable, format!("Mirror node HTTP {code}")),
+                404 => (
+                    ValidationStatus::Invalid,
+                    "Account not found on mainnet".into(),
+                ),
+                _ => (
+                    ValidationStatus::Unreachable,
+                    format!("Mirror node HTTP {code}"),
+                ),
             }
         }
         Err(e) => classify_request_error(e),
@@ -594,9 +731,15 @@ async fn probe_hedera_account(
 /// Classify a reqwest error into a validation status.
 fn classify_request_error(e: reqwest::Error) -> (ValidationStatus, String) {
     if e.is_timeout() {
-        (ValidationStatus::Unreachable, "Request timed out (10s)".into())
+        (
+            ValidationStatus::Unreachable,
+            "Request timed out (10s)".into(),
+        )
     } else if e.is_connect() {
-        (ValidationStatus::Unreachable, format!("Connection failed: {e}"))
+        (
+            ValidationStatus::Unreachable,
+            format!("Connection failed: {e}"),
+        )
     } else {
         (ValidationStatus::Unreachable, format!("Request error: {e}"))
     }
@@ -639,13 +782,8 @@ pub fn credentials_from_vault_refs(
 /// Format a validation report for terminal display.
 pub fn format_report(report: &ValidationReport) -> String {
     let mut out = String::new();
-    out.push_str(&format!(
-        "\n  ── Credential Validation ─────────────────────────────\n"
-    ));
-    out.push_str(&format!(
-        "  {} credential(s) tested\n\n",
-        report.total
-    ));
+    out.push_str("\n  ── Credential Validation ─────────────────────────────\n");
+    out.push_str(&format!("  {} credential(s) tested\n\n", report.total));
 
     for r in &report.results {
         let icon = match r.status {
@@ -758,16 +896,14 @@ mod tests {
 
     #[test]
     fn test_format_report() {
-        let results = vec![
-            ValidationResult {
-                provider_id: "openai".into(),
-                provider_name: "OpenAI".into(),
-                var_name: "OPENAI_API_KEY".into(),
-                status: ValidationStatus::Valid,
-                latency_ms: 150,
-                detail: "42 model(s) available".into(),
-            },
-        ];
+        let results = vec![ValidationResult {
+            provider_id: "openai".into(),
+            provider_name: "OpenAI".into(),
+            var_name: "OPENAI_API_KEY".into(),
+            status: ValidationStatus::Valid,
+            latency_ms: 150,
+            detail: "42 model(s) available".into(),
+        }];
         let report = ValidationReport::from_results(results);
         let output = format_report(&report);
         assert!(output.contains("✓"));

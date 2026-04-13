@@ -14,7 +14,7 @@
 // - `ctap-hid-fido2` crate for FIDO2 hmac-secret
 // - `hidapi` for USB HID communication
 
-use super::super::{ProviderCapability, SovereigntyMode, SovereigntyProvider, EnrollmentResult};
+use super::super::{EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;
 
 // These on-disk filenames are only referenced inside the `hw-yubikey`

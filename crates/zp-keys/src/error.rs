@@ -34,7 +34,6 @@ pub enum KeyError {
 
     // ── Sovereignty provider errors ──────────────────────────────
     // These distinguish failure modes so the ceremony can respond correctly.
-
     /// The hardware device is not connected or not responding.
     /// Transient — retry after the user connects the device.
     #[error("device not found: {0}")]
@@ -76,9 +75,7 @@ impl KeyError {
     pub fn is_transient(&self) -> bool {
         matches!(
             self,
-            KeyError::DeviceNotFound(_)
-                | KeyError::BiometricFailed(_)
-                | KeyError::UserCancelled(_)
+            KeyError::DeviceNotFound(_) | KeyError::BiometricFailed(_) | KeyError::UserCancelled(_)
         )
     }
 

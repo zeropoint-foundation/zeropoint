@@ -7,30 +7,39 @@ use super::{OnboardAction, OnboardEvent, OnboardState};
 /// Shells out to the CLI configure engine so we get identical behavior
 /// to running it from the terminal. Output is captured and streamed
 /// back as terminal events through the WebSocket.
-pub async fn handle_configure(action: &OnboardAction, state: &mut OnboardState) -> Vec<OnboardEvent> {
+pub async fn handle_configure(
+    action: &OnboardAction,
+    state: &mut OnboardState,
+) -> Vec<OnboardEvent> {
     let mut events = Vec::new();
 
-    let use_proxy = action.params.get("proxy")
+    let use_proxy = action
+        .params
+        .get("proxy")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    let proxy_port = action.params.get("proxy_port")
+    let proxy_port = action
+        .params
+        .get("proxy_port")
         .and_then(|v| v.as_u64())
         .unwrap_or(3000) as u16;
 
     // Determine scan path — prefer what the user set in Step 5,
     // fall back to ~/projects, then accept an override from the action.
-    let scan_path = action.params.get("scan_path")
+    let scan_path = action
+        .params
+        .get("scan_path")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .or_else(|| state.scan_path.clone())
         .unwrap_or_else(|| "~/projects".to_string());
 
     // Expand ~ for the shell command
-    let expanded_path = if scan_path.starts_with("~/") {
+    let expanded_path = if let Some(suffix) = scan_path.strip_prefix("~/") {
         dirs::home_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(&scan_path[2..])
+            .join(suffix)
             .display()
             .to_string()
     } else {
@@ -54,13 +63,17 @@ pub async fn handle_configure(action: &OnboardAction, state: &mut OnboardState) 
     }
 
     events.push(OnboardEvent::terminal(&format!(
-        "$ zp {}", cmd_args.join(" ")
+        "$ zp {}",
+        cmd_args.join(" ")
     )));
 
     // Resolve the zp binary path
     let zp_bin = which::which("zp").unwrap_or_else(|_| std::path::PathBuf::from("zp"));
 
-    events.push(OnboardEvent::terminal(&format!("Binary: {}", zp_bin.display())));
+    events.push(OnboardEvent::terminal(&format!(
+        "Binary: {}",
+        zp_bin.display()
+    )));
 
     // Run the configure engine (async — avoids blocking the tokio runtime)
     match tokio::process::Command::new(&zp_bin)
@@ -92,10 +105,13 @@ pub async fn handle_configure(action: &OnboardAction, state: &mut OnboardState) 
 
             if output.status.success() {
                 events.push(OnboardEvent::terminal(""));
-                events.push(OnboardEvent::terminal("✓ Tools configured with vault credentials"));
+                events.push(OnboardEvent::terminal(
+                    "✓ Tools configured with vault credentials",
+                ));
 
                 // Count configured tools from output (lines starting with "  CONFIG")
-                let configured_count = stdout.lines()
+                let configured_count = stdout
+                    .lines()
                     .filter(|l| l.trim_start().starts_with("CONFIG"))
                     .count();
                 // Only count actually configured tools — never inflate
@@ -140,20 +156,25 @@ pub async fn handle_configure(action: &OnboardAction, state: &mut OnboardState) 
                 }
             } else {
                 events.push(OnboardEvent::terminal(&format!(
-                    "Configure exited with code {}", output.status.code().unwrap_or(-1)
+                    "Configure exited with code {}",
+                    output.status.code().unwrap_or(-1)
                 )));
             }
         }
         Err(e) => {
             events.push(OnboardEvent::error(&format!(
-                "Failed to run zp configure: {}", e
+                "Failed to run zp configure: {}",
+                e
             )));
-            events.push(OnboardEvent::terminal(
-                "Fallback: run from your terminal:"
-            ));
-            let proxy_flag = if use_proxy { format!(" --proxy --proxy-port {}", proxy_port) } else { String::new() };
+            events.push(OnboardEvent::terminal("Fallback: run from your terminal:"));
+            let proxy_flag = if use_proxy {
+                format!(" --proxy --proxy-port {}", proxy_port)
+            } else {
+                String::new()
+            };
             events.push(OnboardEvent::terminal(&format!(
-                "  zp configure auto {}{}", expanded_path, proxy_flag
+                "  zp configure auto {}{}",
+                expanded_path, proxy_flag
             )));
         }
     }

@@ -38,8 +38,8 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use tracing::{debug, info};
+use zp_trust::injector::{CredentialInjector, PolicyCheckFn, PolicyContext};
 use zp_trust::vault::CredentialVault;
-use zp_trust::injector::{CredentialInjector, PolicyContext, PolicyCheckFn};
 
 // ============================================================================
 // Config Pattern — the semantic sed rule
@@ -138,10 +138,7 @@ pub enum Resolution {
         value: String,
     },
     /// Variable already has a value in the existing .env — keep it
-    Preserved {
-        var_name: String,
-        value: String,
-    },
+    Preserved { var_name: String, value: String },
     /// No pattern matched — requires human review
     Unresolved {
         var_name: String,
@@ -154,37 +151,43 @@ pub enum Resolution {
         vault_ref: String,
     },
     /// Comment or blank line — passthrough
-    Passthrough {
-        line: String,
-    },
+    Passthrough { line: String },
 }
 
 impl Resolution {
     /// Format this resolution as an env file line.
     pub fn to_env_line(&self) -> String {
         match self {
-            Resolution::VaultResolved { var_name, value, .. } => {
+            Resolution::VaultResolved {
+                var_name, value, ..
+            } => {
                 format!("{}={}", var_name, value)
             }
-            Resolution::DefaultResolved { var_name, value, .. } => {
+            Resolution::DefaultResolved {
+                var_name, value, ..
+            } => {
                 format!("{}={}", var_name, value)
             }
             Resolution::Preserved { var_name, value } => {
                 format!("{}={}", var_name, value)
             }
-            Resolution::Unresolved { original_line, .. } => {
-                original_line.clone()
+            Resolution::Unresolved { original_line, .. } => original_line.clone(),
+            Resolution::Missing {
+                var_name,
+                vault_ref,
+                ..
+            } => {
+                format!(
+                    "{}= # MISSING: vault credential '{}' not found",
+                    var_name, vault_ref
+                )
             }
-            Resolution::Missing { var_name, vault_ref, .. } => {
-                format!("{}= # MISSING: vault credential '{}' not found", var_name, vault_ref)
-            }
-            Resolution::Passthrough { line } => {
-                line.clone()
-            }
+            Resolution::Passthrough { line } => line.clone(),
         }
     }
 
     /// Whether this resolution was successful (has a value).
+    #[allow(dead_code)]
     pub fn is_resolved(&self) -> bool {
         matches!(
             self,
@@ -227,13 +230,15 @@ impl ConfigEngine {
         let patterns = rules
             .into_iter()
             .filter_map(|rule| {
-                Regex::new(&rule.pattern).ok().map(|regex| CompiledPattern {
-                    rule,
-                    regex,
-                })
+                Regex::new(&rule.pattern)
+                    .ok()
+                    .map(|regex| CompiledPattern { rule, regex })
             })
             .collect();
-        Self { patterns, proxy_port: None }
+        Self {
+            patterns,
+            proxy_port: None,
+        }
     }
 
     /// Create a ConfigEngine with proxy mode enabled.
@@ -246,13 +251,15 @@ impl ConfigEngine {
         let patterns = rules
             .into_iter()
             .filter_map(|rule| {
-                Regex::new(&rule.pattern).ok().map(|regex| CompiledPattern {
-                    rule,
-                    regex,
-                })
+                Regex::new(&rule.pattern)
+                    .ok()
+                    .map(|regex| CompiledPattern { rule, regex })
             })
             .collect();
-        Self { patterns, proxy_port: Some(port) }
+        Self {
+            patterns,
+            proxy_port: Some(port),
+        }
     }
 
     /// Create a ConfigEngine with custom patterns (for testing or extension).
@@ -261,13 +268,15 @@ impl ConfigEngine {
         let patterns = rules
             .into_iter()
             .filter_map(|rule| {
-                Regex::new(&rule.pattern).ok().map(|regex| CompiledPattern {
-                    rule,
-                    regex,
-                })
+                Regex::new(&rule.pattern)
+                    .ok()
+                    .map(|regex| CompiledPattern { rule, regex })
             })
             .collect();
-        Self { patterns, proxy_port: None }
+        Self {
+            patterns,
+            proxy_port: None,
+        }
     }
 
     /// If proxy mode is active, rewrite a URL default to the ZP proxy.
@@ -295,23 +304,33 @@ impl ConfigEngine {
     ///   3. Respects priority: anthropic > openai > google > others
     fn apply_provider_coherence(
         &self,
-        resolutions: &mut Vec<Resolution>,
+        resolutions: &mut [Resolution],
         activated_providers: &[String],
     ) {
         // Known backend variable names
         const BACKEND_VARS: &[&str] = &[
-            "LLM_BACKEND", "LLM_PROVIDER", "AI_PROVIDER",
-            "DEFAULT_LLM_PROVIDER", "DEFAULT_PROVIDER",
+            "LLM_BACKEND",
+            "LLM_PROVIDER",
+            "AI_PROVIDER",
+            "DEFAULT_LLM_PROVIDER",
+            "DEFAULT_PROVIDER",
         ];
 
         // Provider priority — first available wins
         const PROVIDER_PRIORITY: &[&str] = &[
-            "anthropic", "openai", "google", "groq",
-            "together", "deepseek", "mistral", "openrouter",
+            "anthropic",
+            "openai",
+            "google",
+            "groq",
+            "together",
+            "deepseek",
+            "mistral",
+            "openrouter",
         ];
 
         // Find the best activated provider
-        let best_provider = PROVIDER_PRIORITY.iter()
+        let best_provider = PROVIDER_PRIORITY
+            .iter()
             .find(|p| activated_providers.iter().any(|a| a == *p));
 
         let best_provider = match best_provider {
@@ -326,15 +345,26 @@ impl ConfigEngine {
 
         for resolution in resolutions.iter_mut() {
             match resolution {
-                Resolution::Preserved { ref var_name, ref value, .. }
-                | Resolution::DefaultResolved { ref var_name, ref value, .. } => {
-                    if BACKEND_VARS.iter().any(|&b| b == var_name.as_str()) {
+                Resolution::Preserved {
+                    ref var_name,
+                    ref value,
+                    ..
+                }
+                | Resolution::DefaultResolved {
+                    ref var_name,
+                    ref value,
+                    ..
+                } => {
+                    if BACKEND_VARS.contains(&var_name.as_str()) {
                         if backend_set.contains(var_name.as_str()) {
                             // Duplicate — comment it out
                             *resolution = Resolution::Passthrough {
                                 line: format!("# {}={} # (duplicate, set above)", var_name, value),
                             };
-                        } else if !activated_providers.iter().any(|a| value.contains(a.as_str())) {
+                        } else if !activated_providers
+                            .iter()
+                            .any(|a| value.contains(a.as_str()))
+                        {
                             info!(
                                 "Provider coherence: switching {} from '{}' to '{}'",
                                 var_name, value, best_provider
@@ -356,20 +386,14 @@ impl ConfigEngine {
                         let uncommented = trimmed.trim_start_matches('#').trim();
                         if let Some((key, _)) = uncommented.split_once('=') {
                             let key = key.trim();
-                            if BACKEND_VARS.iter().any(|&b| b == key) {
-                                if !backend_set.contains(key) {
-                                    info!(
-                                        "Provider coherence: activating {} = {}",
-                                        key, best_provider
-                                    );
-                                    backend_set.insert(key.to_string());
-                                    *resolution = Resolution::DefaultResolved {
-                                        var_name: key.to_string(),
-                                        pattern_name: "provider_coherence".into(),
-                                        value: best_provider.to_string(),
-                                    };
-                                }
-                                // else: already set above, leave as comment
+                            if BACKEND_VARS.contains(&key) && !backend_set.contains(key) {
+                                info!("Provider coherence: activating {} = {}", key, best_provider);
+                                backend_set.insert(key.to_string());
+                                *resolution = Resolution::DefaultResolved {
+                                    var_name: key.to_string(),
+                                    pattern_name: "provider_coherence".into(),
+                                    value: best_provider.to_string(),
+                                };
                             }
                         }
                     }
@@ -428,7 +452,9 @@ impl ConfigEngine {
             // Extract key from either active or commented lines
             let key = if trimmed.starts_with('#') {
                 let uncommented = trimmed.trim_start_matches('#').trim();
-                uncommented.split_once('=').map(|(k, _)| k.trim().to_string())
+                uncommented
+                    .split_once('=')
+                    .map(|(k, _)| k.trim().to_string())
             } else {
                 trimmed.split_once('=').map(|(k, _)| k.trim().to_string())
             };
@@ -436,10 +462,12 @@ impl ConfigEngine {
             if let Some(key) = key {
                 if let Some(pattern) = self.match_var(&key) {
                     if let Some(ref vault_ref) = pattern.vault_ref {
-                        if injector.inject_single(tool_name, vault_ref, &context).is_ok() {
-                            if !available_providers.contains(&pattern.provider) {
-                                available_providers.push(pattern.provider.clone());
-                            }
+                        if injector
+                            .inject_single(tool_name, vault_ref, &context)
+                            .is_ok()
+                            && !available_providers.contains(&pattern.provider)
+                        {
+                            available_providers.push(pattern.provider.clone());
                         }
                     }
                 }
@@ -497,9 +525,9 @@ impl ConfigEngine {
                     if let Some(pattern) = self.match_var(key) {
                         // Credential field — activate if vault has it
                         if let Some(ref vault_ref) = pattern.vault_ref {
-                            if let Ok(value_bytes) = injector.inject_single(
-                                tool_name, vault_ref, &context,
-                            ) {
+                            if let Ok(value_bytes) =
+                                injector.inject_single(tool_name, vault_ref, &context)
+                            {
                                 let value = String::from_utf8_lossy(&value_bytes).to_string();
                                 info!("Activating dormant {} (vault has {})", key, vault_ref);
                                 activated_providers.push(pattern.provider.clone());
@@ -522,14 +550,18 @@ impl ConfigEngine {
                         // ANTHROPIC_BASE_URL) that flip SDKs into "custom
                         // endpoint" mode and break native API-key auth.
                         if let Some(ref default) = pattern.default {
-                            let is_url_without_proxy = pattern.field == ConfigField::Url
-                                && self.proxy_port.is_none();
-                            if available_providers.contains(&pattern.provider) && !is_url_without_proxy {
+                            let is_url_without_proxy =
+                                pattern.field == ConfigField::Url && self.proxy_port.is_none();
+                            if available_providers.contains(&pattern.provider)
+                                && !is_url_without_proxy
+                            {
                                 info!(
                                     "Activating dormant {} with default (provider {} available)",
                                     key, pattern.provider
                                 );
-                                let resolved_value = if pattern.field == ConfigField::Url && self.proxy_port.is_some() {
+                                let resolved_value = if pattern.field == ConfigField::Url
+                                    && self.proxy_port.is_some()
+                                {
                                     self.proxy_url(&pattern.provider, default)
                                 } else {
                                     default.clone()
@@ -594,9 +626,7 @@ impl ConfigEngine {
             match self.match_var(&var_name) {
                 Some(pattern) => {
                     if let Some(ref vault_ref) = pattern.vault_ref {
-                        match injector.inject_single(
-                            tool_name, vault_ref, &context,
-                        ) {
+                        match injector.inject_single(tool_name, vault_ref, &context) {
                             Ok(value_bytes) => {
                                 let value = String::from_utf8_lossy(&value_bytes).to_string();
                                 activated_providers.push(pattern.provider.clone());
@@ -634,11 +664,12 @@ impl ConfigEngine {
                                 line: line.to_string(),
                             });
                         } else {
-                            let resolved_value = if pattern.field == ConfigField::Url && self.proxy_port.is_some() {
-                                self.proxy_url(&pattern.provider, default)
-                            } else {
-                                default.clone()
-                            };
+                            let resolved_value =
+                                if pattern.field == ConfigField::Url && self.proxy_port.is_some() {
+                                    self.proxy_url(&pattern.provider, default)
+                                } else {
+                                    default.clone()
+                                };
                             resolutions.push(Resolution::DefaultResolved {
                                 var_name,
                                 pattern_name: pattern.name.clone(),
@@ -677,7 +708,8 @@ impl ConfigEngine {
         // Now that we know which providers got activated, set the
         // backend selector to match. This happens last because the
         // LLM_BACKEND line might appear before the API_KEY lines.
-        let all_activated: Vec<String> = available_providers.iter()
+        let all_activated: Vec<String> = available_providers
+            .iter()
             .chain(activated_providers.iter())
             .cloned()
             .collect();
@@ -689,18 +721,14 @@ impl ConfigEngine {
     }
 
     /// Write resolved env to file.
-    pub fn write_env_file(
-        resolutions: &[Resolution],
-        output_path: &Path,
-    ) -> io::Result<()> {
+    pub fn write_env_file(resolutions: &[Resolution], output_path: &Path) -> io::Result<()> {
         let mut file = fs::File::create(output_path)?;
         writeln!(file, "# Generated by: zp configure")?;
+        writeln!(file, "# Timestamp: {}", chrono::Utc::now().to_rfc3339())?;
         writeln!(
             file,
-            "# Timestamp: {}",
-            chrono::Utc::now().to_rfc3339()
+            "# DO NOT commit this file — it contains vault-resolved secrets."
         )?;
-        writeln!(file, "# DO NOT commit this file — it contains vault-resolved secrets.")?;
         writeln!(file)?;
 
         for resolution in resolutions {
@@ -720,14 +748,21 @@ impl ConfigEngine {
 
         for r in resolutions {
             match r {
-                Resolution::VaultResolved { var_name, provider, vault_ref, .. } => {
+                Resolution::VaultResolved {
+                    var_name,
+                    provider,
+                    vault_ref,
+                    ..
+                } => {
                     vault_count += 1;
                     println!(
                         "  \x1b[32m✓\x1b[0m {} ← vault:{} ({})",
                         var_name, vault_ref, provider
                     );
                 }
-                Resolution::DefaultResolved { var_name, value, .. } => {
+                Resolution::DefaultResolved {
+                    var_name, value, ..
+                } => {
                     default_count += 1;
                     println!("  \x1b[34m•\x1b[0m {} = {} (default)", var_name, value);
                 }
@@ -737,9 +772,16 @@ impl ConfigEngine {
                 }
                 Resolution::Unresolved { var_name, .. } => {
                     unresolved_count += 1;
-                    println!("  \x1b[90m?\x1b[0m {} (unresolved — review needed)", var_name);
+                    println!(
+                        "  \x1b[90m?\x1b[0m {} (unresolved — review needed)",
+                        var_name
+                    );
                 }
-                Resolution::Missing { var_name, vault_ref, .. } => {
+                Resolution::Missing {
+                    var_name,
+                    vault_ref,
+                    ..
+                } => {
                     missing_count += 1;
                     println!(
                         "  \x1b[31m✗\x1b[0m {} — vault credential '{}' not found",
@@ -799,7 +841,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: None,
         },
-
         // ===================================================================
         // OpenAI / GPT
         // ===================================================================
@@ -835,7 +876,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: None,
         },
-
         // ===================================================================
         // OpenAI for TTS/ASR (semantic variants — same key, different purpose)
         // ===================================================================
@@ -871,7 +911,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("https://api.openai.com/v1".into()),
         },
-
         // ===================================================================
         // Google / Gemini
         // ===================================================================
@@ -908,7 +947,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("google_search/cx_key".into()),
             default: None,
         },
-
         // ===================================================================
         // DeepSeek
         // ===================================================================
@@ -928,7 +966,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("https://api.deepseek.com".into()),
         },
-
         // ===================================================================
         // Qwen / Alibaba
         // ===================================================================
@@ -965,7 +1002,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("qwen/api_key".into()),
             default: None,
         },
-
         // ===================================================================
         // Kimi / Moonshot
         // ===================================================================
@@ -985,7 +1021,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("https://api.moonshot.ai/v1".into()),
         },
-
         // ===================================================================
         // GLM / Zhipu AI
         // ===================================================================
@@ -1014,7 +1049,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("glm/api_key".into()),
             default: None,
         },
-
         // ===================================================================
         // Ollama (local inference)
         // ===================================================================
@@ -1058,7 +1092,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("true".into()),
         },
-
         // ===================================================================
         // AWS Bedrock
         // ===================================================================
@@ -1094,7 +1127,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("us-east-1".into()),
         },
-
         // ===================================================================
         // Embedding providers
         // ===================================================================
@@ -1130,7 +1162,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("ollama".into()),
         },
-
         // ===================================================================
         // Search engines
         // ===================================================================
@@ -1166,7 +1197,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("true".into()),
         },
-
         // ===================================================================
         // PostgreSQL (PentAGI, Langfuse, IronClaw)
         // ===================================================================
@@ -1202,7 +1232,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("postgres/database_url".into()),
             default: None,
         },
-
         // ===================================================================
         // Langfuse subsystem passwords
         // ===================================================================
@@ -1294,7 +1323,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("langfuse/init_password".into()),
             default: None,
         },
-
         // ===================================================================
         // Neo4j (Graphiti knowledge graph)
         // ===================================================================
@@ -1314,7 +1342,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("neo4j".into()),
         },
-
         // ===================================================================
         // Graphiti
         // ===================================================================
@@ -1334,7 +1361,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: Some("http://graphiti:8000".into()),
         },
-
         // ===================================================================
         // PentAGI-specific security
         // ===================================================================
@@ -1346,7 +1372,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("pentagi/cookie_salt".into()),
             default: None,
         },
-
         // ===================================================================
         // OAuth (Google, GitHub)
         // ===================================================================
@@ -1382,7 +1407,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("oauth_github/client_secret".into()),
             default: None,
         },
-
         // ===================================================================
         // NEAR AI (IronClaw)
         // ===================================================================
@@ -1410,7 +1434,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: None,
             default: None,
         },
-
         // ===================================================================
         // Gateway / Auth tokens (IronClaw)
         // ===================================================================
@@ -1422,7 +1445,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
             vault_ref: Some("gateway/auth_token".into()),
             default: None,
         },
-
         // ===================================================================
         // Broad catch-all: any *_API_KEY not matched above
         // ===================================================================
@@ -1494,7 +1516,11 @@ pub fn run_tool(
     println!("Tool: {}", tool_name);
     println!("Template: {}", template.display());
     if existing_env_path.exists() {
-        println!("Existing .env: {} ({} values)", existing_env_path.display(), existing_env.len());
+        println!(
+            "Existing .env: {} ({} values)",
+            existing_env_path.display(),
+            existing_env.len()
+        );
     }
     println!();
 
@@ -1575,11 +1601,18 @@ pub fn run_vault_add(
         Ok(_) => {
             // Persist to disk so credentials survive across invocations
             if let Err(e) = vault.save(vault_path) {
-                eprintln!("Warning: credential stored in memory but failed to persist: {}", e);
+                eprintln!(
+                    "Warning: credential stored in memory but failed to persist: {}",
+                    e
+                );
                 eprintln!("Vault path: {}", vault_path.display());
                 // Still return success — the credential IS stored for this session
             } else {
-                println!("Stored credential: {} ({} bytes, persisted)", vault_ref, value.len());
+                println!(
+                    "Stored credential: {} ({} bytes, persisted)",
+                    vault_ref,
+                    value.len()
+                );
             }
             info!(vault_ref = vault_ref, "Credential stored in vault");
             0
@@ -1613,6 +1646,7 @@ pub struct DiscoveredTool {
     /// Variables that need credentials not yet in vault
     pub missing: Vec<String>,
     /// Variables with defaults (URL, model, toggle — no vault needed)
+    #[allow(dead_code)]
     pub defaulted: Vec<String>,
     /// Variables not matched by any pattern (need human review)
     pub unrecognized: Vec<String>,
@@ -1628,13 +1662,7 @@ const ENV_TEMPLATE_NAMES: &[&str] = &[
 ];
 
 /// Well-known subdirectories where env templates may live (e.g., IronClaw's deploy/).
-const ENV_SUBDIRS: &[&str] = &[
-    "",
-    "deploy",
-    "docker",
-    "config",
-    ".config",
-];
+const ENV_SUBDIRS: &[&str] = &["", "deploy", "docker", "config", ".config"];
 
 /// Find the env template for a given directory, checking well-known names and subdirs.
 fn find_env_template(dir: &Path) -> Option<std::path::PathBuf> {
@@ -1749,7 +1777,8 @@ pub fn discover_tools_in(
             if !child.is_dir() {
                 continue;
             }
-            let dir_name = child.file_name()
+            let dir_name = child
+                .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             if dir_name.starts_with('.')
@@ -1773,10 +1802,14 @@ pub fn discover_tools_in(
                         if !gc_path.is_dir() {
                             continue;
                         }
-                        let gc_name = gc_path.file_name()
+                        let gc_name = gc_path
+                            .file_name()
                             .map(|n| n.to_string_lossy().into_owned())
                             .unwrap_or_default();
-                        if gc_name.starts_with('.') || gc_name == "node_modules" || gc_name == "target" {
+                        if gc_name.starts_with('.')
+                            || gc_name == "node_modules"
+                            || gc_name == "target"
+                        {
                             continue;
                         }
                         if let Some(template) = find_env_template(&gc_path) {
@@ -1792,11 +1825,7 @@ pub fn discover_tools_in(
 }
 
 /// Run `zp configure scan` — discover configurable tools and report readiness.
-pub fn run_scan(
-    scan_path: &Path,
-    vault: &CredentialVault,
-    depth: usize,
-) -> i32 {
+pub fn run_scan(scan_path: &Path, vault: &CredentialVault, depth: usize) -> i32 {
     let engine = ConfigEngine::new();
 
     println!("ZeroPoint Configure — Scan");
@@ -1830,8 +1859,13 @@ pub fn run_scan(
 
         println!("  {} [{}]", tool.name, status);
         println!("    template: {}", tool.template.display());
-        println!("    vars: {} total, {} need vault, {} satisfied, {} missing",
-            tool.total_vars, tool.vault_vars.len(), tool.satisfied.len(), tool.missing.len());
+        println!(
+            "    vars: {} total, {} need vault, {} satisfied, {} missing",
+            tool.total_vars,
+            tool.vault_vars.len(),
+            tool.satisfied.len(),
+            tool.missing.len()
+        );
 
         if !tool.missing.is_empty() {
             println!("    missing:");
@@ -1864,7 +1898,11 @@ pub fn run_scan(
     // Summary
     println!("---");
     println!("Vault: {} credential(s) stored", vault_creds.len());
-    println!("Tools: {}/{} ready to configure", total_ready, discovered.len());
+    println!(
+        "Tools: {}/{} ready to configure",
+        total_ready,
+        discovered.len()
+    );
 
     if total_ready < discovered.len() {
         println!("\nTo add missing credentials:");
@@ -1884,7 +1922,10 @@ pub fn run_scan(
         for vr in &needed {
             let parts: Vec<&str> = vr.splitn(2, '/').collect();
             if parts.len() == 2 {
-                println!("  zp configure vault-add --provider {} --field {}", parts[0], parts[1]);
+                println!(
+                    "  zp configure vault-add --provider {} --field {}",
+                    parts[0], parts[1]
+                );
             }
         }
     }
@@ -1893,7 +1934,11 @@ pub fn run_scan(
         println!("\nTo configure a ready tool:");
         for tool in &discovered {
             if tool.missing.is_empty() {
-                println!("  zp configure tool --path {} --name {}", tool.path.display(), tool.name);
+                println!(
+                    "  zp configure tool --path {} --name {}",
+                    tool.path.display(),
+                    tool.name
+                );
             }
         }
     }
@@ -1964,7 +2009,8 @@ pub fn run_auto(
             if !child.is_dir() {
                 continue;
             }
-            let dir_name = child.file_name()
+            let dir_name = child
+                .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             if dir_name.starts_with('.')
@@ -1988,10 +2034,14 @@ pub fn run_auto(
                         if !gc_path.is_dir() {
                             continue;
                         }
-                        let gc_name = gc_path.file_name()
+                        let gc_name = gc_path
+                            .file_name()
                             .map(|n| n.to_string_lossy().into_owned())
                             .unwrap_or_default();
-                        if gc_name.starts_with('.') || gc_name == "node_modules" || gc_name == "target" {
+                        if gc_name.starts_with('.')
+                            || gc_name == "node_modules"
+                            || gc_name == "target"
+                        {
                             continue;
                         }
                         if let Some(template) = find_env_template(&gc_path) {
@@ -2153,13 +2203,16 @@ pub fn run_auto(
             ) {
                 Ok(resolutions) => {
                     if dry_run {
-                        let resolved_count = resolutions.iter().filter(|r| {
-                            matches!(
-                                r,
-                                Resolution::VaultResolved { .. }
-                                    | Resolution::DefaultResolved { .. }
-                            )
-                        }).count();
+                        let resolved_count = resolutions
+                            .iter()
+                            .filter(|r| {
+                                matches!(
+                                    r,
+                                    Resolution::VaultResolved { .. }
+                                        | Resolution::DefaultResolved { .. }
+                                )
+                            })
+                            .count();
                         println!(
                             "          would resolve {}/{} variables",
                             resolved_count, tool.total_vars
@@ -2221,15 +2274,19 @@ pub fn run_auto(
         // in .env.example; skipping those tools is wrong when at least one
         // provider is already satisfied.
         if !tool.missing.is_empty() {
-            let missing_refs: Vec<String> = tool.missing.iter().filter_map(|var| {
-                engine.match_var(var).and_then(|p| p.vault_ref.clone())
-            }).collect();
+            let missing_refs: Vec<String> = tool
+                .missing
+                .iter()
+                .filter_map(|var| engine.match_var(var).and_then(|p| p.vault_ref.clone()))
+                .collect();
             if !missing_refs.is_empty() && tool.satisfied.is_empty() {
                 // No credentials resolved at all — genuinely unconfigurable.
-                println!("  SKIP  {} (legacy) — missing {} credential(s): {}",
+                println!(
+                    "  SKIP  {} (legacy) — missing {} credential(s): {}",
                     tool.name,
                     missing_refs.len(),
-                    missing_refs.join(", "));
+                    missing_refs.join(", ")
+                );
                 results.push(AutoResult {
                     name: tool.name.clone(),
                     path: tool.path.clone(),
@@ -2253,7 +2310,10 @@ pub fn run_auto(
         // Skip if .env exists and --no-overwrite
         let env_path = tool.path.join(".env");
         if env_path.exists() && !overwrite {
-            println!("  SKIP  {} — .env already exists (use --overwrite to replace)", tool.name);
+            println!(
+                "  SKIP  {} — .env already exists (use --overwrite to replace)",
+                tool.name
+            );
             results.push(AutoResult {
                 name: tool.name.clone(),
                 path: tool.path.clone(),
@@ -2272,13 +2332,29 @@ pub fn run_auto(
             HashMap::new()
         };
 
-        match engine.process_env_file(&tool.template, &existing_env, vault, policy_check, &tool.name) {
+        match engine.process_env_file(
+            &tool.template,
+            &existing_env,
+            vault,
+            policy_check,
+            &tool.name,
+        ) {
             Ok(resolutions) => {
                 if dry_run {
-                    let resolved_count = resolutions.iter().filter(|r| {
-                        matches!(r, Resolution::VaultResolved { .. } | Resolution::DefaultResolved { .. })
-                    }).count();
-                    println!("          would resolve {}/{} variables", resolved_count, tool.total_vars);
+                    let resolved_count = resolutions
+                        .iter()
+                        .filter(|r| {
+                            matches!(
+                                r,
+                                Resolution::VaultResolved { .. }
+                                    | Resolution::DefaultResolved { .. }
+                            )
+                        })
+                        .count();
+                    println!(
+                        "          would resolve {}/{} variables",
+                        resolved_count, tool.total_vars
+                    );
                     results.push(AutoResult {
                         name: tool.name.clone(),
                         path: tool.path.clone(),
@@ -2300,7 +2376,9 @@ pub fn run_auto(
                             results.push(AutoResult {
                                 name: tool.name.clone(),
                                 path: tool.path.clone(),
-                                status: AutoStatus::Failed { error: e.to_string() },
+                                status: AutoStatus::Failed {
+                                    error: e.to_string(),
+                                },
                             });
                         }
                     }
@@ -2311,7 +2389,9 @@ pub fn run_auto(
                 results.push(AutoResult {
                     name: tool.name.clone(),
                     path: tool.path.clone(),
-                    status: AutoStatus::Failed { error: e.to_string() },
+                    status: AutoStatus::Failed {
+                        error: e.to_string(),
+                    },
                 });
             }
         }
@@ -2320,10 +2400,22 @@ pub fn run_auto(
     // Phase 3: Summary
     println!();
     println!("---");
-    let configured = results.iter().filter(|r| r.status == AutoStatus::Configured).count();
-    let skipped_missing = results.iter().filter(|r| matches!(r.status, AutoStatus::SkippedMissing { .. })).count();
-    let skipped_exists = results.iter().filter(|r| r.status == AutoStatus::SkippedExists).count();
-    let failed = results.iter().filter(|r| matches!(r.status, AutoStatus::Failed { .. })).count();
+    let configured = results
+        .iter()
+        .filter(|r| r.status == AutoStatus::Configured)
+        .count();
+    let skipped_missing = results
+        .iter()
+        .filter(|r| matches!(r.status, AutoStatus::SkippedMissing { .. }))
+        .count();
+    let skipped_exists = results
+        .iter()
+        .filter(|r| r.status == AutoStatus::SkippedExists)
+        .count();
+    let failed = results
+        .iter()
+        .filter(|r| matches!(r.status, AutoStatus::Failed { .. }))
+        .count();
 
     println!("Configured: {}", configured);
     if skipped_missing > 0 {
@@ -2356,13 +2448,23 @@ pub fn run_auto(
         for vr in &needed {
             let parts: Vec<&str> = vr.splitn(2, '/').collect();
             if parts.len() == 2 {
-                println!("  zp configure vault-add --provider {} --field {}", parts[0], parts[1]);
+                println!(
+                    "  zp configure vault-add --provider {} --field {}",
+                    parts[0], parts[1]
+                );
             }
         }
-        println!("\nThen re-run: zp configure auto --path {}", scan_path.display());
+        println!(
+            "\nThen re-run: zp configure auto --path {}",
+            scan_path.display()
+        );
     }
 
-    if failed > 0 { 1 } else { 0 }
+    if failed > 0 {
+        1
+    } else {
+        0
+    }
 }
 
 // ============================================================================
@@ -2377,9 +2479,7 @@ fn extract_vault_providers(vault: &CredentialVault) -> Vec<String> {
     let mut providers: Vec<String> = vault
         .list()
         .iter()
-        .filter_map(|ref_name| {
-            ref_name.split('/').next().map(String::from)
-        })
+        .filter_map(|ref_name| ref_name.split('/').next().map(String::from))
         .collect();
     providers.sort();
     providers.dedup();
@@ -2479,7 +2579,11 @@ pub fn run_manifest(tool_path: &Path) -> i32 {
 ///
 /// Reads all vault entries, matches them to providers, and runs lightweight
 /// health checks (e.g., `GET /v1/models`) to verify keys are live.
-pub fn run_validate(vault: &CredentialVault, filter_provider: Option<&str>, json_output: bool) -> i32 {
+pub fn run_validate(
+    vault: &CredentialVault,
+    filter_provider: Option<&str>,
+    json_output: bool,
+) -> i32 {
     use zp_engine::validate;
 
     let vault_refs = vault.list();
@@ -2491,9 +2595,7 @@ pub fn run_validate(vault: &CredentialVault, filter_provider: Option<&str>, json
     }
 
     // Build credential list from vault
-    let retrieve = |name: &str| -> Option<Vec<u8>> {
-        vault.retrieve(name).ok()
-    };
+    let retrieve = |name: &str| -> Option<Vec<u8>> { vault.retrieve(name).ok() };
     let mut creds = validate::credentials_from_vault_refs(&vault_refs, &retrieve);
 
     // Apply provider filter if specified
@@ -2510,14 +2612,16 @@ pub fn run_validate(vault: &CredentialVault, filter_provider: Option<&str>, json
 
     println!();
     println!("  ZeroPoint Credential Validator");
-    println!("  Testing {} credential(s) against live APIs...", creds.len());
+    println!(
+        "  Testing {} credential(s) against live APIs...",
+        creds.len()
+    );
     println!();
 
     // Run the async validation — we're inside #[tokio::main] so use the
     // existing runtime via block_in_place + Handle::current().
     let report = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current()
-            .block_on(validate::validate_credentials(&creds))
+        tokio::runtime::Handle::current().block_on(validate::validate_credentials(&creds))
     });
 
     if json_output {
@@ -2533,7 +2637,11 @@ pub fn run_validate(vault: &CredentialVault, filter_provider: Option<&str>, json
     }
 
     // Exit code: 0 if no invalid, 1 if any invalid
-    if report.invalid > 0 { 1 } else { 0 }
+    if report.invalid > 0 {
+        1
+    } else {
+        0
+    }
 }
 
 // ============================================================================
@@ -2591,7 +2699,10 @@ mod tests {
         let m = engine.match_var("OLLAMA_SERVER_URL");
         assert!(m.is_some());
         assert_eq!(m.unwrap().provider, "ollama");
-        assert_eq!(m.unwrap().default.as_deref(), Some("http://host.docker.internal:11434"));
+        assert_eq!(
+            m.unwrap().default.as_deref(),
+            Some("http://host.docker.internal:11434")
+        );
     }
 
     #[test]
@@ -2650,7 +2761,9 @@ mod tests {
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
 
-        vault.store("anthropic/api_key", b"sk-ant-test-key-123").unwrap();
+        vault
+            .store("anthropic/api_key", b"sk-ant-test-key-123")
+            .unwrap();
 
         let retrieved = vault.retrieve("anthropic/api_key").unwrap();
         assert_eq!(retrieved, b"sk-ant-test-key-123");
@@ -2723,7 +2836,9 @@ mod tests {
         let _ = fs::create_dir_all(&dir);
 
         let template = dir.join(".env.example");
-        fs::write(&template, "\
+        fs::write(
+            &template,
+            "\
 # API Keys
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=sk-ant-placeholder
@@ -2736,13 +2851,17 @@ OLLAMA_SERVER_URL=http://localhost:11434
 
 # Unknown
 MY_CUSTOM_THING=whatever
-").unwrap();
+",
+        )
+        .unwrap();
 
         let engine = ConfigEngine::new();
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
         // Put anthropic key in vault so it shows as satisfied
-        vault.store("anthropic/api_key", b"sk-ant-real-key").unwrap();
+        vault
+            .store("anthropic/api_key", b"sk-ant-real-key")
+            .unwrap();
 
         let result = analyze_tool(&dir, &template, &engine, &vault);
 
@@ -2770,8 +2889,16 @@ MY_CUSTOM_THING=whatever
         let _ = fs::create_dir_all(&tool_a);
         let _ = fs::create_dir_all(&tool_b);
 
-        fs::write(tool_a.join(".env.example"), "OPENAI_API_KEY=\nLLM_MODEL=gpt-4\n").unwrap();
-        fs::write(tool_b.join(".env.example"), "ANTHROPIC_API_KEY=\nTTS_MODEL=tts-1\n").unwrap();
+        fs::write(
+            tool_a.join(".env.example"),
+            "OPENAI_API_KEY=\nLLM_MODEL=gpt-4\n",
+        )
+        .unwrap();
+        fs::write(
+            tool_b.join(".env.example"),
+            "ANTHROPIC_API_KEY=\nTTS_MODEL=tts-1\n",
+        )
+        .unwrap();
 
         let master_key = [0x42u8; 32];
         let vault = CredentialVault::new(&master_key);
@@ -2793,7 +2920,11 @@ MY_CUSTOM_THING=whatever
     // ========================================================================
 
     /// Permissive policy for tests — allows all vault access.
-    fn test_policy(_cred: &str, _purpose: &str, _ctx: &PolicyContext) -> zp_trust::injector::InjectorResult<()> {
+    fn test_policy(
+        _cred: &str,
+        _purpose: &str,
+        _ctx: &PolicyContext,
+    ) -> zp_trust::injector::InjectorResult<()> {
         Ok(())
     }
 
@@ -2804,11 +2935,15 @@ MY_CUSTOM_THING=whatever
         let _ = fs::create_dir_all(&tool);
 
         // A simple template — only needs openai key
-        fs::write(tool.join(".env.example"), "\
+        fs::write(
+            tool.join(".env.example"),
+            "\
 OPENAI_API_KEY=
 LLM_MODEL=gpt-4
 OLLAMA_SERVER_URL=http://localhost:11434
-").unwrap();
+",
+        )
+        .unwrap();
 
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
@@ -2822,7 +2957,10 @@ OLLAMA_SERVER_URL=http://localhost:11434
         let env_path = tool.join(".env");
         assert!(env_path.exists(), ".env should have been created");
         let content = fs::read_to_string(&env_path).unwrap();
-        assert!(content.contains("sk-test-auto-key"), ".env should contain the resolved key");
+        assert!(
+            content.contains("sk-test-auto-key"),
+            ".env should contain the resolved key"
+        );
 
         // Cleanup
         let _ = fs::remove_file(env_path);
@@ -2846,7 +2984,10 @@ OLLAMA_SERVER_URL=http://localhost:11434
         assert_eq!(exit_code, 0);
 
         // .env should NOT have been created
-        assert!(!tool.join(".env").exists(), ".env should not exist for tool with missing creds");
+        assert!(
+            !tool.join(".env").exists(),
+            ".env should not exist for tool with missing creds"
+        );
 
         let _ = fs::remove_file(tool.join(".env.example"));
         let _ = fs::remove_dir(&tool);
@@ -2872,7 +3013,10 @@ OLLAMA_SERVER_URL=http://localhost:11434
 
         // Original .env should be untouched
         let content = fs::read_to_string(tool.join(".env")).unwrap();
-        assert!(content.contains("sk-original-key"), "original .env should be preserved");
+        assert!(
+            content.contains("sk-original-key"),
+            "original .env should be preserved"
+        );
 
         let _ = fs::remove_file(tool.join(".env"));
         let _ = fs::remove_file(tool.join(".env.example"));
@@ -2899,7 +3043,10 @@ OLLAMA_SERVER_URL=http://localhost:11434
 
         // .env should now have the new key
         let content = fs::read_to_string(tool.join(".env")).unwrap();
-        assert!(content.contains("sk-fresh-key"), ".env should contain the new key after overwrite");
+        assert!(
+            content.contains("sk-fresh-key"),
+            ".env should contain the new key after overwrite"
+        );
 
         let _ = fs::remove_file(tool.join(".env"));
         let _ = fs::remove_file(tool.join(".env.example"));
@@ -2923,7 +3070,10 @@ OLLAMA_SERVER_URL=http://localhost:11434
         assert_eq!(exit_code, 0);
 
         // Dry run — no .env should be written
-        assert!(!tool.join(".env").exists(), "dry run should not create .env");
+        assert!(
+            !tool.join(".env").exists(),
+            "dry run should not create .env"
+        );
 
         let _ = fs::remove_file(tool.join(".env.example"));
         let _ = fs::remove_dir(&tool);
@@ -2969,11 +3119,15 @@ OLLAMA_SERVER_URL=http://localhost:11434
         let tool = root.join("proxy-tool");
         let _ = fs::create_dir_all(&tool);
 
-        fs::write(tool.join(".env.example"), "\
+        fs::write(
+            tool.join(".env.example"),
+            "\
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4
-").unwrap();
+",
+        )
+        .unwrap();
 
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
@@ -2987,8 +3141,14 @@ LLM_MODEL=gpt-4
         let env_path = tool.join(".env");
         assert!(env_path.exists());
         let content = fs::read_to_string(&env_path).unwrap();
-        assert!(content.contains("localhost:3000/api/v1/proxy/openai"), "URL should be rewritten to proxy");
-        assert!(content.contains("sk-test-proxy-key"), "API key should still be resolved from vault");
+        assert!(
+            content.contains("localhost:3000/api/v1/proxy/openai"),
+            "URL should be rewritten to proxy"
+        );
+        assert!(
+            content.contains("sk-test-proxy-key"),
+            "API key should still be resolved from vault"
+        );
 
         // Cleanup
         let _ = fs::remove_file(env_path);

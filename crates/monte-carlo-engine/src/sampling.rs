@@ -232,7 +232,7 @@ fn transform_to_bounds(unit_value: f64, bound: &ParameterBounds) -> f64 {
         Some(DistributionHint::Uniform) | None => {
             // Linear interpolation
             bound.min + unit_value * (bound.max - bound.min)
-        },
+        }
         Some(DistributionHint::Normal { mean, std_dev }) => {
             // Inverse CDF transform for normal distribution
             // Clamp to bounds
@@ -243,14 +243,14 @@ fn transform_to_bounds(unit_value: f64, bound: &ParameterBounds) -> f64 {
             );
             let value = normal.inverse_cdf(unit_value.clamp(0.001, 0.999));
             value.clamp(bound.min, bound.max)
-        },
+        }
         Some(DistributionHint::LogNormal { mu, sigma }) => {
             use statrs::distribution::{ContinuousCDF, LogNormal as StatrsLogNormal};
             let lognormal = StatrsLogNormal::new(*mu, *sigma)
                 .unwrap_or(StatrsLogNormal::new(0.0, 1.0).unwrap());
             let value = lognormal.inverse_cdf(unit_value.clamp(0.001, 0.999));
             value.clamp(bound.min, bound.max)
-        },
+        }
         Some(DistributionHint::Beta { alpha, beta }) => {
             use statrs::distribution::{Beta as StatrsBeta, ContinuousCDF};
             let beta_dist =
@@ -258,7 +258,7 @@ fn transform_to_bounds(unit_value: f64, bound: &ParameterBounds) -> f64 {
             let unit_sample = beta_dist.inverse_cdf(unit_value.clamp(0.001, 0.999));
             // Scale to bounds
             bound.min + unit_sample * (bound.max - bound.min)
-        },
+        }
         Some(DistributionHint::Triangular { mode }) => {
             // Inverse CDF for triangular distribution
             let a = bound.min;
@@ -271,7 +271,7 @@ fn transform_to_bounds(unit_value: f64, bound: &ParameterBounds) -> f64 {
             } else {
                 b - (((1.0 - unit_value) * (b - a) * (b - c)).sqrt())
             }
-        },
+        }
     }
 }
 
@@ -281,30 +281,30 @@ fn sample_with_hint<R: Rng>(rng: &mut R, bound: &ParameterBounds) -> f64 {
         Some(DistributionHint::Uniform) | None => {
             let dist = Uniform::new(bound.min, bound.max);
             rng.sample(dist)
-        },
+        }
         Some(DistributionHint::Normal { mean, std_dev }) => {
             let dist = Normal::new(*mean, *std_dev).unwrap_or(
                 Normal::new((bound.min + bound.max) / 2.0, (bound.max - bound.min) / 4.0).unwrap(),
             );
             rng.sample(dist).clamp(bound.min, bound.max)
-        },
+        }
         Some(DistributionHint::LogNormal { mu, sigma }) => {
             let dist = LogNormal::new(*mu, *sigma).unwrap_or(LogNormal::new(0.0, 1.0).unwrap());
             rng.sample(dist).clamp(bound.min, bound.max)
-        },
+        }
         Some(DistributionHint::Beta { alpha, beta }) => {
             let dist = Beta::new(*alpha, *beta).unwrap_or(Beta::new(1.0, 1.0).unwrap());
             let unit_sample: f64 = rng.sample(dist);
             // Scale to bounds
             bound.min + unit_sample * (bound.max - bound.min)
-        },
+        }
         Some(DistributionHint::Triangular { mode }) => {
             let c = mode.clamp(bound.min, bound.max);
             let dist = Triangular::new(bound.min, bound.max, c).unwrap_or(
                 Triangular::new(bound.min, bound.max, (bound.min + bound.max) / 2.0).unwrap(),
             );
             rng.sample(dist)
-        },
+        }
     }
 }
 
@@ -317,14 +317,14 @@ pub fn create_sampler(name: &str, seed: Option<u64>) -> Box<dyn SamplingStrategy
                 None => RandomSampler::new(),
             };
             Box::new(sampler)
-        },
+        }
         "latin_hypercube" | "lhs" => {
             let sampler = match seed {
                 Some(s) => LatinHypercubeSampler::with_seed(s),
                 None => LatinHypercubeSampler::new(),
             };
             Box::new(sampler)
-        },
+        }
         "sobol" | "quasi" => Box::new(SobolSampler::new()),
         _ => {
             // Default to Latin Hypercube
@@ -333,7 +333,7 @@ pub fn create_sampler(name: &str, seed: Option<u64>) -> Box<dyn SamplingStrategy
                 None => LatinHypercubeSampler::new(),
             };
             Box::new(sampler)
-        },
+        }
     }
 }
 

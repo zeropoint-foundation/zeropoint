@@ -258,10 +258,7 @@ impl RecoveryEngine {
         timestamp: DateTime<Utc>,
     ) {
         // Tool invocations.
-        if let Some(tool_name) = extensions
-            .get("zp.tool.name")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(tool_name) = extensions.get("zp.tool.name").and_then(|v| v.as_str()) {
             let conversation_id = extensions
                 .get("zp.tool.conversation_id")
                 .and_then(|v| v.as_str())
@@ -343,10 +340,7 @@ impl RecoveryEngine {
         }
 
         // Observations created.
-        if let Some(obs_id) = extensions
-            .get("zp.observation.id")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(obs_id) = extensions.get("zp.observation.id").and_then(|v| v.as_str()) {
             let category = extensions
                 .get("zp.observation.category")
                 .and_then(|v| v.as_str())
@@ -377,7 +371,10 @@ impl RecoveryEngine {
     }
 
     /// Finalize recovery, applying timeout rules and generating the result.
-    pub fn finalize(mut self, checkpoint: Option<&Checkpoint>) -> (RecoveredState, RecoveryReceipt) {
+    pub fn finalize(
+        mut self,
+        checkpoint: Option<&Checkpoint>,
+    ) -> (RecoveredState, RecoveryReceipt) {
         let now = Utc::now();
 
         // Apply timeout rules to pending tool executions.
@@ -446,10 +443,7 @@ impl RecoveryEngine {
 mod tests {
     use super::*;
 
-    fn make_entry(
-        id: &str,
-        extensions: Option<serde_json::Value>,
-    ) -> ChainEntry {
+    fn make_entry(id: &str, extensions: Option<serde_json::Value>) -> ChainEntry {
         let ext_map = extensions.map(|v| {
             v.as_object()
                 .unwrap()
@@ -498,7 +492,10 @@ mod tests {
 
         assert_eq!(state.pending_tool_executions.len(), 1);
         assert_eq!(state.pending_tool_executions[0].tool_name, "web_search");
-        assert_eq!(state.pending_tool_executions[0].action, RecoveryAction::Retry);
+        assert_eq!(
+            state.pending_tool_executions[0].action,
+            RecoveryAction::Retry
+        );
         assert!(receipt.success);
     }
 
@@ -552,7 +549,10 @@ mod tests {
 
         let (state, receipt) = engine.finalize(None);
         assert_eq!(state.pending_tool_executions.len(), 1);
-        assert_eq!(state.pending_tool_executions[0].action, RecoveryAction::Discard);
+        assert_eq!(
+            state.pending_tool_executions[0].action,
+            RecoveryAction::Discard
+        );
         assert_eq!(state.discarded_entries.len(), 1);
         assert_eq!(receipt.entries_discarded, 1);
     }

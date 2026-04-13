@@ -238,6 +238,7 @@ impl Default for ReconstitutionConfig {
 /// at each step. Produces a `ReconstitutedState` that can be compared against
 /// the live state to generate a blast radius report.
 pub struct ReconstitutionEngine {
+    #[allow(dead_code)]
     config: ReconstitutionConfig,
     state: ReconstitutedState,
     last_timestamp: Option<DateTime<Utc>>,
@@ -333,7 +334,9 @@ impl ReconstitutionEngine {
             {
                 match role {
                     "operator" => {
-                        self.state.valid_operator_keys.insert(issued_key.to_string());
+                        self.state
+                            .valid_operator_keys
+                            .insert(issued_key.to_string());
                     }
                     "agent" => {
                         self.state.valid_agent_keys.insert(issued_key.to_string());
@@ -377,7 +380,9 @@ impl ReconstitutionEngine {
             .and_then(|v| v.as_str())
         {
             self.state.active_capabilities.remove(revoked_grant);
-            self.state.revoked_capabilities.insert(revoked_grant.to_string());
+            self.state
+                .revoked_capabilities
+                .insert(revoked_grant.to_string());
         }
 
         // Memory promotions.
@@ -412,7 +417,9 @@ impl ReconstitutionEngine {
             .get("zp.quarantine.memory_id")
             .and_then(|v| v.as_str())
         {
-            self.state.quarantined_memories.insert(quarantined_id.to_string());
+            self.state
+                .quarantined_memories
+                .insert(quarantined_id.to_string());
             if let Some(mem) = self.state.memory_states.get_mut(quarantined_id) {
                 mem.quarantined = true;
             }
@@ -615,7 +622,10 @@ mod tests {
         );
         engine.process_entry(&entry);
 
-        assert!(engine.state.valid_operator_keys.contains("operator-key-abc"));
+        assert!(engine
+            .state
+            .valid_operator_keys
+            .contains("operator-key-abc"));
 
         // Issue an agent key.
         let entry = make_entry_with_ext(
@@ -642,7 +652,10 @@ mod tests {
         );
         engine.process_entry(&entry);
 
-        assert!(!engine.state.valid_operator_keys.contains("operator-key-abc"));
+        assert!(!engine
+            .state
+            .valid_operator_keys
+            .contains("operator-key-abc"));
         assert!(engine.state.revoked_keys.contains("operator-key-abc"));
 
         let state = engine.finalize(true);
@@ -739,7 +752,9 @@ mod tests {
         recon.revoked_keys.insert("key-compromised".to_string());
         recon.valid_operator_keys.insert("key-valid".to_string());
         recon.revoked_capabilities.insert("cap-revoked".to_string());
-        recon.quarantined_memories.insert("mem-quarantined".to_string());
+        recon
+            .quarantined_memories
+            .insert("mem-quarantined".to_string());
         recon.memory_states.insert(
             "mem-1".to_string(),
             ReconstitutedMemory {
@@ -811,7 +826,10 @@ mod tests {
         engine.process_entry(&entry2);
 
         assert_eq!(engine.anomaly_count(), 1);
-        assert_eq!(engine.state.anomalies[0].kind, AnomalyKind::TimestampRegression);
+        assert_eq!(
+            engine.state.anomalies[0].kind,
+            AnomalyKind::TimestampRegression
+        );
     }
 
     #[test]

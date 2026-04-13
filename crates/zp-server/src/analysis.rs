@@ -33,11 +33,11 @@
 //!
 //! Every query emits a receipt, so the analysis itself is auditable.
 
-use std::sync::Arc;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::Deserialize;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use mle_star_engine::{LearningContext, MLEStarConfig, MLEStarEngine, Observation};
@@ -56,6 +56,12 @@ pub struct AnalysisEngines {
     pub monte_carlo: MonteCarloEngine,
     /// Tracks the last chain index we scanned, so we only process new receipts.
     pub last_scanned_index: RwLock<usize>,
+}
+
+impl Default for AnalysisEngines {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AnalysisEngines {
@@ -223,7 +229,7 @@ fn receipt_to_observation(entry: &AuditEntry) -> Option<Observation> {
             // tool:codebase:tree:toolname, tool:codebase:read:toolname, etc.
             let action = parts[2]; // tree, read, search
             let tool = parts[3];
-            let obs = Observation::new(tool, &format!("codebase:{}", action))
+            let obs = Observation::new(tool, format!("codebase:{}", action))
                 .with_success(true)
                 .with_quality(1.0)
                 .with_duration(0);
@@ -357,8 +363,7 @@ pub async fn expertise_handler(
     }
 
     // Run pre-learning
-    let context = LearningContext::new()
-        .with_hypothesis_generation(q.hypotheses.unwrap_or(true));
+    let context = LearningContext::new().with_hypothesis_generation(q.hypotheses.unwrap_or(true));
     let result = engines.mle_star.prelearn(&q.target, &context).await;
 
     match result {
@@ -521,13 +526,12 @@ pub async fn simulate_handler(
     let se = estimate.standard_error.max(0.01); // floor to avoid zero variance
 
     // Create parameter bounds centered on the estimate
-    let bounds = vec![
-        ParameterBounds::new(metric, (mean - 3.0 * se).max(0.0), (mean + 3.0 * se).min(1.0))
-            .with_distribution(monte_carlo_engine::DistributionHint::Normal {
-                mean,
-                std_dev: se,
-            }),
-    ];
+    let bounds = vec![ParameterBounds::new(
+        metric,
+        (mean - 3.0 * se).max(0.0),
+        (mean + 3.0 * se).min(1.0),
+    )
+    .with_distribution(monte_carlo_engine::DistributionHint::Normal { mean, std_dev: se })];
 
     let num_sims = req.simulations.unwrap_or(5000);
     let mc = MonteCarloEngine::with_config(

@@ -33,16 +33,9 @@ async fn ws_onboard_expect_rejected(server: &TestServer, payload: serde_json::Va
 
             // Read response — should be an error or the action should be denied
             if let Some(Ok(Message::Text(text))) = ws.next().await {
-                let resp: serde_json::Value =
-                    serde_json::from_str(&text).unwrap_or_default();
-                let event = resp
-                    .get("event")
-                    .and_then(|e| e.as_str())
-                    .unwrap_or("");
-                let resp_type = resp
-                    .get("type")
-                    .and_then(|t| t.as_str())
-                    .unwrap_or("");
+                let resp: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+                let event = resp.get("event").and_then(|e| e.as_str()).unwrap_or("");
+                let resp_type = resp.get("type").and_then(|t| t.as_str()).unwrap_or("");
 
                 // The action should be denied. Accepted events are "error",
                 // "blocked", or a state-ordering violation.

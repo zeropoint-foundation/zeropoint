@@ -4,8 +4,13 @@ use super::{OnboardAction, OnboardEvent, OnboardState};
 use serde::Serialize;
 
 /// Set the user's inference posture choice.
-pub async fn handle_set_inference_posture(action: &OnboardAction, state: &mut OnboardState) -> Vec<OnboardEvent> {
-    let posture = action.params.get("posture")
+pub async fn handle_set_inference_posture(
+    action: &OnboardAction,
+    state: &mut OnboardState,
+) -> Vec<OnboardEvent> {
+    let posture = action
+        .params
+        .get("posture")
         .and_then(|v| v.as_str())
         .unwrap_or("mixed")
         .to_string();
@@ -49,14 +54,12 @@ pub async fn handle_setup_guidance(action: &OnboardAction) -> Vec<OnboardEvent> 
         ("ollama", "macos") => SetupInstall {
             runtime: "Ollama".into(),
             method: "Homebrew or direct download".into(),
-            commands: vec![
-                "brew install ollama".into(),
-                "ollama serve".into(),
-            ],
+            commands: vec!["brew install ollama".into(), "ollama serve".into()],
             alt_url: Some("https://ollama.com/download/mac".into()),
             verify_command: "ollama --version".into(),
             notes: "Ollama runs as a background service after install. If using Homebrew, \
-                    it starts automatically.".into(),
+                    it starts automatically."
+                .into(),
         },
         ("ollama", "linux") => SetupInstall {
             runtime: "Ollama".into(),
@@ -73,13 +76,12 @@ pub async fn handle_setup_guidance(action: &OnboardAction) -> Vec<OnboardEvent> 
         ("ollama", "windows") => SetupInstall {
             runtime: "Ollama".into(),
             method: "Windows installer".into(),
-            commands: vec![
-                "winget install Ollama.Ollama".into(),
-            ],
+            commands: vec!["winget install Ollama.Ollama".into()],
             alt_url: Some("https://ollama.com/download/windows".into()),
             verify_command: "ollama --version".into(),
             notes: "After install, Ollama runs in the system tray. You can also use \
-                    the direct installer from the download page.".into(),
+                    the direct installer from the download page."
+                .into(),
         },
         ("lm-studio", _) => SetupInstall {
             runtime: "LM Studio".into(),
@@ -99,7 +101,8 @@ pub async fn handle_setup_guidance(action: &OnboardAction) -> Vec<OnboardEvent> 
             verify_command: String::new(),
             notes: "Download and install Jan. It provides a one-click model setup — choose a \
                     model from the hub and Jan handles the rest. Enable the API server in \
-                    Settings → Advanced.".into(),
+                    Settings → Advanced."
+                .into(),
         },
         _ => SetupInstall {
             runtime: runtime_pref.to_string(),
@@ -108,7 +111,8 @@ pub async fn handle_setup_guidance(action: &OnboardAction) -> Vec<OnboardEvent> 
             alt_url: None,
             verify_command: String::new(),
             notes: "Install your preferred runtime and ensure it serves an OpenAI-compatible \
-                    API on localhost.".into(),
+                    API on localhost."
+                .into(),
         },
     };
 
@@ -132,7 +136,9 @@ pub async fn handle_start_model_pull(action: &OnboardAction) -> Vec<OnboardEvent
     let model_id = match action.params.get("model_id").and_then(|v| v.as_str()) {
         Some(m) => m,
         None => {
-            return vec![OnboardEvent::error("start_model_pull requires 'model_id' parameter")];
+            return vec![OnboardEvent::error(
+                "start_model_pull requires 'model_id' parameter",
+            )];
         }
     };
 
@@ -281,7 +287,7 @@ pub fn detect_system_resources() -> SystemResources {
         let gpu_note = if unified_memory {
             format!("{}GB unified memory", ram_gb)
         } else if let Some(ref g) = gpu {
-            format!("{}", g)
+            g.to_string()
         } else {
             format!("{}GB RAM", ram_gb)
         };
@@ -296,7 +302,7 @@ pub fn detect_system_resources() -> SystemResources {
         let gpu_note = if unified_memory {
             format!("{}GB unified memory", ram_gb)
         } else if let Some(ref g) = gpu {
-            format!("{}", g)
+            g.to_string()
         } else {
             format!("{}GB RAM", ram_gb)
         };
@@ -461,7 +467,9 @@ fn recommend_model(system: &SystemResources, runtime: &str) -> ModelRecommendati
 }
 
 fn load_model_override(inference_memory_gb: u64, runtime: &str) -> Option<ModelRecommendation> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok()?;
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()?;
     let path = std::path::Path::new(&home)
         .join(".zeropoint")
         .join("config")
@@ -502,18 +510,39 @@ fn load_model_override(inference_memory_gb: u64, runtime: &str) -> Option<ModelR
     let size = tier.get("size")?.as_str().unwrap_or("unknown");
     let rationale = tier.get("rationale")?.as_str().unwrap_or("");
 
-    let source_url = tier.get("source_url").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let last_verified = tier.get("last_verified").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let source_url = tier
+        .get("source_url")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let last_verified = tier
+        .get("last_verified")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
     let alternative = tier.get("alternative").and_then(|alt| {
         let alt_id = alt.get("model_id")?.as_str()?;
         Some(ModelAlt {
             model_id: alt_id.to_string(),
-            display_name: alt.get("display_name").and_then(|v| v.as_str()).unwrap_or(alt_id).to_string(),
-            size: alt.get("size").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
+            display_name: alt
+                .get("display_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(alt_id)
+                .to_string(),
+            size: alt
+                .get("size")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
             pull_command: pull_cmd(alt_id),
-            rationale: alt.get("rationale").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            source_url: alt.get("source_url").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            rationale: alt
+                .get("rationale")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            source_url: alt
+                .get("source_url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         })
     });
 
@@ -569,16 +598,22 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
         if let Some(info) = gpu_info {
             if let Some(displays) = info.get("SPDisplaysDataType").and_then(|d| d.as_array()) {
                 for display in displays {
-                    let name = display.get("sppci_model")
+                    let name = display
+                        .get("sppci_model")
                         .and_then(|n| n.as_str())
                         .unwrap_or("Unknown GPU");
-                    let vram = display.get("spdisplays_vram_shared")
+                    let vram = display
+                        .get("spdisplays_vram_shared")
                         .or_else(|| display.get("spdisplays_vram"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
                     let vram_gb = parse_vram_string(vram);
                     if vram_gb > 0 {
-                        return (Some(format!("{} ({}GB VRAM)", name, vram_gb)), vram_gb, false);
+                        return (
+                            Some(format!("{} ({}GB VRAM)", name, vram_gb)),
+                            vram_gb,
+                            false,
+                        );
                     }
                 }
             }
@@ -590,7 +625,10 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
     #[cfg(target_os = "linux")]
     {
         if let Ok(output) = std::process::Command::new("nvidia-smi")
-            .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
+            .args([
+                "--query-gpu=name,memory.total",
+                "--format=csv,noheader,nounits",
+            ])
             .output()
         {
             if output.status.success() {
@@ -601,7 +639,11 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
                         let name = parts[0];
                         let vram_mb: u64 = parts[1].parse().unwrap_or(0);
                         let vram_gb = vram_mb / 1024;
-                        return (Some(format!("{} ({}GB VRAM)", name, vram_gb)), vram_gb, false);
+                        return (
+                            Some(format!("{} ({}GB VRAM)", name, vram_gb)),
+                            vram_gb,
+                            false,
+                        );
                     }
                 }
             }
@@ -617,7 +659,11 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
                     if let Some(total_str) = line.split(',').nth(1) {
                         if let Ok(vram_bytes) = total_str.trim().parse::<u64>() {
                             let vram_gb = vram_bytes / (1024 * 1024 * 1024);
-                            return (Some(format!("AMD GPU ({}GB VRAM)", vram_gb)), vram_gb, false);
+                            return (
+                                Some(format!("AMD GPU ({}GB VRAM)", vram_gb)),
+                                vram_gb,
+                                false,
+                            );
                         }
                     }
                 }
@@ -630,7 +676,10 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
     #[cfg(target_os = "windows")]
     {
         if let Ok(output) = std::process::Command::new("nvidia-smi")
-            .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
+            .args([
+                "--query-gpu=name,memory.total",
+                "--format=csv,noheader,nounits",
+            ])
             .output()
         {
             if output.status.success() {
@@ -641,14 +690,24 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
                         let name = parts[0];
                         let vram_mb: u64 = parts[1].parse().unwrap_or(0);
                         let vram_gb = vram_mb / 1024;
-                        return (Some(format!("{} ({}GB VRAM)", name, vram_gb)), vram_gb, false);
+                        return (
+                            Some(format!("{} ({}GB VRAM)", name, vram_gb)),
+                            vram_gb,
+                            false,
+                        );
                     }
                 }
             }
         }
 
         if let Ok(output) = std::process::Command::new("wmic")
-            .args(["path", "win32_VideoController", "get", "Name,AdapterRAM", "/value"])
+            .args([
+                "path",
+                "win32_VideoController",
+                "get",
+                "Name,AdapterRAM",
+                "/value",
+            ])
             .output()
         {
             if output.status.success() {
@@ -666,7 +725,11 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
                 }
                 if !name.is_empty() && vram_bytes > 0 {
                     let vram_gb = vram_bytes / (1024 * 1024 * 1024);
-                    return (Some(format!("{} ({}GB VRAM)", name, vram_gb)), vram_gb, false);
+                    return (
+                        Some(format!("{} ({}GB VRAM)", name, vram_gb)),
+                        vram_gb,
+                        false,
+                    );
                 }
             }
         }
@@ -681,6 +744,7 @@ fn detect_gpu() -> (Option<String>, u64, bool) {
 }
 
 /// Parse VRAM strings like "8 GB", "8192 MB", "8GB".
+#[allow(dead_code)]
 fn parse_vram_string(s: &str) -> u64 {
     let s = s.trim().to_uppercase();
     if let Some(gb_str) = s.strip_suffix("GB").or_else(|| s.strip_suffix(" GB")) {
@@ -721,7 +785,8 @@ fn detect_platform_resources() -> (u64, Option<String>) {
         let ram_gb = std::fs::read_to_string("/proc/meminfo")
             .ok()
             .and_then(|content| {
-                content.lines()
+                content
+                    .lines()
                     .find(|l| l.starts_with("MemTotal:"))
                     .and_then(|l| {
                         l.split_whitespace()
@@ -735,7 +800,8 @@ fn detect_platform_resources() -> (u64, Option<String>) {
         let chip = std::fs::read_to_string("/proc/cpuinfo")
             .ok()
             .and_then(|content| {
-                content.lines()
+                content
+                    .lines()
                     .find(|l| l.starts_with("model name"))
                     .and_then(|l| l.split(':').nth(1))
                     .map(|s| s.trim().to_string())

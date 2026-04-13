@@ -269,11 +269,9 @@ impl ReceiptBuilder {
         };
 
         // Apply default expiry if no explicit one was set
-        let expires_at = self.expires_at.or_else(|| {
-            self.receipt_type
-                .default_expiry()
-                .map(|d| Utc::now() + d)
-        });
+        let expires_at = self
+            .expires_at
+            .or_else(|| self.receipt_type.default_expiry().map(|d| Utc::now() + d));
 
         let mut receipt = Receipt {
             id,

@@ -10,7 +10,7 @@
 // - `ledger-transport-hid` for USB HID communication
 // - `ledger-apdu` for APDU command construction
 
-use super::super::{ProviderCapability, SovereigntyMode, SovereigntyProvider, EnrollmentResult};
+use super::super::{EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;
 
 /// Ledger sovereignty provider.

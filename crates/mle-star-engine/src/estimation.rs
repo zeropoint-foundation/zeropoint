@@ -63,7 +63,7 @@ impl MLEstimator for BasicEstimator {
                     .iter()
                     .filter_map(|o| o.output_metrics.get(capability_name).copied())
                     .collect()
-            },
+            }
         };
 
         if values.is_empty() {

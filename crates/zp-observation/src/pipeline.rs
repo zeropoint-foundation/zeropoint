@@ -13,9 +13,7 @@ use tracing::{info, warn};
 
 use crate::config::ObservationConfig;
 use crate::observer::{build_observer_prompt, parse_observer_output};
-use crate::receipts::{
-    generate_observation_receipts, generate_reflection_receipt,
-};
+use crate::receipts::{generate_observation_receipts, generate_reflection_receipt};
 use crate::reflector::{apply_reflector_actions, build_reflector_prompt, parse_reflector_output};
 use crate::store::ObservationStore;
 use crate::types::{Observation, ObservationPriority, Reflection, SourceRange};
@@ -39,8 +37,7 @@ pub fn tier1_observe(
     messages
         .iter()
         .filter(|(_, content)| !content.trim().is_empty())
-        .enumerate()
-        .map(|(_i, (role, content))| {
+        .map(|(role, content)| {
             let truncated = if content.len() > 100 {
                 format!("{}...", &content[..97])
             } else {
@@ -196,7 +193,9 @@ impl CognitionPipeline {
 
         // Store observations.
         for obs in &observations {
-            store.append(obs).map_err(|e| format!("Failed to store observation: {}", e))?;
+            store
+                .append(obs)
+                .map_err(|e| format!("Failed to store observation: {}", e))?;
         }
 
         info!(
@@ -237,7 +236,9 @@ impl CognitionPipeline {
         );
 
         for obs in &observations {
-            store.append(obs).map_err(|e| format!("Failed to store observation: {}", e))?;
+            store
+                .append(obs)
+                .map_err(|e| format!("Failed to store observation: {}", e))?;
         }
 
         warn!(
@@ -310,9 +311,7 @@ impl CognitionPipeline {
             .sum::<usize>()
             + active
                 .iter()
-                .filter(|o| {
-                    !consumed_ids.contains(&o.id) && !dropped_ids.contains(&o.id)
-                })
+                .filter(|o| !consumed_ids.contains(&o.id) && !dropped_ids.contains(&o.id))
                 .map(|o| o.token_estimate)
                 .sum::<usize>();
 
@@ -328,11 +327,8 @@ impl CognitionPipeline {
         };
 
         // Generate the reflection receipt.
-        let receipt = generate_reflection_receipt(
-            &reflection,
-            &self.reflector_id,
-            chain_parent_receipt_id,
-        );
+        let receipt =
+            generate_reflection_receipt(&reflection, &self.reflector_id, chain_parent_receipt_id);
 
         // Apply to store: mark consumed/dropped as superseded, insert produced.
         store
@@ -387,8 +383,14 @@ mod tests {
     #[test]
     fn tier1_fallback_produces_observations() {
         let messages = vec![
-            ("user".to_string(), "We have a critical security vulnerability in the auth module".to_string()),
-            ("assistant".to_string(), "I'll fix the authentication bypass immediately".to_string()),
+            (
+                "user".to_string(),
+                "We have a critical security vulnerability in the auth module".to_string(),
+            ),
+            (
+                "assistant".to_string(),
+                "I'll fix the authentication bypass immediately".to_string(),
+            ),
         ];
 
         let sr = make_source_range();
@@ -401,10 +403,22 @@ mod tests {
 
     #[test]
     fn tier1_infers_priority_correctly() {
-        assert_eq!(infer_priority("This is a critical blocker"), ObservationPriority::High);
-        assert_eq!(infer_priority("Task completed successfully"), ObservationPriority::Completed);
-        assert_eq!(infer_priority("Working on the new feature"), ObservationPriority::Medium);
-        assert_eq!(infer_priority("Just some context"), ObservationPriority::Low);
+        assert_eq!(
+            infer_priority("This is a critical blocker"),
+            ObservationPriority::High
+        );
+        assert_eq!(
+            infer_priority("Task completed successfully"),
+            ObservationPriority::Completed
+        );
+        assert_eq!(
+            infer_priority("Working on the new feature"),
+            ObservationPriority::Medium
+        );
+        assert_eq!(
+            infer_priority("Just some context"),
+            ObservationPriority::Low
+        );
     }
 
     #[test]

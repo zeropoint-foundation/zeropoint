@@ -227,13 +227,25 @@ impl EndpointRateLimiter {
     pub fn new() -> Self {
         let mut limits = HashMap::new();
         // Tool launch: 5 per minute
-        limits.insert("/api/v1/tools/launch".to_string(), (Duration::from_secs(60), 5));
+        limits.insert(
+            "/api/v1/tools/launch".to_string(),
+            (Duration::from_secs(60), 5),
+        );
         // Tool stop: 5 per minute
-        limits.insert("/api/v1/tools/stop".to_string(), (Duration::from_secs(60), 5));
+        limits.insert(
+            "/api/v1/tools/stop".to_string(),
+            (Duration::from_secs(60), 5),
+        );
         // Capability grant: 10 per minute
-        limits.insert("/api/v1/capabilities/grant".to_string(), (Duration::from_secs(60), 10));
+        limits.insert(
+            "/api/v1/capabilities/grant".to_string(),
+            (Duration::from_secs(60), 10),
+        );
         // Delegation: 10 per minute
-        limits.insert("/api/v1/capabilities/delegate".to_string(), (Duration::from_secs(60), 10));
+        limits.insert(
+            "/api/v1/capabilities/delegate".to_string(),
+            (Duration::from_secs(60), 10),
+        );
         // Chat/LLM proxy: 30 per minute
         limits.insert("/api/v1/chat".to_string(), (Duration::from_secs(60), 30));
 
@@ -387,13 +399,11 @@ pub async fn require_auth(
     // path, the query param is ignored so tokens never land in access logs
     // or browser history (AUTH-VULN-03).
     let query_token = if path.starts_with("/ws") {
-        req.uri()
-            .query()
-            .and_then(|q| {
-                q.split('&')
-                    .find(|p| p.starts_with("token="))
-                    .map(|p| p.trim_start_matches("token=").to_string())
-            })
+        req.uri().query().and_then(|q| {
+            q.split('&')
+                .find(|p| p.starts_with("token="))
+                .map(|p| p.trim_start_matches("token=").to_string())
+        })
     } else {
         None
     };
@@ -406,7 +416,9 @@ pub async fn require_auth(
             if let Err(retry_after) = endpoint_limiter.check(&path, client_ip) {
                 warn!(
                     "Endpoint rate limit: {} on {} — retry in {}s",
-                    client_ip, path, retry_after.as_secs()
+                    client_ip,
+                    path,
+                    retry_after.as_secs()
                 );
                 return Err(StatusCode::TOO_MANY_REQUESTS);
             }
@@ -646,20 +658,8 @@ pub fn check_command(cmd: &str) -> Result<(), String> {
 
 /// Paths that must never be registered as tools.
 const BLOCKED_PATHS: &[&str] = &[
-    "/etc",
-    "/var",
-    "/usr",
-    "/bin",
-    "/sbin",
-    "/boot",
-    "/dev",
-    "/proc",
-    "/sys",
-    "/tmp",
-    "/root",
-    "/lib",
-    "/lib64",
-    "/opt",
+    "/etc", "/var", "/usr", "/bin", "/sbin", "/boot", "/dev", "/proc", "/sys", "/tmp", "/root",
+    "/lib", "/lib64", "/opt",
 ];
 
 /// Path components that indicate sensitive directories.
@@ -733,7 +733,8 @@ pub fn validate_register_path(path: &str) -> Result<std::path::PathBuf, String> 
         }
     }
     for blocked in BLOCKED_PATHS {
-        if canonical_str.as_ref() == *blocked || canonical_str.starts_with(&format!("{}/", blocked)) {
+        if canonical_str.as_ref() == *blocked || canonical_str.starts_with(&format!("{}/", blocked))
+        {
             // Exception: /opt is sometimes used for tools
             if *blocked == "/opt" {
                 continue;
@@ -780,15 +781,42 @@ mod tests {
         assert!(check_command("ls -la").is_ok());
 
         // Explicitly removed from allowlist (Phase 0.2)
-        assert!(check_command("curl http://example.com").is_err(), "curl must be blocked (SSRF-VULN-01)");
-        assert!(check_command("wget http://example.com").is_err(), "wget must be blocked (SSRF-VULN-01)");
-        assert!(check_command("make").is_err(), "make must be blocked (INJ-VULN-02)");
-        assert!(check_command("make install").is_err(), "make must be blocked (INJ-VULN-02)");
-        assert!(check_command("cargo build --release").is_err(), "cargo must be blocked");
-        assert!(check_command("cargo run").is_err(), "cargo run must be blocked");
-        assert!(check_command("python script.py").is_err(), "python must be blocked");
-        assert!(check_command("python3 script.py").is_err(), "python3 must be blocked");
-        assert!(check_command("node app.js").is_err(), "node must be blocked");
+        assert!(
+            check_command("curl http://example.com").is_err(),
+            "curl must be blocked (SSRF-VULN-01)"
+        );
+        assert!(
+            check_command("wget http://example.com").is_err(),
+            "wget must be blocked (SSRF-VULN-01)"
+        );
+        assert!(
+            check_command("make").is_err(),
+            "make must be blocked (INJ-VULN-02)"
+        );
+        assert!(
+            check_command("make install").is_err(),
+            "make must be blocked (INJ-VULN-02)"
+        );
+        assert!(
+            check_command("cargo build --release").is_err(),
+            "cargo must be blocked"
+        );
+        assert!(
+            check_command("cargo run").is_err(),
+            "cargo run must be blocked"
+        );
+        assert!(
+            check_command("python script.py").is_err(),
+            "python must be blocked"
+        );
+        assert!(
+            check_command("python3 script.py").is_err(),
+            "python3 must be blocked"
+        );
+        assert!(
+            check_command("node app.js").is_err(),
+            "node must be blocked"
+        );
 
         // Always blocked
         assert!(check_command("rm -rf /").is_err());
@@ -864,7 +892,10 @@ mod tests {
         assert!(limiter.record_failure(ip).is_ok());
         assert!(limiter.record_failure(ip).is_ok());
         assert!(limiter.record_failure(ip).is_ok());
-        assert!(limiter.record_failure(ip).is_err(), "4th failure should trip");
+        assert!(
+            limiter.record_failure(ip).is_err(),
+            "4th failure should trip"
+        );
         assert!(limiter.is_blocked(ip).is_some());
         std::env::remove_var("ZP_AUTH_RATE_LIMIT_PER_MIN");
     }

@@ -33,7 +33,11 @@ pub struct CheckResult {
 }
 
 impl CheckResult {
-    pub fn pass(id: impl Into<String>, label: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub fn pass(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -73,7 +77,11 @@ impl CheckResult {
         }
     }
 
-    pub fn skip(id: impl Into<String>, label: impl Into<String>, reason: impl Into<String>) -> Self {
+    pub fn skip(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -117,10 +125,22 @@ impl PreflightReport {
     pub fn build(platform: Platform, checks: Vec<CheckResult>, elapsed: Duration) -> Self {
         let summary = ReportSummary {
             total: checks.len(),
-            passed: checks.iter().filter(|c| matches!(c.status, Status::Pass)).count(),
-            failed: checks.iter().filter(|c| matches!(c.status, Status::Fail)).count(),
-            warnings: checks.iter().filter(|c| matches!(c.status, Status::Warn)).count(),
-            skipped: checks.iter().filter(|c| matches!(c.status, Status::Skip)).count(),
+            passed: checks
+                .iter()
+                .filter(|c| matches!(c.status, Status::Pass))
+                .count(),
+            failed: checks
+                .iter()
+                .filter(|c| matches!(c.status, Status::Fail))
+                .count(),
+            warnings: checks
+                .iter()
+                .filter(|c| matches!(c.status, Status::Warn))
+                .count(),
+            skipped: checks
+                .iter()
+                .filter(|c| matches!(c.status, Status::Skip))
+                .count(),
             ready: !checks.iter().any(|c| matches!(c.status, Status::Fail)),
         };
         Self {

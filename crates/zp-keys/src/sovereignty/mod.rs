@@ -23,10 +23,10 @@
 
 pub mod detection;
 pub mod face;
+pub mod file_based;
 pub mod fingerprint;
 pub mod hardware;
 pub mod login_password;
-pub mod file_based;
 pub mod touchid;
 pub mod windows_hello;
 
@@ -407,12 +407,24 @@ impl Serialize for ProviderCapabilities {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         // Serialize as a list of named capabilities for human-readable formats
         let mut names = Vec::new();
-        if self.has(Self::CAN_ATTEST) { names.push("can_attest"); }
-        if self.has(Self::CAN_REWRAP) { names.push("can_rewrap"); }
-        if self.has(Self::CAN_PASSPHRASE) { names.push("can_passphrase"); }
-        if self.has(Self::CAN_QUORUM) { names.push("can_quorum"); }
-        if self.has(Self::CAN_SALTED_DERIVATION) { names.push("can_salted_derivation"); }
-        if self.has(Self::HAS_DEVICE_STORAGE) { names.push("has_device_storage"); }
+        if self.has(Self::CAN_ATTEST) {
+            names.push("can_attest");
+        }
+        if self.has(Self::CAN_REWRAP) {
+            names.push("can_rewrap");
+        }
+        if self.has(Self::CAN_PASSPHRASE) {
+            names.push("can_passphrase");
+        }
+        if self.has(Self::CAN_QUORUM) {
+            names.push("can_quorum");
+        }
+        if self.has(Self::CAN_SALTED_DERIVATION) {
+            names.push("can_salted_derivation");
+        }
+        if self.has(Self::HAS_DEVICE_STORAGE) {
+            names.push("has_device_storage");
+        }
         names.serialize(serializer)
     }
 }
@@ -500,25 +512,21 @@ pub trait SovereigntyProvider: Send + Sync {
 
 /// Scan the system and return capabilities for all known sovereignty providers.
 pub fn detect_all_providers() -> Vec<ProviderCapability> {
-    let mut capabilities = Vec::new();
-
-    // Biometric providers
-    capabilities.push(touchid::TouchIdProvider.detect());
-    capabilities.push(fingerprint::FingerprintProvider.detect());
-    capabilities.push(face::FaceEnrollProvider.detect());
-    capabilities.push(windows_hello::WindowsHelloProvider.detect());
-
-    // Hardware wallet providers
-    capabilities.push(hardware::yubikey::YubiKeyProvider.detect());
-    capabilities.push(hardware::ledger::LedgerProvider.detect());
-    capabilities.push(hardware::trezor::TrezorProvider.detect());
-    capabilities.push(hardware::onlykey::OnlyKeyProvider.detect());
-
-    // Software providers (always available)
-    capabilities.push(login_password::LoginPasswordProvider.detect());
-    capabilities.push(file_based::FileProvider.detect());
-
-    capabilities
+    vec![
+        // Biometric providers
+        touchid::TouchIdProvider.detect(),
+        fingerprint::FingerprintProvider.detect(),
+        face::FaceEnrollProvider.detect(),
+        windows_hello::WindowsHelloProvider.detect(),
+        // Hardware wallet providers
+        hardware::yubikey::YubiKeyProvider.detect(),
+        hardware::ledger::LedgerProvider.detect(),
+        hardware::trezor::TrezorProvider.detect(),
+        hardware::onlykey::OnlyKeyProvider.detect(),
+        // Software providers (always available)
+        login_password::LoginPasswordProvider.detect(),
+        file_based::FileProvider.detect(),
+    ]
 }
 
 /// Get the appropriate provider for a given sovereignty mode.

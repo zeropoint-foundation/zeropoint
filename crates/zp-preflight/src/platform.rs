@@ -121,9 +121,11 @@ fn detect_os_version(os: Os) -> String {
             std::fs::read_to_string("/etc/os-release")
                 .ok()
                 .and_then(|s| {
-                    s.lines()
-                        .find(|l| l.starts_with("PRETTY_NAME="))
-                        .map(|l| l.trim_start_matches("PRETTY_NAME=").trim_matches('"').to_string())
+                    s.lines().find(|l| l.starts_with("PRETTY_NAME=")).map(|l| {
+                        l.trim_start_matches("PRETTY_NAME=")
+                            .trim_matches('"')
+                            .to_string()
+                    })
                 })
                 .unwrap_or_else(|| run_stdout("uname", &["-r"]).unwrap_or_default())
         }
@@ -178,12 +180,16 @@ pub fn install_cmd(pkg_mgr: &PackageManager, lib_name: &str) -> String {
         (_, "rust") => "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".into(),
 
         // ── Docker ──
-        (PackageManager::Apt, "docker") => "sudo apt-get install -y docker.io && sudo systemctl enable --now docker".into(),
+        (PackageManager::Apt, "docker") => {
+            "sudo apt-get install -y docker.io && sudo systemctl enable --now docker".into()
+        }
         (PackageManager::Brew, "docker") => "brew install --cask docker".into(),
         (_, "docker") => "See https://docs.docker.com/engine/install/".into(),
 
         // ── Fallback ──
-        (PackageManager::None, lib) => format!("Install '{lib}' using your system's package manager"),
+        (PackageManager::None, lib) => {
+            format!("Install '{lib}' using your system's package manager")
+        }
         (_, lib) => format!("Install '{lib}' using your system's package manager"),
     }
 }

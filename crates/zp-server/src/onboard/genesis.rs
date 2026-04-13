@@ -14,10 +14,14 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     let mut events = Vec::new();
 
     // Extract parameters
-    let operator_name = action.params.get("operator_name")
+    let operator_name = action
+        .params
+        .get("operator_name")
         .and_then(|v| v.as_str())
         .unwrap_or("Operator");
-    let sovereignty = action.params.get("sovereignty_mode")
+    let sovereignty = action
+        .params
+        .get("sovereignty_mode")
         .and_then(|v| v.as_str())
         .unwrap_or("auto");
 
@@ -26,7 +30,9 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     events.push(OnboardEvent::terminal("─────────────────"));
 
     // ── Step 1: Generate keypair ──────────────────────────────────
-    events.push(OnboardEvent::terminal("Generating operator keypair...        ✓ Ed25519"));
+    events.push(OnboardEvent::terminal(
+        "Generating operator keypair...        ✓ Ed25519",
+    ));
 
     let genesis = zp_keys::hierarchy::GenesisKey::generate(operator_name);
     let operator = zp_keys::hierarchy::OperatorKey::generate(operator_name, &genesis, None);
@@ -43,7 +49,9 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         .to_hex()
         .to_string();
 
-    events.push(OnboardEvent::terminal("Sealing constitutional bedrock...     ✓ 5 gates installed"));
+    events.push(OnboardEvent::terminal(
+        "Sealing constitutional bedrock...     ✓ 5 gates installed",
+    ));
 
     // ── Step 3: Resolve sovereignty mode ──────────────────────────
     let sovereignty_mode = if sovereignty == "auto" || sovereignty.is_empty() {
@@ -51,8 +59,17 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         // Auto-detect: pick the best CEREMONY-READY provider
         caps.iter()
             .find(|c| c.available && c.mode.is_ceremony_ready() && c.mode.requires_hardware())
-            .or_else(|| caps.iter().find(|c| c.available && c.mode.is_ceremony_ready() && c.mode == zp_keys::SovereigntyMode::LoginPassword))
-            .or_else(|| caps.iter().find(|c| c.available && c.mode.is_ceremony_ready()))
+            .or_else(|| {
+                caps.iter().find(|c| {
+                    c.available
+                        && c.mode.is_ceremony_ready()
+                        && c.mode == zp_keys::SovereigntyMode::LoginPassword
+                })
+            })
+            .or_else(|| {
+                caps.iter()
+                    .find(|c| c.available && c.mode.is_ceremony_ready())
+            })
             .map(|c| c.mode)
             .unwrap_or(zp_keys::SovereigntyMode::FileBased)
     } else {
@@ -65,13 +82,14 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     if !sovereignty_mode.is_ceremony_ready() {
         let name = sovereignty_mode.display_name();
         events.push(OnboardEvent::terminal(&format!(
-            "✗ {} provider is not yet fully implemented.", name
+            "✗ {} provider is not yet fully implemented.",
+            name
         )));
         events.push(OnboardEvent::terminal(
-            "  The Genesis ceremony requires a provider that can store and retrieve"
+            "  The Genesis ceremony requires a provider that can store and retrieve",
         ));
         events.push(OnboardEvent::terminal(
-            "  your secret. Select a different sovereignty provider to continue."
+            "  your secret. Select a different sovereignty provider to continue.",
         ));
         events.push(OnboardEvent::new(
             "genesis_failed",
@@ -101,19 +119,26 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     };
     if has_genesis {
         events.push(OnboardEvent::terminal(""));
-        events.push(OnboardEvent::terminal("⚠ ZeroPoint is already initialized."));
-        events.push(OnboardEvent::terminal("  Remove ~/.zeropoint/ to re-initialize."));
+        events.push(OnboardEvent::terminal(
+            "⚠ ZeroPoint is already initialized.",
+        ));
+        events.push(OnboardEvent::terminal(
+            "  Remove ~/.zeropoint/ to re-initialize.",
+        ));
 
         if let Ok(genesis_json) = std::fs::read_to_string(home.join("genesis.json")) {
             if let Ok(record) = serde_json::from_str::<serde_json::Value>(&genesis_json) {
                 state.genesis_complete = true;
-                state.genesis_public_key = record.get("genesis_public_key")
+                state.genesis_public_key = record
+                    .get("genesis_public_key")
                     .and_then(|v| v.as_str())
                     .map(String::from);
-                state.operator_name = record.get("operator")
+                state.operator_name = record
+                    .get("operator")
                     .and_then(|v| v.as_str())
                     .map(String::from);
-                state.sovereignty_mode = record.get("sovereignty_mode")
+                state.sovereignty_mode = record
+                    .get("sovereignty_mode")
                     .and_then(|v| v.as_str())
                     .map(String::from);
                 state.step = 3;
@@ -135,7 +160,10 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     let keyring = match zp_keys::Keyring::open(home.join("keys")) {
         Ok(k) => k,
         Err(e) => {
-            events.push(OnboardEvent::error(&format!("Failed to create keyring: {}", e)));
+            events.push(OnboardEvent::error(&format!(
+                "Failed to create keyring: {}",
+                e
+            )));
             return events;
         }
     };
@@ -147,13 +175,15 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     let provider = zp_keys::provider_for(sovereignty_mode);
 
     events.push(OnboardEvent::terminal(&format!(
-        "Sealing secret via {} provider...", provider.display_name()
+        "Sealing secret via {} provider...",
+        provider.display_name()
     )));
 
     // Enrollment (face capture, hardware wallet pairing, etc.)
     if provider.detect().requires_enrollment {
         events.push(OnboardEvent::terminal(&format!(
-            "Enrolling {} ...", provider.display_name()
+            "Enrolling {} ...",
+            provider.display_name()
         )));
         match provider.enroll() {
             Ok(Some(result)) => {
@@ -162,7 +192,9 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
             Ok(None) => {} // No enrollment action needed
             Err(e) => {
                 events.push(OnboardEvent::terminal(&format!(
-                    "✗ {} enrollment failed: {}", provider.display_name(), e
+                    "✗ {} enrollment failed: {}",
+                    provider.display_name(),
+                    e
                 )));
                 events.push(OnboardEvent::new(
                     "genesis_failed",
@@ -186,7 +218,10 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
             // Keyring holds the certificate only; the Genesis secret we
             // still have in memory is passed to save_operator below.
             if let Err(e) = keyring.save_genesis(&genesis, false) {
-                events.push(OnboardEvent::error(&format!("Failed to save certificate: {}", e)));
+                events.push(OnboardEvent::error(&format!(
+                    "Failed to save certificate: {}",
+                    e
+                )));
                 return events;
             }
             sovereignty_mode != zp_keys::SovereigntyMode::FileBased
@@ -195,18 +230,19 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
             // Provider failed. No fallback — be honest about it.
             events.push(OnboardEvent::terminal(&format!(
                 "✗ {} failed to store the Genesis secret: {}",
-                provider.display_name(), e
+                provider.display_name(),
+                e
             )));
 
             // Provide actionable guidance based on error type
             if e.is_transient() {
                 events.push(OnboardEvent::terminal(
-                    "  This may be temporary. Check the device and try again."
+                    "  This may be temporary. Check the device and try again.",
                 ));
             }
             if e.is_security_concern() {
                 events.push(OnboardEvent::terminal(
-                    "  ⚠ SECURITY: This may indicate a device mismatch. Verify your hardware."
+                    "  ⚠ SECURITY: This may indicate a device mismatch. Verify your hardware.",
                 ));
             }
 
@@ -229,7 +265,10 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     // can be derived without this path assuming the credential store owns
     // the root (which it does not in HW-wallet / biometric modes).
     if let Err(e) = keyring.save_operator_with_genesis_secret(&operator, &genesis.secret_key()) {
-        events.push(OnboardEvent::error(&format!("Failed to save operator: {}", e)));
+        events.push(OnboardEvent::error(&format!(
+            "Failed to save operator: {}",
+            e
+        )));
         return events;
     }
 
@@ -267,7 +306,10 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         home.join("genesis.json"),
         serde_json::to_string_pretty(&genesis_record).unwrap(),
     ) {
-        events.push(OnboardEvent::error(&format!("Failed to write genesis record: {}", e)));
+        events.push(OnboardEvent::error(&format!(
+            "Failed to write genesis record: {}",
+            e
+        )));
         return events;
     }
 
@@ -306,7 +348,7 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     let transcript_bytes = serde_json::to_vec(&transcript).unwrap_or_default();
     let transcript_hash = blake3::hash(&transcript_bytes);
     let transcript_sig_bytes = {
-        use ed25519_dalek::{SigningKey, Signer};
+        use ed25519_dalek::{Signer, SigningKey};
         let sk = SigningKey::from_bytes(&genesis.secret_key());
         sk.sign(transcript_hash.as_bytes()).to_bytes()
     };
@@ -327,24 +369,37 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         // Non-fatal — the ceremony itself succeeded even if transcript fails
         tracing::warn!("Failed to write ceremony transcript: {}", e);
         events.push(OnboardEvent::terminal(&format!(
-            "⚠ Could not save ceremony transcript: {}", e
+            "⚠ Could not save ceremony transcript: {}",
+            e
         )));
     } else {
-        events.push(OnboardEvent::terminal("✓ Ceremony transcript signed and saved"));
+        events.push(OnboardEvent::terminal(
+            "✓ Ceremony transcript signed and saved",
+        ));
     }
 
     // ── Step 7: Report results ────────────────────────────────────
     let short_pub = &genesis_pub_hex[..8];
 
     if secret_in_credential_store {
-        events.push(OnboardEvent::terminal("✓ genesis record + secret sealed in OS credential store"));
+        events.push(OnboardEvent::terminal(
+            "✓ genesis record + secret sealed in OS credential store",
+        ));
     } else {
-        events.push(OnboardEvent::terminal("✓ genesis record + secret written (file fallback)"));
+        events.push(OnboardEvent::terminal(
+            "✓ genesis record + secret written (file fallback)",
+        ));
     }
 
     events.push(OnboardEvent::terminal(""));
-    events.push(OnboardEvent::terminal(&format!("Operator identity: {}...", short_pub)));
-    events.push(OnboardEvent::terminal(&format!("Constitutional hash: {}...", &constitutional_hash[..6])));
+    events.push(OnboardEvent::terminal(&format!(
+        "Operator identity: {}...",
+        short_pub
+    )));
+    events.push(OnboardEvent::terminal(&format!(
+        "Constitutional hash: {}...",
+        &constitutional_hash[..6]
+    )));
 
     state.genesis_complete = true;
     state.genesis_public_key = Some(genesis_pub_hex.clone());
@@ -380,7 +435,8 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
             }
             Err(e) => {
                 events.push(OnboardEvent::terminal(&format!(
-                    "⚠ Could not generate recovery mnemonic: {}", e
+                    "⚠ Could not generate recovery mnemonic: {}",
+                    e
                 )));
             }
         }
@@ -415,18 +471,23 @@ pub async fn handle_vault_check(state: &mut OnboardState) -> Vec<OnboardEvent> {
                 zp_keys::VaultKeySource::LegacyEnvVar => "env var (legacy)",
             };
             events.push(OnboardEvent::terminal(&format!(
-                "✓ Vault key derived from {}", source_name
+                "✓ Vault key derived from {}",
+                source_name
             )));
 
             state.vault_key = Some(*resolved.key);
             state.step = 3;
-            events.push(OnboardEvent::new("vault_ready", serde_json::json!({
-                "source": source_name,
-            })));
+            events.push(OnboardEvent::new(
+                "vault_ready",
+                serde_json::json!({
+                    "source": source_name,
+                }),
+            ));
         }
         Err(e) => {
             events.push(OnboardEvent::error(&format!(
-                "Vault key derivation failed: {}. Run `zp init` first.", e
+                "Vault key derivation failed: {}. Run `zp init` first.",
+                e
             )));
         }
     }

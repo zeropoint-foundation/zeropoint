@@ -170,7 +170,8 @@ fn detect_windows_hello() -> ProviderCapability {
         ProviderCapability {
             mode: SovereigntyMode::WindowsHello,
             available: false,
-            description: "Windows Hello not available — no TPM or biometric hardware detected".into(),
+            description: "Windows Hello not available — no TPM or biometric hardware detected"
+                .into(),
             requires_enrollment: false,
             detail: None,
             implementation_status: super::ProviderStatus::Partial,

@@ -37,12 +37,18 @@ impl InMemoryPeerKeyStore {
 
     /// Register (or replace) the verifying key for `peer_hash`.
     pub fn insert(&self, peer_hash: [u8; 16], key: VerifyingKey) {
-        self.inner.write().expect("keystore rwlock poisoned").insert(peer_hash, key);
+        self.inner
+            .write()
+            .expect("keystore rwlock poisoned")
+            .insert(peer_hash, key);
     }
 
     /// Remove a peer's registered key.
     pub fn remove(&self, peer_hash: &[u8; 16]) {
-        self.inner.write().expect("keystore rwlock poisoned").remove(peer_hash);
+        self.inner
+            .write()
+            .expect("keystore rwlock poisoned")
+            .remove(peer_hash);
     }
 
     pub fn len(&self) -> usize {

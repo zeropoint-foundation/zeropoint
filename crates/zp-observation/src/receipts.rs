@@ -110,8 +110,7 @@ pub fn generate_observation_receipts(
     let mut prev_receipt_id = chain_parent_receipt_id.map(|s| s.to_string());
 
     for obs in observations.iter_mut() {
-        let receipt =
-            generate_observation_receipt(obs, observer_id, prev_receipt_id.as_deref());
+        let receipt = generate_observation_receipt(obs, observer_id, prev_receipt_id.as_deref());
         obs.receipt_id = Some(receipt.id.clone());
         prev_receipt_id = Some(receipt.id.clone());
         receipts.push(receipt);
@@ -158,14 +157,9 @@ pub fn generate_reflection_receipt(
     }
 
     // Action records the consolidation with token metrics.
-    let consumed_hash = blake3::hash(
-        reflection
-            .consumed_observation_ids
-            .join(",")
-            .as_bytes(),
-    )
-    .to_hex()
-    .to_string();
+    let consumed_hash = blake3::hash(reflection.consumed_observation_ids.join(",").as_bytes())
+        .to_hex()
+        .to_string();
 
     let produced_hash = blake3::hash(
         reflection
@@ -206,10 +200,7 @@ pub fn generate_reflection_receipt(
             "zp.reflection.tokens_after",
             serde_json::json!(reflection.tokens_after),
         )
-        .extension(
-            "zp.reflection.compression_ratio",
-            serde_json::json!(ratio),
-        )
+        .extension("zp.reflection.compression_ratio", serde_json::json!(ratio))
         .extension(
             "zp.reflection.consumed_count",
             serde_json::json!(reflection.consumed_observation_ids.len()),
@@ -244,11 +235,7 @@ pub fn generate_reflection_receipt(
 ///
 /// # Returns
 /// `true` if the receipts match the expected source range hash.
-pub fn verify_source_range(
-    receipts: &[Receipt],
-    chain_id: &str,
-    expected_hash: &str,
-) -> bool {
+pub fn verify_source_range(receipts: &[Receipt], chain_id: &str, expected_hash: &str) -> bool {
     if receipts.is_empty() {
         return false;
     }
@@ -261,20 +248,17 @@ pub fn verify_source_range(
     let end_hash = &last.content_hash;
 
     // Extract sequence numbers from chain metadata.
-    let start_seq = first
-        .chain
-        .as_ref()
-        .and_then(|c| c.sequence)
-        .unwrap_or(0);
-    let end_seq = last
-        .chain
-        .as_ref()
-        .and_then(|c| c.sequence)
-        .unwrap_or(0);
+    let start_seq = first.chain.as_ref().and_then(|c| c.sequence).unwrap_or(0);
+    let end_seq = last.chain.as_ref().and_then(|c| c.sequence).unwrap_or(0);
 
     // Reconstruct the source range and check its hash.
-    let reconstructed =
-        SourceRange::new(chain_id, start_hash.clone(), end_hash.clone(), start_seq, end_seq);
+    let reconstructed = SourceRange::new(
+        chain_id,
+        start_hash.clone(),
+        end_hash.clone(),
+        start_seq,
+        end_seq,
+    );
 
     reconstructed.content_hash() == expected_hash
 }
@@ -282,7 +266,10 @@ pub fn verify_source_range(
 /// Verify that an observation receipt's action hashes match its source range
 /// and content. This is a higher-level check that validates the receipt's
 /// internal consistency without needing the raw source receipts.
-pub fn verify_observation_receipt_consistency(receipt: &Receipt, observation: &Observation) -> bool {
+pub fn verify_observation_receipt_consistency(
+    receipt: &Receipt,
+    observation: &Observation,
+) -> bool {
     let action = match &receipt.action {
         Some(a) => a,
         None => return false,
@@ -291,15 +278,9 @@ pub fn verify_observation_receipt_consistency(receipt: &Receipt, observation: &O
     let expected_input_hash = observation.source_range.content_hash();
     let expected_output_hash = observation.content_hash();
 
-    let input_ok = action
-        .input_hash
-        .as_ref()
-        .map_or(false, |h| h == &expected_input_hash);
+    let input_ok = action.input_hash.as_ref() == Some(&expected_input_hash);
 
-    let output_ok = action
-        .output_hash
-        .as_ref()
-        .map_or(false, |h| h == &expected_output_hash);
+    let output_ok = action.output_hash.as_ref() == Some(&expected_output_hash);
 
     input_ok && output_ok
 }
@@ -481,6 +462,8 @@ mod tests {
         // A different observation does NOT match.
         let mut different = test_observation();
         different.content = "Something completely different".to_string();
-        assert!(!verify_observation_receipt_consistency(&receipt, &different));
+        assert!(!verify_observation_receipt_consistency(
+            &receipt, &different
+        ));
     }
 }
