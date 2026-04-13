@@ -2662,6 +2662,20 @@ fn find_child_pids(parent: u32) -> Vec<u32> {
 }
 
 /// Also kill anything listening on the port (safety net for orphaned processes).
+/// Validate that a tool name is safe for use in paths and commands.
+///
+/// Phase 1.4: AUTHZ-VULN-10, AUTHZ-VULN-11 — prevents path injection
+/// and command injection via tool_name parameter. Tool names must be
+/// 1-64 characters and contain only alphanumeric, hyphens, underscores,
+/// and dots (no leading dot).
+fn is_safe_tool_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+}
+
 fn kill_port_occupant(port: u16) {
     // lsof -ti :<port> returns PIDs of anything on that port
     if let Ok(output) = std::process::Command::new("lsof")
@@ -2699,6 +2713,13 @@ async fn tools_launch_handler(
     State(state): State<AppState>,
     Json(req): Json<LaunchRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // AUTHZ-VULN-08: validate tool name to prevent path injection.
+    if !is_safe_tool_name(&req.name) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+        })));
+    }
+
     let scan_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
@@ -2959,6 +2980,13 @@ async fn tools_stop_handler(
     State(state): State<AppState>,
     Json(req): Json<LaunchRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // AUTHZ-VULN-09: validate tool name.
+    if !is_safe_tool_name(&req.name) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+        })));
+    }
+
     match read_live_pid(&req.name) {
         Some(pid) => {
             let killed = kill_tool_process(&req.name, pid);
@@ -3132,6 +3160,14 @@ async fn tools_configure_handler(
     axum::extract::Path(tool_name): axum::extract::Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // AUTHZ-VULN-10: validate tool_name to prevent path injection.
+    // Tool names must be alphanumeric with hyphens/underscores only.
+    if !is_safe_tool_name(&tool_name) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+        })));
+    }
+
     let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
 
     match action {
@@ -3191,66 +3227,81 @@ async fn tools_configure_handler(
 /// POST /api/v1/tools/:tool_name/repair
 ///
 /// Actions:
-///   - `fix_docker_network`: Remove orphaned Docker network so compose can adopt it.
+///   - `restart_compose`: Restart the tool's Docker Compose stack.
+///
+/// Phase 1.4 (AUTHZ-VULN-11): removed `fix_docker_network` action which
+/// allowed unauthenticated Docker network deletion. Repair now only supports
+/// `restart_compose` which is a safe, non-destructive operation.
 async fn tools_repair_handler(
     axum::extract::Path(tool_name): axum::extract::Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // AUTHZ-VULN-11: validate tool_name to prevent command injection.
+    if !is_safe_tool_name(&tool_name) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+        })));
+    }
+
     let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
 
     match action {
-        "fix_docker_network" => {
-            // docker network rm <tool_name>_with (common pattern for compose networks)
-            let network_candidates = vec![
-                format!("{}_with", tool_name),
-                format!("{}_default", tool_name),
-                tool_name.clone(),
-            ];
+        "restart_compose" => {
+            // Safe restart: `docker compose restart` in the tool's directory.
+            // This does NOT modify infrastructure (networks, volumes) —
+            // it only restarts the existing containers.
+            let scan_path = dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("projects");
+            let tool_path = scan_path.join(&tool_name);
 
-            let mut removed = Vec::new();
-            let mut errors = Vec::new();
+            if !tool_path.exists() {
+                return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                    "error": format!("Tool directory not found: {}", tool_name),
+                })));
+            }
 
-            for network in &network_candidates {
-                let output = std::process::Command::new("docker")
-                    .args(["network", "rm", network])
-                    .output();
+            let output = std::process::Command::new("docker")
+                .args(["compose", "restart"])
+                .current_dir(&tool_path)
+                .output();
 
-                match output {
-                    Ok(o) if o.status.success() => {
-                        removed.push(network.clone());
-                        tracing::info!("Removed Docker network: {}", network);
-                    }
-                    Ok(o) => {
-                        let stderr = String::from_utf8_lossy(&o.stderr);
-                        // "No such network" is expected for non-existent candidates
-                        if !stderr.contains("No such network") && !stderr.contains("not found") {
-                            errors.push(format!("{}: {}", network, stderr.trim()));
-                        }
-                    }
-                    Err(e) => {
-                        errors.push(format!("docker not available: {}", e));
-                        break;
-                    }
+            match output {
+                Ok(o) if o.status.success() => {
+                    tracing::info!("Restarted Docker Compose for {}", tool_name);
+                    (StatusCode::OK, Json(serde_json::json!({
+                        "ok": true,
+                        "tool": tool_name,
+                        "action": "restart_compose",
+                        "hint": "Run preflight again to verify the fix.",
+                    })))
+                }
+                Ok(o) => {
+                    let stderr = String::from_utf8_lossy(&o.stderr);
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                        "error": format!("Docker Compose restart failed: {}", stderr.trim()),
+                    })))
+                }
+                Err(e) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                        "error": format!("docker not available: {}", e),
+                    })))
                 }
             }
-
-            if !removed.is_empty() || errors.is_empty() {
-                (StatusCode::OK, Json(serde_json::json!({
-                    "ok": true,
-                    "removed_networks": removed,
-                    "hint": "Run preflight again to verify the fix.",
-                })))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                    "error": "Could not remove Docker networks",
-                    "details": errors,
-                })))
-            }
+        }
+        // AUTHZ-VULN-11: "fix_docker_network" deliberately removed.
+        // Direct network deletion is a destructive infrastructure
+        // operation that should not be accessible via API.
+        "fix_docker_network" => {
+            (StatusCode::GONE, Json(serde_json::json!({
+                "error": "fix_docker_network has been removed for security reasons. Use restart_compose instead.",
+                "valid_actions": ["restart_compose"],
+            })))
         }
         _ => {
             (StatusCode::BAD_REQUEST, Json(serde_json::json!({
                 "error": format!("Unknown repair action: '{}'", action),
-                "valid_actions": ["fix_docker_network"],
+                "valid_actions": ["restart_compose"],
             })))
         }
     }
