@@ -1,0 +1,41 @@
+[package]
+name = "zp-hardening-tests"
+version = "0.1.0"
+edition = "2021"
+description = "Regression replay test harness for Shannon pentest vulnerabilities"
+publish = false
+
+# This crate exists solely for its integration tests.
+# `cargo test -p zp-hardening-tests` runs the full replay suite.
+
+[lib]
+name = "zp_hardening_tests"
+path = "src/lib.rs"
+
+[dependencies]
+# Server under test — we call build_app() directly
+zp-server = { path = "../zp-server" }
+zp-config = { path = "../zp-config" }
+
+# Axum / Tower for in-process HTTP testing
+axum = { workspace = true }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { workspace = true }
+http-body-util = "0.1"
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# WebSocket client for exec_ws and onboard_ws tests
+tokio-tungstenite = "0.24"
+
+# Serialization (payloads + response parsing)
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Assertions and test utilities
+hyper = { version = "1", features = ["full"] }
+
+# Temp dirs for isolated data_dir per test
+tempfile = { workspace = true }
