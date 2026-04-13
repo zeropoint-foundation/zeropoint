@@ -26,6 +26,8 @@ pub struct ReceiptBuilder {
     redactions: Vec<Redaction>,
     chain: Option<ChainMetadata>,
     extensions: HashMap<String, serde_json::Value>,
+    expires_at: Option<chrono::DateTime<Utc>>,
+    claim_metadata: Option<ClaimMetadata>,
     #[cfg(feature = "signing")]
     #[allow(dead_code)] // Placeholder for future auto-signing on finalize()
     signer: Option<&'static crate::Signer>,
@@ -54,6 +56,8 @@ impl ReceiptBuilder {
             redactions: Vec::new(),
             chain: None,
             extensions: HashMap::new(),
+            expires_at: None,
+            claim_metadata: None,
             #[cfg(feature = "signing")]
             signer: None,
         }
@@ -209,6 +213,24 @@ impl ReceiptBuilder {
         self
     }
 
+    /// Set an explicit expiration time.
+    pub fn expires_at(mut self, expires: chrono::DateTime<Utc>) -> Self {
+        self.expires_at = Some(expires);
+        self
+    }
+
+    /// Set expiration as a duration from now.
+    pub fn expires_in(mut self, duration: chrono::Duration) -> Self {
+        self.expires_at = Some(Utc::now() + duration);
+        self
+    }
+
+    /// Set type-specific claim metadata.
+    pub fn claim_metadata(mut self, metadata: ClaimMetadata) -> Self {
+        self.claim_metadata = Some(metadata);
+        self
+    }
+
     /// Finalize the receipt: generate ID, compute content hash.
     pub fn finalize(self) -> Receipt {
         let id = generate_receipt_id(self.receipt_type);
@@ -237,6 +259,13 @@ impl ReceiptBuilder {
             Some(self.extensions)
         };
 
+        // Apply default expiry if no explicit one was set
+        let expires_at = self.expires_at.or_else(|| {
+            self.receipt_type
+                .default_expiry()
+                .map(|d| Utc::now() + d)
+        });
+
         let mut receipt = Receipt {
             id,
             version: RECEIPT_SCHEMA_VERSION.to_string(),
@@ -259,6 +288,8 @@ impl ReceiptBuilder {
             redactions,
             chain: self.chain,
             extensions,
+            expires_at,
+            claim_metadata: self.claim_metadata,
         };
 
         receipt.content_hash = crate::canonical_hash(&receipt);

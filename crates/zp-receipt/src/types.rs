@@ -94,6 +94,17 @@ pub struct Receipt {
     /// Vendor/domain extensions (reverse-domain keys)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extensions: Option<HashMap<String, serde_json::Value>>,
+
+    /// When this receipt expires (None = no expiry).
+    /// Execution claims default to 90 days. Memory promotion claims persist indefinitely.
+    /// Delegation claims expire with the capability grant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
+
+    /// Type-specific claim metadata.
+    /// Each claim type carries metadata appropriate to its semantics.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claim_metadata: Option<ClaimMetadata>,
 }
 
 impl Receipt {
@@ -127,10 +138,50 @@ impl Receipt {
         crate::ReceiptBuilder::new(ReceiptType::Access, executor_id)
     }
 
+    /// Start building an observation claim receipt.
+    pub fn observation(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::ObservationClaim, executor_id)
+    }
+
+    /// Start building a policy claim receipt.
+    pub fn policy_claim(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::PolicyClaim, executor_id)
+    }
+
+    /// Start building an authorization claim receipt.
+    pub fn authorization(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::AuthorizationClaim, executor_id)
+    }
+
+    /// Start building a memory promotion claim receipt.
+    pub fn memory_promotion(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::MemoryPromotionClaim, executor_id)
+    }
+
+    /// Start building a delegation claim receipt.
+    pub fn delegation(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::DelegationClaim, executor_id)
+    }
+
+    /// Start building a narrative synthesis claim receipt.
+    pub fn narrative_synthesis(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::NarrativeSynthesisClaim, executor_id)
+    }
+
+    /// Start building a revocation claim receipt.
+    pub fn revocation(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::RevocationClaim, executor_id)
+    }
+
     /// Verify the content_hash matches the receipt body.
     pub fn verify_hash(&self) -> bool {
         let computed = crate::canonical_hash(self);
         computed == self.content_hash
+    }
+
+    /// Check if this receipt has expired.
+    pub fn is_expired(&self) -> bool {
+        self.expires_at.map_or(false, |exp| Utc::now() > exp)
     }
 
     /// Verify the Ed25519 signature.
@@ -155,9 +206,13 @@ impl Receipt {
 // ============================================================================
 
 /// The stage in the provenance chain.
+///
+/// Phase 2.1 adds typed claim variants beyond the original provenance chain.
+/// The new claim types carry explicit semantics and type-specific metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum ReceiptType {
+    // --- Original provenance chain types ---
     /// User's original request (root of chain)
     Intent,
     /// Plan created to fulfill the intent
@@ -170,6 +225,22 @@ pub enum ReceiptType {
     Payment,
     /// Content/API access (agent web extension)
     Access,
+
+    // --- Phase 2.1: Typed claim extensions ---
+    /// An observation recorded by an observer agent
+    ObservationClaim,
+    /// A policy evaluation or constitutional rule invocation
+    PolicyClaim,
+    /// An authorization decision with explicit scope and constraints
+    AuthorizationClaim,
+    /// Promotion of knowledge from working memory to long-term memory
+    MemoryPromotionClaim,
+    /// Delegation of a capability from one agent to another
+    DelegationClaim,
+    /// Synthesis of multiple observations into a narrative summary
+    NarrativeSynthesisClaim,
+    /// Revocation of a previously issued receipt
+    RevocationClaim,
 }
 
 impl ReceiptType {
@@ -182,10 +253,22 @@ impl ReceiptType {
             ReceiptType::Execution => "rcpt",
             ReceiptType::Payment => "pymt",
             ReceiptType::Access => "accs",
+            ReceiptType::ObservationClaim => "obsv",
+            ReceiptType::PolicyClaim => "plcy",
+            ReceiptType::AuthorizationClaim => "auth",
+            ReceiptType::MemoryPromotionClaim => "mpro",
+            ReceiptType::DelegationClaim => "dlgt",
+            ReceiptType::NarrativeSynthesisClaim => "nrtv",
+            ReceiptType::RevocationClaim => "revk",
         }
     }
 
     /// Returns the expected parent type in a standard chain.
+    ///
+    /// The original six types form a strict provenance chain.
+    /// The new claim types are more flexible — they can attach to any
+    /// existing receipt as context. Returns None when the parent type
+    /// is unconstrained (caller must supply a valid parent_receipt_id).
     pub fn expected_parent(&self) -> Option<ReceiptType> {
         match self {
             ReceiptType::Intent => None,
@@ -194,7 +277,48 @@ impl ReceiptType {
             ReceiptType::Execution => Some(ReceiptType::Approval),
             ReceiptType::Payment => Some(ReceiptType::Execution),
             ReceiptType::Access => Some(ReceiptType::Approval),
+            // Typed claims can reference any receipt as parent
+            ReceiptType::ObservationClaim => None,
+            ReceiptType::PolicyClaim => None,
+            ReceiptType::AuthorizationClaim => None,
+            ReceiptType::MemoryPromotionClaim => None,
+            ReceiptType::DelegationClaim => None,
+            ReceiptType::NarrativeSynthesisClaim => None,
+            ReceiptType::RevocationClaim => None,
         }
+    }
+
+    /// Returns the default expiration duration for this receipt type.
+    /// None means the receipt never expires.
+    pub fn default_expiry(&self) -> Option<chrono::Duration> {
+        match self {
+            ReceiptType::Execution => Some(chrono::Duration::days(90)),
+            ReceiptType::DelegationClaim => Some(chrono::Duration::days(30)),
+            ReceiptType::AuthorizationClaim => Some(chrono::Duration::days(30)),
+            // Memory promotion and narrative synthesis persist indefinitely
+            ReceiptType::MemoryPromotionClaim => None,
+            ReceiptType::NarrativeSynthesisClaim => None,
+            // Everything else: no default expiry
+            _ => None,
+        }
+    }
+
+    /// Whether this is one of the original provenance chain types.
+    pub fn is_provenance_type(&self) -> bool {
+        matches!(
+            self,
+            ReceiptType::Intent
+                | ReceiptType::Design
+                | ReceiptType::Approval
+                | ReceiptType::Execution
+                | ReceiptType::Payment
+                | ReceiptType::Access
+        )
+    }
+
+    /// Whether this is a typed claim extension (Phase 2.1+).
+    pub fn is_claim_type(&self) -> bool {
+        !self.is_provenance_type()
     }
 }
 
@@ -207,6 +331,13 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::Execution => write!(f, "execution"),
             ReceiptType::Payment => write!(f, "payment"),
             ReceiptType::Access => write!(f, "access"),
+            ReceiptType::ObservationClaim => write!(f, "observation_claim"),
+            ReceiptType::PolicyClaim => write!(f, "policy_claim"),
+            ReceiptType::AuthorizationClaim => write!(f, "authorization_claim"),
+            ReceiptType::MemoryPromotionClaim => write!(f, "memory_promotion_claim"),
+            ReceiptType::DelegationClaim => write!(f, "delegation_claim"),
+            ReceiptType::NarrativeSynthesisClaim => write!(f, "narrative_synthesis_claim"),
+            ReceiptType::RevocationClaim => write!(f, "revocation_claim"),
         }
     }
 }
@@ -491,4 +622,102 @@ pub struct ChainMetadata {
     pub sequence: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chain_id: Option<String>,
+}
+
+// ============================================================================
+// Phase 2.1: Typed Claim Metadata
+// ============================================================================
+
+/// Type-specific metadata carried by claim receipts.
+///
+/// Each claim type has distinct validation requirements and semantics.
+/// The variant must match the `receipt_type` — e.g. an `ObservationClaim`
+/// receipt must carry `ClaimMetadata::Observation`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "claim_type")]
+pub enum ClaimMetadata {
+    /// Metadata for an observation recorded by an observer agent.
+    Observation {
+        /// What was observed (e.g., "tool_invocation", "policy_violation")
+        observation_type: String,
+        /// The agent or system that produced the observation
+        observer_id: String,
+        /// Confidence level (0.0 - 1.0)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        confidence: Option<f64>,
+        /// Tags for categorization
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tags: Vec<String>,
+    },
+
+    /// Metadata for a policy evaluation claim.
+    Policy {
+        /// The policy rule that was evaluated
+        rule_id: String,
+        /// The constitutional principle, if any
+        #[serde(skip_serializing_if = "Option::is_none")]
+        principle: Option<String>,
+        /// Whether the policy was satisfied
+        satisfied: bool,
+        /// Explanation of the evaluation
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rationale: Option<String>,
+    },
+
+    /// Metadata for an authorization claim.
+    Authorization {
+        /// Scope of the authorization (e.g., "tool:launch", "proxy:openai")
+        scope: String,
+        /// Who granted the authorization
+        grantor_id: String,
+        /// Constraints on the authorization (e.g., rate limits, time bounds)
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        constraints: HashMap<String, serde_json::Value>,
+    },
+
+    /// Metadata for a memory promotion claim.
+    MemoryPromotion {
+        /// Where the knowledge came from (e.g., "working_memory", "observation")
+        source_stage: String,
+        /// Where it was promoted to (e.g., "episodic", "semantic", "procedural")
+        target_stage: String,
+        /// Evidence supporting the promotion
+        promotion_evidence: String,
+        /// Who reviewed and approved the promotion
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reviewer: Option<String>,
+    },
+
+    /// Metadata for a delegation claim.
+    Delegation {
+        /// The capability being delegated
+        capability_id: String,
+        /// Who is delegating
+        delegator_id: String,
+        /// Who receives the delegation
+        delegate_id: String,
+        /// Maximum depth of re-delegation allowed (0 = no re-delegation)
+        #[serde(default)]
+        max_depth: u32,
+    },
+
+    /// Metadata for a narrative synthesis claim.
+    NarrativeSynthesis {
+        /// The observation receipt IDs that were synthesized
+        source_observation_ids: Vec<String>,
+        /// The synthesis method (e.g., "temporal_summary", "anomaly_report")
+        synthesis_method: String,
+        /// The agent that performed the synthesis
+        synthesizer_id: String,
+    },
+
+    /// Metadata for a revocation claim.
+    Revocation {
+        /// The receipt ID being revoked
+        revoked_receipt_id: String,
+        /// Why it was revoked
+        reason: String,
+        /// Who authorized the revocation
+        revoker_id: String,
+    },
 }
