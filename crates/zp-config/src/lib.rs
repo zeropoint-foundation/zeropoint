@@ -1,0 +1,28 @@
+//! Unified ZeroPoint Configuration
+//!
+//! Single source of truth for all ZeroPoint configuration, with provenance
+//! tracking so operators (and `zp config show`) can see *where* each value
+//! came from.
+//!
+//! # Resolution order (lowest to highest priority)
+//!
+//! 1. **Compiled defaults** — hardcoded sane values
+//! 2. **System config** — `~/.zeropoint/config.toml`
+//! 3. **Project config** — `./zeropoint.toml` (if present in cwd or ancestors)
+//! 4. **Environment variables** — `ZP_*` overrides
+//! 5. **CLI flags** — `--port`, `--bind`, etc.
+//!
+//! Every resolved value carries its [`Source`] so diagnostics can explain
+//! exactly why a setting has a particular value.
+
+pub mod error;
+pub mod provenance;
+pub mod resolve;
+pub mod schema;
+pub mod validate;
+
+pub use error::ConfigError;
+pub use provenance::{Source, Sourced};
+pub use resolve::ConfigResolver;
+pub use schema::ZpConfig;
+pub use validate::validate;
