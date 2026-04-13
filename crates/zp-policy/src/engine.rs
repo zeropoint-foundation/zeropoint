@@ -4,10 +4,10 @@
 //! restrictive decision according to the severity hierarchy:
 //! Block > Review > Warn > Sanitize > Allow.
 //!
-//! Phase 2 adds WASM policy module support: the engine evaluates native Rust
-//! rules first (constitutional rules are always first), then evaluates any
-//! active WASM modules from the PolicyModuleRegistry.
+//! Native Rust rules (constitutional + operational) are always available.
+//! WASM policy module support requires the `policy-wasm` feature.
 
+#[cfg(feature = "policy-wasm")]
 use crate::policy_registry::PolicyModuleRegistry;
 use crate::rules::{
     BulkOperationRule, CatastrophicActionRule, DefaultAllowRule, HarmPrincipleRule, PolicyRule,
@@ -20,11 +20,12 @@ use zp_core::policy::{PolicyContext, PolicyDecision, RiskLevel};
 /// The policy evaluation engine.
 ///
 /// Maintains a set of native policy rules plus an optional WASM module registry.
-/// Native rules are evaluated first, then WASM modules. The most restrictive
-/// decision across all sources wins.
+/// Native rules are evaluated first, then WASM modules (if `policy-wasm` feature
+/// is enabled). The most restrictive decision across all sources wins.
 pub struct PolicyEngine {
     rules: Vec<Box<dyn PolicyRule>>,
-    /// Optional WASM policy module registry.
+    /// Optional WASM policy module registry (requires `policy-wasm` feature).
+    #[cfg(feature = "policy-wasm")]
     wasm_registry: Option<PolicyModuleRegistry>,
 }
 
@@ -38,11 +39,13 @@ impl PolicyEngine {
     pub fn with_rules(rules: Vec<Box<dyn PolicyRule>>) -> Self {
         Self {
             rules,
+            #[cfg(feature = "policy-wasm")]
             wasm_registry: None,
         }
     }
 
     /// Create an engine with default native rules plus a WASM registry.
+    #[cfg(feature = "policy-wasm")]
     pub fn with_wasm(registry: PolicyModuleRegistry) -> Self {
         Self {
             rules: Self::default_rules(),
@@ -51,11 +54,13 @@ impl PolicyEngine {
     }
 
     /// Attach a WASM policy module registry to this engine.
+    #[cfg(feature = "policy-wasm")]
     pub fn set_wasm_registry(&mut self, registry: PolicyModuleRegistry) {
         self.wasm_registry = Some(registry);
     }
 
     /// Get a reference to the WASM registry, if one is attached.
+    #[cfg(feature = "policy-wasm")]
     pub fn wasm_registry(&self) -> Option<&PolicyModuleRegistry> {
         self.wasm_registry.as_ref()
     }
@@ -115,7 +120,8 @@ impl PolicyEngine {
             }
         }
 
-        // Phase 2: Evaluate WASM policy modules
+        // Evaluate WASM policy modules (if feature enabled and registry attached)
+        #[cfg(feature = "policy-wasm")]
         if let Some(registry) = &self.wasm_registry {
             let wasm_decisions = registry.evaluate_all(context);
             for (name, decision) in wasm_decisions {
@@ -475,9 +481,11 @@ mod tests {
     }
 
     // ====================================================================
-    // WASM Policy Module Integration Tests
+    // WASM Policy Module Integration Tests (require policy-wasm feature)
+    // Run with: cargo test -p zp-policy --features policy-wasm
     // ====================================================================
 
+    #[cfg(feature = "policy-wasm")]
     /// WAT module that always returns Allow.
     const WASM_ALLOW_WAT: &str = r#"
         (module
@@ -504,6 +512,7 @@ mod tests {
         )
     "#;
 
+    #[cfg(feature = "policy-wasm")]
     /// WAT module that always blocks.
     /// JSON: {"Block":{"reason":"no","policy_module":"WBlk"}}
     /// Length: 42 + 2 + 4 = 48
@@ -532,6 +541,7 @@ mod tests {
         )
     "#;
 
+    #[cfg(feature = "policy-wasm")]
     #[test]
     fn engine_with_wasm_allow_module() {
         let registry = PolicyModuleRegistry::new().unwrap();
@@ -545,6 +555,7 @@ mod tests {
         assert!(decision.is_allowed());
     }
 
+    #[cfg(feature = "policy-wasm")]
     #[test]
     fn engine_wasm_block_overrides_native_allow() {
         let registry = PolicyModuleRegistry::new().unwrap();
@@ -558,6 +569,7 @@ mod tests {
         assert!(decision.is_blocked());
     }
 
+    #[cfg(feature = "policy-wasm")]
     #[test]
     fn engine_native_constitutional_overrides_wasm_allow() {
         let registry = PolicyModuleRegistry::new().unwrap();
@@ -578,6 +590,7 @@ mod tests {
     fn engine_without_wasm_registry_works() {
         // Engine with no WASM registry should work exactly as before
         let engine = PolicyEngine::new();
+        #[cfg(feature = "policy-wasm")]
         assert!(engine.wasm_registry().is_none());
 
         let context = make_context(ActionType::Chat);
@@ -585,6 +598,7 @@ mod tests {
         assert!(decision.is_allowed());
     }
 
+    #[cfg(feature = "policy-wasm")]
     #[test]
     fn engine_set_wasm_registry_after_creation() {
         let mut engine = PolicyEngine::new();

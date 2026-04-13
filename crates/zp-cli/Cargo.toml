@@ -8,22 +8,32 @@ repository.workspace = true
 
 description = "ZeroPoint v2 CLI — primary interface for developers"
 
+[features]
+default = []
+embedded-server = ["dep:zp-server"]
+policy-wasm = ["zp-policy/policy-wasm"]
+os-keychain = ["zp-keys/os-keychain"]
+hw-trezor = ["zp-keys/hw-trezor"]
+full = ["embedded-server", "policy-wasm", "os-keychain", "hw-trezor"]
+
 [[bin]]
 name = "zp"
 path = "src/main.rs"
 
 [dependencies]
 # Local workspace crates
+zp-config = { path = "../zp-config" }
 zp-core = { path = "../zp-core" }
 zp-engine = { path = "../zp-engine" }
-zp-keys = { path = "../zp-keys", features = ["os-keychain", "hw-trezor"] }
+zp-keys = { path = "../zp-keys" }
 zp-mesh = { path = "../zp-mesh" }
 zp-pipeline = { path = "../zp-pipeline" }
 zp-trust = { path = "../zp-trust" }
 zp-receipt = { path = "../zp-receipt" }
 zp-policy = { path = "../zp-policy" }
 zp-audit = { path = "../zp-audit" }
-zp-server = { path = "../zp-server" }
+zp-verify = { path = "../zp-verify" }
+zp-server = { path = "../zp-server", optional = true }
 
 # Workspace dependencies
 clap.workspace = true
