@@ -86,7 +86,7 @@ Add an optional `[verification]` section to `.zp-configure.toml`:
 ```toml
 [tool]
 name = "ember"
-version = "0.4.2"
+version = "0.6.0"
 description = "AI learning environment"
 
 # ... existing required/optional capabilities ...
@@ -99,11 +99,12 @@ providers_endpoint = "/api/server-providers"
 # Per-capability verify endpoints.
 # ZP sends a GET (or POST with empty/minimal body) and checks for 2xx.
 [verification.endpoints]
-reasoning_llm = "/api/verify-model"
+reasoning_llm  = "/api/verify-model"
 tts            = "/api/health"          # Some tools only have a general health check
 image_gen      = "/api/verify-image-provider"
 video_gen      = "/api/verify-video-provider"
 pdf            = "/api/verify-pdf-provider"
+image_analysis = "/api/analyze-images"  # v0.6.0 — vision-based pedagogical image analysis (SSE)
 
 # How to probe each endpoint. Default is GET.
 # For endpoints that need parameters, declare them here.
@@ -452,6 +453,269 @@ This would have caught the Ember bug immediately — `reasoning_llm` would show 
 
 ---
 
+## Receipt-Driven Configuration
+
+### Problem
+
+Tools like Ember have feature toggles (image generation, video generation, TTS provider selection, model preferences) that are normally controlled through a browser-side settings UI requiring direct API key entry. Under ZP governance, API keys are vaulted and never exposed to the tool's frontend — so the settings UI is effectively dead.
+
+The receipt chain already proves capability state. Extending it to **carry configuration state** means:
+
+1. Configuration changes are auditable (they're receipts in the chain)
+2. ZP is the single authority for what's enabled and how
+3. No API keys touch Ember's browser-side settings store
+4. The tool doesn't need a separate "managed mode" settings backend — it just reads receipts
+
+### New Receipt: `tool:capability:configured`
+
+**When**: After ZP resolves which capabilities should be active and with what parameters
+**Assertion**: ZP has decided how this capability should be configured at the tool
+**Proves**: Configuration intent — what ZP wants the tool to do (distinct from verification, which proves it *can* do it)
+
+```
+tool:capability:configured:ember:image_gen → {
+  "enabled": true,
+  "provider": "nano_banana",
+  "model": "gemini-2.5-flash-preview-image-generation",
+  "parameters": {
+    "aspect_ratio": "16:9",
+    "max_concurrent": 3
+  }
+}
+
+tool:capability:configured:ember:reasoning_llm → {
+  "enabled": true,
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6",
+  "parameters": {
+    "max_tokens": 8192,
+    "temperature": 0.7
+  }
+}
+
+tool:capability:configured:ember:tts → {
+  "enabled": true,
+  "provider": "openai-tts",
+  "model": "tts-1",
+  "parameters": {
+    "voice": "nova",
+    "speed": 1.0
+  }
+}
+```
+
+This receipt is emitted **before** launch — it represents ZP's intent. The Tier 2 `tool:capability:verified` receipt then confirms the configuration actually works.
+
+### Receipt Chain Sequence (Extended)
+
+```
+tool:capability:configured:ember:reasoning_llm  — ZP decides: use anthropic/claude-sonnet-4-6
+tool:capability:configured:ember:image_gen       — ZP decides: use nano_banana/gemini-2.5-flash
+tool:capability:configured:ember:tts             — ZP decides: use openai-tts/nova
+tool:configured:ember                            — ZP writes .env with keys
+tool:preflight:passed:ember                      — infra checks green
+tool:launched:ember                              — process spawned
+tool:providers:resolved:ember                    — runtime loaded the keys
+tool:capability:verified:ember:reasoning_llm     — end-to-end probe succeeded
+tool:capability:verified:ember:image_gen         — end-to-end probe succeeded
+tool:capability:verified:ember:tts               — end-to-end probe succeeded
+```
+
+### Tool-Side Consumption: Configuration Receipt Endpoint
+
+ZP exposes the latest configuration receipts to the tool via a **local sidecar endpoint** that the tool can query:
+
+```
+GET http://localhost:{zp_port}/zp/receipts/configured/{tool_name}
+```
+
+Response:
+```json
+{
+  "receipts": [
+    {
+      "capability": "image_gen",
+      "enabled": true,
+      "provider": "nano_banana",
+      "model": "gemini-2.5-flash-preview-image-generation",
+      "parameters": { "aspect_ratio": "16:9" },
+      "receipt_id": "r_abc123",
+      "issued_at": "2026-04-02T10:30:00Z"
+    },
+    {
+      "capability": "reasoning_llm",
+      "enabled": true,
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "parameters": { "max_tokens": 8192 },
+      "receipt_id": "r_def456",
+      "issued_at": "2026-04-02T10:30:00Z"
+    }
+  ],
+  "chain_head": "r_def456"
+}
+```
+
+### Ember-Side Integration
+
+Ember adds a thin adapter that reads configuration receipts instead of browser localStorage when ZP-managed:
+
+```typescript
+// lib/settings/zp-config-adapter.ts
+
+interface ZPConfigReceipt {
+  capability: string;
+  enabled: boolean;
+  provider: string;
+  model: string;
+  parameters: Record<string, unknown>;
+  receipt_id: string;
+  issued_at: string;
+}
+
+/**
+ * Fetch configuration receipts from ZP's local sidecar.
+ * Returns null if not running under ZP (endpoint doesn't exist).
+ */
+async function fetchZPConfigReceipts(): Promise<ZPConfigReceipt[] | null> {
+  try {
+    const zpPort = process.env.ZP_SIDECAR_PORT;
+    if (!zpPort) return null;
+
+    const resp = await fetch(
+      `http://localhost:${zpPort}/zp/receipts/configured/${process.env.ZP_TOOL_NAME}`
+    );
+    if (!resp.ok) return null;
+
+    const data = await resp.json();
+    return data.receipts;
+  } catch {
+    return null;  // Not ZP-managed, fall back to normal settings
+  }
+}
+
+/**
+ * Map ZP configuration receipts to Ember's settings shape.
+ * Called on server startup and exposed via /api/settings/managed.
+ */
+function receiptToSettings(receipts: ZPConfigReceipt[]): Partial<EmberSettings> {
+  const settings: Partial<EmberSettings> = {};
+
+  for (const r of receipts) {
+    switch (r.capability) {
+      case 'image_gen':
+        settings.imageGenerationEnabled = r.enabled;
+        settings.imageProviderId = r.provider;
+        settings.imageModelId = r.model;
+        break;
+      case 'video_gen':
+        settings.videoGenerationEnabled = r.enabled;
+        settings.videoProviderId = r.provider;
+        settings.videoModelId = r.model;
+        break;
+      case 'reasoning_llm':
+        settings.reasoningProviderId = r.provider;
+        settings.reasoningModelId = r.model;
+        break;
+      case 'tts':
+        settings.ttsProviderId = r.provider;
+        settings.ttsModelId = r.model;
+        if (r.parameters.voice) settings.ttsVoice = r.parameters.voice as string;
+        break;
+    }
+  }
+
+  return settings;
+}
+```
+
+### Settings UI in Managed Mode
+
+When Ember detects ZP receipts, its settings page shows:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Settings                    Managed by ZeroPoint │
+├─────────────────────────────────────────────────┤
+│                                                   │
+│  Reasoning LLM         ✓ Verified                │
+│  anthropic / claude-sonnet-4-6                    │
+│  Receipt: r_def456 · Apr 2, 2026 10:30 AM        │
+│                                                   │
+│  Image Generation      ✓ Verified                │
+│  nano_banana / gemini-2.5-flash                   │
+│  Receipt: r_abc123 · Apr 2, 2026 10:30 AM        │
+│                                                   │
+│  Text-to-Speech        ✓ Verified                │
+│  openai-tts / nova                                │
+│  Receipt: r_ghi789 · Apr 2, 2026 10:30 AM        │
+│                                                   │
+│  ℹ Configuration is managed by ZeroPoint.         │
+│    To change settings, use `zp configure ember`.  │
+└─────────────────────────────────────────────────┘
+```
+
+Each capability shows its receipt ID and verification status — a direct link between configuration authority and operational proof.
+
+### Reconfiguration Flow
+
+When a user wants to change settings (e.g., switch image provider):
+
+```
+User runs: zp configure ember --set image_gen.provider=seedream
+
+ZP:
+  1. Validates the new configuration against available vault keys
+  2. Emits: tool:capability:configured:ember:image_gen (new receipt, new provider)
+  3. Updates .env if needed (new key injection)
+  4. Sends SIGHUP or calls /api/settings/reload on Ember
+  5. Re-runs Tier 2 verification for image_gen
+  6. Emits: tool:capability:verified:ember:image_gen (confirms new config works)
+
+Ember:
+  1. Receives reload signal
+  2. Re-fetches /zp/receipts/configured/ember
+  3. Updates settings store with new receipt data
+  4. Settings UI reflects the change with the new receipt ID
+```
+
+The entire change is captured in the receipt chain:
+
+```
+r_abc123  tool:capability:configured:ember:image_gen  provider=nano_banana     10:30 AM
+r_xyz999  tool:capability:configured:ember:image_gen  provider=seedream        2:15 PM
+r_xyz000  tool:capability:verified:ember:image_gen    provider=seedream,ok     2:15 PM
+```
+
+### Manifest Extension
+
+Add configurable parameters to `.zp-configure.toml` capability declarations:
+
+```toml
+[[required]]
+capability = "reasoning_llm"
+env_vars = ["ANTHROPIC_API_KEY"]
+configurable = ["provider", "model", "temperature", "max_tokens"]
+defaults = { provider = "anthropic", model = "claude-sonnet-4-6" }
+
+[[optional]]
+capability = "image_gen"
+env_vars = ["IMAGE_NANO_BANANA_API_KEY"]
+configurable = ["provider", "model", "aspect_ratio", "max_concurrent"]
+defaults = { provider = "nano_banana", model = "gemini-2.5-flash-preview-image-generation", enabled = true }
+notes = "AI image generation for slides and whiteboard illustrations"
+
+[[optional]]
+capability = "tts"
+env_vars = ["OPENAI_API_KEY"]
+configurable = ["provider", "model", "voice", "speed"]
+defaults = { provider = "openai-tts", model = "tts-1", voice = "nova" }
+```
+
+The `configurable` array tells ZP which parameters users can adjust via `zp configure`. The `defaults` provide sane starting values. Both feed into the configuration receipts.
+
+---
+
 ## Migration Path
 
 1. **Phase 1**: Add `[verification]` parsing to `ToolManifest` (backward compatible — field is optional)
@@ -459,6 +723,10 @@ This would have caught the Ember bug immediately — `reasoning_llm` would show 
 3. **Phase 3**: Wire into health-up transition
 4. **Phase 4**: Extend `query_tool_readiness()` and dashboard rendering
 5. **Phase 5**: Add `verified` as a governance gate (optional — tools can run without verification, but agents see the degraded badge)
+6. **Phase 6**: Implement `tool:capability:configured` receipts with `configurable` + `defaults` in manifest
+7. **Phase 7**: Add ZP sidecar endpoint `/zp/receipts/configured/{tool}` for tool-side consumption
+8. **Phase 8**: Ember-side: `zp-config-adapter.ts` + `/api/settings/managed` endpoint + managed-mode settings UI
+9. **Phase 9**: `zp configure {tool} --set` CLI for runtime reconfiguration with receipt chain audit trail
 
 ---
 
@@ -466,12 +734,14 @@ This would have caught the Ember bug immediately — `reasoning_llm` would show 
 
 | Component | Current Role | Extended Role |
 |-----------|-------------|---------------|
-| `.zp-configure.toml` | Declares capabilities + env vars | Also declares verification endpoints |
-| `configure.rs` | Writes `.env` from vault | No change |
+| `.zp-configure.toml` | Declares capabilities + env vars | Also declares verification endpoints, configurable params, defaults |
+| `configure.rs` | Writes `.env` from vault | Also emits `tool:capability:configured` receipts from manifest defaults |
 | `preflight.rs` | Checks infra (Docker, compose, ports) | No change |
-| `tool_chain.rs` | Derives readiness from chain | Also derives verification state |
-| `tool_state.rs` | Event taxonomy | New capability events |
+| `tool_chain.rs` | Derives readiness from chain | Also derives verification + configuration state |
+| `tool_state.rs` | Event taxonomy | New capability + configuration events |
 | `lib.rs` (launch) | Spawns process, emits launch receipt | Triggers verification after health-up |
-| Proxy | Emits traffic receipts | No change (Tier 3 aggregation is separate) |
+| Proxy | Emits traffic receipts | Injects capability headers derived from configuration receipts |
+| Sidecar (new) | — | Serves `/zp/receipts/configured/{tool}` for tool-side consumption |
+| Tool settings (new) | Browser localStorage | Reads from ZP receipts when managed; falls back to localStorage otherwise |
 
-The key insight is that this slots into the existing state-derivation-from-chain architecture cleanly. No cached state, no side channels — just new receipt types that `query_tool_readiness()` learns to interpret.
+The key insight is that this slots into the existing state-derivation-from-chain architecture cleanly. No cached state, no side channels — just new receipt types that `query_tool_readiness()` learns to interpret. Configuration receipts extend this naturally: the receipt chain becomes the **single source of truth** for both "what should run" and "is it running correctly."
