@@ -17,6 +17,7 @@ members = [
     "crates/zp-server",
     "crates/zp-cli",
     "crates/zp-receipt",
+    "crates/zp-verify",
     "crates/execution-engine",
     "policies/default-gate",
     "crates/course-examples",
@@ -24,6 +25,8 @@ members = [
     "crates/monte-carlo-engine",
     # "crates/zp-agent-bridge",  # temporarily excluded: depends on missing cross-workspace path
     "crates/zp-observation",
+    "crates/zp-preflight",
+    "crates/zp-config",
 ]
 
 [workspace.package]

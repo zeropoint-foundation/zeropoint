@@ -6,10 +6,15 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
-description = "ZeroPoint Policy Engine - native Rust rules + WASM policy module runtime"
+description = "ZeroPoint Policy Engine - native Rust rules + optional WASM policy module runtime"
+
+[features]
+default = []
+policy-wasm = ["dep:wasmtime"]
 
 [dependencies]
 zp-core = { path = "../zp-core" }
+zp-audit = { path = "../zp-audit" }
 
 serde.workspace = true
 serde_json.workspace = true
@@ -19,7 +24,9 @@ parking_lot.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 blake3.workspace = true
-wasmtime.workspace = true
+wasmtime = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# Tests that exercise WASM need the feature enabled — run with:
+# cargo test -p zp-policy --features policy-wasm

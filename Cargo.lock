@@ -4732,6 +4732,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "rand 0.8.5",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4741,6 +4742,7 @@ dependencies = [
  "tracing",
  "uuid",
  "zp-core",
+ "zp-verify",
 ]
 
 [[package]]
@@ -4770,6 +4772,7 @@ dependencies = [
  "zp-receipt",
  "zp-server",
  "zp-trust",
+ "zp-verify",
 ]
 
 [[package]]
@@ -4937,8 +4940,10 @@ dependencies = [
  "async-trait",
  "blake3",
  "chrono",
+ "ed25519-dalek",
  "execution-engine",
  "hex",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "tempfile",
@@ -4970,6 +4975,7 @@ dependencies = [
  "tracing",
  "uuid",
  "wasmtime",
+ "zp-audit",
  "zp-core",
 ]
 
@@ -5003,12 +5009,14 @@ dependencies = [
  "hex",
  "mle-star-engine",
  "monte-carlo-engine",
+ "parking_lot",
  "rand 0.8.5",
  "reqwest",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2",
+ "shlex",
  "thiserror 2.0.18",
  "tokio",
  "toml",
@@ -5017,6 +5025,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "zeroize",
  "zp-audit",
  "zp-core",
  "zp-engine",
@@ -5057,6 +5066,17 @@ dependencies = [
  "tracing",
  "zeroize",
  "zp-core",
+]
+
+[[package]]
+name = "zp-verify"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "zp-receipt",
 ]
 
 [[package]]
