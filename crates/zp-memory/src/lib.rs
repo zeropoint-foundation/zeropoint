@@ -16,6 +16,7 @@
 
 pub mod lifecycle;
 pub mod promotion;
+pub mod quarantine;
 pub mod sharing;
 pub mod types;
 
@@ -24,6 +25,10 @@ pub use lifecycle::{
     reaffirm, review_interval, sweep_lifecycle, ExpirySweepResult,
 };
 pub use promotion::PromotionEngine;
+pub use quarantine::{
+    BulkQuarantineResult, QuarantineReason, QuarantineRecord, QuarantineStore,
+    ReinstatementResult,
+};
 pub use sharing::{
     can_share, format_for_delegation, merge_memories, MergeResult, SharedMemory, SharingContext,
 };
