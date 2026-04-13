@@ -28,6 +28,7 @@ members = [
     "crates/zp-preflight",
     "crates/zp-config",
     "crates/zp-hardening-tests",
+    "crates/zp-anchor",
 ]
 
 [workspace.package]
