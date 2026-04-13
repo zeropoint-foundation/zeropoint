@@ -199,7 +199,18 @@ impl ReceiptVerifier {
             });
         }
 
-        // 8. Claim metadata type consistency
+        // 8. Claim semantics validation: memory promotion requires TruthAssertion
+        if receipt.receipt_type == crate::ReceiptType::MemoryPromotionClaim
+            && receipt.claim_semantics != crate::ClaimSemantics::TruthAssertion
+        {
+            checks.push(VerificationCheck {
+                name: "claim_semantics".to_string(),
+                passed: false,
+                detail: "MemoryPromotionClaim requires TruthAssertion semantics".to_string(),
+            });
+        }
+
+        // 9. Claim metadata type consistency
         if let Some(ref meta) = receipt.claim_metadata {
             let type_matches = match (&receipt.receipt_type, meta) {
                 (crate::ReceiptType::ObservationClaim, crate::ClaimMetadata::Observation { .. }) => true,

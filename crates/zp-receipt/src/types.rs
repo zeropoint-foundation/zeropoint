@@ -106,6 +106,11 @@ pub struct Receipt {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claim_metadata: Option<ClaimMetadata>,
 
+    /// The epistemic semantics of the signature on this receipt.
+    /// Defaults to AuthorshipProof (I made this) for backward compatibility.
+    #[serde(default = "default_claim_semantics")]
+    pub claim_semantics: ClaimSemantics,
+
     /// ID of the receipt that supersedes this one (soft replacement).
     /// The original claim still exists but is no longer the active version.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -381,6 +386,35 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::RevocationClaim => write!(f, "revocation_claim"),
         }
     }
+}
+
+/// The epistemic meaning of the signature on a receipt.
+///
+/// This is a critical semantic distinction introduced in Phase 2.3.
+/// Signing a receipt with `AuthorshipProof` semantics proves who created it
+/// but does NOT assert that the content is true. Only `TruthAssertion`
+/// semantics can be used for memory promotion (Phase 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaimSemantics {
+    /// "I made this." Proves authorship/origin. Default for all existing receipts.
+    AuthorshipProof,
+    /// "This hasn't changed." Proves content integrity since a prior state.
+    IntegrityAttestation,
+    /// "I believe this is true." Required for memory promotion and knowledge claims.
+    TruthAssertion,
+    /// "I permit this." Used for authorization grants and delegation claims.
+    AuthorizationGrant,
+}
+
+impl Default for ClaimSemantics {
+    fn default() -> Self {
+        ClaimSemantics::AuthorshipProof
+    }
+}
+
+fn default_claim_semantics() -> ClaimSemantics {
+    ClaimSemantics::default()
 }
 
 /// Outcome status.
