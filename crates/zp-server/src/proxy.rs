@@ -59,6 +59,111 @@ pub fn provider_base_url(provider: &str) -> Option<&'static str> {
 }
 
 // ============================================================================
+// Path allowlist — SSRF / path injection prevention (Phase 1.3)
+// ============================================================================
+// INJ-VULN-06, INJ-VULN-07, SSRF-VULN-02: restrict proxy paths to known
+// LLM API endpoints. Without this, an attacker could use the proxy to
+// reach arbitrary paths on provider infrastructure or inject query strings.
+
+/// Allowed API path prefixes per provider. Only requests whose path starts
+/// with one of these prefixes will be forwarded.
+fn allowed_path_prefixes(provider: &str) -> &'static [&'static str] {
+    match provider {
+        "openai" => &[
+            "v1/chat/completions", "v1/completions", "v1/embeddings",
+            "v1/models", "v1/moderations", "v1/images/generations",
+        ],
+        "anthropic" => &[
+            "v1/messages", "v1/complete",
+        ],
+        "groq" => &[
+            "v1/chat/completions", "v1/models",
+        ],
+        "mistral" => &[
+            "v1/chat/completions", "v1/embeddings", "v1/models",
+        ],
+        "together" => &[
+            "v1/chat/completions", "v1/completions", "v1/embeddings",
+        ],
+        "deepseek" => &[
+            "v1/chat/completions",
+        ],
+        "fireworks" => &[
+            "v1/chat/completions", "v1/completions", "v1/embeddings",
+        ],
+        "perplexity" => &[
+            "chat/completions",
+        ],
+        "cohere" => &[
+            "v1/chat", "v1/generate", "v1/embed", "v2/chat",
+        ],
+        "google" => &[
+            "v1beta/models", "v1/models",
+        ],
+        "openrouter" => &[
+            "v1/chat/completions",
+        ],
+        "siliconflow" => &[
+            "v1/chat/completions",
+        ],
+        _ => &[], // Unknown providers have no allowed paths
+    }
+}
+
+/// Validate that a proxy path is safe and allowed for the given provider.
+///
+/// Returns `Ok(sanitized_path)` or `Err(reason)`.
+fn validate_proxy_path(provider: &str, path: &str) -> Result<String, String> {
+    // Reject empty paths
+    if path.is_empty() {
+        return Err("Empty path".to_string());
+    }
+
+    // INJ-VULN-07: reject percent-encoded characters that could bypass
+    // validation (e.g. %3F = ?, %2F = /, %2E = .)
+    if path.contains('%') {
+        return Err("Percent-encoded characters not allowed in proxy path".to_string());
+    }
+
+    // Reject path traversal
+    if path.contains("..") {
+        return Err("Path traversal not allowed".to_string());
+    }
+
+    // Reject query strings (could redirect to unintended endpoints)
+    if path.contains('?') || path.contains('#') {
+        return Err("Query strings and fragments not allowed in proxy path".to_string());
+    }
+
+    // Reject null bytes
+    if path.contains('\0') {
+        return Err("Null bytes not allowed".to_string());
+    }
+
+    // Normalize: strip leading/trailing slashes
+    let normalized = path.trim_matches('/');
+
+    // Check against allowlist
+    let prefixes = allowed_path_prefixes(provider);
+    if prefixes.is_empty() {
+        return Err(format!("No allowed paths configured for provider '{}'", provider));
+    }
+
+    let allowed = prefixes.iter().any(|prefix| {
+        normalized == *prefix || normalized.starts_with(&format!("{}/", prefix))
+    });
+
+    if !allowed {
+        return Err(format!(
+            "Path '{}' is not in the allowed list for provider '{}'. Allowed: {:?}",
+            normalized, provider, prefixes
+        ));
+    }
+
+    Ok(normalized.to_string())
+}
+
+// ============================================================================
 // Token extraction — provider-specific response parsing
 // ============================================================================
 
@@ -191,7 +296,27 @@ pub async fn proxy_handler(
         }
     };
 
-    let target_url = format!("{}/{}", base_url, path);
+    // Phase 1.3: Validate proxy path against provider allowlist.
+    // INJ-VULN-06, INJ-VULN-07, SSRF-VULN-02: prevents SSRF via path
+    // injection, percent-encoded query string injection, and arbitrary
+    // path traversal to non-API endpoints on provider infrastructure.
+    let validated_path = match validate_proxy_path(&provider, &path) {
+        Ok(p) => p,
+        Err(reason) => {
+            warn!(provider = %provider, path = %path, reason = %reason, "Proxy path rejected");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": "Invalid proxy path",
+                    "reason": reason,
+                    "provider": provider,
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let target_url = format!("{}/{}", base_url, validated_path);
     debug!(provider = %provider, target = %target_url, "Proxying request");
 
     // 2. Policy check — rate limit via governance gate
