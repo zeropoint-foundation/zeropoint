@@ -5,11 +5,13 @@ edition = "2021"
 
 [dependencies]
 zp-core = { path = "../zp-core" }
+zp-verify = { path = "../zp-verify" }
 rusqlite = { workspace = true }
 blake3 = { workspace = true }
 chrono = { workspace = true }
 ed25519-dalek = { workspace = true }
 hex = { workspace = true }
+regex = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
