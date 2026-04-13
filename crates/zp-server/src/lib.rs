@@ -443,6 +443,8 @@ pub struct AppStateInner {
     pub session_auth: Arc<auth::SessionAuth>,
     /// Per-IP failed-auth rate limiter (AUTH-VULN-04 mitigation).
     pub rate_limiter: Arc<auth::FailedAuthLimiter>,
+    /// Per-endpoint rate limiter (Phase 1.7: AUTH-VULN-04 hardening).
+    pub endpoint_limiter: Arc<auth::EndpointRateLimiter>,
 }
 
 #[derive(Clone)]
@@ -534,6 +536,7 @@ impl AppState {
         // AUTH-VULN-01: this is the foundation for protecting all API endpoints.
         let session_auth = Arc::new(auth::SessionAuth::new(&identity.signing_key.to_bytes()));
         let rate_limiter = Arc::new(auth::FailedAuthLimiter::new());
+        let endpoint_limiter = Arc::new(auth::EndpointRateLimiter::new());
 
         AppState(Arc::new(AppStateInner {
             gate,
@@ -548,6 +551,7 @@ impl AppState {
             config_port: config.port,
             session_auth,
             rate_limiter,
+            endpoint_limiter,
         }))
     }
 }
@@ -777,11 +781,13 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .layer(axum::middleware::from_fn({
             let session_auth = state.0.session_auth.clone();
             let rate_limiter = state.0.rate_limiter.clone();
+            let endpoint_limiter = state.0.endpoint_limiter.clone();
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let session_auth = session_auth.clone();
                 let rate_limiter = rate_limiter.clone();
+                let endpoint_limiter = endpoint_limiter.clone();
                 async move {
-                    auth::require_auth(req, next, session_auth, rate_limiter).await
+                    auth::require_auth(req, next, session_auth, rate_limiter, endpoint_limiter).await
                 }
             }
         }))
