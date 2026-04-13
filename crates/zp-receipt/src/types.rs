@@ -183,6 +183,11 @@ impl Receipt {
         crate::ReceiptBuilder::new(ReceiptType::NarrativeSynthesisClaim, executor_id)
     }
 
+    /// Start building a reflection claim receipt.
+    pub fn reflection(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::ReflectionClaim, executor_id)
+    }
+
     /// Start building a revocation claim receipt.
     pub fn revocation(executor_id: &str) -> crate::ReceiptBuilder {
         crate::ReceiptBuilder::new(ReceiptType::RevocationClaim, executor_id)
@@ -287,6 +292,10 @@ pub enum ReceiptType {
     NarrativeSynthesisClaim,
     /// Revocation of a previously issued receipt
     RevocationClaim,
+
+    // --- Phase 4.1: Cognition plane receipt types ---
+    /// A reflection (consolidation pass) over observations by a reflector agent
+    ReflectionClaim,
 }
 
 impl ReceiptType {
@@ -306,6 +315,7 @@ impl ReceiptType {
             ReceiptType::DelegationClaim => "dlgt",
             ReceiptType::NarrativeSynthesisClaim => "nrtv",
             ReceiptType::RevocationClaim => "revk",
+            ReceiptType::ReflectionClaim => "rflt",
         }
     }
 
@@ -331,6 +341,7 @@ impl ReceiptType {
             ReceiptType::DelegationClaim => None,
             ReceiptType::NarrativeSynthesisClaim => None,
             ReceiptType::RevocationClaim => None,
+            ReceiptType::ReflectionClaim => None,
         }
     }
 
@@ -384,6 +395,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::DelegationClaim => write!(f, "delegation_claim"),
             ReceiptType::NarrativeSynthesisClaim => write!(f, "narrative_synthesis_claim"),
             ReceiptType::RevocationClaim => write!(f, "revocation_claim"),
+            ReceiptType::ReflectionClaim => write!(f, "reflection_claim"),
         }
     }
 }
@@ -784,6 +796,25 @@ pub enum ClaimMetadata {
         synthesis_method: String,
         /// The agent that performed the synthesis
         synthesizer_id: String,
+    },
+
+    /// Metadata for a reflection (consolidation) claim.
+    /// Produced by the Reflector agent when it merges/upgrades/downgrades/drops observations.
+    Reflection {
+        /// IDs of observations consumed (merged, upgraded, downgraded, completed)
+        consumed_observation_ids: Vec<String>,
+        /// IDs of new observations produced by the consolidation
+        produced_observation_ids: Vec<String>,
+        /// IDs of observations dropped (pruned entirely)
+        dropped_observation_ids: Vec<String>,
+        /// Total observation tokens before reflection
+        tokens_before: usize,
+        /// Total observation tokens after reflection
+        tokens_after: usize,
+        /// Compression ratio (tokens_after / tokens_before)
+        compression_ratio: f64,
+        /// The reflector agent that performed the consolidation
+        reflector_id: String,
     },
 
     /// Metadata for a revocation claim.

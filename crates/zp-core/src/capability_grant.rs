@@ -125,6 +125,7 @@ impl GrantProvenance {
     pub fn is_single_use(&self) -> bool {
         matches!(self, GrantProvenance::SystemGenerated { .. })
     }
+}
 
 fn default_max_delegation_depth() -> u8 {
     3
@@ -153,6 +154,10 @@ impl CapabilityGrant {
     ) -> Self {
         let id = format!("grant-{}", uuid::Uuid::now_v7());
 
+        let provenance = GrantProvenance::OperatorIssued {
+            operator_key: grantor.clone(),
+        };
+
         Self {
             id,
             capability,
@@ -168,9 +173,7 @@ impl CapabilityGrant {
             parent_grant_id: None,
             delegation_depth: 0,
             max_delegation_depth: 3,
-            provenance: GrantProvenance::OperatorIssued {
-                operator_key: grantor.clone(),
-            },
+            provenance,
         }
     }
 

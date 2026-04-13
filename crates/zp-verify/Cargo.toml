@@ -1,0 +1,9 @@
+[package]
+name = "zp-verify"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Receipt and chain verification utilities for ZeroPoint"
+
+[dependencies]
