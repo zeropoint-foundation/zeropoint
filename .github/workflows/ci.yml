@@ -39,17 +39,77 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build
+      # ── Minimal kernel (default features = off) ──
+      - name: Build (minimal kernel)
         run: cargo build --workspace
 
-      - name: Test
+      - name: Test (minimal kernel)
         run: cargo test --workspace
 
-      - name: Clippy
+      - name: Clippy (minimal kernel)
         run: cargo clippy --workspace -- -D warnings
+
+      # ── Full monolith (all feature modules enabled) ──
+      - name: Build (full features)
+        run: cargo build --workspace --features zp-cli/full,zp-server/full,zp-policy/policy-wasm
+
+      - name: Test (full features)
+        run: cargo test --workspace --features zp-cli/full,zp-server/full,zp-policy/policy-wasm
+
+      - name: Clippy (full features)
+        run: cargo clippy --workspace --features zp-cli/full,zp-server/full,zp-policy/policy-wasm -- -D warnings
 
       - name: Format check
         run: cargo fmt --all --check
+
+  # ── Feature-gate regression ─────────────────────────────────
+  # Ensures each feature module compiles independently and the
+  # minimal kernel never accidentally depends on gated code.
+  feature-gates:
+    name: Feature-gate matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - name: minimal-kernel
+            flags: ""
+          - name: policy-wasm-only
+            flags: "--features zp-policy/policy-wasm"
+          - name: os-keychain-only
+            flags: "--features zp-cli/os-keychain"
+          - name: hw-trezor-only
+            flags: "--features zp-cli/hw-trezor"
+          - name: embedded-server-only
+            flags: "--features zp-cli/embedded-server"
+          - name: full-monolith
+            flags: "--features zp-cli/full,zp-server/full,zp-policy/policy-wasm"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libusb-1.0-0-dev pkg-config
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-gates-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-gates-
+
+      - name: "Build: ${{ matrix.profile.name }}"
+        run: cargo build --workspace ${{ matrix.profile.flags }}
+
+      - name: "Check: ${{ matrix.profile.name }}"
+        run: cargo check --workspace ${{ matrix.profile.flags }}
 
   # ── Sentinel (Python) ──────────────────────────────────────
   sentinel:
