@@ -739,6 +739,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Ecosystem: interactive knowledge graph + provenance chain + live state
         .route("/ecosystem", get(ecosystem_page_handler))
         .layer(cors)
+        // ── Request body size limit (Phase 1.1: strict input validation) ──
+        // Cap request bodies at 1 MB to prevent denial-of-service via
+        // oversized payloads. WebSocket upgrades are not affected (they
+        // have their own frame-size limits set per-handler).
+        .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
         // ── Security headers (XSS-VULN-01, XSS-VULN-06, XSS-VULN-09) ──
         // Content-Security-Policy prevents inline script execution, which
         // neutralizes the stored XSS attacks Shannon found (tool.name in
@@ -996,13 +1001,15 @@ async fn identity_handler(State(state): State<AppState>) -> Json<IdentityRespons
 // ============================================================================
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct GuardEvaluateRequest {
     /// Human-readable action description (e.g., "delete all user data")
     action: String,
     /// Optional: structured action type
     action_type: Option<ActionTypeInput>,
-    /// Trust tier of the requester (defaults to Tier0)
-    trust_tier: Option<String>,
+    // AUTH-VULN-06 / AUTHZ-VULN-15: trust_tier REMOVED.
+    // Callers must not be able to assert their own trust level.
+    // Trust tier is now always derived from the authenticated session.
 }
 
 #[derive(Deserialize)]
@@ -1052,11 +1059,12 @@ async fn guard_evaluate_handler(
     State(state): State<AppState>,
     Json(body): Json<GuardEvaluateRequest>,
 ) -> Result<Json<GuardEvaluateResponse>, (StatusCode, String)> {
-    let trust_tier = match body.trust_tier.as_deref() {
-        Some("Tier1") => TrustTier::Tier1,
-        Some("Tier2") => TrustTier::Tier2,
-        _ => TrustTier::Tier0,
-    };
+    // AUTH-VULN-06: Trust tier is derived from the authenticated session,
+    // NEVER from the request body. Previously callers could assert any tier.
+    // TODO(Phase 1.1): derive from session token's associated tier once
+    // the auth system carries tier metadata. For now, default to Tier0
+    // (least privilege) — all callers start untrusted.
+    let trust_tier = TrustTier::Tier0;
 
     // Parse the action into a structured ActionType
     let action_type = if let Some(at) = body.action_type {
@@ -1281,6 +1289,7 @@ async fn policy_rules_handler() -> Json<PolicyRulesResponse> {
 // ============================================================================
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CreateGrantRequest {
     /// Who receives the grant (destination hash or name)
     grantee: String,
@@ -1347,6 +1356,7 @@ async fn grant_handler(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DelegateRequest {
     /// ID of the parent grant to delegate from
     parent_grant_id: String,
@@ -1430,6 +1440,7 @@ async fn delegate_handler(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct VerifyChainRequest {
     /// Grant IDs in order from root to leaf
     grant_ids: Vec<String>,
@@ -1786,6 +1797,7 @@ async fn audit_clear_handler(
 // ============================================================================
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 #[allow(dead_code)]
 struct GenerateReceiptRequest {
     /// The action that was performed
@@ -1860,6 +1872,7 @@ async fn receipt_generate_handler(
 // ============================================================================
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ChatRequest {
     conversation_id: Option<String>,
     message: String,
@@ -2672,6 +2685,7 @@ fn kill_port_occupant(port: u16) {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LaunchRequest {
     name: String,
 }
