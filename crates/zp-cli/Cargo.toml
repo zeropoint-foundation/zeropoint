@@ -9,7 +9,7 @@ repository.workspace = true
 description = "ZeroPoint v2 CLI — primary interface for developers"
 
 [features]
-default = []
+default = ["os-keychain"]
 embedded-server = ["dep:zp-server"]
 policy-wasm = ["zp-policy/policy-wasm"]
 os-keychain = ["zp-keys/os-keychain"]

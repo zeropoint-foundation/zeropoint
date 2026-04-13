@@ -110,7 +110,7 @@ fn main() {
     println!("\nGOVERNANCE");
     println!("─────────");
     let guard = Guard::with_config(100, StdDuration::from_secs(60), TrustTier::Tier0);
-    guard.block_actor(&format!("{:?}", ActorId::User("malicious".into())));
+    guard.block_actor(&ActorId::User("malicious".into()));
     let gate = GovernanceGate::with_guard("fleet-gate", PolicyEngine::new(), guard);
 
     let mut allowed = 0;
