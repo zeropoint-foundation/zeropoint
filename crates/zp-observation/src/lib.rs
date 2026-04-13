@@ -10,12 +10,17 @@
 
 pub mod config;
 pub mod observer;
+pub mod receipts;
 pub mod reflector;
 pub mod store;
 pub mod types;
 
 pub use config::*;
 pub use observer::{build_observer_prompt, parse_observer_output, OBSERVER_SYSTEM_PROMPT};
+pub use receipts::{
+    generate_observation_receipt, generate_observation_receipts, generate_reflection_receipt,
+    verify_observation_receipt_consistency, verify_source_range,
+};
 pub use reflector::{
     apply_reflector_actions, build_reflector_prompt, parse_reflector_output,
     REFLECTOR_SYSTEM_PROMPT,
