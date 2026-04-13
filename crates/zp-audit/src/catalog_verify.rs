@@ -14,7 +14,7 @@
 
 use chrono::{DateTime, Utc};
 use zp_core::AuditEntry;
-use zp_verify::{ChainEntry, VerifyReport, Verifier};
+use zp_verify::{ChainEntry, Verifier, VerifyReport};
 
 use crate::store::{AuditStore, Result};
 
@@ -97,8 +97,7 @@ impl AuditStore {
         // 64-bit targets. i64::MAX rows is effectively "no limit" for any
         // real audit chain.
         let entries = self.export_chain(i64::MAX as usize)?;
-        let wrapped: Vec<AuditChainEntry<'_>> =
-            entries.iter().map(AuditChainEntry).collect();
+        let wrapped: Vec<AuditChainEntry<'_>> = entries.iter().map(AuditChainEntry).collect();
         Ok(Verifier::new().verify(&wrapped))
     }
 }

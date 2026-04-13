@@ -18,8 +18,8 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
-use zp_trust::vault::CredentialVault;
 use zp_engine::validate::{self, CredentialToValidate, ValidationStatus};
+use zp_trust::vault::CredentialVault;
 
 use crate::configure::{self, ConfigEngine, DiscoveredTool};
 
@@ -111,13 +111,14 @@ pub fn run(
         // Show what's already in the vault — the user isn't starting from zero
         let vault_refs = vault.list();
         if !vault_refs.is_empty() {
-            eprintln!("  \x1b[1mVault status\x1b[0m — {} credential(s) on file:", vault_refs.len());
+            eprintln!(
+                "  \x1b[1mVault status\x1b[0m — {} credential(s) on file:",
+                vault_refs.len()
+            );
             eprintln!();
 
             // Run validation sweep so they see their credentials are healthy
-            let retrieve = |name: &str| -> Option<Vec<u8>> {
-                vault.retrieve(name).ok()
-            };
+            let retrieve = |name: &str| -> Option<Vec<u8>> { vault.retrieve(name).ok() };
             let creds = validate::credentials_from_vault_refs(&vault_refs, &retrieve);
 
             if !creds.is_empty() {
@@ -241,7 +242,10 @@ pub fn run(
         match vault.store(&cred.vault_ref, value.as_bytes()) {
             Ok(_) => {
                 let masked = mask_credential(value);
-                eprintln!("  │ \x1b[32m✓\x1b[0m Stored: {} ({})", cred.vault_ref, masked);
+                eprintln!(
+                    "  │ \x1b[32m✓\x1b[0m Stored: {} ({})",
+                    cred.vault_ref, masked
+                );
                 stored_count += 1;
 
                 // ── Live validation ──────────────────────────────
@@ -277,7 +281,9 @@ pub fn run(
                         }
                         ValidationStatus::Unreachable => {
                             eprintln!(" \x1b[33m⚠ unreachable\x1b[0m — {}", r.detail);
-                            eprintln!("  │   \x1b[2mKey stored. Service may be temporarily down.\x1b[0m");
+                            eprintln!(
+                                "  │   \x1b[2mKey stored. Service may be temporarily down.\x1b[0m"
+                            );
                         }
                         ValidationStatus::Unsupported => {
                             eprintln!(" \x1b[2m○ no probe\x1b[0m — validation not available for this provider");
@@ -305,14 +311,20 @@ pub fn run(
     // Summary
     eprintln!();
     if validated_count > 0 {
-        eprintln!("  {} credential(s) stored, \x1b[32m{} verified live\x1b[0m.", stored_count, validated_count);
+        eprintln!(
+            "  {} credential(s) stored, \x1b[32m{} verified live\x1b[0m.",
+            stored_count, validated_count
+        );
     } else {
         eprintln!("  {} credential(s) stored.", stored_count);
     }
 
     if !invalid_keys.is_empty() {
         eprintln!();
-        eprintln!("  \x1b[33m⚠ {} key(s) failed validation:\x1b[0m", invalid_keys.len());
+        eprintln!(
+            "  \x1b[33m⚠ {} key(s) failed validation:\x1b[0m",
+            invalid_keys.len()
+        );
         for (vr, reason) in &invalid_keys {
             eprintln!("    \x1b[31m✗\x1b[0m {} — {}", vr, reason);
         }
@@ -374,15 +386,12 @@ fn offer_auto_configure(
         eprintln!("  \x1b[1mCredential health check\x1b[0m");
         eprintln!("  \x1b[2m───────────────────────\x1b[0m");
 
-        let retrieve = |name: &str| -> Option<Vec<u8>> {
-            vault.retrieve(name).ok()
-        };
+        let retrieve = |name: &str| -> Option<Vec<u8>> { vault.retrieve(name).ok() };
         let creds = validate::credentials_from_vault_refs(&vault_refs, &retrieve);
 
         if !creds.is_empty() {
             let report = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current()
-                    .block_on(validate::validate_credentials(&creds))
+                tokio::runtime::Handle::current().block_on(validate::validate_credentials(&creds))
             });
 
             for r in &report.results {
@@ -485,14 +494,19 @@ fn offer_auto_configure(
     eprintln!("  {}/{} tool(s) configured.", configured, ready.len());
 
     if use_proxy {
-        eprintln!("  API calls will route through \x1b[36mhttp://localhost:{}/api/v1/proxy/\x1b[0m", config.proxy_port);
+        eprintln!(
+            "  API calls will route through \x1b[36mhttp://localhost:{}/api/v1/proxy/\x1b[0m",
+            config.proxy_port
+        );
         eprintln!("  Start the server: \x1b[1mzp serve\x1b[0m");
     }
 
     eprintln!();
     eprintln!("  Your tools are governed. \x1b[2m✦\x1b[0m");
     eprintln!();
-    eprintln!("  \x1b[2mTip: Run `zp configure validate` anytime to re-check your credentials.\x1b[0m");
+    eprintln!(
+        "  \x1b[2mTip: Run `zp configure validate` anytime to re-check your credentials.\x1b[0m"
+    );
     eprintln!();
     0
 }

@@ -185,20 +185,48 @@ mod tests {
     }
 
     impl ChainEntry for TestEntry {
-        fn entry_id(&self) -> &str { &self.id }
-        fn self_link(&self) -> &str { &self.self_hash }
-        fn parent_link(&self) -> Option<&str> { self.parent_hash.as_deref() }
-        fn content_hash_valid(&self) -> bool { self.valid }
-        fn timestamp(&self) -> DateTime<Utc> { self.ts }
+        fn entry_id(&self) -> &str {
+            &self.id
+        }
+        fn self_link(&self) -> &str {
+            &self.self_hash
+        }
+        fn parent_link(&self) -> Option<&str> {
+            self.parent_hash.as_deref()
+        }
+        fn content_hash_valid(&self) -> bool {
+            self.valid
+        }
+        fn timestamp(&self) -> DateTime<Utc> {
+            self.ts
+        }
     }
 
     #[test]
     fn valid_chain() {
         let now = Utc::now();
         let entries = vec![
-            TestEntry { id: "0".into(), self_hash: "h0".into(), parent_hash: None, ts: now, valid: true },
-            TestEntry { id: "1".into(), self_hash: "h1".into(), parent_hash: Some("h0".into()), ts: now, valid: true },
-            TestEntry { id: "2".into(), self_hash: "h2".into(), parent_hash: Some("h1".into()), ts: now, valid: true },
+            TestEntry {
+                id: "0".into(),
+                self_hash: "h0".into(),
+                parent_hash: None,
+                ts: now,
+                valid: true,
+            },
+            TestEntry {
+                id: "1".into(),
+                self_hash: "h1".into(),
+                parent_hash: Some("h0".into()),
+                ts: now,
+                valid: true,
+            },
+            TestEntry {
+                id: "2".into(),
+                self_hash: "h2".into(),
+                parent_hash: Some("h1".into()),
+                ts: now,
+                valid: true,
+            },
         ];
 
         let report = Verifier::new().verify(&entries);
@@ -210,8 +238,20 @@ mod tests {
     fn broken_chain() {
         let now = Utc::now();
         let entries = vec![
-            TestEntry { id: "0".into(), self_hash: "h0".into(), parent_hash: None, ts: now, valid: true },
-            TestEntry { id: "1".into(), self_hash: "h1".into(), parent_hash: Some("wrong".into()), ts: now, valid: true },
+            TestEntry {
+                id: "0".into(),
+                self_hash: "h0".into(),
+                parent_hash: None,
+                ts: now,
+                valid: true,
+            },
+            TestEntry {
+                id: "1".into(),
+                self_hash: "h1".into(),
+                parent_hash: Some("wrong".into()),
+                ts: now,
+                valid: true,
+            },
         ];
 
         let report = Verifier::new().verify(&entries);

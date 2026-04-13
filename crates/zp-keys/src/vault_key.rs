@@ -179,7 +179,10 @@ mod tests {
         let secret = [42u8; 32];
         let key1 = derive_vault_key(&secret);
         let key2 = derive_vault_key(&secret);
-        assert_eq!(*key1, *key2, "same genesis secret must produce same vault key");
+        assert_eq!(
+            *key1, *key2,
+            "same genesis secret must produce same vault key"
+        );
     }
 
     #[test]
@@ -188,21 +191,30 @@ mod tests {
         let secret_b = [2u8; 32];
         let key_a = derive_vault_key(&secret_a);
         let key_b = derive_vault_key(&secret_b);
-        assert_ne!(*key_a, *key_b, "different secrets must produce different vault keys");
+        assert_ne!(
+            *key_a, *key_b,
+            "different secrets must produce different vault keys"
+        );
     }
 
     #[test]
     fn test_derive_vault_key_not_identity() {
         let secret = [42u8; 32];
         let key = derive_vault_key(&secret);
-        assert_ne!(*key, secret, "vault key must not be the genesis secret itself");
+        assert_ne!(
+            *key, secret,
+            "vault key must not be the genesis secret itself"
+        );
     }
 
     #[test]
     fn test_derive_vault_key_all_zeros() {
         let secret = [0u8; 32];
         let key = derive_vault_key(&secret);
-        assert_ne!(*key, [0u8; 32], "vault key must not be zero even with zero input");
+        assert_ne!(
+            *key, [0u8; 32],
+            "vault key must not be zero even with zero input"
+        );
         let key2 = derive_vault_key(&secret);
         assert_eq!(*key, *key2, "still deterministic");
     }
@@ -221,7 +233,11 @@ mod tests {
         for i in 0..32 {
             diff_bits += (key_a[i] ^ key_b[i]).count_ones();
         }
-        assert!(diff_bits > 64, "avalanche: only {} bits differ (expect ~128)", diff_bits);
+        assert!(
+            diff_bits > 64,
+            "avalanche: only {} bits differ (expect ~128)",
+            diff_bits
+        );
     }
 
     // ── Keyring integration tests ────────────────────────────────────

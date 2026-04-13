@@ -5,7 +5,7 @@
 //! preserved for audit. The observation chain remains intact; only the
 //! epistemic status changes.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use tracing::{info, warn};
 
 use crate::types::{MemoryEntry, MemoryStage};
@@ -67,16 +67,12 @@ pub fn apply_lifecycle_rules(entry: &mut MemoryEntry) {
 
 /// Check if a memory has expired.
 pub fn is_expired(entry: &MemoryEntry) -> bool {
-    entry
-        .expires_at
-        .map_or(false, |exp| Utc::now() > exp)
+    entry.expires_at.is_some_and(|exp| Utc::now() > exp)
 }
 
 /// Check if a memory is due for review.
 pub fn is_review_due(entry: &MemoryEntry) -> bool {
-    entry
-        .review_due_at
-        .map_or(false, |due| Utc::now() > due)
+    entry.review_due_at.is_some_and(|due| Utc::now() > due)
 }
 
 /// Result of running the expiry sweep.
@@ -205,8 +201,14 @@ mod tests {
 
     #[test]
     fn default_expiry_values() {
-        assert_eq!(default_expiry(MemoryStage::Observed), Some(Duration::hours(24)));
-        assert_eq!(default_expiry(MemoryStage::Interpreted), Some(Duration::days(7)));
+        assert_eq!(
+            default_expiry(MemoryStage::Observed),
+            Some(Duration::hours(24))
+        );
+        assert_eq!(
+            default_expiry(MemoryStage::Interpreted),
+            Some(Duration::days(7))
+        );
         assert_eq!(default_expiry(MemoryStage::Trusted), None);
         assert_eq!(default_expiry(MemoryStage::Remembered), None);
         assert_eq!(default_expiry(MemoryStage::IdentityBearing), None);
@@ -215,8 +217,14 @@ mod tests {
     #[test]
     fn review_interval_values() {
         assert_eq!(review_interval(MemoryStage::Observed), None);
-        assert_eq!(review_interval(MemoryStage::Trusted), Some(Duration::days(30)));
-        assert_eq!(review_interval(MemoryStage::Remembered), Some(Duration::days(365)));
+        assert_eq!(
+            review_interval(MemoryStage::Trusted),
+            Some(Duration::days(30))
+        );
+        assert_eq!(
+            review_interval(MemoryStage::Remembered),
+            Some(Duration::days(365))
+        );
         assert_eq!(review_interval(MemoryStage::IdentityBearing), None);
     }
 
@@ -264,9 +272,18 @@ mod tests {
     #[test]
     fn demotion_targets() {
         assert_eq!(demotion_target(MemoryStage::Observed), None);
-        assert_eq!(demotion_target(MemoryStage::Interpreted), Some(MemoryStage::Observed));
-        assert_eq!(demotion_target(MemoryStage::Trusted), Some(MemoryStage::Interpreted));
-        assert_eq!(demotion_target(MemoryStage::Remembered), Some(MemoryStage::Trusted));
+        assert_eq!(
+            demotion_target(MemoryStage::Interpreted),
+            Some(MemoryStage::Observed)
+        );
+        assert_eq!(
+            demotion_target(MemoryStage::Trusted),
+            Some(MemoryStage::Interpreted)
+        );
+        assert_eq!(
+            demotion_target(MemoryStage::Remembered),
+            Some(MemoryStage::Trusted)
+        );
         assert_eq!(demotion_target(MemoryStage::IdentityBearing), None); // No auto-demotion
     }
 

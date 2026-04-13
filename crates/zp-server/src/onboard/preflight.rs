@@ -26,7 +26,7 @@ pub struct ToolPreflight {
     pub name: String,
     pub path: String,
     pub ready: bool,
-    pub launch_method: String,  // "native", "pnpm", "npm", "docker", "script", "make", "none"
+    pub launch_method: String, // "native", "pnpm", "npm", "docker", "script", "make", "none"
     pub checks: Vec<PreflightCheck>,
     pub auto_fixed: Vec<String>,
 }
@@ -34,7 +34,7 @@ pub struct ToolPreflight {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreflightCheck {
     pub name: String,
-    pub status: String,  // "pass", "fixed", "fail"
+    pub status: String, // "pass", "fixed", "fail"
     pub detail: String,
 }
 
@@ -88,8 +88,13 @@ impl PreflightResults {
 
 /// Port variable names to scan for conflict detection.
 const PORT_VARS: &[&str] = &[
-    "PORT", "APP_PORT", "SERVER_PORT", "API_PORT",
-    "HTTP_PORT", "LISTEN_PORT", "WEBUI_PORT",
+    "PORT",
+    "APP_PORT",
+    "SERVER_PORT",
+    "API_PORT",
+    "HTTP_PORT",
+    "LISTEN_PORT",
+    "WEBUI_PORT",
 ];
 
 /// How recently a tool must have passed preflight for us to skip re-checking.
@@ -114,6 +119,7 @@ pub(crate) async fn run_preflight(
 }
 
 /// Force a full re-run of all tools, ignoring fresh chain receipts.
+#[allow(dead_code)]
 pub(crate) async fn run_preflight_force(
     scan_path: &Path,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
@@ -151,14 +157,18 @@ async fn run_preflight_inner(
     };
 
     events.push(OnboardEvent::terminal(""));
-    events.push(OnboardEvent::terminal("── Preflight ──────────────────────────"));
+    events.push(OnboardEvent::terminal(
+        "── Preflight ──────────────────────────",
+    ));
 
     // 1. Check Docker availability — attempt auto-start if not running
     let mut docker_available = check_docker_available().await;
     if docker_available {
         events.push(OnboardEvent::terminal("  ✓ Docker daemon reachable"));
     } else {
-        events.push(OnboardEvent::terminal("  ⚠ Docker not running — attempting to start..."));
+        events.push(OnboardEvent::terminal(
+            "  ⚠ Docker not running — attempting to start...",
+        ));
         if try_start_docker().await {
             // Wait for daemon to become responsive (up to 30s)
             for i in 0..15 {
@@ -166,7 +176,8 @@ async fn run_preflight_inner(
                 if check_docker_available().await {
                     docker_available = true;
                     events.push(OnboardEvent::terminal(&format!(
-                        "  ✓ Docker started (took ~{}s)", (i + 1) * 2
+                        "  ✓ Docker started (took ~{}s)",
+                        (i + 1) * 2
                     )));
                     break;
                 }
@@ -200,8 +211,11 @@ async fn run_preflight_inner(
     if let Ok(entries) = std::fs::read_dir(scan_path) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_dir() { continue; }
-            let name = path.file_name()
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
             if name.starts_with('.') || name == "node_modules" || name == "target" {
@@ -215,7 +229,8 @@ async fn run_preflight_inner(
     }
 
     events.push(OnboardEvent::terminal(&format!(
-        "  Checking {} tool(s)...", tool_dirs.len()
+        "  Checking {} tool(s)...",
+        tool_dirs.len()
     )));
 
     // 3. Per-tool preflight
@@ -230,7 +245,8 @@ async fn run_preflight_inner(
         // Idempotent: skip tools with a fresh passing receipt.
         if fresh_tools.contains(name.as_str()) {
             events.push(OnboardEvent::terminal(&format!(
-                "  ▸ {} — recently passed, skipping (use force to re-check)", name
+                "  ▸ {} — recently passed, skipping (use force to re-check)",
+                name
             )));
             // Synthesize a passing result so the summary counts are correct.
             tool_results.push(ToolPreflight {
@@ -283,13 +299,16 @@ async fn run_preflight_inner(
     //     Only applies to tools that actually launch via Docker compose.
     //     Tools running via pnpm/npm/native may have a compose file for
     //     dev purposes but don't use it at runtime.
-    let docker_launched: std::collections::HashSet<String> = tool_results.iter()
+    let docker_launched: std::collections::HashSet<String> = tool_results
+        .iter()
         .filter(|t| t.launch_method == "docker")
         .map(|t| t.name.clone())
         .collect();
     if docker_available {
         for (name, path) in &tool_dirs {
-            if !docker_launched.contains(name.as_str()) { continue; }
+            if !docker_launched.contains(name.as_str()) {
+                continue;
+            }
             let compose_ports = extract_compose_ports(path);
             for (host_port, service) in &compose_ports {
                 if let Some(occupant) = check_port_in_use(*host_port).await {
@@ -298,10 +317,7 @@ async fn run_preflight_inner(
                     if !own_container {
                         port_conflicts.push(PortConflict {
                             port: *host_port,
-                            tools: vec![
-                                format!("{}:{}", name, service),
-                                occupant.clone(),
-                            ],
+                            tools: vec![format!("{}:{}", name, service), occupant.clone()],
                         });
                         events.push(OnboardEvent::terminal(&format!(
                             "  ⚠ {}'s {} needs port {} — already held by {}",
@@ -310,12 +326,15 @@ async fn run_preflight_inner(
 
                         // Emit dep receipt — this is a blocking conflict
                         if let Some(store) = audit_store {
-                            use crate::tool_state::events as te;
                             use crate::tool_chain::emit_tool_receipt;
-                            let event = te::dep(te::DEP_FAILED, name, &format!("port:{}", host_port));
-                            emit_tool_receipt(store, &event, Some(&format!(
-                                "service={} occupant={}", service, occupant
-                            )));
+                            use crate::tool_state::events as te;
+                            let event =
+                                te::dep(te::DEP_FAILED, name, &format!("port:{}", host_port));
+                            emit_tool_receipt(
+                                store,
+                                &event,
+                                Some(&format!("service={} occupant={}", service, occupant)),
+                            );
                         }
                     }
                 }
@@ -331,7 +350,9 @@ async fn run_preflight_inner(
         "  Preflight complete: {}/{} tools ready",
         ready, total
     )));
-    events.push(OnboardEvent::terminal("───────────────────────────────────────"));
+    events.push(OnboardEvent::terminal(
+        "───────────────────────────────────────",
+    ));
 
     let results = PreflightResults {
         tools: tool_results,
@@ -342,7 +363,7 @@ async fn run_preflight_inner(
 
     // ── Emit receipts into the audit chain ──────────────────
     if let Some(store) = audit_store {
-        use crate::tool_chain::{ToolEvent, emit_tool_receipt};
+        use crate::tool_chain::{emit_tool_receipt, ToolEvent};
         use crate::tool_state::events as te;
 
         for tool in &results.tools {
@@ -350,18 +371,16 @@ async fn run_preflight_inner(
             let env_path = PathBuf::from(&tool.path).join(".env");
             if env_path.exists() {
                 let event = ToolEvent::configured(&tool.name);
-                emit_tool_receipt(store, &event, Some(&format!(
-                    "launch_method={}", tool.launch_method
-                )));
+                emit_tool_receipt(
+                    store,
+                    &event,
+                    Some(&format!("launch_method={}", tool.launch_method)),
+                );
             }
 
             // Emit individual check receipts
             for check in &tool.checks {
-                let event = ToolEvent::preflight_check(
-                    &tool.name,
-                    &check.name,
-                    &check.status,
-                );
+                let event = ToolEvent::preflight_check(&tool.name, &check.name, &check.status);
                 emit_tool_receipt(store, &event, Some(&check.detail));
             }
 
@@ -390,9 +409,10 @@ async fn run_preflight_inner(
                         || env_contents.contains("PG_")
                     {
                         // Check if the docker_daemon check passed (implies compose deps work)
-                        let compose_ok = tool.checks.iter().any(|c|
-                            c.name == "compose_valid" && c.status == "pass"
-                        );
+                        let compose_ok = tool
+                            .checks
+                            .iter()
+                            .any(|c| c.name == "compose_valid" && c.status == "pass");
                         let event = if compose_ok || docker_available {
                             te::dep(te::DEP_SATISFIED, &tool.name, "postgres")
                         } else {
@@ -424,7 +444,8 @@ async fn run_preflight_inner(
                 emit_tool_receipt(store, &event, Some(&detail));
             } else {
                 let event = ToolEvent::preflight_failed(&tool.name);
-                let failures: Vec<String> = tool.checks
+                let failures: Vec<String> = tool
+                    .checks
                     .iter()
                     .filter(|c| c.status == "fail")
                     .map(|c| c.detail.clone())
@@ -454,7 +475,11 @@ async fn run_preflight_inner(
 // Per-tool preflight
 // ============================================================================
 
-async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPreflight, Vec<OnboardEvent>) {
+async fn preflight_tool(
+    name: &str,
+    path: &Path,
+    docker_ok: bool,
+) -> (ToolPreflight, Vec<OnboardEvent>) {
     let mut checks = Vec::new();
     let mut auto_fixed = Vec::new();
     let mut events = Vec::new();
@@ -472,23 +497,33 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
 
     // Priority: native > local package manager (pnpm > npm) > docker > script > make
     // Local-first: prefer pnpm/npm over Docker when lockfile present
-    let launch_method = if has_cargo { "native" }
-        else if has_package_json && has_pnpm_lock { "pnpm" }
-        else if has_package_json && has_npm_lock { "npm" }
-        else if has_compose { "docker" }
-        else if has_package_json { "npm" }
-        else if start_script.is_some() { "script" }
-        else if has_makefile { "make" }
-        else { "none" };
+    let launch_method = if has_cargo {
+        "native"
+    } else if has_package_json && has_pnpm_lock {
+        "pnpm"
+    } else if has_package_json && has_npm_lock {
+        "npm"
+    } else if has_compose {
+        "docker"
+    } else if has_package_json {
+        "npm"
+    } else if start_script.is_some() {
+        "script"
+    } else if has_makefile {
+        "make"
+    } else {
+        "none"
+    };
 
     // ── .env bootstrap: copy from .env.example if missing ──
     let env_path = path.join(".env");
     let env_example = path.join(".env.example");
-    if !env_path.exists() && env_example.exists() {
-        if std::fs::copy(&env_example, &env_path).is_ok() {
-            auto_fixed.push("Created .env from .env.example".into());
-            events.push(OnboardEvent::terminal("    ✓ Created .env from .env.example"));
-        }
+    if !env_path.exists() && env_example.exists() && std::fs::copy(&env_example, &env_path).is_ok()
+    {
+        auto_fixed.push("Created .env from .env.example".into());
+        events.push(OnboardEvent::terminal(
+            "    ✓ Created .env from .env.example",
+        ));
     }
 
     // ── .env completeness (with vault auto-resolve) ────────
@@ -498,14 +533,27 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
         // Shell out to `zp configure tool` which reads the vault and
         // resolves credentials semantically. This is the same pipeline
         // as `zp configure auto` but targeted at a single tool.
-        events.push(OnboardEvent::terminal(&format!("    ⚠ {}", env_check.detail)));
-        events.push(OnboardEvent::terminal("    → Attempting vault auto-resolve..."));
+        events.push(OnboardEvent::terminal(&format!(
+            "    ⚠ {}",
+            env_check.detail
+        )));
+        events.push(OnboardEvent::terminal(
+            "    → Attempting vault auto-resolve...",
+        ));
 
         let configure_result = run_cmd(
             path,
             "zp",
-            &["configure", "tool", "--path", &path.display().to_string(), "--name", name],
-        ).await;
+            &[
+                "configure",
+                "tool",
+                "--path",
+                &path.display().to_string(),
+                "--name",
+                name,
+            ],
+        )
+        .await;
 
         if configure_result.success {
             // Re-check after vault resolution
@@ -514,18 +562,25 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                 env_check = recheck;
                 env_check.detail = format!("{} (auto-resolved from vault)", env_check.detail);
                 auto_fixed.push("Resolved credentials from vault".into());
-                events.push(OnboardEvent::terminal("    ✓ Credentials resolved from vault"));
+                events.push(OnboardEvent::terminal(
+                    "    ✓ Credentials resolved from vault",
+                ));
             } else {
                 // Vault didn't have what we needed — report what's still missing
                 env_check = recheck;
-                events.push(OnboardEvent::terminal(&format!("    ✗ {}", env_check.detail)));
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✗ {}",
+                    env_check.detail
+                )));
                 events.push(OnboardEvent::terminal(
                     "    → Store missing credentials: zp configure vault-add --provider <name> --field api_key"
                 ));
             }
         } else {
             // zp binary not on PATH or configure failed — fall through with original check
-            events.push(OnboardEvent::terminal("    ⚠ Vault auto-resolve unavailable"));
+            events.push(OnboardEvent::terminal(
+                "    ⚠ Vault auto-resolve unavailable",
+            ));
         }
     }
     checks.push(env_check.clone());
@@ -536,7 +591,8 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
             checks.push(PreflightCheck {
                 name: "docker_daemon".into(),
                 status: "fail".into(),
-                detail: "Docker daemon not running — start Docker Desktop or the docker service".into(),
+                detail: "Docker daemon not running — start Docker Desktop or the docker service"
+                    .into(),
             });
             events.push(OnboardEvent::terminal("    ✗ Docker not available"));
         } else {
@@ -555,7 +611,8 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                     detail: format!("Compose validation failed: {}", config_ok.stderr_tail()),
                 });
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✗ Compose validation failed: {}", config_ok.stderr_tail()
+                    "    ✗ Compose validation failed: {}",
+                    config_ok.stderr_tail()
                 )));
             }
 
@@ -577,7 +634,8 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                     detail: format!("Image pull failed: {}", pull_ok.stderr_tail()),
                 });
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✗ Image pull failed: {}", pull_ok.stderr_tail()
+                    "    ✗ Image pull failed: {}",
+                    pull_ok.stderr_tail()
                 )));
             }
         }
@@ -595,14 +653,17 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
         } else {
             // Stale check: if package.json is newer than node_modules, re-install
             let pkg_modified = std::fs::metadata(path.join("package.json"))
-                .and_then(|m| m.modified()).ok();
+                .and_then(|m| m.modified())
+                .ok();
             let nm_modified = std::fs::metadata(&node_modules)
-                .and_then(|m| m.modified()).ok();
+                .and_then(|m| m.modified())
+                .ok();
             matches!((pkg_modified, nm_modified), (Some(p), Some(n)) if p > n)
         };
         if needs_install {
             events.push(OnboardEvent::terminal(&format!(
-                "    Installing {} dependencies...", pkg_mgr
+                "    Installing {} dependencies...",
+                pkg_mgr
             )));
             let install_args: Vec<&str> = if use_pnpm {
                 vec!["install"]
@@ -618,7 +679,8 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                 });
                 auto_fixed.push(format!("Installed {} dependencies", pkg_mgr));
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✓ {} install complete", pkg_mgr
+                    "    ✓ {} install complete",
+                    pkg_mgr
                 )));
             } else {
                 checks.push(PreflightCheck {
@@ -627,7 +689,9 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                     detail: format!("{} install failed: {}", pkg_mgr, install_ok.stderr_tail()),
                 });
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✗ {} install failed: {}", pkg_mgr, install_ok.stderr_tail()
+                    "    ✗ {} install failed: {}",
+                    pkg_mgr,
+                    install_ok.stderr_tail()
                 )));
             }
         } else {
@@ -657,7 +721,10 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                             detail: format!("chmod +x {}", script),
                         });
                         auto_fixed.push(format!("Made {} executable", script));
-                        events.push(OnboardEvent::terminal(&format!("    ✓ chmod +x {}", script)));
+                        events.push(OnboardEvent::terminal(&format!(
+                            "    ✓ chmod +x {}",
+                            script
+                        )));
                     }
                 } else {
                     checks.push(PreflightCheck {
@@ -686,7 +753,7 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
             detail: "No docker-compose.yml, start.sh, package.json, or Makefile found".into(),
         });
         events.push(OnboardEvent::terminal(
-            "    ✗ No launch method — add docker-compose.yml or start.sh"
+            "    ✗ No launch method — add docker-compose.yml or start.sh",
         ));
     } else {
         checks.push(PreflightCheck {
@@ -704,25 +771,34 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
         if ps_result.success && !ps_result.stdout.trim().is_empty() {
             let container_count = ps_result.stdout.lines().count();
             // Try to bring them down cleanly
-            let down_result = run_cmd(path, "docker", &["compose", "down", "--remove-orphans"]).await;
+            let down_result =
+                run_cmd(path, "docker", &["compose", "down", "--remove-orphans"]).await;
             if down_result.success {
                 checks.push(PreflightCheck {
                     name: "zombie_containers".into(),
                     status: "fixed".into(),
-                    detail: format!("Cleaned up {} orphan container(s) from previous run", container_count),
+                    detail: format!(
+                        "Cleaned up {} orphan container(s) from previous run",
+                        container_count
+                    ),
                 });
                 auto_fixed.push(format!("Removed {} zombie containers", container_count));
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✓ Cleaned {} orphan container(s)", container_count
+                    "    ✓ Cleaned {} orphan container(s)",
+                    container_count
                 )));
             } else {
                 checks.push(PreflightCheck {
                     name: "zombie_containers".into(),
                     status: "fail".into(),
-                    detail: format!("Found {} running container(s) that could not be stopped", container_count),
+                    detail: format!(
+                        "Found {} running container(s) that could not be stopped",
+                        container_count
+                    ),
                 });
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✗ {} zombie container(s) — try: docker compose down", container_count
+                    "    ✗ {} zombie container(s) — try: docker compose down",
+                    container_count
                 )));
             }
         }
@@ -738,33 +814,34 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
             // ./tmp/{toolname}.pid
             Some(path.join("tmp")),
         ];
-        for dir_opt in &pid_dirs {
-            if let Some(dir) = dir_opt {
-                let pid_file = dir.join(format!("{}.pid", name));
-                if pid_file.exists() {
-                    // Read PID and check if process is still running
-                    let pid_content = std::fs::read_to_string(&pid_file).unwrap_or_default();
-                    let pid_str = pid_content.trim();
-                    let process_alive = if let Ok(pid) = pid_str.parse::<u32>() {
-                        // kill -0 checks existence without sending a signal
-                        run_cmd(Path::new("/"), "kill", &["-0", &pid.to_string()]).await.success
-                    } else {
-                        false
-                    };
+        for dir in pid_dirs.iter().flatten() {
+            let pid_file = dir.join(format!("{}.pid", name));
+            if pid_file.exists() {
+                // Read PID and check if process is still running
+                let pid_content = std::fs::read_to_string(&pid_file).unwrap_or_default();
+                let pid_str = pid_content.trim();
+                let process_alive = if let Ok(pid) = pid_str.parse::<u32>() {
+                    // kill -0 checks existence without sending a signal
+                    run_cmd(Path::new("/"), "kill", &["-0", &pid.to_string()])
+                        .await
+                        .success
+                } else {
+                    false
+                };
 
-                    if !process_alive {
-                        // Stale PID — remove it
-                        if std::fs::remove_file(&pid_file).is_ok() {
-                            checks.push(PreflightCheck {
-                                name: "stale_pid".into(),
-                                status: "fixed".into(),
-                                detail: format!("Removed stale PID file: {}", pid_file.display()),
-                            });
-                            auto_fixed.push(format!("Removed stale {}.pid", name));
-                            events.push(OnboardEvent::terminal(&format!(
-                                "    ✓ Removed stale PID file ({})", pid_str
-                            )));
-                        }
+                if !process_alive {
+                    // Stale PID — remove it
+                    if std::fs::remove_file(&pid_file).is_ok() {
+                        checks.push(PreflightCheck {
+                            name: "stale_pid".into(),
+                            status: "fixed".into(),
+                            detail: format!("Removed stale PID file: {}", pid_file.display()),
+                        });
+                        auto_fixed.push(format!("Removed stale {}.pid", name));
+                        events.push(OnboardEvent::terminal(&format!(
+                            "    ✓ Removed stale PID file ({})",
+                            pid_str
+                        )));
                     }
                 }
             }
@@ -790,7 +867,7 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
             // Not a hard failure — it'll just take a while on first launch
             checks.push(PreflightCheck {
                 name: "native_binary".into(),
-                status: "pass".into(),  // warn, not fail
+                status: "pass".into(), // warn, not fail
                 detail: format!(
                     "No release binary yet — first launch will compile (3–10 min). \
                      Pre-build with: cd {} && cargo build --release",
@@ -811,8 +888,8 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
     // permission issues — things image-pull alone can't detect.
     if has_compose && docker_ok {
         let compose_ports = extract_compose_ports(path);
-        let has_db_service = compose_ports.iter().any(|(p, _)| *p == 5432 || *p == 5433)
-            || env_mentions_db(path);
+        let has_db_service =
+            compose_ports.iter().any(|(p, _)| *p == 5432 || *p == 5433) || env_mentions_db(path);
 
         if has_db_service {
             // Quick up → wait → check → down cycle
@@ -825,8 +902,17 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                 let pg_check = run_cmd(
                     path,
                     "docker",
-                    &["compose", "exec", "-T", "db", "pg_isready", "-U", "postgres"],
-                ).await;
+                    &[
+                        "compose",
+                        "exec",
+                        "-T",
+                        "db",
+                        "pg_isready",
+                        "-U",
+                        "postgres",
+                    ],
+                )
+                .await;
 
                 // Also try the service named "postgres" if "db" didn't work
                 let pg_ok = if pg_check.success {
@@ -835,8 +921,18 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                     run_cmd(
                         path,
                         "docker",
-                        &["compose", "exec", "-T", "postgres", "pg_isready", "-U", "postgres"],
-                    ).await.success
+                        &[
+                            "compose",
+                            "exec",
+                            "-T",
+                            "postgres",
+                            "pg_isready",
+                            "-U",
+                            "postgres",
+                        ],
+                    )
+                    .await
+                    .success
                 };
 
                 // Clean up — don't leave containers running after preflight
@@ -848,7 +944,9 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                         status: "pass".into(),
                         detail: "Postgres accepts connections".into(),
                     });
-                    events.push(OnboardEvent::terminal("    ✓ Database connectivity verified"));
+                    events.push(OnboardEvent::terminal(
+                        "    ✓ Database connectivity verified",
+                    ));
                 } else {
                     checks.push(PreflightCheck {
                         name: "db_connectivity".into(),
@@ -856,7 +954,7 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                         detail: "Postgres container started but pg_isready failed — check credentials or init scripts".into(),
                     });
                     events.push(OnboardEvent::terminal(
-                        "    ✗ Database not accepting connections — check compose logs"
+                        "    ✗ Database not accepting connections — check compose logs",
                     ));
                 }
             } else {
@@ -866,7 +964,8 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
                     detail: format!("docker compose up failed: {}", up.stderr_tail()),
                 });
                 events.push(OnboardEvent::terminal(&format!(
-                    "    ✗ Compose up failed: {}", up.stderr_tail()
+                    "    ✗ Compose up failed: {}",
+                    up.stderr_tail()
                 )));
             }
         }
@@ -897,9 +996,14 @@ async fn preflight_tool(name: &str, path: &Path, docker_ok: bool) -> (ToolPrefli
 // ============================================================================
 
 fn has_compose_file(path: &Path) -> bool {
-    ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]
-        .iter()
-        .any(|f| path.join(f).exists())
+    [
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "compose.yml",
+        "compose.yaml",
+    ]
+    .iter()
+    .any(|f| path.join(f).exists())
 }
 
 fn find_start_script(path: &Path) -> Option<String> {
@@ -917,11 +1021,13 @@ fn detect_port(tool_path: &Path) -> Option<u16> {
         if let Ok(contents) = std::fs::read_to_string(&file) {
             for line in contents.lines() {
                 let trimmed = line.trim();
-                if trimmed.starts_with('#') || !trimmed.contains('=') { continue; }
+                if trimmed.starts_with('#') || !trimmed.contains('=') {
+                    continue;
+                }
                 if let Some((key, val)) = trimmed.split_once('=') {
                     let key = key.trim();
                     let val = val.trim().trim_matches('"').trim_matches('\'');
-                    if PORT_VARS.iter().any(|&p| key == p) {
+                    if PORT_VARS.contains(&key) {
                         if let Ok(port) = val.parse::<u16>() {
                             return Some(port);
                         }
@@ -937,15 +1043,28 @@ fn detect_port(tool_path: &Path) -> Option<u16> {
 /// Everything else is optional — a placeholder there is a warning, not a blocker.
 const CRITICAL_ENV_VARS: &[&str] = &[
     // Database
-    "DATABASE_URL", "DB_URL", "POSTGRES_PASSWORD", "PG_PASSWORD",
+    "DATABASE_URL",
+    "DB_URL",
+    "POSTGRES_PASSWORD",
+    "PG_PASSWORD",
     // LLM / AI provider
-    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY",
-    "OPENROUTER_API_KEY", "TOGETHER_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "LLM_API_KEY",
+    "OPENROUTER_API_KEY",
+    "TOGETHER_API_KEY",
     // App identity
-    "PORT", "APP_PORT", "SERVER_PORT", "API_PORT",
-    "SECRET_KEY", "JWT_SECRET", "SESSION_SECRET",
+    "PORT",
+    "APP_PORT",
+    "SERVER_PORT",
+    "API_PORT",
+    "SECRET_KEY",
+    "JWT_SECRET",
+    "SESSION_SECRET",
     // Auth (the tool's own gateway)
-    "GATEWAY_AUTH_TOKEN", "AUTH_TOKEN", "API_TOKEN",
+    "GATEWAY_AUTH_TOKEN",
+    "AUTH_TOKEN",
+    "API_TOKEN",
 ];
 
 fn check_env_completeness(path: &Path) -> PreflightCheck {
@@ -966,7 +1085,9 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
     if let Ok(zp_contents) = std::fs::read_to_string(path.join(".env.zp")) {
         for line in zp_contents.lines() {
             let trimmed = line.trim();
-            if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') { continue; }
+            if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') {
+                continue;
+            }
             if let Some((key, val)) = trimmed.split_once('=') {
                 let v = val.trim();
                 if !v.is_empty() {
@@ -982,17 +1103,26 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
 
     for line in contents.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') { continue; }
+        if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') {
+            continue;
+        }
         total += 1;
         if let Some((key, val)) = trimmed.split_once('=') {
             let key = key.trim();
 
             // Skip if .env.zp provides a real value for this variable
-            if zp_overrides.contains(key) { continue; }
+            if zp_overrides.contains(key) {
+                continue;
+            }
 
             // Strip inline comments before checking the value
-            let v = val.split('#').next().unwrap_or("")
-                .trim().trim_matches('"').trim_matches('\'');
+            let v = val
+                .split('#')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'');
             let is_placeholder = v.is_empty()
                 || v.contains("your_")
                 || v.contains("changeme")
@@ -1002,7 +1132,7 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
             if is_placeholder {
                 placeholders += 1;
                 // Only flag it as a blocker if it's a critical variable
-                if CRITICAL_ENV_VARS.iter().any(|&c| key == c) {
+                if CRITICAL_ENV_VARS.contains(&key) {
                     critical_missing.push(key.to_string());
                 }
             }
@@ -1026,7 +1156,8 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
             status: "pass".into(),
             detail: format!(
                 "{} env vars configured ({} optional placeholders — tool should still work)",
-                total - placeholders, placeholders
+                total - placeholders,
+                placeholders
             ),
         }
     } else {
@@ -1049,8 +1180,14 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
 ///   - "8080:80"
 ///   - `5432` (short form — host=container)
 fn extract_compose_ports(tool_path: &Path) -> Vec<(u16, String)> {
-    let compose_files = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"];
-    let compose_path = compose_files.iter()
+    let compose_files = [
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "compose.yml",
+        "compose.yaml",
+    ];
+    let compose_path = compose_files
+        .iter()
         .map(|f| tool_path.join(f))
         .find(|p| p.exists());
 
@@ -1093,8 +1230,11 @@ fn extract_compose_ports(tool_path: &Path) -> Vec<(u16, String)> {
 
         // Parse port entries
         if in_ports && trimmed.starts_with('-') {
-            let port_spec = trimmed.trim_start_matches('-').trim()
-                .trim_matches('"').trim_matches('\'');
+            let port_spec = trimmed
+                .trim_start_matches('-')
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'');
             if let Some(host_port) = parse_host_port(port_spec) {
                 let service = current_service.clone().unwrap_or_default();
                 results.push((host_port, service));
@@ -1112,8 +1252,8 @@ fn parse_host_port(spec: &str) -> Option<u16> {
     let parts: Vec<&str> = spec.split(':').collect();
     match parts.len() {
         1 => parts[0].split('/').next()?.parse().ok(), // "5432" or "5432/tcp"
-        2 => parts[0].parse().ok(),                     // "5432:5432"
-        3 => parts[1].parse().ok(),                     // "127.0.0.1:5432:5432"
+        2 => parts[0].parse().ok(),                    // "5432:5432"
+        3 => parts[1].parse().ok(),                    // "127.0.0.1:5432:5432"
         _ => None,
     }
 }
@@ -1206,7 +1346,8 @@ async fn check_port_in_use(port: u16) -> Option<String> {
         Path::new("/"),
         "lsof",
         &["-i", &format!(":{}", port), "-sTCP:LISTEN", "-P", "-n"],
-    ).await;
+    )
+    .await;
 
     if result.success && !result.stdout.trim().is_empty() {
         // Parse lsof output for process name
@@ -1224,11 +1365,22 @@ async fn check_port_in_use(port: u16) -> Option<String> {
     let docker_result = run_cmd(
         Path::new("/"),
         "docker",
-        &["ps", "--format", "{{.Names}} {{.Ports}}", "--filter", &format!("publish={}", port)],
-    ).await;
+        &[
+            "ps",
+            "--format",
+            "{{.Names}} {{.Ports}}",
+            "--filter",
+            &format!("publish={}", port),
+        ],
+    )
+    .await;
 
     if docker_result.success && !docker_result.stdout.trim().is_empty() {
-        let container = docker_result.stdout.lines().next().unwrap_or("unknown container");
+        let container = docker_result
+            .stdout
+            .lines()
+            .next()
+            .unwrap_or("unknown container");
         return Some(format!("container: {}", container.trim()));
     }
 
@@ -1236,7 +1388,13 @@ async fn check_port_in_use(port: u16) -> Option<String> {
 }
 
 async fn check_docker_available() -> bool {
-    run_cmd(Path::new("/"), "docker", &["info", "--format", "{{.ServerVersion}}"]).await.success
+    run_cmd(
+        Path::new("/"),
+        "docker",
+        &["info", "--format", "{{.ServerVersion}}"],
+    )
+    .await
+    .success
 }
 
 /// Attempt to start Docker daemon. Returns true if we found a way to start it
@@ -1248,7 +1406,7 @@ async fn try_start_docker() -> bool {
         // Try Docker Desktop first
         if Path::new("/Applications/Docker.app").exists() {
             let _ = tokio::process::Command::new("open")
-                .args(["-g", "-a", "Docker"])  // -g = don't bring to foreground
+                .args(["-g", "-a", "Docker"]) // -g = don't bring to foreground
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .spawn();
@@ -1269,17 +1427,36 @@ async fn try_start_docker() -> bool {
     #[cfg(target_os = "linux")]
     {
         // Try systemctl first (most modern distros)
-        if run_cmd(Path::new("/"), "which", &["systemctl"]).await.success {
+        if run_cmd(Path::new("/"), "which", &["systemctl"])
+            .await
+            .success
+        {
             let result = run_cmd(Path::new("/"), "systemctl", &["start", "docker"]).await;
-            if result.success { return true; }
+            if result.success {
+                return true;
+            }
             // May need sudo — try via pkexec (non-interactive sudo for desktop)
-            let result = run_cmd(Path::new("/"), "sudo", &["-n", "systemctl", "start", "docker"]).await;
-            if result.success { return true; }
+            let result = run_cmd(
+                Path::new("/"),
+                "sudo",
+                &["-n", "systemctl", "start", "docker"],
+            )
+            .await;
+            if result.success {
+                return true;
+            }
         }
         // Fallback: service command
         if run_cmd(Path::new("/"), "which", &["service"]).await.success {
-            let result = run_cmd(Path::new("/"), "sudo", &["-n", "service", "docker", "start"]).await;
-            if result.success { return true; }
+            let result = run_cmd(
+                Path::new("/"),
+                "sudo",
+                &["-n", "service", "docker", "start"],
+            )
+            .await;
+            if result.success {
+                return true;
+            }
         }
     }
 
@@ -1339,10 +1516,10 @@ async fn run_cmd_with_timeout(
         if HEAVY_PROGRAMS.contains(&program) {
             return CMD_TIMEOUT_HEAVY;
         }
-        if program == "docker" || program == "docker-compose" {
-            if args.iter().any(|a| HEAVY_DOCKER_ARGS.contains(a)) {
-                return CMD_TIMEOUT_HEAVY;
-            }
+        if (program == "docker" || program == "docker-compose")
+            && args.iter().any(|a| HEAVY_DOCKER_ARGS.contains(a))
+        {
+            return CMD_TIMEOUT_HEAVY;
         }
         CMD_TIMEOUT_PROBE
     });
@@ -1383,7 +1560,9 @@ async fn run_cmd_with_timeout(
 
 /// Scan the audit chain for `tool:preflight:passed:{name}` receipts
 /// that are less than `PREFLIGHT_FRESH_SECS` old.
-fn fresh_preflight_tools(audit_store: &Arc<Mutex<AuditStore>>) -> std::collections::HashSet<String> {
+fn fresh_preflight_tools(
+    audit_store: &Arc<Mutex<AuditStore>>,
+) -> std::collections::HashSet<String> {
     use crate::tool_chain::tool_lifecycle_conv_id;
     use zp_core::AuditAction;
 
@@ -1398,8 +1577,7 @@ fn fresh_preflight_tools(audit_store: &Arc<Mutex<AuditStore>>) -> std::collectio
         Err(_) => return fresh,
     };
 
-    let cutoff = chrono::Utc::now()
-        - chrono::Duration::seconds(PREFLIGHT_FRESH_SECS);
+    let cutoff = chrono::Utc::now() - chrono::Duration::seconds(PREFLIGHT_FRESH_SECS);
 
     for entry in &entries {
         if let AuditAction::SystemEvent { event } = &entry.action {
@@ -1431,9 +1609,6 @@ pub(crate) async fn handle_preflight(
     // canonical chain — not just the JSON cache.  Without this, tools
     // preflighted during onboarding show "awaiting preflight" on the
     // dashboard because chain-based readiness finds no entries.
-    let (_results, events) = run_preflight(
-        &scan_path,
-        Some(&app_state.0.audit_store),
-    ).await;
+    let (_results, events) = run_preflight(&scan_path, Some(&app_state.0.audit_store)).await;
     events
 }

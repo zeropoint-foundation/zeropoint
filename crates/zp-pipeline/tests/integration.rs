@@ -2780,8 +2780,9 @@ async fn test_stage3_shared_audit_store_no_forks_under_load() {
     // The single, canonical store. Both the "server" and "pipeline"
     // sides below clone this Arc — exactly what AppState::init and
     // Pipeline::new do after Stage 3.
-    let shared: Arc<std::sync::Mutex<AuditStore>> =
-        Arc::new(std::sync::Mutex::new(AuditStore::open(&audit_path).unwrap()));
+    let shared: Arc<std::sync::Mutex<AuditStore>> = Arc::new(std::sync::Mutex::new(
+        AuditStore::open(&audit_path).unwrap(),
+    ));
 
     // Two "halves" of the system, both clones of the same Arc. Any
     // attempt to re-open the DB here would be a regression of Stage 3.

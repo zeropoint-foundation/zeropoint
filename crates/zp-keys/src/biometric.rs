@@ -20,8 +20,8 @@ pub use crate::sovereignty::detection::{
 
 // Re-export the legacy biometric save/load functions.
 // These now delegate to the TouchId and Fingerprint providers.
-pub use crate::sovereignty::touchid::TouchIdProvider;
 pub use crate::sovereignty::fingerprint::FingerprintProvider;
+pub use crate::sovereignty::touchid::TouchIdProvider;
 
 use crate::error::KeyError;
 

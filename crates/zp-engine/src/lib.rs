@@ -16,9 +16,9 @@
 //! - [`vault`] — Thin convenience layer over `zp_trust::CredentialVault`
 
 pub mod capability;
-pub mod discovery;
-pub mod scan;
 pub mod configure;
+pub mod discovery;
 pub mod providers;
+pub mod scan;
 pub mod validate;
 pub mod vault;

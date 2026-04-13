@@ -87,7 +87,11 @@ impl TestApp {
     }
 
     /// Convenience: POST JSON to a path, return status code + JSON body.
-    pub async fn post_json(&self, path: &str, payload: serde_json::Value) -> (StatusCode, serde_json::Value) {
+    pub async fn post_json(
+        &self,
+        path: &str,
+        payload: serde_json::Value,
+    ) -> (StatusCode, serde_json::Value) {
         let req = Request::builder()
             .method("POST")
             .uri(path)

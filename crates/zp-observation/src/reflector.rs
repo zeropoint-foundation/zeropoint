@@ -36,12 +36,14 @@ Rules:
 
 /// Build the user prompt for the Reflector, containing all active observations.
 pub fn build_reflector_prompt(observations: &[Observation]) -> String {
-    let mut prompt = String::from(
-        "Consolidate the following observations. Current total: ",
-    );
+    let mut prompt = String::from("Consolidate the following observations. Current total: ");
 
     let total_tokens: usize = observations.iter().map(|o| o.token_estimate).sum();
-    prompt.push_str(&format!("{} tokens. Target: < {} tokens.\n\n", total_tokens, (total_tokens as f64 * 0.6) as usize));
+    prompt.push_str(&format!(
+        "{} tokens. Target: < {} tokens.\n\n",
+        total_tokens,
+        (total_tokens as f64 * 0.6) as usize
+    ));
 
     for obs in observations {
         prompt.push_str(&format!(
@@ -119,8 +121,8 @@ pub fn parse_reflector_output(output: &str) -> Vec<ReflectorAction> {
 }
 
 fn parse_observation_data(raw: RawObservationData) -> ObservationData {
-    let priority = ObservationPriority::from_str_loose(&raw.priority)
-        .unwrap_or(ObservationPriority::Low);
+    let priority =
+        ObservationPriority::from_str_loose(&raw.priority).unwrap_or(ObservationPriority::Low);
 
     let referenced_at = raw
         .referenced_at
@@ -159,9 +161,9 @@ pub fn apply_reflector_actions(
 
     for action in actions {
         match action {
-            ReflectorAction::Merge { source_ids, result } |
-            ReflectorAction::Upgrade { source_ids, result } |
-            ReflectorAction::Downgrade { source_ids, result } => {
+            ReflectorAction::Merge { source_ids, result }
+            | ReflectorAction::Upgrade { source_ids, result }
+            | ReflectorAction::Downgrade { source_ids, result } => {
                 consumed.extend(source_ids.clone());
 
                 let new_obs = Observation {
@@ -298,21 +300,19 @@ mod tests {
 
     #[test]
     fn build_prompt_includes_all_observations() {
-        let obs = vec![
-            Observation {
-                id: "o1".into(),
-                content: "important fact".into(),
-                priority: ObservationPriority::High,
-                category: "test".into(),
-                referenced_at: Utc::now(),
-                observed_at: Utc::now(),
-                relative_time: Some("just now".into()),
-                source_range: SourceRange::new("c1", "a", "b", 0, 1),
-                superseded: false,
-                token_estimate: 5,
-                receipt_id: None,
-            },
-        ];
+        let obs = vec![Observation {
+            id: "o1".into(),
+            content: "important fact".into(),
+            priority: ObservationPriority::High,
+            category: "test".into(),
+            referenced_at: Utc::now(),
+            observed_at: Utc::now(),
+            relative_time: Some("just now".into()),
+            source_range: SourceRange::new("c1", "a", "b", 0, 1),
+            superseded: false,
+            token_estimate: 5,
+            receipt_id: None,
+        }];
 
         let prompt = build_reflector_prompt(&obs);
         assert!(prompt.contains("important fact"));

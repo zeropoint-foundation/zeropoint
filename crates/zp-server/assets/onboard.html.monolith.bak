@@ -1,0 +1,3058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — Onboard</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --bg-card: #111116;
+    --bg-card-hover: #1a1a22;
+    --border: #2a2a35;
+    --border-active: #7eb8da;
+    --text: #e0e0e6;
+    --text-dim: #8888a0;
+    --text-bright: #ffffff;
+    --accent: #7eb8da;
+    --accent-dim: rgba(126,184,218,0.15);
+    --green: #66bb88;
+    --yellow: #dda855;
+    --red: #dd5566;
+    --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+
+  /* ── Found Credentials ─────────────────────────────── */
+
+  .found-creds-section {
+    background: rgba(221, 168, 85, 0.06);
+    border: 1px solid rgba(221, 168, 85, 0.25);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .found-creds-section h3 {
+    font-size: 0.82rem;
+    color: var(--yellow);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .found-creds-section h3 .count-badge {
+    background: rgba(221, 168, 85, 0.2);
+    color: var(--yellow);
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+  .found-provider-group {
+    margin-bottom: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: border-color 0.2s;
+  }
+  .found-provider-group:hover { border-color: var(--border-active); }
+  .found-provider-group.has-conflict { border-color: rgba(221, 168, 85, 0.4); }
+  .found-provider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+  }
+  .found-provider-name {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-bright);
+  }
+  .found-source-tag {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.05);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    display: inline-block;
+    margin-left: 0.25rem;
+  }
+  .found-value-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    font-size: 0.78rem;
+  }
+  .found-value-row input[type="radio"] {
+    accent-color: var(--accent);
+  }
+  .found-masked-value {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--yellow);
+    background: rgba(221, 168, 85, 0.08);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+  .found-var-name {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--text-dim);
+  }
+  .priority-controls {
+    display: flex;
+    gap: 0.2rem;
+    margin-left: auto;
+  }
+  .priority-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .priority-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .vault-all-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(221, 168, 85, 0.15);
+  }
+  .vault-all-btn {
+    background: linear-gradient(135deg, var(--yellow), #cc8833);
+    color: #000;
+    border: none;
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .vault-all-btn:hover { opacity: 0.85; }
+  .vault-all-btn:disabled { opacity: 0.4; cursor: default; }
+  .vault-all-status {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+
+  /* ── Layout ───────────────────────────────────────────── */
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  /* ── Header ───────────────────────────────────────────── */
+
+  .header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .header h1 {
+    font-size: 1.1rem;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-transform: lowercase;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+  }
+
+  .header p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  /* ── Step Navigation ──────────────────────────────────── */
+
+  .step-nav {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .step-tab {
+    flex: 1;
+    min-width: 0;
+    padding: 0.5rem 0.25rem;
+    text-align: center;
+    font-size: 0.65rem;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step-tab:hover { background: var(--bg-card); }
+  .step-tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .step-tab.complete { border-color: var(--green); color: var(--green); }
+  .step-tab.disabled { opacity: 0.3; pointer-events: none; }
+
+  /* ── Step Content ─────────────────────────────────────── */
+
+  .step { display: none; }
+  .step.active { display: block; }
+
+  .step-header {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+  }
+
+  .step h2 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: var(--text-bright);
+    margin-bottom: 1rem;
+  }
+
+  .step p {
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    line-height: 1.7;
+  }
+
+  /* ── Cards ────────────────────────────────────────────── */
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    transition: border-color 0.2s;
+  }
+
+  .card:hover { border-color: var(--border-active); }
+  .card.selected { border-color: var(--accent); background: var(--accent-dim); }
+  .card.recommended { position: relative; }
+
+  .card.recommended::before {
+    content: 'recommended';
+    position: absolute;
+    top: -0.5rem;
+    right: 1rem;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 0.6rem;
+    font-family: var(--mono);
+    font-weight: 500;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .card h3 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-bright);
+    margin-bottom: 0.5rem;
+  }
+
+  .card p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+  }
+
+  .card .detail {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+  }
+
+  /* ── Info boxes ───────────────────────────────────────── */
+
+  .info-box {
+    background: var(--bg-card);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    font-size: 0.82rem;
+    line-height: 1.7;
+  }
+
+  .info-box h4 {
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    color: var(--accent);
+    text-transform: lowercase;
+    margin-bottom: 0.5rem;
+  }
+
+  .info-box.warning { border-left-color: var(--yellow); }
+  .info-box.warning h4 { color: var(--yellow); }
+
+  /* ── Paradigm boxes (old model / new model) ────────── */
+
+  .paradigm-box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin: 0.75rem 0;
+    font-size: 0.82rem;
+    line-height: 1.7;
+  }
+
+  .paradigm-box h4 {
+    font-size: 0.68rem;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.6rem;
+  }
+
+  .paradigm-box.old-model {
+    background: rgba(221, 85, 102, 0.04);
+    border-color: rgba(221, 85, 102, 0.25);
+  }
+
+  .paradigm-box.old-model h4 {
+    color: var(--red);
+  }
+
+  .paradigm-box.new-model {
+    background: rgba(126, 184, 218, 0.06);
+    border-color: rgba(126, 184, 218, 0.3);
+  }
+
+  .paradigm-box.new-model h4 {
+    color: var(--accent);
+  }
+
+  /* ── Terminal ─────────────────────────────────────────── */
+
+  .terminal {
+    background: #050508;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    line-height: 1.8;
+    color: var(--text-dim);
+    max-height: 240px;
+    overflow-y: auto;
+    margin: 1rem 0;
+  }
+
+  .terminal .line { white-space: pre-wrap; }
+  .terminal .line.success { color: var(--green); }
+  .terminal .line.error { color: var(--red); }
+  .terminal .line.warn { color: var(--yellow); }
+
+  /* ── Buttons ──────────────────────────────────────────── */
+
+  .btn {
+    display: inline-block;
+    padding: 0.65rem 1.75rem;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--bg);
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+
+  .btn:hover { background: #a0d0ee; }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .btn-secondary:hover { background: var(--accent-dim); }
+
+  .btn-row {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  /* ── Inputs ───────────────────────────────────────────── */
+
+  .input-group {
+    margin-bottom: 1rem;
+  }
+
+  .input-group label {
+    display: block;
+    font-size: 0.75rem;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    margin-bottom: 0.35rem;
+  }
+
+  .input-group input[type="text"],
+  .input-group input[type="password"] {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .input-group input:focus { border-color: var(--accent); }
+
+  /* ── Derivation diagram ───────────────────────────────── */
+
+  .diagram {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    line-height: 1.6;
+    color: var(--text-dim);
+    padding: 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin: 1rem 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  .diagram .highlight { color: var(--accent); }
+
+  /* ── Recovery kit ─────────────────────────────────────── */
+
+  .recovery-kit {
+    background: var(--bg-card);
+    border: 2px solid var(--yellow);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .recovery-kit h3 {
+    color: var(--yellow);
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .recovery-words {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.35rem 0.75rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    margin: 1rem 0;
+  }
+
+  .recovery-words .word {
+    padding: 0.3rem 0;
+  }
+
+  .recovery-words .word-num {
+    color: var(--text-dim);
+    margin-right: 0.3rem;
+    font-size: 0.65rem;
+  }
+
+  .recovery-kit .warning-text {
+    color: var(--yellow);
+    font-size: 0.78rem;
+    font-weight: 500;
+    margin-top: 0.75rem;
+  }
+
+  /* ── Summary cards ────────────────────────────────────── */
+
+  .summary-section {
+    margin-bottom: 1rem;
+  }
+
+  .summary-section h4 {
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    color: var(--accent);
+    text-transform: lowercase;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    padding: 0.25rem 0;
+  }
+
+  .summary-row .label { color: var(--text-dim); }
+  .summary-row .value { color: var(--text-bright); font-family: var(--mono); }
+  .summary-row .value.good { color: var(--green); }
+
+  /* ── Credential cards ─────────────────────────────────── */
+
+  .credential-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .credential-card .provider {
+    font-weight: 500;
+    color: var(--text-bright);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .credential-card .help-link {
+    font-size: 0.72rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-family: var(--mono);
+  }
+
+  .credential-card .used-by {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin: 0.35rem 0;
+  }
+
+  .credential-card .input-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+  }
+
+  .credential-card .input-row input {
+    flex: 1;
+    padding: 0.5rem 0.65rem;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+  }
+
+  .credential-card .input-row input:focus { border-color: var(--accent); }
+
+  .credential-card .store-btn {
+    padding: 0.5rem 1rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .credential-card.detected { border-color: var(--accent); border-width: 1px; }
+  .credential-card.stored { border-color: var(--green); }
+  .credential-card.stored .input-row input { opacity: 0.5; }
+
+  /* ── Narration bar ───────────────────────────────────── */
+
+  .narration-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    margin-bottom: 1.25rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    transition: border-color 0.3s;
+  }
+
+  .narration-bar.playing {
+    border-color: var(--accent);
+  }
+
+  .narration-bar .narrate-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+
+  .narration-bar .narrate-toggle:hover { background: #a0d0ee; }
+
+  .narration-bar .narrate-label {
+    flex: 1;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  .narration-bar.playing .narrate-label {
+    color: var(--accent);
+  }
+
+  .narration-bar .narrate-progress {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    flex: 1;
+    min-width: 60px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .narration-bar .narrate-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 1px;
+    width: 0%;
+    transition: width 0.3s linear;
+  }
+
+  .narration-bar .narrate-mute {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0.2rem;
+    transition: color 0.2s;
+  }
+
+  .narration-bar .narrate-mute:hover { color: var(--accent); }
+  .narration-bar .narrate-mute.muted { color: var(--red); }
+
+  /* ── Animations ───────────────────────────────────────── */
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .step.active { animation: fadeIn 0.3s ease; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .scanning { animation: pulse 1.5s infinite; }
+
+  @keyframes glowPulse {
+    0%, 100% { color: var(--accent); text-shadow: 0 0 0 transparent; }
+    50% { color: #fff; text-shadow: 0 0 12px var(--accent), 0 0 24px rgba(126, 184, 218, 0.3); }
+  }
+
+  .glow-pulse { animation: glowPulse 2.5s ease-in-out infinite; }
+
+  /* ── Responsive ───────────────────────────────────────── */
+
+  @media (max-width: 600px) {
+    .container { padding: 1rem; }
+    .recovery-words { grid-template-columns: repeat(2, 1fr); }
+    .step-nav { gap: 0.15rem; }
+    .step-tab { font-size: 0.55rem; padding: 0.4rem 0.15rem; }
+  }
+
+  /* ── Tool Configuration Cards (Step 7) ──────────────── */
+
+  .tool-config-grid {
+    display: grid;
+    gap: 0.75rem;
+    margin: 1.5rem 0;
+  }
+
+  .tool-config-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.6s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tool-config-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(90deg, transparent 0%, var(--accent-dim) 50%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .tool-config-card.securing::before {
+    opacity: 1;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .tool-config-card.governed {
+    border-color: var(--green);
+    background: rgba(102, 187, 136, 0.06);
+  }
+
+  .tool-config-card .tool-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--accent-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    transition: all 0.6s ease;
+    z-index: 1;
+  }
+
+  .tool-config-card.governed .tool-icon {
+    background: rgba(102, 187, 136, 0.15);
+  }
+
+  .tool-config-card .tool-info {
+    flex: 1;
+    z-index: 1;
+  }
+
+  .tool-config-card .tool-name {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--text-bright);
+  }
+
+  .tool-config-card .tool-status {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 0.15rem;
+    transition: color 0.4s ease;
+  }
+
+  .tool-config-card.securing .tool-status {
+    color: var(--accent);
+  }
+
+  .tool-config-card.governed .tool-status {
+    color: var(--green);
+  }
+
+  .tool-config-card .tool-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    background: var(--border);
+    color: var(--text-dim);
+    z-index: 1;
+    transition: all 0.6s ease;
+  }
+
+  .tool-config-card.governed .tool-badge {
+    background: rgba(102, 187, 136, 0.15);
+    color: var(--green);
+  }
+
+  /* ── Launch Pad (Step 8) ────────────────────────────── */
+
+  .launchpad-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .launchpad-tile {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .launchpad-tile:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  .launchpad-tile .tile-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    margin: 0 auto 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    background: var(--accent-dim);
+  }
+
+  .launchpad-tile .tile-name {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--text-bright);
+    margin-bottom: 0.25rem;
+  }
+
+  .launchpad-tile .tile-status {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  .launchpad-tile .tile-health {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+
+  .launchpad-tile .tile-health.pending {
+    background: var(--yellow);
+  }
+
+  .launchpad-tile.add-tile {
+    border-style: dashed;
+    border-color: var(--border);
+    opacity: 0.6;
+  }
+
+  .launchpad-tile.add-tile:hover {
+    opacity: 1;
+    border-color: var(--accent);
+  }
+
+  .launchpad-tile.add-tile .tile-icon {
+    background: transparent;
+    border: 1px dashed var(--border);
+    font-size: 1.5rem;
+    color: var(--text-dim);
+  }
+
+  .governance-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.68rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    background: rgba(102, 187, 136, 0.1);
+    color: var(--green);
+    margin-top: 0.4rem;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>zeropoint</h1>
+    <p>portable trust for the agentic age</p>
+  </div>
+
+  <!-- Step Navigation -->
+  <div class="step-nav" id="stepNav">
+    <div class="step-tab active" data-step="0">00 welcome</div>
+    <div class="step-tab disabled" data-step="1">01 sovereignty</div>
+    <div class="step-tab disabled" data-step="2">02 identity</div>
+    <div class="step-tab disabled" data-step="3">03 vault</div>
+    <div class="step-tab disabled" data-step="4">04 inference</div>
+    <div class="step-tab disabled" data-step="5">05 discover</div>
+    <div class="step-tab disabled" data-step="6">06 credentials</div>
+    <div class="step-tab disabled" data-step="7">07 configure</div>
+    <div class="step-tab disabled" data-step="8">08 governed</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 0: Welcome                                     -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step active" id="step-0">
+    <div class="step-header">00 — welcome</div>
+
+    <div class="paradigm-box old-model">
+      <h4>the old model</h4>
+      Your identity is issued by authorities. Your credentials are stored by platforms. Your trust depends on institutions you don't control. In the Agentic Age, that model breaks — because the agents acting on your behalf inherit whatever trust model you're using. If you don't own your keys, whoever does owns your agents.
+    </div>
+
+    <div class="paradigm-box new-model">
+      <h4>the new model</h4>
+      You create your own cryptographic root of trust. Your credentials live in a vault only you can unlock. Your governance rules are yours to write. Everything — vault, policies, agent certificates — derives from one key, created right now, by you.
+    </div>
+
+    <p style="color: var(--text-dim); font-size: 0.82rem; margin-top: 1.5rem;">Under 5 minutes. One sitting. No accounts to create.</p>
+
+    <div class="btn-row">
+      <button class="btn" onclick="startOnboard()">Begin Genesis</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 1: Sovereignty Boundary                        -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-1">
+    <div class="step-header">01 — sovereignty boundary</div>
+    <h2>How will you prove it's you?</h2>
+
+    <p>Your Genesis secret needs a guardian — something that proves <em>you</em> authorized an action, not just a process running on your machine.</p>
+
+    <div id="sovereigntyCards">
+
+      <div class="card recommended" id="card-biometric" onclick="selectSovereignty('biometric')" style="cursor:pointer">
+        <h3>Biometric</h3>
+        <p>Your body is the credential. The Genesis secret is locked behind your biometric — no password to phish, no file to copy. Agents can't act without you physically present.</p>
+        <div class="detail" id="biometric-detail">Detecting hardware...</div>
+      </div>
+
+      <div class="card" id="card-login" onclick="selectSovereignty('login-password')" style="cursor:pointer">
+        <h3>Login Password</h3>
+        <p>Your login password gates the Genesis secret via your OS credential store. Solid default. Can upgrade to biometric later without re-keying.</p>
+        <div class="detail" id="login-detail"></div>
+      </div>
+
+      <div class="card" id="card-file" onclick="selectSovereignty('file-based')" style="cursor:pointer">
+        <h3>File on Disk</h3>
+        <p>For headless servers, CI, or systems without a credential store. The secret is on disk. Functional but weaker — any process with user privileges can read the file.</p>
+        <div class="detail">Recommended only for servers and CI</div>
+      </div>
+
+    </div>
+
+    <div class="paradigm-box old-model">
+      <h4>the old model</h4>
+      Proving your identity means presenting credentials issued by someone else — a password stored in a corporate database, a token from an OAuth provider, a certificate signed by an authority. Someone else holds the keys. They can revoke, surveil, or lose them in a breach.
+    </div>
+
+    <div class="paradigm-box new-model">
+      <h4>the new model</h4>
+      Your body is the credential. No institution mediates. No platform can revoke. If an agent runs on your machine, it can access files and env vars — but it can't fake your fingerprint or your face. Your physical presence is the boundary between authorized and unauthorized.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="sovereigntyNext" onclick="goGenesis()" disabled>Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 2: Identity — Genesis Ceremony                 -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-2">
+    <div class="step-header">02 — identity</div>
+    <h2>The Genesis Ceremony</h2>
+
+    <p>Your operator name identifies you in certificate chains and audit logs. It's the subject line on your root certificate — signed by you, not issued by an authority.</p>
+
+    <div class="input-group">
+      <label>operator name</label>
+      <input type="text" id="operatorName" placeholder="Ken" autocomplete="off">
+    </div>
+
+    <button class="btn" id="genesisBtn" onclick="runGenesis()">Create Genesis Key</button>
+
+    <div class="terminal" id="genesisTerm" style="display:none"></div>
+
+    <div class="info-box" id="genesisInfo" style="display:none">
+      <h4>what just happened</h4>
+      <div id="genesisInfoContent"></div>
+    </div>
+
+    <!-- Recovery kit (biometric users only) -->
+    <div class="recovery-kit" id="recoveryKit" style="display:none">
+      <h3>Recovery Kit</h3>
+      <p style="font-size:0.82rem; color:var(--text)">Write down these 24 words. Store them offline.</p>
+      <div class="recovery-words" id="recoveryWords"></div>
+      <p class="warning-text">This screen will not appear again.</p>
+      <p style="font-size:0.72rem; color:var(--text-dim); margin-top:0.5rem; font-family:var(--mono)">Recovery: zp recover --biometric-reset</p>
+    </div>
+
+    <div class="btn-row" id="genesisNext" style="display:none">
+      <button class="btn" onclick="goStep(3)">Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 3: Vault                                       -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-3">
+    <div class="step-header">03 — your vault</div>
+    <h2>Understanding Your Vault</h2>
+
+    <p>Right now, your API keys probably live in .env files, password managers, or cloud secrets services — all mediated by someone else's infrastructure. ZeroPoint replaces that. It derives a vault key from your Genesis secret and encrypts every credential you store with ChaCha20-Poly1305 authenticated encryption. No cloud. No intermediary.</p>
+
+    <div class="diagram"><span class="highlight glow-pulse">Genesis Secret</span> (in credential store)
+      |
+      v
+  BLAKE3-keyed("<span class="highlight">zp-credential-vault-v1</span>")
+      |
+      v
+  <span class="highlight">Vault Key</span> (ephemeral — exists only in memory)
+      |
+      v
+  ChaCha20-Poly1305 → Your encrypted credentials</div>
+
+    <p>You don't manage the vault key. It's derived on demand from your Genesis secret, used, then wiped from memory. There is nothing to remember, back up, or rotate.</p>
+
+    <div class="info-box">
+      <h4>what you can change later</h4>
+      <code style="font-size:0.75rem; color:var(--text-dim)">zp vault export --encrypted</code> — portable backup<br>
+      <code style="font-size:0.75rem; color:var(--text-dim)">zp vault import</code> — restore on new machine
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="goStep(4)">Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 4: Inference Posture                           -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-4">
+    <div class="step-header">04 — inference source</div>
+    <h2>Where Does Your Inference Run?</h2>
+
+    <p>This determines what credentials you need and how ZeroPoint governs your agent traffic.</p>
+
+    <div class="paradigm-box old-model">
+      <h4>the old model</h4>
+      Your prompts, your data, your chain-of-thought — all sent to someone else's hardware. Every inference call is visible to the provider. You pay per token. They decide the terms.
+    </div>
+
+    <div class="paradigm-box new-model">
+      <h4>the new model</h4>
+      You choose where computation happens. Local models keep everything on your hardware. Cloud models give you access to frontier capability. Mixed gives you both — and your governance proxy routes each call to the right place.
+    </div>
+
+    <div class="card" id="localInferenceStatus" style="display:none">
+      <h4 id="localInferenceTitle" style="font-family:var(--mono); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem">local inference status</h4>
+      <p id="localInferenceText" style="font-size:0.82rem; line-height:1.7; margin:0"></p>
+    </div>
+
+    <!-- Setup assistant (shown when no runtime detected and hardware is capable) -->
+    <div class="card" id="setupAssistant" style="display:none">
+      <h4 style="font-family:var(--mono); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.75rem; color:var(--accent)">set up local inference</h4>
+
+      <!-- Phase 1: Choose a runtime -->
+      <div id="setupPhase1">
+        <p style="font-size:0.82rem; line-height:1.6; margin:0 0 0.75rem 0; color:var(--text-dim)">
+          Your hardware can run local models. Choose a runtime and ZeroPoint will walk you through it.
+        </p>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.5rem">
+          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('ollama')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+            Ollama<br><span style="font-size:0.62rem; color:var(--text-dim)">CLI · lightweight</span>
+          </button>
+          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('lm-studio')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+            LM Studio<br><span style="font-size:0.62rem; color:var(--text-dim)">visual · beginner-friendly</span>
+          </button>
+          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('jan')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+            Jan<br><span style="font-size:0.62rem; color:var(--text-dim)">desktop · one-click</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 2: Install instructions (populated by JS) -->
+      <div id="setupPhase2" style="display:none">
+        <div id="setupInstructions" style="font-size:0.82rem; line-height:1.7"></div>
+        <div id="setupCommands" class="terminal" style="margin:0.75rem 0; min-height:auto; max-height:none"></div>
+        <div id="setupNotes" style="font-size:0.72rem; color:var(--text-dim); margin-bottom:0.75rem"></div>
+        <div style="display:flex; gap:0.5rem; align-items:center">
+          <button class="btn" onclick="redetectRuntimes()" style="font-size:0.75rem; padding:0.4rem 0.8rem">
+            I've installed it — check again
+          </button>
+          <button class="btn btn-dim" onclick="showSetupPhase1()" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
+            ← pick a different runtime
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 3: Model recommendation (shown after runtime detected but no models) -->
+      <div id="setupPhase3" style="display:none">
+        <p style="font-size:0.82rem; color:var(--green); margin:0 0 0.5rem 0">
+          <span style="color:var(--green)">✓</span> Runtime is running.
+        </p>
+        <p id="modelRecTitle" style="font-size:0.82rem; line-height:1.6; margin:0 0 0.5rem 0"></p>
+        <div id="modelRecPrimary" class="card" style="margin:0.5rem 0; padding:0.6rem; cursor:default"></div>
+        <div id="modelRecAlt" style="margin:0.5rem 0; display:none">
+          <p style="font-size:0.72rem; color:var(--text-dim); margin:0.25rem 0">or try:</p>
+          <div id="modelRecAltCard" class="card" style="padding:0.5rem; cursor:default; border-color:var(--border)"></div>
+        </div>
+        <div id="modelRecCommand" class="terminal" style="margin:0.75rem 0; min-height:auto; max-height:none"></div>
+        <div id="modelPullActions" style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem">
+          <button class="btn" id="pullAndContinueBtn" onclick="startModelPull()" style="font-size:0.75rem; padding:0.4rem 0.8rem">
+            Pull model & continue
+          </button>
+          <button class="btn btn-dim" onclick="redetectRuntimes()" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
+            I've already pulled one — check again
+          </button>
+        </div>
+        <div id="modelPullStatus" style="display:none; margin-top:0.5rem">
+          <p id="modelPullMessage" style="font-size:0.78rem; line-height:1.5; margin:0"></p>
+        </div>
+      </div>
+
+      <!-- Phase 4: skip option (always visible at bottom) -->
+      <div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border)">
+        <p style="font-size:0.72rem; color:var(--text-dim); margin:0">
+          You can also skip this — choose <strong>Cloud</strong> or <strong>Mixed</strong> below and add local inference anytime with <code>zp configure inference</code>.
+        </p>
+      </div>
+    </div>
+
+    <div class="card-grid" style="display:grid; grid-template-columns:1fr; gap:0.75rem; margin:1rem 0">
+      <div class="card posture-card" id="posture-local" onclick="selectPosture('local')" style="cursor:pointer; transition:border-color 0.2s">
+        <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Local Only</h3>
+        <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">All inference stays on your hardware. No API keys needed. No data leaves your machine. Maximum privacy.</p>
+        <p id="local-models" style="font-size:0.72rem; color:var(--text-dim); margin:0.25rem 0 0 0; display:none"></p>
+      </div>
+
+      <div class="card posture-card" id="posture-cloud" onclick="selectPosture('cloud')" style="cursor:pointer; transition:border-color 0.2s">
+        <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Cloud Only</h3>
+        <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">Use OpenAI, Anthropic, Google, etc. Frontier models. API keys required. All calls governed through the proxy.</p>
+      </div>
+
+      <div class="card posture-card recommended" id="posture-mixed" onclick="selectPosture('mixed')" style="cursor:pointer; transition:border-color 0.2s">
+        <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Mixed</h3>
+        <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">Local models for routine tasks. Cloud models for frontier capability. The governance proxy routes each call — you set the rules for what stays local.</p>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="postureBtn" onclick="goDiscover()" disabled>Continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 5: Discover Tools                              -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-5">
+    <div class="step-header">05 — discover tools</div>
+    <h2>Tool Discovery</h2>
+
+    <p>ZeroPoint scans your project directories for AI tools that use .env files for configuration.</p>
+
+    <div class="input-group">
+      <label>scan directory</label>
+      <div style="display:flex; gap:0.5rem">
+        <input type="text" id="scanPath" value="~/projects" style="flex:1">
+        <button class="btn" id="scanBtn" onclick="runScan()">Scan</button>
+      </div>
+    </div>
+
+    <div class="terminal" id="scanTerm" style="display:none"></div>
+
+    <div id="scanResults" style="display:none">
+      <div id="scanResultsList"></div>
+      <p id="scanSummary" style="font-size:0.82rem; color:var(--text-dim); margin-top:0.75rem"></p>
+    </div>
+
+    <div class="btn-row" id="scanNext" style="display:none">
+      <button class="btn" onclick="goStep(6)">Add Credentials</button>
+      <button class="btn btn-secondary" onclick="goStep(7)">Skip</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 6: Credential Collection                       -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-6">
+    <div class="step-header">06 — add credentials</div>
+    <h2>Credential Collection</h2>
+
+    <p>Each credential is encrypted in your vault the moment you press Store — no plaintext on disk, no cloud intermediary. The key goes straight from this page to your local vault. Skip any you don't have yet.</p>
+
+    <!-- Found in plaintext (scraped from .env files) -->
+    <div id="foundPlaintextSection" class="found-creds-section" style="display:none">
+      <h3>
+        <span>⚠ Found in Plaintext</span>
+        <span class="count-badge" id="foundPlaintextCount">0</span>
+      </h3>
+      <p style="font-size:0.78rem; color:var(--text-dim); margin-bottom:0.75rem">
+        These API keys are sitting unencrypted in your project <code>.env</code> files.
+        Select which to vault — drag to reorder priority.
+      </p>
+      <div id="foundPlaintextCards"></div>
+      <div class="vault-all-bar">
+        <span class="vault-all-status" id="vaultAllStatus">Select credentials to secure</span>
+        <button class="vault-all-btn" id="vaultAllBtn" onclick="vaultAllFound()" disabled>Vault All Found</button>
+      </div>
+    </div>
+
+    <!-- Detected providers (env vars found) -->
+    <div id="detectedProviders" style="display:none">
+      <h3 style="font-size:0.85rem; color:var(--accent); margin:1.5rem 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em">Detected in your environment</h3>
+      <div id="detectedCards"></div>
+    </div>
+
+    <!-- All other providers by category -->
+    <div id="catalogProviders" style="display:none">
+      <h3 id="catalogHeading" style="font-size:0.85rem; color:var(--text-dim); margin:1.5rem 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer" onclick="toggleCatalog()">
+        <span id="catalogToggle">▸</span> <span id="catalogLabel">All providers</span> (<span id="catalogCount">0</span>)
+      </h3>
+      <div id="catalogCards" style="display:none"></div>
+    </div>
+
+    <p id="credentialSummary" style="font-size:0.82rem; color:var(--text-dim); margin-top:1rem"></p>
+
+    <div class="btn-row">
+      <button class="btn" onclick="goStep(7)">Continue</button>
+      <button class="btn btn-secondary" onclick="goStep(7)">Skip remaining</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 7: Configure                                   -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-7">
+    <div class="step-header">07 — configure</div>
+    <h2>Bring Your Tools Under Governance</h2>
+
+    <p>This is the moment everything connects. Your vault credentials flow into your discovered tools. The governance proxy wraps every API call with policy enforcement, cost metering, and cryptographic receipts. Watch each tool come online.</p>
+
+    <div class="card" style="margin-bottom:1rem">
+      <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.82rem; cursor:pointer">
+        <input type="checkbox" id="proxyEnabled" checked>
+        <span>Route all API calls through governance proxy <span style="color:var(--text-dim)">(port 3000)</span></span>
+      </label>
+    </div>
+
+    <div id="configToolCards" class="tool-config-grid"></div>
+
+    <div class="btn-row">
+      <button class="btn" id="configureBtn" onclick="runConfigure()">Secure &amp; Configure</button>
+    </div>
+
+    <div class="terminal" id="configureTerm" style="display:none; margin-top:1rem; max-height:150px; overflow-y:auto; font-size:0.72rem"></div>
+
+    <div class="btn-row" id="configureNext" style="display:none">
+      <button class="btn" onclick="goStep(8)">See Your Launch Pad →</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Step 8: You're Governed                             -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="step" id="step-8">
+    <div class="step-header">08 — your launch pad</div>
+    <h2 style="margin-bottom:0.5rem">Mission Control</h2>
+    <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:1.5rem">Every tool governed. Every call receipted. Every key sovereign.</p>
+
+    <!-- Operator identity bar -->
+    <div class="card" style="padding:0.75rem 1rem; margin-bottom:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem">
+      <div style="display:flex; align-items:center; gap:0.75rem">
+        <div style="width:36px; height:36px; border-radius:50%; background:var(--accent-dim); display:flex; align-items:center; justify-content:center; font-size:0.85rem; color:var(--accent); font-weight:600" id="sumAvatarInitial">?</div>
+        <div>
+          <div style="font-size:0.85rem; font-weight:500; color:var(--text-bright)" id="sumOperator">—</div>
+          <div style="font-size:0.7rem; color:var(--text-dim); font-family:var(--mono)" id="sumGenesis">—</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+        <span class="governance-badge" id="sumSovereigntyBadge">—</span>
+        <span class="governance-badge" id="sumInferenceBadge">—</span>
+        <span class="governance-badge" style="background:rgba(126,184,218,0.1); color:var(--accent)" id="sumVaultBadge">—</span>
+      </div>
+    </div>
+
+    <!-- Launch pad grid -->
+    <div class="launchpad-grid" id="launchpadGrid"></div>
+
+    <!-- Act 3 — Open the Money Pipe -->
+    <div style="margin-top:2rem; border:1px solid var(--yellow); border-radius:8px; overflow:hidden">
+      <div style="background:rgba(221,168,85,0.08); padding:1.25rem 1.5rem; border-bottom:1px solid rgba(221,168,85,0.15)">
+        <h3 style="color:var(--yellow); font-size:0.95rem; margin-bottom:0.25rem; font-weight:600">Act 3 — Open the Money Pipe</h3>
+        <p style="font-size:0.78rem; color:var(--text-dim); margin:0">Anchoring turns your governance chain into a revenue channel</p>
+      </div>
+      <div style="padding:1.25rem 1.5rem">
+        <p style="font-size:0.85rem; line-height:1.8; color:var(--text); margin-bottom:1rem">
+          Everything you've built so far is local — powerful, but invisible. No one can pay you through a governance chain they can't verify. <strong style="color:var(--yellow)">Anchoring opens the pipe.</strong>
+        </p>
+        <p style="font-size:0.85rem; line-height:1.8; color:var(--text); margin-bottom:1.25rem">
+          When your genesis key is anchored to a public ledger, your agents can prove their identity and governance posture to <em>any other agent on the network</em> — in milliseconds. That proof is the prerequisite for autonomous payments, binding agreements, and machine-speed commerce. No attestation, no deal.
+        </p>
+
+        <div style="display:grid; gap:0.75rem; margin-bottom:1.25rem">
+          <div style="display:flex; gap:0.75rem; align-items:flex-start">
+            <span style="color:var(--yellow); font-size:1rem; line-height:1.5; flex-shrink:0">💰</span>
+            <div>
+              <div style="font-size:0.82rem; color:var(--text-bright); font-weight:500">Agents that can transact</div>
+              <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">Your agent needs a service from another agent. Before any money moves, both sides verify the other's attestation chain — identity, policies, track record. Verified in milliseconds. Payment authorized. Settlement on Hedera. No invoices, no net-30, no accounts receivable. Money moves at the speed of trust.</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:0.75rem; align-items:flex-start">
+            <span style="color:var(--yellow); font-size:1rem; line-height:1.5; flex-shrink:0">📈</span>
+            <div>
+              <div style="font-size:0.82rem; color:var(--text-bright); font-weight:500">Reputation is your credit score</div>
+              <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">Every governed transaction extends your attestation chain. Six months of policy-compliant operations is six months of cryptographic proof — not a pitch deck, not a reference call. New partners offer better terms because your track record is math, not promises. Your reputation compounds like interest.</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:0.75rem; align-items:flex-start">
+            <span style="color:var(--yellow); font-size:1rem; line-height:1.5; flex-shrink:0">⚡</span>
+            <div>
+              <div style="font-size:0.82rem; color:var(--text-bright); font-weight:500">The commerce layer for the Agentic Age</div>
+              <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">When billions of agents buy, sell, and negotiate autonomously, the bottleneck isn't intelligence — it's trust. Can this agent prove who it works for? Can it prove its governance in real time? Public attestation is that proof. It's the difference between an agent that can browse and an agent that can do business.</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:rgba(221,168,85,0.06); border-radius:6px; padding:1rem; margin-bottom:0.5rem">
+          <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem">
+            <code style="font-size:0.82rem; color:var(--yellow); font-weight:500">zp anchor genesis</code>
+            <span style="font-size:0.72rem; color:var(--text-dim)">~$0.0001 on Hedera testnet</span>
+          </div>
+          <div style="font-size:0.78rem; color:var(--text-dim); line-height:1.6">
+            Anchoring is irreversible — your cryptographic root becomes permanently, publicly verifiable. Your agents become capable of autonomous commerce. This is the on-ramp.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top: 1px solid var(--border); margin-top: 2rem; padding-top: 1.5rem; text-align: center;">
+      <p style="color: var(--text); font-size: 0.92rem; line-height: 1.8; max-width: 520px; margin: 0 auto;">
+        You own your keys. You govern your tools. Your attestation chain is growing.<br>
+        The only question left is when you open the pipe.
+      </p>
+      <p style="color: var(--accent); font-size: 0.95rem; margin-top: 1.25rem; font-weight: 500; letter-spacing:0.02em">
+        Your agents are ready to do business.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Narration bar (inserted into active step by JS) -->
+<div class="narration-bar" id="narrationBar" style="display:none">
+  <button class="narrate-toggle" id="narrateToggle" onclick="toggleNarration()" title="Play / Pause">&#9654;</button>
+  <span class="narrate-label" id="narrateLabel">Narrating...</span>
+  <div class="narrate-progress"><div class="narrate-progress-fill" id="narrateProgress"></div></div>
+  <button class="narrate-mute" id="narrateMute" onclick="toggleMute()" title="Mute narration">&#x1f50a;</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- JavaScript                                             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ── State ───────────────────────────────────────────────
+  let ws = null;
+  let currentStep = 0;
+  let selectedSovereignty = null;
+  let platformInfo = null;
+  let genesisData = null;
+  let discoveredTools = [];
+  let credentialsStored = 0;
+  let narrationAudio = null;
+  let isNarrating = false;
+
+  // ── WebSocket ───────────────────────────────────────────
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/api/onboard/ws`);
+
+    ws.onopen = () => {
+      console.log('onboard ws connected');
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        handleEvent(msg);
+      } catch (err) {
+        console.error('ws parse error:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('onboard ws closed — reconnecting in 2s');
+      setTimeout(connect, 2000);
+    };
+
+    ws.onerror = (e) => {
+      console.error('onboard ws error:', e);
+    };
+  }
+
+  function send(action, params) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.error('ws not connected');
+      return;
+    }
+    ws.send(JSON.stringify({ action, ...params }));
+  }
+
+  // ── Event handler ───────────────────────────────────────
+  function handleEvent(msg) {
+    switch (msg.event) {
+      case 'state':
+        // Reconstruct UI from server state (filesystem-backed)
+        if (msg.step && msg.step > 0) {
+          console.log('[ZP] Resuming from step', msg.step, msg);
+
+          // Restore known state into JS globals
+          if (msg.genesis_public_key) {
+            genesisData = {
+              genesis_public_key: msg.genesis_public_key,
+              operator: msg.operator_name,
+              sovereignty_mode: msg.sovereignty_mode,
+            };
+          }
+          if (msg.credentials_stored) {
+            credentialsStored = msg.credentials_stored;
+          }
+          if (msg.operator_name) {
+            platformInfo = platformInfo || {};
+            platformInfo.operator_name = msg.operator_name;
+          }
+          if (msg.inference_posture) {
+            window._resumedPosture = msg.inference_posture;
+          }
+          if (msg.tools_discovered) {
+            window._resumedToolCount = msg.tools_discovered;
+          }
+
+          // Jump to the reconstructed step
+          setTimeout(() => {
+            goStep(msg.step);
+          }, 300);
+        }
+        break;
+
+      case 'platform':
+        platformInfo = msg;
+        updatePlatformUI(msg);
+        break;
+
+      case 'genesis_complete':
+        genesisData = msg;
+        showGenesisComplete(msg);
+        break;
+
+      case 'recovery_kit':
+        showRecoveryKit(msg);
+        break;
+
+      case 'vault_ready':
+        appendTerminal('genesisTerm', '✓ Vault key derivation confirmed', 'success');
+        break;
+
+      case 'system_resources':
+        // Consumed via local_inference_status event (which includes system data)
+        break;
+
+      case 'local_inference_status':
+        showLocalInferenceStatus(msg);
+        break;
+
+      case 'ollama_status':
+        // Legacy event — handled by local_inference_status now
+        break;
+
+      case 'setup_guidance':
+        showSetupGuidance(msg);
+        break;
+
+      case 'model_pull_started':
+        showModelPullStatus(msg);
+        break;
+
+      case 'inference_posture_set':
+        // Acknowledged — no UI update needed
+        break;
+
+      case 'scan_result':
+        addScanResult(msg);
+        break;
+
+      case 'scan_complete':
+        showScanComplete(msg);
+        break;
+
+      case 'credentials_summary':
+        showFoundCredentials(msg);
+        break;
+
+      case 'import_complete':
+        handleImportComplete(msg);
+        break;
+
+      case 'provider_catalog':
+        showProviderCatalog(msg);
+        break;
+
+      case 'credential_stored':
+        markCredentialStored(msg);
+        break;
+
+      case 'tool_configured':
+        markToolConfigured(msg);
+        break;
+
+      case 'configure_complete':
+        showConfigureComplete(msg);
+        break;
+
+      case 'terminal':
+        // Route to the currently visible terminal
+        const activeTerm = document.querySelector('.step.active .terminal');
+        if (activeTerm) {
+          activeTerm.style.display = 'block';
+          appendTerminal(activeTerm.id, msg.line);
+        }
+        break;
+
+      case 'error':
+        const errTerm = document.querySelector('.step.active .terminal');
+        if (errTerm) {
+          errTerm.style.display = 'block';
+          appendTerminal(errTerm.id, '✗ ' + msg.message, 'error');
+        }
+        break;
+    }
+  }
+
+  // ── Terminal helper ─────────────────────────────────────
+  function appendTerminal(termId, text, cls) {
+    const term = document.getElementById(termId);
+    if (!term) return;
+    const line = document.createElement('div');
+    line.className = 'line' + (cls ? ' ' + cls : '');
+    line.textContent = text;
+    term.appendChild(line);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  // ── Step navigation ─────────────────────────────────────
+  window.goStep = function(step, animate) {
+    // Hide all steps
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    // Show target
+    const target = document.getElementById('step-' + step);
+    if (target) target.classList.add('active');
+
+    // Update nav tabs
+    document.querySelectorAll('.step-tab').forEach(tab => {
+      const tabStep = parseInt(tab.dataset.step);
+      tab.classList.remove('active', 'disabled');
+      if (tabStep === step) {
+        tab.classList.add('active');
+      } else if (tabStep > step && tabStep > currentStep) {
+        tab.classList.add('disabled');
+      }
+      if (tabStep < step) {
+        tab.classList.add('complete');
+      }
+    });
+
+    currentStep = step;
+
+    // Trigger local inference runtime detection when entering inference step
+    if (step === 4) {
+      send('detect_local_inference');
+    }
+
+    // Load provider catalog when entering credential step
+    if (step === 6) {
+      send('get_provider_catalog');
+    }
+
+    // Rebuild tool config cards with saved state when revisiting Step 7
+    if (step === 7) {
+      buildConfigToolCards();
+    }
+
+    // Rebuild launch pad when entering Step 8
+    if (step === 8) {
+      populateSummary();
+    }
+
+    // Auto-play narration on step transition
+    stopNarration();
+    setTimeout(() => startNarration(), 400); // slight delay for step animation
+  };
+
+  // Enable clicking completed/active tabs
+  document.querySelectorAll('.step-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      if (!tab.classList.contains('disabled')) {
+        goStep(parseInt(tab.dataset.step));
+      }
+    });
+  });
+
+  // ── Step 0: Begin ───────────────────────────────────────
+  window.startOnboard = function() {
+    // Remove first-click listener so it doesn't double-fire with goStep's auto-play
+    document.removeEventListener('click', autoplayOnFirstClick);
+    send('detect');
+    goStep(1);
+  };
+
+  // ── Step 1: Sovereignty ─────────────────────────────────
+  function updatePlatformUI(info) {
+    const bioCard = document.getElementById('card-biometric');
+    const bioDetail = document.getElementById('biometric-detail');
+    const loginDetail = document.getElementById('login-detail');
+
+    if (info.biometric_available) {
+      bioDetail.textContent = info.description || info.biometric_type || 'Available';
+      bioCard.classList.add('recommended');
+      // Auto-select biometric if available
+      selectSovereignty('biometric');
+    } else {
+      bioDetail.textContent = 'Not available on this hardware';
+      bioCard.classList.remove('recommended');
+      bioCard.style.opacity = '0.5';
+      bioCard.style.pointerEvents = 'none';
+      // Make login password the recommended option
+      document.getElementById('card-login').classList.add('recommended');
+      selectSovereignty('login-password');
+    }
+
+    if (info.credential_store_available) {
+      const storeNames = {
+        macos: 'macOS Keychain',
+        linux: 'Secret Service',
+        windows: 'Windows Credential Manager',
+      };
+      loginDetail.textContent = (storeNames[info.platform] || 'OS credential store') + ' available';
+    } else {
+      loginDetail.textContent = 'Credential store not available';
+    }
+  }
+
+  window.selectSovereignty = function(mode) {
+    selectedSovereignty = mode;
+    document.querySelectorAll('#sovereigntyCards .card').forEach(c => c.classList.remove('selected'));
+    const cardMap = { 'biometric': 'card-biometric', 'login-password': 'card-login', 'file-based': 'card-file' };
+    const card = document.getElementById(cardMap[mode]);
+    if (card) card.classList.add('selected');
+    document.getElementById('sovereigntyNext').disabled = false;
+  };
+
+  window.goGenesis = function() {
+    goStep(2);
+  };
+
+  // ── Step 2: Genesis ─────────────────────────────────────
+  window.runGenesis = function() {
+    const name = document.getElementById('operatorName').value.trim() || 'Operator';
+    document.getElementById('genesisBtn').disabled = true;
+    document.getElementById('genesisTerm').style.display = 'block';
+    document.getElementById('genesisTerm').innerHTML = '';
+
+    send('genesis', {
+      operator_name: name,
+      sovereignty_mode: selectedSovereignty || 'auto'
+    });
+  };
+
+  function showGenesisComplete(data) {
+    const infoDiv = document.getElementById('genesisInfoContent');
+    const shortPub = (data.genesis_public_key || '').substring(0, 8);
+
+    const sovereigntyLabels = {
+      'biometric': 'Biometric',
+      'login_password': 'Login Password',
+      'file_based': 'File on Disk',
+    };
+
+    let details = [
+      '✓ Ed25519 keypair generated (Genesis + Operator)',
+      '✓ Constitutional bedrock sealed (5 governance gates)',
+    ];
+
+    if (data.secret_in_credential_store) {
+      const mode = data.sovereignty_mode || '';
+      const storeNames = {
+        macos: 'macOS Keychain',
+        linux: 'Secret Service',
+        windows: 'Windows Credential Manager',
+      };
+      const storeName = storeNames[data.platform] || 'OS credential store';
+      if (mode === 'biometric') {
+        const bioNames = {
+          macos: 'biometric (Secure Enclave)',
+          linux: 'fingerprint (fprintd)',
+          windows: 'Windows Hello',
+        };
+        const bioName = bioNames[data.platform] || 'biometric';
+        details.push(`✓ Genesis secret sealed in ${storeName}, gated by ${bioName}`);
+      } else {
+        details.push(`✓ Genesis secret sealed in ${storeName}`);
+      }
+    } else {
+      details.push('✓ Genesis secret written to file (credential store unavailable)');
+    }
+
+    details.push('✓ Genesis record written to ~/.zeropoint/');
+    details.push('');
+    details.push('<span style="color:var(--text-dim)">This key is local for now. Later, you can anchor it to a public ledger — making your identity and governance verifiable by anyone, including other agents.</span>');
+
+    infoDiv.innerHTML = details.map(d =>
+      `<div style="font-size:0.82rem; padding:0.15rem 0">${d}</div>`
+    ).join('');
+
+    document.getElementById('genesisInfo').style.display = 'block';
+    document.getElementById('genesisNext').style.display = 'flex';
+
+    // Store for summary
+    genesisData = data;
+  }
+
+  function showRecoveryKit(data) {
+    const container = document.getElementById('recoveryWords');
+    container.innerHTML = '';
+
+    data.words.forEach((word, i) => {
+      const div = document.createElement('div');
+      div.className = 'word';
+      div.innerHTML = `<span class="word-num">${i + 1}.</span> ${word}`;
+      container.appendChild(div);
+    });
+
+    document.getElementById('recoveryKit').style.display = 'block';
+
+    // Play recovery narration (conditional — only for biometric path)
+    stopNarration();
+    narrationAudio = new Audio('/assets/narration/onboard/onboard-recovery.mp3');
+    showNarrationBar();
+    document.getElementById('narrateLabel').textContent = 'Why your recovery kit matters';
+    if (!isMuted) {
+      narrationAudio.play().catch(() => {});
+      isNarrating = true;
+      document.getElementById('narrateToggle').innerHTML = '&#10074;&#10074;';
+      document.getElementById('narrationBar').classList.add('playing');
+      progressInterval = setInterval(updateProgress, 300);
+      narrationAudio.onended = () => {
+        isNarrating = false;
+        clearInterval(progressInterval);
+        document.getElementById('narrateProgress').style.width = '100%';
+        document.getElementById('narrateToggle').innerHTML = '&#9654;';
+        document.getElementById('narrationBar').classList.remove('playing');
+      };
+    }
+    narrationAudio.onerror = () => {
+      document.getElementById('narrationBar').style.display = 'none';
+      isNarrating = false;
+    };
+  }
+
+  // ── Step 3 → 4: Vault → Inference Posture ──────────────
+  // (goStep(4) is called by vault Continue button)
+
+  // ── Step 4: Inference Posture ─────────────────────────
+  let inferencePosture = null;
+
+  window.selectPosture = function(posture) {
+    inferencePosture = posture;
+    // Visual selection
+    document.querySelectorAll('.posture-card').forEach(c => {
+      c.style.borderColor = 'var(--border)';
+    });
+    const selected = document.getElementById('posture-' + posture);
+    if (selected) selected.style.borderColor = 'var(--accent)';
+    document.getElementById('postureBtn').disabled = false;
+
+    // Tell server about the choice
+    send('set_inference_posture', { posture });
+  };
+
+  function showLocalInferenceStatus(data) {
+    const box = document.getElementById('localInferenceStatus');
+    const title = document.getElementById('localInferenceTitle');
+    const text = document.getElementById('localInferenceText');
+    box.style.display = 'block';
+
+    const sys = data.system || {};
+    const runtimes = data.runtimes || [];
+    const available = data.available || false;
+    let statusLines = [];
+
+    // System resources line
+    if (sys.ram_gb) {
+      let sysLine = `${sys.ram_gb}GB RAM · ${sys.cpu_cores || '?'} cores`;
+      if (sys.chip) sysLine += ` · ${sys.chip}`;
+      if (sys.gpu) sysLine += `<br>${sys.gpu}`;
+      else if (sys.unified_memory) sysLine += ' (unified memory)';
+      statusLines.push(`<span style="color:var(--text-dim); font-size:0.75rem">${sysLine}</span>`);
+    }
+
+    // Runtime status
+    if (available && runtimes.length > 0) {
+      title.style.color = 'var(--green)';
+      const allModels = data.models || [];
+
+      // Show each detected runtime
+      runtimes.forEach(rt => {
+        let rtLine = `<span style="color:var(--green)">✓</span> ${rt.name} detected`;
+        if (rt.version) rtLine += ` (v${rt.version})`;
+        rtLine += ` <span style="color:var(--text-dim)">at ${rt.endpoint}</span>`;
+        if (rt.models && rt.models.length > 0) {
+          rtLine += `<br><span style="color:var(--text-dim)">${rt.models.length} model(s): ${rt.models.join(', ')}</span>`;
+        }
+        statusLines.unshift(rtLine);
+      });
+
+      // Update local-models display if it exists
+      const localModels = document.getElementById('local-models');
+      if (localModels && allModels.length > 0) {
+        localModels.style.display = 'block';
+        localModels.textContent = `Models: ${allModels.join(', ')}`;
+      }
+    } else {
+      title.style.color = 'var(--text-dim)';
+      statusLines.unshift(
+        `<span style="color:var(--text-dim)">⚠ No local inference runtime detected.</span>`
+      );
+
+      // Show setup assistant for capable hardware
+      if (sys.local_inference_fit && sys.local_inference_fit !== 'limited') {
+        document.getElementById('setupAssistant').style.display = 'block';
+      } else {
+        // Limited hardware — still show assistant but note the constraint
+        const sa = document.getElementById('setupAssistant');
+        sa.style.display = 'block';
+        const phase1 = document.getElementById('setupPhase1');
+        const existingNote = phase1.querySelector('.hw-note');
+        if (!existingNote) {
+          const note = document.createElement('p');
+          note.className = 'hw-note';
+          note.style.cssText = 'font-size:0.72rem; color:var(--yellow); margin:0 0 0.5rem 0';
+          note.textContent = 'Your hardware is limited for local inference — small models will work, but Mixed or Cloud mode may be a better fit.';
+          phase1.insertBefore(note, phase1.firstChild.nextSibling);
+        }
+      }
+    }
+
+    // Recommendation line
+    if (sys.recommendation) {
+      statusLines.push(`<span style="font-size:0.75rem; color:var(--accent); margin-top:0.25rem; display:inline-block">${sys.recommendation}</span>`);
+    }
+
+    text.innerHTML = statusLines.join('<br>');
+
+    // Store system resources for setup assistant
+    lastSystemResources = sys;
+
+    // Adaptive recommendation: highlight the best-fit posture card
+    applyPostureRecommendation(available, sys.local_inference_fit);
+
+    // Update setup assistant state (handles re-detection flow)
+    updateSetupAssistantAfterDetect(data);
+  }
+
+  function applyPostureRecommendation(localAvailable, fit) {
+    // Remove any existing recommendation tags
+    // Clear previous recommendation labels
+    document.querySelectorAll('.posture-card').forEach(el => el.classList.remove('recommended'));
+
+    let recommended = 'mixed'; // default and fallback for unknown
+    if (fit === 'limited') {
+      recommended = 'cloud';
+    } else if (fit === 'moderate' && !localAvailable) {
+      recommended = 'cloud';
+    } else if (fit === 'strong' || fit === 'moderate') {
+      recommended = 'mixed';
+    }
+    // fit === 'unknown' → stays 'mixed' (safe default)
+
+    const card = document.getElementById('posture-' + recommended);
+    if (card) {
+      card.classList.add('recommended');
+    }
+  }
+
+  // ── Setup Assistant: guided local inference setup ──────
+
+  // Store the last system resources for the setup flow
+  let lastSystemResources = null;
+
+  window.requestSetupGuidance = function(runtime) {
+    // Highlight selected runtime button
+    document.querySelectorAll('.runtime-pick').forEach(b => {
+      b.style.borderColor = 'var(--border)';
+      b.style.opacity = '0.6';
+    });
+    event.currentTarget.style.borderColor = 'var(--accent)';
+    event.currentTarget.style.opacity = '1';
+
+    send('get_setup_guidance', { runtime: runtime });
+  };
+
+  function showSetupGuidance(data) {
+    const install = data.install || {};
+    const model = data.model || {};
+
+    // If phase 3 is currently visible (model-pull step), just update the model rec
+    if (document.getElementById('setupPhase3').style.display === 'block') {
+      if (model && model.model_id) {
+        populateModelRecommendation(model);
+      }
+      return;
+    }
+
+    // Switch to phase 2
+    document.getElementById('setupPhase1').style.display = 'none';
+    document.getElementById('setupPhase2').style.display = 'block';
+    document.getElementById('setupPhase3').style.display = 'none';
+
+    // Build install instructions
+    const instrEl = document.getElementById('setupInstructions');
+    instrEl.innerHTML = `<span style="color:var(--accent)">▸</span> Install <strong>${install.runtime}</strong> <span style="color:var(--text-dim)">(${install.method})</span>`;
+
+    // Build command block
+    const cmdEl = document.getElementById('setupCommands');
+    if (install.commands && install.commands.length > 0) {
+      cmdEl.style.display = 'block';
+      cmdEl.innerHTML = install.commands
+        .map(cmd => `<div style="margin:0.15rem 0"><span style="color:var(--accent)">$</span> <code>${cmd}</code></div>`)
+        .join('');
+
+      if (install.alt_url) {
+        cmdEl.innerHTML += `<div style="margin:0.35rem 0 0 0; font-size:0.72rem; color:var(--text-dim)">or download directly: <a href="${install.alt_url}" target="_blank" style="color:var(--accent)">${install.alt_url}</a></div>`;
+      }
+    } else if (install.alt_url) {
+      cmdEl.style.display = 'block';
+      cmdEl.innerHTML = `<div style="margin:0.15rem 0"><span style="color:var(--accent)">→</span> <a href="${install.alt_url}" target="_blank" style="color:var(--accent)">${install.alt_url}</a></div>`;
+    } else {
+      cmdEl.style.display = 'none';
+    }
+
+    // Notes
+    const notesEl = document.getElementById('setupNotes');
+    notesEl.textContent = install.notes || '';
+
+    // Store model recommendation for phase 3
+    cmdEl.dataset.modelRec = JSON.stringify(model);
+  }
+
+  window.showSetupPhase1 = function() {
+    document.getElementById('setupPhase1').style.display = 'block';
+    document.getElementById('setupPhase2').style.display = 'none';
+    document.getElementById('setupPhase3').style.display = 'none';
+    // Reset button highlights
+    document.querySelectorAll('.runtime-pick').forEach(b => {
+      b.style.borderColor = 'var(--border)';
+      b.style.opacity = '1';
+    });
+  };
+
+  window.redetectRuntimes = function() {
+    // Clear the status display and re-probe
+    const box = document.getElementById('localInferenceStatus');
+    const text = document.getElementById('localInferenceText');
+    text.innerHTML = '<span style="color:var(--text-dim)">Re-scanning for local inference runtimes...</span>';
+    box.style.display = 'block';
+
+    send('detect_local_inference');
+  };
+
+  // Called when re-detection finds a runtime with models → hide assistant
+  // Called when re-detection finds a runtime without models → show phase 3
+  function updateSetupAssistantAfterDetect(data) {
+    const runtimes = data.runtimes || [];
+    const available = data.available || false;
+    const allModels = data.models || [];
+    const sa = document.getElementById('setupAssistant');
+
+    if (available && allModels.length > 0) {
+      // Full success — runtime + models found. Hide assistant.
+      sa.style.display = 'none';
+    } else if (available && allModels.length === 0) {
+      // Runtime running but no models — show model recommendation (phase 3)
+      sa.style.display = 'block';
+      document.getElementById('setupPhase1').style.display = 'none';
+      document.getElementById('setupPhase2').style.display = 'none';
+      document.getElementById('setupPhase3').style.display = 'block';
+
+      // Try to load model rec from the last setup_guidance, or request fresh
+      const cmdEl = document.getElementById('setupCommands');
+      let model;
+      try { model = JSON.parse(cmdEl.dataset.modelRec || '{}'); } catch(e) { model = {}; }
+
+      if (model && model.model_id) {
+        populateModelRecommendation(model);
+      } else {
+        // Request fresh guidance to get model recommendation
+        const rtName = runtimes[0] ? runtimes[0].name.toLowerCase().replace(' ', '-') : 'ollama';
+        send('get_setup_guidance', { runtime: rtName });
+      }
+    }
+    // If not available, the showLocalInferenceStatus already handles showing the assistant
+  }
+
+  function populateModelRecommendation(model) {
+    const titleEl = document.getElementById('modelRecTitle');
+    titleEl.innerHTML = `Now pull a model. Based on your hardware, we recommend:`;
+
+    // Source attribution line — show where this recommendation comes from
+    let sourceHtml = '';
+    if (model.source_url) {
+      sourceHtml = `<div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.35rem; border-top:1px solid var(--border); padding-top:0.3rem">` +
+        `<a href="${model.source_url}" target="_blank" style="color:var(--accent); text-decoration:none">model card ↗</a>`;
+      if (model.last_verified) {
+        sourceHtml += ` · verified ${model.last_verified}`;
+      }
+      sourceHtml += `</div>`;
+    }
+
+    const primaryEl = document.getElementById('modelRecPrimary');
+    primaryEl.innerHTML =
+      `<div style="display:flex; justify-content:space-between; align-items:baseline">` +
+      `<strong style="font-size:0.85rem">${model.display_name}</strong>` +
+      `<span style="font-size:0.68rem; color:var(--text-dim)">${model.size}</span>` +
+      `</div>` +
+      `<p style="font-size:0.75rem; color:var(--text-dim); margin:0.25rem 0 0 0; line-height:1.5">${model.rationale}</p>` +
+      sourceHtml;
+
+    // Pull command
+    const cmdEl = document.getElementById('modelRecCommand');
+    cmdEl.innerHTML = `<div style="margin:0.15rem 0"><span style="color:var(--accent)">$</span> <code>${model.pull_command}</code></div>`;
+
+    // Alternative model
+    if (model.alternative) {
+      const alt = model.alternative;
+      const altEl = document.getElementById('modelRecAlt');
+      altEl.style.display = 'block';
+
+      let altSourceHtml = '';
+      if (alt.source_url) {
+        altSourceHtml = ` · <a href="${alt.source_url}" target="_blank" style="color:var(--accent); text-decoration:none; font-size:0.62rem">model card ↗</a>`;
+      }
+
+      document.getElementById('modelRecAltCard').innerHTML =
+        `<div style="display:flex; justify-content:space-between; align-items:baseline">` +
+        `<strong style="font-size:0.78rem">${alt.display_name}</strong>` +
+        `<span style="font-size:0.68rem; color:var(--text-dim)">${alt.size}${altSourceHtml}</span>` +
+        `</div>` +
+        `<p style="font-size:0.72rem; color:var(--text-dim); margin:0.15rem 0 0 0; line-height:1.4">${alt.rationale}</p>` +
+        `<div style="font-size:0.72rem; margin-top:0.25rem"><span style="color:var(--accent)">$</span> <code>${alt.pull_command}</code></div>`;
+    }
+  }
+
+  // Track current model being pulled for the pull-and-continue flow
+  let currentPullModelId = null;
+  let currentPullRuntime = null;
+
+  window.startModelPull = function() {
+    // Get model info from the stored recommendation
+    const cmdEl = document.getElementById('setupCommands');
+    let model;
+    try { model = JSON.parse(cmdEl.dataset.modelRec || '{}'); } catch(e) { model = {}; }
+
+    if (!model || !model.model_id) return;
+
+    currentPullModelId = model.model_id;
+    currentPullRuntime = 'ollama'; // TODO: track from setup guidance
+
+    // Disable the button to prevent double-pulls
+    const btn = document.getElementById('pullAndContinueBtn');
+    btn.disabled = true;
+    btn.textContent = 'Starting download...';
+
+    send('start_model_pull', {
+      model_id: model.model_id,
+      runtime: currentPullRuntime,
+    });
+  };
+
+  function showModelPullStatus(data) {
+    const statusEl = document.getElementById('modelPullStatus');
+    const msgEl = document.getElementById('modelPullMessage');
+    const actionsEl = document.getElementById('modelPullActions');
+
+    statusEl.style.display = 'block';
+
+    if (data.error) {
+      // Pull failed — show the manual command
+      msgEl.innerHTML =
+        `<span style="color:var(--yellow)">⚠</span> ${data.message}`;
+      // Re-enable the button
+      const btn = document.getElementById('pullAndContinueBtn');
+      btn.disabled = false;
+      btn.textContent = 'Pull model & continue';
+    } else {
+      // Pull started successfully — show status and enable continue
+      msgEl.innerHTML =
+        `<span style="color:var(--green)">✓</span> <span style="color:var(--green)">${data.message}</span>`;
+
+      // Replace action buttons with a "Continue" that moves on + optional notification
+      actionsEl.innerHTML =
+        `<button class="btn" onclick="goDiscover()" style="font-size:0.75rem; padding:0.4rem 0.8rem">` +
+        `Continue onboarding →</button>` +
+        `<label style="font-size:0.72rem; color:var(--text-dim); display:flex; align-items:center; gap:0.35rem; cursor:pointer">` +
+        `<input type="checkbox" id="notifyOnModelReady" checked style="accent-color:var(--accent)">` +
+        `Notify me when the model is ready</label>`;
+    }
+  }
+
+  // ── Step 4 → 5: Inference → Discover ──────────────────
+  window.goDiscover = function() {
+    // If a model pull is in progress, store notification preference
+    if (currentPullModelId) {
+      const notifyBox = document.getElementById('notifyOnModelReady');
+      const wantsNotify = notifyBox ? notifyBox.checked : false;
+      send('set_inference_posture', {
+        posture: inferencePosture || 'mixed',
+        model_pulling: currentPullModelId,
+        notify_when_ready: wantsNotify,
+      });
+    }
+    send('vault_check');
+    goStep(5);
+  };
+
+  // ── Step 5: Scan ────────────────────────────────────────
+  window.runScan = function() {
+    const path = document.getElementById('scanPath').value.trim() || '~/projects';
+    document.getElementById('scanBtn').disabled = true;
+    document.getElementById('scanBtn').textContent = 'Scanning...';
+    document.getElementById('scanTerm').style.display = 'block';
+    document.getElementById('scanTerm').innerHTML = '';
+    document.getElementById('scanResultsList').innerHTML = '';
+    discoveredTools = [];
+
+    send('scan', { path });
+  };
+
+  function addScanResult(data) {
+    discoveredTools.push(data);
+
+    const list = document.getElementById('scanResultsList');
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.style.padding = '0.75rem 1rem';
+
+    let status;
+    if (data.status === 'has_plaintext') {
+      status = `<span style="color:var(--yellow)">⚠ ${data.found_count} plaintext credential(s)</span>`;
+    } else if (data.status === 'configured' || data.status === 'ready') {
+      status = '<span style="color:var(--green)">✓ configured</span>';
+    } else {
+      status = '<span style="color:var(--text-dim)">○ unconfigured</span>';
+    }
+
+    div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center">
+      <strong style="font-size:0.85rem">${data.tool_name}</strong>
+      <span style="font-size:0.75rem">${status}</span>
+    </div>`;
+
+    list.appendChild(div);
+    document.getElementById('scanResults').style.display = 'block';
+  }
+
+  function showScanComplete(data) {
+    document.getElementById('scanBtn').disabled = false;
+    document.getElementById('scanBtn').textContent = 'Scan';
+    document.getElementById('scanSummary').textContent =
+      `${data.tool_count} tool(s) found · ${data.unique_providers} unique provider(s)`;
+    document.getElementById('scanNext').style.display = 'flex';
+
+    // Credential cards now built by catalog response in step 6
+  }
+
+  // ── Step 6: Credentials (catalog-driven) ────────────────
+  let providerCatalog = []; // Full catalog from server
+
+  const categoryLabels = {
+    llm: 'LLM / Foundation Models',
+    embedding: 'Embedding',
+    platform: 'Cloud Platforms',
+    aggregator: 'Aggregators',
+    search: 'Search / Tools',
+  };
+
+  function showProviderCatalog(data) {
+    providerCatalog = data.providers || [];
+    const detected = providerCatalog.filter(p => p.detected);
+    const undetected = providerCatalog.filter(p => !p.detected);
+
+    // ── Detected section ──
+    const detectedContainer = document.getElementById('detectedCards');
+    const detectedSection = document.getElementById('detectedProviders');
+    detectedContainer.innerHTML = '';
+
+    if (detected.length > 0) {
+      detectedSection.style.display = 'block';
+      detected.forEach(p => {
+        detectedContainer.appendChild(buildProviderCard(p, true));
+      });
+    }
+
+    // ── Full catalog section ──
+    // Collapsed if detected providers exist (user has something to focus on);
+    // expanded if nothing was detected (catalog IS the step content).
+    const catalogContainer = document.getElementById('catalogCards');
+    const catalogSection = document.getElementById('catalogProviders');
+    const catalogToggle = document.getElementById('catalogToggle');
+    catalogContainer.innerHTML = '';
+    document.getElementById('catalogCount').textContent = undetected.length;
+
+    if (undetected.length > 0) {
+      catalogSection.style.display = 'block';
+
+      if (detected.length > 0) {
+        // Detected providers shown above — keep catalog collapsed
+        catalogContainer.style.display = 'none';
+        catalogToggle.textContent = '▸';
+        document.getElementById('catalogLabel').textContent = 'More providers';
+      } else {
+        // Nothing detected — expand catalog so the step isn't empty
+        catalogContainer.style.display = 'block';
+        catalogToggle.textContent = '▾';
+        document.getElementById('catalogLabel').textContent = 'Providers';
+      }
+
+      // Group by category
+      const byCategory = {};
+      undetected.forEach(p => {
+        const cat = p.profile?.category || p.category || 'llm';
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(p);
+      });
+
+      const categoryOrder = ['llm', 'embedding', 'platform', 'aggregator', 'search'];
+      categoryOrder.forEach(cat => {
+        if (!byCategory[cat]) return;
+        const label = categoryLabels[cat] || cat;
+        const heading = document.createElement('div');
+        heading.style.cssText = 'font-size:0.75rem; color:var(--text-dim); margin:1rem 0 0.4rem; text-transform:uppercase; letter-spacing:0.04em';
+        heading.textContent = label;
+        catalogContainer.appendChild(heading);
+        byCategory[cat].forEach(p => {
+          catalogContainer.appendChild(buildProviderCard(p, false));
+        });
+      });
+    } else if (detected.length === 0) {
+      // No providers at all (catalog failed to load?)
+      catalogSection.style.display = 'block';
+      catalogContainer.style.display = 'block';
+      catalogContainer.innerHTML = '<p style="font-size:0.82rem; color:var(--text-dim)">Provider catalog unavailable. You can add credentials later with <code>zp configure vault-add</code>.</p>';
+    }
+
+    updateCredentialSummary();
+  }
+
+  function buildProviderCard(provider, isDetected) {
+    const p = provider.profile || provider;
+    const id = p.id;
+    const vaultRef = `${id}/api_key`;
+
+    // Find tools from scan that need this provider
+    const toolNames = discoveredTools
+      .filter(t => (t.provider_vars || t.needed_vars || []).some(v => {
+        return (p.env_patterns || []).some(pattern => v === pattern);
+      }))
+      .map(t => t.tool_name);
+
+    const div = document.createElement('div');
+    div.className = 'credential-card' + (isDetected ? ' detected' : '');
+    div.id = `cred-${id}`;
+
+    let metaHtml = '';
+    if (isDetected && provider.detected_vars && provider.detected_vars.length) {
+      metaHtml += `<div style="font-size:0.72rem; color:var(--green); margin-bottom:0.3rem">✓ Found: ${provider.detected_vars.join(', ')}</div>`;
+    }
+    if (toolNames.length) {
+      metaHtml += `<div class="used-by">Used by: ${toolNames.join(', ')}</div>`;
+    }
+    if (p.coverage) {
+      metaHtml += `<div style="font-size:0.72rem; color:var(--accent); margin-bottom:0.3rem; font-style:italic">${p.coverage}</div>`;
+    }
+    if (p.key_hint) {
+      metaHtml += `<div style="font-size:0.72rem; color:var(--text-dim)">${p.key_hint}</div>`;
+    }
+
+    let sourceHtml = '';
+    if (p.source_url) {
+      sourceHtml = `<div style="font-size:0.68rem; color:var(--text-dim); margin-top:0.3rem">`;
+      sourceHtml += `<a href="${p.source_url}" target="_blank" style="color:var(--accent); text-decoration:none">docs ↗</a>`;
+      if (p.last_verified) {
+        sourceHtml += ` · verified ${p.last_verified}`;
+      }
+      sourceHtml += `</div>`;
+    }
+
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:baseline">
+        <div class="provider">${p.name}</div>
+        ${p.key_url ? `<a class="help-link" href="${p.key_url}" target="_blank" style="font-size:0.75rem; color:var(--accent); text-decoration:none">get key ↗</a>` : ''}
+      </div>
+      ${metaHtml}
+      <div class="input-row">
+        <input type="password" id="cred-input-${id}" placeholder="${p.env_patterns?.[0] || 'API Key'}">
+        <button class="store-btn" onclick="storeCred('${id}', '${vaultRef}')">Store</button>
+      </div>
+      ${sourceHtml}
+    `;
+    return div;
+  }
+
+  window.toggleCatalog = function() {
+    const cards = document.getElementById('catalogCards');
+    const toggle = document.getElementById('catalogToggle');
+    if (cards.style.display === 'none') {
+      cards.style.display = 'block';
+      toggle.textContent = '▾';
+    } else {
+      cards.style.display = 'none';
+      toggle.textContent = '▸';
+    }
+  };
+
+  window.storeCred = function(provider, vaultRef) {
+    const input = document.getElementById(`cred-input-${provider}`);
+    const value = input.value.trim();
+    if (!value) return;
+
+    send('vault_store', { vault_ref: vaultRef, value });
+  };
+
+  // ── Found Credentials (plaintext .env scraping) ──────────
+  let foundCredentialsSummary = null;  // Server response from credentials_summary
+  let selectedFoundCreds = {};         // provider → selected value object
+
+  function showFoundCredentials(data) {
+    foundCredentialsSummary = data;
+    const providers = data.providers || [];
+    if (providers.length === 0) return;
+
+    const section = document.getElementById('foundPlaintextSection');
+    const container = document.getElementById('foundPlaintextCards');
+    const countBadge = document.getElementById('foundPlaintextCount');
+
+    section.style.display = 'block';
+    countBadge.textContent = data.total_plaintext || providers.length;
+    container.innerHTML = '';
+
+    // Initialize selections — pick first value for each provider
+    selectedFoundCreds = {};
+
+    providers.forEach((group, gi) => {
+      const provider = group.provider;
+      const values = group.values || [];
+      const hasConflict = group.has_conflict;
+
+      const div = document.createElement('div');
+      div.className = 'found-provider-group' + (hasConflict ? ' has-conflict' : '');
+      div.id = `found-group-${provider}`;
+
+      // Header
+      let headerHtml = `
+        <div class="found-provider-header">
+          <div>
+            <span class="found-provider-name">${provider}</span>
+            ${hasConflict ? '<span style="font-size:0.68rem; color:var(--yellow); margin-left:0.5rem">⚠ conflicting values</span>' : ''}
+          </div>
+          <div class="priority-controls">
+            <button class="priority-btn" onclick="moveProviderUp('${provider}')" title="Move up">▲</button>
+            <button class="priority-btn" onclick="moveProviderDown('${provider}')" title="Move down">▼</button>
+          </div>
+        </div>
+      `;
+
+      let valuesHtml = '';
+      values.forEach((v, vi) => {
+        const sources = (v.sources || []).join(', ');
+        const isSelected = vi === 0; // First value is default selection
+        const radioName = `found-${provider}`;
+
+        if (isSelected) {
+          selectedFoundCreds[provider] = v;
+        }
+
+        if (hasConflict) {
+          // Show radio buttons when values conflict
+          valuesHtml += `
+            <div class="found-value-row">
+              <input type="radio" name="${radioName}" value="${vi}" ${isSelected ? 'checked' : ''}
+                     onchange="selectFoundCred('${provider}', ${vi})">
+              <span class="found-var-name">${v.var_name}</span>
+              <span class="found-masked-value">${v.masked_value}</span>
+              <span class="found-source-tag">${sources}</span>
+            </div>
+          `;
+        } else {
+          // Single value — just show it with checkbox to include/exclude
+          valuesHtml += `
+            <div class="found-value-row">
+              <input type="checkbox" checked onchange="toggleFoundCred('${provider}', this.checked, ${vi})"
+                     style="accent-color:var(--accent)">
+              <span class="found-var-name">${v.var_name}</span>
+              <span class="found-masked-value">${v.masked_value}</span>
+              <span class="found-source-tag">${sources}</span>
+            </div>
+          `;
+        }
+      });
+
+      div.innerHTML = headerHtml + valuesHtml;
+      container.appendChild(div);
+    });
+
+    updateVaultAllStatus();
+  }
+
+  window.selectFoundCred = function(provider, valueIndex) {
+    if (!foundCredentialsSummary) return;
+    const group = foundCredentialsSummary.providers.find(g => g.provider === provider);
+    if (group && group.values[valueIndex]) {
+      selectedFoundCreds[provider] = group.values[valueIndex];
+    }
+    updateVaultAllStatus();
+  };
+
+  window.toggleFoundCred = function(provider, checked, valueIndex) {
+    if (checked) {
+      const group = foundCredentialsSummary.providers.find(g => g.provider === provider);
+      if (group && group.values[valueIndex]) {
+        selectedFoundCreds[provider] = group.values[valueIndex];
+      }
+    } else {
+      delete selectedFoundCreds[provider];
+    }
+    updateVaultAllStatus();
+  };
+
+  window.moveProviderUp = function(provider) {
+    const container = document.getElementById('foundPlaintextCards');
+    const el = document.getElementById(`found-group-${provider}`);
+    if (el && el.previousElementSibling) {
+      container.insertBefore(el, el.previousElementSibling);
+    }
+  };
+
+  window.moveProviderDown = function(provider) {
+    const container = document.getElementById('foundPlaintextCards');
+    const el = document.getElementById(`found-group-${provider}`);
+    if (el && el.nextElementSibling) {
+      container.insertBefore(el.nextElementSibling, el);
+    }
+  };
+
+  function updateVaultAllStatus() {
+    const count = Object.keys(selectedFoundCreds).length;
+    const btn = document.getElementById('vaultAllBtn');
+    const status = document.getElementById('vaultAllStatus');
+
+    if (count === 0) {
+      btn.disabled = true;
+      status.textContent = 'No credentials selected';
+    } else {
+      btn.disabled = false;
+      btn.textContent = `Vault ${count} Credential${count !== 1 ? 's' : ''}`;
+      status.textContent = `${count} selected — plaintext will remain in .env until you remove it`;
+    }
+  }
+
+  window.vaultAllFound = function() {
+    const credentials = Object.entries(selectedFoundCreds).map(([provider, v]) => ({
+      provider,
+      var_name: v.var_name,
+      value: v.value,
+    }));
+
+    if (credentials.length === 0) return;
+
+    const btn = document.getElementById('vaultAllBtn');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+
+    send('vault_import_all', { credentials });
+  };
+
+  function handleImportComplete(data) {
+    const btn = document.getElementById('vaultAllBtn');
+    const status = document.getElementById('vaultAllStatus');
+    btn.textContent = '✓ Vaulted';
+    btn.disabled = true;
+    status.textContent = `${data.imported} credential(s) secured · ${data.total_stored} total in vault`;
+    status.style.color = 'var(--green)';
+
+    // Mark provider cards as stored
+    Object.keys(selectedFoundCreds).forEach(provider => {
+      const group = document.getElementById(`found-group-${provider}`);
+      if (group) {
+        group.style.borderColor = 'var(--green)';
+        group.style.opacity = '0.7';
+      }
+      // Also mark in the catalog section if present
+      const catalogCard = document.getElementById(`cred-${provider}`);
+      if (catalogCard && !catalogCard.classList.contains('stored')) {
+        catalogCard.classList.add('stored');
+        const input = catalogCard.querySelector('input[type="password"]');
+        if (input) {
+          const v = selectedFoundCreds[provider];
+          input.value = v.masked_value || '••••••';
+          input.disabled = true;
+        }
+        const storeBtn = catalogCard.querySelector('.store-btn');
+        if (storeBtn) {
+          storeBtn.textContent = '✓';
+          storeBtn.disabled = true;
+        }
+      }
+    });
+
+    updateCredentialSummary();
+  }
+
+  function markCredentialStored(data) {
+    credentialsStored = data.total_stored || credentialsStored + 1;
+
+    // Find the card by vault_ref
+    const provider = (data.vault_ref || '').split('/')[0];
+    const card = document.getElementById(`cred-${provider}`);
+    if (card) {
+      card.classList.add('stored');
+      const input = card.querySelector('input');
+      if (input) {
+        input.value = data.masked_value || '••••••';
+        input.disabled = true;
+      }
+      const btn = card.querySelector('.store-btn');
+      if (btn) {
+        btn.textContent = '✓';
+        btn.disabled = true;
+      }
+    }
+
+    updateCredentialSummary();
+  }
+
+  function updateCredentialSummary() {
+    const summary = document.getElementById('credentialSummary');
+    const total = document.querySelectorAll('.credential-card').length;
+    if (total === 0) {
+      summary.textContent = '';
+      return;
+    }
+    summary.textContent = `${credentialsStored} of ${total} credential(s) stored`;
+  }
+
+  // ── Step 7: Configure ───────────────────────────────────
+
+  let configResults = {};  // tool_name -> { status, missing } — persists across step navigation
+  let configDone = false;
+
+  const toolIcons = {
+    'openmaictool': '🤖', 'openMAIC': '🤖', 'pentagi': '🛡️',
+    'agent-zero': '🧠', 'autogpt': '⚡', 'langchain': '🔗',
+    'crewai': '👥', 'zp-hedera': '⛓️', 'ironclaw': '🦀', 'deploy': '🚀',
+  };
+
+  function getToolIcon(name) {
+    return toolIcons[name] || toolIcons[name.toLowerCase()] || '🔧';
+  }
+
+  // Find a card by fuzzy-matching the configure engine's tool name
+  // against the scan's directory names (case-insensitive, substring)
+  function findCardForTool(configName) {
+    const lower = configName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cards = document.querySelectorAll('.tool-config-card');
+    for (const card of cards) {
+      const cardName = (card.dataset.toolName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cardName === lower || cardName.includes(lower) || lower.includes(cardName)) {
+        return card;
+      }
+    }
+    return null;
+  }
+
+  function applyCardState(card, status, missing) {
+    card.classList.remove('securing');
+    const hasGenesis = !!(genesisData && genesisData.genesis_public_key);
+    if (status === 'governed') {
+      card.classList.add('governed');
+      card.querySelector('.tool-status').textContent = hasGenesis
+        ? 'governed · .env written · genesis-bound'
+        : 'configured · .env written · no genesis anchor';
+      card.querySelector('.tool-badge').textContent = hasGenesis ? '✓ governed' : '⚠ unanchored';
+      card.querySelector('.tool-badge').style.background = hasGenesis ? '' : 'rgba(221,168,85,0.15)';
+      card.querySelector('.tool-badge').style.color = hasGenesis ? '' : 'var(--yellow)';
+    } else if (status === 'skipped') {
+      card.classList.add('skipped');
+      card.style.borderColor = 'var(--yellow)';
+      card.style.background = 'rgba(221,168,85,0.04)';
+      card.querySelector('.tool-status').textContent = 'skipped · missing credentials';
+      card.querySelector('.tool-badge').textContent = 'needs keys';
+      card.querySelector('.tool-badge').style.background = 'rgba(221,168,85,0.15)';
+      card.querySelector('.tool-badge').style.color = 'var(--yellow)';
+    }
+  }
+
+  function buildConfigToolCards() {
+    const grid = document.getElementById('configToolCards');
+    grid.innerHTML = '';
+
+    discoveredTools.forEach((tool) => {
+      const icon = getToolIcon(tool.tool_name);
+      const card = document.createElement('div');
+      card.className = 'tool-config-card';
+      card.dataset.toolName = tool.tool_name;
+
+      // If we already have results (revisiting step), show final state
+      const existing = findConfigResult(tool.tool_name);
+      if (existing) {
+        card.innerHTML = `
+          <div class="tool-icon">${icon}</div>
+          <div class="tool-info">
+            <div class="tool-name">${tool.tool_name}</div>
+            <div class="tool-status">...</div>
+          </div>
+          <div class="tool-badge">...</div>
+        `;
+        grid.appendChild(card);
+        applyCardState(card, existing.status, existing.missing);
+      } else {
+        card.innerHTML = `
+          <div class="tool-icon">${icon}</div>
+          <div class="tool-info">
+            <div class="tool-name">${tool.tool_name}</div>
+            <div class="tool-status">${tool.status === 'has_plaintext' ? 'plaintext credentials found' : tool.status === 'unconfigured' ? 'unconfigured · no .env' : 'pending'}</div>
+          </div>
+          <div class="tool-badge">waiting</div>
+        `;
+        grid.appendChild(card);
+      }
+    });
+
+    if (discoveredTools.length === 0) {
+      grid.innerHTML = '<p style="color:var(--text-dim); font-size:0.82rem">No tools discovered yet — complete Step 5 first.</p>';
+    }
+
+    // If configure already ran, show the continue button
+    if (configDone) {
+      document.getElementById('configureNext').style.display = 'flex';
+      document.getElementById('configureTerm').style.display = 'block';
+    }
+  }
+
+  function findConfigResult(toolName) {
+    const lower = toolName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [key, val] of Object.entries(configResults)) {
+      const keyLower = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (keyLower === lower || keyLower.includes(lower) || lower.includes(keyLower)) {
+        return val;
+      }
+    }
+    return null;
+  }
+
+  let configEventQueue = [];
+  let configProcessing = false;
+
+  window.runConfigure = function() {
+    // Reset state for a fresh run (allows re-running)
+    configDone = false;
+    configResults = {};
+    configEventQueue = [];
+    configProcessing = false;
+
+    buildConfigToolCards();
+
+    const proxy = document.getElementById('proxyEnabled').checked;
+    document.getElementById('configureBtn').disabled = true;
+    document.getElementById('configureBtn').textContent = 'Securing...';
+    document.getElementById('configureNext').style.display = 'none';
+    document.getElementById('configureTerm').style.display = 'block';
+    document.getElementById('configureTerm').innerHTML = '';
+
+    // Stagger the "securing" shimmer onto each card
+    const cards = document.querySelectorAll('.tool-config-card');
+    cards.forEach((card, i) => {
+      setTimeout(() => {
+        if (!card.classList.contains('governed') && !card.classList.contains('skipped')) {
+          card.classList.add('securing');
+          card.querySelector('.tool-status').textContent = 'securing · routing through governance proxy...';
+          card.querySelector('.tool-badge').textContent = 'securing';
+        }
+      }, i * 400);
+    });
+
+    // Delay sending so the user sees the shimmer animation start
+    setTimeout(() => {
+      send('configure', { proxy, proxy_port: 3000 });
+    }, cards.length * 400 + 300);
+  };
+
+  function queueConfigEvent(handler) {
+    configEventQueue.push(handler);
+    if (!configProcessing) processConfigQueue();
+  }
+
+  function processConfigQueue() {
+    if (configEventQueue.length === 0) { configProcessing = false; return; }
+    configProcessing = true;
+    const next = configEventQueue.shift();
+    next();
+    setTimeout(processConfigQueue, 800);
+  }
+
+  function markToolConfigured(data) {
+    const name = data.tool_name || '';
+    const status = data.status || 'governed';
+    const missing = data.missing || 0;
+
+    // Save result for state persistence
+    configResults[name] = { status, missing };
+
+    queueConfigEvent(() => {
+      const card = findCardForTool(name);
+      if (!card) return;
+      applyCardState(card, status, missing);
+    });
+  }
+
+  function showConfigureComplete(data) {
+    configDone = true;
+
+    queueConfigEvent(() => {
+      // Any cards still in "securing" that didn't get an event — mark as unknown (don't assume success)
+      document.querySelectorAll('.tool-config-card.securing').forEach(card => {
+        card.classList.remove('securing');
+        card.querySelector('.tool-status').textContent = 'no response — check manually';
+        card.querySelector('.tool-badge').textContent = '? unknown';
+        card.querySelector('.tool-badge').style.background = 'rgba(136,136,160,0.15)';
+        card.querySelector('.tool-badge').style.color = 'var(--text-dim)';
+      });
+
+      document.getElementById('configureBtn').textContent = 'Secure & Configure';
+      document.getElementById('configureBtn').disabled = false;
+      document.getElementById('configureNext').style.display = 'flex';
+
+      // Populate summary for step 8
+      populateSummary();
+    });
+  }
+
+  // ── Step 8: Launch Pad ──────────────────────────────────
+  function populateSummary() {
+    // Operator identity bar
+    if (genesisData) {
+      const name = genesisData.operator || '—';
+      document.getElementById('sumOperator').textContent = name;
+      document.getElementById('sumAvatarInitial').textContent = name.charAt(0).toUpperCase();
+      const pub = genesisData.genesis_public_key || '';
+      document.getElementById('sumGenesis').textContent = pub ? pub.substring(0, 16) + '...' : '—';
+
+      const modeLabels = { biometric: '🔒 Biometric', login_password: '🔑 Password', file_based: '📁 File' };
+      document.getElementById('sumSovereigntyBadge').textContent =
+        modeLabels[genesisData.sovereignty_mode] || genesisData.sovereignty_mode || '—';
+    }
+
+    const postureLabels = { local: '🏠 Local', cloud: '☁️ Cloud', mixed: '🔄 Mixed' };
+    let inferenceLabel = postureLabels[inferencePosture] || inferencePosture || '—';
+    document.getElementById('sumInferenceBadge').textContent = inferenceLabel;
+
+    document.getElementById('sumVaultBadge').textContent =
+      `🗝️ ${credentialsStored} key${credentialsStored !== 1 ? 's' : ''} encrypted`;
+
+    // Build launch pad grid
+    buildLaunchPad();
+  }
+
+  function buildLaunchPad() {
+    const grid = document.getElementById('launchpadGrid');
+    grid.innerHTML = '';
+
+    const toolIcons = {
+      'openmaictool': '🤖', 'pentagi': '🛡️', 'agent-zero': '🧠',
+      'autogpt': '⚡', 'langchain': '🔗', 'crewai': '👥',
+    };
+
+    discoveredTools.forEach(tool => {
+      const icon = toolIcons[tool.tool_name.toLowerCase()] || '🔧';
+      const tile = document.createElement('div');
+      tile.className = 'launchpad-tile';
+
+      // Use actual configure results if available
+      const result = configResults[tool.tool_name] || configResults[tool.tool_name.toLowerCase()];
+      const isGoverned = result && result.status === 'governed';
+      const isSkipped = result && result.status === 'skipped';
+      const isTimeout = result && result.status === 'unknown';
+      const hasGenesis = !!(genesisData && genesisData.genesis_public_key);
+
+      let statusText, badgeHtml, healthColor;
+      if (isGoverned && hasGenesis) {
+        statusText = 'governed · .env written';
+        badgeHtml = '<div class="governance-badge">✓ genesis-bound</div>';
+        healthColor = '';
+      } else if (isGoverned && !hasGenesis) {
+        statusText = 'configured · no genesis anchor';
+        badgeHtml = '<div class="governance-badge" style="background:rgba(221,168,85,0.15); color:var(--yellow)">unanchored</div>';
+        healthColor = 'background: var(--yellow)';
+      } else if (isSkipped) {
+        statusText = 'skipped · needs credentials';
+        badgeHtml = '<div class="governance-badge" style="background:rgba(221,168,85,0.15); color:var(--yellow)">needs setup</div>';
+        healthColor = 'background: var(--yellow)';
+      } else if (isTimeout) {
+        statusText = 'no response · check manually';
+        badgeHtml = '<div class="governance-badge" style="background:rgba(136,136,160,0.15); color:var(--text-dim)">unknown</div>';
+        healthColor = 'background: var(--text-dim)';
+      } else {
+        statusText = tool.status === 'has_plaintext' ? 'has credentials · not yet governed' : 'unconfigured';
+        badgeHtml = '<div class="governance-badge" style="background:rgba(136,136,160,0.15); color:var(--text-dim)">pending</div>';
+        healthColor = 'background: var(--text-dim)';
+      }
+
+      tile.innerHTML = `
+        <div class="tile-health" style="${healthColor}"></div>
+        <div class="tile-icon">${icon}</div>
+        <div class="tile-name">${tool.tool_name}</div>
+        <div class="tile-status">${statusText}</div>
+        ${badgeHtml}
+      `;
+      tile.onclick = () => {
+        alert('Dashboard for ' + tool.tool_name + ' coming soon');
+      };
+      grid.appendChild(tile);
+    });
+
+    // ZeroPoint system tile — only claim "core" if genesis is established
+    const zpTile = document.createElement('div');
+    zpTile.className = 'launchpad-tile';
+    const zpHasGenesis = !!(genesisData && genesisData.genesis_public_key);
+    zpTile.innerHTML = `
+      <div class="tile-health" style="${zpHasGenesis ? '' : 'background: var(--yellow)'}"></div>
+      <div class="tile-icon" style="background:rgba(126,184,218,0.15)">⚙️</div>
+      <div class="tile-name">ZeroPoint</div>
+      <div class="tile-status">${zpHasGenesis ? 'governance engine · genesis active' : 'governance engine · no genesis'}</div>
+      <div class="governance-badge" style="background:rgba(126,184,218,0.1); color:var(--accent)">${zpHasGenesis ? 'core' : 'incomplete'}</div>
+    `;
+    zpTile.onclick = () => {
+      window.open('/api/v1/status', '_blank');
+    };
+    grid.appendChild(zpTile);
+
+    // Add new tool tile
+    const addTile = document.createElement('div');
+    addTile.className = 'launchpad-tile add-tile';
+    addTile.innerHTML = `
+      <div class="tile-icon">+</div>
+      <div class="tile-name">Add Tool</div>
+      <div class="tile-status">zp configure</div>
+    `;
+    addTile.onclick = () => {
+      // Future: open tool discovery flow
+      alert('Run: zp configure auto ~/projects');
+    };
+    grid.appendChild(addTile);
+  }
+
+  // ── Narration (auto-play) ────────────────────────────────
+  // Narration files expected at /assets/narration/onboard/
+  const stepNarrations = {
+    0: 'onboard-welcome.mp3',
+    1: 'onboard-sovereignty.mp3',
+    2: 'onboard-genesis.mp3',
+    3: 'onboard-vault.mp3',
+    4: 'onboard-inference.mp3',
+    5: 'onboard-discover.mp3',
+    6: 'onboard-credentials.mp3',
+    7: 'onboard-configure.mp3',
+    8: 'onboard-complete.mp3',
+  };
+
+  const stepLabels = {
+    0: 'The old model vs. the new model',
+    1: 'Why your body is the credential',
+    2: 'What it means to create your own root of trust',
+    3: 'How your vault protects your credentials',
+    4: 'Where your inference runs — and why it matters',
+    5: 'How tool discovery works',
+    6: 'Why local encryption changes everything',
+    7: 'What governance actually means',
+    8: 'What you\'ve built — and what comes next',
+  };
+
+  let isMuted = false;
+  let progressInterval = null;
+
+  function showNarrationBar() {
+    const bar = document.getElementById('narrationBar');
+    // Insert bar at the top of the active step, right after step-header
+    const step = document.getElementById('step-' + currentStep);
+    if (step) {
+      const header = step.querySelector('.step-header');
+      if (header && header.nextSibling) {
+        step.insertBefore(bar, header.nextSibling);
+      } else {
+        step.prepend(bar);
+      }
+    }
+    bar.style.display = 'flex';
+    document.getElementById('narrateLabel').textContent = stepLabels[currentStep] || 'Narrating...';
+  }
+
+  function updateProgress() {
+    if (!narrationAudio || !narrationAudio.duration) return;
+    const pct = (narrationAudio.currentTime / narrationAudio.duration) * 100;
+    document.getElementById('narrateProgress').style.width = pct + '%';
+  }
+
+  function startNarration() {
+    const file = stepNarrations[currentStep];
+    if (!file || isMuted) {
+      // Still show the bar even if muted, so user can unmute
+      showNarrationBar();
+      if (isMuted) {
+        document.getElementById('narrateToggle').innerHTML = '&#9654;';
+        document.getElementById('narrationBar').classList.remove('playing');
+      }
+      return;
+    }
+
+    if (narrationAudio) {
+      narrationAudio.pause();
+      clearInterval(progressInterval);
+    }
+
+    showNarrationBar();
+    document.getElementById('narrateProgress').style.width = '0%';
+
+    narrationAudio = new Audio(`/assets/narration/onboard/${file}`);
+    narrationAudio.play().catch(() => {});
+
+    narrationAudio.onended = () => {
+      isNarrating = false;
+      clearInterval(progressInterval);
+      document.getElementById('narrateProgress').style.width = '100%';
+      document.getElementById('narrateToggle').innerHTML = '&#9654;';
+      document.getElementById('narrationBar').classList.remove('playing');
+    };
+
+    narrationAudio.onerror = () => {
+      // Audio file not found — hide bar gracefully
+      document.getElementById('narrationBar').style.display = 'none';
+      isNarrating = false;
+    };
+
+    isNarrating = true;
+    document.getElementById('narrateToggle').innerHTML = '&#10074;&#10074;';
+    document.getElementById('narrationBar').classList.add('playing');
+
+    progressInterval = setInterval(updateProgress, 300);
+  }
+
+  function stopNarration() {
+    if (narrationAudio) {
+      narrationAudio.pause();
+      narrationAudio.currentTime = 0;
+    }
+    clearInterval(progressInterval);
+    isNarrating = false;
+    const prog = document.getElementById('narrateProgress');
+    const tog = document.getElementById('narrateToggle');
+    const bar = document.getElementById('narrationBar');
+    if (prog) prog.style.width = '0%';
+    if (tog) tog.innerHTML = '&#9654;';
+    if (bar) bar.classList.remove('playing');
+  }
+
+  window.toggleNarration = function() {
+    if (isNarrating) {
+      stopNarration();
+    } else {
+      startNarration();
+    }
+  };
+
+  window.toggleMute = function() {
+    isMuted = !isMuted;
+    const muteBtn = document.getElementById('narrateMute');
+    if (isMuted) {
+      muteBtn.innerHTML = '&#x1f507;';
+      muteBtn.classList.add('muted');
+      muteBtn.title = 'Unmute narration';
+      stopNarration();
+    } else {
+      muteBtn.innerHTML = '&#x1f50a;';
+      muteBtn.classList.remove('muted');
+      muteBtn.title = 'Mute narration';
+      startNarration();
+    }
+  };
+
+  // ── Init ────────────────────────────────────────────────
+  connect();
+
+  // Auto-play Step 0 narration on first user interaction
+  // (browsers require a user gesture before playing audio)
+  function autoplayOnFirstClick() {
+    startNarration();
+    document.removeEventListener('click', autoplayOnFirstClick);
+  }
+  document.addEventListener('click', autoplayOnFirstClick);
+
+})();
+</script>
+
+</body>
+</html>

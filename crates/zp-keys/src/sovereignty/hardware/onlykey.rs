@@ -9,7 +9,7 @@
 // Dependencies: feature-gated behind `hw-onlykey`
 // - `hidapi` for raw USB HID communication
 
-use super::super::{ProviderCapability, SovereigntyMode, SovereigntyProvider, EnrollmentResult};
+use super::super::{EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;
 
 /// OnlyKey sovereignty provider.

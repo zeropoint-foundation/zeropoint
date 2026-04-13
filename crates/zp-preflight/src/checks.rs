@@ -4,7 +4,7 @@
 //! Checks shell out to system tools rather than linking native crates —
 //! keeping the binary small and compilation fast.
 
-use crate::platform::{self, install_cmd, Os, PackageManager, Platform};
+use crate::platform::{self, install_cmd, Os, Platform};
 use crate::report::CheckResult;
 use std::net::TcpListener;
 use std::path::PathBuf;
@@ -28,22 +28,25 @@ pub fn check_rust_toolchain(plat: &Platform) -> CheckResult {
         ),
         Some(version_str) => {
             // Parse "rustc 1.82.0 (f6e511eec 2024-10-15)"
-            let version = version_str
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or("0.0.0");
+            let version = version_str.split_whitespace().nth(1).unwrap_or("0.0.0");
             let parts: Vec<u32> = version
                 .split('.')
                 .take(2)
                 .filter_map(|s| s.parse().ok())
                 .collect();
-            let (major, minor) = (parts.first().copied().unwrap_or(0), parts.get(1).copied().unwrap_or(0));
+            let (major, minor) = (
+                parts.first().copied().unwrap_or(0),
+                parts.get(1).copied().unwrap_or(0),
+            );
 
             if (major, minor) >= MIN_RUST_VERSION {
                 CheckResult::pass(
                     "rust-toolchain",
                     "Rust compiler (rustc)",
-                    format!("rustc {version} (>= {}.{} required)", MIN_RUST_VERSION.0, MIN_RUST_VERSION.1),
+                    format!(
+                        "rustc {version} (>= {}.{} required)",
+                        MIN_RUST_VERSION.0, MIN_RUST_VERSION.1
+                    ),
                 )
             } else {
                 CheckResult::fail(
@@ -71,7 +74,10 @@ pub fn check_wasm_target(_plat: &Platform) -> CheckResult {
             "rustup target add wasm32-unknown-unknown",
         ),
         Some(targets) => {
-            if targets.lines().any(|l| l.trim() == "wasm32-unknown-unknown") {
+            if targets
+                .lines()
+                .any(|l| l.trim() == "wasm32-unknown-unknown")
+            {
                 CheckResult::pass(
                     "wasm-target",
                     "WASM compilation target",
@@ -406,9 +412,7 @@ fn tcp_connect(host: &str, port: u16) -> bool {
     addr.to_socket_addrs()
         .ok()
         .and_then(|mut addrs| addrs.next())
-        .map(|addr| {
-            std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(5)).is_ok()
-        })
+        .map(|addr| std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(5)).is_ok())
         .unwrap_or(false)
 }
 
@@ -432,7 +436,7 @@ fn dirs_home() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("/tmp"))
 }
 
-fn disk_free_mb(path: &PathBuf) -> Option<u64> {
+fn disk_free_mb(path: &std::path::Path) -> Option<u64> {
     // Use `df` — available on all Unix-like systems
     let path_str = path.to_string_lossy();
     let output = platform::run_stdout("df", &["-m", &path_str])?;

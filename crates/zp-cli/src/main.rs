@@ -12,9 +12,9 @@ mod policy_commands;
 mod secure;
 
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 use zp_core::{OperatorIdentity, TrustTier};
 use zp_pipeline::{MeshConfig, Pipeline, PipelineConfig};
@@ -463,7 +463,9 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     eprintln!("Failed to launch zp-server: {}", e);
                     eprintln!("Ensure zp-server is installed and on your PATH,");
-                    eprintln!("or rebuild zp-cli with: cargo build -p zp-cli --features embedded-server");
+                    eprintln!(
+                        "or rebuild zp-cli with: cargo build -p zp-cli --features embedded-server"
+                    );
                     std::process::exit(1);
                 }
             }
@@ -536,13 +538,17 @@ async fn main() -> anyhow::Result<()> {
                     eprintln!("  {}", e);
                     eprintln!();
                     if cfg!(target_os = "macos") {
-                        eprintln!("  On macOS: Ensure Keychain Access is available and not locked.");
+                        eprintln!(
+                            "  On macOS: Ensure Keychain Access is available and not locked."
+                        );
                         eprintln!("  If you denied Keychain access, open Keychain Access → find");
                         eprintln!("  'zeropoint-genesis' → delete it, then re-run `zp init`.");
                     } else if cfg!(target_os = "linux") {
                         eprintln!("  On Linux: Requires a running Secret Service (GNOME Keyring, KWallet).");
                         eprintln!("  Install: `sudo apt install gnome-keyring` or `sudo dnf install gnome-keyring`");
-                        eprintln!("  For headless/CI: set SECRETS_MASTER_KEY env var (64 hex chars).");
+                        eprintln!(
+                            "  For headless/CI: set SECRETS_MASTER_KEY env var (64 hex chars)."
+                        );
                     }
                     eprintln!();
                     std::process::exit(1);
@@ -590,15 +596,17 @@ async fn main() -> anyhow::Result<()> {
         let vault_path = commands::resolve_zp_home().join("vault.json");
 
         let exit_code = match cmd {
-            ConfigureCmd::Tool { path, name, dry_run } => {
-                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-                    Ok(vault) => configure::run_tool(path, name, *dry_run, &vault, configure_policy),
-                    Err(e) => {
-                        eprintln!("Error loading vault: {}", e);
-                        1
-                    }
+            ConfigureCmd::Tool {
+                path,
+                name,
+                dry_run,
+            } => match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                Ok(vault) => configure::run_tool(path, name, *dry_run, &vault, configure_policy),
+                Err(e) => {
+                    eprintln!("Error loading vault: {}", e);
+                    1
                 }
-            }
+            },
             ConfigureCmd::Providers => {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(vault) => configure::run_providers(&vault),
@@ -608,23 +616,25 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            ConfigureCmd::VaultAdd { provider, field, value } => {
-                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-                    Ok(mut vault) => {
-                        let val = value.clone().unwrap_or_else(|| {
-                            eprint!("Enter value for {}/{}: ", provider, field);
-                            let mut input = String::new();
-                            std::io::stdin().read_line(&mut input).unwrap_or(0);
-                            input.trim().to_string()
-                        });
-                        configure::run_vault_add(&mut vault, provider, field, &val, &vault_path)
-                    }
-                    Err(e) => {
-                        eprintln!("Error loading vault: {}", e);
-                        1
-                    }
+            ConfigureCmd::VaultAdd {
+                provider,
+                field,
+                value,
+            } => match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                Ok(mut vault) => {
+                    let val = value.clone().unwrap_or_else(|| {
+                        eprint!("Enter value for {}/{}: ", provider, field);
+                        let mut input = String::new();
+                        std::io::stdin().read_line(&mut input).unwrap_or(0);
+                        input.trim().to_string()
+                    });
+                    configure::run_vault_add(&mut vault, provider, field, &val, &vault_path)
                 }
-            }
+                Err(e) => {
+                    eprintln!("Error loading vault: {}", e);
+                    1
+                }
+            },
             ConfigureCmd::Scan { path, depth } => {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(vault) => configure::run_scan(path, &vault, *depth),
@@ -634,15 +644,35 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            ConfigureCmd::Auto { path, depth, dry_run, overwrite, proxy, proxy_port, validate } => {
+            ConfigureCmd::Auto {
+                path,
+                depth,
+                dry_run,
+                overwrite,
+                proxy,
+                proxy_port,
+                validate,
+            } => {
                 let proxy_opt = if *proxy { Some(*proxy_port) } else { None };
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(vault) => {
-                        let exit = configure::run_auto(path, &vault, configure_policy, *depth, *dry_run, *overwrite, proxy_opt);
+                        let exit = configure::run_auto(
+                            path,
+                            &vault,
+                            configure_policy,
+                            *depth,
+                            *dry_run,
+                            *overwrite,
+                            proxy_opt,
+                        );
                         if *validate && exit == 0 && !*dry_run {
                             println!();
                             let v_exit = configure::run_validate(&vault, None, false);
-                            if v_exit != 0 { v_exit } else { exit }
+                            if v_exit != 0 {
+                                v_exit
+                            } else {
+                                exit
+                            }
                         } else {
                             exit
                         }
@@ -653,9 +683,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            ConfigureCmd::Manifest { path } => {
-                configure::run_manifest(path)
-            }
+            ConfigureCmd::Manifest { path } => configure::run_manifest(path),
             ConfigureCmd::Validate { provider, json } => {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(vault) => configure::run_validate(&vault, provider.as_deref(), *json),
@@ -670,7 +698,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Onboard — interactive credential wizard, no pipeline needed
-    if let Some(Commands::Onboard { path, depth, proxy_port }) = &args.command {
+    if let Some(Commands::Onboard {
+        path,
+        depth,
+        proxy_port,
+    }) = &args.command
+    {
         let home_zp = commands::resolve_zp_home();
         let keyring = zp_keys::Keyring::open(home_zp.join("keys")).ok();
         let resolved = match &keyring {
@@ -693,13 +726,14 @@ async fn main() -> anyhow::Result<()> {
         };
         let padded_key = *resolved.key;
         let vault_path = home_zp.join("vault.json");
-        let mut vault = match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Error loading vault: {}", e);
-                std::process::exit(1);
-            }
-        };
+        let mut vault =
+            match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("Error loading vault: {}", e);
+                    std::process::exit(1);
+                }
+            };
         let config = onboard::OnboardConfig {
             scan_path: path.clone(),
             depth: *depth,
@@ -710,7 +744,14 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Init — bootstrap a new ZeroPoint environment, no pipeline needed
-    if let Some(Commands::Init { name, dir, sovereignty, wizard, config: genesis_config }) = &args.command {
+    if let Some(Commands::Init {
+        name,
+        dir,
+        sovereignty,
+        wizard,
+        config: genesis_config,
+    }) = &args.command
+    {
         let operator_name = name.clone().unwrap_or_else(|| {
             std::env::var("USER")
                 .or_else(|_| std::env::var("USERNAME"))
@@ -723,7 +764,10 @@ async fn main() -> anyhow::Result<()> {
         // ── Tier C: Headless (from TOML config file) ──
         if let Some(config_path) = genesis_config {
             if !config_path.exists() {
-                eprintln!("\x1b[31m✗\x1b[0m Genesis config not found: {}", config_path.display());
+                eprintln!(
+                    "\x1b[31m✗\x1b[0m Genesis config not found: {}",
+                    config_path.display()
+                );
                 std::process::exit(1);
             }
             let toml_str = match std::fs::read_to_string(config_path) {
@@ -741,13 +785,15 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             };
-            let cfg_name = parsed.get("operator")
+            let cfg_name = parsed
+                .get("operator")
                 .and_then(|v: &toml::Value| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| operator_name.clone());
-            let cfg_sov = parsed.get("sovereignty")
+            let cfg_sov = parsed
+                .get("sovereignty")
                 .and_then(|v: &toml::Value| v.as_str())
-                .map(|s| zp_keys::SovereigntyMode::from_onboard_str(s))
+                .map(zp_keys::SovereigntyMode::from_onboard_str)
                 .unwrap_or_else(zp_keys::SovereigntyMode::auto_detect);
 
             let init_config = init::InitConfig {
@@ -773,7 +819,13 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("  Available sovereignty providers:");
             for (i, cap) in available.iter().enumerate() {
                 let marker = if i == 0 { " (recommended)" } else { "" };
-                eprintln!("    [{}] {} — {}{}", i + 1, cap.mode.display_name(), cap.description, marker);
+                eprintln!(
+                    "    [{}] {} — {}{}",
+                    i + 1,
+                    cap.mode.display_name(),
+                    cap.description,
+                    marker
+                );
             }
             eprint!("  Choose [1]: ");
             let mut choice = String::new();
@@ -876,7 +928,9 @@ async fn main() -> anyhow::Result<()> {
             println!("audit_db:        {}", db_path.display());
             println!("receipts_checked: {}", report.receipts_checked);
             if report.violations().is_empty() {
-                println!("result:          \x1b[32mACCEPT\x1b[0m — chain parses against the v0 grammar");
+                println!(
+                    "result:          \x1b[32mACCEPT\x1b[0m — chain parses against the v0 grammar"
+                );
             } else {
                 println!(
                     "result:          \x1b[31mREJECT\x1b[0m — {} violation(s)",
@@ -885,12 +939,7 @@ async fn main() -> anyhow::Result<()> {
                 println!();
                 println!("violations:");
                 for v in report.violations() {
-                    println!(
-                        "  [{}] entry={} {}",
-                        v.rule,
-                        v.entry_id,
-                        v.description
-                    );
+                    println!("  [{}] entry={} {}", v.rule, v.entry_id, v.description);
                 }
             }
         }
@@ -904,27 +953,28 @@ async fn main() -> anyhow::Result<()> {
                 let cfg = zp_config::ConfigResolver::resolve_standard();
                 println!("{}", cfg.show());
             }
-            CfgCmd::Set { key, value } => {
-                match zp_config::resolve::config_set(key, value) {
-                    Ok(()) => {
-                        println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
-                        println!("  Written to ~/.zeropoint/config.toml");
-                    }
-                    Err(e) => {
-                        eprintln!("\x1b[31m✗\x1b[0m {}", e);
-                        std::process::exit(1);
-                    }
+            CfgCmd::Set { key, value } => match zp_config::resolve::config_set(key, value) {
+                Ok(()) => {
+                    println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
+                    println!("  Written to ~/.zeropoint/config.toml");
                 }
-            }
+                Err(e) => {
+                    eprintln!("\x1b[31m✗\x1b[0m {}", e);
+                    std::process::exit(1);
+                }
+            },
             CfgCmd::Validate { json } => {
                 let cfg = zp_config::ConfigResolver::resolve_standard();
                 let errors = zp_config::validate(&cfg);
                 if *json {
                     let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
-                    println!("{}", serde_json::json!({
-                        "valid": errors.is_empty(),
-                        "errors": msgs
-                    }));
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "valid": errors.is_empty(),
+                            "errors": msgs
+                        })
+                    );
                 } else if errors.is_empty() {
                     println!("\x1b[32m✓\x1b[0m Configuration is valid");
                 } else {
@@ -1012,9 +1062,15 @@ async fn main() -> anyhow::Result<()> {
         if data.exists() {
             let perms = {
                 #[cfg(unix)]
-                { std::fs::metadata(data).map(|m| format!("{:o}", m.permissions().mode() & 0o777)).unwrap_or_else(|_| "?".into()) }
+                {
+                    std::fs::metadata(data)
+                        .map(|m| format!("{:o}", m.permissions().mode() & 0o777))
+                        .unwrap_or_else(|_| "?".into())
+                }
                 #[cfg(not(unix))]
-                { "n/a".to_string() }
+                {
+                    "n/a".to_string()
+                }
             };
             checks.push(Check {
                 label: "Data directory".into(),
@@ -1047,7 +1103,7 @@ async fn main() -> anyhow::Result<()> {
                     label: format!("Port {port}"),
                     status: "warn",
                     detail: "in use (server may already be running)".into(),
-                    fix: format!("Kill the process or: zp config set port <other>"),
+                    fix: "Kill the process or: zp config set port <other>".to_string(),
                 });
             }
         }
@@ -1062,7 +1118,10 @@ async fn main() -> anyhow::Result<()> {
                             checks.push(Check {
                                 label: "Audit chain".into(),
                                 status: "pass",
-                                detail: format!("{} entries, integrity verified", report.receipts_checked),
+                                detail: format!(
+                                    "{} entries, integrity verified",
+                                    report.receipts_checked
+                                ),
                                 fix: String::new(),
                             });
                         } else {
@@ -1098,20 +1157,26 @@ async fn main() -> anyhow::Result<()> {
         let warn_count = checks.iter().filter(|c| c.status == "warn").count();
 
         if *json {
-            let entries: Vec<serde_json::Value> = checks.iter().map(|c| {
-                serde_json::json!({
-                    "label": c.label,
-                    "status": c.status,
-                    "detail": c.detail,
-                    "fix": c.fix
+            let entries: Vec<serde_json::Value> = checks
+                .iter()
+                .map(|c| {
+                    serde_json::json!({
+                        "label": c.label,
+                        "status": c.status,
+                        "detail": c.detail,
+                        "fix": c.fix
+                    })
                 })
-            }).collect();
-            println!("{}", serde_json::json!({
-                "checks": entries,
-                "failures": fail_count,
-                "warnings": warn_count,
-                "healthy": fail_count == 0
-            }));
+                .collect();
+            println!(
+                "{}",
+                serde_json::json!({
+                    "checks": entries,
+                    "failures": fail_count,
+                    "warnings": warn_count,
+                    "healthy": fail_count == 0
+                })
+            );
         } else {
             println!();
             println!("  \x1b[1mzp doctor\x1b[0m");
@@ -1227,12 +1292,12 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Policy(_)) => unreachable!(),    // handled above
         Some(Commands::Configure(_)) => unreachable!(), // handled above
-        Some(Commands::Init { .. }) => unreachable!(),     // handled above
+        Some(Commands::Init { .. }) => unreachable!(),  // handled above
         Some(Commands::Onboard { .. }) => unreachable!(), // handled above
-        Some(Commands::Keys(_)) => unreachable!(),       // handled above
+        Some(Commands::Keys(_)) => unreachable!(),      // handled above
         Some(Commands::Gate(_)) => unreachable!(),      // handled above
         Some(Commands::Verify { .. }) => unreachable!(), // handled above
-        Some(Commands::Cfg(_)) => unreachable!(),        // handled above
+        Some(Commands::Cfg(_)) => unreachable!(),       // handled above
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,

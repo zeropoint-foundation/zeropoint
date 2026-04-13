@@ -26,8 +26,7 @@ pub use lifecycle::{
 };
 pub use promotion::PromotionEngine;
 pub use quarantine::{
-    BulkQuarantineResult, QuarantineReason, QuarantineRecord, QuarantineStore,
-    ReinstatementResult,
+    BulkQuarantineResult, QuarantineReason, QuarantineRecord, QuarantineStore, ReinstatementResult,
 };
 pub use sharing::{
     can_share, format_for_delegation, merge_memories, MergeResult, SharedMemory, SharingContext,

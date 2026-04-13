@@ -136,7 +136,11 @@ impl InternalTokenAuthority {
         let mut key = [0u8; 32];
         // Use blake3 hash of current time + random bytes as key material.
         // In production, this would use a proper CSPRNG.
-        let seed = format!("{}-{}", Utc::now().timestamp_nanos_opt().unwrap_or(0), std::process::id());
+        let seed = format!(
+            "{}-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or(0),
+            std::process::id()
+        );
         let hash = blake3::hash(seed.as_bytes());
         key.copy_from_slice(hash.as_bytes());
 
@@ -160,7 +164,8 @@ impl InternalTokenAuthority {
         let issued_at = Utc::now();
         let expires_at = issued_at + Duration::seconds(TOKEN_LIFETIME_SECS);
 
-        let signature = self.compute_signature(&token_id, &scope, requestor, &issued_at, &expires_at);
+        let signature =
+            self.compute_signature(&token_id, &scope, requestor, &issued_at, &expires_at);
 
         InternalCapabilityToken {
             token_id,

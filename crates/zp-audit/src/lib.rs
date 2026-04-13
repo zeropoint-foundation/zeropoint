@@ -19,8 +19,8 @@ pub use collective_audit::{
     PeerAuditAttestation, MAX_ENTRIES_PER_RESPONSE,
 };
 pub use reconstitute::{
-    compute_blast_radius, BlastRadiusReport, ChainEntry, ReconstitutedState,
-    ReconstitutionAnomaly, ReconstitutionConfig, ReconstitutionEngine,
+    compute_blast_radius, BlastRadiusReport, ChainEntry, ReconstitutedState, ReconstitutionAnomaly,
+    ReconstitutionConfig, ReconstitutionEngine,
 };
 pub use recovery::{
     Checkpoint, RecoveredState, RecoveryConfig, RecoveryEngine, RecoveryReceipt, ShutdownMarker,

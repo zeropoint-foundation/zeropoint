@@ -30,7 +30,8 @@ pub async fn handle_detect(state: &mut OnboardState) -> Vec<OnboardEvent> {
     // Terminal output summarizing what was found
     let available_providers: Vec<&zp_keys::ProviderCapability> =
         providers.iter().filter(|p| p.available).collect();
-    let hw_wallets: Vec<&zp_keys::ProviderCapability> = available_providers.iter()
+    let hw_wallets: Vec<&zp_keys::ProviderCapability> = available_providers
+        .iter()
         .filter(|p| p.mode.category() == zp_keys::SovereigntyCategory::HardwareWallet)
         .copied()
         .collect();
@@ -39,9 +40,19 @@ pub async fn handle_detect(state: &mut OnboardState) -> Vec<OnboardEvent> {
         "Platform: {} | Biometric: {} | Credential store: {} | HW wallets: {}",
         platform,
         bio_type.as_deref().unwrap_or("none"),
-        if bio.credential_store_available { "available" } else { "unavailable" },
-        if hw_wallets.is_empty() { "none".to_string() } else {
-            hw_wallets.iter().map(|p| p.mode.display_name()).collect::<Vec<_>>().join(", ")
+        if bio.credential_store_available {
+            "available"
+        } else {
+            "unavailable"
+        },
+        if hw_wallets.is_empty() {
+            "none".to_string()
+        } else {
+            hw_wallets
+                .iter()
+                .map(|p| p.mode.display_name())
+                .collect::<Vec<_>>()
+                .join(", ")
         }
     )));
 
@@ -49,21 +60,24 @@ pub async fn handle_detect(state: &mut OnboardState) -> Vec<OnboardEvent> {
     state.step = 1;
 
     // Emit full provider capabilities for the new UI
-    let providers_json: Vec<serde_json::Value> = providers.iter().map(|p| {
-        serde_json::json!({
-            "mode": p.mode.to_string(),
-            "display_name": p.mode.display_name(),
-            "category": format!("{:?}", p.mode.category()),
-            "available": p.available,
-            "description": p.description,
-            "requires_enrollment": p.requires_enrollment,
-            "detail": p.detail,
-            "requires_hardware": p.mode.requires_hardware(),
-            "requires_external_device": p.mode.requires_external_device(),
-            "implementation_status": p.implementation_status,
-            "ceremony_ready": p.mode.is_ceremony_ready(),
+    let providers_json: Vec<serde_json::Value> = providers
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "mode": p.mode.to_string(),
+                "display_name": p.mode.display_name(),
+                "category": format!("{:?}", p.mode.category()),
+                "available": p.available,
+                "description": p.description,
+                "requires_enrollment": p.requires_enrollment,
+                "detail": p.detail,
+                "requires_hardware": p.mode.requires_hardware(),
+                "requires_external_device": p.mode.requires_external_device(),
+                "implementation_status": p.implementation_status,
+                "ceremony_ready": p.mode.is_ceremony_ready(),
+            })
         })
-    }).collect();
+        .collect();
 
     events.push(OnboardEvent::new(
         "platform",
@@ -104,7 +118,10 @@ pub async fn handle_detect_local_inference(state: &mut OnboardState) -> Vec<Onbo
 
     // ── System resource detection ─────────────────────────────
     let system = super::inference::detect_system_resources();
-    events.push(OnboardEvent::new("system_resources", serde_json::to_value(&system).unwrap_or_default()));
+    events.push(OnboardEvent::new(
+        "system_resources",
+        serde_json::to_value(&system).unwrap_or_default(),
+    ));
 
     // ── Local runtime detection ───────────────────────────────
     let client = reqwest::Client::new();
@@ -186,7 +203,11 @@ async fn detect_ollama_runtime(
         .and_then(|m| m.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .filter_map(|m| {
+                    m.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -197,11 +218,11 @@ async fn detect_ollama_runtime(
         .send()
         .await
     {
-        Ok(vresp) => vresp
-            .json::<serde_json::Value>()
-            .await
-            .ok()
-            .and_then(|v| v.get("version").and_then(|s| s.as_str()).map(|s| s.to_string())),
+        Ok(vresp) => vresp.json::<serde_json::Value>().await.ok().and_then(|v| {
+            v.get("version")
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_string())
+        }),
         Err(_) => None,
     };
 

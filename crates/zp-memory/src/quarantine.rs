@@ -32,7 +32,10 @@ pub enum QuarantineReason {
     /// Operator-directed quarantine during investigation.
     OperatorDirected { explanation: String },
     /// Automated quarantine triggered by anomaly detection.
-    AnomalyDetected { detector_id: String, anomaly_type: String },
+    AnomalyDetected {
+        detector_id: String,
+        anomaly_type: String,
+    },
     /// Memory content conflicts with a higher-trust source.
     TruthConflict { conflicting_memory_id: String },
 }
@@ -41,7 +44,11 @@ impl std::fmt::Display for QuarantineReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             QuarantineReason::SourceKeyRevoked { agent_key } => {
-                write!(f, "source_key_revoked({})", &agent_key[..8.min(agent_key.len())])
+                write!(
+                    f,
+                    "source_key_revoked({})",
+                    &agent_key[..8.min(agent_key.len())]
+                )
             }
             QuarantineReason::OperatorDirected { explanation } => {
                 write!(f, "operator_directed({})", explanation)
@@ -49,7 +56,9 @@ impl std::fmt::Display for QuarantineReason {
             QuarantineReason::AnomalyDetected { anomaly_type, .. } => {
                 write!(f, "anomaly_detected({})", anomaly_type)
             }
-            QuarantineReason::TruthConflict { conflicting_memory_id } => {
+            QuarantineReason::TruthConflict {
+                conflicting_memory_id,
+            } => {
                 write!(f, "truth_conflict({})", conflicting_memory_id)
             }
         }
@@ -155,7 +164,7 @@ impl QuarantineStore {
     pub fn is_quarantined(&self, memory_id: &str) -> bool {
         self.quarantines
             .get(memory_id)
-            .map_or(false, |r| !r.reinstated)
+            .is_some_and(|r| !r.reinstated)
     }
 
     /// Get the quarantine record for a memory (if quarantined).
@@ -169,11 +178,7 @@ impl QuarantineStore {
         memory: &mut MemoryEntry,
         reason: QuarantineReason,
     ) -> QuarantineRecord {
-        let receipt = generate_quarantine_receipt(
-            &memory.id,
-            &reason,
-            &self.operator_id,
-        );
+        let receipt = generate_quarantine_receipt(&memory.id, &reason, &self.operator_id);
 
         let record = QuarantineRecord {
             id: format!("quar-{}", uuid::Uuid::now_v7()),
@@ -278,10 +283,7 @@ impl QuarantineStore {
     /// Reinstate a quarantined memory, restoring it to its original stage.
     ///
     /// Creates a ReinstateReceipt linking back to the quarantine receipt.
-    pub fn reinstate(
-        &mut self,
-        memory: &mut MemoryEntry,
-    ) -> Result<ReinstatementResult, String> {
+    pub fn reinstate(&mut self, memory: &mut MemoryEntry) -> Result<ReinstatementResult, String> {
         let record = self
             .quarantines
             .get(&memory.id)
@@ -391,7 +393,11 @@ fn generate_bulk_quarantine_receipt(
             observation_type: "bulk_quarantine".to_string(),
             observer_id: operator_id.to_string(),
             confidence: Some(1.0),
-            tags: vec!["quarantine".to_string(), "bulk".to_string(), "memory".to_string()],
+            tags: vec![
+                "quarantine".to_string(),
+                "bulk".to_string(),
+                "memory".to_string(),
+            ],
         })
         .extension(
             "zp.quarantine.reason",
@@ -401,14 +407,8 @@ fn generate_bulk_quarantine_receipt(
             "zp.quarantine.source_observation_id",
             serde_json::Value::String(source_observation_id.to_string()),
         )
-        .extension(
-            "zp.quarantine.count",
-            serde_json::json!(memory_ids.len()),
-        )
-        .extension(
-            "zp.quarantine.memory_ids",
-            serde_json::json!(memory_ids),
-        )
+        .extension("zp.quarantine.count", serde_json::json!(memory_ids.len()))
+        .extension("zp.quarantine.memory_ids", serde_json::json!(memory_ids))
         .finalize()
 }
 
@@ -530,9 +530,18 @@ mod tests {
         store.register_source("mem-3", "obs-clean");
 
         let mut memories = HashMap::new();
-        memories.insert("mem-1".to_string(), make_memory("mem-1", MemoryStage::Trusted));
-        memories.insert("mem-2".to_string(), make_memory("mem-2", MemoryStage::Remembered));
-        memories.insert("mem-3".to_string(), make_memory("mem-3", MemoryStage::Observed));
+        memories.insert(
+            "mem-1".to_string(),
+            make_memory("mem-1", MemoryStage::Trusted),
+        );
+        memories.insert(
+            "mem-2".to_string(),
+            make_memory("mem-2", MemoryStage::Remembered),
+        );
+        memories.insert(
+            "mem-3".to_string(),
+            make_memory("mem-3", MemoryStage::Observed),
+        );
 
         let result = store.quarantine_by_source(
             "obs-compromised",
@@ -556,8 +565,14 @@ mod tests {
         store.register_source("mem-2", "obs-compromised");
 
         let mut memories = HashMap::new();
-        memories.insert("mem-1".to_string(), make_memory("mem-1", MemoryStage::Trusted));
-        memories.insert("mem-2".to_string(), make_memory("mem-2", MemoryStage::Observed));
+        memories.insert(
+            "mem-1".to_string(),
+            make_memory("mem-1", MemoryStage::Trusted),
+        );
+        memories.insert(
+            "mem-2".to_string(),
+            make_memory("mem-2", MemoryStage::Observed),
+        );
 
         // Quarantine mem-1 individually first.
         let mut mem1 = memories.get("mem-1").unwrap().clone();

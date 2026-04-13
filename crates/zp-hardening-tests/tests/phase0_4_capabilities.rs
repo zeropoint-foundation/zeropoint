@@ -25,7 +25,10 @@ use zp_hardening_tests::payloads::authz;
 async fn test_authz_vuln_05_unauth_capability_grant() {
     let app = TestApp::new().await;
     let (status, _body) = app
-        .post_json("/api/v1/capabilities/grant", authz::unauth_capability_grant())
+        .post_json(
+            "/api/v1/capabilities/grant",
+            authz::unauth_capability_grant(),
+        )
         .await;
 
     assert!(
@@ -44,7 +47,10 @@ async fn test_authz_vuln_05_overly_broad_grant() {
     // operator-level authority (Tier 2+). A regular session token
     // (which is Tier 1) should not be sufficient for this scope.
     let (status, _body) = app
-        .post_json("/api/v1/capabilities/grant", authz::unauth_capability_grant())
+        .post_json(
+            "/api/v1/capabilities/grant",
+            authz::unauth_capability_grant(),
+        )
         .await;
 
     assert!(

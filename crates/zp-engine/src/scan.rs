@@ -265,7 +265,8 @@ fn aggregate_credentials(creds: &[FoundCredential]) -> Vec<ProviderCredentialGro
             if seen.contains(&key) {
                 // Same var + same value already seen — just add source tool
                 for uv in &mut unique_values {
-                    if uv.var_name == c.var_name && uv.value == c.value
+                    if uv.var_name == c.var_name
+                        && uv.value == c.value
                         && !uv.sources.contains(&c.source_tool)
                     {
                         uv.sources.push(c.source_tool.clone());

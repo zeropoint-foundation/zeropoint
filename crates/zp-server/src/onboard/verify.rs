@@ -25,7 +25,7 @@ use zp_engine::capability::{ToolManifest, VerificationConfig};
 use crate::tool_chain::{emit_tool_receipt, ToolEvent};
 
 /// Result of a full verification run for a single tool.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VerificationResult {
     pub providers_resolved: bool,
     pub loaded_providers: Vec<String>,
@@ -38,17 +38,6 @@ pub struct CapabilityResult {
     pub capability: String,
     pub status: String, // "verified", "degraded", "failed"
     pub detail: String,
-}
-
-impl Default for VerificationResult {
-    fn default() -> Self {
-        Self {
-            providers_resolved: false,
-            loaded_providers: vec![],
-            missing_providers: vec![],
-            capabilities: vec![],
-        }
-    }
 }
 
 /// Run Tier 1 + Tier 2 verification for a tool after it reaches health:up.
@@ -98,7 +87,7 @@ pub async fn verify_tool_capabilities(
 
                 if let Some(providers) = body.as_object() {
                     for (id, info) in providers {
-                        let has_content = info.as_object().map_or(false, |o| !o.is_empty());
+                        let has_content = info.as_object().is_some_and(|o| !o.is_empty());
                         if has_content {
                             loaded.push(id.clone());
                         } else {
@@ -109,8 +98,16 @@ pub async fn verify_tool_capabilities(
 
                 let detail = format!(
                     "loaded={},missing={}",
-                    if loaded.is_empty() { "none".into() } else { loaded.join("+") },
-                    if missing.is_empty() { "none".into() } else { missing.join("+") },
+                    if loaded.is_empty() {
+                        "none".into()
+                    } else {
+                        loaded.join("+")
+                    },
+                    if missing.is_empty() {
+                        "none".into()
+                    } else {
+                        missing.join("+")
+                    },
                 );
 
                 tracing::info!("verify[{}]: Tier 1 — {}", tool_name, detail);
@@ -158,28 +155,24 @@ pub async fn verify_tool_capabilities(
     for (capability, endpoint) in &verification.endpoints {
         let url = format!("{}{}", base, endpoint);
         let probe_cfg = verification.probes.get(capability);
-        let method = probe_cfg
-            .map(|p| p.method.as_str())
-            .unwrap_or("GET");
-        let headers = probe_cfg
-            .map(|p| &p.headers)
-            .cloned()
-            .unwrap_or_default();
+        let method = probe_cfg.map(|p| p.method.as_str()).unwrap_or("GET");
+        let headers = probe_cfg.map(|p| &p.headers).cloned().unwrap_or_default();
         let body = probe_cfg.and_then(|p| p.body.as_deref());
 
         tracing::info!(
             "verify[{}]: Tier 2 — probing {} {} ({})",
-            tool_name, method, url, capability
+            tool_name,
+            method,
+            url,
+            capability
         );
 
         let is_required = required_caps.contains(capability.as_str());
 
         match probe_with_retry(&client, method, &url, &headers, body, retries).await {
             ProbeResult::Success(_) => {
-                let detail = format!("provider=resolved");
-                tracing::info!(
-                    "verify[{}]: {} — verified", tool_name, capability
-                );
+                let detail = "provider=resolved".to_string();
+                tracing::info!("verify[{}]: {} — verified", tool_name, capability);
 
                 emit_tool_receipt(
                     audit_store,
@@ -194,11 +187,7 @@ pub async fn verify_tool_capabilities(
                 });
             }
             ProbeResult::HttpError(status, body_text) => {
-                let detail = format!(
-                    "status={},body={}",
-                    status,
-                    truncate(&body_text, 200)
-                );
+                let detail = format!("status={},body={}", status, truncate(&body_text, 200));
                 let (event_fn, status_str): (fn(&str, &str) -> String, &str) = if is_required {
                     (ToolEvent::capability_failed, "failed")
                 } else {
@@ -207,14 +196,13 @@ pub async fn verify_tool_capabilities(
 
                 tracing::warn!(
                     "verify[{}]: {} — {} ({})",
-                    tool_name, capability, status_str, detail
+                    tool_name,
+                    capability,
+                    status_str,
+                    detail
                 );
 
-                emit_tool_receipt(
-                    audit_store,
-                    &event_fn(tool_name, capability),
-                    Some(&detail),
-                );
+                emit_tool_receipt(audit_store, &event_fn(tool_name, capability), Some(&detail));
 
                 result.capabilities.push(CapabilityResult {
                     capability: capability.clone(),
@@ -232,14 +220,13 @@ pub async fn verify_tool_capabilities(
 
                 tracing::warn!(
                     "verify[{}]: {} — {} ({})",
-                    tool_name, capability, status_str, detail
+                    tool_name,
+                    capability,
+                    status_str,
+                    detail
                 );
 
-                emit_tool_receipt(
-                    audit_store,
-                    &event_fn(tool_name, capability),
-                    Some(&detail),
-                );
+                emit_tool_receipt(audit_store, &event_fn(tool_name, capability), Some(&detail));
 
                 result.capabilities.push(CapabilityResult {
                     capability: capability.clone(),
@@ -293,7 +280,10 @@ async fn probe_with_retry(
                 let backoff = Duration::from_secs(2u64.pow(attempt));
                 tracing::debug!(
                     "verify: probe {} failed (attempt {}/{}), retrying in {:?}",
-                    url, attempt, max_retries, backoff
+                    url,
+                    attempt,
+                    max_retries,
+                    backoff
                 );
                 tokio::time::sleep(backoff).await;
             }

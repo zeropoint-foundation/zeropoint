@@ -106,8 +106,8 @@ impl RotationCertificate {
             reason,
         };
 
-        let canonical = serde_json::to_vec(&body)
-            .map_err(|e| KeyError::Serialization(e.to_string()))?;
+        let canonical =
+            serde_json::to_vec(&body).map_err(|e| KeyError::Serialization(e.to_string()))?;
         let sig = old_signing_key.sign(&canonical);
 
         info!(
@@ -130,8 +130,8 @@ impl RotationCertificate {
     /// For operator rotation, the genesis key co-signs.
     /// For agent rotation, the operator key co-signs.
     pub fn co_sign(&mut self, parent_signing_key: &SigningKey) -> Result<(), KeyError> {
-        let canonical = serde_json::to_vec(&self.body)
-            .map_err(|e| KeyError::Serialization(e.to_string()))?;
+        let canonical =
+            serde_json::to_vec(&self.body).map_err(|e| KeyError::Serialization(e.to_string()))?;
         let sig = parent_signing_key.sign(&canonical);
         self.parent_key_signature = Some(hex::encode(sig.to_bytes()));
         Ok(())
@@ -139,7 +139,11 @@ impl RotationCertificate {
 
     /// Verify the old key's signature on the rotation.
     pub fn verify_old_key_signature(&self) -> Result<bool, KeyError> {
-        verify_signature(&self.old_key_signature, &self.body.old_public_key, &self.body)
+        verify_signature(
+            &self.old_key_signature,
+            &self.body.old_public_key,
+            &self.body,
+        )
     }
 
     /// Verify the parent key's co-signature (if present).
@@ -163,8 +167,8 @@ fn verify_signature(
     public_key_hex: &str,
     body: &RotationBody,
 ) -> Result<bool, KeyError> {
-    let key_bytes = hex::decode(public_key_hex)
-        .map_err(|e| KeyError::InvalidKeyMaterial(e.to_string()))?;
+    let key_bytes =
+        hex::decode(public_key_hex).map_err(|e| KeyError::InvalidKeyMaterial(e.to_string()))?;
 
     if key_bytes.len() != 32 {
         return Err(KeyError::InvalidKeyMaterial(
@@ -178,8 +182,8 @@ fn verify_signature(
     let verifying_key = VerifyingKey::from_bytes(&key_array)
         .map_err(|e| KeyError::InvalidKeyMaterial(e.to_string()))?;
 
-    let sig_bytes = hex::decode(signature_hex)
-        .map_err(|e| KeyError::InvalidSignature(e.to_string()))?;
+    let sig_bytes =
+        hex::decode(signature_hex).map_err(|e| KeyError::InvalidSignature(e.to_string()))?;
 
     if sig_bytes.len() != 64 {
         return Err(KeyError::InvalidSignature(
@@ -191,8 +195,7 @@ fn verify_signature(
     sig_array.copy_from_slice(&sig_bytes);
     let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
 
-    let canonical = serde_json::to_vec(body)
-        .map_err(|e| KeyError::Serialization(e.to_string()))?;
+    let canonical = serde_json::to_vec(body).map_err(|e| KeyError::Serialization(e.to_string()))?;
 
     Ok(verifying_key.verify_strict(&canonical, &signature).is_ok())
 }
@@ -313,14 +316,9 @@ impl RotationChain {
         let mut history = vec![root.clone()];
         let mut current = root;
 
-        loop {
-            match self.rotations.get(&current) {
-                Some(cert) => {
-                    history.push(cert.body.new_public_key.clone());
-                    current = cert.body.new_public_key.clone();
-                }
-                None => break,
-            }
+        while let Some(cert) = self.rotations.get(&current) {
+            history.push(cert.body.new_public_key.clone());
+            current = cert.body.new_public_key.clone();
         }
 
         history
@@ -378,15 +376,9 @@ mod tests {
         let new_operator = gen_key();
         let new_pub = new_operator.verifying_key().to_bytes();
 
-        let mut cert = RotationCertificate::issue(
-            &old_operator,
-            &new_pub,
-            KeyRole::Operator,
-            0,
-            None,
-            None,
-        )
-        .unwrap();
+        let mut cert =
+            RotationCertificate::issue(&old_operator, &new_pub, KeyRole::Operator, 0, None, None)
+                .unwrap();
 
         cert.co_sign(&genesis_key).unwrap();
 
@@ -401,17 +393,13 @@ mod tests {
         let key = gen_key();
         let pub_bytes = key.verifying_key().to_bytes();
 
-        let result = RotationCertificate::issue(
-            &key,
-            &pub_bytes,
-            KeyRole::Agent,
-            0,
-            None,
-            None,
-        );
+        let result = RotationCertificate::issue(&key, &pub_bytes, KeyRole::Agent, 0, None, None);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), KeyError::InvalidKeyMaterial(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            KeyError::InvalidKeyMaterial(_)
+        ));
     }
 
     #[test]
@@ -420,15 +408,8 @@ mod tests {
         let new_key = gen_key();
         let new_pub = new_key.verifying_key().to_bytes();
 
-        let mut cert = RotationCertificate::issue(
-            &old_key,
-            &new_pub,
-            KeyRole::Agent,
-            0,
-            None,
-            None,
-        )
-        .unwrap();
+        let mut cert =
+            RotationCertificate::issue(&old_key, &new_pub, KeyRole::Agent, 0, None, None).unwrap();
 
         // Tamper with the new key.
         let rogue_key = gen_key();
@@ -457,16 +438,19 @@ mod tests {
         let mut chain = RotationChain::new();
 
         // v1 → v2
-        let cert1 = RotationCertificate::issue(
-            &key_v1, &v2_pub, KeyRole::Operator, 0, None, None,
-        )
-        .unwrap();
+        let cert1 =
+            RotationCertificate::issue(&key_v1, &v2_pub, KeyRole::Operator, 0, None, None).unwrap();
         let cert1_hash = cert1.content_hash();
         chain.register(cert1).unwrap();
 
         // v2 → v3
         let cert2 = RotationCertificate::issue(
-            &key_v2, &v3_pub, KeyRole::Operator, 1, Some(cert1_hash), None,
+            &key_v2,
+            &v3_pub,
+            KeyRole::Operator,
+            1,
+            Some(cert1_hash),
+            None,
         )
         .unwrap();
         chain.register(cert2).unwrap();
@@ -490,10 +474,8 @@ mod tests {
         let unrelated_hex = hex::encode(unrelated.verifying_key().to_bytes());
 
         let mut chain = RotationChain::new();
-        let cert = RotationCertificate::issue(
-            &key_v1, &v2_pub, KeyRole::Agent, 0, None, None,
-        )
-        .unwrap();
+        let cert =
+            RotationCertificate::issue(&key_v1, &v2_pub, KeyRole::Agent, 0, None, None).unwrap();
         chain.register(cert).unwrap();
 
         // v1 and v2 are the same identity.
@@ -519,22 +501,28 @@ mod tests {
 
         let mut chain = RotationChain::new();
 
-        let cert1 = RotationCertificate::issue(
-            &key_v1, &v2_pub, KeyRole::Operator, 0, None, None,
-        )
-        .unwrap();
+        let cert1 =
+            RotationCertificate::issue(&key_v1, &v2_pub, KeyRole::Operator, 0, None, None).unwrap();
         let cert1_hash = cert1.content_hash();
         chain.register(cert1).unwrap();
 
         let cert2 = RotationCertificate::issue(
-            &key_v2, &v3_pub, KeyRole::Operator, 1, Some(cert1_hash), None,
+            &key_v2,
+            &v3_pub,
+            KeyRole::Operator,
+            1,
+            Some(cert1_hash),
+            None,
         )
         .unwrap();
         chain.register(cert2).unwrap();
 
         // History from any key should show the full chain.
         let history = chain.key_history(&v1_hex);
-        assert_eq!(history, vec![v1_hex.clone(), v2_hex.clone(), v3_hex.clone()]);
+        assert_eq!(
+            history,
+            vec![v1_hex.clone(), v2_hex.clone(), v3_hex.clone()]
+        );
 
         let history = chain.key_history(&v3_hex);
         assert_eq!(history, vec![v1_hex, v2_hex, v3_hex]);
@@ -546,15 +534,8 @@ mod tests {
         let new_key = gen_key();
         let new_pub = new_key.verifying_key().to_bytes();
 
-        let cert = RotationCertificate::issue(
-            &old_key,
-            &new_pub,
-            KeyRole::Operator,
-            0,
-            None,
-            None,
-        )
-        .unwrap();
+        let cert = RotationCertificate::issue(&old_key, &new_pub, KeyRole::Operator, 0, None, None)
+            .unwrap();
 
         // No co-sign → verify_parent_signature returns false.
         let genesis_key = gen_key();
@@ -572,10 +553,8 @@ mod tests {
         let key_v2 = gen_key();
         let v2_pub = key_v2.verifying_key().to_bytes();
 
-        let cert = RotationCertificate::issue(
-            &key_v1, &v2_pub, KeyRole::Agent, 0, None, None,
-        )
-        .unwrap();
+        let cert =
+            RotationCertificate::issue(&key_v1, &v2_pub, KeyRole::Agent, 0, None, None).unwrap();
         chain.register(cert).unwrap();
 
         assert_eq!(chain.rotation_count(), 1);

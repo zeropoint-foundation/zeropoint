@@ -51,22 +51,18 @@ pub(crate) mod test_sync {
 
 // ── Sovereignty system (new) ──
 pub use sovereignty::{
-    SovereigntyMode, SovereigntyProvider, SovereigntyCategory,
-    ProviderCapability, ProviderCapabilities, EnrollmentResult,
-    detect_all_providers, provider_for,
+    detect_all_providers, provider_for, EnrollmentResult, ProviderCapabilities, ProviderCapability,
+    SovereigntyCategory, SovereigntyMode, SovereigntyProvider,
 };
 
 // ── Hardware wallet infrastructure (quorum-ready) ──
 pub use sovereignty::hardware::{
-    EnrollmentMetadata, QuorumThreshold, DerivationSalt,
-    rewrap_secret,
+    rewrap_secret, DerivationSalt, EnrollmentMetadata, QuorumThreshold,
 };
 
 // ── Backward-compatible re-exports ──
 // These delegate to sovereignty::detection, which wraps the new provider system.
-pub use sovereignty::detection::{
-    detect_biometric, BiometricCapability, BiometricType, Platform,
-};
+pub use sovereignty::detection::{detect_biometric, BiometricCapability, BiometricType, Platform};
 
 pub use certificate::{Certificate, CertificateChain, KeyRole};
 pub use error::KeyError;
@@ -74,8 +70,8 @@ pub use hierarchy::{AgentKey, GenesisKey, OperatorKey};
 pub use keyring::Keyring;
 pub use recovery::{decode_mnemonic, encode_mnemonic, verify_recovery};
 pub use revocation::{
-    RevocationCertificate, RevocationReason, RevocationStatus, RevocationStore,
-    verify_chain_with_revocation,
+    verify_chain_with_revocation, RevocationCertificate, RevocationReason, RevocationStatus,
+    RevocationStore,
 };
 pub use rotation::{RotationCertificate, RotationChain};
 pub use vault_key::{derive_vault_key, resolve_vault_key, ResolvedVaultKey, VaultKeySource};

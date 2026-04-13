@@ -21,7 +21,10 @@
 // Dependencies: feature-gated behind `hw-trezor`
 // - `trezor-client` for USB communication and CipherKeyValue protobuf
 
-use super::super::{EnrollmentResult, ProviderCapability, ProviderCapabilities, ProviderStatus, SovereigntyMode, SovereigntyProvider};
+use super::super::{
+    EnrollmentResult, ProviderCapabilities, ProviderCapability, ProviderStatus, SovereigntyMode,
+    SovereigntyProvider,
+};
 use crate::error::KeyError;
 
 /// Trezor sovereignty provider.
@@ -31,6 +34,7 @@ pub struct TrezorProvider;
 ///
 /// 10016' is the Trezor-standard CipherKeyValue path (0x80002720).
 /// This path is conventionally used for symmetric encryption operations.
+#[allow(dead_code)]
 const CIPHER_KEY_VALUE_PATH: &[u32] = &[0x80002720, 0];
 
 /// Key name shown on the Trezor display during confirmation.
@@ -42,6 +46,7 @@ const CIPHER_KEY_NAME: &str = "ZeroPoint Genesis";
 /// The output is deterministic for a given device + path + key name,
 /// giving us a stable 32-byte wrapping key without ever sending
 /// the Genesis secret to the device.
+#[allow(dead_code)]
 const CIPHER_DOMAIN_SEPARATOR: &[u8; 32] = b"zeropoint-trezor-wrapping-key-v1";
 
 impl SovereigntyProvider for TrezorProvider {
@@ -185,12 +190,14 @@ impl SovereigntyProvider for TrezorProvider {
         // attestation. Reserved for when Trezor firmware adds signing.
         //
         // CAN_QUORUM: reserved for future Shamir + multi-Trezor support.
-        let mut caps = ProviderCapabilities::CAN_REWRAP;
+        let caps = ProviderCapabilities::CAN_REWRAP;
         #[cfg(feature = "hw-trezor")]
         {
-            caps = caps.union(ProviderCapabilities::CAN_PASSPHRASE);
-            caps = caps.union(ProviderCapabilities::HAS_DEVICE_STORAGE);
+            let caps = caps.union(ProviderCapabilities::CAN_PASSPHRASE);
+            let caps = caps.union(ProviderCapabilities::HAS_DEVICE_STORAGE);
+            return caps;
         }
+        #[cfg(not(feature = "hw-trezor"))]
         caps
     }
 }
@@ -259,14 +266,14 @@ fn connect_trezor() -> Result<trezor_client::Trezor, KeyError> {
         )
     })?;
 
-    let mut trezor = device.connect().map_err(|e| {
-        KeyError::DeviceNotFound(format!("Failed to connect to Trezor: {}", e))
-    })?;
+    let mut trezor = device
+        .connect()
+        .map_err(|e| KeyError::DeviceNotFound(format!("Failed to connect to Trezor: {}", e)))?;
 
     // Initialize the session
-    trezor.init_device(None).map_err(|e| {
-        KeyError::DeviceNotFound(format!("Trezor initialization failed: {}", e))
-    })?;
+    trezor
+        .init_device(None)
+        .map_err(|e| KeyError::DeviceNotFound(format!("Trezor initialization failed: {}", e)))?;
 
     Ok(trezor)
 }
@@ -309,14 +316,13 @@ fn derive_wrapping_key() -> Result<([u8; 32], String), KeyError> {
 
     // Send via the high-level call() API.
     // The result_handler extracts the CipheredKeyValue into raw bytes.
-    let result_handler: Box<dyn Fn(&mut trezor_client::Trezor, CipheredKeyValue) -> trezor_client::Result<Vec<u8>>> =
-        Box::new(|_client, response| {
-            Ok(response.value().to_vec())
-        });
+    let result_handler: Box<
+        dyn Fn(&mut trezor_client::Trezor, CipheredKeyValue) -> trezor_client::Result<Vec<u8>>,
+    > = Box::new(|_client, response| Ok(response.value().to_vec()));
 
-    let mut response = trezor.call(msg, result_handler).map_err(|e| {
-        KeyError::DeviceNotFound(format!("Trezor communication failed: {}", e))
-    })?;
+    let mut response = trezor
+        .call(msg, result_handler)
+        .map_err(|e| KeyError::DeviceNotFound(format!("Trezor communication failed: {}", e)))?;
 
     // Handle the interactive flow: ButtonRequest, PinMatrix, Passphrase
     let result = loop {
@@ -327,11 +333,13 @@ fn derive_wrapping_key() -> Result<([u8; 32], String), KeyError> {
                 let msg = failure.message().to_string();
                 if msg.contains("cancelled") || msg.contains("Cancelled") {
                     return Err(KeyError::UserCancelled(format!(
-                        "Operation cancelled on Trezor: {}", msg
+                        "Operation cancelled on Trezor: {}",
+                        msg
                     )));
                 }
                 return Err(KeyError::CredentialStore(format!(
-                    "Trezor rejected operation: {}", msg
+                    "Trezor rejected operation: {}",
+                    msg
                 )));
             }
 
@@ -347,7 +355,8 @@ fn derive_wrapping_key() -> Result<([u8; 32], String), KeyError> {
                 // The user should unlock the device via Trezor Suite first.
                 return Err(KeyError::DeviceNotFound(
                     "Trezor is locked. Please unlock your Trezor with Trezor Suite \
-                     or enter your PIN on the device, then try again.".into(),
+                     or enter your PIN on the device, then try again."
+                        .into(),
                 ));
             }
 
@@ -379,7 +388,8 @@ fn derive_wrapping_key() -> Result<([u8; 32], String), KeyError> {
 fn derive_wrapping_key() -> Result<([u8; 32], String), KeyError> {
     Err(KeyError::NotImplemented(
         "Trezor support requires the hw-trezor feature flag. \
-         Rebuild with: cargo build --features hw-trezor".into(),
+         Rebuild with: cargo build --features hw-trezor"
+            .into(),
     ))
 }
 

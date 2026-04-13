@@ -49,16 +49,17 @@ pub struct PortAssignment {
     pub auth_token: String,
 }
 
-/// Generate a random 32-char hex auth token.
+/// Generate a cryptographically random auth token.
+///
+/// Uses 16 bytes (128 bits) of randomness from the OS CSPRNG via `rand`,
+/// producing a 32-char hex string prefixed with `zp-`. This replaces the
+/// previous timestamp+PID scheme which was predictable if an attacker
+/// could observe process timing.
 fn generate_auth_token() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    // Combine timestamp nanos with process ID for uniqueness
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let pid = std::process::id();
-    format!("zp-{:x}{:x}", nanos, pid)
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let bytes: [u8; 16] = rng.gen();
+    format!("zp-{}", hex::encode(bytes))
 }
 
 pub struct PortAllocator {
@@ -127,8 +128,7 @@ impl PortAllocator {
         }
 
         // Find next free port
-        let used: std::collections::HashSet<u16> =
-            map.values().map(|a| a.port).collect();
+        let used: std::collections::HashSet<u16> = map.values().map(|a| a.port).collect();
 
         for port in self.range_start..=self.range_end {
             if !used.contains(&port) {
@@ -186,7 +186,11 @@ impl PortAllocator {
 /// This file is sourced before the tool starts, overriding its default
 /// port and setting the auth token so the proxy can authenticate
 /// transparently.  The user's `.env` is never touched.
-pub fn write_env_zp(tool_path: &Path, tool_name: &str, assignment: &PortAssignment) -> std::io::Result<()> {
+pub fn write_env_zp(
+    tool_path: &Path,
+    tool_name: &str,
+    assignment: &PortAssignment,
+) -> std::io::Result<()> {
     let zp_env = tool_path.join(".env.zp");
 
     // Detect which env var the tool uses for auth tokens
@@ -204,9 +208,7 @@ pub fn write_env_zp(tool_path: &Path, tool_name: &str, assignment: &PortAssignme
          {}\n\
          {}={}\n\
          {}={}\n",
-        proxy_comment,
-        assignment.port_var, assignment.port,
-        auth_var, assignment.auth_token,
+        proxy_comment, assignment.port_var, assignment.port, auth_var, assignment.auth_token,
     );
     std::fs::write(&zp_env, &content)?;
     debug!(
@@ -247,15 +249,18 @@ pub fn write_env_zp(tool_path: &Path, tool_name: &str, assignment: &PortAssignme
 
             let new_contents = filtered.join("\n");
             if new_contents.len() < env_contents.len() {
-                let final_contents = if env_contents.ends_with('\n') && !new_contents.ends_with('\n') {
-                    format!("{}\n", new_contents)
-                } else {
-                    new_contents
-                };
+                let final_contents =
+                    if env_contents.ends_with('\n') && !new_contents.ends_with('\n') {
+                        format!("{}\n", new_contents)
+                    } else {
+                        new_contents
+                    };
                 std::fs::write(&dot_env, &final_contents)?;
                 info!(
                     "Removed ZP-managed vars ({}, {}) from {}.env to prevent shadow conflicts",
-                    auth_var, assignment.port_var, tool_path.display()
+                    auth_var,
+                    assignment.port_var,
+                    tool_path.display()
                 );
             }
         }
@@ -341,7 +346,7 @@ pub fn detect_port_var(tool_path: &Path) -> String {
                 if let Some((key, _)) = trimmed.split_once('=') {
                     let key = key.trim();
                     if let Some(priority) = PORT_VAR_PRIORITY.iter().position(|&p| p == key) {
-                        if best.map_or(true, |(bp, _)| priority < bp) {
+                        if best.is_none_or(|(bp, _)| priority < bp) {
                             best = Some((priority, key));
                         }
                     }

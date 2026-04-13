@@ -96,18 +96,16 @@ impl ConfigResolver {
         }
         if let Ok(v) = std::env::var("ZP_SESSION_MAX_AGE_SECONDS") {
             if let Ok(secs) = v.parse::<u64>() {
-                self.config.session_max_age_s.override_with(
-                    secs,
-                    Source::EnvVar("ZP_SESSION_MAX_AGE_SECONDS".into()),
-                );
+                self.config
+                    .session_max_age_s
+                    .override_with(secs, Source::EnvVar("ZP_SESSION_MAX_AGE_SECONDS".into()));
             }
         }
         if let Ok(v) = std::env::var("ZP_AUTH_RATE_LIMIT_PER_MIN") {
             if let Ok(rate) = v.parse::<u32>() {
-                self.config.auth_rate_limit_per_min.override_with(
-                    rate,
-                    Source::EnvVar("ZP_AUTH_RATE_LIMIT_PER_MIN".into()),
-                );
+                self.config
+                    .auth_rate_limit_per_min
+                    .override_with(rate, Source::EnvVar("ZP_AUTH_RATE_LIMIT_PER_MIN".into()));
             }
         }
         self
@@ -240,9 +238,7 @@ impl ConfigResolver {
                 .override_with(v, source.clone());
         }
         if let Some(v) = file.shell.posture {
-            self.config
-                .shell_posture
-                .override_with(v, source.clone());
+            self.config.shell_posture.override_with(v, source.clone());
         }
         // Filesystem
         if let Some(v) = file.filesystem.watch_enabled {
@@ -251,15 +247,11 @@ impl ConfigResolver {
                 .override_with(v, source.clone());
         }
         if let Some(v) = file.filesystem.watch_dirs {
-            self.config
-                .fs_watch_dirs
-                .override_with(v, source.clone());
+            self.config.fs_watch_dirs.override_with(v, source.clone());
         }
         // Docker
         if let Some(v) = file.docker.enabled {
-            self.config
-                .docker_enabled
-                .override_with(v, source.clone());
+            self.config.docker_enabled.override_with(v, source.clone());
         }
     }
 }
@@ -418,7 +410,9 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
         _ => {
             return Err(ConfigError::InvalidValue {
                 key: key.into(),
-                reason: format!("unknown config key '{key}'. Run 'zp config show' to see available keys."),
+                reason: format!(
+                    "unknown config key '{key}'. Run 'zp config show' to see available keys."
+                ),
             })
         }
     }

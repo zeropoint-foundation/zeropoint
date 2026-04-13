@@ -92,7 +92,9 @@ async fn test_auth_root_exempt() {
 #[tokio::test]
 async fn test_auth_invalid_token_rejected() {
     let app = TestApp::new().await;
-    let (status, _body) = app.get_authed("/api/v1/identity", "totally-fake-token").await;
+    let (status, _body) = app
+        .get_authed("/api/v1/identity", "totally-fake-token")
+        .await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,

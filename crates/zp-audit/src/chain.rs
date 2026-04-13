@@ -92,7 +92,6 @@ impl UnsealedEntry {
         self.signature = Some(signature.into());
         self
     }
-
 }
 
 /// The blake3 hash of the empty byte string. Used as `prev_hash` for the

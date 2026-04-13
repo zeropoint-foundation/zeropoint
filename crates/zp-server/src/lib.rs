@@ -135,6 +135,7 @@ pub struct GenesisRecord {
 /// 3. **First run (Genesis)** — no identity exists. Generates a new Ed25519 key
 ///    and writes `identity.key` as a bootstrap. The onboarding flow will later
 ///    create the full hierarchy and the next server start will use path 1.
+///
 /// Canon permission check run at server startup. Refuses to boot if:
 /// - `~/.zeropoint` or `~/.zeropoint/keys` is not 0700
 /// - any `*.secret` or `*.secret.enc` file is group- or world-readable
@@ -206,7 +207,7 @@ fn finalize_operator_identity(
     use sha2::{Digest, Sha256};
     let pub_bytes = operator.public_key();
     let public_key_hex = hex::encode(pub_bytes);
-    let hash = Sha256::digest(&pub_bytes);
+    let hash = Sha256::digest(pub_bytes);
     let destination_hash = hex::encode(&hash[..16]);
     let signing_key = SigningKey::from_bytes(&operator.secret_key());
 
@@ -244,8 +245,8 @@ fn load_operator_via_sovereignty_provider(
 
     let raw = std::fs::read_to_string(genesis_record_path)
         .map_err(|e| format!("failed to read genesis.json: {}", e))?;
-    let record: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("failed to parse genesis.json: {}", e))?;
+    let record: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("failed to parse genesis.json: {}", e))?;
     let mode_str = record
         .get("sovereignty_mode")
         .and_then(|v| v.as_str())
@@ -253,9 +254,13 @@ fn load_operator_via_sovereignty_provider(
     let mode = zp_keys::SovereigntyMode::from_onboard_str(mode_str).resolve();
 
     let provider = zp_keys::provider_for(mode);
-    let mut genesis_secret = provider
-        .load_secret()
-        .map_err(|e| format!("{} provider could not unlock Genesis: {}", mode.display_name(), e))?;
+    let mut genesis_secret = provider.load_secret().map_err(|e| {
+        format!(
+            "{} provider could not unlock Genesis: {}",
+            mode.display_name(),
+            e
+        )
+    })?;
 
     let result = keyring
         .load_operator_with_genesis_secret(&genesis_secret)
@@ -509,7 +514,10 @@ impl AppState {
                     Some(resolved)
                 }
                 Err(e) => {
-                    info!("Vault key not available: {} — vault operations will require re-auth", e);
+                    info!(
+                        "Vault key not available: {} — vault operations will require re-auth",
+                        e
+                    );
                     None
                 }
             }
@@ -517,7 +525,8 @@ impl AppState {
 
         // Receipt: keychain access is a trust-relevant event on the chain
         if vault_key.is_some() {
-            let source_str = vault_key.as_ref()
+            let source_str = vault_key
+                .as_ref()
                 .map(|v| format!("{:?}", v.source))
                 .unwrap_or_default();
             tool_chain::emit_tool_receipt(
@@ -528,9 +537,7 @@ impl AppState {
         }
 
         // Port allocator — manages the 9100–9199 range for governed tools
-        let port_allocator = tool_ports::PortAllocator::new(
-            std::path::Path::new(&config.data_dir),
-        );
+        let port_allocator = tool_ports::PortAllocator::new(std::path::Path::new(&config.data_dir));
 
         // Session auth — derives HMAC key from the signing key, mints first token.
         // AUTH-VULN-01: this is the foundation for protecting all API endpoints.
@@ -610,12 +617,11 @@ async fn security_headers_middleware(
     // by browsers, proxies, or CDNs.
     headers.insert(
         axum::http::header::CACHE_CONTROL,
-        "no-store, no-cache, must-revalidate, max-age=0".parse().unwrap(),
+        "no-store, no-cache, must-revalidate, max-age=0"
+            .parse()
+            .unwrap(),
     );
-    headers.insert(
-        axum::http::header::PRAGMA,
-        "no-cache".parse().unwrap(),
-    );
+    headers.insert(axum::http::header::PRAGMA, "no-cache".parse().unwrap());
 
     // Phase 1.6 (AUTH-VULN-02): HSTS when TLS is enabled.
     // Tells browsers to only connect via HTTPS for 1 year.
@@ -642,7 +648,9 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         CorsLayer::new()
             .allow_origin(tower_http::cors::AllowOrigin::predicate(
                 move |origin: &HeaderValue, _parts: &axum::http::request::Parts| {
-                    let Ok(origin_str) = origin.to_str() else { return false };
+                    let Ok(origin_str) = origin.to_str() else {
+                        return false;
+                    };
                     if origin_str == format!("http://localhost:{}", port)
                         || origin_str == format!("http://127.0.0.1:{}", port)
                     {
@@ -664,6 +672,27 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             .allow_origin("https://zeropoint.global".parse::<HeaderValue>().unwrap())
             .allow_methods(tower_http::cors::Any)
             .allow_headers(tower_http::cors::Any)
+    };
+
+    // Pre-load Bridge UI HTML if configured (before router construction)
+    let bridge_html: Option<&'static str> = if let Some(ref bridge_dir) = config.bridge_dir {
+        if bridge_dir.exists() {
+            let index_path = bridge_dir.join("index.html");
+            if let Ok(html_content) = std::fs::read_to_string(&index_path) {
+                info!("Bridge UI: http://localhost:{}/bridge", config.port);
+                Some(Box::leak(html_content.into_boxed_str()))
+            } else {
+                None
+            }
+        } else {
+            tracing::warn!(
+                "ZP_BRIDGE_DIR={:?} does not exist, Bridge UI disabled",
+                bridge_dir
+            );
+            None
+        }
+    } else {
+        None
     };
 
     let mut router = Router::new()
@@ -706,13 +735,28 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/stop", post(tools_stop_handler))
         .route("/api/v1/tools/log", get(tools_log_handler))
         .route("/api/v1/tools/preflight", post(tools_preflight_handler))
-        .route("/api/v1/tools/preflight", get(tools_preflight_status_handler))
+        .route(
+            "/api/v1/tools/preflight",
+            get(tools_preflight_status_handler),
+        )
         .route("/api/v1/tools/receipt", post(tools_receipt_handler))
         .route("/api/v1/tools/chain", get(tools_chain_handler))
-        .route("/api/v1/tools/ports", get(tool_proxy::port_assignments_handler))
-        .route("/api/v1/tools/:tool_name/preflight", post(tools_single_preflight_handler))
-        .route("/api/v1/tools/:tool_name/configure", post(tools_configure_handler))
-        .route("/api/v1/tools/:tool_name/repair", post(tools_repair_handler))
+        .route(
+            "/api/v1/tools/ports",
+            get(tool_proxy::port_assignments_handler),
+        )
+        .route(
+            "/api/v1/tools/:tool_name/preflight",
+            post(tools_single_preflight_handler),
+        )
+        .route(
+            "/api/v1/tools/:tool_name/configure",
+            post(tools_configure_handler),
+        )
+        .route(
+            "/api/v1/tools/:tool_name/repair",
+            post(tools_repair_handler),
+        )
         // Governed codebase — self-describing trust infrastructure
         // AUTHZ-VULN-13: codebase read/search only available in dev builds.
         // In production, these endpoints expose source code to authenticated
@@ -720,11 +764,20 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/codebase/tree", get(codebase::tree_handler))
         // Analysis engines — receipt chain intelligence (MLE STAR + Monte Carlo)
         .route("/api/v1/analysis/index", get(analysis::index_handler))
-        .route("/api/v1/analysis/expertise", get(analysis::expertise_handler))
+        .route(
+            "/api/v1/analysis/expertise",
+            get(analysis::expertise_handler),
+        )
         .route("/api/v1/analysis/tools", get(analysis::tools_handler))
-        .route("/api/v1/analysis/simulate", post(analysis::simulate_handler))
+        .route(
+            "/api/v1/analysis/simulate",
+            post(analysis::simulate_handler),
+        )
         // System state — derived from receipt chain (the big one)
-        .route("/api/v1/system/state", get(tool_state::system_state_handler))
+        .route(
+            "/api/v1/system/state",
+            get(tool_state::system_state_handler),
+        )
         // Tool paths are now subdomain-based: http://{name}.localhost:3000/
         // No legacy /tools/{name}/ routes — clean break.
         // Genesis record
@@ -764,6 +817,24 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/speak", get(speak_page_handler))
         // Ecosystem: interactive knowledge graph + provenance chain + live state
         .route("/ecosystem", get(ecosystem_page_handler))
+        // Bridge UI (if configured) — served before middleware layers so auth applies
+        .route(
+            "/bridge",
+            get(move || {
+                let html = bridge_html;
+                async move {
+                    if let Some(html) = html {
+                        Html(html.to_string()).into_response()
+                    } else {
+                        (
+                            axum::http::StatusCode::NOT_FOUND,
+                            "Bridge UI not configured",
+                        )
+                            .into_response()
+                    }
+                }
+            }),
+        )
         .layer(cors)
         // ── Request body size limit (Phase 1.1: strict input validation) ──
         // Cap request bodies at 1 MB to prevent denial-of-service via
@@ -787,7 +858,8 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
                 let rate_limiter = rate_limiter.clone();
                 let endpoint_limiter = endpoint_limiter.clone();
                 async move {
-                    auth::require_auth(req, next, session_auth, rate_limiter, endpoint_limiter).await
+                    auth::require_auth(req, next, session_auth, rate_limiter, endpoint_limiter)
+                        .await
                 }
             }
         }))
@@ -800,7 +872,10 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     #[cfg(feature = "dev-tools")]
     {
         router = router
-            .route("/api/v1/audit/simulate-tamper", post(audit_simulate_tamper_handler))
+            .route(
+                "/api/v1/audit/simulate-tamper",
+                post(audit_simulate_tamper_handler),
+            )
             .route("/api/v1/audit/restore", post(audit_restore_handler))
             .route("/api/v1/audit/clear", post(audit_clear_handler))
             // AUTHZ-VULN-13: codebase read/search gated to dev-tools only
@@ -825,7 +900,8 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             let state = proxy_state.clone();
             async move {
                 // Extract Host header
-                let host = req.headers()
+                let host = req
+                    .headers()
                     .get(axum::http::header::HOST)
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("")
@@ -836,17 +912,19 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
                     // We must inject CORS headers ourselves because the
                     // CORS layer sits inside this middleware and never runs
                     // for proxied responses.
-                    let origin = req.headers()
+                    let origin = req
+                        .headers()
                         .get(axum::http::header::ORIGIN)
                         .and_then(|v| v.to_str().ok())
                         .unwrap_or("")
                         .to_string();
 
                     let path = req.uri().path().trim_start_matches('/').to_string();
-                    let mut resp = match tool_proxy::proxy_inner(&state, &tool_name, &path, req).await {
-                        Ok(resp) => resp,
-                        Err(status) => status.into_response(),
-                    };
+                    let mut resp =
+                        match tool_proxy::proxy_inner(&state, &tool_name, &path, req).await {
+                            Ok(resp) => resp,
+                            Err(status) => status.into_response(),
+                        };
 
                     // Add CORS headers for allowed origins (dashboard at
                     // localhost:{port} or sibling subdomains).
@@ -859,7 +937,9 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
                         let headers = resp.headers_mut();
                         headers.insert(
                             axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                            origin.parse().unwrap_or_else(|_| HeaderValue::from_static("*")),
+                            origin
+                                .parse()
+                                .unwrap_or_else(|_| HeaderValue::from_static("*")),
                         );
                         headers.insert(
                             axum::http::header::ACCESS_CONTROL_ALLOW_METHODS,
@@ -889,32 +969,16 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| config.home_dir.join("assets"));
     if assets_dir.exists() {
-        info!("Assets:     http://localhost:{}/assets/  ({})", config.port, assets_dir.display());
+        info!(
+            "Assets:     http://localhost:{}/assets/  ({})",
+            config.port,
+            assets_dir.display()
+        );
     } else {
         info!("Assets:     {} (not yet created)", assets_dir.display());
     }
     let assets_service = ServeDir::new(&assets_dir);
     router = router.nest_service("/assets", assets_service);
-
-    // Serve Bridge UI static files if configured.
-    if let Some(ref bridge_dir) = config.bridge_dir {
-        if bridge_dir.exists() {
-            info!("Bridge UI: http://localhost:{}/bridge", config.port);
-            let index_path = bridge_dir.join("index.html");
-            let index_html: &'static str = Box::leak(
-                std::fs::read_to_string(&index_path)
-                    .unwrap_or_else(|_| "<h1>Bridge index.html not found</h1>".to_string())
-                    .into_boxed_str(),
-            );
-            router = router
-                .route("/bridge", get(move || async move { Html(index_html) }));
-        } else {
-            tracing::warn!(
-                "ZP_BRIDGE_DIR={:?} does not exist, Bridge UI disabled",
-                bridge_dir
-            );
-        }
-    }
 
     info!("Tool proxy: http://{{tool}}.localhost:{}/", config.port);
 
@@ -1023,7 +1087,7 @@ async fn identity_handler(State(state): State<AppState>) -> Json<IdentityRespons
     let redacted_pk = {
         let pk = &state.0.identity.public_key_hex;
         if pk.len() > 20 {
-            format!("{}...{}", &pk[..8], &pk[pk.len()-8..])
+            format!("{}...{}", &pk[..8], &pk[pk.len() - 8..])
         } else {
             pk.clone()
         }
@@ -1095,6 +1159,42 @@ struct GuardEvaluateResponse {
     action_evaluated: String,
     /// Timestamp
     timestamp: String,
+}
+
+// ── Governance gate enforcement helper ──────────────────────────────
+// Every action handler that modifies state or grants privileges MUST call
+// this before proceeding. Returns Ok(GateResult) on Allow/Warn/Review,
+// returns Err(403) on Block. This is the authoritative enforcement point.
+fn enforce_gate(
+    state: &AppState,
+    action: CoreActionType,
+    actor_label: &str,
+) -> Result<GateResult, (StatusCode, String)> {
+    let context = PolicyContext {
+        action,
+        trust_tier: TrustTier::Tier0,
+        channel: Channel::Api,
+        conversation_id: ConversationId::new(),
+        skill_ids: vec![],
+        tool_names: vec![],
+        mesh_context: None,
+    };
+    let actor = ActorId::User(actor_label.to_string());
+    let result = state.0.gate.evaluate(&context, actor);
+
+    if result.is_blocked() {
+        let reason = match &result.decision {
+            PolicyDecision::Block {
+                reason,
+                policy_module,
+            } => format!("Blocked by {}: {}", policy_module, reason),
+            _ => "Action blocked by governance policy".to_string(),
+        };
+        tracing::warn!("Gate BLOCKED action for actor={}: {}", actor_label, reason);
+        Err((StatusCode::FORBIDDEN, reason))
+    } else {
+        Ok(result)
+    }
 }
 
 async fn guard_evaluate_handler(
@@ -1202,7 +1302,10 @@ async fn guard_evaluate_handler(
         rationale,
         applied_rules: result.applied_rules.clone(),
         // Note: audit_entry field was removed in Phase 3, use receipt_id instead
-        audit_entry_id: result.receipt_id.clone().unwrap_or_else(|| "N/A".to_string()),
+        audit_entry_id: result
+            .receipt_id
+            .clone()
+            .unwrap_or_else(|| "N/A".to_string()),
         audit_entry_hash: "pending-seal".to_string(),
         audit_prev_hash: "pending-seal".to_string(),
         receipt_id: result.receipt_id.clone(),
@@ -1356,6 +1459,15 @@ async fn grant_handler(
     State(state): State<AppState>,
     Json(body): Json<CreateGrantRequest>,
 ) -> Result<Json<GrantResponse>, (StatusCode, String)> {
+    // ── Gate enforcement: capability grants are high-privilege ──
+    enforce_gate(
+        &state,
+        CoreActionType::CredentialAccess {
+            credential_ref: format!("grant:{}", body.capability),
+        },
+        "grant-requester",
+    )?;
+
     let scope = body.scope.unwrap_or_else(|| vec!["*".to_string()]);
 
     let capability = match body.capability.to_lowercase().as_str() {
@@ -1426,6 +1538,15 @@ async fn delegate_handler(
     State(state): State<AppState>,
     Json(body): Json<DelegateRequest>,
 ) -> Result<Json<DelegateResponse>, (StatusCode, String)> {
+    // ── Gate enforcement: delegation is high-privilege ──
+    enforce_gate(
+        &state,
+        CoreActionType::CredentialAccess {
+            credential_ref: format!("delegate:{}", body.capability),
+        },
+        &body.delegator_identity,
+    )?;
+
     let grants = state.0.grants.lock().unwrap();
     let parent = grants
         .iter()
@@ -2287,13 +2408,13 @@ fn redact_paths(s: &str) -> String {
 struct CockpitTool {
     name: String,
     path: String,
-    status: String,          // "governed", "configured", "unconfigured"
-    governance: String,      // "genesis-bound", "unanchored", "none"
-    providers: Vec<String>,  // provider names found in .env.example
-    launch: ToolLaunch,      // how to open this tool
-    ready: bool,             // preflight passed?
+    status: String,                // "governed", "configured", "unconfigured"
+    governance: String,            // "genesis-bound", "unanchored", "none"
+    providers: Vec<String>,        // provider names found in .env.example
+    launch: ToolLaunch,            // how to open this tool
+    ready: bool,                   // preflight passed?
     preflight_issues: Vec<String>, // failures from last preflight
-    verified: bool,          // Tier 2: all required capabilities verified?
+    verified: bool,                // Tier 2: all required capabilities verified?
     capabilities: Vec<tool_chain::CapabilityChainState>, // per-capability results
 }
 
@@ -2310,8 +2431,14 @@ struct ToolLaunch {
 /// Used by detect_tool_port() for the tools listing display.
 /// The actual launch port is managed by PortAllocator (tool_ports.rs).
 const PORT_VAR_NAMES: &[&str] = &[
-    "PORT", "GATEWAY_PORT", "APP_PORT", "SERVER_PORT", "API_PORT",
-    "WEBUI_PORT", "LISTEN_PORT", "HTTP_PORT",
+    "PORT",
+    "GATEWAY_PORT",
+    "APP_PORT",
+    "SERVER_PORT",
+    "API_PORT",
+    "WEBUI_PORT",
+    "LISTEN_PORT",
+    "HTTP_PORT",
 ];
 
 /// Try to detect a web port from a tool's .env or .env.example.
@@ -2333,11 +2460,17 @@ fn detect_tool_port(tool_path: &std::path::Path) -> Option<u16> {
                 }
                 if let Some((key, val)) = trimmed.split_once('=') {
                     let key = key.trim();
-                    let val = val.trim().trim_matches('"').trim_matches('\'')
-                        .split('#').next().unwrap_or("").trim();
+                    let val = val
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .split('#')
+                        .next()
+                        .unwrap_or("")
+                        .trim();
                     if let Some(priority) = PORT_VAR_NAMES.iter().position(|&p| p == key) {
                         if let Ok(port) = val.parse::<u16>() {
-                            if best.map_or(true, |(bp, _)| priority < bp) {
+                            if best.is_none_or(|(bp, _)| priority < bp) {
                                 best = Some((priority, port));
                             }
                         }
@@ -2377,16 +2510,21 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
     if has_cargo {
         // Native Rust tool — compose provides deps, cargo runs the app
         let deps_cmd = if has_docker_compose {
-            format!("docker compose down --remove-orphans 2>/dev/null; \
+            "docker compose down --remove-orphans 2>/dev/null; \
                 docker compose up -d && \
                 for i in $(seq 1 15); do \
                     docker compose exec -T postgres pg_isready -q 2>/dev/null && break; \
                     sleep 1; \
-                done && ")
+                done && "
+                .to_string()
         } else {
             String::new()
         };
-        let cmd = format!("cd '{}' && {}cargo run --release", tool_path.display(), deps_cmd);
+        let cmd = format!(
+            "cd '{}' && {}cargo run --release",
+            tool_path.display(),
+            deps_cmd
+        );
         ToolLaunch {
             kind: "native".to_string(),
             url: port.map(|p| format!("http://localhost:{}", p)),
@@ -2423,13 +2561,22 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             if standalone_server.exists() {
                 Some(format!(
                     "cd '{}' && {}HOSTNAME=0.0.0.0 node .next/standalone/server.js",
-                    tool_path.display(), build_prefix
+                    tool_path.display(),
+                    build_prefix
                 ))
             } else {
-                Some(format!("cd '{}' && {}{} start", tool_path.display(), build_prefix, pkg_mgr))
+                Some(format!(
+                    "cd '{}' && {}{} start",
+                    tool_path.display(),
+                    build_prefix,
+                    pkg_mgr
+                ))
             }
         } else if has_docker_compose {
-            Some(format!("cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d", tool_path.display()))
+            Some(format!(
+                "cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d",
+                tool_path.display()
+            ))
         } else {
             None
         };
@@ -2454,7 +2601,10 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             kind: "docker".to_string(),
             url: None,
             port: None,
-            cmd: Some(format!("cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d", tool_path.display())),
+            cmd: Some(format!(
+                "cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d",
+                tool_path.display()
+            )),
         }
     } else {
         // Scripted or CLI — check for start.sh, npm, make
@@ -2478,7 +2628,12 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             } else {
                 String::new()
             };
-            format!("cd '{}' && {}{} start", tool_path.display(), build_prefix, pkg_mgr)
+            format!(
+                "cd '{}' && {}{} start",
+                tool_path.display(),
+                build_prefix,
+                pkg_mgr
+            )
         } else if tool_path.join("Makefile").exists() {
             format!("cd '{}' && make start", tool_path.display())
         } else {
@@ -2498,9 +2653,7 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
 ///
 /// Readiness is derived from the **audit chain** (canonical source),
 /// with a fallback to the preflight JSON cache for backward compat.
-async fn tools_handler(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn tools_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     let scan_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
@@ -2527,7 +2680,8 @@ async fn tools_handler(
     let port_conflict_map: std::collections::HashMap<String, Vec<String>> = preflight_cache
         .as_ref()
         .map(|pf| {
-            let mut map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+            let mut map: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
             for conflict in &pf.port_conflicts {
                 // conflict.tools = ["ironclaw:postgres", "pgvector (PID 1234)"]
                 // The first entry is the tool:service, the second is the occupant
@@ -2536,9 +2690,10 @@ async fn tools_handler(
                     let occupant = &conflict.tools[1];
                     if let Some(tool_name) = tool_service.split(':').next() {
                         let service = tool_service.split(':').nth(1).unwrap_or("service");
-                        map.entry(tool_name.to_string()).or_default().push(
-                            format!("Port {} ({}) blocked by {}", conflict.port, service, occupant)
-                        );
+                        map.entry(tool_name.to_string()).or_default().push(format!(
+                            "Port {} ({}) blocked by {}",
+                            conflict.port, service, occupant
+                        ));
                     }
                 }
             }
@@ -2546,72 +2701,78 @@ async fn tools_handler(
         })
         .unwrap_or_default();
 
-    let tools: Vec<CockpitTool> = results.tools.into_iter().map(|tool| {
-        // Check if .env exists and was written by zp configure
-        let env_path = tool.path.join(".env");
-        let (status, governance) = if env_path.exists() {
-            let is_zp = std::fs::read_to_string(&env_path)
-                .map(|c| c.contains("Generated by: zp configure"))
-                .unwrap_or(false);
-            if is_zp && has_genesis {
-                ("governed".to_string(), "genesis-bound".to_string())
-            } else if is_zp {
-                ("configured".to_string(), "unanchored".to_string())
+    let tools: Vec<CockpitTool> = results
+        .tools
+        .into_iter()
+        .map(|tool| {
+            // Check if .env exists and was written by zp configure
+            let env_path = tool.path.join(".env");
+            let (status, governance) = if env_path.exists() {
+                let is_zp = std::fs::read_to_string(&env_path)
+                    .map(|c| c.contains("Generated by: zp configure"))
+                    .unwrap_or(false);
+                if is_zp && has_genesis {
+                    ("governed".to_string(), "genesis-bound".to_string())
+                } else if is_zp {
+                    ("configured".to_string(), "unanchored".to_string())
+                } else {
+                    ("configured".to_string(), "none".to_string())
+                }
             } else {
-                ("configured".to_string(), "none".to_string())
-            }
-        } else {
-            ("unconfigured".to_string(), "none".to_string())
-        };
+                ("unconfigured".to_string(), "none".to_string())
+            };
 
-        let launch = detect_launch(&tool.path);
+            let launch = detect_launch(&tool.path);
 
-        // Derive readiness: chain first, then JSON fallback
-        let (ready, preflight_issues) = if let Some(cs) = chain_state.get(&tool.name) {
-            // Chain has receipts for this tool — use chain state
-            (cs.ready, cs.preflight_issues.clone())
-        } else if let Some(ref pf) = preflight_cache {
-            // Fallback to JSON cache
-            if let Some(tp) = pf.tools.iter().find(|t| t.name == tool.name) {
-                let issues: Vec<String> = tp.checks.iter()
-                    .filter(|c| c.status == "fail")
-                    .map(|c| c.detail.clone())
-                    .collect();
-                (tp.ready, issues)
+            // Derive readiness: chain first, then JSON fallback
+            let (ready, preflight_issues) = if let Some(cs) = chain_state.get(&tool.name) {
+                // Chain has receipts for this tool — use chain state
+                (cs.ready, cs.preflight_issues.clone())
+            } else if let Some(ref pf) = preflight_cache {
+                // Fallback to JSON cache
+                if let Some(tp) = pf.tools.iter().find(|t| t.name == tool.name) {
+                    let issues: Vec<String> = tp
+                        .checks
+                        .iter()
+                        .filter(|c| c.status == "fail")
+                        .map(|c| c.detail.clone())
+                        .collect();
+                    (tp.ready, issues)
+                } else {
+                    (false, vec!["Not preflighted yet".to_string()])
+                }
             } else {
-                (false, vec!["Not preflighted yet".to_string()])
+                (false, vec!["Preflight not run".to_string()])
+            };
+
+            // Merge any compose port conflicts into preflight issues
+            let mut all_issues = preflight_issues;
+            if let Some(conflicts) = port_conflict_map.get(&tool.name) {
+                all_issues.extend(conflicts.iter().cloned());
             }
-        } else {
-            (false, vec!["Preflight not run".to_string()])
-        };
+            let effective_ready = ready && !port_conflict_map.contains_key(&tool.name);
 
-        // Merge any compose port conflicts into preflight issues
-        let mut all_issues = preflight_issues;
-        if let Some(conflicts) = port_conflict_map.get(&tool.name) {
-            all_issues.extend(conflicts.iter().cloned());
-        }
-        let effective_ready = ready && port_conflict_map.get(&tool.name).is_none();
+            // Derive verification state from chain
+            let (verified, capabilities) = if let Some(cs) = chain_state.get(&tool.name) {
+                (cs.verified, cs.capabilities.clone())
+            } else {
+                (false, vec![])
+            };
 
-        // Derive verification state from chain
-        let (verified, capabilities) = if let Some(cs) = chain_state.get(&tool.name) {
-            (cs.verified, cs.capabilities.clone())
-        } else {
-            (false, vec![])
-        };
-
-        CockpitTool {
-            name: tool.name,
-            path: tool.path.display().to_string(),
-            status,
-            governance,
-            providers: tool.provider_vars,
-            launch,
-            ready: effective_ready,
-            preflight_issues: all_issues,
-            verified,
-            capabilities,
-        }
-    }).collect();
+            CockpitTool {
+                name: tool.name,
+                path: tool.path.display().to_string(),
+                status,
+                governance,
+                providers: tool.provider_vars,
+                launch,
+                ready: effective_ready,
+                preflight_issues: all_issues,
+                verified,
+                capabilities,
+            }
+        })
+        .collect();
 
     let chain_receipts = !chain_state.is_empty();
     Json(serde_json::json!({
@@ -2681,7 +2842,10 @@ fn kill_tool_process(name: &str, pid: u32) -> bool {
         || tool_path.join("compose.yaml").exists();
 
     if has_compose {
-        info!("Compose tool detected — running docker compose down for {}", name);
+        info!(
+            "Compose tool detected — running docker compose down for {}",
+            name
+        );
         let _ = std::process::Command::new("docker")
             .args(["compose", "down"])
             .current_dir(&tool_path)
@@ -2722,7 +2886,10 @@ fn kill_tool_process(name: &str, pid: u32) -> bool {
         .unwrap_or(false);
 
     if still_alive {
-        warn!("{} (PID {}) didn't stop gracefully, sending SIGKILL", name, pid);
+        warn!(
+            "{} (PID {}) didn't stop gracefully, sending SIGKILL",
+            name, pid
+        );
         let _ = std::process::Command::new("kill")
             .args(["-9", &pid.to_string()])
             .stdout(std::process::Stdio::null())
@@ -2751,12 +2918,10 @@ fn find_child_pids(parent: u32) -> Vec<u32> {
         .args(["-P", &parent.to_string()])
         .output();
     match output {
-        Ok(out) if out.status.success() => {
-            String::from_utf8_lossy(&out.stdout)
-                .lines()
-                .filter_map(|line| line.trim().parse::<u32>().ok())
-                .collect()
-        }
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|line| line.trim().parse::<u32>().ok())
+            .collect(),
         _ => vec![],
     }
 }
@@ -2773,7 +2938,9 @@ fn is_safe_tool_name(name: &str) -> bool {
         && name.len() <= 64
         && !name.starts_with('.')
         && !name.contains("..")
-        && name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+        && name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
 fn kill_port_occupant(port: u16) {
@@ -2813,11 +2980,25 @@ async fn tools_launch_handler(
     State(state): State<AppState>,
     Json(req): Json<LaunchRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // ── Gate enforcement: tool launch is a high-privilege Execute action ──
+    if let Err((status, reason)) = enforce_gate(
+        &state,
+        CoreActionType::Execute {
+            language: format!("tool:{}", req.name),
+        },
+        "tool-launcher",
+    ) {
+        return (status, Json(serde_json::json!({ "error": reason })));
+    }
+
     // AUTHZ-VULN-08: validate tool name to prevent path injection.
     if !is_safe_tool_name(&req.name) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
-        })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+            })),
+        );
     }
 
     let scan_path = dirs::home_dir()
@@ -2914,16 +3095,10 @@ async fn tools_launch_handler(
     let log_path = log_dir.join(format!("{}.log", req.name));
 
     // Prepend .env.zp sourcing so the tool picks up ZP-assigned port
-    let full_cmd = format!(
-        "{}{}", tool_ports::env_zp_preamble(), start_cmd
-    );
+    let full_cmd = format!("{}{}", tool_ports::env_zp_preamble(), start_cmd);
 
     // Wrap the command so stdout+stderr go to the log file
-    let logged_cmd = format!(
-        "{{ {} ; }} > '{}' 2>&1",
-        full_cmd,
-        log_path.display()
-    );
+    let logged_cmd = format!("{{ {} ; }} > '{}' 2>&1", full_cmd, log_path.display());
 
     // ── Stop-before-start ──────────────────────────────────────────
     // If the tool is already running, kill it cleanly before relaunching.
@@ -2937,11 +3112,7 @@ async fn tools_launch_handler(
         // Emit stopped receipt so the chain has no gap
         let stopped_event = tool_chain::ToolEvent::stopped(&req.name);
         let detail = format!("pid={} reason=relaunch", old_pid);
-        tool_chain::emit_tool_receipt(
-            &state.0.audit_store,
-            &stopped_event,
-            Some(&detail),
-        );
+        tool_chain::emit_tool_receipt(&state.0.audit_store, &stopped_event, Some(&detail));
         restarted = true;
         // Brief pause to let the port release (async-safe)
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -2980,20 +3151,12 @@ async fn tools_launch_handler(
             // Emit port assignment receipt
             let port_event = tool_state::events::port_assigned(&req.name, assignment.port);
             let port_detail = format!("var={}", assignment.port_var);
-            tool_chain::emit_tool_receipt(
-                &state.0.audit_store,
-                &port_event,
-                Some(&port_detail),
-            );
+            tool_chain::emit_tool_receipt(&state.0.audit_store, &port_event, Some(&port_detail));
 
             // Emit launched receipt into the chain
             let event = tool_chain::ToolEvent::launched(&req.name);
             let launch_detail = format!("cmd={} port={}", full_cmd, assignment.port);
-            tool_chain::emit_tool_receipt(
-                &state.0.audit_store,
-                &event,
-                Some(&launch_detail),
-            );
+            tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&launch_detail));
 
             // ── Capability Verification (Tier 1 + Tier 2) ──────────
             // If the tool has a [verification] section in its manifest,
@@ -3011,7 +3174,8 @@ async fn tools_launch_handler(
                             tokio::spawn(async move {
                                 tracing::info!(
                                     "verify[{}]: scheduled — will probe after {}s delay",
-                                    vname, verification.delay_secs
+                                    vname,
+                                    verification.delay_secs
                                 );
                                 let result = onboard::verify::verify_tool_capabilities(
                                     &vname,
@@ -3019,7 +3183,8 @@ async fn tools_launch_handler(
                                     &vmanifest,
                                     &verification,
                                     &vstate.0.audit_store,
-                                ).await;
+                                )
+                                .await;
                                 let verified = !result.capabilities.is_empty()
                                     && result.capabilities.iter().all(|c| c.status != "failed");
                                 tracing::info!(
@@ -3082,9 +3247,12 @@ async fn tools_stop_handler(
 ) -> (StatusCode, Json<serde_json::Value>) {
     // AUTHZ-VULN-09: validate tool name.
     if !is_safe_tool_name(&req.name) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
-        })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+            })),
+        );
     }
 
     match read_live_pid(&req.name) {
@@ -3099,11 +3267,7 @@ async fn tools_stop_handler(
             // Emit stopped receipt into the audit chain
             let event = tool_chain::ToolEvent::stopped(&req.name);
             let detail = format!("pid={}", pid);
-            tool_chain::emit_tool_receipt(
-                &state.0.audit_store,
-                &event,
-                Some(&detail),
-            );
+            tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
             (
                 StatusCode::OK,
@@ -3115,16 +3279,14 @@ async fn tools_stop_handler(
                 })),
             )
         }
-        None => {
-            (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                    "status": "not_running",
-                    "name": req.name,
-                    "message": format!("No running process found for '{}'", req.name),
-                })),
-            )
-        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "status": "not_running",
+                "name": req.name,
+                "message": format!("No running process found for '{}'", req.name),
+            })),
+        ),
     }
 }
 
@@ -3153,7 +3315,11 @@ async fn tools_log_handler(
 
     let contents = std::fs::read_to_string(&log_path).unwrap_or_default();
     let lines: Vec<&str> = contents.lines().collect();
-    let tail_start = if lines.len() > 50 { lines.len() - 50 } else { 0 };
+    let tail_start = if lines.len() > 50 {
+        lines.len() - 50
+    } else {
+        0
+    };
     let tail: String = lines[tail_start..].join("\n");
 
     Json(serde_json::json!({
@@ -3168,17 +3334,13 @@ async fn tools_log_handler(
 
 /// Run preflight checks on all configured tools (POST).
 /// This pulls docker images, installs deps, fixes permissions, etc.
-async fn tools_preflight_handler(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn tools_preflight_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     let scan_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
 
-    let (results, _events) = onboard::preflight::run_preflight(
-        &scan_path,
-        Some(&state.0.audit_store),
-    ).await;
+    let (results, _events) =
+        onboard::preflight::run_preflight(&scan_path, Some(&state.0.audit_store)).await;
     Json(serde_json::to_value(&results).unwrap_or_default())
 }
 
@@ -3219,22 +3381,32 @@ async fn tools_single_preflight_handler(
         &scan_path,
         &tool_name,
         Some(&state.0.audit_store),
-    ).await;
+    )
+    .await;
 
     // Extract the single tool's result from the full results vec.
-    let tool_result = results.tools.iter()
+    let tool_result = results
+        .tools
+        .iter()
         .find(|t| t.name.eq_ignore_ascii_case(&tool_name));
 
     match tool_result {
         Some(result) => {
-            let status = if result.ready { StatusCode::OK } else { StatusCode::CONFLICT };
-            (status, Json(serde_json::json!({
-                "tool": result.name,
-                "ready": result.ready,
-                "launch_method": result.launch_method,
-                "checks": result.checks,
-                "auto_fixed": result.auto_fixed,
-            })))
+            let status = if result.ready {
+                StatusCode::OK
+            } else {
+                StatusCode::CONFLICT
+            };
+            (
+                status,
+                Json(serde_json::json!({
+                    "tool": result.name,
+                    "ready": result.ready,
+                    "launch_method": result.launch_method,
+                    "checks": result.checks,
+                    "auto_fixed": result.auto_fixed,
+                })),
+            )
         }
         None => (
             StatusCode::NOT_FOUND,
@@ -3263,9 +3435,12 @@ async fn tools_configure_handler(
     // AUTHZ-VULN-10: validate tool_name to prevent path injection.
     // Tool names must be alphanumeric with hyphens/underscores only.
     if !is_safe_tool_name(&tool_name) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
-        })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+            })),
+        );
     }
 
     let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
@@ -3287,40 +3462,40 @@ async fn tools_configure_handler(
                 Ok(assignment) => {
                     // Re-write .env.zp with new port
                     if tool_path.exists() {
-                        if let Err(e) = tool_ports::write_env_zp(
-                            &tool_path,
-                            &tool_name,
-                            &assignment,
-                        ) {
+                        if let Err(e) =
+                            tool_ports::write_env_zp(&tool_path, &tool_name, &assignment)
+                        {
                             tracing::warn!("Failed to write .env.zp for {}: {}", tool_name, e);
                         }
                     }
 
-                    tracing::info!(
-                        "Reassigned {}: new port {}",
-                        tool_name, assignment.port
-                    );
+                    tracing::info!("Reassigned {}: new port {}", tool_name, assignment.port);
 
-                    (StatusCode::OK, Json(serde_json::json!({
-                        "ok": true,
-                        "tool": tool_name,
-                        "new_port": assignment.port,
-                        "port_var": port_var,
-                    })))
+                    (
+                        StatusCode::OK,
+                        Json(serde_json::json!({
+                            "ok": true,
+                            "tool": tool_name,
+                            "new_port": assignment.port,
+                            "port_var": port_var,
+                        })),
+                    )
                 }
-                Err(e) => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
                         "error": format!("Port reassignment failed: {}", e),
-                    })))
-                }
+                    })),
+                ),
             }
         }
-        _ => {
-            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
                 "error": format!("Unknown configure action: '{}'", action),
                 "valid_actions": ["reassign_port"],
-            })))
-        }
+            })),
+        ),
     }
 }
 
@@ -3338,9 +3513,12 @@ async fn tools_repair_handler(
 ) -> (StatusCode, Json<serde_json::Value>) {
     // AUTHZ-VULN-11: validate tool_name to prevent command injection.
     if !is_safe_tool_name(&tool_name) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
-        })));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+            })),
+        );
     }
 
     let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
@@ -3356,9 +3534,12 @@ async fn tools_repair_handler(
             let tool_path = scan_path.join(&tool_name);
 
             if !tool_path.exists() {
-                return (StatusCode::NOT_FOUND, Json(serde_json::json!({
-                    "error": format!("Tool directory not found: {}", tool_name),
-                })));
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "error": format!("Tool directory not found: {}", tool_name),
+                    })),
+                );
             }
 
             let output = std::process::Command::new("docker")
@@ -3369,41 +3550,50 @@ async fn tools_repair_handler(
             match output {
                 Ok(o) if o.status.success() => {
                     tracing::info!("Restarted Docker Compose for {}", tool_name);
-                    (StatusCode::OK, Json(serde_json::json!({
-                        "ok": true,
-                        "tool": tool_name,
-                        "action": "restart_compose",
-                        "hint": "Run preflight again to verify the fix.",
-                    })))
+                    (
+                        StatusCode::OK,
+                        Json(serde_json::json!({
+                            "ok": true,
+                            "tool": tool_name,
+                            "action": "restart_compose",
+                            "hint": "Run preflight again to verify the fix.",
+                        })),
+                    )
                 }
                 Ok(o) => {
                     let stderr = String::from_utf8_lossy(&o.stderr);
-                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                        "error": format!("Docker Compose restart failed: {}", stderr.trim()),
-                    })))
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "error": format!("Docker Compose restart failed: {}", stderr.trim()),
+                        })),
+                    )
                 }
-                Err(e) => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
                         "error": format!("docker not available: {}", e),
-                    })))
-                }
+                    })),
+                ),
             }
         }
         // AUTHZ-VULN-11: "fix_docker_network" deliberately removed.
         // Direct network deletion is a destructive infrastructure
         // operation that should not be accessible via API.
-        "fix_docker_network" => {
-            (StatusCode::GONE, Json(serde_json::json!({
+        "fix_docker_network" => (
+            StatusCode::GONE,
+            Json(serde_json::json!({
                 "error": "fix_docker_network has been removed for security reasons. Use restart_compose instead.",
                 "valid_actions": ["restart_compose"],
-            })))
-        }
-        _ => {
-            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            })),
+        ),
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
                 "error": format!("Unknown repair action: '{}'", action),
                 "valid_actions": ["restart_compose"],
-            })))
-        }
+            })),
+        ),
     }
 }
 
@@ -3443,9 +3633,7 @@ async fn tools_receipt_handler(
 ///
 /// This is the canonical view — the cockpit can call this to see
 /// which lifecycle receipts exist for each tool.
-async fn tools_chain_handler(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn tools_chain_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
     let tools: Vec<&tool_chain::ToolChainState> = chain_state.values().collect();
     Json(serde_json::json!({
@@ -3516,13 +3704,19 @@ async fn root_handler(State(state): State<AppState>) -> Response {
     );
 
     let mut resp = if has_complete_genesis {
-        Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK)).into_response()
+        Html(resolve_html_asset(
+            "dashboard.html",
+            DASHBOARD_HTML_FALLBACK,
+        ))
+        .into_response()
     } else {
         Redirect::temporary("/onboard").into_response()
     };
     resp.headers_mut().insert(
         axum::http::header::SET_COOKIE,
-        cookie.parse().unwrap_or_else(|_| HeaderValue::from_static("")),
+        cookie
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("")),
     );
     resp
 }
@@ -3532,15 +3726,28 @@ async fn dashboard_handler(State(state): State<AppState>) -> Response {
         &state.0.session_auth.current_token(),
         state.0.session_auth.max_age_secs(),
     );
-    let mut resp = Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML_FALLBACK)).into_response();
+    let mut resp = Html(resolve_html_asset(
+        "dashboard.html",
+        DASHBOARD_HTML_FALLBACK,
+    ))
+    .into_response();
     resp.headers_mut().insert(
         axum::http::header::SET_COOKIE,
-        cookie.parse().unwrap_or_else(|_| HeaderValue::from_static("")),
+        cookie
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("")),
     );
     resp
 }
 
 async fn onboard_page_handler(State(state): State<AppState>) -> Response {
+    // Post-genesis: redirect to dashboard
+    let home = dirs::home_dir().unwrap_or_default();
+    let genesis_path = home.join(".zeropoint").join("genesis.json");
+    if genesis_path.exists() {
+        return axum::response::Redirect::to("/dashboard").into_response();
+    }
+
     let cookie = auth::build_session_cookie(
         &state.0.session_auth.current_token(),
         state.0.session_auth.max_age_secs(),
@@ -3548,17 +3755,45 @@ async fn onboard_page_handler(State(state): State<AppState>) -> Response {
     let mut resp = Html(resolve_html_asset("onboard.html", ONBOARD_HTML_FALLBACK)).into_response();
     resp.headers_mut().insert(
         axum::http::header::SET_COOKIE,
-        cookie.parse().unwrap_or_else(|_| HeaderValue::from_static("")),
+        cookie
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("")),
     );
     resp
 }
 
-async fn speak_page_handler() -> Html<String> {
-    Html(resolve_html_asset("speak.html", SPEAK_HTML_FALLBACK))
+async fn speak_page_handler(State(state): State<AppState>) -> Response {
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset("speak.html", SPEAK_HTML_FALLBACK)).into_response();
+    resp.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        cookie
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("")),
+    );
+    resp
 }
 
-async fn ecosystem_page_handler() -> Html<String> {
-    Html(resolve_html_asset("ecosystem.html", ECOSYSTEM_HTML_FALLBACK))
+async fn ecosystem_page_handler(State(state): State<AppState>) -> Response {
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset(
+        "ecosystem.html",
+        ECOSYSTEM_HTML_FALLBACK,
+    ))
+    .into_response();
+    resp.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        cookie
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("")),
+    );
+    resp
 }
 
 // ============================================================================

@@ -41,9 +41,9 @@ pub struct SecurityPosture {
 pub struct TopologyNode {
     pub id: String,
     pub name: String,
-    pub role: String,        // "gateway", "router", "node", "sentinel", "device"
+    pub role: String, // "gateway", "router", "node", "sentinel", "device"
     pub address: String,
-    pub status: String,      // "active", "inactive", "unknown"
+    pub status: String, // "active", "inactive", "unknown"
     pub detail: String,
 }
 
@@ -56,9 +56,7 @@ pub struct NetworkTopology {
 
 /// Build network topology from config or sensible defaults.
 pub fn topology() -> NetworkTopology {
-    let home = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".zeropoint");
+    let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
 
     // Try to read topology config
     let topo_path = home.join("config").join("topology.toml");
@@ -73,17 +71,16 @@ pub fn topology() -> NetworkTopology {
     let port = std::env::var("ZP_PORT").unwrap_or_else(|_| "3000".to_string());
 
     NetworkTopology {
-        nodes: vec![
-            TopologyNode {
-                id: "zp-node".into(),
-                name: "ZeroPoint Node".into(),
-                role: "node".into(),
-                address: format!("{}:{}", bind, port),
-                status: "active".into(),
-                detail: "Governance proxy + verification surface".into(),
-            },
-        ],
-        description: "Single node — configure ~/.zeropoint/config/topology.toml for full network map".into(),
+        nodes: vec![TopologyNode {
+            id: "zp-node".into(),
+            name: "ZeroPoint Node".into(),
+            role: "node".into(),
+            address: format!("{}:{}", bind, port),
+            status: "active".into(),
+            detail: "Governance proxy + verification surface".into(),
+        }],
+        description:
+            "Single node — configure ~/.zeropoint/config/topology.toml for full network map".into(),
     }
 }
 
@@ -93,30 +90,56 @@ fn parse_topology_config(config: &toml::Value) -> NetworkTopology {
     if let Some(node_list) = config.get("nodes").and_then(|v| v.as_array()) {
         for node in node_list {
             nodes.push(TopologyNode {
-                id: node.get("id").and_then(|v| v.as_str()).unwrap_or("unknown").into(),
-                name: node.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown").into(),
-                role: node.get("role").and_then(|v| v.as_str()).unwrap_or("device").into(),
-                address: node.get("address").and_then(|v| v.as_str()).unwrap_or("").into(),
-                status: node.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").into(),
-                detail: node.get("detail").and_then(|v| v.as_str()).unwrap_or("").into(),
+                id: node
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .into(),
+                name: node
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown")
+                    .into(),
+                role: node
+                    .get("role")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("device")
+                    .into(),
+                address: node
+                    .get("address")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .into(),
+                status: node
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .into(),
+                detail: node
+                    .get("detail")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .into(),
             });
         }
     }
 
-    let desc = config.get("description")
+    let desc = config
+        .get("description")
         .and_then(|v| v.as_str())
         .unwrap_or("Network topology from config")
         .to_string();
 
-    NetworkTopology { nodes, description: desc }
+    NetworkTopology {
+        nodes,
+        description: desc,
+    }
 }
 
 /// Run all security checks against the current environment.
 pub fn assess(state: &crate::AppState) -> SecurityPosture {
     let mut checks = Vec::new();
-    let home = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".zeropoint");
+    let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
 
     // ── Network ──────────────────────────────────────────────
 
@@ -152,10 +175,16 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
     // 3. Identity key — prefer hierarchy, fall back to legacy file
     let operator_secret_path = home.join("keys").join("operator.secret");
     if operator_secret_path.exists() {
-        checks.push(check_key_permissions(&operator_secret_path, "Operator key (hierarchy)"));
+        checks.push(check_key_permissions(
+            &operator_secret_path,
+            "Operator key (hierarchy)",
+        ));
     } else {
         let identity_key_path = home.join("identity.key");
-        checks.push(check_key_permissions(&identity_key_path, "Identity key (legacy)"));
+        checks.push(check_key_permissions(
+            &identity_key_path,
+            "Identity key (legacy)",
+        ));
     }
 
     // 4. Genesis record + signature
@@ -202,7 +231,10 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
                 category: "identity".into(),
                 name: "Keyring".into(),
                 status: CheckStatus::Warning,
-                detail: format!("Keyring sparse — only {} key file(s), expected genesis + operator", key_count),
+                detail: format!(
+                    "Keyring sparse — only {} key file(s), expected genesis + operator",
+                    key_count
+                ),
             }
         }
     } else {
@@ -224,18 +256,24 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
             Ok(content) => {
                 // If we can parse it as JSON and it has credential-looking values, it's plaintext
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let has_plaintext_keys = val.as_object().map(|obj| {
-                        obj.values().any(|v| {
-                            v.as_str().map(|s| s.starts_with("sk-") || s.starts_with("AIza")).unwrap_or(false)
+                    let has_plaintext_keys = val
+                        .as_object()
+                        .map(|obj| {
+                            obj.values().any(|v| {
+                                v.as_str()
+                                    .map(|s| s.starts_with("sk-") || s.starts_with("AIza"))
+                                    .unwrap_or(false)
+                            })
                         })
-                    }).unwrap_or(false);
+                        .unwrap_or(false);
 
                     if has_plaintext_keys {
                         SecurityCheck {
                             category: "vault".into(),
                             name: "Credential vault".into(),
                             status: CheckStatus::Fail,
-                            detail: "Vault contains plaintext API keys — encryption not applied".into(),
+                            detail: "Vault contains plaintext API keys — encryption not applied"
+                                .into(),
                         }
                     } else {
                         let cred_count = val.as_object().map(|o| o.len()).unwrap_or(0);
@@ -243,7 +281,10 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
                             category: "vault".into(),
                             name: "Credential vault".into(),
                             status: CheckStatus::Pass,
-                            detail: format!("Vault encrypted — {} credential(s) stored", cred_count),
+                            detail: format!(
+                                "Vault encrypted — {} credential(s) stored",
+                                cred_count
+                            ),
                         }
                     }
                 } else {
@@ -351,14 +392,20 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
             category: "governance".into(),
             name: "Governance gate".into(),
             status: CheckStatus::Pass,
-            detail: format!("{} constitutional rule(s) active — all requests evaluated", rule_count),
+            detail: format!(
+                "{} constitutional rule(s) active — all requests evaluated",
+                rule_count
+            ),
         }
     } else if rule_count > 0 {
         SecurityCheck {
             category: "governance".into(),
             name: "Governance gate".into(),
             status: CheckStatus::Warning,
-            detail: format!("Only {} rule(s) loaded — expected HarmPrinciple + Sovereignty minimum", rule_count),
+            detail: format!(
+                "Only {} rule(s) loaded — expected HarmPrinciple + Sovereignty minimum",
+                rule_count
+            ),
         }
     } else {
         SecurityCheck {
@@ -372,9 +419,18 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
     // ── Score Calculation ────────────────────────────────────
     // Honest scoring: warnings count as half, fails cap the score.
     let total = checks.len();
-    let passed = checks.iter().filter(|c| c.status == CheckStatus::Pass).count();
-    let warnings = checks.iter().filter(|c| c.status == CheckStatus::Warning).count();
-    let failed = checks.iter().filter(|c| c.status == CheckStatus::Fail).count();
+    let passed = checks
+        .iter()
+        .filter(|c| c.status == CheckStatus::Pass)
+        .count();
+    let warnings = checks
+        .iter()
+        .filter(|c| c.status == CheckStatus::Warning)
+        .count();
+    let failed = checks
+        .iter()
+        .filter(|c| c.status == CheckStatus::Fail)
+        .count();
 
     let score: u8 = if total == 0 {
         0
@@ -444,7 +500,12 @@ fn check_key_permissions(path: &std::path::Path, label: &str) -> SecurityCheck {
                         category: "filesystem".into(),
                         name: format!("{} permissions", label),
                         status: CheckStatus::Fail,
-                        detail: format!("{} — mode {:04o} — world-readable, fix with: chmod 600 {}", label, mode, path.display()),
+                        detail: format!(
+                            "{} — mode {:04o} — world-readable, fix with: chmod 600 {}",
+                            label,
+                            mode,
+                            path.display()
+                        ),
                     }
                 }
             }
@@ -463,7 +524,10 @@ fn check_key_permissions(path: &std::path::Path, label: &str) -> SecurityCheck {
             category: "filesystem".into(),
             name: format!("{} permissions", label),
             status: CheckStatus::Warning,
-            detail: format!("{} exists — permission check not available on this platform", label),
+            detail: format!(
+                "{} exists — permission check not available on this platform",
+                label
+            ),
         }
     }
 }

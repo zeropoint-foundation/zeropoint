@@ -128,8 +128,8 @@ impl RevocationCertificate {
             explanation,
         };
 
-        let canonical = serde_json::to_vec(&body)
-            .map_err(|e| KeyError::Serialization(e.to_string()))?;
+        let canonical =
+            serde_json::to_vec(&body).map_err(|e| KeyError::Serialization(e.to_string()))?;
         let sig = revoker_signing_key.sign(&canonical);
 
         info!(
@@ -162,8 +162,8 @@ impl RevocationCertificate {
         let verifying_key = VerifyingKey::from_bytes(&key_array)
             .map_err(|e| KeyError::InvalidKeyMaterial(e.to_string()))?;
 
-        let sig_bytes = hex::decode(&self.signature)
-            .map_err(|e| KeyError::InvalidSignature(e.to_string()))?;
+        let sig_bytes =
+            hex::decode(&self.signature).map_err(|e| KeyError::InvalidSignature(e.to_string()))?;
 
         if sig_bytes.len() != 64 {
             return Err(KeyError::InvalidSignature(
@@ -175,8 +175,8 @@ impl RevocationCertificate {
         sig_array.copy_from_slice(&sig_bytes);
         let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
 
-        let canonical = serde_json::to_vec(&self.body)
-            .map_err(|e| KeyError::Serialization(e.to_string()))?;
+        let canonical =
+            serde_json::to_vec(&self.body).map_err(|e| KeyError::Serialization(e.to_string()))?;
 
         Ok(verifying_key.verify_strict(&canonical, &signature).is_ok())
     }
@@ -351,10 +351,7 @@ pub fn verify_chain_with_revocation(
             RevocationStatus::Revoked { reason, .. } => {
                 return Err(KeyError::BrokenChain {
                     depth: cert.body.depth,
-                    reason: format!(
-                        "key {} revoked (reason: {})",
-                        cert.body.subject, reason
-                    ),
+                    reason: format!("key {} revoked (reason: {})", cert.body.subject, reason),
                 });
             }
             RevocationStatus::ParentRevoked {
@@ -391,7 +388,14 @@ mod tests {
         SigningKey::generate(&mut OsRng)
     }
 
-    fn setup_chain() -> (SigningKey, SigningKey, SigningKey, Certificate, Certificate, Certificate) {
+    fn setup_chain() -> (
+        SigningKey,
+        SigningKey,
+        SigningKey,
+        Certificate,
+        Certificate,
+        Certificate,
+    ) {
         let genesis_key = gen_key();
         let operator_key = gen_key();
         let agent_key = gen_key();
@@ -427,7 +431,14 @@ mod tests {
             None,
         );
 
-        (genesis_key, operator_key, agent_key, genesis_cert, operator_cert, agent_cert)
+        (
+            genesis_key,
+            operator_key,
+            agent_key,
+            genesis_cert,
+            operator_cert,
+            agent_cert,
+        )
     }
 
     #[test]
@@ -517,7 +528,13 @@ mod tests {
         store.register(revocation).unwrap();
 
         let status = store.check(&agent_cert.body.public_key);
-        assert!(matches!(status, RevocationStatus::Revoked { reason: RevocationReason::Compromise, .. }));
+        assert!(matches!(
+            status,
+            RevocationStatus::Revoked {
+                reason: RevocationReason::Compromise,
+                ..
+            }
+        ));
         assert!(!status.is_valid());
     }
 
@@ -527,10 +544,7 @@ mod tests {
 
         // Register the operator→agent relationship.
         let mut store = RevocationStore::new();
-        store.register_delegation(
-            &operator_cert.body.public_key,
-            &agent_cert.body.public_key,
-        );
+        store.register_delegation(&operator_cert.body.public_key, &agent_cert.body.public_key);
 
         // Revoke the operator.
         let revocation = RevocationCertificate::issue(
@@ -549,7 +563,10 @@ mod tests {
 
         // Agent is cascade-revoked.
         let agent_status = store.check(&agent_cert.body.public_key);
-        assert!(matches!(agent_status, RevocationStatus::ParentRevoked { .. }));
+        assert!(matches!(
+            agent_status,
+            RevocationStatus::ParentRevoked { .. }
+        ));
         assert!(!agent_status.is_valid());
 
         // Cascade list includes the agent.
@@ -583,7 +600,11 @@ mod tests {
         let mut store = RevocationStore::new();
 
         // Chain is valid before any revocation.
-        let certs = vec![genesis_cert.clone(), operator_cert.clone(), agent_cert.clone()];
+        let certs = vec![
+            genesis_cert.clone(),
+            operator_cert.clone(),
+            agent_cert.clone(),
+        ];
         assert!(verify_chain_with_revocation(&certs, &store).is_ok());
 
         // Revoke the operator.

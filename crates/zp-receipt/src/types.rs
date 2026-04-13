@@ -201,14 +201,12 @@ impl Receipt {
 
     /// Check if this receipt has expired.
     pub fn is_expired(&self) -> bool {
-        self.expires_at.map_or(false, |exp| Utc::now() > exp)
+        self.expires_at.is_some_and(|exp| Utc::now() > exp)
     }
 
     /// Check if this receipt is still active (not revoked, superseded, or expired).
     pub fn is_active(&self) -> bool {
-        !self.is_expired()
-            && self.revoked_at.is_none()
-            && self.superseded_by.is_none()
+        !self.is_expired() && self.revoked_at.is_none() && self.superseded_by.is_none()
     }
 
     /// Mark this receipt as superseded by another receipt.
@@ -219,11 +217,7 @@ impl Receipt {
 
     /// Revoke this receipt. Returns a RevocationClaim receipt that should be
     /// appended to the chain as proof of revocation.
-    pub fn revoke(
-        &mut self,
-        revoker_id: &str,
-        reason: &str,
-    ) -> crate::ReceiptBuilder {
+    pub fn revoke(&mut self, revoker_id: &str, reason: &str) -> crate::ReceiptBuilder {
         self.revoked_at = Some(Utc::now());
 
         Receipt::revocation(revoker_id)
@@ -406,10 +400,11 @@ impl std::fmt::Display for ReceiptType {
 /// Signing a receipt with `AuthorshipProof` semantics proves who created it
 /// but does NOT assert that the content is true. Only `TruthAssertion`
 /// semantics can be used for memory promotion (Phase 4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ClaimSemantics {
     /// "I made this." Proves authorship/origin. Default for all existing receipts.
+    #[default]
     AuthorshipProof,
     /// "This hasn't changed." Proves content integrity since a prior state.
     IntegrityAttestation,
@@ -417,12 +412,6 @@ pub enum ClaimSemantics {
     TruthAssertion,
     /// "I permit this." Used for authorization grants and delegation claims.
     AuthorizationGrant,
-}
-
-impl Default for ClaimSemantics {
-    fn default() -> Self {
-        ClaimSemantics::AuthorshipProof
-    }
 }
 
 fn default_claim_semantics() -> ClaimSemantics {

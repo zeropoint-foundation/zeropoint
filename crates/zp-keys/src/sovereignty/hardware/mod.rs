@@ -18,10 +18,10 @@
 // - Trezor:  Trezor CipherKeyValue for deterministic key derivation
 // - OnlyKey: OnlyKey challenge-response (HMACSHA1 in a slot)
 
-pub mod yubikey;
 pub mod ledger;
-pub mod trezor;
 pub mod onlykey;
+pub mod trezor;
+pub mod yubikey;
 
 use crate::error::KeyError;
 
@@ -153,10 +153,7 @@ pub(crate) fn encrypt_secret(
 /// Reads the version prefix byte and dispatches to the correct decryption
 /// implementation. Blobs without a version prefix (pre-0.3 format) are
 /// handled as legacy v0 — raw ChaCha20-Poly1305 with 48-byte length.
-pub(crate) fn decrypt_secret(
-    blob: &[u8],
-    wrapping_key: &[u8; 32],
-) -> Result<[u8; 32], KeyError> {
+pub(crate) fn decrypt_secret(blob: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8; 32], KeyError> {
     if blob.is_empty() {
         return Err(KeyError::EnrollmentCorrupted(
             "Encrypted secret blob is empty".into(),
@@ -202,11 +199,9 @@ fn decrypt_chacha20poly1305(
     let nonce_bytes: [u8; 12] = nonce_material.as_bytes()[..12].try_into().unwrap();
     let nonce = Nonce::from(nonce_bytes);
 
-    let plaintext = cipher
-        .decrypt(&nonce, ciphertext)
-        .map_err(|_| KeyError::CredentialStore(
-            "Decryption failed — wrong device or corrupted data".into(),
-        ))?;
+    let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| {
+        KeyError::CredentialStore("Decryption failed — wrong device or corrupted data".into())
+    })?;
 
     if plaintext.len() != 32 {
         return Err(KeyError::InvalidKeyMaterial(format!(
@@ -317,14 +312,14 @@ pub(crate) fn load_enrollment(mode: &str) -> Result<EnrollmentMetadata, KeyError
     let path = dir.join(&filename);
     if !path.exists() {
         return Err(KeyError::NotEnrolled(format!(
-            "No enrollment data found for {}. Run the Genesis ceremony to enroll.", mode
+            "No enrollment data found for {}. Run the Genesis ceremony to enroll.",
+            mode
         )));
     }
     let json = std::fs::read_to_string(&path)?;
-    serde_json::from_str(&json)
-        .map_err(|e| KeyError::EnrollmentCorrupted(format!(
-            "{} enrollment data is corrupted: {}", mode, e
-        )))
+    serde_json::from_str(&json).map_err(|e| {
+        KeyError::EnrollmentCorrupted(format!("{} enrollment data is corrupted: {}", mode, e))
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -349,13 +344,15 @@ pub(crate) fn load_encrypted_secret(mode: &str) -> Result<Vec<u8>, KeyError> {
     let path = dir.join(&filename);
     if !path.exists() {
         return Err(KeyError::NotEnrolled(format!(
-            "No encrypted secret found for {}. Run the Genesis ceremony first.", mode
+            "No encrypted secret found for {}. Run the Genesis ceremony first.",
+            mode
         )));
     }
     let data = std::fs::read(&path)?;
     if data.is_empty() {
         return Err(KeyError::EnrollmentCorrupted(format!(
-            "{} encrypted secret file is empty", mode
+            "{} encrypted secret file is empty",
+            mode
         )));
     }
     Ok(data)

@@ -31,6 +31,21 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
+/// Type alias for audit row data from database queries.
+type AuditRow = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+);
+
 /// The audit store manages an append-only SQLite database of audit entries
 /// with hash-chained verification for integrity.
 pub struct AuditStore {
@@ -130,10 +145,7 @@ impl AuditStore {
                 .map_err(StoreError::Database)?;
         }
 
-        info!(
-            "Audit store initialized (schema v{})",
-            Self::SCHEMA_VERSION
-        );
+        info!("Audit store initialized (schema v{})", Self::SCHEMA_VERSION);
         Ok(())
     }
 
@@ -607,11 +619,7 @@ impl AuditStore {
     /// Uses SQLite's json_extract to filter on the receipt JSON without
     /// requiring a schema migration. For large chains, consider adding a
     /// denormalized `receipt_type` column in a future schema version.
-    pub fn query_by_claim_type(
-        &self,
-        claim_type: &str,
-        limit: usize,
-    ) -> Result<Vec<AuditEntry>> {
+    pub fn query_by_claim_type(&self, claim_type: &str, limit: usize) -> Result<Vec<AuditEntry>> {
         let mut stmt = self
             .conn
             .prepare(
@@ -639,9 +647,17 @@ impl AuditStore {
                 let signature: Option<String> = row.get(10)?;
 
                 Ok((
-                    id_str, timestamp_str, prev_hash, entry_hash,
-                    actor_json, action_json, conv_id_str,
-                    policy_decision_json, policy_module, receipt_json, signature,
+                    id_str,
+                    timestamp_str,
+                    prev_hash,
+                    entry_hash,
+                    actor_json,
+                    action_json,
+                    conv_id_str,
+                    policy_decision_json,
+                    policy_module,
+                    receipt_json,
+                    signature,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -655,11 +671,7 @@ impl AuditStore {
     ///
     /// Scans audit entries for RevocationClaim receipts whose claim_metadata
     /// contains the given receipt_id as the revoked target.
-    pub fn query_revocations(
-        &self,
-        receipt_id: &str,
-        limit: usize,
-    ) -> Result<Vec<AuditEntry>> {
+    pub fn query_revocations(&self, receipt_id: &str, limit: usize) -> Result<Vec<AuditEntry>> {
         let mut stmt = self
             .conn
             .prepare(
@@ -688,9 +700,17 @@ impl AuditStore {
                 let signature: Option<String> = row.get(10)?;
 
                 Ok((
-                    id_str, timestamp_str, prev_hash, entry_hash,
-                    actor_json, action_json, conv_id_str,
-                    policy_decision_json, policy_module, receipt_json, signature,
+                    id_str,
+                    timestamp_str,
+                    prev_hash,
+                    entry_hash,
+                    actor_json,
+                    action_json,
+                    conv_id_str,
+                    policy_decision_json,
+                    policy_module,
+                    receipt_json,
+                    signature,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -731,9 +751,17 @@ impl AuditStore {
                 let signature: Option<String> = row.get(10)?;
 
                 Ok((
-                    id_str, timestamp_str, prev_hash, entry_hash,
-                    actor_json, action_json, conv_id_str,
-                    policy_decision_json, policy_module, receipt_json, signature,
+                    id_str,
+                    timestamp_str,
+                    prev_hash,
+                    entry_hash,
+                    actor_json,
+                    action_json,
+                    conv_id_str,
+                    policy_decision_json,
+                    policy_module,
+                    receipt_json,
+                    signature,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -745,19 +773,20 @@ impl AuditStore {
 
     /// Internal helper to convert raw row tuples into AuditEntry structs.
     /// Extracted to avoid duplicating the deserialization logic across query methods.
-    fn hydrate_entries(
-        &self,
-        entries: Vec<(
-            String, String, String, String,
-            String, String, String,
-            String, String, Option<String>, Option<String>,
-        )>,
-    ) -> Result<Vec<AuditEntry>> {
+    fn hydrate_entries(&self, entries: Vec<AuditRow>) -> Result<Vec<AuditEntry>> {
         let mut result = Vec::with_capacity(entries.len());
         for (
-            id_str, timestamp_str, prev_hash, entry_hash,
-            actor_json, action_json, conv_id_str,
-            policy_decision_json, policy_module, receipt_json, signature,
+            id_str,
+            timestamp_str,
+            prev_hash,
+            entry_hash,
+            actor_json,
+            action_json,
+            conv_id_str,
+            policy_decision_json,
+            policy_module,
+            receipt_json,
+            signature,
         ) in entries
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
@@ -1129,7 +1158,7 @@ mod tests {
             params![
                 "fork-attempt-id",
                 chrono::Utc::now().to_rfc3339(),
-                e1.entry_hash,           // <-- duplicate prev_hash
+                e1.entry_hash, // <-- duplicate prev_hash
                 "deadbeef".repeat(8),
                 "{\"System\":\"attacker\"}",
                 "{\"SystemEvent\":{\"event\":\"fork\"}}",

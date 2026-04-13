@@ -103,7 +103,14 @@ pub fn validate(config: &ZpConfig) -> Vec<ConfigError> {
     }
 
     // ── Data dir writability ──
-    if config.data_dir.value.exists() && config.data_dir.value.metadata().map(|m| m.permissions().readonly()).unwrap_or(false) {
+    if config.data_dir.value.exists()
+        && config
+            .data_dir
+            .value
+            .metadata()
+            .map(|m| m.permissions().readonly())
+            .unwrap_or(false)
+    {
         errors.push(ConfigError::InvalidValue {
             key: "data.dir".into(),
             reason: format!(

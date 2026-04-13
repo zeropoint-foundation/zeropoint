@@ -332,11 +332,7 @@ impl MeshBridge {
     /// When the `mesh-auth-v1` feature is off, all inbound payloads are
     /// classified as `NotChecked` regardless of `sg`.
     #[allow(unused_variables)]
-    fn classify_inbound_auth(
-        &self,
-        receipt: &CompactReceipt,
-        sender_hash: &[u8; 16],
-    ) -> AuthState {
+    fn classify_inbound_auth(&self, receipt: &CompactReceipt, sender_hash: &[u8; 16]) -> AuthState {
         #[cfg(not(feature = "mesh-auth-v1"))]
         {
             AuthState::NotChecked
@@ -423,9 +419,13 @@ impl MeshBridge {
                               "Rejected inbound receipt: signature verification failed");
                         // Record a negative reputation signal on verify failure.
                         let signal = zp_mesh::reputation::signal_from_receipt(
-                            &receipt.id, false, Utc::now(),
+                            &receipt.id,
+                            false,
+                            Utc::now(),
                         );
-                        self.node.record_reputation_signal(sender_hash, signal).await;
+                        self.node
+                            .record_reputation_signal(sender_hash, signal)
+                            .await;
                         return Err("signature verification failed".to_string());
                     }
                 }
@@ -1456,7 +1456,10 @@ mod tests {
             let r = signed_receipt("rcpt-auth-unk", &signing);
 
             let accepted = bridge.handle_inbound_receipt(&r, &sender).await.unwrap();
-            assert!(accepted, "unknown-key path should still accept with reduced trust");
+            assert!(
+                accepted,
+                "unknown-key path should still accept with reduced trust"
+            );
             let stored = bridge.received_receipts().await;
             assert_eq!(stored[0].auth, AuthState::UnverifiedNoKey);
         }

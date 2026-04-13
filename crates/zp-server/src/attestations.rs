@@ -107,7 +107,7 @@ fn verify_attestation_signature(
     signature_hex: &str,
     signer_public_key_hex: &str,
 ) -> bool {
-    use ed25519_dalek::{Signature, VerifyingKey, Verifier};
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
     // Decode public key
     let pk_bytes = match hex::decode(signer_public_key_hex) {
@@ -480,11 +480,8 @@ pub async fn list_attestations_handler(
             let attestation_hash: String = row.get(5)?;
             let signature: String = row.get(6)?;
             let signer_public_key: String = row.get(7)?;
-            let verified = verify_attestation_signature(
-                &attestation_hash,
-                &signature,
-                &signer_public_key,
-            );
+            let verified =
+                verify_attestation_signature(&attestation_hash, &signature, &signer_public_key);
             Ok(AttestationSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,

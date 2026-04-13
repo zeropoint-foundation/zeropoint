@@ -76,8 +76,8 @@ pub fn detect_platform() -> Platform {
 /// old BiometricCapability format for backward compatibility with
 /// the onboarding step 1 UI.
 pub fn detect_biometric() -> BiometricCapability {
-    use super::touchid::TouchIdProvider;
     use super::fingerprint::FingerprintProvider;
+    use super::touchid::TouchIdProvider;
     use super::SovereigntyProvider;
 
     let platform = detect_platform();
@@ -87,11 +87,11 @@ pub fn detect_biometric() -> BiometricCapability {
         Platform::MacOS => {
             let cap = TouchIdProvider.detect();
             let bio_type = if cap.available {
-                cap.detail.as_deref().and_then(|d| {
+                cap.detail.as_deref().map(|d| {
                     if d.contains("Face") {
-                        Some(BiometricType::FaceId)
+                        BiometricType::FaceId
                     } else {
-                        Some(BiometricType::TouchId)
+                        BiometricType::TouchId
                     }
                 })
             } else {

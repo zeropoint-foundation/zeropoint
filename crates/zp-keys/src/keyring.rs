@@ -27,16 +27,20 @@ use crate::hierarchy::{AgentKey, GenesisKey, OperatorKey};
 
 /// Service name for Genesis secret in the OS credential store.
 /// Public so biometric.rs can use the same identifiers.
+#[allow(dead_code)]
 pub(crate) const GENESIS_KEYCHAIN_SERVICE: &str = "zeropoint-genesis";
 
 /// Account name for the Genesis secret in the OS credential store.
 /// Public so biometric.rs can use the same identifiers.
+#[allow(dead_code)]
 pub(crate) const GENESIS_KEYCHAIN_ACCOUNT: &str = "genesis-secret";
 
 /// Service name for the Operator secret in the OS credential store.
+#[allow(dead_code)]
 const OPERATOR_KEYCHAIN_SERVICE: &str = "zeropoint-operator";
 
 /// Account name for the Operator secret in the OS credential store.
+#[allow(dead_code)]
 const OPERATOR_KEYCHAIN_ACCOUNT: &str = "operator-secret";
 
 /// Version byte for the on-disk encrypted operator secret blob.
@@ -778,7 +782,10 @@ mod tests {
 
         let (secret, from_credential_store) = keyring.load_genesis_secret().unwrap();
         assert_eq!(secret, genesis.secret_key());
-        assert!(from_credential_store, "canon: genesis secret must come from credential store");
+        assert!(
+            from_credential_store,
+            "canon: genesis secret must come from credential store"
+        );
         let _ = keyring.clear_genesis_secret();
     }
 

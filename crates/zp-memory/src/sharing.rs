@@ -10,7 +10,7 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::info;
 
 use zp_receipt::{ClaimMetadata, ClaimSemantics, Receipt, Status};
 
@@ -201,14 +201,8 @@ fn generate_merge_receipt(source_ids: &[String], context: &SharingContext) -> Re
             "zp.merge.sender_reputation",
             serde_json::json!(context.sender_reputation),
         )
-        .extension(
-            "zp.merge.source_count",
-            serde_json::json!(source_ids.len()),
-        )
-        .extension(
-            "zp.merge.safety_reset",
-            serde_json::Value::Bool(true),
-        )
+        .extension("zp.merge.source_count", serde_json::json!(source_ids.len()))
+        .extension("zp.merge.safety_reset", serde_json::Value::Bool(true))
         .finalize()
 }
 

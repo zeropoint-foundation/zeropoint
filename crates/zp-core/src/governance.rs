@@ -1429,18 +1429,14 @@ mod tests {
     // ========================================================================
 
     fn sealed_sample_event() -> GovernanceEvent {
-        let actor = GovernanceActor::Human {
-            id: "alice".into(),
-        };
+        let actor = GovernanceActor::Human { id: "alice".into() };
         let action_context = ActionContext {
             action_type: "Read".into(),
             target: Some("/etc/passwd".into()),
             trust_tier: 0,
             risk_level: "Low".into(),
         };
-        let decision = GovernanceDecision::Allow {
-            conditions: vec![],
-        };
+        let decision = GovernanceDecision::Allow { conditions: vec![] };
         let event = GovernanceEvent::guard_evaluation(actor, action_context, decision);
         let hash = event.compute_hash();
         event.with_audit_hash(hash)
@@ -1454,9 +1450,7 @@ mod tests {
 
     #[test]
     fn test_verify_hash_errors_when_unsealed() {
-        let actor = GovernanceActor::Human {
-            id: "bob".into(),
-        };
+        let actor = GovernanceActor::Human { id: "bob".into() };
         let ctx = ActionContext {
             action_type: "Write".into(),
             target: None,

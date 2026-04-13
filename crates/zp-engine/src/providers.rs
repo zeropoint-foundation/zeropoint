@@ -80,7 +80,10 @@ impl ProviderProfile {
         catalog: &'a [ProviderProfile],
         capability: &str,
     ) -> Vec<&'a ProviderProfile> {
-        catalog.iter().filter(|p| p.has_capability(capability)).collect()
+        catalog
+            .iter()
+            .filter(|p| p.has_capability(capability))
+            .collect()
     }
 }
 

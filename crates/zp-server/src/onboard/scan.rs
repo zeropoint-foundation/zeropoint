@@ -7,24 +7,30 @@ use super::{OnboardAction, OnboardEvent, OnboardState};
 pub async fn handle_scan(action: &OnboardAction, state: &mut OnboardState) -> Vec<OnboardEvent> {
     let mut events = Vec::new();
 
-    let scan_path = action.params.get("path")
+    let scan_path = action
+        .params
+        .get("path")
         .and_then(|v| v.as_str())
         .unwrap_or("~/projects");
 
     // Expand ~ to home directory
-    let expanded = if scan_path.starts_with("~/") {
+    let expanded = if let Some(suffix) = scan_path.strip_prefix("~/") {
         dirs::home_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(&scan_path[2..])
+            .join(suffix)
     } else {
         std::path::PathBuf::from(scan_path)
     };
 
-    events.push(OnboardEvent::terminal(&format!("Scanning {}...", expanded.display())));
+    events.push(OnboardEvent::terminal(&format!(
+        "Scanning {}...",
+        expanded.display()
+    )));
 
     if !expanded.exists() {
         events.push(OnboardEvent::error(&format!(
-            "Directory not found: {}", expanded.display()
+            "Directory not found: {}",
+            expanded.display()
         )));
         return events;
     }
@@ -39,14 +45,18 @@ pub async fn handle_scan(action: &OnboardAction, state: &mut OnboardState) -> Ve
             zp_engine::scan::ToolStatus::Unconfigured => "unconfigured",
         };
 
-        let found_creds_json: Vec<serde_json::Value> = tool.found_credentials.iter().map(|c| {
-            serde_json::json!({
-                "var_name": c.var_name,
-                "provider": c.provider,
-                "masked_value": c.masked_value,
-                "value": c.value,
+        let found_creds_json: Vec<serde_json::Value> = tool
+            .found_credentials
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "var_name": c.var_name,
+                    "provider": c.provider,
+                    "masked_value": c.masked_value,
+                    "value": c.value,
+                })
             })
-        }).collect();
+            .collect();
 
         events.push(OnboardEvent::new(
             "scan_result",
@@ -64,12 +74,14 @@ pub async fn handle_scan(action: &OnboardAction, state: &mut OnboardState) -> Ve
             zp_engine::scan::ToolStatus::HasPlaintext => {
                 events.push(OnboardEvent::terminal(&format!(
                     "  {} — configured · ⚠ {} plaintext credential(s)",
-                    tool.name, tool.found_credentials.len()
+                    tool.name,
+                    tool.found_credentials.len()
                 )));
             }
             zp_engine::scan::ToolStatus::Unconfigured => {
                 events.push(OnboardEvent::terminal(&format!(
-                    "  {} — unconfigured", tool.name
+                    "  {} — unconfigured",
+                    tool.name
                 )));
             }
         }
@@ -96,23 +108,33 @@ pub async fn handle_scan(action: &OnboardAction, state: &mut OnboardState) -> Ve
 
     // ── Credential summary from engine's aggregation ──
     if results.total_plaintext > 0 {
-        let provider_groups: Vec<serde_json::Value> = results.credential_groups.iter().map(|g| {
-            let values: Vec<serde_json::Value> = g.values.iter().map(|v| {
+        let provider_groups: Vec<serde_json::Value> = results
+            .credential_groups
+            .iter()
+            .map(|g| {
+                let values: Vec<serde_json::Value> = g
+                    .values
+                    .iter()
+                    .map(|v| {
+                        serde_json::json!({
+                            "var_name": v.var_name,
+                            "masked_value": v.masked_value,
+                            "value": v.value,
+                            "sources": v.sources,
+                        })
+                    })
+                    .collect();
                 serde_json::json!({
-                    "var_name": v.var_name,
-                    "masked_value": v.masked_value,
-                    "value": v.value,
-                    "sources": v.sources,
+                    "provider": g.provider,
+                    "values": values,
+                    "has_conflict": g.has_conflict,
                 })
-            }).collect();
-            serde_json::json!({
-                "provider": g.provider,
-                "values": values,
-                "has_conflict": g.has_conflict,
             })
-        }).collect();
+            .collect();
 
-        let conflicts = results.credential_groups.iter()
+        let conflicts = results
+            .credential_groups
+            .iter()
             .filter(|g| g.has_conflict)
             .count();
 
@@ -126,7 +148,7 @@ pub async fn handle_scan(action: &OnboardAction, state: &mut OnboardState) -> Ve
         ));
     } else if tool_count > 0 {
         events.push(OnboardEvent::terminal(
-            "\n✓ No plaintext credentials found in .env files"
+            "\n✓ No plaintext credentials found in .env files",
         ));
         events.push(OnboardEvent::new(
             "credentials_summary",

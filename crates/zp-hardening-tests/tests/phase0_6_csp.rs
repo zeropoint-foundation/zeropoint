@@ -40,8 +40,7 @@ async fn assert_has_csp(app: &TestApp, path: &str) {
 
     // Must not allow unsafe-inline for scripts (that defeats the purpose)
     assert!(
-        !csp_value.contains("script-src 'unsafe-inline'")
-            && !csp_value.contains("script-src *"),
+        !csp_value.contains("script-src 'unsafe-inline'") && !csp_value.contains("script-src *"),
         "XSS: CSP header on {} allows unsafe-inline or wildcard scripts: '{}'",
         path,
         csp_value

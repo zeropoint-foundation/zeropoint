@@ -234,9 +234,7 @@ impl<T> Epistemic<T> {
 
         // Check claim semantics
         if new_status.requires_truth_assertion() && !is_truth_assertion {
-            return Err(EpistemicError::WrongClaimSemantics {
-                target: new_status,
-            });
+            return Err(EpistemicError::WrongClaimSemantics { target: new_status });
         }
 
         let transition = StatusTransition {
@@ -308,7 +306,13 @@ mod tests {
         assert_eq!(entity.status, EpistemicStatus::Observed);
 
         entity
-            .promote(EpistemicStatus::Interpreted, "rcpt-002", "agent-1", 0, false)
+            .promote(
+                EpistemicStatus::Interpreted,
+                "rcpt-002",
+                "agent-1",
+                0,
+                false,
+            )
             .unwrap();
         assert_eq!(entity.status, EpistemicStatus::Interpreted);
 

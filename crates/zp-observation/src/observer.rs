@@ -34,7 +34,8 @@ Rules:
 /// Build the user prompt for the Observer agent, containing the raw messages
 /// to observe.
 pub fn build_observer_prompt(messages: &[(String, String)]) -> String {
-    let mut prompt = String::from("Compress the following conversation segment into observations:\n\n");
+    let mut prompt =
+        String::from("Compress the following conversation segment into observations:\n\n");
 
     for (role, content) in messages {
         prompt.push_str(&format!("[{}]: {}\n\n", role, content));
@@ -58,10 +59,7 @@ pub struct RawObservation {
 ///
 /// The Observer outputs one JSON object per line. We parse each line
 /// independently so partial output still yields results.
-pub fn parse_observer_output(
-    output: &str,
-    source_range: &SourceRange,
-) -> Vec<Observation> {
+pub fn parse_observer_output(output: &str, source_range: &SourceRange) -> Vec<Observation> {
     let now = Utc::now();
 
     output
@@ -112,7 +110,10 @@ mod tests {
         let observations = parse_observer_output(output, &sr);
 
         assert_eq!(observations.len(), 2);
-        assert_eq!(observations[0].content, "User is building an auth system with JWT");
+        assert_eq!(
+            observations[0].content,
+            "User is building an auth system with JWT"
+        );
         assert_eq!(observations[0].priority, ObservationPriority::Medium);
         assert_eq!(observations[0].category, "auth");
         assert_eq!(observations[1].content, "Database uses PostgreSQL 15");

@@ -63,13 +63,16 @@ impl OnboardState {
                 if let Ok(record) = serde_json::from_str::<serde_json::Value>(&content) {
                     state.genesis_complete = true;
                     state.platform_detected = true;
-                    state.genesis_public_key = record.get("genesis_public_key")
+                    state.genesis_public_key = record
+                        .get("genesis_public_key")
                         .and_then(|v| v.as_str())
                         .map(String::from);
-                    state.operator_name = record.get("operator")
+                    state.operator_name = record
+                        .get("operator")
                         .and_then(|v| v.as_str())
                         .map(String::from);
-                    state.sovereignty_mode = record.get("sovereignty_mode")
+                    state.sovereignty_mode = record
+                        .get("sovereignty_mode")
                         .and_then(|v| v.as_str())
                         .map(String::from);
                     state.step = 3; // Past genesis
@@ -140,7 +143,9 @@ impl OnboardState {
             if let Ok(entries) = std::fs::read_dir(&scan_path) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if !path.is_dir() { continue; }
+                    if !path.is_dir() {
+                        continue;
+                    }
                     if path.join(".env.example").exists() {
                         tool_count += 1;
                     }
