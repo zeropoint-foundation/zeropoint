@@ -14,8 +14,13 @@
 //! | Remembered     | Promotion engine approval   | MemoryPromotionClaim   |
 //! | IdentityBearing| Human review + signing      | MemoryPromotionClaim   |
 
+pub mod lifecycle;
 pub mod promotion;
 pub mod types;
 
+pub use lifecycle::{
+    apply_lifecycle_rules, default_expiry, demote, demotion_target, is_expired, is_review_due,
+    reaffirm, review_interval, sweep_lifecycle, ExpirySweepResult,
+};
 pub use promotion::PromotionEngine;
 pub use types::*;
