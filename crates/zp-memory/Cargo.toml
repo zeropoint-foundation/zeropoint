@@ -1,0 +1,24 @@
+[package]
+name = "zp-memory"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Memory promotion engine for ZeroPoint's cognition plane"
+
+[dependencies]
+zp-core = { path = "../zp-core" }
+zp-receipt = { path = "../zp-receipt" }
+zp-observation = { path = "../zp-observation" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+blake3 = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = "3.10"
