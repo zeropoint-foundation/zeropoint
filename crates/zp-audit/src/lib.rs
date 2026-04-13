@@ -7,6 +7,7 @@
 pub mod catalog_verify;
 pub mod chain;
 pub mod collective_audit;
+pub mod reconstitute;
 pub mod scrub;
 pub mod store;
 pub mod verifier;
@@ -15,6 +16,10 @@ pub use chain::{genesis_hash, recompute_entry_hash, seal_entry, UnsealedEntry};
 pub use collective_audit::{
     verify_peer_chain, AuditChallenge, AuditRange, AuditResponse, CompactAuditEntry,
     PeerAuditAttestation, MAX_ENTRIES_PER_RESPONSE,
+};
+pub use reconstitute::{
+    compute_blast_radius, BlastRadiusReport, ChainEntry, ReconstitutedState,
+    ReconstitutionAnomaly, ReconstitutionConfig, ReconstitutionEngine,
 };
 pub use store::{AuditStore, Result, StoreError};
 pub use verifier::{verify_linkage, verify_linkage_report, ChainVerifier, VerificationReport};
