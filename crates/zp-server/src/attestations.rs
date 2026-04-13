@@ -32,6 +32,7 @@ use axum::extract::Query;
 // ============================================================================
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IssueAttestationRequest {
     /// Full name of the builder
     pub name: String,
@@ -72,6 +73,8 @@ pub struct Attestation {
     pub epoch: u64,
     /// Previous attestation hash (chain linkage)
     pub prev_attestation_hash: Option<String>,
+    /// Whether the Ed25519 signature has been re-verified on read
+    pub verified: bool,
 }
 
 #[derive(Serialize)]
@@ -88,6 +91,52 @@ pub struct AttestationSummary {
 #[derive(Deserialize)]
 pub struct LookupQuery {
     pub id: Option<String>,
+}
+
+// ============================================================================
+// Signature Verification (Phase 1.9: AUTHZ-VULN-14, AUTHZ-VULN-18)
+// ============================================================================
+
+/// Re-verify an attestation's Ed25519 signature.
+///
+/// Previously this always returned true (hardcoded). Now it performs real
+/// cryptographic verification: decode the signer public key and signature
+/// from hex, then verify the signature over the attestation hash.
+fn verify_attestation_signature(
+    attestation_hash: &str,
+    signature_hex: &str,
+    signer_public_key_hex: &str,
+) -> bool {
+    use ed25519_dalek::{Signature, VerifyingKey, Verifier};
+
+    // Decode public key
+    let pk_bytes = match hex::decode(signer_public_key_hex) {
+        Ok(b) if b.len() == 32 => b,
+        _ => return false,
+    };
+    let pk_array: [u8; 32] = match pk_bytes.try_into() {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+    let verifying_key = match VerifyingKey::from_bytes(&pk_array) {
+        Ok(vk) => vk,
+        Err(_) => return false,
+    };
+
+    // Decode signature
+    let sig_bytes = match hex::decode(signature_hex) {
+        Ok(b) if b.len() == 64 => b,
+        _ => return false,
+    };
+    let sig_array: [u8; 64] = match sig_bytes.try_into() {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+    let signature = Signature::from_bytes(&sig_array);
+
+    // Verify: signature is over the hash bytes (hex-encoded hash string)
+    let hash_bytes = attestation_hash.as_bytes();
+    verifying_key.verify(hash_bytes, &signature).is_ok()
 }
 
 // ============================================================================
@@ -391,6 +440,7 @@ pub async fn lookup_attestation_handler(
         })?;
 
     let completions: Vec<ModuleCompletion> = serde_json::from_str(&row.4).unwrap_or_default();
+    let verified = verify_attestation_signature(&row.6, &row.7, &row.8);
 
     Ok(Json(Attestation {
         id: row.0,
@@ -404,6 +454,7 @@ pub async fn lookup_attestation_handler(
         signer_public_key: row.8,
         epoch: row.9 as u64,
         prev_attestation_hash: row.10,
+        verified,
     }))
 }
 
@@ -417,21 +468,30 @@ pub async fn list_attestations_handler(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, track, modules_completed, issued_at, attestation_hash
+            "SELECT id, name, track, modules_completed, issued_at,
+                    attestation_hash, signature, signer_public_key
              FROM attestations ORDER BY created_at DESC",
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let rows = stmt
         .query_map([], |row| {
+            let attestation_hash: String = row.get(5)?;
+            let signature: String = row.get(6)?;
+            let signer_public_key: String = row.get(7)?;
+            let verified = verify_attestation_signature(
+                &attestation_hash,
+                &signature,
+                &signer_public_key,
+            );
             Ok(AttestationSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 track: row.get(2)?,
                 modules_completed: row.get(3)?,
                 issued_at: row.get(4)?,
-                attestation_hash: row.get(5)?,
-                verified: true, // TODO: re-verify signature on read
+                attestation_hash,
+                verified,
             })
         })
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
