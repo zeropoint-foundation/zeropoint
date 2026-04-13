@@ -24,6 +24,7 @@ pub mod error;
 pub mod hierarchy;
 pub mod keyring;
 pub mod recovery;
+pub mod revocation;
 pub mod sovereignty;
 pub mod vault_key;
 
@@ -71,4 +72,8 @@ pub use error::KeyError;
 pub use hierarchy::{AgentKey, GenesisKey, OperatorKey};
 pub use keyring::Keyring;
 pub use recovery::{decode_mnemonic, encode_mnemonic, verify_recovery};
+pub use revocation::{
+    RevocationCertificate, RevocationReason, RevocationStatus, RevocationStore,
+    verify_chain_with_revocation,
+};
 pub use vault_key::{derive_vault_key, resolve_vault_key, ResolvedVaultKey, VaultKeySource};
