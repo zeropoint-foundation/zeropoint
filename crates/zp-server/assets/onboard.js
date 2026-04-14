@@ -134,6 +134,14 @@
         handleGenesisFailed(msg);
         break;
 
+      case 'awaiting_provider':
+        // Server is about to block on an OS dialog or terminal password prompt.
+        // Show the user what's happening so the UI doesn't appear dead (result 028).
+        appendTerminal('genesisTerm', '');
+        appendTerminal('genesisTerm', '⏳ ' + (msg.hint || 'Waiting for system authorization...'));
+        appendTerminal('genesisTerm', '   If nothing appears, check your terminal for a password prompt.');
+        break;
+
       case 'hw_connect_prompt':
         showHwConnectStatus('detecting', msg.device);
         break;
@@ -316,7 +324,9 @@
   // ── Step 0: Begin ───────────────────────────────────────
   window.startOnboard = function() {
     // Remove first-click listener so it doesn't double-fire with goStep's auto-play
-    document.removeEventListener('click', autoplayOnFirstClick);
+    document.removeEventListener('click', autoplayOnFirstInteraction);
+    document.removeEventListener('keydown', autoplayOnFirstInteraction);
+    document.removeEventListener('touchstart', autoplayOnFirstInteraction);
     send('detect');
     goStep(1);
   };
@@ -348,11 +358,13 @@
         card.dataset.implementationStatus = prov.implementation_status || 'ready';
 
         if (prov.implementation_status === 'detection_only') {
-          // DetectionOnly: show but clearly mark as not yet available for ceremony
+          // DetectionOnly: show but clearly mark as not yet available for ceremony.
+          // Don't show "connect your device" instructions for unimplemented providers
+          // — that contradicts the "Coming soon" badge (result 026).
           if (detail) {
             detail.textContent = prov.available
               ? (prov.display_name + ' detected — full support coming soon')
-              : (prov.description || 'Not detected');
+              : 'Full support coming soon';
           }
           card.style.opacity = '0.4';
           card.style.pointerEvents = 'auto';

@@ -804,10 +804,16 @@
       tools: '/api/v1/tools'
     };
 
-    async function fetchEndpoint(url) {
+    async function fetchEndpoint(url, retried) {
       try {
         const r = await zpFetch(url);
-        if (!r.ok) return { error: `HTTP ${r.status}` };
+        if (r.status === 401 && !retried) {
+          // Session cookie may not have been processed yet — retry once
+          // after a short delay (addresses result 031 stall).
+          await new Promise(function(ok) { setTimeout(ok, 500); });
+          return fetchEndpoint(url, true);
+        }
+        if (!r.ok) return { error: 'HTTP ' + r.status };
         return await r.json();
       } catch (err) { return { error: 'Unreachable' }; }
     }

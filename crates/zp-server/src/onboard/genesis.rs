@@ -179,6 +179,26 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         provider.display_name()
     )));
 
+    // Warn the browser that the server may block on an OS dialog or terminal
+    // password prompt.  This prevents the "nothing happened" dead state
+    // reported in result 028 — the UI can show a spinner or instruction.
+    let provider_hint = match sovereignty_mode {
+        zp_keys::SovereigntyMode::TouchId => "Touch ID will be requested — look for the biometric prompt",
+        zp_keys::SovereigntyMode::WindowsHello => "Windows Hello verification will appear",
+        zp_keys::SovereigntyMode::Fingerprint => "Place your finger on the reader when prompted",
+        zp_keys::SovereigntyMode::FaceEnroll => "Camera will activate for face enrollment",
+        mode if mode.requires_external_device() => "Confirm on your hardware device when prompted",
+        _ => "Your system may request permission — check for a dialog or terminal prompt",
+    };
+    events.push(OnboardEvent::new(
+        "awaiting_provider",
+        serde_json::json!({
+            "mode": sovereignty_mode.to_string(),
+            "display_name": sovereignty_mode.display_name(),
+            "hint": provider_hint,
+        }),
+    ));
+
     // Enrollment (face capture, hardware wallet pairing, etc.)
     if provider.detect().requires_enrollment {
         events.push(OnboardEvent::terminal(&format!(
