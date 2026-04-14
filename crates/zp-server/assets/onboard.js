@@ -1446,7 +1446,7 @@
           valuesHtml += `
             <div class="found-value-row">
               <input type="radio" name="${escapeHtml(radioName)}" value="${vi}" ${isSelected ? 'checked' : ''}
-                     onchange="selectFoundCred('${escapeHtml(provider)}', ${vi})">
+                     data-action="select-found-cred" data-provider="${escapeHtml(provider)}" data-value-index="${vi}">
               <span class="found-var-name">${escapeHtml(v.var_name)}</span>
               <span class="found-masked-value">${escapeHtml(v.masked_value)}</span>
               <span class="found-source-tag">${escapeHtml(sources)}</span>
@@ -1456,7 +1456,7 @@
           // Single value — just show it with checkbox to include/exclude
           valuesHtml += `
             <div class="found-value-row">
-              <input type="checkbox" checked onchange="toggleFoundCred('${escapeHtml(provider)}', this.checked, ${vi})"
+              <input type="checkbox" checked data-action="toggle-found-cred" data-provider="${escapeHtml(provider)}" data-value-index="${vi}"
                      style="accent-color:var(--accent)">
               <span class="found-var-name">${escapeHtml(v.var_name)}</span>
               <span class="found-masked-value">${escapeHtml(v.masked_value)}</span>
@@ -2304,6 +2304,27 @@
       case 'viewVerification':
         // Navigation handled by the <a> href
         break;
+    }
+  });
+
+  // ── Change event delegation (radios, checkboxes) ─────────
+  document.addEventListener('change', function(e) {
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.dataset.action;
+    switch (action) {
+      case 'select-found-cred': {
+        var provider = el.dataset.provider;
+        var vi = parseInt(el.dataset.valueIndex, 10);
+        if (typeof selectFoundCred === 'function') selectFoundCred(provider, vi);
+        break;
+      }
+      case 'toggle-found-cred': {
+        var provider = el.dataset.provider;
+        var vi = parseInt(el.dataset.valueIndex, 10);
+        if (typeof toggleFoundCred === 'function') toggleFoundCred(provider, el.checked, vi);
+        break;
+      }
     }
   });
 

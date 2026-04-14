@@ -3670,13 +3670,28 @@ const ECOSYSTEM_HTML_FALLBACK: &str = include_str!("../assets/ecosystem.html");
 const ONBOARD_CSS_EMBEDDED: &str = include_str!("../assets/onboard.css");
 const ONBOARD_JS_EMBEDDED: &str = include_str!("../assets/onboard.js");
 const TTS_JS_EMBEDDED: &str = include_str!("../assets/tts.js");
+const DASHBOARD_JS_EMBEDDED: &str = include_str!("../assets/dashboard.js");
+const ECOSYSTEM_JS_EMBEDDED: &str = include_str!("../assets/ecosystem.js");
+const SPEAK_JS_EMBEDDED: &str = include_str!("../assets/speak.js");
+
+// Vendored 3rd-party libraries — no CDN dependency.  A sovereignty tool
+// shouldn't require third-party infrastructure to render its UI.
+const VENDOR_XTERM_JS: &str = include_str!("../assets/vendor/xterm.min.js");
+const VENDOR_XTERM_CSS: &str = include_str!("../assets/vendor/xterm.min.css");
+const VENDOR_XTERM_FIT_JS: &str = include_str!("../assets/vendor/xterm-addon-fit.min.js");
+const VENDOR_D3_JS: &str = include_str!("../assets/vendor/d3.min.js");
+
+// Vendored fonts — served locally under /assets/fonts/.
+const FONTS_CSS: &str = include_str!("../assets/fonts/fonts.css");
+const FONT_INTER: &[u8] = include_bytes!("../assets/fonts/inter-latin.woff2");
+const FONT_JETBRAINS: &[u8] = include_bytes!("../assets/fonts/jetbrainsmono-latin.woff2");
 
 /// Bootstrap the assets directory if it doesn't exist or is missing critical files.
 /// Writes compiled-in HTML, CSS, and JS so that a fresh `zp serve` works without
 /// any manual copying.  Existing files are NOT overwritten — only missing ones
 /// are created.  Users who want hot-reload can still use `./zp-dev.sh html`.
 fn bootstrap_assets(assets_dir: &std::path::Path) {
-    let files: &[(&str, &str)] = &[
+    let text_files: &[(&str, &str)] = &[
         ("dashboard.html", DASHBOARD_HTML_FALLBACK),
         ("onboard.html", ONBOARD_HTML_FALLBACK),
         ("speak.html", SPEAK_HTML_FALLBACK),
@@ -3684,15 +3699,40 @@ fn bootstrap_assets(assets_dir: &std::path::Path) {
         ("onboard.css", ONBOARD_CSS_EMBEDDED),
         ("onboard.js", ONBOARD_JS_EMBEDDED),
         ("tts.js", TTS_JS_EMBEDDED),
+        ("dashboard.js", DASHBOARD_JS_EMBEDDED),
+        ("ecosystem.js", ECOSYSTEM_JS_EMBEDDED),
+        ("speak.js", SPEAK_JS_EMBEDDED),
+        ("vendor/xterm.min.js", VENDOR_XTERM_JS),
+        ("vendor/xterm.min.css", VENDOR_XTERM_CSS),
+        ("vendor/xterm-addon-fit.min.js", VENDOR_XTERM_FIT_JS),
+        ("vendor/d3.min.js", VENDOR_D3_JS),
+        ("fonts/fonts.css", FONTS_CSS),
+    ];
+    let binary_files: &[(&str, &[u8])] = &[
+        ("fonts/inter-latin.woff2", FONT_INTER),
+        ("fonts/jetbrainsmono-latin.woff2", FONT_JETBRAINS),
     ];
 
     if let Err(e) = std::fs::create_dir_all(assets_dir) {
         tracing::warn!("Could not create assets dir {}: {}", assets_dir.display(), e);
         return;
     }
+    // Ensure nested dirs exist
+    let _ = std::fs::create_dir_all(assets_dir.join("vendor"));
+    let _ = std::fs::create_dir_all(assets_dir.join("fonts"));
 
     let mut bootstrapped = 0u32;
-    for (name, content) in files {
+    for (name, content) in text_files {
+        let path = assets_dir.join(name);
+        if !path.exists() {
+            if let Err(e) = std::fs::write(&path, content) {
+                tracing::warn!("Could not write {}: {}", path.display(), e);
+            } else {
+                bootstrapped += 1;
+            }
+        }
+    }
+    for (name, content) in binary_files {
         let path = assets_dir.join(name);
         if !path.exists() {
             if let Err(e) = std::fs::write(&path, content) {
