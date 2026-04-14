@@ -16,8 +16,9 @@
 //!   - GET  /                       (root redirect)
 
 use axum::{
+    body::Body,
     extract::Request,
-    http::{header, StatusCode},
+    http::{header, HeaderValue, StatusCode},
     middleware::Next,
     response::Response,
 };
@@ -425,7 +426,12 @@ pub async fn require_auth(
             Ok(next.run(req).await)
         }
         Some(_) => {
-            warn!("Auth rejected: invalid token for {}", path);
+            // Stale token: client has a well-formed cookie from a previous
+            // server run (or a rotated session). Distinguish this from "no
+            // cookie at all" so the dashboard can show "Session expired —
+            // reload to reconnect" instead of the misleading "No Genesis
+            // established" UX (ARTEMIS result 035 issue 3).
+            warn!("Auth rejected: stale/invalid token for {}", path);
             if let Err(retry) = rate_limiter.record_failure(client_ip) {
                 warn!(
                     "Auth rate limit tripped: {} for {}s",
@@ -434,7 +440,7 @@ pub async fn require_auth(
                 );
                 return Err(StatusCode::TOO_MANY_REQUESTS);
             }
-            Err(StatusCode::UNAUTHORIZED)
+            Ok(build_auth_response(StatusCode::UNAUTHORIZED, "stale"))
         }
         None => {
             // For dashboard and page loads, redirect to root (which is exempt)
@@ -442,7 +448,7 @@ pub async fn require_auth(
             if path.starts_with("/api/") || path.starts_with("/ws") {
                 warn!("Auth rejected: no token for {}", path);
                 let _ = rate_limiter.record_failure(client_ip);
-                Err(StatusCode::UNAUTHORIZED)
+                Ok(build_auth_response(StatusCode::UNAUTHORIZED, "missing"))
             } else {
                 // HTML page requests without auth — let through. The root
                 // handler will set the session cookie on response.
@@ -450,6 +456,29 @@ pub async fn require_auth(
             }
         }
     }
+}
+
+/// Build a 401 (or other) response with an `X-Auth-Reason` header so the
+/// client can distinguish "stale cookie, just reload" from "never authed,
+/// no genesis or no session yet". Keeps the body small so `zpFetch` callers
+/// don't try to parse it as JSON.
+fn build_auth_response(status: StatusCode, reason: &'static str) -> Response {
+    let body = match reason {
+        "stale" => r#"{"error":"session_stale","detail":"Session expired or server restarted — reload to reconnect"}"#,
+        "missing" => r#"{"error":"unauthenticated","detail":"No session token"}"#,
+        _ => r#"{"error":"unauthorized"}"#,
+    };
+    let mut resp = Response::new(Body::from(body));
+    *resp.status_mut() = status;
+    let headers = resp.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    if let Ok(v) = HeaderValue::from_str(reason) {
+        headers.insert("x-auth-reason", v);
+    }
+    resp
 }
 
 /// Build a `Set-Cookie` header value for the session cookie.

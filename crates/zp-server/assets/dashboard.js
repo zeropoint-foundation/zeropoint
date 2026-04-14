@@ -36,14 +36,47 @@
       tools: '/api/v1/tools'
     };
 
+    // Tracks whether we've already surfaced the stale-session banner so we
+    // don't spam the DOM with 8 copies (one per endpoint).
+    var _staleSessionNoticeShown = false;
+
+    function showStaleSessionBanner() {
+      if (_staleSessionNoticeShown) return;
+      _staleSessionNoticeShown = true;
+      var bar = document.createElement('div');
+      bar.setAttribute('data-action', 'reload-page');
+      bar.style.cssText = [
+        'position:fixed', 'top:0', 'left:0', 'right:0',
+        'z-index:99999',
+        'background:#5b3a1a', 'color:#f5d59a',
+        'border-bottom:1px solid #8a5a2a',
+        'font-family:JetBrains Mono, monospace', 'font-size:13px',
+        'padding:10px 16px', 'text-align:center',
+        'cursor:pointer', 'box-shadow:0 2px 8px rgba(0,0,0,0.3)'
+      ].join(';');
+      bar.innerHTML = '\u26A0 Session expired or server restarted &middot; ' +
+                      '<u>click to reload and reconnect</u>';
+      document.body.appendChild(bar);
+    }
+
     async function fetchEndpoint(url, retried) {
       try {
         const r = await zpFetch(url);
-        if (r.status === 401 && !retried) {
-          // Session cookie may not have been processed yet — retry once
-          // after a short delay (addresses result 031 stall).
-          await new Promise(function(ok) { setTimeout(ok, 500); });
-          return fetchEndpoint(url, true);
+        if (r.status === 401) {
+          // Distinguish stale cookie (from a previous `zp serve` run, ARTEMIS
+          // result 035 issue 3) from genuine "no session yet". The server
+          // emits X-Auth-Reason: stale|missing.
+          var reason = r.headers.get('x-auth-reason') || 'missing';
+          if (reason === 'stale') {
+            showStaleSessionBanner();
+            return { error: 'Session stale', staleSession: true };
+          }
+          if (!retried) {
+            // Session cookie may not have been processed yet — retry once
+            // after a short delay (addresses result 031 stall).
+            await new Promise(function(ok) { setTimeout(ok, 500); });
+            return fetchEndpoint(url, true);
+          }
         }
         if (!r.ok) return { error: 'HTTP ' + r.status };
         return await r.json();
@@ -1209,6 +1242,13 @@
     // ── Identity ──────────────────────────────────────────
     function renderIdentity(data, gen) {
       const el = (id) => document.getElementById(id);
+      if (gen && gen.staleSession) {
+        // Don't lie about identity state when we just have a stale cookie.
+        // The banner tells the user to reload — render neutral placeholders.
+        el('operatorName').innerHTML = '<span class="unreachable">Session expired &mdash; reload to reconnect</span>';
+        ['sovereigntyMode','publicKey','destinationHash','algorithm'].forEach(id => el(id).textContent = '\u2014');
+        return;
+      }
       if (!gen || gen.error) {
         el('operatorName').innerHTML = `<span class="unreachable">No Genesis established</span> &middot; <a href="/onboard" style="color:#7eb8da; text-decoration:none; border-bottom:1px solid rgba(126,184,218,0.3)">Begin Onboarding &rarr;</a>`;
         ['sovereigntyMode','publicKey','destinationHash','algorithm'].forEach(id => el(id).textContent = '\u2014');
@@ -1427,5 +1467,8 @@ document.addEventListener('click', function(e) {
       if (name) removeTool(name);
       break;
     }
+    case 'reload-page':
+      window.location.reload();
+      break;
   }
 });
