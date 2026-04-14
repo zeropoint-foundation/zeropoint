@@ -37,18 +37,18 @@
 
     <div class="paradigm-box old-model">
       <h4>the old model</h4>
-      Your identity is issued by authorities. Your credentials are stored by platforms. Your trust depends on institutions you don't control. In the Agentic Age, that model breaks — because the agents acting on your behalf inherit whatever trust model you're using. If you don't own your keys, whoever does owns your agents.
+      Your identity is issued by authorities. Your credentials are stored by platforms. Your trust depends on institutions you don't control. In the Agentic Age, that model breaks — because agents acting on your behalf inherit whatever trust model you're using. If you don't own your keys, whoever does owns your agents.
     </div>
 
     <div class="paradigm-box new-model">
       <h4>the new model</h4>
-      You create your own cryptographic root of trust. Your credentials live in a vault only you can unlock. Your governance rules are yours to write. Everything — vault, policies, agent certificates — derives from one key, created right now, by you.
+      You create your own cryptographic root of trust. Your credentials live in a vault only you can unlock — gated by your body, your hardware, or your choice. No accounts, no platforms, no intermediaries. Everything derives from one key, created right now, by you.
     </div>
 
-    <p style="color: var(--text-dim); font-size: 0.82rem; margin-top: 1.5rem;">Under 5 minutes. One sitting. No accounts to create.</p>
+    <p style="color: var(--text-dim); font-size: 0.82rem; margin-top: 1.5rem;">Under 5 minutes. One sitting. No accounts to create. Privacy by design.</p>
 
     <div class="btn-row">
-      <button class="btn" onclick="startOnboard()">Begin Genesis</button>
+      <button class="btn" id="beginGenesisBtn" data-action="startOnboard">Begin Genesis</button>
     </div>
   </div>
 
@@ -57,95 +57,95 @@
   <!-- ═══════════════════════════════════════════════════ -->
   <div class="step" id="step-1">
     <div class="step-header">01 — sovereignty boundary</div>
-    <h2>How will you prove it's you?</h2>
+    <h2>Choose your sovereignty.</h2>
 
-    <p>Your Genesis secret needs a guardian — something that proves <em>you</em> authorized an action, not just a process running on your machine.</p>
+    <p>This is the most important decision in your setup. Your Genesis secret — the root of all trust — needs a guardian that answers only to you. Not a password in a database. Not a token from an OAuth provider. <em>Something that proves you are present.</em></p>
 
     <div id="sovereigntyCards">
 
       <!-- Biometric category -->
-      <div class="card-category-label" id="cat-biometric-label">Biometric</div>
+      <div class="card-category-label" id="cat-biometric-label">Biometric — your body is the key</div>
 
-      <div class="card recommended" id="card-touch_id" onclick="selectSovereignty('touch_id')" style="cursor:pointer">
+      <div class="card recommended" id="card-touch_id" data-action="selectSovereignty" data-sovereignty="touch_id" style="cursor:pointer">
         <h3>Touch ID / Face ID</h3>
-        <p>Your body is the credential. The Genesis secret is locked in the Secure Enclave — agents can't act without your fingerprint or face.</p>
+        <p>Your fingerprint or face unlocks everything. The Genesis secret lives in the Secure Enclave — a hardware vault on your device that no software can extract from. No passwords to leak. No tokens to steal. Just you.</p>
         <div class="detail" id="touch_id-detail">Detecting hardware...</div>
       </div>
 
-      <div class="card" id="card-fingerprint" onclick="selectSovereignty('fingerprint')" style="cursor:pointer;display:none">
+      <div class="card" id="card-fingerprint" data-action="selectSovereignty" data-sovereignty="fingerprint" style="cursor:pointer;display:none">
         <h3>Fingerprint (fprintd)</h3>
-        <p>Linux fingerprint reader gates the Genesis secret. Physical presence required for every operation.</p>
+        <p>Your fingerprint gates every operation. Physical presence, verified locally by your hardware — nothing leaves the device, nothing is stored remotely.</p>
         <div class="detail" id="fingerprint-detail">Detecting...</div>
       </div>
 
-      <div class="card" id="card-face_enroll" onclick="selectSovereignty('face_enroll')" style="cursor:pointer">
+      <div class="card" id="card-face_enroll" data-action="selectSovereignty" data-sovereignty="face_enroll" style="cursor:pointer">
         <h3>Face Enrollment</h3>
-        <p>Your webcam captures a face template during setup. Every unlock requires a live face match — no stored images, just a compact local template.</p>
+        <p>Your face becomes the key. A compact mathematical template is created locally — no images stored, no cloud, no third party ever sees it. Every unlock requires your live presence.</p>
         <div class="detail" id="face_enroll-detail">Detecting camera...</div>
       </div>
 
-      <div class="card" id="card-windows_hello" onclick="selectSovereignty('windows_hello')" style="cursor:pointer;display:none">
+      <div class="card" id="card-windows_hello" data-action="selectSovereignty" data-sovereignty="windows_hello" style="cursor:pointer;display:none">
         <h3>Windows Hello</h3>
-        <p>Fingerprint, face, or PIN backed by TPM 2.0. The Genesis secret is locked in Windows Credential Manager — agents can't act without your Hello verification.</p>
+        <p>Your fingerprint, face, or PIN — verified locally through your TPM hardware. The Genesis secret is sealed in the Windows Credential Manager, unlockable only through your physical presence.</p>
         <div class="detail" id="windows_hello-detail">Detecting...</div>
       </div>
 
       <!-- Hardware Wallet category -->
-      <div class="card-category-label" id="cat-hw-label">Hardware Wallet</div>
+      <div class="card-category-label" id="cat-hw-label">Hardware Wallet — sovereign key custody</div>
 
-      <div class="card" id="card-yubi_key" onclick="selectSovereignty('yubi_key')" style="cursor:pointer">
+      <div class="card" id="card-yubi_key" data-action="selectSovereignty" data-sovereignty="yubi_key" style="cursor:pointer">
         <h3>YubiKey</h3>
-        <p>FIDO2 hardware key gates the Genesis secret. Tap to authorize — the secret never leaves your machine, but can't be unlocked without the physical key.</p>
+        <p>FIDO2 hardware security. Tap the key to authorize — your Genesis secret can't be unlocked without the physical device in your hand. It never touches software.</p>
         <div class="detail" id="yubi_key-detail">Scanning USB...</div>
       </div>
 
-      <div class="card" id="card-ledger" onclick="selectSovereignty('ledger')" style="cursor:pointer">
+      <div class="card" id="card-ledger" data-action="selectSovereignty" data-sovereignty="ledger" style="cursor:pointer">
         <h3>Ledger</h3>
-        <p>Ledger hardware wallet derives a wrapping key for the Genesis secret. Confirm on the device to authorize.</p>
+        <p>Your Ledger derives the wrapping key for your Genesis secret. The cryptography happens on the device itself — confirm on screen to authorize. Self-custody at the hardware level.</p>
         <div class="detail" id="ledger-detail">Scanning USB...</div>
       </div>
 
-      <div class="card" id="card-trezor" onclick="selectSovereignty('trezor')" style="cursor:pointer">
+      <div class="card" id="card-trezor" data-action="selectSovereignty" data-sovereignty="trezor" style="cursor:pointer">
         <h3>Trezor</h3>
-        <p>Trezor hardware wallet provides deterministic key derivation for the Genesis secret. PIN + physical confirmation.</p>
+        <p>Deterministic key derivation from your Trezor. PIN entry on the device plus physical confirmation — the Genesis secret is derived, never transmitted.</p>
         <div class="detail" id="trezor-detail">Scanning USB...</div>
       </div>
 
-      <div class="card" id="card-only_key" onclick="selectSovereignty('only_key')" style="cursor:pointer">
+      <div class="card" id="card-only_key" data-action="selectSovereignty" data-sovereignty="only_key" style="cursor:pointer">
         <h3>OnlyKey</h3>
-        <p>OnlyKey hardware token uses challenge-response to gate the Genesis secret. Physical touch required.</p>
+        <p>Challenge-response authentication through dedicated hardware. Physical touch required for every operation — your trust boundary is a device only you possess.</p>
         <div class="detail" id="only_key-detail">Scanning USB...</div>
       </div>
 
       <!-- Software category -->
-      <div class="card-category-label">Software</div>
+      <div class="card-category-label">Software — when hardware isn't available</div>
 
-      <div class="card" id="card-login_password" onclick="selectSovereignty('login_password')" style="cursor:pointer">
+      <div class="card" id="card-login_password" data-action="selectSovereignty" data-sovereignty="login_password" style="cursor:pointer">
         <h3>Login Password</h3>
-        <p>Your login password gates the Genesis secret via your OS credential store. Solid default. Can upgrade to biometric or hardware wallet later without re-keying.</p>
+        <p>Your OS credential store guards the Genesis secret, gated by your login password. A solid starting point — you can upgrade to biometric or hardware wallet later without re-keying.</p>
         <div class="detail" id="login_password-detail"></div>
       </div>
 
-      <div class="card" id="card-file_based" onclick="selectSovereignty('file_based')" style="cursor:pointer">
+      <div class="card" id="card-file_based" data-action="selectSovereignty" data-sovereignty="file_based" style="cursor:pointer">
         <h3>File on Disk</h3>
-        <p>For headless servers, CI, or systems without a credential store. The secret is on disk. Functional but weaker — any process with user privileges can read the file.</p>
+        <p>For headless servers and CI pipelines only. The secret lives as a file on disk — functional, but any process with your user privileges can access it. Not recommended for personal use.</p>
         <div class="detail" id="file_based-detail">Recommended only for servers and CI</div>
       </div>
 
     </div>
 
     <div class="paradigm-box old-model">
-      <h4>the old model</h4>
-      Proving your identity means presenting credentials issued by someone else — a password stored in a corporate database, a token from an OAuth provider, a certificate signed by an authority. Someone else holds the keys. They can revoke, surveil, or lose them in a breach.
+      <h4>why this matters</h4>
+      Every key stored by a platform is a key someone else can revoke, surveil, or lose in a breach. Every agent that inherits those credentials inherits that vulnerability. In the Agentic Age, the trust model you choose isn't just personal security — it's the foundation your AI agents stand on.
     </div>
 
     <div class="paradigm-box new-model">
-      <h4>the new model</h4>
-      Your body is the credential. No institution mediates. No platform can revoke. If an agent runs on your machine, it can access files and env vars — but it can't fake your fingerprint or your face. Your physical presence is the boundary between authorized and unauthorized.
+      <h4>privacy by design</h4>
+      Biometric data never leaves your device. Hardware wallet keys never touch software. No telemetry, no cloud enrollment, no third-party verification. Your sovereignty boundary is between you and your machine — nothing and no one else.
     </div>
 
     <div class="btn-row">
-      <button class="btn" id="sovereigntyNext" onclick="goGenesis()" disabled>Continue</button>
+      <button class="btn" id="sovereigntyNext" data-action="goGenesis" disabled>Continue</button>
     </div>
   </div>
 
@@ -180,7 +180,7 @@
       </div>
     </div>
 
-    <button class="btn" id="genesisBtn" onclick="runGenesis()">Create Genesis Key</button>
+    <button class="btn" id="genesisBtn" data-action="runGenesis">Create Genesis Key</button>
 
     <div class="terminal" id="genesisTerm" style="display:none"></div>
 
@@ -199,7 +199,7 @@
     </div>
 
     <div class="btn-row" id="genesisNext" style="display:none">
-      <button class="btn" onclick="goStep(3)">Continue</button>
+      <button class="btn" data-action="goStep" data-step="3">Continue</button>
     </div>
   </div>
 
@@ -232,7 +232,7 @@
     </div>
 
     <div class="btn-row">
-      <button class="btn" onclick="goStep(4)">Continue</button>
+      <button class="btn" data-action="goStep" data-step="4">Continue</button>
     </div>
   </div>
 
@@ -270,13 +270,13 @@
           Your hardware can run local models. Choose a runtime and ZeroPoint will walk you through it.
         </p>
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.5rem">
-          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('ollama')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+          <button class="btn btn-sm runtime-pick" data-action="requestSetupGuidance" data-runtime="ollama" style="font-size:0.72rem; padding:0.4rem 0.6rem">
             Ollama<br><span style="font-size:0.62rem; color:var(--text-dim)">CLI · lightweight</span>
           </button>
-          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('lm-studio')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+          <button class="btn btn-sm runtime-pick" data-action="requestSetupGuidance" data-runtime="lm-studio" style="font-size:0.72rem; padding:0.4rem 0.6rem">
             LM Studio<br><span style="font-size:0.62rem; color:var(--text-dim)">visual · beginner-friendly</span>
           </button>
-          <button class="btn btn-sm runtime-pick" onclick="requestSetupGuidance('jan')" style="font-size:0.72rem; padding:0.4rem 0.6rem">
+          <button class="btn btn-sm runtime-pick" data-action="requestSetupGuidance" data-runtime="jan" style="font-size:0.72rem; padding:0.4rem 0.6rem">
             Jan<br><span style="font-size:0.62rem; color:var(--text-dim)">desktop · one-click</span>
           </button>
         </div>
@@ -288,10 +288,10 @@
         <div id="setupCommands" class="terminal" style="margin:0.75rem 0; min-height:auto; max-height:none"></div>
         <div id="setupNotes" style="font-size:0.72rem; color:var(--text-dim); margin-bottom:0.75rem"></div>
         <div style="display:flex; gap:0.5rem; align-items:center">
-          <button class="btn" onclick="redetectRuntimes()" style="font-size:0.75rem; padding:0.4rem 0.8rem">
+          <button class="btn" data-action="redetectRuntimes" style="font-size:0.75rem; padding:0.4rem 0.8rem">
             I've installed it — check again
           </button>
-          <button class="btn btn-dim" onclick="showSetupPhase1()" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
+          <button class="btn btn-dim" data-action="showSetupPhase1" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
             ← pick a different runtime
           </button>
         </div>
@@ -310,10 +310,10 @@
         </div>
         <div id="modelRecCommand" class="terminal" style="margin:0.75rem 0; min-height:auto; max-height:none"></div>
         <div id="modelPullActions" style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem">
-          <button class="btn" id="pullAndContinueBtn" onclick="startModelPull()" style="font-size:0.75rem; padding:0.4rem 0.8rem">
+          <button class="btn" id="pullAndContinueBtn" data-action="startModelPull" style="font-size:0.75rem; padding:0.4rem 0.8rem">
             Pull model & continue
           </button>
-          <button class="btn btn-dim" onclick="redetectRuntimes()" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
+          <button class="btn btn-dim" data-action="redetectRuntimes" style="font-size:0.72rem; padding:0.4rem 0.6rem; background:transparent; border:1px solid var(--border); color:var(--text-dim)">
             I've already pulled one — check again
           </button>
         </div>
@@ -331,25 +331,25 @@
     </div>
 
     <div class="card-grid" style="display:grid; grid-template-columns:1fr; gap:0.75rem; margin:1rem 0">
-      <div class="card posture-card" id="posture-local" onclick="selectPosture('local')" style="cursor:pointer; transition:border-color 0.2s">
+      <div class="card posture-card" id="posture-local" data-action="selectPosture" data-posture="local" style="cursor:pointer; transition:border-color 0.2s">
         <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Local Only</h3>
         <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">All inference stays on your hardware. No API keys needed. No data leaves your machine. Maximum privacy.</p>
         <p id="local-models" style="font-size:0.72rem; color:var(--text-dim); margin:0.25rem 0 0 0; display:none"></p>
       </div>
 
-      <div class="card posture-card" id="posture-cloud" onclick="selectPosture('cloud')" style="cursor:pointer; transition:border-color 0.2s">
+      <div class="card posture-card" id="posture-cloud" data-action="selectPosture" data-posture="cloud" style="cursor:pointer; transition:border-color 0.2s">
         <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Cloud Only</h3>
         <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">Use OpenAI, Anthropic, Google, etc. Frontier models. API keys required. All calls governed through the proxy.</p>
       </div>
 
-      <div class="card posture-card recommended" id="posture-mixed" onclick="selectPosture('mixed')" style="cursor:pointer; transition:border-color 0.2s">
+      <div class="card posture-card recommended" id="posture-mixed" data-action="selectPosture" data-posture="mixed" style="cursor:pointer; transition:border-color 0.2s">
         <h3 style="font-size:0.9rem; margin-bottom:0.25rem">Mixed</h3>
         <p style="font-size:0.78rem; line-height:1.6; color:var(--text-dim)">Local models for routine tasks. Cloud models for frontier capability. The governance proxy routes each call — you set the rules for what stays local.</p>
       </div>
     </div>
 
     <div class="btn-row">
-      <button class="btn" id="postureBtn" onclick="goDiscover()" disabled>Continue</button>
+      <button class="btn" id="postureBtn" data-action="goDiscover" disabled>Continue</button>
     </div>
   </div>
 
@@ -366,7 +366,7 @@
       <label>scan directory</label>
       <div style="display:flex; gap:0.5rem">
         <input type="text" id="scanPath" value="~/projects" style="flex:1">
-        <button class="btn" id="scanBtn" onclick="runScan()">Scan</button>
+        <button class="btn" id="scanBtn" data-action="runScan">Scan</button>
       </div>
     </div>
 
@@ -378,8 +378,8 @@
     </div>
 
     <div class="btn-row" id="scanNext" style="display:none">
-      <button class="btn" onclick="goStep(6)">Add Credentials</button>
-      <button class="btn btn-secondary" onclick="goStep(7)">Skip</button>
+      <button class="btn" data-action="goStep" data-step="6">Add Credentials</button>
+      <button class="btn btn-secondary" data-action="goStep" data-step="7">Skip</button>
     </div>
   </div>
 
@@ -405,7 +405,7 @@
       <div id="foundPlaintextCards"></div>
       <div class="vault-all-bar">
         <span class="vault-all-status" id="vaultAllStatus">Select credentials to secure</span>
-        <button class="vault-all-btn" id="vaultAllBtn" onclick="vaultAllFound()" disabled>Vault All Found</button>
+        <button class="vault-all-btn" id="vaultAllBtn" data-action="vaultAllFound" disabled>Vault All Found</button>
       </div>
     </div>
 
@@ -417,7 +417,7 @@
 
     <!-- All other providers by category -->
     <div id="catalogProviders" style="display:none">
-      <h3 id="catalogHeading" style="font-size:0.85rem; color:var(--text-dim); margin:1.5rem 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer" onclick="toggleCatalog()">
+      <h3 id="catalogHeading" style="font-size:0.85rem; color:var(--text-dim); margin:1.5rem 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer" data-action="toggleCatalog">
         <span id="catalogToggle">▸</span> <span id="catalogLabel">All providers</span> (<span id="catalogCount">0</span>)
       </h3>
       <div id="catalogCards" style="display:none"></div>
@@ -432,8 +432,8 @@
     </div>
 
     <div class="btn-row">
-      <button class="btn" onclick="goStep(7)">Continue</button>
-      <button class="btn btn-secondary" onclick="goStep(7)">Skip remaining</button>
+      <button class="btn" data-action="goStep" data-step="7">Continue</button>
+      <button class="btn btn-secondary" data-action="goStep" data-step="7">Skip remaining</button>
     </div>
   </div>
 
@@ -467,13 +467,13 @@
     <div id="configToolCards" class="tool-config-grid"></div>
 
     <div class="btn-row">
-      <button class="btn" id="configureBtn" onclick="runConfigure()">Secure &amp; Configure</button>
+      <button class="btn" id="configureBtn" data-action="runConfigure">Secure &amp; Configure</button>
     </div>
 
     <div class="terminal" id="configureTerm" style="display:none; margin-top:1rem; max-height:150px; overflow-y:auto; font-size:0.72rem"></div>
 
     <div class="btn-row" id="configureNext" style="display:none">
-      <button class="btn" onclick="goStep(8)">See Your Launch Pad →</button>
+      <button class="btn" data-action="goStep" data-step="8">See Your Launch Pad →</button>
     </div>
   </div>
 
@@ -573,7 +573,7 @@
           font-size: 0.85rem;
           letter-spacing: 0.05em;
           transition: background 0.2s, color 0.2s;
-        " onmouseover="this.style.background='rgba(126,184,218,0.1)'" onmouseout="this.style.background='none'">View Verification Surface &rarr;</a>
+        " data-action="viewVerification">View Verification Surface &rarr;</a>
       </div>
     </div>
   </div>
@@ -582,10 +582,10 @@
 
 <!-- Narration bar (inserted into active step by JS) -->
 <div class="narration-bar" id="narrationBar" style="display:none">
-  <button class="narrate-toggle" id="narrateToggle" onclick="toggleNarration()" title="Play / Pause">&#9654;</button>
+  <button class="narrate-toggle" id="narrateToggle" data-action="toggleNarration" title="Play / Pause">&#9654;</button>
   <span class="narrate-label" id="narrateLabel">Narrating...</span>
   <div class="narrate-progress"><div class="narrate-progress-fill" id="narrateProgress"></div></div>
-  <button class="narrate-mute" id="narrateMute" onclick="toggleMute()" title="Mute narration">&#x1f50a;</button>
+  <button class="narrate-mute" id="narrateMute" data-action="toggleMute" title="Mute narration">&#x1f50a;</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->

@@ -1087,7 +1087,7 @@
 
       // Replace action buttons with a "Continue" that moves on + optional notification
       actionsEl.innerHTML =
-        `<button class="btn" onclick="goDiscover()" style="font-size:0.75rem; padding:0.4rem 0.8rem">` +
+        `<button class="btn" data-action="goDiscover" style="font-size:0.75rem; padding:0.4rem 0.8rem">` +
         `Continue onboarding →</button>` +
         `<label style="font-size:0.72rem; color:var(--text-dim); display:flex; align-items:center; gap:0.35rem; cursor:pointer">` +
         `<input type="checkbox" id="notifyOnModelReady" checked style="accent-color:var(--accent)">` +
@@ -1316,7 +1316,7 @@
       ${metaHtml}
       <div class="input-row">
         <input type="password" id="cred-input-${escapeHtml(id)}" placeholder="${escapeHtml(p.env_patterns?.[0] || 'API Key')}">
-        <button class="store-btn" onclick="storeCred('${escapeHtml(id)}', '${escapeHtml(vaultRef)}')">Store</button>
+        <button class="store-btn" data-action="storeCred" data-cred-id="${escapeHtml(id)}" data-vault-ref="${escapeHtml(vaultRef)}">Store</button>
       </div>
       ${sourceHtml}
     `;
@@ -1413,8 +1413,8 @@
             ${hasConflict ? '<span style="font-size:0.68rem; color:var(--yellow); margin-left:0.5rem">⚠ conflicting values</span>' : ''}
           </div>
           <div class="priority-controls">
-            <button class="priority-btn" onclick="moveProviderUp('${escapeHtml(provider)}')" title="Move up">▲</button>
-            <button class="priority-btn" onclick="moveProviderDown('${escapeHtml(provider)}')" title="Move down">▼</button>
+            <button class="priority-btn" data-action="moveProviderUp" data-provider="${escapeHtml(provider)}" title="Move up">▲</button>
+            <button class="priority-btn" data-action="moveProviderDown" data-provider="${escapeHtml(provider)}" title="Move down">▼</button>
           </div>
         </div>
       `;
@@ -2199,6 +2199,112 @@
       startNarration();
     }
   };
+
+  // ── Event Delegation (CSP-compliant — no inline handlers) ──
+  // All interactive elements use data-action attributes instead of onclick.
+  // This single listener dispatches to the appropriate handler.
+  document.addEventListener('click', function(e) {
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+
+    var action = el.dataset.action;
+
+    switch (action) {
+      // Step 0
+      case 'startOnboard':
+        startOnboard();
+        break;
+
+      // Step 1: Sovereignty selection
+      case 'selectSovereignty':
+        selectSovereignty(el.dataset.sovereignty);
+        break;
+      case 'goGenesis':
+        goGenesis();
+        break;
+
+      // Step 2: Genesis
+      case 'runGenesis':
+        runGenesis();
+        break;
+
+      // Step navigation
+      case 'goStep':
+        goStep(parseInt(el.dataset.step, 10));
+        break;
+
+      // Step 4: Inference posture
+      case 'requestSetupGuidance':
+        requestSetupGuidance(el.dataset.runtime);
+        break;
+      case 'redetectRuntimes':
+        redetectRuntimes();
+        break;
+      case 'showSetupPhase1':
+        showSetupPhase1();
+        break;
+      case 'startModelPull':
+        startModelPull();
+        break;
+      case 'selectPosture':
+        selectPosture(el.dataset.posture);
+        break;
+      case 'goDiscover':
+        goDiscover();
+        break;
+
+      // Step 5: Scan
+      case 'runScan':
+        runScan();
+        break;
+
+      // Step 6: Credentials
+      case 'storeCred':
+        storeCred(el.dataset.credId, el.dataset.vaultRef);
+        break;
+      case 'vaultAllFound':
+        vaultAllFound();
+        break;
+      case 'toggleCatalog':
+        toggleCatalog();
+        break;
+      case 'moveProviderUp':
+        moveProviderUp(el.dataset.provider);
+        break;
+      case 'moveProviderDown':
+        moveProviderDown(el.dataset.provider);
+        break;
+
+      // Step 7: Configure
+      case 'runConfigure':
+        runConfigure();
+        break;
+
+      // Narration
+      case 'toggleNarration':
+        toggleNarration();
+        break;
+      case 'toggleMute':
+        toggleMute();
+        break;
+
+      // Verification link hover (CSS handles this instead of JS)
+      case 'viewVerification':
+        // Navigation handled by the <a> href
+        break;
+    }
+  });
+
+  // Hover effect for verification link (replaces onmouseover/onmouseout)
+  var verifyLink = document.querySelector('[data-action="viewVerification"]');
+  if (verifyLink) {
+    verifyLink.addEventListener('mouseenter', function() {
+      this.style.background = 'rgba(126,184,218,0.1)';
+    });
+    verifyLink.addEventListener('mouseleave', function() {
+      this.style.background = 'none';
+    });
+  }
 
   // ── Init ────────────────────────────────────────────────
   connect();

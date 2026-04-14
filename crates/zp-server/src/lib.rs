@@ -585,10 +585,16 @@ async fn security_headers_middleware(
     // CSP: 'self' for scripts (no inline), 'unsafe-inline' for styles only
     // (Tailwind/inline styles need it), data: for inline images/icons.
     // WebSocket connections to localhost are permitted for exec_ws/onboard_ws.
+    // connect-src includes localhost:8473 for local Piper TTS health checks.
+    // font-src includes data: for inline fonts and the external CDN for brand fonts.
+    // media-src 'self' for narration MP3s served from /assets/narration/.
     headers.insert(
         axum::http::header::HeaderName::from_static("content-security-policy"),
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
-         img-src 'self' data:; connect-src 'self' ws://localhost:* wss://localhost:*; \
+         img-src 'self' data:; \
+         font-src 'self' data: https://r2cdn.perplexity.ai; \
+         media-src 'self'; \
+         connect-src 'self' ws://localhost:* wss://localhost:* http://localhost:8473; \
          frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
             .parse()
             .unwrap(),
@@ -968,6 +974,12 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     let assets_dir = std::env::var("ZP_ASSETS_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| config.home_dir.join("assets"));
+
+    // Bootstrap compiled-in assets to disk on first run.  This ensures
+    // `cargo build --release && zp serve` works out of the box — no
+    // manual `cp -r` step required.
+    bootstrap_assets(&assets_dir);
+
     if assets_dir.exists() {
         info!(
             "Assets:     http://localhost:{}/assets/  ({})",
@@ -3651,6 +3663,54 @@ const DASHBOARD_HTML_FALLBACK: &str = include_str!("../assets/dashboard.html");
 const ONBOARD_HTML_FALLBACK: &str = include_str!("../assets/onboard.html");
 const SPEAK_HTML_FALLBACK: &str = include_str!("../assets/speak.html");
 const ECOSYSTEM_HTML_FALLBACK: &str = include_str!("../assets/ecosystem.html");
+
+// Embedded CSS and JS — bootstrapped to ~/.zeropoint/assets/ on first run
+// so the ServeDir handler can serve them.  This means `cargo build && zp serve`
+// works out of the box with no manual `cp` step.
+const ONBOARD_CSS_EMBEDDED: &str = include_str!("../assets/onboard.css");
+const ONBOARD_JS_EMBEDDED: &str = include_str!("../assets/onboard.js");
+const TTS_JS_EMBEDDED: &str = include_str!("../assets/tts.js");
+
+/// Bootstrap the assets directory if it doesn't exist or is missing critical files.
+/// Writes compiled-in HTML, CSS, and JS so that a fresh `zp serve` works without
+/// any manual copying.  Existing files are NOT overwritten — only missing ones
+/// are created.  Users who want hot-reload can still use `./zp-dev.sh html`.
+fn bootstrap_assets(assets_dir: &std::path::Path) {
+    let files: &[(&str, &str)] = &[
+        ("dashboard.html", DASHBOARD_HTML_FALLBACK),
+        ("onboard.html", ONBOARD_HTML_FALLBACK),
+        ("speak.html", SPEAK_HTML_FALLBACK),
+        ("ecosystem.html", ECOSYSTEM_HTML_FALLBACK),
+        ("onboard.css", ONBOARD_CSS_EMBEDDED),
+        ("onboard.js", ONBOARD_JS_EMBEDDED),
+        ("tts.js", TTS_JS_EMBEDDED),
+    ];
+
+    if let Err(e) = std::fs::create_dir_all(assets_dir) {
+        tracing::warn!("Could not create assets dir {}: {}", assets_dir.display(), e);
+        return;
+    }
+
+    let mut bootstrapped = 0u32;
+    for (name, content) in files {
+        let path = assets_dir.join(name);
+        if !path.exists() {
+            if let Err(e) = std::fs::write(&path, content) {
+                tracing::warn!("Could not write {}: {}", path.display(), e);
+            } else {
+                bootstrapped += 1;
+            }
+        }
+    }
+
+    // Create narration directory so the server doesn't 404 on audio requests
+    let narration_dir = assets_dir.join("narration").join("onboard");
+    let _ = std::fs::create_dir_all(&narration_dir);
+
+    if bootstrapped > 0 {
+        tracing::info!("Bootstrapped {} asset files to {}", bootstrapped, assets_dir.display());
+    }
+}
 
 /// Resolve an HTML asset: check $ZP_ASSETS_DIR or ~/.zeropoint/assets/{name}
 /// first (override), then fall back to the compiled-in copy.

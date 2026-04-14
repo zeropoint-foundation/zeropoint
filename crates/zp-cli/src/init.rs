@@ -65,6 +65,10 @@ pub fn run(config: &InitConfig) -> i32 {
     eprintln!();
     eprintln!("  \x1b[1mZeroPoint Genesis\x1b[0m");
     eprintln!("  \x1b[2m─────────────────\x1b[0m");
+    eprintln!();
+    eprintln!("  \x1b[2mYou are creating your own cryptographic root of trust.\x1b[0m");
+    eprintln!("  \x1b[2mNo accounts. No platforms. No one else holds your keys.\x1b[0m");
+    eprintln!();
 
     // ── Step 1: Generate keypair ────────────────────────────────
     eprint!("  Generating operator keypair...        ");
@@ -89,39 +93,59 @@ pub fn run(config: &InitConfig) -> i32 {
     // Tell the user what's about to happen BEFORE the OS dialog appears.
     if config.store_genesis_secret {
         let provider = zp_keys::provider_for(config.sovereignty_mode);
-        eprint!(
-            "  Sealing secret via {} provider...",
+        eprintln!();
+        eprintln!(
+            "  \x1b[1mSovereignty: {}\x1b[0m",
             provider.display_name()
         );
-        eprintln!();
         match config.sovereignty_mode {
             SovereigntyMode::TouchId => {
-                eprintln!("  \x1b[2m(Touch ID will be requested — place your finger on the sensor)\x1b[0m");
+                eprintln!("  Your body is the credential — no password, no token, just you.");
+                eprintln!("  The Genesis secret will be sealed in the Secure Enclave.");
+                eprintln!();
+                eprintln!("  \x1b[36m→ Place your finger on the sensor when prompted.\x1b[0m");
             }
             SovereigntyMode::WindowsHello => {
-                eprintln!(
-                    "  \x1b[2m(Windows Hello will be requested — verify your identity)\x1b[0m"
-                );
+                eprintln!("  Your identity, verified locally through your own hardware.");
+                eprintln!("  The Genesis secret will be locked in the TPM.");
+                eprintln!();
+                eprintln!("  \x1b[36m→ Verify with Windows Hello when prompted.\x1b[0m");
             }
             SovereigntyMode::Fingerprint => {
-                eprintln!("  \x1b[2m(Fingerprint will be requested — place your finger on the reader)\x1b[0m");
+                eprintln!("  Physical presence required — your fingerprint gates every operation.");
+                eprintln!();
+                eprintln!("  \x1b[36m→ Place your finger on the reader when prompted.\x1b[0m");
             }
             SovereigntyMode::FaceEnroll => {
-                eprintln!("  \x1b[2m(Camera will activate — look at the webcam for face enrollment)\x1b[0m");
+                eprintln!("  Your face becomes the key. A compact local template — no images stored,");
+                eprintln!("  no cloud, no third party ever sees it.");
+                eprintln!();
+                eprintln!("  \x1b[36m→ Look at the webcam when it activates.\x1b[0m");
             }
             SovereigntyMode::LoginPassword => {
+                eprintln!("  Your OS credential store guards the Genesis secret.");
+                eprintln!("  \x1b[2mYou can upgrade to biometric or hardware wallet later\x1b[0m");
+                eprintln!("  \x1b[2mwithout re-keying.\x1b[0m");
                 if cfg!(target_os = "macos") {
-                    eprintln!("  \x1b[2m(Your system may ask permission to access the keychain — click Allow)\x1b[0m");
+                    eprintln!();
+                    eprintln!("  \x1b[36m→ Click Allow if macOS requests keychain access.\x1b[0m");
                 }
             }
             mode if mode.requires_external_device() => {
                 eprintln!(
-                    "  \x1b[2m(Ensure your {} is connected via USB)\x1b[0m",
+                    "  Your {} holds the key. The secret never touches software —",
+                    mode.display_name()
+                );
+                eprintln!("  it's derived directly from the hardware.");
+                eprintln!();
+                eprintln!(
+                    "  \x1b[36m→ Ensure your {} is connected via USB.\x1b[0m",
                     mode.display_name()
                 );
             }
             _ => {}
         }
+        eprintln!();
     } else {
         eprint!("  Writing genesis record...             ");
     }
@@ -293,13 +317,14 @@ data_dir = ".zeropoint/data"
     let short_pub = &genesis_pub[..8];
 
     eprintln!();
+    eprintln!("  \x1b[1mGenesis Complete\x1b[0m");
+    eprintln!("  \x1b[2m────────────────\x1b[0m");
     eprintln!("  Operator identity: \x1b[36m{}...\x1b[0m", short_pub);
     eprintln!(
         "  Constitutional hash: \x1b[36m{}...\x1b[0m",
         &constitutional_hash[..6]
     );
     eprintln!();
-    eprintln!("  Your environment is ready.");
     if secret_in_credential_store {
         let store_name = if cfg!(target_os = "macos") {
             "macOS Keychain"
@@ -311,19 +336,23 @@ data_dir = ".zeropoint/data"
             "OS credential store"
         };
         eprintln!(
-            "  Genesis secret sealed in {}, gated by {}.",
+            "  \x1b[32m✓\x1b[0m Genesis secret sealed in {}.",
             store_name,
+        );
+        eprintln!(
+            "  \x1b[32m✓\x1b[0m Gated by {} — your sovereignty boundary.",
             actual_mode.display_name()
         );
         if actual_mode != SovereigntyMode::FileBased {
             eprintln!(
-                "  No secret key files on disk. {} required for vault access.",
+                "  \x1b[32m✓\x1b[0m No secret key files on disk. {} required for vault access.",
                 actual_mode.display_name()
             );
         }
     } else if config.store_genesis_secret {
         if actual_mode == SovereigntyMode::FileBased {
             eprintln!("  Genesis secret stored in ~/.zeropoint/keys/genesis.secret");
+            eprintln!("  \x1b[2mFor production use, consider biometric or hardware wallet sovereignty.\x1b[0m");
         } else {
             eprintln!(
                 "  \x1b[33mNote:\x1b[0m Genesis secret stored in ~/.zeropoint/keys/genesis.secret"
@@ -370,7 +399,11 @@ data_dir = ".zeropoint/data"
     }
 
     eprintln!();
-    eprintln!("  Sovereignty: \x1b[1m{}\x1b[0m", config.sovereignty_mode);
+    eprintln!("  Sovereignty mode: \x1b[1m{}\x1b[0m", actual_mode.display_name());
+    if actual_mode.requires_hardware() || actual_mode == SovereigntyMode::TouchId {
+        eprintln!("  \x1b[2mYour keys, your hardware, your rules. No institution mediates.\x1b[0m");
+    }
+    eprintln!();
     eprintln!("  Next: \x1b[1m`zp onboard`\x1b[0m to set up your AI tools.");
     eprintln!();
 
