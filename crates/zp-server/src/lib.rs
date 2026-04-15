@@ -3744,9 +3744,26 @@ fn bootstrap_assets(assets_dir: &std::path::Path) {
         }
     }
 
-    // Create narration directory so the server doesn't 404 on audio requests
+    // Create narration directory so the server doesn't 404 on audio requests.
+    // MP3s are too large for include_bytes! — they're deployed by `zp-dev.sh`
+    // (which rsync's from $REPO/assets/narration/ to this directory). If the
+    // directory is empty after bootstrap, log a hint so developers know why
+    // narration is silent.
     let narration_dir = assets_dir.join("narration").join("onboard");
     let _ = std::fs::create_dir_all(&narration_dir);
+    let has_mp3s = std::fs::read_dir(&narration_dir)
+        .ok()
+        .map(|rd| rd.filter_map(|e| e.ok()).any(|e| {
+            e.path().extension().map(|ext| ext == "mp3").unwrap_or(false)
+        }))
+        .unwrap_or(false);
+    if !has_mp3s {
+        tracing::info!(
+            "No narration MP3s in {} — onboarding will run without audio. \
+             Run `./zp-dev.sh` from the repo root to deploy narration assets.",
+            narration_dir.display()
+        );
+    }
 
     if bootstrapped > 0 {
         tracing::info!("Bootstrapped {} asset files to {}", bootstrapped, assets_dir.display());
