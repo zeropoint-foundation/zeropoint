@@ -322,23 +322,21 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     let _ = std::fs::create_dir_all(home.join("policies"));
     let _ = std::fs::create_dir_all(home.join("data"));
 
-    if let Err(e) = std::fs::write(
-        home.join("genesis.json"),
-        serde_json::to_string_pretty(&genesis_record).unwrap(),
-    ) {
-        events.push(OnboardEvent::error(&format!(
-            "Failed to write genesis record: {}",
-            e
-        )));
-        return events;
-    }
-
-    // ── Step 6b: Write ceremony transcript ───────────────────────
-    // A signed, immutable record of the Genesis ceremony for audit.
-    // This captures everything needed to verify the ceremony happened
-    // correctly: who, when, what provider, what capabilities, and the
-    // resulting public key fingerprint. Signed by the Genesis key itself
-    // to prove the transcript was created by the same ceremony.
+    // ── Step 6b: Build signed ceremony transcript ─────────────────
+    //
+    // The transcript is the cryptographic attestation of the ceremony:
+    // Ed25519 signature by the Genesis key over BLAKE3 of a canonical
+    // serialization of the transcript body. Fields mirror `genesis.json`
+    // plus ceremony metadata so `security::assess` can cross-check the
+    // unsigned record against it at startup.
+    //
+    // Ordering invariant (ARTEMIS 035 issue 2): the transcript MUST be
+    // durable before `genesis.json` becomes visible. If we crash between
+    // the two writes, next startup sees no genesis.json → onboarding
+    // re-runs cleanly. The previous implementation wrote genesis.json
+    // first and treated transcript failures as non-fatal, which
+    // produced the "record exists but signature missing" state 035
+    // flagged.
     let provider_caps = provider.capabilities();
     let genesis_fingerprint = blake3::hash(genesis.public_key().as_ref())
         .to_hex()
@@ -364,7 +362,9 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
                     else { "other" },
     });
 
-    // Sign the transcript with the Genesis key for tamper evidence
+    // Sign over BLAKE3(canonical transcript bytes). serde_json's Map is
+    // BTreeMap-backed (no `preserve_order` feature), so `to_vec` emits
+    // keys in alphabetical order — deterministic across sign/verify.
     let transcript_bytes = serde_json::to_vec(&transcript).unwrap_or_default();
     let transcript_hash = blake3::hash(&transcript_bytes);
     let transcript_sig_bytes = {
@@ -382,20 +382,32 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         },
     });
 
-    if let Err(e) = std::fs::write(
-        home.join("genesis_transcript.json"),
-        serde_json::to_string_pretty(&signed_transcript).unwrap(),
+    // Transcript write is now FATAL and atomic. A failure here means the
+    // ceremony did not complete — returning early leaves the keyring and
+    // provider in whatever state they reached, but ~/.zeropoint/genesis.json
+    // does not exist, so subsequent `zp serve` will offer re-onboarding.
+    if let Err(e) = atomic_write_json(
+        &home.join("genesis_transcript.json"),
+        &signed_transcript,
     ) {
-        // Non-fatal — the ceremony itself succeeded even if transcript fails
-        tracing::warn!("Failed to write ceremony transcript: {}", e);
-        events.push(OnboardEvent::terminal(&format!(
-            "⚠ Could not save ceremony transcript: {}",
+        events.push(OnboardEvent::error(&format!(
+            "Failed to write ceremony transcript: {} — ceremony aborted, re-run onboarding",
             e
         )));
-    } else {
-        events.push(OnboardEvent::terminal(
-            "✓ Ceremony transcript signed and saved",
-        ));
+        return events;
+    }
+    events.push(OnboardEvent::terminal(
+        "✓ Ceremony transcript signed and saved",
+    ));
+
+    // NOW write the canonical record. After this point the security
+    // posture check will see the ceremony as complete and verified.
+    if let Err(e) = atomic_write_json(&home.join("genesis.json"), &genesis_record) {
+        events.push(OnboardEvent::error(&format!(
+            "Failed to write genesis record: {}",
+            e
+        )));
+        return events;
     }
 
     // ── Step 7: Report results ────────────────────────────────────
@@ -463,6 +475,20 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     }
 
     events
+}
+
+/// Write a JSON value to `path` atomically: serialize pretty, write to a
+/// sibling tmp file, then `rename()` into place. On POSIX `rename` within
+/// the same directory is atomic, so readers never see a half-written
+/// file. Any I/O failure aborts cleanly — the tmp file may be left
+/// behind but the target is unchanged.
+fn atomic_write_json(path: &std::path::Path, value: &serde_json::Value) -> std::io::Result<()> {
+    let body = serde_json::to_string_pretty(value)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, body.as_bytes())?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
 }
 
 /// Verify vault key derivation.

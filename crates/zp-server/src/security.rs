@@ -187,29 +187,33 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
         ));
     }
 
-    // 4. Genesis record + signature
-    let genesis_path = home.join("genesis.json");
-    let genesis_sig_path = home.join("genesis.sig");
-    checks.push(if genesis_path.exists() && genesis_sig_path.exists() {
+    // 4. Genesis ceremony integrity.
+    //
+    // Historical note (ARTEMIS 035 issue 2): this check previously looked
+    // for `~/.zeropoint/genesis.sig`, a file that no code path has ever
+    // written. The ceremony produces `genesis_transcript.json` — a signed
+    // attestation covering every substantive field in `genesis.json`. We
+    // now actually verify the transcript (Ed25519 over BLAKE3) and
+    // cross-check the unsigned record against it, so this check finally
+    // reflects cryptographic reality.
+    use crate::genesis_verify::Verdict;
+    checks.push({
+        let verdict = crate::genesis_verify::verify(&home);
+        let status = match verdict {
+            Verdict::Verified => CheckStatus::Pass,
+            Verdict::NoTranscript => CheckStatus::Warning,
+            Verdict::NotEstablished => CheckStatus::Fail,
+            // Anything that parses partially but fails crypto / cross-check
+            // is a hard fail — the record is no longer trustworthy.
+            Verdict::MalformedTranscript(_)
+            | Verdict::SignatureInvalid
+            | Verdict::FieldMismatch(_) => CheckStatus::Fail,
+        };
         SecurityCheck {
             category: "identity".into(),
             name: "Genesis ceremony".into(),
-            status: CheckStatus::Pass,
-            detail: "Genesis record and signature present — sovereign identity anchored".into(),
-        }
-    } else if genesis_path.exists() {
-        SecurityCheck {
-            category: "identity".into(),
-            name: "Genesis ceremony".into(),
-            status: CheckStatus::Warning,
-            detail: "Genesis record exists but signature missing — integrity unverifiable".into(),
-        }
-    } else {
-        SecurityCheck {
-            category: "identity".into(),
-            name: "Genesis ceremony".into(),
-            status: CheckStatus::Fail,
-            detail: "Genesis not established — run onboarding to create identity".into(),
+            status,
+            detail: verdict.detail(),
         }
     });
 
