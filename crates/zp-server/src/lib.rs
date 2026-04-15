@@ -8,6 +8,7 @@ pub mod attestations;
 pub mod auth;
 pub mod codebase;
 pub mod exec_ws;
+pub mod genesis_verify;
 pub mod onboard;
 pub mod proxy;
 pub mod security;
