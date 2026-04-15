@@ -1,0 +1,166 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-15T22:47:46.624295+00:00",
+  "entries": [
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-complete.mp3",
+      "source_text_sha256": "0605cb0b08c898e5d31bf850895f3448da9249c98277f4f41b95c50961a9f9d0",
+      "voice": "amy",
+      "params": {
+        "length_scale": 0.7692,
+        "noise_scale": 0.36,
+        "noise_w": 0.93,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "en_US-amy-medium",
+      "render_blake3": "",
+      "size_bytes": 4244972,
+      "rendered_at": "2026-04-14T00:07:38.861572+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-configure.mp3",
+      "source_text_sha256": "9973c794f141320abb3d8ecc06bfd58a7f474f6009bbd3f0f912a0a3e117700b",
+      "voice": "kusal",
+      "params": {
+        "length_scale": 0.8097,
+        "noise_scale": 0.36,
+        "noise_w": 0.65,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "kusal",
+      "render_blake3": "",
+      "size_bytes": 2824808,
+      "rendered_at": "2026-04-14T00:07:36.929349+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-credentials.mp3",
+      "source_text_sha256": "e707a8293bece9ebbae6fb6f95f50d210cbd6f4a23aad5474d94e9db21aad6ad",
+      "voice": "amy",
+      "params": {
+        "length_scale": 0.7692,
+        "noise_scale": 0.36,
+        "noise_w": 0.93,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "en_US-amy-medium",
+      "render_blake3": "",
+      "size_bytes": 3201210,
+      "rendered_at": "2026-04-14T00:07:35.456925+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-discover.mp3",
+      "source_text_sha256": "ca071cc2532414dfc47523b6658d29e802dd8fd9453347a13adec682e90b3393",
+      "voice": "kusal",
+      "params": {
+        "length_scale": 0.8097,
+        "noise_scale": 0.36,
+        "noise_w": 0.65,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "kusal",
+      "render_blake3": "",
+      "size_bytes": 895716,
+      "rendered_at": "2026-04-14T00:07:33.881568+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-genesis.mp3",
+      "source_text_sha256": "5b72032e429eb6a1b061943af364431e7b5fb73820e3d23e015fd0b591f8144e",
+      "voice": "amy",
+      "params": {
+        "length_scale": 0.7692,
+        "noise_scale": 0.36,
+        "noise_w": 0.93,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "en_US-amy-medium",
+      "render_blake3": "",
+      "size_bytes": 3575932,
+      "rendered_at": "2026-04-14T00:07:29.284343+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-inference.mp3",
+      "source_text_sha256": "866a14c4c8c9c3089ad6922f245715376e2bc82091cf5c36911adf208921eee3",
+      "voice": "amy",
+      "params": {
+        "length_scale": 0.7692,
+        "noise_scale": 0.36,
+        "noise_w": 0.93,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "en_US-amy-medium",
+      "render_blake3": "",
+      "size_bytes": 3628914,
+      "rendered_at": "2026-04-14T00:07:33.112678+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-recovery.mp3",
+      "source_text_sha256": "be37e3d2b56fddb5b7cb53b98bd8177666d9b6c834cced80af282687378cff71",
+      "voice": "kusal",
+      "params": {
+        "length_scale": 0.8097,
+        "noise_scale": 0.36,
+        "noise_w": 0.65,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "kusal",
+      "render_blake3": "",
+      "size_bytes": 1060846,
+      "rendered_at": "2026-04-14T00:07:30.139490+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-sovereignty.mp3",
+      "source_text_sha256": "0421bca25b8f9cdc26c3e2a0f67ef3d194497e272270a4a610be9d4bc055dadc",
+      "voice": "kusal",
+      "params": {
+        "length_scale": 0.8097,
+        "noise_scale": 0.36,
+        "noise_w": 0.65,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "kusal",
+      "render_blake3": "",
+      "size_bytes": 3749602,
+      "rendered_at": "2026-04-14T00:07:27.555224+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-vault.mp3",
+      "source_text_sha256": "25652b1c8dc74f08c1f8449ae6b67c3ff23b78c6412be2b1a04670c0d4e30bbe",
+      "voice": "kusal",
+      "params": {
+        "length_scale": 0.8097,
+        "noise_scale": 0.36,
+        "noise_w": 0.65,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "kusal",
+      "render_blake3": "",
+      "size_bytes": 2193164,
+      "rendered_at": "2026-04-14T00:07:31.359952+00:00"
+    },
+    {
+      "domain": "onboard",
+      "file": "assets/narration/onboard/onboard-welcome.mp3",
+      "source_text_sha256": "c3a5d02820675ce6897430ce513065245dab3210eb6da83eae1f04797a2619a5",
+      "voice": "amy",
+      "params": {
+        "length_scale": 0.7692,
+        "noise_scale": 0.36,
+        "noise_w": 0.93,
+        "sentence_silence": 0.3
+      },
+      "piper_model": "en_US-amy-medium",
+      "render_blake3": "",
+      "size_bytes": 2427312,
+      "rendered_at": "2026-04-14T00:07:25.754609+00:00"
+    }
+  ]
+}
