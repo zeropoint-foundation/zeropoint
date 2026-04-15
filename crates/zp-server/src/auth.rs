@@ -23,12 +23,45 @@ use axum::{
     response::Response,
 };
 use parking_lot::{Mutex, RwLock};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::warn;
+
+/// On-disk representation of a persisted session. Kept owner-only (0600)
+/// alongside the identity key. The bearer token in here grants the same
+/// access as the in-memory session; rotating the session (logout) also
+/// rewrites this file.
+#[derive(Serialize, Deserialize)]
+struct PersistedSession {
+    /// Hex-encoded session token (matches `SessionAuth::token`).
+    token: String,
+    /// Unix seconds when the token was minted.
+    created_at: i64,
+    /// HMAC-key fingerprint — first 16 hex chars of SHA-256(hmac_key).
+    /// If this doesn't match the key material derived at startup, we treat
+    /// the persisted session as foreign (e.g. identity rotated) and mint
+    /// a fresh token rather than trusting whatever's on disk.
+    key_fp: String,
+    /// Persisted schema version. Bump when the record layout changes so
+    /// old files can be discarded cleanly.
+    #[serde(default = "PersistedSession::default_version")]
+    version: u8,
+}
+
+impl PersistedSession {
+    const VERSION: u8 = 1;
+    fn default_version() -> u8 {
+        0
+    }
+}
+
+/// Filename under `~/.zeropoint/` where the session record lives.
+const SESSION_FILENAME: &str = "session.json";
 
 /// Session token state — shared via AppState.
 ///
@@ -53,30 +86,74 @@ pub struct SessionAuth {
 impl SessionAuth {
     /// Create a new session auth context from the server's signing key bytes.
     ///
-    /// Generates a fresh session token for this server run.
+    /// Attempts to reuse a persisted token from `~/.zeropoint/session.json`
+    /// if one exists, is still within `max_age_secs`, and was bound to the
+    /// same HMAC key material. Otherwise mints a fresh token and writes it
+    /// to disk. This eliminates the "every restart invalidates all
+    /// outstanding cookies" footgun called out in ARTEMIS result 035
+    /// issue 3 without changing the single-token-per-session mental model.
     pub fn new(signing_key_bytes: &[u8; 32]) -> Self {
+        Self::new_with_persistence(signing_key_bytes, session_file_path().as_deref())
+    }
+
+    /// Ephemeral variant: no disk persistence. Used by unit tests so
+    /// `cargo test` doesn't touch `~/.zeropoint/session.json`.
+    #[cfg(test)]
+    pub fn new_in_memory(signing_key_bytes: &[u8; 32]) -> Self {
+        Self::new_with_persistence(signing_key_bytes, None)
+    }
+
+    /// Internal constructor. If `persist_path` is `Some`, we'll try to
+    /// load a previous session from it and write new/rotated tokens back.
+    /// If `None`, the session is purely in-memory.
+    fn new_with_persistence(signing_key_bytes: &[u8; 32], persist_path: Option<&Path>) -> Self {
         // Derive HMAC key: SHA-256(signing_key || domain_separator)
         let mut hasher = Sha256::new();
         hasher.update(signing_key_bytes);
         hasher.update(b"zp-session-v1");
         let hmac_key: [u8; 32] = hasher.finalize().into();
 
-        let token = Self::mint_token(&hmac_key);
-        tracing::info!(
-            "Session token generated: {}...{} (valid for this server run)",
-            &token[..8],
-            &token[token.len() - 4..]
-        );
-
         let max_age_secs = std::env::var("ZP_SESSION_MAX_AGE_SECONDS")
             .ok()
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or(8 * 60 * 60);
 
+        let now = chrono::Utc::now().timestamp();
+        let key_fp = hmac_key_fingerprint(&hmac_key);
+
+        let (token, created_at, loaded) = match persist_path
+            .and_then(|p| load_persisted_session(p, &key_fp, now, max_age_secs))
+        {
+            Some(p) => (p.token, p.created_at, true),
+            None => (Self::mint_token(&hmac_key), now, false),
+        };
+
+        if loaded {
+            tracing::info!(
+                "Session token restored from disk: {}...{} (aged {}s)",
+                &token[..8],
+                &token[token.len() - 4..],
+                now - created_at
+            );
+        } else {
+            tracing::info!(
+                "Session token generated: {}...{}{}",
+                &token[..8],
+                &token[token.len() - 4..],
+                match persist_path {
+                    Some(p) => format!(" (persisted to {})", p.display()),
+                    None => " (in-memory only)".into(),
+                }
+            );
+            if let Some(path) = persist_path {
+                persist_session(path, &token, created_at, &key_fp);
+            }
+        }
+
         Self {
             token: RwLock::new(token),
             hmac_key,
-            created_at: RwLock::new(chrono::Utc::now().timestamp()),
+            created_at: RwLock::new(created_at),
             max_age_secs,
         }
     }
@@ -108,13 +185,18 @@ impl SessionAuth {
     /// the current session. Returns the newly-minted token.
     pub fn rotate(&self) -> String {
         let new_token = Self::mint_token(&self.hmac_key);
+        let now = chrono::Utc::now().timestamp();
         *self.token.write() = new_token.clone();
-        *self.created_at.write() = chrono::Utc::now().timestamp();
+        *self.created_at.write() = now;
         tracing::info!(
             "Session token rotated: {}...{}",
             &new_token[..8],
             &new_token[new_token.len() - 4..]
         );
+        if let Some(path) = session_file_path() {
+            let key_fp = hmac_key_fingerprint(&self.hmac_key);
+            persist_session(&path, &new_token, now, &key_fp);
+        }
         new_token
     }
 
@@ -140,6 +222,135 @@ impl SessionAuth {
             diff |= x ^ y;
         }
         diff == 0
+    }
+}
+
+// ── Session persistence helpers ──────────────────────────────────────
+//
+// These keep the single-token-per-session model but survive `zp serve`
+// restarts. The file lives at `~/.zeropoint/session.json`, is owner-only
+// (0600), and contains a key-material fingerprint so a rotated identity
+// doesn't accidentally inherit a stale session.
+//
+// Any I/O or parse error is treated as "no persisted session": the call
+// site mints a fresh token and rewrites the file on the next successful
+// write. Persistence failures never block startup or rotation.
+
+/// Path to the persisted session file, or `None` if we can't find a home
+/// directory (unusual — we'll just run without persistence in that case).
+fn session_file_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".zeropoint").join(SESSION_FILENAME))
+}
+
+/// Short fingerprint of the HMAC key. Used to detect mismatches between
+/// a persisted session and a freshly-derived key at startup (e.g. after
+/// identity rotation).
+fn hmac_key_fingerprint(hmac_key: &[u8; 32]) -> String {
+    let mut h = Sha256::new();
+    h.update(hmac_key);
+    let d = h.finalize();
+    hex::encode(&d[..8])
+}
+
+/// Try to load + validate a persisted session. Returns `None` if the
+/// file doesn't exist, fails to parse, was bound to a different HMAC
+/// key, or has aged past `max_age_secs`.
+fn load_persisted_session(
+    path: &Path,
+    key_fp: &str,
+    now: i64,
+    max_age_secs: i64,
+) -> Option<PersistedSession> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    let persisted: PersistedSession = serde_json::from_str(&contents).ok()?;
+    if persisted.version != PersistedSession::VERSION {
+        warn!(
+            "Persisted session schema mismatch (got v{}, want v{}) — discarding",
+            persisted.version,
+            PersistedSession::VERSION
+        );
+        return None;
+    }
+    if persisted.key_fp != key_fp {
+        warn!("Persisted session bound to a different identity key — discarding");
+        return None;
+    }
+    if persisted.token.len() != 64 || !persisted.token.chars().all(|c| c.is_ascii_hexdigit()) {
+        warn!("Persisted session token malformed — discarding");
+        return None;
+    }
+    let age = now - persisted.created_at;
+    if age < 0 || age >= max_age_secs {
+        // Negative age = clock rolled back, also suspicious.
+        warn!(
+            "Persisted session outside validity window (age {}s, max {}s) — discarding",
+            age, max_age_secs
+        );
+        return None;
+    }
+    Some(persisted)
+}
+
+/// Write the session record to disk with 0600 permissions. Best-effort:
+/// any error is logged but does not fail the caller, since a server that
+/// can't persist its token is still functional — it just loses the
+/// restart-continuity property until the next successful write.
+fn persist_session(path: &Path, token: &str, created_at: i64, key_fp: &str) {
+    let record = PersistedSession {
+        token: token.to_string(),
+        created_at,
+        key_fp: key_fp.to_string(),
+        version: PersistedSession::VERSION,
+    };
+    let body = match serde_json::to_string(&record) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("Failed to serialize session record: {}", e);
+            return;
+        }
+    };
+
+    if let Some(parent) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            warn!("Failed to create {} for session file: {}", parent.display(), e);
+            return;
+        }
+    }
+
+    // Write atomically: tmp file + rename. Owner-only perms on Unix.
+    let tmp = path.with_extension("json.tmp");
+    let write_result = {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&tmp)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, body.as_bytes()))
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&tmp, body.as_bytes())
+        }
+    };
+
+    if let Err(e) = write_result {
+        warn!("Failed to write session tmp file {}: {}", tmp.display(), e);
+        let _ = std::fs::remove_file(&tmp);
+        return;
+    }
+
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        warn!(
+            "Failed to rename session tmp file into place ({} -> {}): {}",
+            tmp.display(),
+            path.display(),
+            e
+        );
+        let _ = std::fs::remove_file(&tmp);
     }
 }
 
@@ -893,7 +1104,7 @@ mod tests {
     #[test]
     fn test_session_auth() {
         let key = [42u8; 32];
-        let auth = SessionAuth::new(&key);
+        let auth = SessionAuth::new_in_memory(&key);
         let tok = auth.current_token();
         assert!(auth.verify(&tok));
         assert!(!auth.verify("bad-token"));
@@ -903,13 +1114,51 @@ mod tests {
     #[test]
     fn test_session_rotate_invalidates_old_token() {
         let key = [7u8; 32];
-        let auth = SessionAuth::new(&key);
+        let auth = SessionAuth::new_in_memory(&key);
         let old = auth.current_token();
         assert!(auth.verify(&old));
         let new = auth.rotate();
         assert_ne!(old, new);
         assert!(!auth.verify(&old));
         assert!(auth.verify(&new));
+    }
+
+    #[test]
+    fn test_session_persistence_roundtrip() {
+        // Two `SessionAuth::new_with_persistence` calls pointing at the
+        // same temp file should land on the same token — simulating a
+        // `zp serve` restart preserving the cookie (ARTEMIS 035 option c).
+        let tmp = std::env::temp_dir().join(format!(
+            "zp-session-test-{}-{}.json",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = std::fs::remove_file(&tmp);
+
+        let key = [99u8; 32];
+        let first = SessionAuth::new_with_persistence(&key, Some(&tmp));
+        let first_token = first.current_token();
+
+        // Second "startup" with the same key + path should reuse the
+        // persisted token verbatim.
+        let second = SessionAuth::new_with_persistence(&key, Some(&tmp));
+        assert_eq!(first_token, second.current_token());
+        assert!(second.verify(&first_token));
+
+        // Rotating the second auth should invalidate the old token AND
+        // rewrite the file so a third "startup" picks up the new one.
+        let rotated = second.rotate();
+        let third = SessionAuth::new_with_persistence(&key, Some(&tmp));
+        assert_eq!(rotated, third.current_token());
+        assert!(!third.verify(&first_token));
+
+        // A different identity key fingerprint must NOT inherit the
+        // persisted session — we mint fresh instead.
+        let other_key = [100u8; 32];
+        let foreign = SessionAuth::new_with_persistence(&other_key, Some(&tmp));
+        assert_ne!(foreign.current_token(), rotated);
+
+        let _ = std::fs::remove_file(&tmp);
     }
 
     #[test]
