@@ -14,7 +14,7 @@ from pathlib import Path
 # ─── Configuration ───────────────────────────────────────────────
 OUTPUT_SCRIPT = "narration-script-onboard.txt"
 OUTPUT_AUDIO_SH = "generate-audio-onboard.sh"
-AUDIO_DIR = "assets/narration/onboard"  # Relative to project root; symlinked from ~/.zeropoint/assets/narration
+AUDIO_DIR = "assets/narration/onboard"  # Relative to project root; deployed to ~/.zeropoint/assets/ by zp-dev.sh
 
 PIPER_BIN = "/Users/kenrom/anaconda3/bin/piper"
 PIPER_MODEL_DIR = "/Users/kenrom/projects/zeropoint/models/piper"

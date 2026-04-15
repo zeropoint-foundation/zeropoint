@@ -86,6 +86,48 @@ copy_all_assets() {
     done
 }
 
+# Deploy narration MP3s from repo → override dir.
+# MP3s are "persistent assets" (too large for include_bytes!) that live
+# in the override dir permanently. This copies them from the repo's
+# assets/narration/ tree, preserving directory structure. Only copies
+# files that are missing or newer — safe to re-run on every build.
+deploy_narration() {
+    local src="$REPO/assets/narration"
+    local dst="$ASSETS_DIR/narration"
+    if [ ! -d "$src" ]; then
+        return  # No repo narration assets — nothing to deploy
+    fi
+    mkdir -p "$dst"
+    local copied=0
+    local skipped=0
+    # rsync is ideal (preserves structure, only copies newer) but fall
+    # back to find+cp if rsync isn't available.
+    if command -v rsync >/dev/null 2>&1; then
+        copied=$(rsync -a --itemize-changes "$src/" "$dst/" 2>/dev/null \
+            | grep '^>f' | wc -l | tr -d ' ')
+        skipped="(rsync)"
+    else
+        while IFS= read -r mp3; do
+            local rel="${mp3#$src/}"
+            local target="$dst/$rel"
+            mkdir -p "$(dirname "$target")"
+            if [ ! -f "$target" ] || [ "$mp3" -nt "$target" ]; then
+                cp "$mp3" "$target"
+                copied=$((copied + 1))
+            else
+                skipped=$((skipped + 1))
+            fi
+        done < <(find "$src" -name '*.mp3' -type f 2>/dev/null)
+    fi
+    local total
+    total=$(find "$dst" -name '*.mp3' -type f 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$copied" -gt 0 ] 2>/dev/null; then
+        echo "✓ Narration: $copied MP3(s) deployed ($total total in assets/narration/)"
+    else
+        echo "  Narration: $total MP3(s) current"
+    fi
+}
+
 kill_server() {
     # 1. Kill by PID file (cleanest)
     if [ -f "$PID_FILE" ]; then
@@ -191,6 +233,7 @@ case "${1:-dev}" in
     # files (CSS/JS have no compiled-in fallback, must always be present).
     remove_html_overrides
     deploy_static
+    deploy_narration
 
     start_server "$LOCAL_BIN"
     echo "══════════════════════════════════════"
@@ -216,6 +259,7 @@ case "${1:-dev}" in
 
     remove_html_overrides
     deploy_static
+    deploy_narration
 
     start_server "$LOCAL_BIN"
     echo "══════════════════════════════════════"
@@ -230,6 +274,7 @@ case "${1:-dev}" in
     # Copy all source assets → override dir (HTML + static)
     # resolve_html_asset() and ServeDir both read from here.
     copy_all_assets
+    deploy_narration
 
     start_server "$LOCAL_BIN"
     echo ""
