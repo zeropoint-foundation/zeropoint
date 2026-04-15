@@ -81,6 +81,13 @@ pub struct SessionAuth {
     /// Maximum session lifetime in seconds. Configured from
     /// `ZP_SESSION_MAX_AGE_SECONDS`, default 8 hours.
     max_age_secs: i64,
+    /// Where to read/write the persisted session file. `None` means the
+    /// session is purely in-memory (no restart continuity). Stored so
+    /// [`Self::rotate`] writes to the same path the constructor used —
+    /// avoids the bug where rotation silently clobbers
+    /// `~/.zeropoint/session.json` even when the auth context was built
+    /// with a different path (e.g. unit tests, future multi-tenant runs).
+    persist_path: Option<PathBuf>,
 }
 
 impl SessionAuth {
@@ -155,6 +162,7 @@ impl SessionAuth {
             hmac_key,
             created_at: RwLock::new(created_at),
             max_age_secs,
+            persist_path: persist_path.map(|p| p.to_path_buf()),
         }
     }
 
@@ -193,9 +201,9 @@ impl SessionAuth {
             &new_token[..8],
             &new_token[new_token.len() - 4..]
         );
-        if let Some(path) = session_file_path() {
+        if let Some(path) = self.persist_path.as_deref() {
             let key_fp = hmac_key_fingerprint(&self.hmac_key);
-            persist_session(&path, &new_token, now, &key_fp);
+            persist_session(path, &new_token, now, &key_fp);
         }
         new_token
     }
@@ -1125,14 +1133,26 @@ mod tests {
 
     #[test]
     fn test_session_persistence_roundtrip() {
+        // Isolate this test from the real ~/.zeropoint — redirect HOME
+        // to a fresh tempdir so that any regression that ignores the
+        // passed persist_path and falls back to session_file_path()
+        // lands in isolated space and is visible as a local test
+        // failure, not silent prod contamination (ARTEMIS 039
+        // hygiene suggestion).
+        let unique = format!(
+            "zp-session-test-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        );
+        let fake_home = std::env::temp_dir().join(format!("{}-home", unique));
+        std::fs::create_dir_all(&fake_home).expect("mk fake home");
+        let prior_home = std::env::var_os("HOME");
+        std::env::set_var("HOME", &fake_home);
+
         // Two `SessionAuth::new_with_persistence` calls pointing at the
         // same temp file should land on the same token — simulating a
         // `zp serve` restart preserving the cookie (ARTEMIS 035 option c).
-        let tmp = std::env::temp_dir().join(format!(
-            "zp-session-test-{}-{}.json",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-        ));
+        let tmp = std::env::temp_dir().join(format!("{}.json", unique));
         let _ = std::fs::remove_file(&tmp);
 
         let key = [99u8; 32];
@@ -1142,14 +1162,23 @@ mod tests {
         // Second "startup" with the same key + path should reuse the
         // persisted token verbatim.
         let second = SessionAuth::new_with_persistence(&key, Some(&tmp));
-        assert_eq!(first_token, second.current_token());
+        assert_eq!(
+            first_token,
+            second.current_token(),
+            "restart with same persist_path must reuse the token"
+        );
         assert!(second.verify(&first_token));
 
         // Rotating the second auth should invalidate the old token AND
-        // rewrite the file so a third "startup" picks up the new one.
+        // rewrite THE PASSED-IN FILE (not session_file_path()) so a
+        // third "startup" picks up the new one. Was broken in 2969cb2.
         let rotated = second.rotate();
         let third = SessionAuth::new_with_persistence(&key, Some(&tmp));
-        assert_eq!(rotated, third.current_token());
+        assert_eq!(
+            rotated,
+            third.current_token(),
+            "rotate() must persist to the same path the constructor used"
+        );
         assert!(!third.verify(&first_token));
 
         // A different identity key fingerprint must NOT inherit the
@@ -1158,7 +1187,20 @@ mod tests {
         let foreign = SessionAuth::new_with_persistence(&other_key, Some(&tmp));
         assert_ne!(foreign.current_token(), rotated);
 
+        // Fake home MUST remain clean — no rotate-to-default-path bug.
+        let leaked = fake_home.join(".zeropoint").join(SESSION_FILENAME);
+        assert!(
+            !leaked.exists(),
+            "rotate() leaked session.json into HOME at {:?}",
+            leaked
+        );
+
         let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_dir_all(&fake_home);
+        match prior_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
     }
 
     #[test]
