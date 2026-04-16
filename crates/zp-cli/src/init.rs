@@ -383,7 +383,7 @@ data_dir = ".zeropoint/data"
                 }
                 eprintln!("  \x1b[33m│\x1b[0m                                                        \x1b[33m│\x1b[0m");
                 eprintln!("  \x1b[33m│\x1b[0m  These words ARE your Genesis secret.                   \x1b[33m│\x1b[0m");
-                eprintln!("  \x1b[33m│\x1b[0m  Recovery: `zp recover --biometric-reset`                \x1b[33m│\x1b[0m");
+                eprintln!("  \x1b[33m│\x1b[0m  Recovery: `zp recover`                                  \x1b[33m│\x1b[0m");
                 eprintln!(
                     "  \x1b[1;33m└────────────────────────────────────────────────────────┘\x1b[0m"
                 );

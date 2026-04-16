@@ -267,7 +267,8 @@ impl Keyring {
         let cert = self.load_genesis_certificate()?;
         let secret = load_genesis_from_credential_store().map_err(|e| {
             KeyError::InvalidKeyMaterial(format!(
-                "Genesis secret not in OS credential store ({}). Run `zp init`.",
+                "Genesis secret not in OS credential store ({}). \
+                 Run `zp recover` with your 24-word mnemonic, or `zp init` to start fresh.",
                 e
             ))
         })?;
