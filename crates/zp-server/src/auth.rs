@@ -666,7 +666,11 @@ pub async fn require_auth(
             // For API calls, return 401
             if path.starts_with("/api/") || path.starts_with("/ws") {
                 warn!("Auth rejected: no token for {}", path);
-                let _ = rate_limiter.record_failure(client_ip);
+                // No record_failure here — missing-token requests aren't
+                // brute-force attempts. Only stale/invalid tokens (above)
+                // count against the rate limiter. This prevents legitimate
+                // unauthenticated probes (health checks, bots, first-visit
+                // API calls) from exhausting the budget for real clients.
                 Ok(build_auth_response(StatusCode::UNAUTHORIZED, "missing"))
             } else {
                 // HTML page requests without auth — let through. The root

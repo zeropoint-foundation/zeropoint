@@ -34,10 +34,20 @@ impl TestApp {
         let data_dir = temp_dir.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("failed to create data dir");
 
-        // Create a minimal home directory structure
+        // Create a minimal home directory structure with canon permissions (0700)
+        // so enforce_canon_permissions() doesn't process::exit(1) the test runner.
         let home_dir = temp_dir.path().to_path_buf();
         let keys_dir = home_dir.join("keys");
         std::fs::create_dir_all(&keys_dir).expect("failed to create keys dir");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&home_dir, std::fs::Permissions::from_mode(0o700))
+                .expect("failed to chmod home_dir");
+            std::fs::set_permissions(&keys_dir, std::fs::Permissions::from_mode(0o700))
+                .expect("failed to chmod keys_dir");
+        }
 
         let config = zp_server::ServerConfig {
             bind_addr: "127.0.0.1".to_string(),
@@ -149,6 +159,7 @@ impl TestApp {
 pub struct TestServer {
     pub addr: SocketAddr,
     pub config: zp_server::ServerConfig,
+    pub session_token: String,
     _temp_dir: tempfile::TempDir,
     _server_handle: tokio::task::JoinHandle<()>,
 }
@@ -163,6 +174,15 @@ impl TestServer {
         let home_dir = temp_dir.path().to_path_buf();
         let keys_dir = home_dir.join("keys");
         std::fs::create_dir_all(&keys_dir).expect("failed to create keys dir");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&home_dir, std::fs::Permissions::from_mode(0o700))
+                .expect("failed to chmod home_dir");
+            std::fs::set_permissions(&keys_dir, std::fs::Permissions::from_mode(0o700))
+                .expect("failed to chmod keys_dir");
+        }
 
         // Bind to port 0 to get a random available port
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -182,6 +202,7 @@ impl TestServer {
         };
 
         let state = zp_server::AppState::init(&config).await;
+        let session_token = state.session_token();
         let app = zp_server::build_app(state, &config);
 
         let server_handle = tokio::spawn(async move {
@@ -191,6 +212,7 @@ impl TestServer {
         Self {
             addr,
             config,
+            session_token,
             _temp_dir: temp_dir,
             _server_handle: server_handle,
         }
@@ -203,7 +225,7 @@ impl TestServer {
 
     /// WebSocket URL (e.g., "ws://127.0.0.1:12345/ws/exec").
     pub fn ws_url(&self, path: &str) -> String {
-        format!("ws://{}{}", self.addr, path)
+        format!("ws://{}{}?token={}", self.addr, path, self.session_token)
     }
 }
 

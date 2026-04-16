@@ -296,8 +296,14 @@
     // complete. This handles cached/stale page loads where the browser
     // renders step 2 before the WS state event can advance forward.
     if (step === 2 && genesisComplete) {
-      console.log('[ZP] Genesis already complete — skipping step 2, advancing to step 3');
-      step = 3;
+      step = 3; // genesis already complete — skip step 2, advance to step 3
+    }
+
+    // Guard: cannot advance to step 3 (recovery kit) until genesis is complete.
+    // Prevents nav-tab clicks or stale onclick handlers from skipping ahead.
+    if (step === 3 && !genesisComplete) {
+      console.log('[ZP] Genesis not complete — cannot advance to step 3');
+      return;
     }
 
     // Hide all steps
