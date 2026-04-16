@@ -13,6 +13,7 @@
   let selectedSovereignty = null;
   let platformInfo = null;
   let genesisData = null;
+  let genesisComplete = false;  // Set by 'state' event; guards step 2
   let discoveredTools = [];
   let credentialsStored = 0;
   let narrationAudio = null;
@@ -97,6 +98,12 @@
   function handleEvent(msg) {
     switch (msg.event) {
       case 'state':
+        // Track genesis completion globally — used by goStep to block
+        // the genesis creation UI on cached/stale page loads.
+        if (msg.genesis_complete) {
+          genesisComplete = true;
+        }
+
         // Reconstruct UI from server state (filesystem-backed).
         // Only advance FORWARD — never regress the user to an earlier step.
         // This prevents heartbeat/reconnect state events from yanking the
@@ -143,6 +150,7 @@
         break;
 
       case 'genesis_complete':
+        genesisComplete = true;
         genesisData = msg;
         showGenesisComplete(msg);
         break;
@@ -284,6 +292,14 @@
 
   // ── Step navigation ─────────────────────────────────────
   window.goStep = function(step, animate) {
+    // Guard: never show the genesis creation UI if genesis is already
+    // complete. This handles cached/stale page loads where the browser
+    // renders step 2 before the WS state event can advance forward.
+    if (step === 2 && genesisComplete) {
+      console.log('[ZP] Genesis already complete — skipping step 2, advancing to step 3');
+      step = 3;
+    }
+
     // Hide all steps
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
     // Show target
