@@ -291,6 +291,22 @@ enum KeysCmd {
         /// Agent name to revoke
         name: String,
     },
+    /// Rotate a key to a new keypair (preserves identity via rotation certificate)
+    ///
+    /// For operator rotation: `zp keys rotate --target operator`
+    /// For agent rotation:    `zp keys rotate --target <agent-name>`
+    ///
+    /// The old key signs the rotation certificate (proving possession),
+    /// and the parent key co-signs for defense-in-depth.
+    Rotate {
+        /// Key to rotate: "operator" or an agent name
+        #[arg(long)]
+        target: String,
+
+        /// Reason for rotation (recorded in the certificate for audit)
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -880,6 +896,9 @@ async fn main() -> anyhow::Result<()> {
             } => commands::keys_issue(name, capabilities.as_deref(), *expires_days),
             KeysCmd::List => commands::keys_list(),
             KeysCmd::Revoke { name } => commands::keys_revoke(name),
+            KeysCmd::Rotate { target, reason } => {
+                commands::keys_rotate(target, reason.as_deref())
+            }
         };
         std::process::exit(exit_code);
     }

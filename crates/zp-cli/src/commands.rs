@@ -1,15 +1,19 @@
 //! Subcommand handlers for skills, audit, health, keys, and gate operations
 
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 use anyhow::Result;
+use ed25519_dalek::SigningKey;
 use zp_audit::AuditStore;
 use zp_core::{
     policy::{PolicyContext, TrustTier},
     ActionType, ActorId, Channel, ConversationId,
 };
-use zp_keys::hierarchy::AgentKey;
+use zp_keys::certificate::KeyRole;
+use zp_keys::hierarchy::{AgentKey, OperatorKey};
 use zp_keys::keyring::Keyring;
+use zp_keys::rotation::RotationCertificate;
 use zp_pipeline::Pipeline;
 use zp_policy::GovernanceGate;
 
@@ -475,6 +479,393 @@ pub fn keys_revoke(name: &str) -> i32 {
     eprintln!();
 
     0
+}
+
+// ── Key rotation commands ─────────────────────────────────────────
+
+/// Rotate an operator or agent key to a new keypair.
+///
+/// The old key signs the rotation certificate (proving possession), and the
+/// parent key co-signs for defense-in-depth (genesis for operator, operator
+/// for agent). The rotation certificate is persisted to disk so the
+/// succession chain can be reconstructed.
+pub fn keys_rotate(target: &str, reason: Option<&str>) -> i32 {
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            eprintln!("  Run `zp init` first to bootstrap your environment.");
+            return 1;
+        }
+    };
+
+    let status = keyring.status();
+
+    if target == "operator" {
+        rotate_operator(&keyring, &status, reason)
+    } else {
+        // Treat as agent name
+        rotate_agent(&keyring, target, reason)
+    }
+}
+
+/// Rotate the operator key. Genesis co-signs for defense-in-depth.
+fn rotate_operator(
+    keyring: &Keyring,
+    status: &zp_keys::keyring::KeyringStatus,
+    reason: Option<&str>,
+) -> i32 {
+    if !status.has_operator {
+        eprintln!("  No operator key found. Run `zp init` first.");
+        return 1;
+    }
+    if !status.has_genesis {
+        eprintln!("  No genesis certificate found. Cannot co-sign rotation.");
+        return 1;
+    }
+
+    eprintln!();
+    eprintln!("  \x1b[1mOperator Key Rotation\x1b[0m");
+    eprintln!("  \x1b[2m─────────────────────\x1b[0m");
+
+    // Load genesis key (need the signing key for co-signature + vault key derivation)
+    let genesis = match keyring.load_genesis() {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("  Failed to load genesis key: {}", e);
+            eprintln!("  The genesis secret must be in the OS credential store.");
+            eprintln!("  Run `zp recover` if needed.");
+            return 1;
+        }
+    };
+
+    // Load current operator key
+    let old_operator = match keyring.load_operator() {
+        Ok(op) => op,
+        Err(e) => {
+            eprintln!("  Failed to load operator key: {}", e);
+            return 1;
+        }
+    };
+
+    let old_pub_hex = hex::encode(old_operator.public_key());
+    eprintln!(
+        "  Current operator: \x1b[36m{}...\x1b[0m",
+        &old_pub_hex[..16]
+    );
+
+    // Check existing rotation history to determine sequence number
+    let rotations_path = keyring.path().join("rotations.json");
+    let (sequence, prev_hash) = load_rotation_sequence(&rotations_path, &old_pub_hex);
+
+    eprintln!(
+        "  Rotation sequence: {} ({})",
+        sequence,
+        if sequence == 0 {
+            "first rotation"
+        } else {
+            "continuing chain"
+        }
+    );
+
+    // Confirm
+    eprintln!();
+    eprintln!("  \x1b[33m⚠\x1b[0m  This will generate a new operator keypair.");
+    eprintln!("  \x1b[33m⚠\x1b[0m  All active sessions will be invalidated.");
+    eprintln!("  \x1b[33m⚠\x1b[0m  The server must be restarted after rotation.");
+    eprint!("  Proceed? [y/N] ");
+    let _ = io::stdout().flush();
+    let mut answer = String::new();
+    if io::stdin().lock().read_line(&mut answer).is_err()
+        || !answer.trim().eq_ignore_ascii_case("y")
+    {
+        eprintln!("  Aborted.");
+        return 0;
+    }
+
+    // Generate new operator key (signed by genesis)
+    eprint!("  Generating new operator key...       ");
+    let subject = old_operator.certificate().body.subject.clone();
+    let new_operator = OperatorKey::generate(&subject, &genesis, None);
+    let new_pub_hex = hex::encode(new_operator.public_key());
+    eprintln!("\x1b[32m✓\x1b[0m Ed25519");
+    eprintln!(
+        "  New operator:     \x1b[36m{}...\x1b[0m",
+        &new_pub_hex[..16]
+    );
+
+    // Issue rotation certificate (old key signs)
+    eprint!("  Issuing rotation certificate...      ");
+    let old_signing_key = SigningKey::from_bytes(&old_operator.secret_key());
+    let mut cert = match RotationCertificate::issue(
+        &old_signing_key,
+        &new_operator.public_key(),
+        KeyRole::Operator,
+        sequence,
+        prev_hash,
+        reason.map(String::from),
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m");
+            eprintln!("  Failed to issue rotation certificate: {}", e);
+            return 1;
+        }
+    };
+    eprintln!("\x1b[32m✓\x1b[0m signed by old key");
+
+    // Co-sign with genesis (defense-in-depth)
+    eprint!("  Genesis co-signing...                ");
+    let genesis_signing_key = SigningKey::from_bytes(&genesis.secret_key());
+    if let Err(e) = cert.co_sign(&genesis_signing_key) {
+        eprintln!("\x1b[31m✗\x1b[0m");
+        eprintln!("  Genesis co-sign failed: {}", e);
+        return 1;
+    }
+    eprintln!("\x1b[32m✓\x1b[0m co-signed");
+
+    // Save new operator key (encrypted under vault key derived from genesis)
+    eprint!("  Saving new operator key...           ");
+    if let Err(e) =
+        keyring.save_operator_with_genesis_secret(&new_operator, &genesis.secret_key())
+    {
+        eprintln!("\x1b[31m✗\x1b[0m");
+        eprintln!("  Failed to save operator key: {}", e);
+        return 1;
+    }
+    eprintln!("\x1b[32m✓\x1b[0m operator.secret.enc");
+
+    // Persist rotation certificate
+    eprint!("  Persisting rotation certificate...   ");
+    if let Err(e) = save_rotation_cert(&rotations_path, &cert) {
+        eprintln!("\x1b[31m✗\x1b[0m");
+        eprintln!("  Failed to save rotation certificate: {}", e);
+        eprintln!("  The key was rotated but the certificate was not persisted.");
+        eprintln!("  Manual recovery may be needed.");
+        return 1;
+    }
+    eprintln!("\x1b[32m✓\x1b[0m rotations.json");
+
+    // Verify the rotation certificate
+    eprint!("  Verifying rotation certificate...    ");
+    match cert.verify_old_key_signature() {
+        Ok(true) => eprintln!("\x1b[32m✓\x1b[0m valid"),
+        Ok(false) => {
+            eprintln!("\x1b[31m✗\x1b[0m invalid signature");
+            return 1;
+        }
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m verification error: {}", e);
+            return 1;
+        }
+    }
+
+    eprintln!();
+    eprintln!("  \x1b[32m✓ Operator key rotated successfully.\x1b[0m");
+    eprintln!();
+    eprintln!("  Old key: {}...", &old_pub_hex[..16]);
+    eprintln!("  New key: {}...", &new_pub_hex[..16]);
+    eprintln!("  Cert ID: {}", cert.body.id);
+    if let Some(r) = &cert.body.reason {
+        eprintln!("  Reason:  {}", r);
+    }
+    eprintln!();
+    eprintln!("  \x1b[33mNext steps:\x1b[0m");
+    eprintln!("    1. Restart `zp serve` to pick up the new key");
+    eprintln!("    2. All browser sessions will need re-authentication");
+    eprintln!("    3. Agent keys signed by the old operator are still valid");
+    eprintln!("       (rotation chain preserves identity continuity)");
+    eprintln!();
+
+    0
+}
+
+/// Rotate an agent key. Operator co-signs for defense-in-depth.
+fn rotate_agent(keyring: &Keyring, name: &str, reason: Option<&str>) -> i32 {
+    // Verify agent exists
+    let old_agent = match keyring.load_agent(name) {
+        Ok(a) => a,
+        Err(_) => {
+            eprintln!("  Agent key '{}' not found.", name);
+            return 1;
+        }
+    };
+
+    eprintln!();
+    eprintln!("  \x1b[1mAgent Key Rotation: {}\x1b[0m", name);
+    eprintln!("  \x1b[2m─────────────────────{}\x1b[0m", "─".repeat(name.len()));
+
+    let old_pub_hex = hex::encode(old_agent.public_key());
+    eprintln!(
+        "  Current agent key: \x1b[36m{}...\x1b[0m",
+        &old_pub_hex[..16]
+    );
+
+    // Load operator (needed to sign new agent cert + co-sign rotation)
+    let operator = match keyring.load_operator() {
+        Ok(op) => op,
+        Err(e) => {
+            eprintln!("  Failed to load operator key: {}", e);
+            eprintln!("  The operator key is needed to sign the new agent certificate.");
+            return 1;
+        }
+    };
+
+    // Check existing rotation history
+    let rotations_path = keyring.path().join("rotations.json");
+    let (sequence, prev_hash) = load_rotation_sequence(&rotations_path, &old_pub_hex);
+
+    // Confirm
+    eprintln!();
+    eprint!("  Rotate agent key '{}'? [y/N] ", name);
+    let _ = io::stdout().flush();
+    let mut answer = String::new();
+    if io::stdin().lock().read_line(&mut answer).is_err()
+        || !answer.trim().eq_ignore_ascii_case("y")
+    {
+        eprintln!("  Aborted.");
+        return 0;
+    }
+
+    // Generate new agent key (signed by operator)
+    eprint!("  Generating new agent key...          ");
+    let new_agent = AgentKey::generate(name, &operator, None);
+    let new_pub_hex = hex::encode(new_agent.public_key());
+    eprintln!("\x1b[32m✓\x1b[0m Ed25519");
+
+    // Issue rotation certificate (old key signs)
+    eprint!("  Issuing rotation certificate...      ");
+    let old_signing_key = SigningKey::from_bytes(&old_agent.secret_key());
+    let mut cert = match RotationCertificate::issue(
+        &old_signing_key,
+        &new_agent.public_key(),
+        KeyRole::Agent,
+        sequence,
+        prev_hash,
+        reason.map(String::from),
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m");
+            eprintln!("  Failed to issue rotation certificate: {}", e);
+            return 1;
+        }
+    };
+    eprintln!("\x1b[32m✓\x1b[0m signed by old key");
+
+    // Co-sign with operator
+    eprint!("  Operator co-signing...               ");
+    if let Err(e) = cert.co_sign(operator.signing_key()) {
+        eprintln!("\x1b[31m✗\x1b[0m");
+        eprintln!("  Operator co-sign failed: {}", e);
+        return 1;
+    }
+    eprintln!("\x1b[32m✓\x1b[0m co-signed");
+
+    // Save new agent key
+    eprint!("  Saving new agent key...              ");
+    if let Err(e) = keyring.save_agent(name, &new_agent) {
+        eprintln!("\x1b[31m✗\x1b[0m");
+        eprintln!("  Failed to save agent key: {}", e);
+        return 1;
+    }
+    eprintln!("\x1b[32m✓\x1b[0m agents/{}.json", name);
+
+    // Persist rotation certificate
+    eprint!("  Persisting rotation certificate...   ");
+    if let Err(e) = save_rotation_cert(&rotations_path, &cert) {
+        eprintln!("\x1b[31m✗\x1b[0m");
+        eprintln!("  Failed to save rotation certificate: {}", e);
+        return 1;
+    }
+    eprintln!("\x1b[32m✓\x1b[0m rotations.json");
+
+    eprintln!();
+    eprintln!("  \x1b[32m✓ Agent key '{}' rotated successfully.\x1b[0m", name);
+    eprintln!();
+    eprintln!("  Old key: {}...", &old_pub_hex[..16]);
+    eprintln!("  New key: {}...", &new_pub_hex[..16]);
+    eprintln!("  Cert ID: {}", cert.body.id);
+    eprintln!();
+
+    0
+}
+
+// ── Rotation persistence helpers ──────────────────────────────────
+
+/// Load existing rotation certificates from disk and determine the next
+/// sequence number + previous rotation hash for a given key.
+fn load_rotation_sequence(
+    rotations_path: &std::path::Path,
+    old_pub_hex: &str,
+) -> (u32, Option<String>) {
+    let certs = load_rotation_certs(rotations_path);
+
+    // Find the most recent rotation FROM this key (or TO this key)
+    // to determine the next sequence number.
+    let mut max_sequence: Option<u32> = None;
+    let mut last_hash: Option<String> = None;
+
+    for cert in &certs {
+        // If this key was the new key in a previous rotation, the next
+        // rotation from it continues that sequence.
+        if cert.body.new_public_key == old_pub_hex {
+            let seq = cert.body.sequence;
+            if max_sequence.map_or(true, |m| seq > m) {
+                max_sequence = Some(seq);
+                last_hash = Some(cert.content_hash());
+            }
+        }
+        // If this key was the old key, it was already rotated away.
+        // This shouldn't happen in normal flow, but handle it.
+        if cert.body.old_public_key == old_pub_hex {
+            let seq = cert.body.sequence;
+            if max_sequence.map_or(true, |m| seq > m) {
+                max_sequence = Some(seq);
+                last_hash = Some(cert.content_hash());
+            }
+        }
+    }
+
+    match max_sequence {
+        Some(s) => (s + 1, last_hash),
+        None => (0, None),
+    }
+}
+
+/// Load all rotation certificates from the JSON file.
+fn load_rotation_certs(path: &std::path::Path) -> Vec<RotationCertificate> {
+    if !path.exists() {
+        return Vec::new();
+    }
+    match std::fs::read_to_string(path) {
+        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Append a rotation certificate to the JSON file.
+fn save_rotation_cert(
+    path: &std::path::Path,
+    cert: &RotationCertificate,
+) -> Result<(), String> {
+    let mut certs = load_rotation_certs(path);
+    certs.push(cert.clone());
+
+    let json = serde_json::to_string_pretty(&certs)
+        .map_err(|e| format!("serialization error: {}", e))?;
+
+    std::fs::write(path, json).map_err(|e| format!("write error: {}", e))?;
+
+    // Set restrictive permissions (0600) on the rotation chain file
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        let _ = std::fs::set_permissions(path, perms);
+    }
+
+    Ok(())
 }
 
 // ── Gate evaluation commands ───────────────────────────────────────
