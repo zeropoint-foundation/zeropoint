@@ -6,6 +6,7 @@ mod configure;
 mod guard;
 mod init;
 mod mesh_commands;
+mod recover;
 mod onboard;
 #[cfg(feature = "policy-wasm")]
 mod policy_commands;
@@ -167,6 +168,13 @@ enum Commands {
     /// Key lifecycle management
     #[command(subcommand)]
     Keys(KeysCmd),
+
+    /// Restore genesis identity from 24-word recovery mnemonic
+    ///
+    /// Use this when the OS credential store has been lost (Keychain wiped,
+    /// machine migration, factory reset). Reads 24 BIP-39 words, verifies
+    /// against the genesis certificate, and re-seals the secret.
+    Recover,
 
     /// Gate evaluation and management
     #[command(subcommand)]
@@ -876,6 +884,11 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    // Recover — restore genesis identity from mnemonic, no pipeline needed
+    if let Some(Commands::Recover) = &args.command {
+        std::process::exit(recover::run());
+    }
+
     // Gate — gate evaluation and management, no pipeline needed
     if let Some(Commands::Gate(cmd)) = &args.command {
         let exit_code = match cmd {
@@ -1295,6 +1308,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Init { .. }) => unreachable!(),  // handled above
         Some(Commands::Onboard { .. }) => unreachable!(), // handled above
         Some(Commands::Keys(_)) => unreachable!(),      // handled above
+        Some(Commands::Recover) => unreachable!(),      // handled above
         Some(Commands::Gate(_)) => unreachable!(),      // handled above
         Some(Commands::Verify { .. }) => unreachable!(), // handled above
         Some(Commands::Cfg(_)) => unreachable!(),       // handled above
