@@ -44,19 +44,6 @@ pub fn run() -> i32 {
         }
     };
 
-    // Check current state — maybe recovery isn't needed
-    let status = keyring.status();
-    if status.has_genesis_secret {
-        eprintln!("  \x1b[33m⚠\x1b[0m Genesis secret is already present in the credential store.");
-        eprintln!("  Recovery will overwrite it. Continue? [y/N] ");
-        let _ = io::stdout().flush();
-        let mut answer = String::new();
-        if io::stdin().lock().read_line(&mut answer).is_err() || !answer.trim().eq_ignore_ascii_case("y") {
-            eprintln!("  Aborted.");
-            return 0;
-        }
-    }
-
     // ── Load the genesis public key ──────────────────────────────
     let cert = match keyring.load_genesis_certificate() {
         Ok(c) => c,
@@ -114,6 +101,9 @@ pub fn run() -> i32 {
     }
 
     // ── Verify mnemonic against genesis public key ───────────────
+    // Verify BEFORE prompting for overwrite — reject wrong words early
+    // so piped input works and users don't confirm an action that will
+    // fail anyway.
     eprint!("  Verifying mnemonic… ");
     let secret = match zp_keys::verify_recovery(&words, &expected_pubkey) {
         Ok(s) => {
@@ -130,6 +120,20 @@ pub fn run() -> i32 {
             return 1;
         }
     };
+
+    // ── Confirm overwrite if credential store already has a secret ─
+    let status = keyring.status();
+    if status.has_genesis_secret {
+        eprintln!();
+        eprintln!("  \x1b[33m⚠\x1b[0m Genesis secret is already present in the credential store.");
+        eprint!("  Overwrite with the recovered secret? [y/N] ");
+        let _ = io::stdout().flush();
+        let mut answer = String::new();
+        if io::stdin().lock().read_line(&mut answer).is_err() || !answer.trim().eq_ignore_ascii_case("y") {
+            eprintln!("  Aborted. The credential store was not modified.");
+            return 0;
+        }
+    }
 
     // ── Re-seal genesis secret to credential store ───────────────
     eprint!("  Sealing genesis secret to credential store… ");
