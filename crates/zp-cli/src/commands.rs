@@ -1,6 +1,6 @@
 //! Subcommand handlers for skills, audit, health, keys, and gate operations
 
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 use anyhow::Result;

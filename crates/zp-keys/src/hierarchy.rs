@@ -96,6 +96,14 @@ impl GenesisKey {
     pub fn secret_key(&self) -> [u8; 32] {
         *self.signing_key.as_bytes()
     }
+
+    /// Borrow the internal Ed25519 signing key.
+    ///
+    /// Used by callers that need a `&SigningKey` reference (e.g., rotation
+    /// certificate co-signing). Prefer `secret_key()` for raw bytes export.
+    pub fn signing_key(&self) -> &SigningKey {
+        &self.signing_key
+    }
 }
 
 /// An operator key — represents a node operator in the hierarchy.
@@ -324,6 +332,14 @@ impl AgentKey {
     /// Export the secret key bytes. Handle with care.
     pub fn secret_key(&self) -> [u8; 32] {
         *self.signing_key.as_bytes()
+    }
+
+    /// Borrow the internal Ed25519 signing key.
+    ///
+    /// Used by callers that need a `&SigningKey` reference (e.g., rotation
+    /// certificate signing). Prefer `sign()` for simple data signing.
+    pub fn signing_key(&self) -> &SigningKey {
+        &self.signing_key
     }
 }
 
