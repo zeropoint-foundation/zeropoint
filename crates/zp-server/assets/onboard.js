@@ -1629,8 +1629,16 @@
       }
       const btn = card.querySelector('.store-btn');
       if (btn) {
-        btn.textContent = '✓';
+        btn.textContent = data.replaced ? '✓ Updated' : '✓';
         btn.disabled = true;
+        // Re-enable after 3s if replaced, so operator can update again
+        if (data.replaced) {
+          setTimeout(() => {
+            btn.textContent = 'Update';
+            btn.disabled = false;
+            if (input) input.disabled = false;
+          }, 3000);
+        }
       }
 
       // Show "checking..." validation badge

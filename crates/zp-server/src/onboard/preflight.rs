@@ -1140,14 +1140,46 @@ fn check_env_completeness(path: &Path) -> PreflightCheck {
     }
 
     if !critical_missing.is_empty() {
-        PreflightCheck {
-            name: "env_file".into(),
-            status: "fail".into(),
-            detail: format!(
+        // Build actionable guidance per missing var type
+        let mut guidance = Vec::new();
+        let has_db = critical_missing.iter().any(|v| {
+            v.contains("DATABASE") || v.contains("DB_") || v.contains("PG_") || v.contains("POSTGRES")
+        });
+        let has_llm = critical_missing.iter().any(|v| {
+            v.contains("API_KEY") || v.contains("LLM_") || v.contains("OPENAI") || v.contains("ANTHROPIC")
+        });
+        let has_auth = critical_missing.iter().any(|v| {
+            v.contains("SECRET") || v.contains("TOKEN") || v.contains("JWT") || v.contains("AUTH")
+        });
+
+        if has_db {
+            guidance.push("Database: set DATABASE_URL to a valid connection string (e.g. postgres://user:pass@localhost/dbname) or run `zp configure auto` to detect it");
+        }
+        if has_llm {
+            guidance.push("LLM provider: add your API key to .env or store it with `zp keys vault-store`");
+        }
+        if has_auth {
+            guidance.push("Auth/session: generate secrets with `openssl rand -hex 32` and add to .env");
+        }
+
+        let detail = if guidance.is_empty() {
+            format!(
                 "Critical env vars missing: {} ({} optional placeholders remaining)",
                 critical_missing.join(", "),
                 placeholders - critical_missing.len()
-            ),
+            )
+        } else {
+            format!(
+                "Critical env vars missing: {}. Remediation: {}",
+                critical_missing.join(", "),
+                guidance.join("; ")
+            )
+        };
+
+        PreflightCheck {
+            name: "env_file".into(),
+            status: "fail".into(),
+            detail,
         }
     } else if placeholders > 0 {
         // Non-critical placeholders — tool can probably run fine

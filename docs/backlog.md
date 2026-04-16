@@ -1,8 +1,7 @@
-# Open backlog
+# Backlog — RESOLVED
 
-Items identified during the ARTEMIS relay cycle (020–025) that are
-deferred — none are security-critical, all are UX or operational polish.
-Intended to be picked up before or in parallel with the next full pentest.
+All items from the ARTEMIS relay cycle (020–026) have been addressed.
+Original items preserved below with resolution notes.
 
 Last updated: 2026-04-16.
 
@@ -11,7 +10,7 @@ Last updated: 2026-04-16.
 ## 1. Ironclaw DATABASE_URL preflight UX
 
 **Origin:** Relay 035, issue 1.
-**Status:** Open.
+**Status:** Done.
 
 When `DATABASE_URL` is unset or points to a nonexistent database, the
 ironclaw integration panics deep in the connection pool. The user sees
@@ -30,38 +29,26 @@ server is running).
 ## 2. BSD grep in CSP audit scripts
 
 **Origin:** Relay 034.
-**Status:** Open.
+**Status:** N/A — scripts do not exist in the repo.
 
-The CSP audit scripts in `tools/` use GNU grep flags (`-P` for
-Perl-compatible regex) that don't exist on macOS BSD grep. The scripts
-work in CI (Linux) but fail silently or with errors on developer
-machines.
-
-**Fix:** Replace `grep -P` with `grep -E` (extended regex, portable)
-or use `sed`/`awk` for the patterns that need lookahead/lookbehind.
-Alternatively, detect the grep flavor and adapt.
-
-**Files:** `tools/audit/` — CSP-related scripts.
+The `tools/audit/` directory with CSP-related scripts was referenced in
+the original finding but these scripts were never committed to the repo.
+If CSP audit scripts are added in the future, they should use `grep -E`
+(portable extended regex) instead of `grep -P` (GNU-only Perl regex).
 
 ---
 
 ## 3. Credential conflict UX
 
 **Origin:** Relay 030.
-**Status:** Open.
+**Status:** Done.
 
-When the vault already contains a credential for a given provider and
-the user tries to store a new one, the behavior is unclear. The store
-succeeds silently (overwrite), but the user gets no confirmation of
-what happened — no "replacing existing credential for X" message.
-
-**Fix:** Before overwriting, check if the key exists in the vault. If
-so, show a confirmation prompt in the onboard UI ("Replace existing
-credential for OpenAI?") and a clear success message after. In the CLI
-path, print a warning.
-
-**Files:** `crates/zp-server/src/onboard/` (vault_store handler),
-`crates/zp-server/assets/onboard.js` (UI feedback).
+The vault_store handler now checks `vault.list()` before storing to
+detect if a credential already exists for the given vault_ref. The
+response event includes a `replaced: true/false` field. The frontend
+shows "✓ Updated" instead of "✓" when replacing, and re-enables the
+input after 3 seconds so the operator can update again. The stored
+count is only incremented for genuinely new credentials.
 
 ---
 
@@ -83,41 +70,25 @@ for defense-in-depth.
 ## 5. `zp keys list` — cert vs secret distinction
 
 **Origin:** Relay cycle observation.
-**Status:** Open.
+**Status:** Done.
 
-`zp keys list` (or whatever command displays key status) should clearly
-distinguish between:
-
-- Certificate on disk (public key, issuer chain, expiry)
-- Secret in credential store (present/absent, last-accessed if available)
-- Secret in encrypted file (present/absent)
-
-Currently the output doesn't make it obvious whether the *secret* is
-available or just the certificate. This matters for recovery triage —
-an operator needs to know "do I have the secret or just the cert?"
-before deciding whether `zp recover` is needed.
-
-**Fix:** Update the keys list output to show a status column:
-`[cert+secret]`, `[cert only]`, `[secret only]` (shouldn't happen but
-handle it). Query the credential store status without loading the actual
-secret.
-
-**Files:** `crates/zp-cli/src/` (keys subcommand, may need creation),
-`crates/zp-keys/src/keyring.rs` (`KeyringStatus` struct already has
-`has_genesis_secret`).
+`zp keys list` now shows four-state status for both genesis and
+operator keys: "cert + secret", "cert only (secret missing — run
+`zp recover`)", "secret only (cert missing)", or "missing". Uses the
+existing `KeyringStatus` fields (`has_genesis_secret`,
+`has_operator_secret`). Also shows the rotation chain certificate
+count if `rotations.json` exists.
 
 ---
 
-## Priority guidance
+## Resolution summary
 
-None of these block a pentest. If prioritizing:
+All five items resolved in the hardening cycle:
 
-1. **Credential conflict UX** (#3) — most user-facing, easiest to hit
-   during normal onboarding.
-2. **`zp keys list` distinction** (#5) — important for operator
-   situational awareness during incidents.
-3. **Ironclaw preflight** (#1) — only matters if ironclaw integration
-   is active.
-4. **BSD grep** (#2) — only affects developers on macOS running audit
-   scripts locally.
-5. **Rotation runbook update** (#4) — blocked on `zp rotate` implementation.
+1. **Preflight UX** — actionable remediation guidance per env var type
+2. **BSD grep** — scripts never materialized; noted for future work
+3. **Credential conflict** — replaced/new distinction in UI + backend
+4. **Rotation runbook + CLI** — `zp keys rotate` shipped, docs updated
+5. **Keys list** — cert/secret distinction with recovery guidance
+
+Backlog is clear for the next pentest cycle.

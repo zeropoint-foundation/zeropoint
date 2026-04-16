@@ -251,6 +251,10 @@ pub async fn handle_vault_store(
         }
     };
 
+    // Check if this credential already exists in the vault
+    let existing_refs = vault.list();
+    let is_replacement = existing_refs.iter().any(|r| r == vault_ref);
+
     // Encrypt and store the credential
     if let Err(e) = vault.store(vault_ref, value.as_bytes()) {
         events.push(OnboardEvent::error(&format!(
@@ -266,11 +270,18 @@ pub async fn handle_vault_store(
         return events;
     }
 
-    state.credentials_stored += 1;
+    // Only increment count for genuinely new credentials
+    if !is_replacement {
+        state.credentials_stored += 1;
+    }
+
+    let action_verb = if is_replacement { "Updated" } else { "Stored" };
 
     events.push(OnboardEvent::terminal(&format!(
-        "✓ Encrypted and stored: {} ({})",
-        vault_ref, masked
+        "✓ Encrypted and {}: {} ({})",
+        action_verb.to_lowercase(),
+        vault_ref,
+        masked
     )));
 
     events.push(OnboardEvent::new(
@@ -279,6 +290,7 @@ pub async fn handle_vault_store(
             "vault_ref": vault_ref,
             "masked_value": masked,
             "total_stored": state.credentials_stored,
+            "replaced": is_replacement,
         }),
     ));
 

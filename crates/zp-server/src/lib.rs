@@ -496,9 +496,14 @@ impl AppState {
             None
         };
 
-        // Initialize attestation database
-        attestations::init_attestation_db(&config.data_dir)
-            .expect("Failed to initialize attestation database");
+        // Initialize attestation database (graceful degradation)
+        if let Err(e) = attestations::init_attestation_db(&config.data_dir) {
+            tracing::warn!(
+                "Attestation database unavailable ({}): {} — attestation features disabled. \
+                 Check that the data directory exists and is writable: {}",
+                config.data_dir, e, config.data_dir
+            );
+        }
 
         // Resolve vault key once at startup — this is the single Keychain access.
         // Cached for the lifetime of the server so the OS never re-prompts.

@@ -414,23 +414,38 @@ pub fn keys_list() -> i32 {
     eprintln!();
     eprintln!("  \x1b[1mKeyring Status\x1b[0m");
     eprintln!("  \x1b[2m──────────────\x1b[0m");
-    eprintln!(
-        "  Genesis key:   {}",
-        if status.has_genesis {
-            "\x1b[32m✓\x1b[0m present"
-        } else {
-            "\x1b[31m✗\x1b[0m missing"
-        }
-    );
-    eprintln!(
-        "  Operator key:  {}",
-        if status.has_operator {
-            "\x1b[32m✓\x1b[0m present"
-        } else {
-            "\x1b[31m✗\x1b[0m missing"
-        }
-    );
+
+    // Genesis: distinguish cert-on-disk from secret-in-credential-store
+    let genesis_status = match (status.has_genesis, status.has_genesis_secret) {
+        (true, true) => "\x1b[32m✓\x1b[0m cert + secret (credential store)",
+        (true, false) => "\x1b[33m⚠\x1b[0m cert only (secret missing — run `zp recover`)",
+        (false, true) => "\x1b[33m⚠\x1b[0m secret only (cert missing)",
+        (false, false) => "\x1b[31m✗\x1b[0m missing",
+    };
+    eprintln!("  Genesis key:   {}", genesis_status);
+
+    // Operator: distinguish cert-on-disk from encrypted secret
+    let operator_status = match (status.has_operator, status.has_operator_secret) {
+        (true, true) => "\x1b[32m✓\x1b[0m cert + secret (encrypted)",
+        (true, false) => "\x1b[33m⚠\x1b[0m cert only (secret missing)",
+        (false, true) => "\x1b[33m⚠\x1b[0m secret only (cert missing)",
+        (false, false) => "\x1b[31m✗\x1b[0m missing",
+    };
+    eprintln!("  Operator key:  {}", operator_status);
+
     eprintln!("  Agent keys:    {}", status.agent_count);
+
+    // Rotation chain
+    let rotations_path = keyring.path().join("rotations.json");
+    if rotations_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&rotations_path) {
+            if let Ok(certs) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                if !certs.is_empty() {
+                    eprintln!("  Rotations:     {} certificate(s)", certs.len());
+                }
+            }
+        }
+    }
 
     if !status.agent_names.is_empty() {
         eprintln!();
