@@ -520,8 +520,11 @@ impl AppState {
                     Some(resolved)
                 }
                 Err(e) => {
-                    info!(
-                        "Vault key not available: {} — vault operations will require re-auth",
+                    warn!(
+                        "⚠ Vault key not available: {} — operator rotation, \
+                         credential decryption, and vault operations are disabled. \
+                         Run `zp recover` with your 24-word mnemonic or `zp doctor` \
+                         to diagnose.",
                         e
                     );
                     None
