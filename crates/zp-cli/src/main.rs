@@ -1044,20 +1044,48 @@ async fn main() -> anyhow::Result<()> {
             fix: String::new(),
         });
 
-        // 2. Genesis key
+        // 2. Genesis key (certificate on disk)
         let genesis_path = home.join("genesis.json");
         if genesis_path.exists() {
             checks.push(Check {
-                label: "Genesis key".into(),
+                label: "Genesis certificate".into(),
                 status: "pass",
                 detail: format!("{}", genesis_path.display()),
                 fix: String::new(),
             });
         } else {
             checks.push(Check {
-                label: "Genesis key".into(),
+                label: "Genesis certificate".into(),
                 status: "fail",
                 detail: "genesis.json not found".into(),
+                fix: "Run: zp init".into(),
+            });
+        }
+
+        // 2b. Genesis secret (credential store)
+        let keys_dir = home.join("keys");
+        let genesis_secret_ok = zp_keys::Keyring::open(&keys_dir)
+            .map(|kr| kr.status().has_genesis_secret)
+            .unwrap_or(false);
+        if genesis_secret_ok {
+            checks.push(Check {
+                label: "Genesis secret".into(),
+                status: "pass",
+                detail: "present in credential store".into(),
+                fix: String::new(),
+            });
+        } else if genesis_path.exists() {
+            checks.push(Check {
+                label: "Genesis secret".into(),
+                status: "fail",
+                detail: "certificate exists but secret missing from credential store".into(),
+                fix: "Run: zp recover (with your 24-word mnemonic)".into(),
+            });
+        } else {
+            checks.push(Check {
+                label: "Genesis secret".into(),
+                status: "fail",
+                detail: "not initialized".into(),
                 fix: "Run: zp init".into(),
             });
         }

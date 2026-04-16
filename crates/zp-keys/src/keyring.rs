@@ -27,21 +27,40 @@ use crate::hierarchy::{AgentKey, GenesisKey, OperatorKey};
 
 /// Service name for Genesis secret in the OS credential store.
 /// Public so biometric.rs can use the same identifiers.
+///
+/// In test builds (`#[cfg(test)]`), these resolve to a test-scoped suffix
+/// so `cargo test` never wipes the production keychain entry.
 #[allow(dead_code)]
-pub(crate) const GENESIS_KEYCHAIN_SERVICE: &str = "zeropoint-genesis";
+pub(crate) const GENESIS_KEYCHAIN_SERVICE: &str = if cfg!(test) {
+    "zeropoint-genesis-test"
+} else {
+    "zeropoint-genesis"
+};
 
 /// Account name for the Genesis secret in the OS credential store.
 /// Public so biometric.rs can use the same identifiers.
 #[allow(dead_code)]
-pub(crate) const GENESIS_KEYCHAIN_ACCOUNT: &str = "genesis-secret";
+pub(crate) const GENESIS_KEYCHAIN_ACCOUNT: &str = if cfg!(test) {
+    "genesis-secret-test"
+} else {
+    "genesis-secret"
+};
 
 /// Service name for the Operator secret in the OS credential store.
 #[allow(dead_code)]
-const OPERATOR_KEYCHAIN_SERVICE: &str = "zeropoint-operator";
+const OPERATOR_KEYCHAIN_SERVICE: &str = if cfg!(test) {
+    "zeropoint-operator-test"
+} else {
+    "zeropoint-operator"
+};
 
 /// Account name for the Operator secret in the OS credential store.
 #[allow(dead_code)]
-const OPERATOR_KEYCHAIN_ACCOUNT: &str = "operator-secret";
+const OPERATOR_KEYCHAIN_ACCOUNT: &str = if cfg!(test) {
+    "operator-secret-test"
+} else {
+    "operator-secret"
+};
 
 /// Version byte for the on-disk encrypted operator secret blob.
 /// Format: [0x01][12-byte nonce][ChaCha20-Poly1305 ciphertext+tag].
