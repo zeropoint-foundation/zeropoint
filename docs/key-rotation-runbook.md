@@ -58,44 +58,60 @@ agent secrets.
 
 ## 2. Operator key rotation
 
-### 2.1 Current state (v0.1)
+### 2.1 CLI rotation command
 
-The rotation certificate format and chain validation are implemented in
-`zp-keys::rotation`:
+```
+zp keys rotate --target operator --reason "scheduled rotation"
+```
 
-- `RotationCertificate::issue()` — creates a rotation cert signed by the
-  old key, proving possession.
-- `RotationCertificate::co_sign()` — Genesis co-signs for defense-in-depth.
-- `RotationChain::register()` — validates sequence continuity and
-  registers the cert.
-- `RotationChain::resolve_current()` — maps any historical key to the
-  current active key.
+This command:
 
-**Not yet wired:** There is no `zp rotate` CLI command or HTTP endpoint.
-Operator rotation currently requires manual use of the library API.
+1. Loads the Genesis key from the OS credential store (needed for
+   co-signing and vault key derivation).
+2. Loads the current operator key (decrypted via vault key).
+3. Generates a new Ed25519 operator keypair, certified by Genesis.
+4. Issues a rotation certificate signed by the old operator key.
+5. Genesis co-signs the rotation certificate (defense-in-depth).
+6. Saves the new operator key encrypted under the vault key
+   (`operator.secret.enc`).
+7. Persists the rotation certificate to
+   `~/.zeropoint/keys/rotations.json`.
 
-### 2.2 Manual operator rotation procedure
+The command prompts for confirmation before proceeding. Pipe `echo y`
+for non-interactive use.
 
-Until `zp rotate` is implemented, the procedure is:
+### 2.2 Post-rotation steps
 
-1. **Stop the server.** The vault key cache must be invalidated.
+After running `zp keys rotate --target operator`:
 
-2. **Generate a new operator keypair** using the zp-keys library.
-   The new key must be signed by the Genesis key (via hierarchy).
+1. **Restart the server.** The vault key cache and session tokens are
+   stale.
 
-3. **Issue a rotation certificate:**
-   - Old operator key signs the rotation cert.
-   - Genesis key co-signs for defense-in-depth.
-   - Register the cert in the rotation chain.
+   ```
+   # Stop the running server, then:
+   zp serve
+   ```
 
-4. **Re-encrypt the new operator secret** under the vault key and write
-   it to `operator.secret.enc`. Remove the old encrypted secret.
+2. **Verify the rotation:**
 
-5. **Update any agent keys** that reference the old operator public key
-   in their certificates' issuer field.
+   ```
+   zp keys list
+   ```
 
-6. **Restart the server.** The new operator key will be loaded from the
-   updated encrypted secret.
+3. **Note:** Agent keys signed by the old operator remain valid. The
+   rotation chain preserves identity continuity — verifiers walk the
+   chain to resolve old key references.
+
+### 2.3 Manual rotation (library-level)
+
+If the CLI command is unavailable, the rotation can be performed
+directly against the `zp-keys` library:
+
+1. Load the old operator `SigningKey` and Genesis `SigningKey`.
+2. Call `RotationCertificate::issue(old_key, new_pub, KeyRole::Operator, sequence, prev_hash, reason)`.
+3. Call `cert.co_sign(&genesis_signing_key)`.
+4. Save the new operator key with `keyring.save_operator_with_genesis_secret()`.
+5. Persist the rotation certificate to `rotations.json`.
 
 ### 2.3 What changes on rotation
 
@@ -167,8 +183,7 @@ by design — sovereignty means no backdoor.
 
 ## 5. Planned improvements
 
-- `zp rotate operator` — CLI command to automate §2.2
-- `zp rotate agent <name>` — per-agent key rotation
-- Rotation chain persistence to `~/.zeropoint/keys/rotation-chain.json`
 - Server-side rotation endpoint for hot rotation without full restart
 - Mesh-aware rotation propagation (for multi-node deployments)
+- Automated agent key re-issuance after operator rotation
+- Rotation chain integrity verification command (`zp keys verify-chain`)

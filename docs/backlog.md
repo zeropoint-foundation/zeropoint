@@ -65,19 +65,18 @@ path, print a warning.
 
 ---
 
-## 4. Rotation runbook documentation
+## 4. Rotation runbook + CLI command
 
 **Origin:** Backlog (pre-relay).
-**Status:** Done — `docs/key-rotation-runbook.md`.
+**Status:** Done.
 
 The canon permission enforcement error message in `lib.rs` references a
-"rotation runbook" that didn't exist. Now written. The runbook documents
-the key hierarchy, recovery procedure, manual operator rotation, vault
-key implications, and emergency procedures.
-
-**Remaining gap:** The runbook documents manual rotation because `zp
-rotate` is not yet implemented. When the CLI command ships, update the
-runbook to reference it.
+"rotation runbook" that didn't exist. Now written at
+`docs/key-rotation-runbook.md`. The `zp keys rotate` CLI command is
+implemented, supporting both operator rotation (`--target operator`) and
+agent rotation (`--target <agent-name>`). Rotation certificates are
+persisted to `~/.zeropoint/keys/rotations.json` with parent co-signing
+for defense-in-depth.
 
 ---
 
