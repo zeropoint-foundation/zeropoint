@@ -22,11 +22,19 @@
   let heartbeatInterval = null;
   let pendingSends = [];  // Messages queued while WS is reconnecting
 
+  let connectFailCount = 0;
+  const MAX_FAST_FAILS = 3;
+
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const openedAt = Date.now();
+    let didOpen = false;
+
     ws = new WebSocket(`${proto}//${location.host}/api/onboard/ws`);
 
     ws.onopen = () => {
+      didOpen = true;
+      connectFailCount = 0;
       console.log('onboard ws connected');
       // Flush any messages queued during reconnect
       while (pendingSends.length > 0) {
@@ -52,8 +60,21 @@
     };
 
     ws.onclose = () => {
-      console.log('onboard ws closed — reconnecting in 1s');
       if (heartbeatInterval) clearInterval(heartbeatInterval);
+      // If the socket closed without ever opening (e.g. server 403),
+      // count rapid failures. After MAX_FAST_FAILS, genesis is likely
+      // complete — redirect to dashboard instead of looping forever.
+      if (!didOpen) {
+        connectFailCount++;
+        if (connectFailCount >= MAX_FAST_FAILS) {
+          console.log('onboard ws rejected ' + MAX_FAST_FAILS + ' times — genesis likely complete, redirecting');
+          window.location.href = '/dashboard';
+          return;
+        }
+      } else {
+        connectFailCount = 0;
+      }
+      console.log('onboard ws closed — reconnecting in 1s');
       setTimeout(connect, 1000);
     };
 

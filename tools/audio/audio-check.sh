@@ -142,13 +142,16 @@ fi
 
 header "Check 3: Source text staleness"
 
-# Map domain → generator script
-declare -A GENERATORS
-GENERATORS[onboard]="$REPO_ROOT/generate-narration-onboard.py"
-GENERATORS[whitepaper]="$REPO_ROOT/generate-narration.py"
+# Domain → generator script pairs (bash 3.2 compatible — no assoc arrays)
+DOMAIN_NAMES=( onboard whitepaper )
+DOMAIN_GENS=(
+  "$REPO_ROOT/generate-narration-onboard.py"
+  "$REPO_ROOT/generate-narration.py"
+)
 
-for domain in "${!GENERATORS[@]}"; do
-  gen="${GENERATORS[$domain]}"
+for i in "${!DOMAIN_NAMES[@]}"; do
+  domain="${DOMAIN_NAMES[$i]}"
+  gen="${DOMAIN_GENS[$i]}"
   if [ ! -f "$gen" ]; then
     warn "Generator not found for domain '$domain': $gen"
     continue
