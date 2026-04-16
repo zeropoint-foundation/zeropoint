@@ -567,6 +567,12 @@ impl AppState {
             endpoint_limiter,
         }))
     }
+
+    /// Return the current session token. Used by test harnesses that need
+    /// to authenticate WebSocket connections.
+    pub fn session_token(&self) -> String {
+        self.0.session_auth.current_token()
+    }
 }
 
 // ============================================================================

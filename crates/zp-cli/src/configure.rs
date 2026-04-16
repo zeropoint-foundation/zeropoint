@@ -283,8 +283,20 @@ impl ConfigEngine {
     fn proxy_url(&self, provider: &str, original_default: &str) -> String {
         match self.proxy_port {
             Some(port) => {
-                // Strip trailing /v1 or /v1/ from the proxy URL — the tool adds its own path
-                format!("http://localhost:{}/api/v1/proxy/{}/v1", port, provider)
+                // Preserve the original URL's path suffix (e.g. /v1 for OpenAI,
+                // empty for Anthropic) so the proxy routes correctly.
+                let suffix = original_default
+                    .find("://")
+                    .and_then(|i| original_default[i + 3..].find('/'))
+                    .map(|i| {
+                        let host_start = original_default.find("://").unwrap() + 3;
+                        &original_default[host_start + i..]
+                    })
+                    .unwrap_or("");
+                format!(
+                    "http://localhost:{}/api/v1/proxy/{}{}",
+                    port, provider, suffix
+                )
             }
             None => original_default.to_string(),
         }
