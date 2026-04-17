@@ -330,8 +330,9 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     // plus ceremony metadata so `security::assess` can cross-check the
     // unsigned record against it at startup.
     //
-    // Ordering invariant (ARTEMIS 035 issue 2): the transcript MUST be
-    // durable before `genesis.json` becomes visible. If we crash between
+    // Ordering invariant (ARTEMIS 035 issue 2):
+    // the transcript MUST be durable before `genesis.json` becomes visible.
+    // If we crash between
     // the two writes, next startup sees no genesis.json → onboarding
     // re-runs cleanly. The previous implementation wrote genesis.json
     // first and treated transcript failures as non-fatal, which
