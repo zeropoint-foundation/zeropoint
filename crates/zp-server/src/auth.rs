@@ -520,9 +520,12 @@ impl Default for FailedAuthLimiter {
     }
 }
 
-/// Paths that bypass authentication.
+/// Paths that bypass *session* authentication.
 ///
 /// These are either pre-genesis flows, health probes, or the root redirect.
+/// Note: `/onboard` and `/api/onboard/ws` bypass session auth (no session
+/// exists pre-genesis) but are independently protected by the one-time setup
+/// token enforced in their respective handlers (AUTH-VULN-06).
 fn is_exempt(path: &str) -> bool {
     // Exact matches
     matches!(

@@ -76,9 +76,17 @@ impl OnboardEvent {
 // WebSocket upgrade handler
 // ============================================================================
 
+/// Query parameters for onboard WebSocket upgrade.
+#[derive(Debug, serde::Deserialize)]
+pub struct OnboardWsQuery {
+    pub token: Option<String>,
+}
+
 pub async fn onboard_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<OnboardWsQuery>,
 ) -> impl IntoResponse {
     // Post-genesis: reject onboard WebSocket connections
     let home = dirs::home_dir().unwrap_or_default();
@@ -89,6 +97,41 @@ pub async fn onboard_ws_handler(
             "Onboarding is disabled after genesis is complete",
         )
             .into_response();
+    }
+
+    // AUTH-VULN-06: Require one-time setup token on the WebSocket upgrade.
+    // The browser carries the `zp_onboard` cookie set during the page load
+    // redirect, so the token never needs to appear in the WS URL.
+    if let Some(ref expected) = state.0.onboard_token {
+        let client_ip = crate::client_ip_from_headers(&headers);
+
+        if let Some(_retry_after) = state.0.rate_limiter.is_blocked(client_ip) {
+            return (
+                axum::http::StatusCode::TOO_MANY_REQUESTS,
+                "Too many attempts",
+            )
+                .into_response();
+        }
+
+        // Accept token from cookie (primary — set by page handler redirect)
+        // or query param (fallback — e.g. CLI-based WS clients).
+        let from_cookie = crate::extract_onboard_cookie(&headers)
+            .map(|t| crate::constant_time_eq(&t, expected))
+            .unwrap_or(false);
+        let from_query = query
+            .token
+            .as_deref()
+            .map(|t| crate::constant_time_eq(t, expected))
+            .unwrap_or(false);
+
+        if !from_cookie && !from_query {
+            let _ = state.0.rate_limiter.record_failure(client_ip);
+            return (
+                axum::http::StatusCode::FORBIDDEN,
+                "Setup token required for onboard WebSocket",
+            )
+                .into_response();
+        }
     }
 
     ws.max_frame_size(128 * 1024) // 128 KB — onboard payloads include credentials

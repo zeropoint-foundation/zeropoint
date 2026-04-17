@@ -30,6 +30,7 @@ use axum::{
 };
 use chrono::Utc;
 use ed25519_dalek::{Signer as DalekSigner, SigningKey};
+use rand::RngCore;
 use futures::stream::StreamExt;
 use futures::SinkExt;
 use serde::{Deserialize, Serialize};
@@ -451,6 +452,12 @@ pub struct AppStateInner {
     pub rate_limiter: Arc<auth::FailedAuthLimiter>,
     /// Per-endpoint rate limiter (Phase 1.7: AUTH-VULN-04 hardening).
     pub endpoint_limiter: Arc<auth::EndpointRateLimiter>,
+    /// One-time setup token for the onboard flow (AUTH-VULN-06).
+    /// Generated at startup, printed to the operator's console. Required as
+    /// `?token=<hex>` on `/onboard` and `/api/onboard/ws` to prevent
+    /// unauthenticated access to the genesis ceremony on network-facing
+    /// deployments. `None` after genesis (onboard is already 403).
+    pub onboard_token: Option<String>,
 }
 
 #[derive(Clone)]
@@ -554,6 +561,25 @@ impl AppState {
         let rate_limiter = Arc::new(auth::FailedAuthLimiter::new());
         let endpoint_limiter = Arc::new(auth::EndpointRateLimiter::new());
 
+        // One-time onboard setup token (AUTH-VULN-06).
+        // Only generated when:
+        //   1. genesis.json does not exist (pre-genesis), AND
+        //   2. the server is bound to a non-localhost address.
+        // On localhost, the token adds friction with no real security benefit —
+        // only local processes can reach the port, and if you can't trust
+        // localhost the game is already lost.  On 0.0.0.0 or any external
+        // interface, this token is the only thing standing between a network
+        // attacker and the genesis ceremony.
+        let genesis_path = config.home_dir.join("genesis.json");
+        let is_localhost = config.bind_addr == "127.0.0.1" || config.bind_addr == "localhost";
+        let onboard_token = if genesis_path.exists() || is_localhost {
+            None
+        } else {
+            let mut token_bytes = [0u8; 32];
+            rand::rngs::OsRng.fill_bytes(&mut token_bytes);
+            Some(hex::encode(token_bytes))
+        };
+
         AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -568,6 +594,7 @@ impl AppState {
             session_auth,
             rate_limiter,
             endpoint_limiter,
+            onboard_token,
         }))
     }
 
@@ -576,6 +603,58 @@ impl AppState {
     pub fn session_token(&self) -> String {
         self.0.session_auth.current_token()
     }
+}
+
+// ============================================================================
+// Constant-time token comparison (AUTH-VULN-06)
+// ============================================================================
+
+/// Best-effort client IP extraction from request headers.
+/// Mirrors the logic in `auth::require_auth` for consistency.
+pub(crate) fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> std::net::IpAddr {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.trim().parse().ok())
+        .or_else(|| {
+            headers
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse().ok())
+        })
+        .unwrap_or_else(|| std::net::IpAddr::from([127, 0, 0, 1]))
+}
+
+/// Extract the `zp_onboard` cookie value from request headers.
+pub(crate) fn extract_onboard_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
+    let cookie_header = headers
+        .get(axum::http::header::COOKIE)?
+        .to_str()
+        .ok()?;
+    for pair in cookie_header.split(';') {
+        let pair = pair.trim();
+        if let Some(val) = pair.strip_prefix("zp_onboard=") {
+            return Some(val.to_string());
+        }
+    }
+    None
+}
+
+/// Compare two strings in constant time to prevent timing side-channels.
+/// Returns `true` iff both strings are the same length and identical.
+/// Uses XOR-accumulation over raw bytes — no early return on mismatch.
+pub(crate) fn constant_time_eq(a: &str, b: &str) -> bool {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.len() != b.len() {
+        return false; // Length is not secret for fixed-size tokens
+    }
+    let mut acc: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        acc |= x ^ y;
+    }
+    acc == 0
 }
 
 // ============================================================================
@@ -1031,16 +1110,46 @@ pub async fn run_server(config: ServerConfig) -> anyhow::Result<()> {
     let open_dashboard = config.open_dashboard;
     let dashboard_port = config.port;
     let state = AppState::init(&config).await;
-    let app = build_app(state, &config);
+
+    let app = build_app(state.clone(), &config);
 
     info!("ZeroPoint server on {}", addr);
-    info!("Dashboard: http://localhost:{}", config.port);
-    info!("Onboard:   http://localhost:{}/onboard", config.port);
+    info!("Dashboard: http://{}:{}", config.bind_addr, config.port);
+
+    // AUTH-VULN-06: On network-facing deployments, print the setup-token-bearing
+    // onboard URL. On localhost (the default), no token is needed — just show
+    // the plain URL.
+    let genesis_path = config.home_dir.join("genesis.json");
+    if genesis_path.exists() {
+        info!("Onboard:   disabled (genesis complete)");
+    } else if let Some(ref token) = state.0.onboard_token {
+        let onboard_url = format!(
+            "http://{}:{}/onboard?token={}",
+            config.bind_addr, config.port, token
+        );
+        info!("═══════════════════════════════════════════════════════");
+        info!("  Network-facing deployment detected.");
+        info!("  Onboard URL (token-protected):");
+        info!("  {}", onboard_url);
+        info!("═══════════════════════════════════════════════════════");
+    } else {
+        info!("Onboard:   http://{}:{}/onboard", config.bind_addr, config.port);
+    }
     info!("Trust is infrastructure.");
 
-    // Open browser if requested
+    // Open browser — pre-genesis uses the onboard URL (with token if applicable),
+    // post-genesis opens the dashboard.
     if open_dashboard {
-        let url = format!("http://localhost:{}", dashboard_port);
+        let url = if genesis_path.exists() {
+            format!("http://localhost:{}", dashboard_port)
+        } else if let Some(ref token) = state.0.onboard_token {
+            format!(
+                "http://localhost:{}/onboard?token={}",
+                dashboard_port, token
+            )
+        } else {
+            format!("http://localhost:{}/onboard", dashboard_port)
+        };
         open_browser(&url);
     }
 
@@ -3842,6 +3951,9 @@ async fn root_handler(State(state): State<AppState>) -> Response {
         ))
         .into_response()
     } else {
+        // Pre-genesis: redirect to /onboard WITHOUT the setup token.
+        // The token is never exposed in redirect headers — the operator
+        // must use the full URL from the server console (AUTH-VULN-06).
         Redirect::temporary("/onboard").into_response()
     };
     resp.headers_mut().insert(
@@ -3872,7 +3984,17 @@ async fn dashboard_handler(State(state): State<AppState>) -> Response {
     resp
 }
 
-async fn onboard_page_handler(State(state): State<AppState>) -> Response {
+/// Query parameters for the onboard page.
+#[derive(Debug, Deserialize)]
+struct OnboardQuery {
+    token: Option<String>,
+}
+
+async fn onboard_page_handler(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Query(query): Query<OnboardQuery>,
+) -> Response {
     // Post-genesis: redirect to dashboard
     let home = dirs::home_dir().unwrap_or_default();
     let genesis_path = home.join(".zeropoint").join("genesis.json");
@@ -3880,11 +4002,66 @@ async fn onboard_page_handler(State(state): State<AppState>) -> Response {
         return axum::response::Redirect::to("/dashboard").into_response();
     }
 
+    // AUTH-VULN-06: One-time setup token for network-facing deployments.
+    //
+    // Token lifecycle:
+    //   1. Browser auto-opens `/onboard?token=<hex>` (token in URL once).
+    //   2. Server validates, sets `zp_onboard` HttpOnly cookie, redirects
+    //      to `/onboard` (strips token from URL bar + browser history).
+    //   3. Subsequent page loads + WebSocket upgrades ride the cookie.
+    //
+    // On localhost (default): onboard_token is None — no gate at all.
+    if let Some(ref expected) = state.0.onboard_token {
+        let client_ip = client_ip_from_headers(&headers);
+
+        // Rate-limit failed token attempts (reuses the auth rate limiter).
+        if let Some(_retry_after) = state.0.rate_limiter.is_blocked(client_ip) {
+            return (StatusCode::TOO_MANY_REQUESTS, "Too many attempts").into_response();
+        }
+
+        // Accept token from query param OR cookie.
+        let from_query = query
+            .token
+            .as_deref()
+            .map(|t| constant_time_eq(t, expected))
+            .unwrap_or(false);
+        let from_cookie = extract_onboard_cookie(&headers)
+            .map(|t| constant_time_eq(&t, expected))
+            .unwrap_or(false);
+
+        if from_query {
+            // Token in URL — exchange for cookie and redirect to clean URL.
+            // This ensures the token never lingers in the URL bar, browser
+            // history, or Referrer headers.
+            // Path=/ so the cookie reaches both /onboard and /api/onboard/ws.
+            let cookie_val = format!(
+                "zp_onboard={}; HttpOnly; SameSite=Strict; Path=/",
+                expected
+            );
+            let mut resp = Redirect::temporary("/onboard").into_response();
+            if let Ok(hv) = cookie_val.parse() {
+                resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+            }
+            return resp;
+        } else if !from_cookie {
+            let _ = state.0.rate_limiter.record_failure(client_ip);
+            return (
+                StatusCode::FORBIDDEN,
+                "Setup token required. Check the server console for the onboard URL with token.",
+            )
+                .into_response();
+        }
+        // from_cookie == true — fall through to serve the page.
+    }
+
     let cookie = auth::build_session_cookie(
         &state.0.session_auth.current_token(),
         state.0.session_auth.max_age_secs(),
     );
-    let mut resp = Html(resolve_html_asset("onboard.html", ONBOARD_HTML_FALLBACK)).into_response();
+
+    let html = resolve_html_asset("onboard.html", ONBOARD_HTML_FALLBACK);
+
+    let mut resp = Html(html).into_response();
     resp.headers_mut().insert(
         axum::http::header::SET_COOKIE,
         cookie
