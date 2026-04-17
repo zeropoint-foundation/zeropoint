@@ -126,7 +126,7 @@ fn detect_touchid() -> ProviderCapability {
         }
         Err(_) => {
             // bioutil not found — try system_profiler
-            let sp_check = std::process::Command::new("system_profiler")
+            let sp_check = std::process::Command::new("system_profiler") // system_profiler SPiBridgeDataType
                 .args(["SPiBridgeDataType"])
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
