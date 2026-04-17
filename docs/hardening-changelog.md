@@ -126,6 +126,34 @@ came back to life.
 | 024 | `zp recover` CLI | SHIP IT | Destructive recovery verified; confirm-before-verify ordering bug caught |
 | 025 | Ordering fix + onboard guard | ALL PASS | 13/13 tests; both fixes verified |
 
+## One-time onboard setup token (AUTH-VULN-06)
+
+**Pre-genesis genesis hijacking mitigation.** Before this change, any
+host that could reach the ZeroPoint port during the pre-genesis window
+could complete the genesis ceremony — establishing operator identity,
+sovereignty mode, and storing credentials — without any authentication.
+
+**Fix:** At startup, if `genesis.json` does not exist **and** the server
+is bound to a non-localhost address (`ZP_BIND` ≠ `127.0.0.1`/`localhost`),
+the server generates a cryptographically random 64-hex-char setup token
+(32 bytes from `OsRng`).
+
+- **Localhost (default):** No token required. Only local processes can
+  reach the port, so the onboard flow works with zero friction.
+- **Network-facing (`0.0.0.0`, etc.):** Token is mandatory.
+  - `/onboard` requires `?token=<hex>` — returns 403 without it.
+  - `/api/onboard/ws` requires the same token on the WS upgrade.
+  - `onboard.js` reads `window.__ZP_ONBOARD_TOKEN` (injected into
+    `<head>` by the server) and attaches it to the WebSocket URL.
+  - Browser auto-open uses the tokenized URL — zero copy-paste.
+  - Root redirect (`/` → `/onboard`) omits the token to prevent
+    leakage via 302 Location headers.
+- Token is `None` after genesis — onboard already returns 403.
+
+**Files:** `lib.rs` (AppStateInner, AppState::init, run_server,
+onboard_page_handler, root_handler), `onboard/mod.rs`
+(onboard_ws_handler), `onboard.js` (connect), `auth.rs` (comment).
+
 ## Attack surface audit (post-hardening)
 
 Conducted after relay 025. No security-critical gaps identified.
@@ -133,7 +161,8 @@ Conducted after relay 025. No security-critical gaps identified.
 | Surface | Status | Controls |
 |---------|--------|----------|
 | HTTP endpoints | Hardened | 401 on missing/stale tokens; 429 rate limit; secure headers |
-| WebSocket handlers | Hardened | Frame size limits (64KB exec, 128KB onboard); step-ordering enforcement |
+| WebSocket handlers | Hardened | Frame size limits (64KB exec, 128KB onboard); step-ordering enforcement; onboard WS requires setup token |
+| Onboard flow | Hardened | One-time setup token (AUTH-VULN-06); 403 post-genesis; genesis step guard in JS |
 | Credential storage | Hardened | OS keyring; BLAKE3 vault key; ChaCha20-Poly1305; no plaintext on disk |
 | File handling | Hardened | Path traversal blocked; canonicalize enforced; `.ssh`/`.git` rejected |
 | Exec/command | Hardened | 52-prefix allowlist + 16 blocked patterns; cwd confined to $HOME |

@@ -31,6 +31,10 @@
     const openedAt = Date.now();
     let didOpen = false;
 
+    // AUTH-VULN-06: The setup token (if required) is carried as the
+    // `zp_onboard` HttpOnly cookie set during the page-load redirect.
+    // The browser sends the cookie automatically on same-origin WS
+    // upgrades, so no token needs to appear in the URL.
     ws = new WebSocket(`${proto}//${location.host}/api/onboard/ws`);
 
     ws.onopen = () => {
