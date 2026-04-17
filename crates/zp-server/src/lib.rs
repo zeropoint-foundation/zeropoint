@@ -436,9 +436,10 @@ pub struct AppStateInner {
     pub pipeline: Option<Pipeline>,
     pub grants: std::sync::Mutex<Vec<CapabilityGrant>>,
     pub data_dir: String,
-    /// Vault key resolved once at startup from the OS credential store.
+    /// Vault key resolved lazily from the OS credential store.
+    /// Deferred to avoid blocking server startup on macOS Keychain access (~4s).
     /// Cached here so we never hit the Keychain again during the session.
-    pub vault_key: Option<zp_keys::ResolvedVaultKey>,
+    pub vault_key: std::sync::OnceLock<Option<zp_keys::ResolvedVaultKey>>,
     /// Manages port assignments for governed tools so they don't collide.
     pub port_allocator: tool_ports::PortAllocator,
     /// MLE STAR + Monte Carlo analysis engines fed by receipt chain data.
@@ -512,45 +513,11 @@ impl AppState {
             );
         }
 
-        // Resolve vault key once at startup — this is the single Keychain access.
-        // Cached for the lifetime of the server so the OS never re-prompts.
-        let vault_key = {
-            let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
-            match zp_keys::Keyring::open(home.join("keys"))
-                .and_then(|kr| zp_keys::resolve_vault_key(&kr))
-            {
-                Ok(resolved) => {
-                    info!(
-                        "Vault key resolved (source: {:?}) — cached for session",
-                        resolved.source
-                    );
-                    Some(resolved)
-                }
-                Err(e) => {
-                    warn!(
-                        "⚠ Vault key not available: {} — operator rotation, \
-                         credential decryption, and vault operations are disabled. \
-                         Run `zp recover` with your 24-word mnemonic or `zp doctor` \
-                         to diagnose.",
-                        e
-                    );
-                    None
-                }
-            }
-        };
-
-        // Receipt: keychain access is a trust-relevant event on the chain
-        if vault_key.is_some() {
-            let source_str = vault_key
-                .as_ref()
-                .map(|v| format!("{:?}", v.source))
-                .unwrap_or_default();
-            tool_chain::emit_tool_receipt(
-                &audit_store,
-                "system:keychain:accessed",
-                Some(&format!("source={}", source_str)),
-            );
-        }
+        // Vault key: deferred to a background thread so the server can bind
+        // immediately. macOS Keychain access can take 4–5 seconds (Touch ID /
+        // authorization dialog), and blocking here would prevent the server
+        // from accepting connections promptly.
+        let vault_key = std::sync::OnceLock::new();
 
         // Port allocator — manages the 9100–9199 range for governed tools
         let port_allocator = tool_ports::PortAllocator::new(std::path::Path::new(&config.data_dir));
@@ -580,7 +547,7 @@ impl AppState {
             Some(hex::encode(token_bytes))
         };
 
-        AppState(Arc::new(AppStateInner {
+        let state = AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
             identity,
@@ -595,7 +562,43 @@ impl AppState {
             rate_limiter,
             endpoint_limiter,
             onboard_token,
-        }))
+        }));
+
+        // Spawn background vault key resolution — the Keychain access can take
+        // 4–5 seconds on macOS but the server is already serving requests.
+        let inner = state.0.clone();
+        let audit_store_vk = state.0.audit_store.clone();
+        std::thread::spawn(move || {
+            let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
+            match zp_keys::Keyring::open(home.join("keys"))
+                .and_then(|kr| zp_keys::resolve_vault_key(&kr))
+            {
+                Ok(resolved) => {
+                    info!(
+                        "Vault key resolved (source: {:?}) — cached for session",
+                        resolved.source
+                    );
+                    tool_chain::emit_tool_receipt(
+                        &audit_store_vk,
+                        "system:keychain:accessed",
+                        Some(&format!("source={:?}", resolved.source)),
+                    );
+                    let _ = inner.vault_key.set(Some(resolved));
+                }
+                Err(e) => {
+                    warn!(
+                        "⚠ Vault key not available: {} — operator rotation, \
+                         credential decryption, and vault operations are disabled. \
+                         Run `zp recover` with your 24-word mnemonic or `zp doctor` \
+                         to diagnose.",
+                        e
+                    );
+                    let _ = inner.vault_key.set(None);
+                }
+            }
+        });
+
+        state
     }
 
     /// Return the current session token. Used by test harnesses that need
@@ -1095,7 +1098,23 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
 // Run Server (public entry point)
 // ============================================================================
 
-pub async fn run_server(config: ServerConfig) -> anyhow::Result<()> {
+pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
+    // Env vars override caller-supplied config (relay scripts use ZP_PORT / ZP_BIND).
+    if let Some(port) = std::env::var("ZP_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+    {
+        config.port = port;
+    }
+    if let Ok(bind) = std::env::var("ZP_BIND") {
+        config.bind_addr = bind;
+    }
+    if std::env::var("ZP_OPEN_BROWSER")
+        .map(|v| v == "false" || v == "0")
+        .unwrap_or(false)
+    {
+        config.open_dashboard = false;
+    }
     let addr = format!("{}:{}", config.bind_addr, config.port);
 
     // Security warning for non-localhost binding

@@ -142,9 +142,14 @@ pub async fn onboard_ws_handler(
 
 async fn handle_onboard_ws(socket: WebSocket, app_state: AppState) {
     let (mut sender, mut receiver) = socket.split();
-    // Use the cached vault key from AppState (resolved once at startup)
+    // Use the cached vault key from AppState (resolved in background at startup)
     // so we never re-prompt the macOS Keychain during the session.
-    let cached_vk: Option<&[u8; 32]> = app_state.0.vault_key.as_ref().map(|v| &*v.key);
+    let cached_vk: Option<&[u8; 32]> = app_state
+        .0
+        .vault_key
+        .get()
+        .and_then(|opt| opt.as_ref())
+        .map(|v| &*v.key);
     let mut onboard = OnboardState::from_filesystem_with_vault(cached_vk);
 
     tracing::info!(
