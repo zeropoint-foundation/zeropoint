@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for Keychain items with biometric access control
+         (kSecAccessControlBiometryCurrentSet) on macOS.
+         The Secure Enclave requires the binary to have a valid code
+         signature with keychain-access-groups entitlement. -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>foundation.zeropoint.keys</string>
+    </array>
+</dict>
+</plist>
