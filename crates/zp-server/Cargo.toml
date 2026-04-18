@@ -7,6 +7,7 @@ edition = "2021"
 default = []
 policy-wasm = ["zp-policy/policy-wasm"]
 os-keychain = ["zp-keys/os-keychain"]
+biometric-keychain = ["zp-keys/biometric-keychain"]
 hw-trezor = ["zp-keys/hw-trezor"]
 ## Development-only features — NEVER enable in production builds.
 ## Exposes audit tamper/restore/clear endpoints for testing.

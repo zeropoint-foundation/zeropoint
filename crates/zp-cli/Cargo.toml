@@ -9,10 +9,11 @@ repository.workspace = true
 description = "ZeroPoint v2 CLI — primary interface for developers"
 
 [features]
-default = ["os-keychain", "embedded-server"]
+default = ["os-keychain", "biometric-keychain", "embedded-server"]
 embedded-server = ["dep:zp-server"]
 policy-wasm = ["zp-policy/policy-wasm"]
 os-keychain = ["zp-keys/os-keychain"]
+biometric-keychain = ["zp-keys/biometric-keychain", "zp-server?/biometric-keychain"]
 hw-trezor = ["zp-keys/hw-trezor"]
 full = ["embedded-server", "policy-wasm", "os-keychain", "hw-trezor"]
 
