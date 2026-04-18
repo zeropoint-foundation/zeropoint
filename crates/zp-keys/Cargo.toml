@@ -14,7 +14,7 @@ os-keychain = ["keyring"]
 # macOS biometric-gated Keychain via Security.framework (v0.2)
 # When enabled, Keychain items get kSecAccessControlBiometryCurrentSet —
 # the OS refuses to release the secret without a live biometric match.
-biometric-keychain = ["dep:security-framework", "dep:security-framework-sys", "dep:core-foundation"]
+biometric-keychain = ["dep:security-framework"]
 # Cross-platform face enrollment via OpenCV webcam
 face-enroll = ["dep:opencv"]
 # v0.2 face embeddings: real cosine-similarity matching via ONNX model
@@ -55,8 +55,6 @@ ndarray = { version = "0.15", optional = true }
 # macOS Security.framework — Keychain with kSecAccessControlBiometryCurrentSet (v0.2)
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { workspace = true, optional = true }
-security-framework-sys = { workspace = true, optional = true }
-core-foundation = { workspace = true, optional = true }
 
 # Linux biometric — whoami for username detection (fprintd-verify)
 [target.'cfg(target_os = "linux")'.dependencies]
