@@ -80,6 +80,10 @@ impl OnboardEvent {
 #[derive(Debug, serde::Deserialize)]
 pub struct OnboardWsQuery {
     pub token: Option<String>,
+    /// When true, sends initial state event and terminal (progress) events.
+    /// Browser UI sets this; CLI tools like websocat omit it to get only
+    /// result events (platform, genesis_complete, etc.).
+    pub ui: Option<bool>,
 }
 
 pub async fn onboard_ws_handler(
@@ -134,13 +138,14 @@ pub async fn onboard_ws_handler(
         }
     }
 
+    let ui_mode = query.ui.unwrap_or(false);
     ws.max_frame_size(128 * 1024) // 128 KB — onboard payloads include credentials
         .max_message_size(256 * 1024)
-        .on_upgrade(move |socket| handle_onboard_ws(socket, state))
+        .on_upgrade(move |socket| handle_onboard_ws(socket, state, ui_mode))
         .into_response()
 }
 
-async fn handle_onboard_ws(socket: WebSocket, app_state: AppState) {
+async fn handle_onboard_ws(socket: WebSocket, app_state: AppState, ui_mode: bool) {
     let (mut sender, mut receiver) = socket.split();
     // Use the cached vault key from AppState (resolved in background at startup)
     // so we never re-prompt the macOS Keychain during the session.
@@ -161,9 +166,14 @@ async fn handle_onboard_ws(socket: WebSocket, app_state: AppState) {
         onboard.tools_discovered
     );
 
-    // Send initial state so frontend can resume at the right step
-    let init_event = OnboardEvent::new("state", serde_json::to_value(&onboard).unwrap_or_default());
-    let _ = sender.send(WsMessage::Text(init_event.to_json())).await;
+    // Send initial state so frontend can resume at the right step.
+    // Only in UI mode — CLI tools (websocat) use one-shot mode and
+    // need the first message to be the action response, not unsolicited state.
+    if ui_mode {
+        let init_event =
+            OnboardEvent::new("state", serde_json::to_value(&onboard).unwrap_or_default());
+        let _ = sender.send(WsMessage::Text(init_event.to_json())).await;
+    }
 
     while let Some(msg) = receiver.next().await {
         let msg = match msg {
@@ -186,9 +196,59 @@ async fn handle_onboard_ws(socket: WebSocket, app_state: AppState) {
                 };
 
                 let events = handle_action(&action, &mut onboard, &app_state).await;
-                for event in events {
-                    if sender.send(WsMessage::Text(event.to_json())).await.is_err() {
-                        return;
+                if ui_mode {
+                    // Browser UI: stream events individually for live terminal animation
+                    for event in events {
+                        if sender.send(WsMessage::Text(event.to_json())).await.is_err() {
+                            return;
+                        }
+                    }
+                } else {
+                    // CLI / one-shot mode (websocat -1): batch all non-terminal
+                    // events into a single JSON object so the client receives
+                    // the full result set in one read. Terminal progress events
+                    // are dropped — they're only useful for UI animation.
+                    let result_events: Vec<&OnboardEvent> =
+                        events.iter().filter(|e| e.event != "terminal").collect();
+                    if result_events.len() == 1 {
+                        // Single result event — send as-is
+                        if sender
+                            .send(WsMessage::Text(result_events[0].to_json()))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                    } else if !result_events.is_empty() {
+                        // Multiple result events — merge into one JSON with all fields.
+                        // Last event's `event` field wins (it's the final result).
+                        let mut merged = serde_json::Map::new();
+                        for evt in &result_events {
+                            if let Ok(serde_json::Value::Object(map)) =
+                                serde_json::to_value(evt)
+                            {
+                                for (k, v) in map {
+                                    merged.insert(k, v);
+                                }
+                            }
+                            // Also merge flattened data fields
+                            if let serde_json::Value::Object(data_map) = &evt.data {
+                                for (k, v) in data_map {
+                                    merged.insert(k.clone(), v.clone());
+                                }
+                            }
+                        }
+                        let merged_json = serde_json::to_string(
+                            &serde_json::Value::Object(merged),
+                        )
+                        .unwrap_or_default();
+                        if sender
+                            .send(WsMessage::Text(merged_json))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
                     }
                 }
             }
