@@ -367,10 +367,38 @@ fn verify_touchid() -> Result<(), KeyError> {
 #[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
 mod secure_keychain {
     use crate::error::KeyError;
-    use security_framework::passwords::{
-        delete_generic_password, generic_password, set_generic_password_options,
+    use core_foundation::base::TCFType;
+    use core_foundation::data::CFData;
+    use core_foundation::string::CFString;
+    use core_foundation_sys::base::{kCFAllocatorDefault, CFRelease, CFTypeRef, OSStatus};
+    use core_foundation_sys::dictionary::{
+        CFDictionaryCreate, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks,
     };
-    use security_framework::passwords_options::{AccessControlOptions, PasswordOptions};
+    use security_framework_sys::access_control::{
+        SecAccessControlCreateWithFlags, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+    };
+    use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound, errSecSuccess};
+    use security_framework_sys::item::{
+        kSecAttrAccessControl, kSecAttrAccount, kSecAttrService, kSecClass,
+        kSecClassGenericPassword, kSecReturnData, kSecValueData,
+    };
+    use security_framework_sys::keychain_item::{
+        SecItemAdd, SecItemCopyMatching, SecItemDelete,
+    };
+    use std::ffi::c_void;
+
+    /// Apple: kSecAccessControlBiometryCurrentSet = 1 << 3
+    ///
+    /// Not exported by security-framework-sys 2.11.x, so we define
+    /// the raw value from Apple's Security/SecAccessControl.h header.
+    ///
+    /// This flag means:
+    ///   - Must match biometrics CURRENTLY enrolled at Keychain-item creation
+    ///   - If the user adds or removes a fingerprint/face, the item is
+    ///     automatically invalidated by the Secure Enclave (prevents
+    ///     enrollment-swap attacks)
+    ///   - Every read triggers an OS-level biometric verification prompt
+    const SEC_ACCESS_CONTROL_BIOMETRY_CURRENT_SET: u64 = 1 << 3;
 
     /// Keychain service label for biometric-gated items.
     /// Distinct from the v0.1 label so both can coexist during migration.
@@ -385,11 +413,31 @@ mod secure_keychain {
         "genesis-secret-bio"
     };
 
+    /// Build a CFDictionary from parallel key/value slices.
+    ///
+    /// # Safety
+    /// All pointers in `keys` and `values` must be valid CFTypeRef values
+    /// that outlive the returned dictionary (or the dictionary retains them).
+    /// Caller must CFRelease the returned dictionary when done.
+    unsafe fn build_dict(
+        keys: &[*const c_void],
+        values: &[*const c_void],
+    ) -> core_foundation_sys::dictionary::CFDictionaryRef {
+        assert_eq!(keys.len(), values.len());
+        CFDictionaryCreate(
+            kCFAllocatorDefault,
+            keys.as_ptr(),
+            values.as_ptr(),
+            keys.len() as isize,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks,
+        )
+    }
+
     /// Store the Genesis secret with kSecAccessControlBiometryCurrentSet.
     ///
-    /// Uses the security-framework `passwords` API which sets the
-    /// access control flags on the Keychain item. BiometryCurrentSet
-    /// means:
+    /// Uses direct Security.framework FFI to create a Keychain item
+    /// with OS-enforced biometric access control:
     ///   - Every read triggers a Secure Enclave biometric verification
     ///   - If the user adds/removes fingerprints, the item is invalidated
     ///     (prevents enrollment swap attacks)
@@ -403,92 +451,205 @@ mod secure_keychain {
         // Delete any existing item first (idempotent re-genesis)
         let _ = delete_existing();
 
-        // Create password options with biometric access control
-        let mut opts = PasswordOptions::new_generic_password(SERVICE, ACCOUNT);
-        opts.set_access_control_options(AccessControlOptions::BIOMETRY_CURRENT_SET);
+        unsafe {
+            // Create access control: BiometryCurrentSet with passcode-set prerequisite.
+            // kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly is Apple's recommended
+            // accessibility for biometric-gated items — it ensures the device has a
+            // passcode (required for Touch ID) and never syncs to iCloud Keychain.
+            let mut error: core_foundation_sys::error::CFErrorRef = std::ptr::null_mut();
+            let access_control = SecAccessControlCreateWithFlags(
+                kCFAllocatorDefault,
+                kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+                SEC_ACCESS_CONTROL_BIOMETRY_CURRENT_SET
+                    as core_foundation_sys::base::CFOptionFlags,
+                &mut error,
+            );
 
-        // set_generic_password_options takes (password, options)
-        set_generic_password_options(secret_hex.as_bytes(), opts).map_err(|e| {
-            KeyError::CredentialStore(format!(
-                "Failed to store biometric-gated Keychain item: {} \
-                 — check Touch ID enrollment and Keychain access",
-                e
-            ))
-        })?;
+            if access_control.is_null() {
+                let err_msg = if !error.is_null() {
+                    let cf_err = core_foundation::error::CFError::wrap_under_create_rule(
+                        error as core_foundation_sys::error::CFErrorRef,
+                    );
+                    format!("SecAccessControl creation failed: {}", cf_err)
+                } else {
+                    "SecAccessControl creation failed (unknown error)".to_string()
+                };
+                return Err(KeyError::CredentialStore(err_msg));
+            }
 
-        tracing::info!(
-            "Genesis secret stored in Keychain with \
-             kSecAccessControlBiometryCurrentSet (v0.2 OS-enforced)"
-        );
+            // Wrap values that need to stay alive for the dictionary
+            let service_cf = CFString::new(SERVICE);
+            let account_cf = CFString::new(ACCOUNT);
+            let data_cf = CFData::from_buffer(secret_hex.as_bytes());
 
-        Ok(())
+            let keys: Vec<*const c_void> = vec![
+                kSecClass as *const c_void,
+                kSecAttrService as *const c_void,
+                kSecAttrAccount as *const c_void,
+                kSecValueData as *const c_void,
+                kSecAttrAccessControl as *const c_void,
+            ];
+            let values: Vec<*const c_void> = vec![
+                kSecClassGenericPassword as *const c_void,
+                service_cf.as_concrete_TypeRef() as *const c_void,
+                account_cf.as_concrete_TypeRef() as *const c_void,
+                data_cf.as_concrete_TypeRef() as *const c_void,
+                access_control as *const c_void,
+            ];
+
+            let query = build_dict(&keys, &values);
+            let status: OSStatus = SecItemAdd(query, std::ptr::null_mut());
+            CFRelease(query as CFTypeRef);
+            CFRelease(access_control as CFTypeRef);
+
+            match status {
+                s if s == errSecSuccess => {
+                    tracing::info!(
+                        "Genesis secret stored in Keychain with \
+                         kSecAccessControlBiometryCurrentSet (v0.2 OS-enforced)"
+                    );
+                    Ok(())
+                }
+                s if s == errSecDuplicateItem => {
+                    // Race condition — delete and retry once
+                    tracing::warn!("Duplicate Keychain item — retrying after delete");
+                    delete_existing()?;
+                    // Rebuild (service_cf etc. are still alive)
+                    let query2 = build_dict(&keys, &values);
+                    let status2: OSStatus = SecItemAdd(query2, std::ptr::null_mut());
+                    CFRelease(query2 as CFTypeRef);
+                    if status2 == errSecSuccess {
+                        Ok(())
+                    } else {
+                        Err(KeyError::CredentialStore(format!(
+                            "SecItemAdd failed after retry: OSStatus {}",
+                            status2
+                        )))
+                    }
+                }
+                s => Err(KeyError::CredentialStore(format!(
+                    "SecItemAdd failed: OSStatus {} \
+                     — check Touch ID enrollment and Keychain access",
+                    s
+                ))),
+            }
+        }
     }
 
-    /// Load the Genesis secret. The OS will trigger a biometric prompt
+    /// Load the Genesis secret. The OS triggers a biometric prompt
     /// automatically — kSecAccessControlBiometryCurrentSet ensures this
     /// at the kernel level. No application-layer check needed.
     pub fn load() -> Result<[u8; 32], KeyError> {
-        let opts = PasswordOptions::new_generic_password(SERVICE, ACCOUNT);
+        unsafe {
+            let service_cf = CFString::new(SERVICE);
+            let account_cf = CFString::new(ACCOUNT);
+            let true_val = core_foundation::boolean::CFBoolean::true_value();
 
-        // generic_password(options) triggers Touch ID / Face ID via the
-        // Secure Enclave. The OS shows the biometric dialog automatically.
-        let data = generic_password(opts).map_err(|e| {
-            let msg = format!("{}", e);
-            if msg.contains("-25293") || msg.contains("AuthFailed") {
-                KeyError::CredentialStore(
-                    "Biometric authentication failed — touch your sensor and try again".into(),
-                )
-            } else if msg.contains("-25300") || msg.contains("ItemNotFound") {
-                KeyError::CredentialStore(
+            let keys: Vec<*const c_void> = vec![
+                kSecClass as *const c_void,
+                kSecAttrService as *const c_void,
+                kSecAttrAccount as *const c_void,
+                kSecReturnData as *const c_void,
+            ];
+            let values: Vec<*const c_void> = vec![
+                kSecClassGenericPassword as *const c_void,
+                service_cf.as_concrete_TypeRef() as *const c_void,
+                account_cf.as_concrete_TypeRef() as *const c_void,
+                true_val.as_concrete_TypeRef() as *const c_void,
+            ];
+
+            let query = build_dict(&keys, &values);
+            let mut result: CFTypeRef = std::ptr::null();
+            let status: OSStatus = SecItemCopyMatching(query, &mut result);
+            CFRelease(query as CFTypeRef);
+
+            match status {
+                s if s == errSecSuccess && !result.is_null() => {
+                    // Result is CFData containing the hex-encoded secret.
+                    // SecItemCopyMatching returns a retained CFDataRef when
+                    // kSecReturnData is true, so wrap_under_create_rule is correct
+                    // (it takes ownership without an extra retain).
+                    let cf_data = CFData::wrap_under_create_rule(
+                        result as core_foundation_sys::data::CFDataRef,
+                    );
+                    let bytes = cf_data.bytes();
+
+                    let hex_str = std::str::from_utf8(bytes).map_err(|_| {
+                        KeyError::CredentialStore(
+                            "Corrupted secret in Keychain (not valid UTF-8)"
+                                .into(),
+                        )
+                    })?;
+
+                    let decoded = hex::decode(hex_str.trim()).map_err(|_| {
+                        KeyError::CredentialStore(
+                            "Corrupted secret in Keychain (not valid hex)".into(),
+                        )
+                    })?;
+
+                    if decoded.len() != 32 {
+                        return Err(KeyError::CredentialStore(format!(
+                            "Secret has wrong length: {} bytes (expected 32)",
+                            decoded.len()
+                        )));
+                    }
+
+                    let mut secret = [0u8; 32];
+                    secret.copy_from_slice(&decoded);
+
+                    tracing::info!(
+                        "Genesis secret loaded from biometric-gated Keychain (v0.2)"
+                    );
+                    Ok(secret)
+                }
+                s if s == errSecItemNotFound => Err(KeyError::CredentialStore(
                     "Genesis secret not found in Keychain (biometric-gated). \
                      This may indicate the biometric enrollment changed since genesis. \
                      Run `zp recover` with your 24-word mnemonic."
                         .into(),
-                )
-            } else {
-                KeyError::CredentialStore(format!(
-                    "Keychain read failed: {} — biometric may have changed since genesis",
-                    e
-                ))
+                )),
+                // -25293 = errSecAuthFailed
+                s if s == -25293 => Err(KeyError::CredentialStore(
+                    "Biometric authentication failed — touch your sensor \
+                     and try again"
+                        .into(),
+                )),
+                s => Err(KeyError::CredentialStore(format!(
+                    "Keychain read failed: OSStatus {} \
+                     — biometric may have changed since genesis",
+                    s
+                ))),
             }
-        })?;
-
-        // Decode the hex-encoded secret
-        let hex_str = String::from_utf8(data).map_err(|_| {
-            KeyError::CredentialStore("Corrupted secret in Keychain (not valid UTF-8)".into())
-        })?;
-        let bytes = hex::decode(hex_str.trim()).map_err(|_| {
-            KeyError::CredentialStore("Corrupted secret in Keychain (not valid hex)".into())
-        })?;
-
-        if bytes.len() != 32 {
-            return Err(KeyError::CredentialStore(format!(
-                "Secret has wrong length: {} bytes (expected 32)",
-                bytes.len()
-            )));
         }
-
-        let mut secret = [0u8; 32];
-        secret.copy_from_slice(&bytes);
-
-        tracing::info!("Genesis secret loaded from biometric-gated Keychain (v0.2)");
-        Ok(secret)
     }
 
     /// Delete the existing biometric-gated keychain item.
     fn delete_existing() -> Result<(), KeyError> {
-        match delete_generic_password(SERVICE, ACCOUNT) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                let msg = format!("{}", e);
-                if msg.contains("-25300") || msg.contains("ItemNotFound") {
-                    Ok(()) // Nothing to delete
-                } else {
-                    Err(KeyError::CredentialStore(format!(
-                        "Failed to delete existing keychain item: {}",
-                        e
-                    )))
-                }
+        unsafe {
+            let service_cf = CFString::new(SERVICE);
+            let account_cf = CFString::new(ACCOUNT);
+
+            let keys: Vec<*const c_void> = vec![
+                kSecClass as *const c_void,
+                kSecAttrService as *const c_void,
+                kSecAttrAccount as *const c_void,
+            ];
+            let values: Vec<*const c_void> = vec![
+                kSecClassGenericPassword as *const c_void,
+                service_cf.as_concrete_TypeRef() as *const c_void,
+                account_cf.as_concrete_TypeRef() as *const c_void,
+            ];
+
+            let query = build_dict(&keys, &values);
+            let status: OSStatus = SecItemDelete(query);
+            CFRelease(query as CFTypeRef);
+
+            match status {
+                s if s == errSecSuccess || s == errSecItemNotFound => Ok(()),
+                s => Err(KeyError::CredentialStore(format!(
+                    "Failed to delete existing keychain item: OSStatus {}",
+                    s
+                ))),
             }
         }
     }

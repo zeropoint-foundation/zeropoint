@@ -115,6 +115,9 @@ trezor-client = { version = "0.1", default-features = false }
 
 # macOS Security.framework — Keychain with biometric access control (v0.2)
 security-framework = "2.11"
+security-framework-sys = "2.11"
+core-foundation = "0.9"
+core-foundation-sys = "0.8"
 
 # Regex
 regex = "1.10"
