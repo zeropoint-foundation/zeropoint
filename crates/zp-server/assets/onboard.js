@@ -35,7 +35,7 @@
     // `zp_onboard` HttpOnly cookie set during the page-load redirect.
     // The browser sends the cookie automatically on same-origin WS
     // upgrades, so no token needs to appear in the URL.
-    ws = new WebSocket(`${proto}//${location.host}/api/onboard/ws`);
+    ws = new WebSocket(`${proto}//${location.host}/api/onboard/ws?ui=true`);
 
     ws.onopen = () => {
       didOpen = true;
