@@ -467,7 +467,7 @@ mod secure_keychain {
             let mut error: core_foundation_sys::error::CFErrorRef = std::ptr::null_mut();
             let access_control = SecAccessControlCreateWithFlags(
                 kCFAllocatorDefault,
-                kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+                kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly as CFTypeRef,
                 SEC_ACCESS_CONTROL_BIOMETRY_CURRENT_SET
                     as core_foundation_sys::base::CFOptionFlags,
                 &mut error,
