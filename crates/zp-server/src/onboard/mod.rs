@@ -224,6 +224,13 @@ async fn handle_action(
         )],
 
         // ── Requires genesis_complete ─────────────────────────────
+        "sovereignty_upgrade" if state.genesis_complete => {
+            genesis::handle_sovereignty_upgrade(action, state).await
+        }
+        "sovereignty_upgrade" => vec![OnboardEvent::error(
+            "Genesis must be completed before sovereignty upgrade",
+        )],
+
         "vault_check" if state.genesis_complete => genesis::handle_vault_check(state).await,
         "vault_check" => vec![OnboardEvent::error(
             "Genesis must be completed before vault check",

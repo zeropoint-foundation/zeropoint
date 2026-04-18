@@ -343,9 +343,18 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         .to_hex()
         .to_string();
 
+    // Collect biometric evidence if the provider supports it (v0.2).
+    // This must be done AFTER the save_secret (which triggers the biometric)
+    // and BEFORE building the transcript (which includes the evidence).
+    let biometric_evidence = provider.biometric_evidence();
+    let biometric_evidence_json = biometric_evidence
+        .as_ref()
+        .map(|e| serde_json::to_value(e).unwrap_or_default())
+        .unwrap_or(serde_json::Value::Null);
+
     let transcript = serde_json::json!({
         "ceremony": "genesis",
-        "version": "1.0",
+        "version": "2.0",
         "timestamp": &ceremony_timestamp,
         "operator": operator_name,
         "sovereignty_mode": sovereignty_mode.to_string(),
@@ -361,6 +370,8 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
                     else if cfg!(target_os = "linux") { "linux" }
                     else if cfg!(target_os = "windows") { "windows" }
                     else { "other" },
+        // v0.2: Biometric evidence — nonce-challenge proving live biometric
+        "biometric_evidence": biometric_evidence_json,
     });
 
     // Sign over BLAKE3(canonical transcript bytes). serde_json's Map is
@@ -538,6 +549,264 @@ pub async fn handle_vault_check(state: &mut OnboardState) -> Vec<OnboardEvent> {
             )));
         }
     }
+
+    events
+}
+
+// ===========================================================================
+// Post-genesis sovereignty upgrade
+// ===========================================================================
+
+/// Upgrade the sovereignty provider for an existing genesis.
+///
+/// Flow:
+/// 1. Load the Genesis secret from the CURRENT provider
+/// 2. Enroll + save via the NEW provider
+/// 3. Update genesis.json with the new sovereignty_mode
+/// 4. Append upgrade record to the genesis transcript
+///
+/// The old provider's entry is preserved as a fallback until the
+/// operator confirms the upgrade works. This is intentional — if the
+/// new biometric fails (e.g., face enrollment in bad lighting), they
+/// can still access their identity via the old provider.
+pub async fn handle_sovereignty_upgrade(
+    action: &OnboardAction,
+    _state: &mut OnboardState,
+) -> Vec<OnboardEvent> {
+    let mut events = Vec::new();
+
+    let new_mode_str = action
+        .params
+        .get("new_sovereignty_mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if new_mode_str.is_empty() {
+        events.push(OnboardEvent::error(
+            "sovereignty_upgrade requires 'new_sovereignty_mode' parameter",
+        ));
+        return events;
+    }
+
+    let new_mode = zp_keys::SovereigntyMode::from_onboard_str(new_mode_str).resolve();
+
+    events.push(OnboardEvent::terminal(&format!(
+        "Upgrading sovereignty to {}...",
+        new_mode.display_name()
+    )));
+
+    // ── Step 1: Load current genesis record ──────────────────────
+    let home = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".zeropoint");
+
+    let genesis_path = home.join("genesis.json");
+    let genesis_json = match std::fs::read_to_string(&genesis_path) {
+        Ok(j) => j,
+        Err(e) => {
+            events.push(OnboardEvent::error(&format!(
+                "No genesis record found: {} — run genesis first",
+                e
+            )));
+            return events;
+        }
+    };
+
+    let mut genesis_record: serde_json::Value = match serde_json::from_str(&genesis_json) {
+        Ok(v) => v,
+        Err(e) => {
+            events.push(OnboardEvent::error(&format!(
+                "Corrupt genesis record: {}",
+                e
+            )));
+            return events;
+        }
+    };
+
+    let current_mode_str = genesis_record
+        .get("sovereignty_mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("login_password");
+    let current_mode = zp_keys::SovereigntyMode::from_onboard_str(current_mode_str).resolve();
+
+    if current_mode == new_mode {
+        events.push(OnboardEvent::terminal(&format!(
+            "Already using {} — no upgrade needed",
+            new_mode.display_name()
+        )));
+        return events;
+    }
+
+    // ── Step 2: Load secret from current provider ────────────────
+    let current_provider = zp_keys::provider_for(current_mode);
+    events.push(OnboardEvent::terminal(&format!(
+        "Loading secret from current {} provider...",
+        current_provider.display_name()
+    )));
+
+    let secret = match current_provider.load_secret() {
+        Ok(s) => s,
+        Err(e) => {
+            events.push(OnboardEvent::error(&format!(
+                "Cannot load secret from {}: {} — upgrade aborted",
+                current_provider.display_name(),
+                e
+            )));
+            return events;
+        }
+    };
+
+    // ── Step 3: Upgrade to new provider ──────────────────────────
+    let new_provider = zp_keys::provider_for(new_mode);
+
+    if !new_mode.is_ceremony_ready() {
+        events.push(OnboardEvent::error(&format!(
+            "{} is not fully implemented yet — cannot upgrade",
+            new_provider.display_name()
+        )));
+        return events;
+    }
+
+    // Warn the browser about incoming biometric/hardware prompt
+    events.push(OnboardEvent::new(
+        "awaiting_provider",
+        serde_json::json!({
+            "mode": new_mode.to_string(),
+            "display_name": new_mode.display_name(),
+            "hint": format!("{} enrollment will begin — follow the prompts", new_mode.display_name()),
+        }),
+    ));
+
+    match new_provider.upgrade_from(&secret) {
+        Ok(result) => {
+            if let Some(ref enrollment) = result {
+                events.push(OnboardEvent::terminal(&format!(
+                    "✓ {}",
+                    enrollment.summary
+                )));
+            }
+        }
+        Err(e) => {
+            events.push(OnboardEvent::error(&format!(
+                "{} upgrade failed: {} — your {} access is unchanged",
+                new_provider.display_name(),
+                e,
+                current_provider.display_name()
+            )));
+            return events;
+        }
+    }
+
+    // ── Step 4: Update genesis.json ──────────────────────────────
+    let upgrade_timestamp = chrono::Utc::now().to_rfc3339();
+
+    // Record previous mode for audit trail
+    let previous_modes: Vec<serde_json::Value> = genesis_record
+        .get("previous_sovereignty_modes")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut updated_modes = previous_modes;
+    updated_modes.push(serde_json::json!({
+        "mode": current_mode.to_string(),
+        "upgraded_at": &upgrade_timestamp,
+    }));
+
+    genesis_record["sovereignty_mode"] = serde_json::Value::String(new_mode.to_string());
+    genesis_record["previous_sovereignty_modes"] = serde_json::Value::Array(updated_modes);
+    genesis_record["last_sovereignty_upgrade"] =
+        serde_json::Value::String(upgrade_timestamp.clone());
+
+    // Collect biometric evidence from the new provider
+    let biometric_evidence = new_provider.biometric_evidence();
+
+    // ── Step 5: Append upgrade record to transcript ──────────────
+    let transcript_path = home.join("genesis_transcript.json");
+    let mut transcript_doc: serde_json::Value =
+        match std::fs::read_to_string(&transcript_path).and_then(|s| {
+            serde_json::from_str(&s)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        }) {
+            Ok(v) => v,
+            Err(e) => {
+                events.push(OnboardEvent::error(&format!(
+                    "Cannot read transcript: {} — upgrade saved to genesis.json \
+                     but transcript not updated",
+                    e
+                )));
+                // Still save genesis.json even if transcript update fails
+                let _ = atomic_write_json(&genesis_path, &genesis_record);
+                return events;
+            }
+        };
+
+    let upgrade_record = serde_json::json!({
+        "ceremony": "sovereignty_upgrade",
+        "version": "1.0",
+        "timestamp": &upgrade_timestamp,
+        "from_mode": current_mode.to_string(),
+        "to_mode": new_mode.to_string(),
+        "provider_capabilities": new_provider.capabilities(),
+        "biometric_evidence": biometric_evidence
+            .as_ref()
+            .map(|e| serde_json::to_value(e).unwrap_or_default())
+            .unwrap_or(serde_json::Value::Null),
+        "software_version": env!("CARGO_PKG_VERSION"),
+    });
+
+    let upgrade_bytes = serde_json::to_vec(&upgrade_record).unwrap_or_default();
+    let upgrade_hash = blake3::hash(&upgrade_bytes);
+
+    // Append to the transcript as an "upgrades" array
+    if let Some(upgrades_arr) = transcript_doc
+        .as_object_mut()
+        .and_then(|m| {
+            m.entry("upgrades")
+                .or_insert_with(|| serde_json::Value::Array(Vec::new()))
+                .as_array_mut()
+        })
+    {
+        upgrades_arr.push(serde_json::json!({
+            "record": upgrade_record,
+            "hash": upgrade_hash.to_hex().to_string(),
+        }));
+    }
+
+    // Write transcript first (ordering invariant)
+    if let Err(e) = atomic_write_json(&transcript_path, &transcript_doc) {
+        events.push(OnboardEvent::error(&format!(
+            "Failed to update transcript: {} — upgrade saved to genesis.json only",
+            e
+        )));
+    }
+
+    // Then write genesis.json
+    if let Err(e) = atomic_write_json(&genesis_path, &genesis_record) {
+        events.push(OnboardEvent::error(&format!(
+            "Failed to update genesis.json: {}",
+            e
+        )));
+        return events;
+    }
+
+    events.push(OnboardEvent::terminal(&format!(
+        "✓ Sovereignty upgraded: {} → {}",
+        current_mode.display_name(),
+        new_mode.display_name()
+    )));
+    events.push(OnboardEvent::terminal(
+        "  Previous provider entry preserved as fallback. Run `zp doctor` to verify.",
+    ));
+
+    events.push(OnboardEvent::new(
+        "sovereignty_upgraded",
+        serde_json::json!({
+            "from_mode": current_mode.to_string(),
+            "to_mode": new_mode.to_string(),
+            "timestamp": &upgrade_timestamp,
+            "has_biometric_evidence": biometric_evidence.is_some(),
+        }),
+    ));
 
     events
 }
