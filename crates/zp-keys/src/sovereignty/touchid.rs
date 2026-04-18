@@ -123,16 +123,15 @@ impl SovereigntyProvider for TouchIdProvider {
         // Upgrade path: re-gate an existing secret under Touch ID.
         // The secret was loaded from the old provider by the caller.
         self.save_secret(secret)?;
+        let tier = {
+            #[cfg(feature = "biometric-keychain")]
+            { if is_os_enforced() { "Tier 2: OS-enforced via kSecAccessControlBiometryCurrentSet" } else { "Tier 1: application-layer biometric" } }
+            #[cfg(not(feature = "biometric-keychain"))]
+            { "Tier 1: application-layer biometric" }
+        };
         Ok(Some(super::EnrollmentResult {
             enrollment_data: Vec::new(),
-            summary: format!(
-                "Sovereignty upgraded to Touch ID ({})",
-                if cfg!(feature = "biometric-keychain") {
-                    "OS-enforced via kSecAccessControlBiometryCurrentSet"
-                } else {
-                    "application-layer gating"
-                }
-            ),
+            summary: format!("Sovereignty upgraded to Touch ID ({})", tier),
         }))
     }
 }
@@ -189,7 +188,16 @@ fn collect_biometric_evidence() -> Option<BiometricEvidence> {
     // Detect whether this is Touch ID or Face ID
     let method = detect_biometric_method();
 
-    let os_enforced = cfg!(feature = "biometric-keychain");
+    // os_enforced is true only when the binary is signed AND SecItemAdd
+    // succeeded with kSecAccessControlBiometryCurrentSet. Compile-time
+    // feature check alone isn't enough — the entitlement might be missing
+    // at runtime (errSecMissingEntitlement / -34018).
+    let os_enforced = {
+        #[cfg(feature = "biometric-keychain")]
+        { is_os_enforced() }
+        #[cfg(not(feature = "biometric-keychain"))]
+        { false }
+    };
 
     Some(BiometricEvidence {
         method,
@@ -246,7 +254,7 @@ fn detect_touchid() -> ProviderCapability {
             };
 
             let enforcement = if cfg!(feature = "biometric-keychain") {
-                "OS-enforced"
+                "OS-enforced if signed, application-layer fallback"
             } else {
                 "application-layer"
             };
@@ -655,7 +663,28 @@ mod secure_keychain {
     }
 }
 
+/// Track whether OS-level biometric enforcement is active for this session.
+/// Set to `true` when secure_keychain::save succeeds (biometric-gated item
+/// stored with kSecAccessControlBiometryCurrentSet). Remains `false` when
+/// the binary lacks entitlements and we fall back to v0.1 keyring.
+#[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
+static OS_ENFORCED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
+pub(crate) fn is_os_enforced() -> bool {
+    OS_ENFORCED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// v0.2: Store with kSecAccessControlBiometryCurrentSet.
+///
+/// Tier 1 (unsigned binary): If SecItemAdd returns -34018
+///   (errSecMissingEntitlement), falls back to v0.1 keyring storage
+///   automatically. Touch ID was already verified via bioutil pre-flight,
+///   so the biometric evidence is still valid — just not OS-enforced.
+///
+/// Tier 2 (signed binary): If SecItemAdd succeeds, the Keychain item
+///   has biometric access control at the kernel level. Every future read
+///   triggers an OS biometric prompt with no application-layer bypass.
 #[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
 fn save_touchid_secret_v2(secret: &[u8; 32]) -> Result<(), KeyError> {
     // Pre-flight: verify Touch ID works before committing to biometric gating.
@@ -669,24 +698,48 @@ fn save_touchid_secret_v2(secret: &[u8; 32]) -> Result<(), KeyError> {
         ))
     })?;
 
-    // Store with OS-level biometric enforcement
-    secure_keychain::save(secret)?;
+    // Try Tier 2: OS-enforced biometric via Secure Enclave
+    match secure_keychain::save(secret) {
+        Ok(()) => {
+            OS_ENFORCED.store(true, std::sync::atomic::Ordering::Relaxed);
+            tracing::info!(
+                "Tier 2: Keychain item stored with OS-enforced biometric \
+                 (kSecAccessControlBiometryCurrentSet)"
+            );
+        }
+        Err(e) => {
+            let msg = format!("{}", e);
+            // -34018 = errSecMissingEntitlement — binary is not code-signed
+            // with Keychain entitlements. Fall back to Tier 1 gracefully.
+            if msg.contains("-34018") || msg.contains("MissingEntitlement") {
+                tracing::warn!(
+                    "Tier 2 unavailable (binary not signed with Keychain entitlements). \
+                     Falling back to Tier 1: standard Keychain + application-layer biometric. \
+                     To enable OS-enforced biometric, sign the binary with: \
+                     codesign --sign <identity> --entitlements entitlements/keychain-biometric.entitlements.plist <binary>"
+                );
+                // Tier 1 stores via keyring (no biometric access control on the item)
+            } else {
+                // Unexpected error — propagate
+                return Err(e);
+            }
+        }
+    }
 
-    // Also store in the v0.1 keyring as a migration bridge.
-    // The v0.2 path will always be preferred for loads, but having
-    // the v0.1 entry means downgrade is possible.
+    // Always store in v0.1 keyring as well:
+    // - Tier 1: this IS the primary storage (no biometric flag on item)
+    // - Tier 2: this is the migration bridge for downgrade
     #[cfg(feature = "os-keychain")]
     {
         let entry = keyring::Entry::new(
             crate::keyring::GENESIS_KEYCHAIN_SERVICE,
             crate::keyring::GENESIS_KEYCHAIN_ACCOUNT,
         )
-        .map_err(|e| KeyError::CredentialStore(format!("v0.1 bridge entry error: {}", e)))?;
+        .map_err(|e| KeyError::CredentialStore(format!("Keychain entry error: {}", e)))?;
 
-        if let Err(e) = entry.set_password(&hex::encode(secret)) {
-            tracing::warn!("Could not write v0.1 bridge keychain entry: {}", e);
-            // Non-fatal — the v0.2 entry is the source of truth
-        }
+        entry
+            .set_password(&hex::encode(secret))
+            .map_err(|e| KeyError::CredentialStore(format!("Keychain store error: {}", e)))?;
     }
 
     Ok(())
