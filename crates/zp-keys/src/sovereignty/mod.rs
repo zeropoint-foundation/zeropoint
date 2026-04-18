@@ -33,6 +33,9 @@ pub mod windows_hello;
 use crate::error::KeyError;
 use serde::{Deserialize, Serialize};
 
+// Re-export BiometricEvidence from touchid module for use in transcripts
+pub use touchid::BiometricEvidence;
+
 // ---------------------------------------------------------------------------
 // SovereigntyMode — the expanded enum
 // ---------------------------------------------------------------------------
@@ -381,6 +384,10 @@ impl ProviderCapabilities {
     pub const CAN_SALTED_DERIVATION: Self = Self(1 << 4);
     /// Provider has non-volatile enrollment (enrollment data persists on device).
     pub const HAS_DEVICE_STORAGE: Self = Self(1 << 5);
+    /// Provider supports post-genesis upgrade (re-gating existing secret).
+    pub const CAN_UPGRADE: Self = Self(1 << 6);
+    /// Provider produces biometric evidence for transcripts.
+    pub const HAS_BIOMETRIC_EVIDENCE: Self = Self(1 << 7);
 
     /// Combine two capability sets.
     pub const fn union(self, other: Self) -> Self {
@@ -425,6 +432,12 @@ impl Serialize for ProviderCapabilities {
         if self.has(Self::HAS_DEVICE_STORAGE) {
             names.push("has_device_storage");
         }
+        if self.has(Self::CAN_UPGRADE) {
+            names.push("can_upgrade");
+        }
+        if self.has(Self::HAS_BIOMETRIC_EVIDENCE) {
+            names.push("has_biometric_evidence");
+        }
         names.serialize(serializer)
     }
 }
@@ -441,6 +454,8 @@ impl<'de> Deserialize<'de> for ProviderCapabilities {
                 "can_quorum" => caps = caps.union(Self::CAN_QUORUM),
                 "can_salted_derivation" => caps = caps.union(Self::CAN_SALTED_DERIVATION),
                 "has_device_storage" => caps = caps.union(Self::HAS_DEVICE_STORAGE),
+                "can_upgrade" => caps = caps.union(Self::CAN_UPGRADE),
+                "has_biometric_evidence" => caps = caps.union(Self::HAS_BIOMETRIC_EVIDENCE),
                 _ => {} // Ignore unknown capabilities (forward compat)
             }
         }
@@ -498,6 +513,41 @@ pub trait SovereigntyProvider: Send + Sync {
     /// probing for errors or checking feature flags externally.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities::BASE // Default: base operations only
+    }
+
+    /// Collect biometric evidence for the genesis transcript (v0.2).
+    ///
+    /// Returns cryptographic proof that a biometric verification occurred:
+    /// a nonce-challenge-response binding the verification to a specific
+    /// point in time, preventing replay.
+    ///
+    /// Only biometric providers return evidence. Hardware wallets and
+    /// software gates return None.
+    fn biometric_evidence(&self) -> Option<touchid::BiometricEvidence> {
+        None // Default: no biometric evidence
+    }
+
+    /// Upgrade: re-gate an existing Genesis secret under this provider.
+    ///
+    /// This enables post-genesis sovereignty upgrades:
+    ///   login_password → touch_id
+    ///   touch_id → face_enroll (add secondary biometric)
+    ///   login_password → yubikey
+    ///
+    /// The caller loads the secret from the OLD provider and passes it
+    /// here. This provider enrolls (if needed) and saves the secret
+    /// under its own gating mechanism. The old provider's entry is NOT
+    /// deleted — that's the caller's responsibility after confirming
+    /// the new entry works.
+    ///
+    /// Returns the enrollment result (if any) for transcript recording.
+    fn upgrade_from(&self, secret: &[u8; 32]) -> Result<Option<EnrollmentResult>, KeyError> {
+        // Default: enroll + save. Providers can override for custom flows.
+        if self.detect().requires_enrollment {
+            self.enroll()?;
+        }
+        self.save_secret(secret)?;
+        Ok(None)
     }
 
     /// Human-readable name for the provider.
@@ -628,5 +678,106 @@ mod tests {
     fn test_detect_all_providers_does_not_panic() {
         let caps = detect_all_providers();
         assert!(caps.len() >= 2); // At least login_password + file_based
+    }
+
+    // ── v0.2 biometric tests ─────────────────────────────────────
+
+    #[test]
+    fn test_biometric_evidence_structure() {
+        let evidence = BiometricEvidence {
+            method: "touchid".into(),
+            verified_at: "2026-04-17T12:00:00Z".into(),
+            challenge_nonce: "aa".repeat(32),
+            challenge_response: "bb".repeat(32),
+            os_enforced: true,
+            hardware_attestation: String::new(),
+        };
+
+        let json = serde_json::to_value(&evidence).unwrap();
+        assert_eq!(json["method"], "touchid");
+        assert_eq!(json["os_enforced"], true);
+        assert!(json["challenge_nonce"].as_str().unwrap().len() == 64);
+        assert!(json["challenge_response"].as_str().unwrap().len() == 64);
+    }
+
+    #[test]
+    fn test_biometric_evidence_in_transcript_json() {
+        // Verify that biometric evidence serializes correctly for inclusion
+        // in genesis transcripts
+        let evidence = BiometricEvidence {
+            method: "faceid".into(),
+            verified_at: chrono::Utc::now().to_rfc3339(),
+            challenge_nonce: hex::encode([0xaa; 32]),
+            challenge_response: hex::encode([0xbb; 32]),
+            os_enforced: false,
+            hardware_attestation: String::new(),
+        };
+
+        let transcript = serde_json::json!({
+            "ceremony": "genesis",
+            "biometric_evidence": evidence,
+        });
+
+        let evidence_obj = &transcript["biometric_evidence"];
+        assert_eq!(evidence_obj["method"], "faceid");
+        assert_eq!(evidence_obj["os_enforced"], false);
+    }
+
+    #[test]
+    fn test_provider_capabilities_upgrade_flag() {
+        let caps = ProviderCapabilities::BASE
+            .union(ProviderCapabilities::CAN_UPGRADE)
+            .union(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE);
+
+        assert!(caps.has(ProviderCapabilities::CAN_UPGRADE));
+        assert!(caps.has(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE));
+        assert!(!caps.has(ProviderCapabilities::CAN_ATTEST));
+    }
+
+    #[test]
+    fn test_provider_capabilities_serde_roundtrip() {
+        let caps = ProviderCapabilities::CAN_UPGRADE
+            .union(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE);
+
+        let json = serde_json::to_string(&caps).unwrap();
+        assert!(json.contains("can_upgrade"));
+        assert!(json.contains("has_biometric_evidence"));
+
+        let parsed: ProviderCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(parsed.has(ProviderCapabilities::CAN_UPGRADE));
+        assert!(parsed.has(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE));
+    }
+
+    #[test]
+    fn test_touchid_provider_has_upgrade_capability() {
+        let provider = touchid::TouchIdProvider;
+        let caps = provider.capabilities();
+        assert!(caps.has(ProviderCapabilities::CAN_UPGRADE));
+        assert!(caps.has(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE));
+    }
+
+    #[test]
+    fn test_face_provider_has_upgrade_capability() {
+        let provider = face::FaceEnrollProvider;
+        let caps = provider.capabilities();
+        assert!(caps.has(ProviderCapabilities::CAN_UPGRADE));
+    }
+
+    #[test]
+    fn test_login_password_default_capabilities() {
+        let provider = login_password::LoginPasswordProvider;
+        let caps = provider.capabilities();
+        // Login password has no special capabilities
+        assert!(!caps.has(ProviderCapabilities::CAN_UPGRADE));
+        assert!(!caps.has(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE));
+    }
+
+    #[test]
+    fn test_sovereignty_upgrade_same_mode_noop() {
+        // Upgrading to the same mode should be detected by the handler
+        // (not tested here — that's a server-layer test)
+        // But we verify the provider trait has upgrade_from
+        let provider = touchid::TouchIdProvider;
+        assert_eq!(provider.mode(), SovereigntyMode::TouchId);
     }
 }

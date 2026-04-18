@@ -51,8 +51,8 @@ pub(crate) mod test_sync {
 
 // ── Sovereignty system (new) ──
 pub use sovereignty::{
-    detect_all_providers, provider_for, EnrollmentResult, ProviderCapabilities, ProviderCapability,
-    SovereigntyCategory, SovereigntyMode, SovereigntyProvider,
+    detect_all_providers, provider_for, BiometricEvidence, EnrollmentResult, ProviderCapabilities,
+    ProviderCapability, SovereigntyCategory, SovereigntyMode, SovereigntyProvider,
 };
 
 // ── Hardware wallet infrastructure (quorum-ready) ──
