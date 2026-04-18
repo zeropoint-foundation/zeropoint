@@ -221,9 +221,18 @@ async fn handle_onboard_ws(socket: WebSocket, app_state: AppState, ui_mode: bool
                         }
                     } else if !result_events.is_empty() {
                         // Multiple result events — merge into one JSON with all fields.
-                        // Last event's `event` field wins (it's the final result).
+                        // Collect all event names so grep-based checks (e.g. relay
+                        // scripts looking for "genesis_complete") find every event
+                        // in the combined output.
+                        let event_names: Vec<&str> =
+                            result_events.iter().map(|e| e.event.as_str()).collect();
                         let mut merged = serde_json::Map::new();
+                        merged.insert(
+                            "events".to_string(),
+                            serde_json::to_value(&event_names).unwrap_or_default(),
+                        );
                         for evt in &result_events {
+                            // Set `event` to last event name (final result)
                             if let Ok(serde_json::Value::Object(map)) =
                                 serde_json::to_value(evt)
                             {
