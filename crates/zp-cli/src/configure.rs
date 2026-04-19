@@ -41,7 +41,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::Path;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use zp_trust::injector::{CredentialInjector, PolicyCheckFn, PolicyContext};
 use zp_trust::vault::CredentialVault;
 

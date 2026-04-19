@@ -355,9 +355,9 @@ pub fn run(
 /// Offer to auto-configure all discovered tools.
 fn offer_auto_configure(
     config: &OnboardConfig,
-    vault: &CredentialVault,
+    vault: &mut CredentialVault,
     _vault_key: &[u8; 32],
-    _vault_path: &Path,
+    vault_path: &Path,
     engine: &ConfigEngine,
     stdin: &io::Stdin,
 ) -> i32 {
