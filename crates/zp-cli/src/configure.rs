@@ -1936,6 +1936,146 @@ pub fn run_vault_add(
     }
 }
 
+/// Run `zp configure rotate` — rotate a provider credential and verify propagation.
+///
+/// When a provider key is compromised or rotated upstream, the user stores the
+/// new key via `vault-add`. This command verifies that the rotation propagated
+/// to all tools that reference the provider through `VaultEntry::Ref` pointers.
+///
+/// Flow:
+///   1. Verify the provider credential exists in the vault.
+///   2. Enumerate all `tools/*/` entries that ref the provider's key path.
+///   3. For each tool, resolve the ref and verify it returns the current value.
+///   4. Report which tools are current and which have stale or broken refs.
+///
+/// The vault's ref-based architecture means rotation is instant — there's no
+/// copy to update. This command is a verification pass, not a mutation.
+pub fn run_rotate(
+    vault: &CredentialVault,
+    provider: &str,
+    field: &str,
+) -> i32 {
+    println!("ZeroPoint Configure — Rotate");
+    println!("Provider: {}", provider);
+    println!("Field: {}", field);
+    println!();
+
+    // 1. Verify the provider credential exists
+    let tiered_path = format!("providers/{}/{}", provider, field);
+    let legacy_path = format!("{}/{}", provider, field);
+
+    let canonical_path = if vault.contains(&tiered_path) {
+        &tiered_path
+    } else if vault.contains(&legacy_path) {
+        &legacy_path
+    } else {
+        eprintln!(
+            "Error: no credential found at {} or {}",
+            tiered_path, legacy_path
+        );
+        eprintln!(
+            "Store the new key first: zp configure vault-add --provider {} --field {}",
+            provider, field
+        );
+        return 1;
+    };
+
+    // Resolve the current value (we won't print it, but confirm it's non-empty)
+    match vault.retrieve(canonical_path) {
+        Ok(value) if !value.is_empty() => {
+            println!(
+                "  \x1b[32m✓\x1b[0m {} — credential present ({} bytes)",
+                canonical_path,
+                value.len()
+            );
+        }
+        Ok(_) => {
+            eprintln!("  \x1b[31m✗\x1b[0m {} — credential is empty", canonical_path);
+            return 1;
+        }
+        Err(e) => {
+            eprintln!("  \x1b[31m✗\x1b[0m {} — resolve failed: {}", canonical_path, e);
+            return 1;
+        }
+    }
+
+    // 2. Find all tools that reference this provider
+    let tool_entries = vault.list_prefix("tools/");
+    let mut tools_checked: HashMap<String, Vec<(String, bool)>> = HashMap::new();
+
+    for entry_key in &tool_entries {
+        // entry_key is "tools/{tool}/{VAR}" — check if it refs the provider path
+        let parts: Vec<&str> = entry_key.splitn(3, '/').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let tool_name = parts[1].to_string();
+        let var_name = parts[2].to_string();
+
+        // Check if this entry is a ref pointing to our provider
+        if let Some(target) = vault.resolve_ref(entry_key) {
+            if target == tiered_path || target == legacy_path {
+                // This tool var refs our provider — verify it resolves
+                let ok = vault.retrieve(entry_key).map(|v| !v.is_empty()).unwrap_or(false);
+                tools_checked
+                    .entry(tool_name)
+                    .or_default()
+                    .push((var_name, ok));
+            }
+        }
+    }
+
+    println!();
+
+    if tools_checked.is_empty() {
+        println!("  No tools reference {}/{}", provider, field);
+        println!("  (credential stored but not yet used by any tool config)");
+        return 0;
+    }
+
+    // 3. Report
+    let mut all_ok = true;
+    let mut tool_names: Vec<&String> = tools_checked.keys().collect();
+    tool_names.sort();
+
+    for tool_name in &tool_names {
+        let vars = &tools_checked[*tool_name];
+        let tool_ok = vars.iter().all(|(_, ok)| *ok);
+        let symbol = if tool_ok { "\x1b[32m✓\x1b[0m" } else { "\x1b[31m✗\x1b[0m" };
+        println!("  {} {}", symbol, tool_name);
+        for (var, ok) in vars {
+            let var_symbol = if *ok { "✓" } else { "✗ STALE" };
+            println!("      {} {}", var_symbol, var);
+        }
+        if !tool_ok {
+            all_ok = false;
+        }
+    }
+
+    println!();
+    if all_ok {
+        println!(
+            "\x1b[32m✓\x1b[0m Rotation verified: {}/{} propagated to {} tool(s)",
+            provider,
+            field,
+            tools_checked.len()
+        );
+        info!(
+            provider = provider,
+            field = field,
+            tools = tools_checked.len(),
+            "Credential rotation verified"
+        );
+    } else {
+        eprintln!(
+            "\x1b[31m✗\x1b[0m Rotation incomplete: some tool refs failed to resolve"
+        );
+        eprintln!("  Re-run `zp configure auto --overwrite` to rebuild stale refs");
+    }
+
+    if all_ok { 0 } else { 1 }
+}
+
 // ============================================================================
 // Scan — auto-discovery of configurable tools
 // ============================================================================
@@ -3769,5 +3909,53 @@ LLM_MODEL=gpt-4
             std::str::from_utf8(env.get("MODEL_NAME").unwrap()).unwrap(),
             "claude-sonnet-4-20250514"
         );
+    }
+
+    // ========================================================================
+    // Rotate tests
+    // ========================================================================
+
+    #[test]
+    fn test_rotate_verifies_propagation() {
+        let master_key = [0x42u8; 32];
+        let mut vault = CredentialVault::new(&master_key);
+
+        // Store a provider credential
+        vault.store_provider("anthropic", "api_key", b"sk-ant-v1").unwrap();
+
+        // Create tool refs pointing to the provider
+        vault.store_ref(
+            "tools/my-tool/ANTHROPIC_API_KEY",
+            "providers/anthropic/api_key",
+        ).unwrap();
+        vault.store_ref(
+            "tools/other-tool/ANTHROPIC_API_KEY",
+            "providers/anthropic/api_key",
+        ).unwrap();
+
+        // Rotate should succeed — all refs resolve
+        let exit = run_rotate(&vault, "anthropic", "api_key");
+        assert_eq!(exit, 0, "rotate should succeed when all refs resolve");
+
+        // Now "rotate" the credential (update value)
+        vault.store_provider("anthropic", "api_key", b"sk-ant-v2").unwrap();
+
+        // Rotate should still succeed — refs point to same path, new value
+        let exit = run_rotate(&vault, "anthropic", "api_key");
+        assert_eq!(exit, 0, "rotate should succeed after key update");
+
+        // Verify the tools see the new key through their refs
+        let v = vault.retrieve("tools/my-tool/ANTHROPIC_API_KEY").unwrap();
+        assert_eq!(std::str::from_utf8(&v).unwrap(), "sk-ant-v2");
+    }
+
+    #[test]
+    fn test_rotate_fails_missing_provider() {
+        let master_key = [0x42u8; 32];
+        let vault = CredentialVault::new(&master_key);
+
+        // No provider stored — rotate should fail
+        let exit = run_rotate(&vault, "nonexistent", "api_key");
+        assert_eq!(exit, 1, "rotate should fail for missing provider");
     }
 }
