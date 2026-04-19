@@ -15,11 +15,22 @@ export default {
 
     // Debug endpoint — remove after confirming secrets work
     if (path === '/_debug/env') {
+      const assetResp = await env.ASSETS.fetch(new Request(url.origin + '/playground'));
+      const ct = assetResp.headers.get('content-type') || 'NONE';
+      const body = await assetResp.text();
+      const hasHead = body.includes('<head');
+      const first200 = body.substring(0, 200);
       const keys = Object.keys(env).filter(k => k !== 'ASSETS');
       const has = {
         GOOGLE_API_KEY: !!env.GOOGLE_API_KEY,
         CESIUM_TOKEN: !!env.CESIUM_TOKEN,
         envKeys: keys,
+        pathname: url.pathname,
+        computedPath: path,
+        assetContentType: ct,
+        assetStatus: assetResp.status,
+        assetHasHead: hasHead,
+        assetFirst200: first200,
       };
       return new Response(JSON.stringify(has, null, 2), {
         headers: { 'content-type': 'application/json' },
