@@ -3283,21 +3283,64 @@ async fn tools_launch_handler(
         "Cockpit launch: {} → {} (port :{})",
         req.name, full_cmd, assignment.port
     );
+    // ── Vault env injection ─────────────────────────────────────────
+    // If the vault has tool config for this tool, inject all resolved
+    // env vars directly into the process. This is the vault-backed
+    // alternative to .env files — secrets never touch the filesystem.
+    let mut vault_env: Vec<(String, String)> = Vec::new();
+    if let Some(resolved_key) = state.0.vault_key.get().and_then(|k| k.as_ref()) {
+        let vault_path = std::path::PathBuf::from(&state.0.data_dir).join("vault.json");
+        if let Ok(vault) =
+            zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path)
+        {
+            match vault.resolve_tool_env(&req.name) {
+                Ok(env_map) if !env_map.is_empty() => {
+                    info!(
+                        tool = req.name,
+                        vars = env_map.len(),
+                        "Injecting vault-resolved env vars"
+                    );
+                    for (var, value) in &env_map {
+                        if let Ok(s) = std::str::from_utf8(value) {
+                            vault_env.push((var.clone(), s.to_string()));
+                        }
+                    }
+                }
+                Ok(_) => {
+                    debug!(tool = req.name, "No vault-stored tool config — using .env");
+                }
+                Err(e) => {
+                    warn!(
+                        tool = req.name,
+                        error = %e,
+                        "Failed to resolve vault env — falling back to .env"
+                    );
+                }
+            }
+        }
+    }
+
     // Create the child in its own process group (PGID = child PID).
     // This isolates the tool from the ZP server's process group so that
     // killing the tool never accidentally kills the server.
     #[cfg(unix)]
     use std::os::unix::process::CommandExt;
 
-    let spawn_result = std::process::Command::new("sh")
-        .arg("-c")
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg("-c")
         .arg(&logged_cmd)
         .current_dir(&tool_path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .process_group(0) // new process group, isolated from ZP server
-        .spawn();
+        .process_group(0); // new process group, isolated from ZP server
+
+    // Inject vault-resolved env vars into the process
+    for (key, value) in &vault_env {
+        cmd.env(key, value);
+    }
+
+    let spawn_result = cmd.spawn();
 
     match spawn_result {
         Ok(child) => {
