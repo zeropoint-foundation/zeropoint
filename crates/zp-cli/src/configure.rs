@@ -825,6 +825,191 @@ impl ConfigEngine {
         }
     }
 
+    /// Store MVC-resolved tool configuration directly in the vault.
+    ///
+    /// This is the Phase E replacement for the `process_env_file` → `resolve_to_vault`
+    /// round-trip. The MVC capability resolver already knows which provider won
+    /// each capability — this function writes that directly to the vault graph
+    /// without re-discovering it via pattern matching.
+    ///
+    /// For each resolved capability:
+    /// - Credential env vars → `VaultEntry::Ref` pointing to the provider's key
+    /// - `${vault:path}` refs in provider_overrides → `VaultEntry::Ref`
+    /// - Static defaults, also_set, auto-gen → `VaultEntry::Value`
+    ///
+    /// Provider credential refs use the canonical path convention:
+    ///   `tools/{tool}/{VAR}` → `providers/{provider}/api_key` (tiered)
+    ///   or → `{provider}/api_key` (legacy flat, if tiered doesn't exist)
+    pub fn resolve_mvc_to_vault(
+        resolved: &zp_engine::capability::ResolvedTool,
+        manifest: &zp_engine::capability::ToolManifest,
+        vault: &mut CredentialVault,
+        catalog: &[zp_engine::providers::ProviderProfile],
+    ) -> VaultConfigResult {
+        let tool_name = &resolved.name;
+        let mut refs_stored = 0u32;
+        let mut values_stored = 0u32;
+        let mut skipped = 0u32;
+
+        // ── Phase 1: Store credential refs from resolved capabilities ──
+        for cap_res in &resolved.capabilities {
+            let provider_id = match &cap_res.status {
+                zp_engine::capability::ResolutionStatus::Resolved { provider_id } => {
+                    Some(provider_id.as_str())
+                }
+                zp_engine::capability::ResolutionStatus::Shared { provider_id, .. } => {
+                    Some(provider_id.as_str())
+                }
+                _ => None,
+            };
+
+            let Some(provider_id) = provider_id else {
+                continue;
+            };
+
+            // Find the CapabilityRequirement that produced this resolution
+            let requirement = manifest
+                .required
+                .iter()
+                .chain(manifest.optional.iter())
+                .find(|r| r.capability == cap_res.capability);
+
+            let Some(req) = requirement else {
+                continue;
+            };
+
+            // Look up provider_overrides for this provider — these have explicit
+            // env_map entries like { ANTHROPIC_API_KEY = "${vault:anthropic/api_key}" }
+            let mut handled_vars: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+
+            for ov in &manifest.provider_overrides {
+                if ov.provider != provider_id {
+                    continue;
+                }
+
+                for (env_var, value) in &ov.env_map {
+                    if let Some(vault_path) = value
+                        .strip_prefix("${vault:")
+                        .and_then(|s| s.strip_suffix('}'))
+                    {
+                        // This is a vault ref — store as VaultEntry::Ref
+                        let target = if vault.contains(&format!("providers/{}", vault_path)) {
+                            format!("providers/{}", vault_path)
+                        } else {
+                            vault_path.to_string()
+                        };
+                        let source = format!("tools/{}/{}", tool_name, env_var);
+                        if let Err(e) = vault.store_ref(&source, &target) {
+                            tracing::warn!(
+                                tool = tool_name,
+                                var = env_var,
+                                error = %e,
+                                "MVC: failed to store vault ref from override"
+                            );
+                            skipped += 1;
+                        } else {
+                            refs_stored += 1;
+                        }
+                        handled_vars.insert(env_var.clone());
+                    } else {
+                        // Static value from override — store directly
+                        if let Err(e) =
+                            vault.store_tool_env(tool_name, env_var, value.as_bytes())
+                        {
+                            tracing::warn!(
+                                tool = tool_name,
+                                var = env_var,
+                                error = %e,
+                                "MVC: failed to store override value"
+                            );
+                            skipped += 1;
+                        } else {
+                            values_stored += 1;
+                        }
+                        handled_vars.insert(env_var.clone());
+                    }
+                }
+            }
+
+            // For env vars in the capability that weren't handled by overrides,
+            // try to infer the vault ref from the provider catalog's env_patterns.
+            // e.g., if provider "openai" has env_patterns ["OPENAI_API_KEY"] and
+            // the capability lists "OPENAI_API_KEY" in env_vars, store a ref
+            // to openai/api_key.
+            let provider_profile = catalog.iter().find(|p| p.id == provider_id);
+
+            if let Some(profile) = provider_profile {
+                for env_var in &req.env_vars {
+                    if handled_vars.contains(env_var) {
+                        continue;
+                    }
+
+                    // Check if this env var matches the provider's key pattern
+                    if profile.env_patterns.contains(env_var) {
+                        let vault_ref = format!("{}/api_key", provider_id);
+                        let target =
+                            if vault.contains(&format!("providers/{}", vault_ref)) {
+                                format!("providers/{}", vault_ref)
+                            } else {
+                                vault_ref
+                            };
+                        let source = format!("tools/{}/{}", tool_name, env_var);
+                        if let Err(e) = vault.store_ref(&source, &target) {
+                            tracing::warn!(
+                                tool = tool_name,
+                                var = env_var,
+                                error = %e,
+                                "MVC: failed to store inferred vault ref"
+                            );
+                            skipped += 1;
+                        } else {
+                            refs_stored += 1;
+                        }
+                        handled_vars.insert(env_var.clone());
+                    }
+                }
+            }
+        }
+
+        // ── Phase 2: Store env_output values (defaults, also_set, auto-gen) ──
+        for (env_var, value) in &resolved.env_output {
+            // Don't overwrite refs we already stored in Phase 1
+            let key = format!("tools/{}/{}", tool_name, env_var);
+            if vault.contains(&key) {
+                continue;
+            }
+
+            if let Err(e) = vault.store_tool_env(tool_name, env_var, value.as_bytes())
+            {
+                tracing::warn!(
+                    tool = tool_name,
+                    var = env_var,
+                    error = %e,
+                    "MVC: failed to store env_output value"
+                );
+                skipped += 1;
+            } else {
+                values_stored += 1;
+            }
+        }
+
+        info!(
+            tool = tool_name,
+            refs = refs_stored,
+            values = values_stored,
+            skipped = skipped,
+            "MVC tool config stored in vault (native)"
+        );
+
+        VaultConfigResult {
+            tool: tool_name.to_string(),
+            refs_stored,
+            values_stored,
+            skipped,
+        }
+    }
+
     /// Print a dry-run summary of resolutions.
     pub fn print_summary(resolutions: &[Resolution]) {
         let mut vault_count = 0;
@@ -2320,69 +2505,49 @@ pub fn run_auto(
                 }
             }
 
-            // MVC resolution succeeded — now process the template using the
-            // var-level engine for vault storage.
-            // TODO(Phase E): Replace with native MVC env writer.
-            match engine.process_env_file(
-                &tool.template,
-                vault,
-                policy_check,
-                &tool.name,
-            ) {
-                Ok(resolutions) => {
-                    if dry_run {
-                        let resolved_count = resolutions
-                            .iter()
-                            .filter(|r| {
-                                matches!(
-                                    r,
-                                    Resolution::VaultResolved { .. }
-                                        | Resolution::DefaultResolved { .. }
-                                )
-                            })
-                            .count();
-                        println!(
-                            "          would resolve {}/{} variables",
-                            resolved_count, tool.total_vars
-                        );
-                    } else {
-                        // Store in vault graph
-                        let vr = ConfigEngine::resolve_to_vault(
-                            &resolutions,
-                            &tool.name,
-                            vault,
-                        );
-                        println!(
-                            "          vault: {} refs + {} values stored",
-                            vr.refs_stored, vr.values_stored
-                        );
-                        info!(
-                            tool = tool.name,
-                            source = source_label,
-                            confidence = %resolved.confidence,
-                            refs = vr.refs_stored,
-                            values = vr.values_stored,
-                            "MVC auto-configured (vault-backed)"
-                        );
-                        strip_legacy_env(&tool.path, &tool.name);
-                    }
-                    mvc_results.push(AutoResult {
-                        name: tool.name.clone(),
-                        path: tool.path.clone(),
-                        status: AutoStatus::Configured,
-                    });
-                }
-                Err(e) => {
-                    eprintln!("          error processing template: {}", e);
-                    mvc_results.push(AutoResult {
-                        name: tool.name.clone(),
-                        path: tool.path.clone(),
-                        status: AutoStatus::Failed {
-                            error: e.to_string(),
-                        },
-                    });
-                }
+            // Native MVC vault writer — no ConfigEngine round-trip.
+            // The MVC resolver already knows which provider won each capability;
+            // write refs and values directly to the vault graph.
+            if dry_run {
+                let cap_count = resolved.capabilities.iter().filter(|c| {
+                    matches!(
+                        c.status,
+                        zp_engine::capability::ResolutionStatus::Resolved { .. }
+                            | zp_engine::capability::ResolutionStatus::Shared { .. }
+                            | zp_engine::capability::ResolutionStatus::DefaultLocal
+                            | zp_engine::capability::ResolutionStatus::AutoGenerated
+                    )
+                }).count();
+                println!(
+                    "          would resolve {}/{} capabilities, {} env values",
+                    cap_count, resolved.capabilities.len(), resolved.env_output.len()
+                );
+            } else {
+                let vr = ConfigEngine::resolve_mvc_to_vault(
+                    &resolved,
+                    &mvc_discovery.manifest,
+                    vault,
+                    &catalog,
+                );
+                println!(
+                    "          vault: {} refs + {} values stored (native MVC)",
+                    vr.refs_stored, vr.values_stored
+                );
+                info!(
+                    tool = tool.name,
+                    source = source_label,
+                    confidence = %resolved.confidence,
+                    refs = vr.refs_stored,
+                    values = vr.values_stored,
+                    "MVC auto-configured (native vault writer)"
+                );
+                strip_legacy_env(&tool.path, &tool.name);
             }
+            mvc_results.push(AutoResult {
+                name: tool.name.clone(),
+                path: tool.path.clone(),
+                status: AutoStatus::Configured,
+            });
         } else {
             // Low confidence or no env template — fall back to legacy path
             legacy_tools.push(tool);
@@ -3310,5 +3475,299 @@ LLM_MODEL=gpt-4
         let _ = fs::remove_file(tool.join(".env.example"));
         let _ = fs::remove_dir(&tool);
         let _ = fs::remove_dir(&root);
+    }
+
+    // ========================================================================
+    // MVC native vault writer tests
+    // ========================================================================
+
+    /// Build a minimal ToolManifest for testing.
+    fn test_manifest(
+        name: &str,
+        required: Vec<zp_engine::capability::CapabilityRequirement>,
+        optional: Vec<zp_engine::capability::CapabilityRequirement>,
+        overrides: Vec<zp_engine::capability::ProviderOverride>,
+    ) -> zp_engine::capability::ToolManifest {
+        zp_engine::capability::ToolManifest {
+            tool: zp_engine::capability::ToolMeta {
+                name: name.to_string(),
+                version: "0.1.0".to_string(),
+                description: "test tool".to_string(),
+            },
+            required,
+            optional,
+            auto_generate: None,
+            deluxe: None,
+            provider_overrides: overrides,
+            verification: None,
+        }
+    }
+
+    /// Build a minimal ResolvedTool for testing.
+    fn test_resolved(
+        name: &str,
+        capabilities: Vec<zp_engine::capability::CapabilityResolution>,
+        env_output: HashMap<String, String>,
+    ) -> zp_engine::capability::ResolvedTool {
+        zp_engine::capability::ResolvedTool {
+            name: name.to_string(),
+            path: std::path::PathBuf::from("/tmp/test"),
+            capabilities,
+            ready: true,
+            confidence: zp_engine::capability::Confidence::High,
+            deluxe_mode: false,
+            missing_required: vec![],
+            needs_attention: vec![],
+            env_output,
+        }
+    }
+
+    #[test]
+    fn test_mvc_vault_writer_stores_provider_ref_from_override() {
+        let master_key = [0x42u8; 32];
+        let mut vault = CredentialVault::new(&master_key);
+        vault.store("anthropic/api_key", b"sk-ant-test-key").unwrap();
+
+        let manifest = test_manifest(
+            "test-tool",
+            vec![zp_engine::capability::CapabilityRequirement {
+                capability: "reasoning_llm".to_string(),
+                env_vars: vec!["ANTHROPIC_API_KEY".to_string()],
+                config_vars: HashMap::new(),
+                prefer: vec!["anthropic".to_string()],
+                shared_with: None,
+                model_env: None,
+                model_default: None,
+                defaults: HashMap::new(),
+                attention: None,
+                local_default: false,
+                notes: None,
+                backend_groups: vec![],
+                auto_generate: vec![],
+            }],
+            vec![],
+            vec![zp_engine::capability::ProviderOverride {
+                provider: "anthropic".to_string(),
+                env_map: {
+                    let mut m = HashMap::new();
+                    m.insert(
+                        "ANTHROPIC_API_KEY".to_string(),
+                        "${vault:anthropic/api_key}".to_string(),
+                    );
+                    m
+                },
+                also_set: HashMap::new(),
+                shares: vec![],
+                custom_base_url: None,
+                notes: None,
+            }],
+        );
+
+        let resolved = test_resolved(
+            "test-tool",
+            vec![zp_engine::capability::CapabilityResolution {
+                capability: "reasoning_llm".to_string(),
+                required: true,
+                status: zp_engine::capability::ResolutionStatus::Resolved {
+                    provider_id: "anthropic".to_string(),
+                },
+                confidence: zp_engine::capability::Confidence::High,
+                env_vars: HashMap::new(),
+                notes: vec![],
+            }],
+            HashMap::new(),
+        );
+
+        let catalog = zp_engine::providers::load_catalog();
+        let vr = ConfigEngine::resolve_mvc_to_vault(&resolved, &manifest, &mut vault, &catalog);
+
+        assert_eq!(vr.refs_stored, 1, "should store one ref");
+        assert_eq!(vr.values_stored, 0, "no values expected");
+
+        // Verify the ref resolves to the provider credential
+        let env = vault.resolve_tool_env("test-tool").unwrap();
+        let key = env.get("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY should be in vault");
+        assert_eq!(
+            std::str::from_utf8(key).unwrap(),
+            "sk-ant-test-key",
+            "ref should resolve to provider credential"
+        );
+    }
+
+    #[test]
+    fn test_mvc_vault_writer_stores_env_output_values() {
+        let master_key = [0x42u8; 32];
+        let mut vault = CredentialVault::new(&master_key);
+        vault.store("openai/api_key", b"sk-test").unwrap();
+
+        let manifest = test_manifest("val-tool", vec![], vec![], vec![]);
+        let resolved = test_resolved(
+            "val-tool",
+            vec![],
+            {
+                let mut m = HashMap::new();
+                m.insert("LLM_MODEL".to_string(), "gpt-4".to_string());
+                m.insert("OLLAMA_SERVER_URL".to_string(), "http://localhost:11434".to_string());
+                m
+            },
+        );
+
+        let catalog = zp_engine::providers::load_catalog();
+        let vr = ConfigEngine::resolve_mvc_to_vault(&resolved, &manifest, &mut vault, &catalog);
+
+        assert_eq!(vr.values_stored, 2, "should store two values");
+
+        let env = vault.resolve_tool_env("val-tool").unwrap();
+        let model = env.get("LLM_MODEL").expect("LLM_MODEL in vault");
+        assert_eq!(std::str::from_utf8(model).unwrap(), "gpt-4");
+        let url = env.get("OLLAMA_SERVER_URL").expect("OLLAMA_SERVER_URL in vault");
+        assert_eq!(std::str::from_utf8(url).unwrap(), "http://localhost:11434");
+    }
+
+    #[test]
+    fn test_mvc_vault_writer_infers_ref_from_env_patterns() {
+        // When no provider_override exists, the writer should infer the vault ref
+        // from the provider catalog's env_patterns.
+        let master_key = [0x42u8; 32];
+        let mut vault = CredentialVault::new(&master_key);
+        vault.store("openai/api_key", b"sk-openai-test").unwrap();
+
+        let manifest = test_manifest(
+            "infer-tool",
+            vec![zp_engine::capability::CapabilityRequirement {
+                capability: "reasoning_llm".to_string(),
+                env_vars: vec!["OPENAI_API_KEY".to_string()],
+                config_vars: HashMap::new(),
+                prefer: vec!["openai".to_string()],
+                shared_with: None,
+                model_env: None,
+                model_default: None,
+                defaults: {
+                    let mut d = HashMap::new();
+                    d.insert("LLM_MODEL".to_string(), "gpt-4".to_string());
+                    d
+                },
+                attention: None,
+                local_default: false,
+                notes: None,
+                backend_groups: vec![],
+                auto_generate: vec![],
+            }],
+            vec![],
+            vec![], // No provider_overrides — should infer from catalog
+        );
+
+        let resolved = test_resolved(
+            "infer-tool",
+            vec![zp_engine::capability::CapabilityResolution {
+                capability: "reasoning_llm".to_string(),
+                required: true,
+                status: zp_engine::capability::ResolutionStatus::Resolved {
+                    provider_id: "openai".to_string(),
+                },
+                confidence: zp_engine::capability::Confidence::High,
+                env_vars: HashMap::new(),
+                notes: vec![],
+            }],
+            {
+                let mut m = HashMap::new();
+                m.insert("LLM_MODEL".to_string(), "gpt-4".to_string());
+                m
+            },
+        );
+
+        let catalog = zp_engine::providers::load_catalog();
+        let vr = ConfigEngine::resolve_mvc_to_vault(&resolved, &manifest, &mut vault, &catalog);
+
+        assert_eq!(vr.refs_stored, 1, "should infer one ref from env_patterns");
+        assert_eq!(vr.values_stored, 1, "should store LLM_MODEL value");
+
+        let env = vault.resolve_tool_env("infer-tool").unwrap();
+        let key = env.get("OPENAI_API_KEY").expect("OPENAI_API_KEY in vault");
+        assert_eq!(std::str::from_utf8(key).unwrap(), "sk-openai-test");
+        let model = env.get("LLM_MODEL").expect("LLM_MODEL in vault");
+        assert_eq!(std::str::from_utf8(model).unwrap(), "gpt-4");
+    }
+
+    #[test]
+    fn test_mvc_vault_writer_refs_dont_overwrite_each_other() {
+        // Ensure env_output values don't overwrite refs stored in Phase 1
+        let master_key = [0x42u8; 32];
+        let mut vault = CredentialVault::new(&master_key);
+        vault.store("anthropic/api_key", b"sk-ant-real").unwrap();
+
+        let manifest = test_manifest(
+            "nodup-tool",
+            vec![zp_engine::capability::CapabilityRequirement {
+                capability: "reasoning_llm".to_string(),
+                env_vars: vec!["ANTHROPIC_API_KEY".to_string()],
+                config_vars: HashMap::new(),
+                prefer: vec!["anthropic".to_string()],
+                shared_with: None,
+                model_env: None,
+                model_default: None,
+                defaults: HashMap::new(),
+                attention: None,
+                local_default: false,
+                notes: None,
+                backend_groups: vec![],
+                auto_generate: vec![],
+            }],
+            vec![],
+            vec![zp_engine::capability::ProviderOverride {
+                provider: "anthropic".to_string(),
+                env_map: {
+                    let mut m = HashMap::new();
+                    m.insert("ANTHROPIC_API_KEY".to_string(), "${vault:anthropic/api_key}".to_string());
+                    m
+                },
+                also_set: {
+                    let mut m = HashMap::new();
+                    m.insert("MODEL_NAME".to_string(), "claude-sonnet-4-20250514".to_string());
+                    m
+                },
+                shares: vec![],
+                custom_base_url: None,
+                notes: None,
+            }],
+        );
+
+        // env_output has MODEL_NAME from also_set (applied by resolve_tool)
+        let resolved = test_resolved(
+            "nodup-tool",
+            vec![zp_engine::capability::CapabilityResolution {
+                capability: "reasoning_llm".to_string(),
+                required: true,
+                status: zp_engine::capability::ResolutionStatus::Resolved {
+                    provider_id: "anthropic".to_string(),
+                },
+                confidence: zp_engine::capability::Confidence::High,
+                env_vars: HashMap::new(),
+                notes: vec![],
+            }],
+            {
+                let mut m = HashMap::new();
+                m.insert("MODEL_NAME".to_string(), "claude-sonnet-4-20250514".to_string());
+                m
+            },
+        );
+
+        let catalog = zp_engine::providers::load_catalog();
+        let vr = ConfigEngine::resolve_mvc_to_vault(&resolved, &manifest, &mut vault, &catalog);
+
+        // 1 ref (ANTHROPIC_API_KEY) + 1 value (MODEL_NAME from env_output, not duplicated)
+        assert_eq!(vr.refs_stored, 1);
+        // MODEL_NAME stored as value from env_output
+        assert!(vr.values_stored >= 1);
+
+        let env = vault.resolve_tool_env("nodup-tool").unwrap();
+        assert_eq!(
+            std::str::from_utf8(env.get("ANTHROPIC_API_KEY").unwrap()).unwrap(),
+            "sk-ant-real"
+        );
+        assert_eq!(
+            std::str::from_utf8(env.get("MODEL_NAME").unwrap()).unwrap(),
+            "claude-sonnet-4-20250514"
+        );
     }
 }
