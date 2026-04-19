@@ -137,6 +137,15 @@ The sovereignty provider system should be designed from the ground up for multi-
 
 **Key decision**: Shamir Secret Sharing (split Genesis into shares) vs. threshold signatures (each device signs independently, combine). SSS is simpler for wrapping key derivation; threshold sigs are more powerful for agent certificate issuance. Both may be needed at different layers.
 
+## Intellectual Context & Adjacent Thinkers
+
+| Source | Key Thesis | ZP Connection |
+|--------|-----------|---------------|
+| **Autoregressive theory** (Ken's talk notes) | Autoregression is a unifying computational principle (language, cognition, physics). Trust-as-trajectory is the accessible framing. | Theoretical bedrock of ZP. Architecture independently converged on autoregressive patterns; theory provides vocabulary for why it works. Whitepaper v2.1 grounds all four tenets in this. |
+| **LARQL** (Bytez, 2024) | Transformer FFN layers can be decomposed as a graph database (entities=nodes, features=edges, relations=labels). Vindex format enables KNN graph-walk inference and surgical knowledge editing (INSERT→COMPILE). | Shares ZP's "legibility as prerequisite for accountability" aesthetic. Composes with ZP: agent-native knowledge with per-fact provenance chains. Future work: cognitive accountability layer. See `docs/future-work/cognitive-accountability.md`, `docs/design/larql-integration.md`, `docs/related-work-larql.md`. |
+| **MEDS** (Memory-Enhanced Dynamic Reward Shaping, 2025) | Layer-wise logit fingerprints reveal recurring error patterns in LLM reasoning. HDBSCAN clustering identifies "stable error basins" — dense regions of activation space where the same faulty logic recurs despite varied wording. Deep layers (~last 14) encode logic, not grammar. | Complementary to LARQL: LARQL decomposes what the model *knows*, MEDS characterizes how it *reasons*. Together they provide both inputs for the trace layer (Layer 3 of the three-layer accountability stack). Error basins = drift detection signal. Confabulation gap = divergence between stated reasoning and actual computation. See `docs/design/larql-integration.md`, `docs/related-work-larql.md`. |
+| **Nate Jones** (agentic infrastructure) | AI is already fast; the bottleneck is human-speed software. Rebuild tools as agent-native primitives. Humans move "above the loop" into coordination/judgment roles. Bifurcated web: agentic layer at superhuman speed, human layer at our pace. | ZP receipts ARE agent-native trust primitives (no dashboards, no login screens). Delegation narrowing enables the bifurcation: agents execute fast within scope, humans audit the trajectory at their own speed. Sovereignty holder = Jones's "adult in the room" with cryptographically enforced constraints. |
+
 ## HW Wallet Architecture Notes
 
 **Shared infrastructure** (`sovereignty/hardware/mod.rs`): Provides `encrypt_secret`/`decrypt_secret` (ChaCha20-Poly1305 with deterministic BLAKE3 nonce), `EnrollmentMetadata`, and file I/O for `{mode}_enrollment.json` + `{mode}_genesis.encrypted`. Each device only needs to produce a 32-byte wrapping key.
