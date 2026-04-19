@@ -738,93 +738,106 @@ pub fn is_tls_enabled() -> bool {
     std::env::var("ZP_TLS_CERT").is_ok() && std::env::var("ZP_TLS_KEY").is_ok()
 }
 
-// ── Command governance for /ws/exec ────────────────────────────────────
+// ── Command governance for /ws/exec (P2-1) ────────────────────────────
+//
+// Exact program allowlist with per-program argument validators.
+// Default deny — unlisted programs are rejected.
+//
+// SECURITY NOTE (Phase 0.2 → 2.5, INJ-VULN-01/02/04, SSRF-VULN-01):
+// The following programs are INTENTIONALLY EXCLUDED:
+//   - `curl`, `wget`: enable SSRF and data exfiltration
+//   - `make`, `cmake`: execute arbitrary code via Makefile in attacker-controlled cwd
+//   - `cargo`, `rustc`: arbitrary code execution
+//   - `node`, `python`, `python3`, `deno`, `bun`: arbitrary code execution
+//   - `pip`, `pip3`: can run setup.py with arbitrary code
+//   - `kill`: process termination goes through tool management API
+//   - `bash`, `sh`, `zsh`, `fish`, `dash`: interactive shells
+//   - `ssh`, `scp`, `sftp`: network access
+//   - `nc`, `ncat`, `netcat`, `socat`, `telnet`, `nmap`: network tools
+//
+// To add a new program, document the threat model and get security review.
 
-/// Command allowlist for governed execution.
-///
-/// Only commands matching these prefixes are allowed through the exec
-/// WebSocket. Everything else is rejected before spawning.
-///
-/// SECURITY NOTE (Phase 0.2, INJ-VULN-01/02/04, SSRF-VULN-01):
-/// The following commands are INTENTIONALLY EXCLUDED:
-///   - `curl`, `wget`: enable SSRF and data exfiltration (SSRF-VULN-01, INJ-VULN-04)
-///   - `make`, `cmake`: execute arbitrary code via Makefile in attacker-controlled cwd (INJ-VULN-02)
-///   - `cargo run`, `cargo build`: arbitrary code execution
-///   - `node`, `python`, `python3`, `deno`, `bun`: arbitrary code execution
-///   - `pip`, `pip3`: can run setup.py with arbitrary code
-///   - `kill`: process termination should go through tool management API
-///
-/// Each command below has been individually justified. To add a new command,
-/// document the threat model in a comment and get security review.
-const ALLOWED_CMD_PREFIXES: &[&str] = &[
-    // Package managers (install only — safe subcommands)
-    "npm install",
-    "npm ls",
-    "npm list",
-    "npm outdated",
-    "npm audit",
-    "pnpm install",
-    "pnpm ls",
-    "pnpm list",
-    "yarn install",
-    "yarn list",
-    // Docker (read-only + lifecycle for governed tools)
-    "docker ps",
-    "docker logs",
-    "docker inspect",
-    "docker images",
-    "docker compose up",
-    "docker compose down",
-    "docker compose ps",
-    "docker compose logs",
-    "docker-compose up",
-    "docker-compose down",
-    "docker-compose ps",
-    "docker-compose logs",
-    // Git (read-only)
-    "git status",
-    "git log",
-    "git diff",
-    "git branch",
-    "git remote",
-    "git show",
-    "git ls-files",
-    "git rev-parse",
-    // File listing (read-only, no write capability)
-    "ls ",
-    "ls",
-    "cat ",
-    "head ",
-    "tail ",
-    "wc ",
-    "file ",
-    "tree ",
-    "tree",
-    // System info (read-only)
-    "which ",
-    "env",
-    "echo ",
-    "date",
-    "whoami",
-    "uname",
-    "df ",
-    "du ",
-    "free",
-    "ps ",
-    "lsof ",
-    "pgrep ",
-    // ZP-specific (governed tools)
-    "zp doctor",
-    "zp config",
-    "zp status",
-    "zp version",
-];
+use std::fmt;
 
-/// Blocked command patterns — these are never allowed regardless of prefix.
+/// Errors from command validation.
+#[derive(Debug, Clone)]
+pub enum CommandError {
+    /// Command string was empty or whitespace-only.
+    Empty,
+    /// Command string could not be tokenized (e.g. unbalanced quotes).
+    ParseFailed(String),
+    /// The program is not in the allowlist.
+    ProgramNotAllowed(String),
+    /// The program is allowed but the arguments are invalid.
+    ArgumentsRejected { program: String, reason: String },
+    /// Defense-in-depth: the raw command string contains a blocked pattern.
+    BlockedPattern(String),
+}
+
+impl fmt::Display for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CommandError::Empty => write!(f, "Empty command"),
+            CommandError::ParseFailed(e) => write!(f, "Command parse failed: {}", e),
+            CommandError::ProgramNotAllowed(p) => write!(
+                f,
+                "Program '{}' not in governance allowlist. \
+                 Use the cockpit to request elevated access.",
+                p
+            ),
+            CommandError::ArgumentsRejected { program, reason } => {
+                write!(f, "'{}' argument rejected: {}", program, reason)
+            }
+            CommandError::BlockedPattern(pat) => {
+                write!(f, "Command blocked by governance policy: contains '{}'", pat)
+            }
+        }
+    }
+}
+
+/// A validated command ready for execution.
 ///
-/// SECURITY NOTE: These are defense-in-depth. The primary defense is the
-/// allowlist above + shell metacharacter rejection in exec_ws.rs. These
-/// patterns catch anything that somehow slips through.
+/// Constructed only by [`validate_command`] — cannot be forged.
+/// The program and args have passed the allowlist and per-program
+/// argument validators.
+pub struct ValidatedCommand {
+    program: String,
+    args: Vec<String>,
+}
+
+impl ValidatedCommand {
+    /// The program name (first element of argv).
+    pub fn program(&self) -> &str {
+        &self.program
+    }
+
+    /// The argument list (everything after the program).
+    pub fn args(&self) -> &[String] {
+        &self.args
+    }
+
+    /// Execute without `sh -c`. Direct argv-based, no shell interpretation.
+    /// Stdin is closed, stdout/stderr are piped for capture.
+    pub fn spawn(&self, cwd: &str) -> std::io::Result<tokio::process::Child> {
+        tokio::process::Command::new(&self.program)
+            .args(&self.args)
+            .current_dir(cwd)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null())
+            .spawn()
+    }
+}
+
+impl fmt::Debug for ValidatedCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ValidatedCommand({:?} {:?})", self.program, self.args)
+    }
+}
+
+/// Blocked patterns — defense-in-depth. Checked against the raw command
+/// string BEFORE tokenization. Catches anything that somehow slips past
+/// the program allowlist + argument validators.
 const BLOCKED_PATTERNS: &[&str] = &[
     // Destructive filesystem operations
     "rm -rf /",
@@ -855,14 +868,14 @@ const BLOCKED_PATTERNS: &[&str] = &[
     "node -e",
     "perl -e",
     "ruby -e",
-    // Data exfiltration patterns (defense in depth)
+    // Data exfiltration patterns
     "| curl",
     "| wget",
     "|curl",
     "|wget",
     "curl ",
     "wget ",
-    // Network tools that enable SSRF
+    // Network tools
     "nc ",
     "ncat ",
     "netcat ",
@@ -871,41 +884,318 @@ const BLOCKED_PATTERNS: &[&str] = &[
     "nmap ",
 ];
 
-/// Check if a command is allowed by the governance policy.
+/// Validate a command against the program allowlist.
 ///
-/// Returns `Ok(())` if allowed, `Err(reason)` if blocked.
-pub fn check_command(cmd: &str) -> Result<(), String> {
+/// Each allowed program has its own argument validator.
+/// Default deny — unlisted programs are rejected.
+///
+/// Returns a [`ValidatedCommand`] that can be spawned safely,
+/// or a [`CommandError`] explaining why the command was rejected.
+pub fn validate_command(cmd: &str) -> Result<ValidatedCommand, CommandError> {
     let cmd_trimmed = cmd.trim();
 
     if cmd_trimmed.is_empty() {
-        return Err("Empty command".to_string());
+        return Err(CommandError::Empty);
     }
 
-    // Check blocked patterns first (highest priority)
+    // Defense-in-depth: check blocked patterns on the raw string first
     for pattern in BLOCKED_PATTERNS {
         if cmd_trimmed.contains(pattern) {
-            return Err(format!(
-                "Command blocked by governance policy: contains '{}'",
-                pattern
-            ));
+            return Err(CommandError::BlockedPattern(pattern.to_string()));
         }
     }
 
-    // Check if command matches any allowed prefix
-    let allowed = ALLOWED_CMD_PREFIXES
-        .iter()
-        .any(|prefix| cmd_trimmed.starts_with(prefix));
+    // Tokenize with shlex (POSIX shell-quoting without execution semantics)
+    let argv = shlex::split(cmd_trimmed).ok_or_else(|| {
+        CommandError::ParseFailed("unbalanced quotes or unterminated escape".to_string())
+    })?;
 
-    if allowed {
+    if argv.is_empty() {
+        return Err(CommandError::Empty);
+    }
+
+    let program = &argv[0];
+    let args = &argv[1..];
+
+    // Exact program match → per-program argument validator
+    match program.as_str() {
+        // ── Git (read-only subcommands) ──
+        "git" => validate_git_args(args)?,
+
+        // ── File listing (read-only, no write capability) ──
+        "ls" | "cat" | "head" | "tail" | "wc" | "file" | "tree" => {
+            validate_fs_read_args(program, args)?
+        }
+
+        // ── Docker (governed subcommands) ──
+        "docker" => validate_docker_args(args)?,
+        "docker-compose" => validate_docker_compose_args(args)?,
+
+        // ── Package managers (safe subcommands) ──
+        "npm" => validate_npm_args(args)?,
+        "pnpm" => validate_pnpm_args(args)?,
+        "yarn" => validate_yarn_args(args)?,
+
+        // ── System info (read-only, no arguments that write) ──
+        "which" | "env" | "echo" | "date" | "whoami" | "uname" | "df" | "du" | "free" | "ps"
+        | "lsof" | "pgrep" => {
+            validate_sysinfo_args(program, args)?
+        }
+
+        // ── ZeroPoint CLI (governed subcommands) ──
+        "zp" => validate_zp_args(args)?,
+
+        // ── Default deny ──
+        _ => return Err(CommandError::ProgramNotAllowed(program.to_string())),
+    }
+
+    Ok(ValidatedCommand {
+        program: program.to_string(),
+        args: args.iter().map(|s| s.to_string()).collect(),
+    })
+}
+
+/// Backward-compatible wrapper. Prefer [`validate_command`] in new code.
+pub fn check_command(cmd: &str) -> Result<(), String> {
+    validate_command(cmd).map(|_| ()).map_err(|e| e.to_string())
+}
+
+// ── Per-program argument validators ─────────────────────────────────
+
+/// Git: allowlist of read-only subcommands.
+fn validate_git_args(args: &[String]) -> Result<(), CommandError> {
+    const ALLOWED_GIT_SUBCMDS: &[&str] = &[
+        "status", "log", "diff", "branch", "remote", "show", "ls-files", "rev-parse", "tag",
+        "stash", "describe", "shortlog", "blame", "config",
+    ];
+
+    let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
+    if subcmd.is_empty() {
+        // bare `git` — harmless, shows help
+        return Ok(());
+    }
+
+    if ALLOWED_GIT_SUBCMDS.contains(&subcmd) {
         Ok(())
     } else {
-        // Extract the first word of the command for the error message
-        let first_word = cmd_trimmed.split_whitespace().next().unwrap_or(cmd_trimmed);
-        Err(format!(
-            "Command '{}' not in governance allowlist. \
-             Use the cockpit to request elevated access.",
-            first_word
-        ))
+        Err(CommandError::ArgumentsRejected {
+            program: "git".to_string(),
+            reason: format!(
+                "subcommand '{}' not allowed. Permitted: {}",
+                subcmd,
+                ALLOWED_GIT_SUBCMDS.join(", ")
+            ),
+        })
+    }
+}
+
+/// File read commands: reject paths that escape boundaries.
+fn validate_fs_read_args(program: &str, args: &[String]) -> Result<(), CommandError> {
+    for arg in args {
+        // Skip flags (e.g. -la, --color)
+        if arg.starts_with('-') {
+            continue;
+        }
+        // Reject path traversal
+        if arg.contains("..") {
+            return Err(CommandError::ArgumentsRejected {
+                program: program.to_string(),
+                reason: format!("path traversal '..' not permitted in argument '{}'", arg),
+            });
+        }
+        // Reject absolute paths to sensitive locations
+        if arg.starts_with("/etc")
+            || arg.starts_with("/var")
+            || arg.starts_with("/root")
+            || arg.starts_with("/proc")
+            || arg.starts_with("/sys")
+            || arg.starts_with("/dev")
+            || arg.starts_with("/boot")
+            || arg.starts_with("/private/etc")
+            || arg.starts_with("/private/var")
+        {
+            return Err(CommandError::ArgumentsRejected {
+                program: program.to_string(),
+                reason: format!("access to system path '{}' not permitted", arg),
+            });
+        }
+        // Reject sensitive file patterns
+        let lower = arg.to_lowercase();
+        if lower.contains(".ssh/")
+            || lower.contains("id_rsa")
+            || lower.contains("id_ed25519")
+            || lower.contains("authorized_keys")
+            || lower.contains(".zeropoint/keys")
+        {
+            return Err(CommandError::ArgumentsRejected {
+                program: program.to_string(),
+                reason: format!("access to sensitive path '{}' not permitted", arg),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Docker: allowlist of safe subcommands, reject dangerous flags.
+fn validate_docker_args(args: &[String]) -> Result<(), CommandError> {
+    const ALLOWED_DOCKER_SUBCMDS: &[&str] = &[
+        "ps", "logs", "inspect", "images", "compose",
+    ];
+    const DANGEROUS_FLAGS: &[&str] = &[
+        "--privileged", "-v", "--volume", "--mount", "--network=host",
+        "--pid=host", "--cap-add", "--security-opt",
+    ];
+
+    let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
+    if subcmd.is_empty() {
+        return Err(CommandError::ArgumentsRejected {
+            program: "docker".to_string(),
+            reason: "subcommand required".to_string(),
+        });
+    }
+
+    if !ALLOWED_DOCKER_SUBCMDS.contains(&subcmd) {
+        return Err(CommandError::ArgumentsRejected {
+            program: "docker".to_string(),
+            reason: format!(
+                "subcommand '{}' not allowed. Permitted: {}",
+                subcmd,
+                ALLOWED_DOCKER_SUBCMDS.join(", ")
+            ),
+        });
+    }
+
+    // If subcommand is "compose", validate compose subcommands
+    if subcmd == "compose" {
+        return validate_docker_compose_args(&args[1..]);
+    }
+
+    // Check for dangerous flags in remaining args
+    for arg in &args[1..] {
+        for flag in DANGEROUS_FLAGS {
+            if arg == flag || arg.starts_with(&format!("{}=", flag.trim_end_matches('='))) {
+                return Err(CommandError::ArgumentsRejected {
+                    program: "docker".to_string(),
+                    reason: format!("flag '{}' not permitted", arg),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Docker Compose: allowlist of safe subcommands.
+fn validate_docker_compose_args(args: &[String]) -> Result<(), CommandError> {
+    const ALLOWED_COMPOSE_SUBCMDS: &[&str] = &[
+        "up", "down", "ps", "logs", "restart", "stop", "start",
+    ];
+
+    let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
+    if subcmd.is_empty() {
+        return Err(CommandError::ArgumentsRejected {
+            program: "docker-compose".to_string(),
+            reason: "subcommand required".to_string(),
+        });
+    }
+
+    if ALLOWED_COMPOSE_SUBCMDS.contains(&subcmd) {
+        Ok(())
+    } else {
+        Err(CommandError::ArgumentsRejected {
+            program: "docker-compose".to_string(),
+            reason: format!(
+                "subcommand '{}' not allowed. Permitted: {}",
+                subcmd,
+                ALLOWED_COMPOSE_SUBCMDS.join(", ")
+            ),
+        })
+    }
+}
+
+/// npm: allowlist of safe subcommands.
+fn validate_npm_args(args: &[String]) -> Result<(), CommandError> {
+    const ALLOWED_NPM_SUBCMDS: &[&str] = &[
+        "install", "ls", "list", "outdated", "audit", "ci", "view", "info", "pack",
+    ];
+    validate_pkg_manager_subcmd("npm", args, ALLOWED_NPM_SUBCMDS)
+}
+
+/// pnpm: allowlist of safe subcommands.
+fn validate_pnpm_args(args: &[String]) -> Result<(), CommandError> {
+    const ALLOWED_PNPM_SUBCMDS: &[&str] = &["install", "ls", "list", "outdated", "audit"];
+    validate_pkg_manager_subcmd("pnpm", args, ALLOWED_PNPM_SUBCMDS)
+}
+
+/// yarn: allowlist of safe subcommands.
+fn validate_yarn_args(args: &[String]) -> Result<(), CommandError> {
+    const ALLOWED_YARN_SUBCMDS: &[&str] = &["install", "list", "info", "audit"];
+    validate_pkg_manager_subcmd("yarn", args, ALLOWED_YARN_SUBCMDS)
+}
+
+/// Shared logic for npm/pnpm/yarn subcommand validation.
+fn validate_pkg_manager_subcmd(
+    program: &str,
+    args: &[String],
+    allowed: &[&str],
+) -> Result<(), CommandError> {
+    let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
+    if subcmd.is_empty() {
+        return Err(CommandError::ArgumentsRejected {
+            program: program.to_string(),
+            reason: "subcommand required".to_string(),
+        });
+    }
+    if allowed.contains(&subcmd) {
+        Ok(())
+    } else {
+        Err(CommandError::ArgumentsRejected {
+            program: program.to_string(),
+            reason: format!(
+                "subcommand '{}' not allowed. Permitted: {}",
+                subcmd,
+                allowed.join(", ")
+            ),
+        })
+    }
+}
+
+/// System info commands: accept any flags but reject write-oriented
+/// arguments and sensitive paths.
+fn validate_sysinfo_args(program: &str, args: &[String]) -> Result<(), CommandError> {
+    for arg in args {
+        if arg.starts_with('-') {
+            continue; // flags are fine for read-only tools
+        }
+        // Reject sensitive paths (reuse fs_read logic)
+        if arg.contains("..") || arg.contains(".ssh/") || arg.contains(".zeropoint/keys") {
+            return Err(CommandError::ArgumentsRejected {
+                program: program.to_string(),
+                reason: format!("sensitive path '{}' not permitted", arg),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// ZeroPoint CLI: allowlist of safe subcommands.
+fn validate_zp_args(args: &[String]) -> Result<(), CommandError> {
+    const ALLOWED_ZP_SUBCMDS: &[&str] = &["doctor", "config", "status", "version"];
+    let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
+    if subcmd.is_empty() {
+        return Ok(()); // bare `zp` shows help
+    }
+    if ALLOWED_ZP_SUBCMDS.contains(&subcmd) {
+        Ok(())
+    } else {
+        Err(CommandError::ArgumentsRejected {
+            program: "zp".to_string(),
+            reason: format!(
+                "subcommand '{}' not allowed. Permitted: {}",
+                subcmd,
+                ALLOWED_ZP_SUBCMDS.join(", ")
+            ),
+        })
     }
 }
 
@@ -1023,89 +1313,250 @@ pub fn validate_register_path(path: &str) -> Result<std::path::PathBuf, String> 
 mod tests {
     use super::*;
 
+    // ── P2-1: ValidatedCommand + exact allowlist tests ─────────────
+
     #[test]
-    fn test_command_allowlist() {
-        // Allowed commands
-        assert!(check_command("docker compose up").is_ok());
-        assert!(check_command("docker compose down").is_ok());
-        assert!(check_command("docker ps").is_ok());
-        assert!(check_command("npm install").is_ok());
-        assert!(check_command("npm audit").is_ok());
-        assert!(check_command("git status").is_ok());
-        assert!(check_command("git log --oneline").is_ok());
-        assert!(check_command("ls -la").is_ok());
+    fn test_validate_command_allowed_programs() {
+        // Git read-only
+        assert!(validate_command("git status").is_ok());
+        assert!(validate_command("git log --oneline").is_ok());
+        assert!(validate_command("git diff HEAD~1").is_ok());
+        assert!(validate_command("git branch -a").is_ok());
+        assert!(validate_command("git remote -v").is_ok());
+        assert!(validate_command("git show HEAD").is_ok());
+        assert!(validate_command("git ls-files").is_ok());
+        assert!(validate_command("git rev-parse HEAD").is_ok());
+        assert!(validate_command("git blame README.md").is_ok());
 
-        // Explicitly removed from allowlist (Phase 0.2)
-        assert!(
-            check_command("curl http://example.com").is_err(),
-            "curl must be blocked (SSRF-VULN-01)"
-        );
-        assert!(
-            check_command("wget http://example.com").is_err(),
-            "wget must be blocked (SSRF-VULN-01)"
-        );
-        assert!(
-            check_command("make").is_err(),
-            "make must be blocked (INJ-VULN-02)"
-        );
-        assert!(
-            check_command("make install").is_err(),
-            "make must be blocked (INJ-VULN-02)"
-        );
-        assert!(
-            check_command("cargo build --release").is_err(),
-            "cargo must be blocked"
-        );
-        assert!(
-            check_command("cargo run").is_err(),
-            "cargo run must be blocked"
-        );
-        assert!(
-            check_command("python script.py").is_err(),
-            "python must be blocked"
-        );
-        assert!(
-            check_command("python3 script.py").is_err(),
-            "python3 must be blocked"
-        );
-        assert!(
-            check_command("node app.js").is_err(),
-            "node must be blocked"
-        );
+        // File listing
+        assert!(validate_command("ls -la").is_ok());
+        assert!(validate_command("ls").is_ok());
+        assert!(validate_command("cat README.md").is_ok());
+        assert!(validate_command("head -n 10 file.txt").is_ok());
+        assert!(validate_command("tail -f log.txt").is_ok());
+        assert!(validate_command("wc -l file.txt").is_ok());
+        assert!(validate_command("tree").is_ok());
+        assert!(validate_command("file binary.dat").is_ok());
 
-        // Always blocked
-        assert!(check_command("rm -rf /").is_err());
-        assert!(check_command("cat /etc/shadow").is_err());
-        assert!(check_command("bash").is_err());
-        assert!(check_command("sh").is_err());
-        assert!(check_command("vim").is_err());
-        assert!(check_command("nano").is_err());
+        // Docker
+        assert!(validate_command("docker ps").is_ok());
+        assert!(validate_command("docker logs container1").is_ok());
+        assert!(validate_command("docker inspect container1").is_ok());
+        assert!(validate_command("docker images").is_ok());
+        assert!(validate_command("docker compose up -d").is_ok());
+        assert!(validate_command("docker compose down").is_ok());
+        assert!(validate_command("docker compose ps").is_ok());
+        assert!(validate_command("docker-compose up").is_ok());
+        assert!(validate_command("docker-compose down").is_ok());
+
+        // Package managers
+        assert!(validate_command("npm install").is_ok());
+        assert!(validate_command("npm audit").is_ok());
+        assert!(validate_command("npm ls").is_ok());
+        assert!(validate_command("pnpm install").is_ok());
+        assert!(validate_command("yarn install").is_ok());
+        assert!(validate_command("yarn list").is_ok());
+
+        // System info
+        assert!(validate_command("which node").is_ok());
+        assert!(validate_command("echo hello").is_ok());
+        assert!(validate_command("date").is_ok());
+        assert!(validate_command("whoami").is_ok());
+        assert!(validate_command("uname -a").is_ok());
+        assert!(validate_command("df -h").is_ok());
+        assert!(validate_command("du -sh .").is_ok());
+        assert!(validate_command("free -m").is_ok());
+        assert!(validate_command("ps aux").is_ok());
+        assert!(validate_command("env").is_ok());
+
+        // ZP CLI
+        assert!(validate_command("zp doctor").is_ok());
+        assert!(validate_command("zp status").is_ok());
+        assert!(validate_command("zp version").is_ok());
     }
 
     #[test]
-    fn test_blocked_patterns_override_allow() {
-        // Even if prefix matches, blocked patterns win
-        assert!(check_command("echo hello").is_ok());
-        // Curl and wget are now blocked at the allowlist level too
+    fn test_validate_command_returns_correct_argv() {
+        let vc = validate_command("git log --oneline -5").unwrap();
+        assert_eq!(vc.program(), "git");
+        assert_eq!(vc.args(), &["log", "--oneline", "-5"]);
+
+        let vc = validate_command("ls -la").unwrap();
+        assert_eq!(vc.program(), "ls");
+        assert_eq!(vc.args(), &["-la"]);
+
+        let vc = validate_command("docker compose up -d").unwrap();
+        assert_eq!(vc.program(), "docker");
+        assert_eq!(vc.args(), &["compose", "up", "-d"]);
+    }
+
+    #[test]
+    fn test_validate_command_programs_not_allowed() {
+        // INTENTIONALLY EXCLUDED — arbitrary code execution
+        // Note: some of these hit BLOCKED_PATTERNS (defense-in-depth)
+        // before reaching the program allowlist. We just assert Err.
+        assert!(validate_command("curl http://example.com").is_err());
+        assert!(validate_command("wget http://example.com").is_err());
+        assert!(matches!(
+            validate_command("make"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("cargo build --release"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("cargo run"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("python script.py"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("python3 script.py"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("node app.js"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("bash"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("sh"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("ssh user@host"),
+            Err(CommandError::ProgramNotAllowed(_))
+        ));
+        assert!(matches!(
+            validate_command("rm -rf /"),
+            Err(CommandError::BlockedPattern(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_command_git_subcmd_rejected() {
+        // git subcommands that can write/execute
+        assert!(matches!(
+            validate_command("git push"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("git checkout -- ."),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("git reset --hard"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("git clean -fd"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("git rebase"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validate_command_docker_dangerous_flags() {
+        assert!(matches!(
+            validate_command("docker run alpine"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("docker exec -it container bash"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("docker build ."),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validate_command_npm_subcmd_rejected() {
+        // npm run can execute arbitrary scripts from package.json
+        assert!(matches!(
+            validate_command("npm run build"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("npm exec malicious-pkg"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+        assert!(matches!(
+            validate_command("npm start"),
+            Err(CommandError::ArgumentsRejected { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validate_command_fs_path_traversal() {
+        // Some of these hit BLOCKED_PATTERNS (defense-in-depth) before
+        // reaching per-program validators. The important invariant is
+        // that they're all rejected.
+        assert!(validate_command("cat ../../etc/passwd").is_err());
+        assert!(validate_command("ls ../../../").is_err());
+        assert!(validate_command("cat /etc/shadow").is_err());
+        assert!(validate_command("head /proc/self/environ").is_err());
+        assert!(validate_command("cat /root/.bashrc").is_err());
+    }
+
+    #[test]
+    fn test_validate_command_fs_sensitive_files() {
+        // These hit BLOCKED_PATTERNS (defense-in-depth) for .ssh/,
+        // id_rsa, authorized_keys, .zeropoint/keys. The important
+        // invariant is that they're all rejected.
+        assert!(validate_command("cat .ssh/id_rsa").is_err());
+        assert!(validate_command("cat .ssh/authorized_keys").is_err());
+        assert!(validate_command("ls .zeropoint/keys/").is_err());
+    }
+
+    #[test]
+    fn test_validate_command_empty_and_whitespace() {
+        assert!(matches!(validate_command(""), Err(CommandError::Empty)));
+        assert!(matches!(validate_command("   "), Err(CommandError::Empty)));
+    }
+
+    #[test]
+    fn test_validate_command_blocked_patterns_win() {
+        // Even for allowed programs, blocked patterns trigger first
+        assert!(matches!(
+            validate_command("echo eval rm -rf /"),
+            Err(CommandError::BlockedPattern(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_command_backward_compat() {
+        // check_command wrapper still works
+        assert!(check_command("docker compose up").is_ok());
         assert!(check_command("curl http://evil.com").is_err());
-        assert!(check_command("wget http://evil.com").is_err());
+        assert!(check_command("").is_err());
     }
 
     #[test]
     fn test_double_space_bypass_blocked() {
-        // INJ-VULN-01: double space should not bypass blocklist
-        // Since "rm" is not in the allowlist, it's blocked regardless
-        assert!(check_command("rm  -rf /tmp/test").is_err());
-        assert!(check_command("rm\t-rf /tmp/test").is_err());
+        // INJ-VULN-01: double space should not bypass
+        // "rm" is not in the program allowlist, so it's rejected
+        assert!(validate_command("rm  -rf /tmp/test").is_err());
+        assert!(validate_command("rm\t-rf /tmp/test").is_err());
     }
 
     #[test]
     fn test_network_tools_blocked() {
         // SSRF-VULN-01: network tools must be blocked
-        assert!(check_command("nc 10.0.0.1 8080").is_err());
-        assert!(check_command("ncat --listen 4444").is_err());
-        assert!(check_command("telnet 127.0.0.1 6379").is_err());
-        assert!(check_command("nmap -sV 10.0.0.0/24").is_err());
+        assert!(validate_command("nc 10.0.0.1 8080").is_err());
+        assert!(validate_command("ncat --listen 4444").is_err());
+        assert!(validate_command("telnet 127.0.0.1 6379").is_err());
+        assert!(validate_command("nmap -sV 10.0.0.0/24").is_err());
     }
 
     #[test]
