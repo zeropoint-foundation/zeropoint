@@ -1,9 +1,13 @@
 //! ZeroPoint Configure — Semantic Sed for tool configuration.
 //!
-//! Reads a tool's `.env.example`, matches each variable against a registry of
-//! `ConfigPattern` rules (built on `SanitizePattern` semantics), resolves
-//! credentials from `zp-trust`'s `CredentialVault` via `CredentialInjector`,
-//! and writes a fully populated `.env` file.
+//! Reads a tool's `.env.example` template, matches each variable against a
+//! registry of `ConfigPattern` rules (built on `SanitizePattern` semantics),
+//! resolves credentials from `zp-trust`'s `CredentialVault` via
+//! `CredentialInjector`, and stores the resolved config in the vault graph.
+//!
+//! **Zero plaintext on disk** — no `.env` files are read or written. The vault
+//! is the sole authority for tool configuration. Stale `.env` files from
+//! pre-vault installs are archived to `.env.pre-vault` on first configure.
 //!
 //! ## Design Principles
 //!
@@ -137,7 +141,7 @@ pub enum Resolution {
         pattern_name: String,
         value: String,
     },
-    /// Variable already has a value in the existing .env — keep it
+    /// Template has a non-empty inline value with no matching pattern — keep it
     Preserved { var_name: String, value: String },
     /// No pattern matched — requires human review
     Unresolved {
@@ -208,10 +212,10 @@ struct CompiledPattern {
 // The Semantic Sed Engine
 // ============================================================================
 
-/// The configuration engine — semantic sed for `.env` files.
+/// The configuration engine — semantic sed for `.env.example` templates.
 ///
 /// Matches env variable names against provider patterns, resolves values
-/// from the vault, and produces a fully configured `.env` file.
+/// from the vault, and stores the result in the vault graph.
 pub struct ConfigEngine {
     /// Compiled pattern rules
     patterns: Vec<CompiledPattern>,
@@ -434,14 +438,13 @@ impl ConfigEngine {
     ///
     /// For each line:
     /// 1. Comments and blank lines pass through unchanged.
-    /// 2. Variables with existing values in `existing_env` are preserved.
-    /// 3. Variables matching a pattern with `vault_ref` are resolved from vault.
-    /// 4. Variables matching a pattern with `default` get the default value.
-    /// 5. Unmatched variables are flagged for review.
+    /// 2. Variables matching a pattern with `vault_ref` are resolved from vault.
+    /// 3. Variables matching a pattern with `default` get the default value.
+    /// 4. Variables with non-empty template defaults are preserved as-is.
+    /// 5. Unmatched empty variables are flagged for review.
     pub fn process_env_file(
         &self,
         template_path: &Path,
-        existing_env: &HashMap<String, String>,
         vault: &CredentialVault,
         policy_check: PolicyCheckFn,
         tool_name: &str,
@@ -517,14 +520,6 @@ impl ConfigEngine {
 
                     // Skip if already resolved (dedup)
                     if resolved_vars.contains(key) {
-                        resolutions.push(Resolution::Passthrough {
-                            line: line.to_string(),
-                        });
-                        continue;
-                    }
-
-                    // Skip if existing .env already has this var active
-                    if existing_env.contains_key(key) {
                         resolutions.push(Resolution::Passthrough {
                             line: line.to_string(),
                         });
@@ -619,17 +614,6 @@ impl ConfigEngine {
                 .unwrap_or("")
                 .trim()
                 .to_string();
-
-            // Preserve existing non-empty values
-            if let Some(existing) = existing_env.get(&var_name) {
-                if !existing.is_empty() {
-                    resolutions.push(Resolution::Preserved {
-                        var_name,
-                        value: existing.clone(),
-                    });
-                    continue;
-                }
-            }
 
             // Match against patterns
             match self.match_var(&var_name) {
@@ -736,8 +720,8 @@ impl ConfigEngine {
     ///   provider's vault path. The credential is NOT copied — the ref points
     ///   to the canonical provider entry (which may be at the legacy flat path
     ///   `{provider}/{field}` or the new tiered `providers/{provider}/{field}`).
-    /// - **DefaultResolved / Preserved**: Stores the value directly as a
-    ///   `tools/{tool}/{VAR}` entry encrypted with the Tools-tier key.
+    /// - **DefaultResolved / Preserved** (template defaults): Stores the value
+    ///   directly as a `tools/{tool}/{VAR}` entry encrypted with the Tools-tier key.
     /// - **Unresolved / Missing / Passthrough**: Skipped (nothing to store).
     ///
     /// # Returns
@@ -1563,30 +1547,6 @@ pub fn builtin_patterns() -> Vec<ConfigPattern> {
 }
 
 // ============================================================================
-// Parse existing .env file into a HashMap
-// ============================================================================
-
-/// Parse an existing `.env` file into a key-value map.
-pub fn parse_env_file(path: &Path) -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    if let Ok(content) = fs::read_to_string(path) {
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-            if let Some((key, value)) = trimmed.split_once('=') {
-                let clean_value = value.split('#').next().unwrap_or("").trim();
-                if !clean_value.is_empty() {
-                    map.insert(key.trim().to_string(), clean_value.to_string());
-                }
-            }
-        }
-    }
-    map
-}
-
-// ============================================================================
 // Legacy .env cleanup
 // ============================================================================
 
@@ -1641,8 +1601,7 @@ fn strip_legacy_env(tool_path: &Path, tool_name: &str) -> bool {
 /// Run `zp configure tool` — resolve a tool's config into the vault.
 ///
 /// All resolved configuration is stored in the vault graph (zero
-/// plaintext on disk). Existing `.env` values are read for migration
-/// but no `.env` file is written.
+/// plaintext on disk). No `.env` file is read or written.
 pub fn run_tool(
     tool_path: &Path,
     tool_name: &str,
@@ -1658,30 +1617,15 @@ pub fn run_tool(
         return 1;
     }
 
-    // Parse existing .env if present
-    let existing_env_path = tool_path.join(".env");
-    let existing_env = if existing_env_path.exists() {
-        parse_env_file(&existing_env_path)
-    } else {
-        HashMap::new()
-    };
-
     let engine = ConfigEngine::new();
 
     println!("ZeroPoint Configure — Semantic Sed");
     println!("Tool: {}", tool_name);
     println!("Template: {}", template.display());
     println!("Storage: vault-backed (encrypted)");
-    if existing_env_path.exists() {
-        println!(
-            "Existing .env: {} ({} values)",
-            existing_env_path.display(),
-            existing_env.len()
-        );
-    }
     println!();
 
-    match engine.process_env_file(&template, &existing_env, vault, policy_check, tool_name) {
+    match engine.process_env_file(&template, vault, policy_check, tool_name) {
         Ok(resolutions) => {
             ConfigEngine::print_summary(&resolutions);
 
@@ -2150,7 +2094,7 @@ pub enum AutoStatus {
     Configured,
     /// Tool was skipped — missing vault credentials
     SkippedMissing { missing_refs: Vec<String> },
-    /// Tool was skipped — already has a .env and --no-overwrite was set
+    /// Tool was skipped — already vault-configured and --no-overwrite was set
     SkippedExists,
     /// Tool configuration failed
     Failed { error: String },
@@ -2303,14 +2247,12 @@ pub fn run_auto(
                 continue;
             }
 
-            // Skip if already configured and --no-overwrite
-            let env_path = tool.path.join(".env");
+            // Skip if already vault-configured and --no-overwrite
             let has_vault_config = !vault.list_prefix(&format!("tools/{}/", tool.name)).is_empty();
-            if (env_path.exists() || has_vault_config) && !overwrite {
-                let source = if has_vault_config { "vault" } else { ".env" };
+            if has_vault_config && !overwrite {
                 println!(
-                    "  SKIP  {} — already configured in {} (use --overwrite to replace)",
-                    tool.name, source
+                    "  SKIP  {} — already configured in vault (use --overwrite to replace)",
+                    tool.name
                 );
                 mvc_results.push(AutoResult {
                     name: tool.name.clone(),
@@ -2378,19 +2320,11 @@ pub fn run_auto(
                 }
             }
 
-            // MVC resolution succeeded — now process the .env file using the
-            // legacy engine for the actual file writing (MVC resolves capabilities
-            // but we still need the var-level template processing for now).
+            // MVC resolution succeeded — now process the template using the
+            // var-level engine for vault storage.
             // TODO(Phase E): Replace with native MVC env writer.
-            let existing_env = if env_path.exists() && !overwrite {
-                parse_env_file(&env_path)
-            } else {
-                HashMap::new()
-            };
-
             match engine.process_env_file(
                 &tool.template,
-                &existing_env,
                 vault,
                 policy_check,
                 &tool.name,
@@ -2497,14 +2431,12 @@ pub fn run_auto(
             // not user-actionable missing credentials — proceed normally.
         }
 
-        // Skip if already configured and --no-overwrite
-        let env_path = tool.path.join(".env");
+        // Skip if already vault-configured and --no-overwrite
         let has_vault_config = !vault.list_prefix(&format!("tools/{}/", tool.name)).is_empty();
-        if (env_path.exists() || has_vault_config) && !overwrite {
-            let source = if has_vault_config { "vault" } else { ".env" };
+        if has_vault_config && !overwrite {
             println!(
-                "  SKIP  {} — already configured in {} (use --overwrite to replace)",
-                tool.name, source
+                "  SKIP  {} — already configured in vault (use --overwrite to replace)",
+                tool.name
             );
             results.push(AutoResult {
                 name: tool.name.clone(),
@@ -2522,16 +2454,8 @@ pub fn run_auto(
         // Configure this tool
         println!("  CONFIG  {} (legacy) ...", tool.name);
 
-        // Read existing .env for migration (values get vault-encrypted)
-        let existing_env = if env_path.exists() && !overwrite {
-            parse_env_file(&env_path)
-        } else {
-            HashMap::new()
-        };
-
         match engine.process_env_file(
             &tool.template,
-            &existing_env,
             vault,
             policy_check,
             &tool.name,
@@ -2629,7 +2553,7 @@ pub fn run_auto(
         println!("Skipped (missing creds): {}", skipped_missing);
     }
     if skipped_exists > 0 {
-        println!("Skipped (existing .env): {}", skipped_exists);
+        println!("Skipped (already vault-configured): {}", skipped_exists);
     }
     if failed > 0 {
         println!("Failed: {}", failed);
@@ -3215,30 +3139,32 @@ OLLAMA_SERVER_URL=http://localhost:11434
     }
 
     #[test]
-    fn test_auto_skips_existing_env_without_overwrite() {
+    fn test_auto_skips_vault_configured_without_overwrite() {
         let root = std::env::temp_dir().join("zp-auto-test-nooverwrite");
-        let tool = root.join("has-env");
+        let tool = root.join("has-vault");
         let _ = fs::create_dir_all(&tool);
 
         fs::write(tool.join(".env.example"), "OPENAI_API_KEY=\n").unwrap();
-        fs::write(tool.join(".env"), "OPENAI_API_KEY=sk-original-key\n").unwrap();
 
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
         vault.store("openai/api_key", b"sk-new-key").unwrap();
+        // Pre-configure the tool in vault so it appears "already configured"
+        vault.store_tool_env("has-vault", "OPENAI_API_KEY", b"sk-original-key").unwrap();
 
-        // Without --overwrite: existing .env triggers skip
+        // Without --overwrite: existing vault config triggers skip
         let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, None, None);
         assert_eq!(exit_code, 0);
 
-        // Vault should have no tool entries (skipped)
-        let env = vault.resolve_tool_env("has-env").unwrap();
-        assert!(
-            env.is_empty(),
-            "vault should have no entries when tool is skipped"
+        // Vault should still have the original key (not overwritten)
+        let env = vault.resolve_tool_env("has-vault").unwrap();
+        let key_val = env.get("OPENAI_API_KEY").expect("OPENAI_API_KEY should be in vault");
+        assert_eq!(
+            std::str::from_utf8(key_val).unwrap(),
+            "sk-original-key",
+            "vault should retain original value when skipped"
         );
 
-        let _ = fs::remove_file(tool.join(".env"));
         let _ = fs::remove_file(tool.join(".env.example"));
         let _ = fs::remove_dir(&tool);
         let _ = fs::remove_dir(&root);
@@ -3252,17 +3178,18 @@ OLLAMA_SERVER_URL=http://localhost:11434
         let vault_file = root.join("vault.json");
 
         fs::write(tool.join(".env.example"), "OPENAI_API_KEY=\n").unwrap();
-        fs::write(tool.join(".env"), "OPENAI_API_KEY=sk-old-key\n").unwrap();
 
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
         vault.store("openai/api_key", b"sk-fresh-key").unwrap();
+        // Pre-configure with stale key
+        vault.store_tool_env("overwrite-me", "OPENAI_API_KEY", b"sk-old-key").unwrap();
 
-        // With --overwrite: configure despite existing .env
+        // With --overwrite: re-configure despite existing vault config
         let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, true, None, Some(&vault_file));
         assert_eq!(exit_code, 0);
 
-        // Vault should have the fresh key via ref resolution
+        // Vault should have the fresh key via ref resolution (overwritten)
         let env = vault.resolve_tool_env("overwrite-me").unwrap();
         let key_val = env.get("OPENAI_API_KEY").expect("OPENAI_API_KEY should be in vault");
         assert_eq!(
@@ -3272,7 +3199,6 @@ OLLAMA_SERVER_URL=http://localhost:11434
         );
 
         let _ = fs::remove_file(&vault_file);
-        let _ = fs::remove_file(tool.join(".env"));
         let _ = fs::remove_file(tool.join(".env.example"));
         let _ = fs::remove_dir(&tool);
         let _ = fs::remove_dir(&root);

@@ -2,13 +2,16 @@
 //!
 //! Runs after `zp configure auto` to ensure every configured tool
 //! can start with a single cockpit click. Checks:
+//!   - Vault configuration (credentials encrypted, injected at launch)
 //!   - Docker daemon availability
 //!   - Compose file validation
 //!   - Image pre-pull
 //!   - Port conflict detection
 //!   - Start script permissions
 //!   - Node dependency installation
-//!   - .env completeness
+//!
+//! Tools without vault config are auto-resolved via `zp configure tool`.
+//! No `.env` files are read or written — the vault is the sole authority.
 //!
 //! Results are persisted to `~/.zeropoint/state/preflight.json`
 //! so the cockpit knows which tools are launch-ready.
@@ -248,8 +251,8 @@ async fn run_preflight_inner(
             if name.starts_with('.') || name == "node_modules" || name == "target" {
                 continue;
             }
-            // Preflight tools that are configured: vault-backed, .env, or discoverable
-            if vault_tools.contains(&name) || path.join(".env").exists() || path.join(".env.example").exists() {
+            // Preflight tools that are configured (vault) or discoverable (template)
+            if vault_tools.contains(&name) || path.join(".env.example").exists() {
                 tool_dirs.push((name, path));
             }
         }
@@ -395,14 +398,13 @@ async fn run_preflight_inner(
         use crate::tool_state::events as te;
 
         for tool in &results.tools {
-            // Emit configured receipt for tools with .env
-            let env_path = PathBuf::from(&tool.path).join(".env");
-            if env_path.exists() {
+            // Emit configured receipt for vault-configured tools
+            if vault_tools.contains(&tool.name) {
                 let event = ToolEvent::configured(&tool.name);
                 emit_tool_receipt(
                     store,
                     &event,
-                    Some(&format!("launch_method={}", tool.launch_method)),
+                    Some(&format!("launch_method={} storage=vault", tool.launch_method)),
                 );
             }
 
@@ -413,9 +415,8 @@ async fn run_preflight_inner(
             }
 
             // ── Dependency receipts ─────────────────────────────
-            // Infer dependencies from the checks that failed or passed.
-            // Docker-based tools depend on Docker.  Tools with compose
-            // depend on whatever services compose provides.
+            // Infer dependencies from the tool's .env.example template
+            // (source of truth for what services a tool needs).
             let tool_path = PathBuf::from(&tool.path);
 
             // Docker daemon dependency
@@ -428,36 +429,34 @@ async fn run_preflight_inner(
                 emit_tool_receipt(store, &event, None);
             }
 
-            // Database dependency: infer from .env variables
-            if env_path.exists() {
-                if let Ok(env_contents) = std::fs::read_to_string(&env_path) {
-                    // Postgres
-                    if env_contents.contains("DATABASE_URL")
-                        || env_contents.contains("POSTGRES_")
-                        || env_contents.contains("PG_")
-                    {
-                        // Check if the docker_daemon check passed (implies compose deps work)
-                        let compose_ok = tool
-                            .checks
-                            .iter()
-                            .any(|c| c.name == "compose_valid" && c.status == "pass");
-                        let event = if compose_ok || docker_available {
-                            te::dep(te::DEP_SATISFIED, &tool.name, "postgres")
-                        } else {
-                            te::dep(te::DEP_NEEDED, &tool.name, "postgres")
-                        };
-                        emit_tool_receipt(store, &event, None);
-                    }
+            // Database dependency: infer from .env.example template
+            let template_path = tool_path.join(".env.example");
+            if let Ok(template_contents) = std::fs::read_to_string(&template_path) {
+                // Postgres
+                if template_contents.contains("DATABASE_URL")
+                    || template_contents.contains("POSTGRES_")
+                    || template_contents.contains("PG_")
+                {
+                    let compose_ok = tool
+                        .checks
+                        .iter()
+                        .any(|c| c.name == "compose_valid" && c.status == "pass");
+                    let event = if compose_ok || docker_available {
+                        te::dep(te::DEP_SATISFIED, &tool.name, "postgres")
+                    } else {
+                        te::dep(te::DEP_NEEDED, &tool.name, "postgres")
+                    };
+                    emit_tool_receipt(store, &event, None);
+                }
 
-                    // Redis
-                    if env_contents.contains("REDIS_URL") || env_contents.contains("REDIS_HOST") {
-                        let event = if docker_available {
-                            te::dep(te::DEP_SATISFIED, &tool.name, "redis")
-                        } else {
-                            te::dep(te::DEP_NEEDED, &tool.name, "redis")
-                        };
-                        emit_tool_receipt(store, &event, None);
-                    }
+                // Redis
+                if template_contents.contains("REDIS_URL") || template_contents.contains("REDIS_HOST") {
+                    let event = if docker_available {
+                        te::dep(te::DEP_SATISFIED, &tool.name, "redis")
+                    } else {
+                        te::dep(te::DEP_NEEDED, &tool.name, "redis")
+                    };
+                    emit_tool_receipt(store, &event, None);
                 }
             }
 
@@ -557,65 +556,48 @@ async fn preflight_tool(
             detail: "Vault-backed configuration — zero plaintext on disk".into(),
         }
     } else {
-        // No vault config — fall back to .env completeness check.
-        // Bootstrap .env from .env.example if missing (legacy tools only).
-        let env_path = path.join(".env");
-        let env_example = path.join(".env.example");
-        if !env_path.exists() && env_example.exists() && std::fs::copy(&env_example, &env_path).is_ok()
-        {
-            auto_fixed.push("Created .env from .env.example".into());
+        // No vault config — attempt vault auto-resolution.
+        events.push(OnboardEvent::terminal(
+            "    ⚠ Not vault-configured — attempting auto-resolve...",
+        ));
+
+        let configure_result = run_cmd(
+            path,
+            "zp",
+            &[
+                "configure",
+                "tool",
+                "--path",
+                &path.display().to_string(),
+                "--name",
+                name,
+            ],
+        )
+        .await;
+
+        if configure_result.success {
+            auto_fixed.push("Resolved credentials into vault".into());
             events.push(OnboardEvent::terminal(
-                "    ✓ Created .env from .env.example",
+                "    ✓ Credentials resolved into vault",
             ));
-        }
-
-        let mut check = check_env_completeness(path);
-        if check.status == "fail" {
-            // Critical env vars missing — attempt vault resolution
-            events.push(OnboardEvent::terminal(&format!(
-                "    ⚠ {}",
-                check.detail
-            )));
+            PreflightCheck {
+                name: "env_config".into(),
+                status: "pass".into(),
+                detail: "Credentials auto-resolved into vault".into(),
+            }
+        } else {
             events.push(OnboardEvent::terminal(
-                "    → Attempting vault auto-resolve...",
+                "    ✗ Vault auto-resolve failed",
             ));
-
-            let configure_result = run_cmd(
-                path,
-                "zp",
-                &[
-                    "configure",
-                    "tool",
-                    "--path",
-                    &path.display().to_string(),
-                    "--name",
-                    name,
-                ],
-            )
-            .await;
-
-            if configure_result.success {
-                // configure now stores to vault, not .env — so re-check
-                // won't see changes in .env. Mark as resolved if configure succeeded.
-                check = PreflightCheck {
-                    name: "env_config".into(),
-                    status: "pass".into(),
-                    detail: "Credentials auto-resolved into vault".into(),
-                };
-                auto_fixed.push("Resolved credentials from vault".into());
-                events.push(OnboardEvent::terminal(
-                    "    ✓ Credentials resolved from vault",
-                ));
-            } else {
-                events.push(OnboardEvent::terminal(
-                    "    ⚠ Vault auto-resolve unavailable",
-                ));
-                events.push(OnboardEvent::terminal(
-                    "    → Store missing credentials: zp configure vault-add --provider <name> --field api_key"
-                ));
+            events.push(OnboardEvent::terminal(
+                "    → Store credentials: zp configure vault-add --provider <name> --field api_key"
+            ));
+            PreflightCheck {
+                name: "env_config".into(),
+                status: "fail".into(),
+                detail: "No vault configuration — run `zp configure tool` or `zp configure vault-add`".into(),
             }
         }
-        check
     };
     checks.push(env_check.clone());
 
@@ -1071,168 +1053,6 @@ fn detect_port(tool_path: &Path) -> Option<u16> {
         }
     }
     None
-}
-
-/// Env var names that must have real values for the tool to function.
-/// Everything else is optional — a placeholder there is a warning, not a blocker.
-const CRITICAL_ENV_VARS: &[&str] = &[
-    // Database
-    "DATABASE_URL",
-    "DB_URL",
-    "POSTGRES_PASSWORD",
-    "PG_PASSWORD",
-    // LLM / AI provider
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "LLM_API_KEY",
-    "OPENROUTER_API_KEY",
-    "TOGETHER_API_KEY",
-    // App identity
-    "PORT",
-    "APP_PORT",
-    "SERVER_PORT",
-    "API_PORT",
-    "SECRET_KEY",
-    "JWT_SECRET",
-    "SESSION_SECRET",
-    // Auth (the tool's own gateway)
-    "GATEWAY_AUTH_TOKEN",
-    "AUTH_TOKEN",
-    "API_TOKEN",
-];
-
-fn check_env_completeness(path: &Path) -> PreflightCheck {
-    let env_path = path.join(".env");
-    if !env_path.exists() {
-        return PreflightCheck {
-            name: "env_file".into(),
-            status: "fail".into(),
-            detail: "No .env file — run zp configure auto".into(),
-        };
-    }
-
-    let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
-
-    // Collect ZP sidecar overrides — these take priority over .env values.
-    // If .env.zp provides a real value for a variable, it's not "missing".
-    let mut zp_overrides = std::collections::HashSet::new();
-    if let Ok(zp_contents) = std::fs::read_to_string(path.join(".env.zp")) {
-        for line in zp_contents.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') {
-                continue;
-            }
-            if let Some((key, val)) = trimmed.split_once('=') {
-                let v = val.trim();
-                if !v.is_empty() {
-                    zp_overrides.insert(key.trim().to_string());
-                }
-            }
-        }
-    }
-
-    let mut total = 0;
-    let mut placeholders = 0;
-    let mut critical_missing: Vec<String> = Vec::new();
-
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') {
-            continue;
-        }
-        total += 1;
-        if let Some((key, val)) = trimmed.split_once('=') {
-            let key = key.trim();
-
-            // Skip if .env.zp provides a real value for this variable
-            if zp_overrides.contains(key) {
-                continue;
-            }
-
-            // Strip inline comments before checking the value
-            let v = val
-                .split('#')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .trim_matches('"')
-                .trim_matches('\'');
-            let is_placeholder = v.is_empty()
-                || v.contains("your_")
-                || v.contains("changeme")
-                || v.contains("PLACEHOLDER")
-                || val.contains("# MISSING");
-
-            if is_placeholder {
-                placeholders += 1;
-                // Only flag it as a blocker if it's a critical variable
-                if CRITICAL_ENV_VARS.contains(&key) {
-                    critical_missing.push(key.to_string());
-                }
-            }
-        }
-    }
-
-    if !critical_missing.is_empty() {
-        // Build actionable guidance per missing var type
-        let mut guidance = Vec::new();
-        let has_db = critical_missing.iter().any(|v| {
-            v.contains("DATABASE") || v.contains("DB_") || v.contains("PG_") || v.contains("POSTGRES")
-        });
-        let has_llm = critical_missing.iter().any(|v| {
-            v.contains("API_KEY") || v.contains("LLM_") || v.contains("OPENAI") || v.contains("ANTHROPIC")
-        });
-        let has_auth = critical_missing.iter().any(|v| {
-            v.contains("SECRET") || v.contains("TOKEN") || v.contains("JWT") || v.contains("AUTH")
-        });
-
-        if has_db {
-            guidance.push("Database: set DATABASE_URL to a valid connection string (e.g. postgres://user:pass@localhost/dbname) or run `zp configure auto` to detect it");
-        }
-        if has_llm {
-            guidance.push("LLM provider: add your API key to .env or store it with `zp keys vault-store`");
-        }
-        if has_auth {
-            guidance.push("Auth/session: generate secrets with `openssl rand -hex 32` and add to .env");
-        }
-
-        let detail = if guidance.is_empty() {
-            format!(
-                "Critical env vars missing: {} ({} optional placeholders remaining)",
-                critical_missing.join(", "),
-                placeholders - critical_missing.len()
-            )
-        } else {
-            format!(
-                "Critical env vars missing: {}. Remediation: {}",
-                critical_missing.join(", "),
-                guidance.join("; ")
-            )
-        };
-
-        PreflightCheck {
-            name: "env_file".into(),
-            status: "fail".into(),
-            detail,
-        }
-    } else if placeholders > 0 {
-        // Non-critical placeholders — tool can probably run fine
-        PreflightCheck {
-            name: "env_file".into(),
-            status: "pass".into(),
-            detail: format!(
-                "{} env vars configured ({} optional placeholders — tool should still work)",
-                total - placeholders,
-                placeholders
-            ),
-        }
-    } else {
-        PreflightCheck {
-            name: "env_file".into(),
-            status: "pass".into(),
-            detail: format!("{} env vars configured", total),
-        }
-    }
 }
 
 /// Extract host port mappings from docker-compose.yml.
