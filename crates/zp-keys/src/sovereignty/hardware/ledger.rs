@@ -81,9 +81,9 @@ fn detect_ledger_basic() -> ProviderCapability {
         mode: SovereigntyMode::Ledger,
         available: found,
         description: if found {
-            "Ledger device detected".into()
+            "Ledger detected — full support coming in v0.3".into()
         } else {
-            "No Ledger device detected — connect your Ledger to use this mode".into()
+            "Ledger support coming in v0.3".into()
         },
         requires_enrollment: true,
         detail: None,

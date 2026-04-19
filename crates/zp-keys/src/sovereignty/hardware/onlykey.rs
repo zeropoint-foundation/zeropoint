@@ -81,9 +81,9 @@ fn detect_onlykey_basic() -> ProviderCapability {
         mode: SovereigntyMode::OnlyKey,
         available: found,
         description: if found {
-            "OnlyKey device detected".into()
+            "OnlyKey detected — full support coming in v0.3".into()
         } else {
-            "No OnlyKey device detected — connect your OnlyKey to use this mode".into()
+            "OnlyKey support coming in v0.3".into()
         },
         requires_enrollment: true,
         detail: None,
