@@ -124,9 +124,9 @@ impl SovereigntyProvider for TouchIdProvider {
         // The secret was loaded from the old provider by the caller.
         self.save_secret(secret)?;
         let tier = {
-            #[cfg(feature = "biometric-keychain")]
+            #[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
             { if is_os_enforced() { "Tier 2: OS-enforced via kSecAccessControlBiometryCurrentSet" } else { "Tier 1: application-layer biometric" } }
-            #[cfg(not(feature = "biometric-keychain"))]
+            #[cfg(not(all(target_os = "macos", feature = "biometric-keychain")))]
             { "Tier 1: application-layer biometric" }
         };
         Ok(Some(super::EnrollmentResult {
@@ -193,9 +193,9 @@ fn collect_biometric_evidence() -> Option<BiometricEvidence> {
     // feature check alone isn't enough — the entitlement might be missing
     // at runtime (errSecMissingEntitlement / -34018).
     let os_enforced = {
-        #[cfg(feature = "biometric-keychain")]
+        #[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
         { is_os_enforced() }
-        #[cfg(not(feature = "biometric-keychain"))]
+        #[cfg(not(all(target_os = "macos", feature = "biometric-keychain")))]
         { false }
     };
 
