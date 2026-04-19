@@ -121,106 +121,28 @@ async fn execute_and_stream(
     cwd: &str,
     app_state: &AppState,
 ) -> Option<String> {
-    // Expand leading `~` or `~/` — Rust's Command::current_dir() takes paths
-    // literally and does not perform shell-style tilde expansion.
-    let resolved_cwd = if cwd.starts_with("~/") || cwd == "~" {
-        match dirs::home_dir() {
-            Some(home) => home
-                .join(cwd.strip_prefix("~/").unwrap_or(""))
-                .to_string_lossy()
-                .to_string(),
-            None => cwd.to_string(),
-        }
-    } else {
-        cwd.to_string()
-    };
-
-    // ── CWD governance (INJ-VULN-02, INJ-VULN-03) ──────────────────────
-    // Canonicalize the path and reject anything outside the operator's
-    // home directory. This prevents path traversal and execution in
-    // attacker-controlled directories.
-    let resolved_path = std::path::Path::new(&resolved_cwd);
-
-    // Reject path traversal sequences BEFORE canonicalization.
-    if cwd.contains("..") {
-        let msg = "🛡 Path traversal (..) not permitted in cwd";
-        tracing::warn!("exec_ws: BLOCKED cwd '{}' — path traversal", cwd);
-        let _ = tx
-            .send(WsMessage::Text(
-                serde_json::json!({ "type": "error", "message": msg }).to_string(),
-            ))
-            .await;
-        tool_chain::emit_tool_receipt(
-            &app_state.0.audit_store,
-            "tool:cmd:blocked",
-            Some(&format!("reason=cwd_traversal, cwd={}", cwd)),
-        );
-        return None;
-    }
-
-    // Canonicalize and validate the path is within allowed boundaries.
-    let canonical_cwd = match resolved_path.canonicalize() {
-        Ok(p) => p,
-        Err(_) if !resolved_path.exists() => {
-            let msg = format!("🛡 Working directory does not exist: {}", resolved_cwd);
-            tracing::warn!("exec_ws: BLOCKED — cwd does not exist: {}", resolved_cwd);
-            let _ = tx
-                .send(WsMessage::Text(
-                    serde_json::json!({ "type": "error", "message": msg }).to_string(),
-                ))
-                .await;
-            return None;
-        }
-        Err(e) => {
-            let msg = format!("🛡 Cannot resolve working directory: {}", e);
-            let _ = tx
-                .send(WsMessage::Text(
-                    serde_json::json!({ "type": "error", "message": msg }).to_string(),
-                ))
-                .await;
-            return None;
-        }
-    };
-
-    // The cwd must be under the operator's home directory.
-    // System paths (/etc, /var, /usr, /tmp, /root, etc.) are never permitted.
+    // ── CWD governance (P2-2, INJ-VULN-02/03) ──────────────────────────
+    // Use the centralized safe_path() to canonicalize, resolve symlinks,
+    // reject traversal, and verify the cwd falls under $HOME.
     let home_dir = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/nonexistent"));
-    let canonical_str = canonical_cwd.to_string_lossy();
-    let is_under_home = canonical_cwd.starts_with(&home_dir);
-    let is_system_path = canonical_str.starts_with("/etc")
-        || canonical_str.starts_with("/var")
-        || canonical_str.starts_with("/usr")
-        || canonical_str.starts_with("/bin")
-        || canonical_str.starts_with("/sbin")
-        || canonical_str.starts_with("/root")
-        || canonical_str.starts_with("/boot")
-        || canonical_str.starts_with("/dev")
-        || canonical_str.starts_with("/proc")
-        || canonical_str.starts_with("/sys")
-        || canonical_str.starts_with("/tmp")
-        || canonical_str.starts_with("/private/etc")
-        || canonical_str.starts_with("/private/var")
-        || canonical_str.starts_with("/private/tmp");
-
-    if is_system_path || (!is_under_home && canonical_str != ".") {
-        let msg = format!(
-            "🛡 Working directory '{}' is outside the permitted area. \
-             Commands may only execute within your home directory.",
-            canonical_str
-        );
-        tracing::warn!("exec_ws: BLOCKED cwd '{}' — outside home", canonical_str);
-        let _ = tx
-            .send(WsMessage::Text(
-                serde_json::json!({ "type": "error", "message": msg }).to_string(),
-            ))
-            .await;
-        tool_chain::emit_tool_receipt(
-            &app_state.0.audit_store,
-            "tool:cmd:blocked",
-            Some(&format!("reason=cwd_outside_home, cwd={}", canonical_str)),
-        );
-        return None;
-    }
+    let resolved_cwd = match auth::safe_path(cwd, &home_dir) {
+        Ok(canonical) => canonical.to_string_lossy().to_string(),
+        Err(e) => {
+            let msg = format!("🛡 {}", e);
+            tracing::warn!("exec_ws: BLOCKED cwd '{}' — {}", cwd, e);
+            let _ = tx
+                .send(WsMessage::Text(
+                    serde_json::json!({ "type": "error", "message": msg }).to_string(),
+                ))
+                .await;
+            tool_chain::emit_tool_receipt(
+                &app_state.0.audit_store,
+                "tool:cmd:blocked",
+                Some(&format!("reason=cwd_rejected, cwd={}, error={}", cwd, e)),
+            );
+            return None;
+        }
+    };
 
     // ── EXEC-01 fix: NO SHELL — metacharacter rejection (defense-in-depth) ──
     // Reject shell metacharacters outright before any parsing. Even

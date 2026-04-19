@@ -3516,6 +3516,13 @@ async fn tools_log_handler(
         None => return Json(serde_json::json!({ "error": "Missing 'name' parameter" })),
     };
 
+    // P2-2: Validate the name before using it to construct a file path.
+    // Without this, an attacker could use traversal sequences like
+    // "../../etc/passwd" to read arbitrary files.
+    if !is_safe_tool_name(name) {
+        return Json(serde_json::json!({ "error": "Invalid tool name" }));
+    }
+
     let log_path = dirs::home_dir()
         .unwrap_or_default()
         .join(".zeropoint")
@@ -3588,6 +3595,14 @@ async fn tools_single_preflight_handler(
     State(state): State<AppState>,
     axum::extract::Path(tool_name): axum::extract::Path<String>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // P2-2: Validate tool_name before constructing a directory path.
+    if !is_safe_tool_name(&tool_name) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Invalid tool name" })),
+        );
+    }
+
     let scan_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
