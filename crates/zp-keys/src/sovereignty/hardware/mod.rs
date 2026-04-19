@@ -406,3 +406,630 @@ pub fn rewrap_secret(
 
     Ok(new_blob)
 }
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Helper: generate a deterministic wrapping key for testing ────
+    fn test_wrapping_key(seed: u8) -> [u8; 32] {
+        let mut key = [0u8; 32];
+        for (i, b) in key.iter_mut().enumerate() {
+            *b = seed.wrapping_add(i as u8);
+        }
+        key
+    }
+
+    fn test_secret() -> [u8; 32] {
+        let mut s = [0u8; 32];
+        for (i, b) in s.iter_mut().enumerate() {
+            *b = 0xAA ^ (i as u8);
+        }
+        s
+    }
+
+    // ── Encrypt / Decrypt roundtrip ─────────────────────────────────
+
+    #[test]
+    fn encrypt_decrypt_roundtrip() {
+        let secret = test_secret();
+        let key = test_wrapping_key(0x01);
+
+        let blob = encrypt_secret(&secret, &key).unwrap();
+        let recovered = decrypt_secret(&blob, &key).unwrap();
+
+        assert_eq!(secret, recovered);
+    }
+
+    #[test]
+    fn encrypt_produces_versioned_blob() {
+        let secret = test_secret();
+        let key = test_wrapping_key(0x02);
+
+        let blob = encrypt_secret(&secret, &key).unwrap();
+
+        // First byte is version prefix
+        assert_eq!(blob[0], CIPHERTEXT_VERSION);
+        // ChaCha20-Poly1305: 32 plaintext → 32 ciphertext + 16 tag = 48
+        // Plus 1 version byte = 49
+        assert_eq!(blob.len(), 49);
+    }
+
+    #[test]
+    fn decrypt_rejects_wrong_wrapping_key() {
+        let secret = test_secret();
+        let key_a = test_wrapping_key(0x01);
+        let key_b = test_wrapping_key(0x02);
+
+        let blob = encrypt_secret(&secret, &key_a).unwrap();
+        let result = decrypt_secret(&blob, &key_b);
+
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("wrong device") || err_msg.contains("Decryption failed"),
+            "Unexpected error: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn decrypt_rejects_empty_blob() {
+        let key = test_wrapping_key(0x01);
+        let result = decrypt_secret(&[], &key);
+        assert!(result.is_err());
+        assert!(
+            format!("{}", result.unwrap_err()).contains("empty"),
+            "Expected 'empty' in error"
+        );
+    }
+
+    #[test]
+    fn decrypt_rejects_unknown_version() {
+        let key = test_wrapping_key(0x01);
+        // Version 0xFF, followed by enough bytes to not be legacy (> 48 total)
+        let mut bad_blob = vec![0xFF];
+        bad_blob.extend_from_slice(&[0u8; 60]);
+
+        let result = decrypt_secret(&bad_blob, &key);
+        assert!(result.is_err());
+        assert!(
+            format!("{}", result.unwrap_err()).contains("Unknown ciphertext version"),
+            "Expected version error"
+        );
+    }
+
+    #[test]
+    fn decrypt_handles_legacy_48_byte_blob() {
+        // Legacy (pre-version) format: raw 48-byte ChaCha20-Poly1305 output
+        // with no version prefix. We construct one manually.
+        let secret = test_secret();
+        let key = test_wrapping_key(0x03);
+
+        // Build a legacy blob by encrypting and stripping the version byte
+        let versioned = encrypt_secret(&secret, &key).unwrap();
+        let legacy = &versioned[1..]; // strip version byte
+        assert_eq!(legacy.len(), 48);
+
+        // decrypt_secret should detect legacy format (48 bytes, first byte != known version)
+        let recovered = decrypt_secret(legacy, &key).unwrap();
+        assert_eq!(secret, recovered);
+    }
+
+    // ── Deterministic nonce ─────────────────────────────────────────
+
+    #[test]
+    fn encrypt_is_deterministic_for_same_key() {
+        let secret = test_secret();
+        let key = test_wrapping_key(0x04);
+
+        let blob_a = encrypt_secret(&secret, &key).unwrap();
+        let blob_b = encrypt_secret(&secret, &key).unwrap();
+
+        // Same key + same secret → same ciphertext (deterministic nonce)
+        assert_eq!(blob_a, blob_b);
+    }
+
+    #[test]
+    fn different_keys_produce_different_ciphertexts() {
+        let secret = test_secret();
+        let key_a = test_wrapping_key(0x05);
+        let key_b = test_wrapping_key(0x06);
+
+        let blob_a = encrypt_secret(&secret, &key_a).unwrap();
+        let blob_b = encrypt_secret(&secret, &key_b).unwrap();
+
+        assert_ne!(blob_a, blob_b);
+    }
+
+    // ── DerivationSalt ──────────────────────────────────────────────
+
+    #[test]
+    fn derivation_salt_generate_produces_32_bytes() {
+        let salt = DerivationSalt::generate();
+        assert_eq!(salt.salt.len(), 32);
+        assert!(salt.epoch.is_none());
+    }
+
+    #[test]
+    fn derivation_salt_with_epoch() {
+        let salt = DerivationSalt::with_epoch(42);
+        assert_eq!(salt.epoch, Some(42));
+    }
+
+    #[test]
+    fn derivation_salt_apply_changes_key() {
+        let key = test_wrapping_key(0x07);
+        let salt = DerivationSalt::generate();
+
+        let salted = salt.apply(&key);
+        assert_ne!(key, salted);
+    }
+
+    #[test]
+    fn derivation_salt_apply_is_deterministic() {
+        let key = test_wrapping_key(0x08);
+        let salt = DerivationSalt {
+            salt: vec![0xBB; 32],
+            created_at: "2026-04-18T00:00:00Z".into(),
+            epoch: None,
+            label: None,
+        };
+
+        let a = salt.apply(&key);
+        let b = salt.apply(&key);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn different_salts_produce_different_keys() {
+        let key = test_wrapping_key(0x09);
+
+        let salt_a = DerivationSalt {
+            salt: vec![0xAA; 32],
+            created_at: "2026-04-18T00:00:00Z".into(),
+            epoch: None,
+            label: None,
+        };
+        let salt_b = DerivationSalt {
+            salt: vec![0xBB; 32],
+            created_at: "2026-04-18T00:00:00Z".into(),
+            epoch: None,
+            label: None,
+        };
+
+        assert_ne!(salt_a.apply(&key), salt_b.apply(&key));
+    }
+
+    #[test]
+    fn salted_encrypt_decrypt_roundtrip() {
+        let secret = test_secret();
+        let base_key = test_wrapping_key(0x0A);
+        let salt = DerivationSalt::generate();
+
+        let salted_key = salt.apply(&base_key);
+        let blob = encrypt_secret(&secret, &salted_key).unwrap();
+        let recovered = decrypt_secret(&blob, &salted_key).unwrap();
+
+        assert_eq!(secret, recovered);
+    }
+
+    #[test]
+    fn salted_key_cannot_decrypt_unsalted_blob() {
+        let secret = test_secret();
+        let base_key = test_wrapping_key(0x0B);
+        let salt = DerivationSalt::generate();
+        let salted_key = salt.apply(&base_key);
+
+        // Encrypt with base key
+        let blob = encrypt_secret(&secret, &base_key).unwrap();
+        // Try to decrypt with salted key — should fail
+        assert!(decrypt_secret(&blob, &salted_key).is_err());
+    }
+
+    // ── EnrollmentMetadata serialization ─────────────────────────────
+
+    #[test]
+    fn enrollment_metadata_serde_roundtrip() {
+        let meta = EnrollmentMetadata {
+            version: "2".into(),
+            mode: "trezor".into(),
+            device_id: "My Trezor".into(),
+            device_description: "Trezor Model T".into(),
+            enrolled_at: "2026-04-18T12:00:00Z".into(),
+            provider_data: serde_json::json!({
+                "path": "m/10016'/0",
+                "key_name": "ZeroPoint Genesis",
+            }),
+            attestation: None,
+            share_index: None,
+            quorum_id: None,
+            threshold: None,
+        };
+
+        let json = serde_json::to_string_pretty(&meta).unwrap();
+        let parsed: EnrollmentMetadata = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.version, "2");
+        assert_eq!(parsed.mode, "trezor");
+        assert_eq!(parsed.device_id, "My Trezor");
+        assert!(parsed.attestation.is_none());
+        assert!(parsed.share_index.is_none());
+    }
+
+    #[test]
+    fn enrollment_metadata_with_quorum_fields() {
+        let meta = EnrollmentMetadata {
+            version: "2".into(),
+            mode: "trezor".into(),
+            device_id: "Device A".into(),
+            device_description: "Trezor for quorum".into(),
+            enrolled_at: "2026-04-18T12:00:00Z".into(),
+            provider_data: serde_json::Value::Null,
+            attestation: Some("deadbeef".into()),
+            share_index: Some(0),
+            quorum_id: Some("quorum-123".into()),
+            threshold: Some(QuorumThreshold {
+                required: 2,
+                total: 3,
+            }),
+        };
+
+        let json = serde_json::to_string_pretty(&meta).unwrap();
+        let parsed: EnrollmentMetadata = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.share_index, Some(0));
+        assert_eq!(parsed.quorum_id.as_deref(), Some("quorum-123"));
+        let t = parsed.threshold.unwrap();
+        assert_eq!(t.required, 2);
+        assert_eq!(t.total, 3);
+    }
+
+    #[test]
+    fn enrollment_metadata_missing_optional_fields_deserializes() {
+        // Minimal JSON — simulates a v1 enrollment file without quorum fields
+        let json = r#"{
+            "version": "1",
+            "mode": "ledger",
+            "device_id": "Ledger Nano",
+            "device_description": "Ledger Nano X",
+            "enrolled_at": "2026-01-01T00:00:00Z",
+            "provider_data": null
+        }"#;
+
+        let parsed: EnrollmentMetadata = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.version, "1");
+        assert!(parsed.attestation.is_none());
+        assert!(parsed.share_index.is_none());
+        assert!(parsed.quorum_id.is_none());
+        assert!(parsed.threshold.is_none());
+    }
+
+    // ── Rewrap ──────────────────────────────────────────────────────
+
+    #[test]
+    fn rewrap_secret_changes_ciphertext() {
+        let secret = test_secret();
+        let old_key = test_wrapping_key(0x0C);
+        let new_key = test_wrapping_key(0x0D);
+
+        // Simulate: save encrypted blob with old key
+        let old_blob = encrypt_secret(&secret, &old_key).unwrap();
+
+        // Create temp dir to simulate sovereignty_dir
+        let tmp = tempfile::tempdir().unwrap();
+        let sov_dir = tmp.path().join(".zeropoint").join("sovereignty");
+        std::fs::create_dir_all(&sov_dir).unwrap();
+
+        std::fs::write(sov_dir.join("test_genesis.encrypted"), &old_blob).unwrap();
+
+        // Verify old key decrypts
+        let loaded = std::fs::read(sov_dir.join("test_genesis.encrypted")).unwrap();
+        let recovered = decrypt_secret(&loaded, &old_key).unwrap();
+        assert_eq!(secret, recovered);
+
+        // Verify new key does NOT decrypt old blob
+        assert!(decrypt_secret(&loaded, &new_key).is_err());
+
+        // Manually re-encrypt (rewrap_secret uses sovereignty_dir() which
+        // points to real HOME — test the core logic instead)
+        let new_blob = encrypt_secret(&recovered, &new_key).unwrap();
+        assert_ne!(old_blob, new_blob);
+
+        // Verify new key decrypts new blob
+        let final_secret = decrypt_secret(&new_blob, &new_key).unwrap();
+        assert_eq!(secret, final_secret);
+    }
+
+    // ── File I/O ────────────────────────────────────────────────────
+
+    #[test]
+    fn load_encrypted_secret_returns_not_enrolled_when_missing() {
+        // This test uses the real sovereignty_dir() pointed at HOME,
+        // but checks for a mode name that should never exist
+        let result = load_encrypted_secret("__nonexistent_test_mode__");
+        assert!(result.is_err());
+        assert!(
+            format!("{}", result.unwrap_err()).contains("No encrypted secret found"),
+            "Expected 'No encrypted secret found' error"
+        );
+    }
+
+    #[test]
+    fn load_enrollment_returns_not_enrolled_when_missing() {
+        let result = load_enrollment("__nonexistent_test_mode__");
+        assert!(result.is_err());
+        assert!(
+            format!("{}", result.unwrap_err()).contains("No enrollment data found"),
+            "Expected 'No enrollment data found' error"
+        );
+    }
+
+    // ── Provider status and ceremony readiness ──────────────────────
+
+    #[test]
+    fn detection_only_providers_are_not_ceremony_ready() {
+        use super::super::SovereigntyMode;
+
+        let detection_only = [
+            SovereigntyMode::YubiKey,
+            SovereigntyMode::Ledger,
+            SovereigntyMode::OnlyKey,
+        ];
+
+        for mode in &detection_only {
+            assert_eq!(
+                mode.implementation_status(),
+                super::super::ProviderStatus::DetectionOnly,
+                "{:?} should be DetectionOnly",
+                mode
+            );
+            assert!(
+                !mode.is_ceremony_ready(),
+                "{:?} should NOT be ceremony-ready",
+                mode
+            );
+        }
+    }
+
+    #[test]
+    fn trezor_ceremony_readiness_depends_on_feature() {
+        use super::super::SovereigntyMode;
+
+        let status = SovereigntyMode::Trezor.implementation_status();
+        if cfg!(feature = "hw-trezor") {
+            assert_eq!(status, super::super::ProviderStatus::Ready);
+            assert!(SovereigntyMode::Trezor.is_ceremony_ready());
+        } else {
+            assert_eq!(status, super::super::ProviderStatus::DetectionOnly);
+            assert!(!SovereigntyMode::Trezor.is_ceremony_ready());
+        }
+    }
+
+    #[test]
+    fn all_hw_providers_require_external_device() {
+        use super::super::SovereigntyMode;
+
+        assert!(SovereigntyMode::YubiKey.requires_external_device());
+        assert!(SovereigntyMode::Ledger.requires_external_device());
+        assert!(SovereigntyMode::Trezor.requires_external_device());
+        assert!(SovereigntyMode::OnlyKey.requires_external_device());
+    }
+
+    #[test]
+    fn hw_providers_are_hardware_category() {
+        use super::super::{SovereigntyCategory, SovereigntyMode};
+
+        assert_eq!(SovereigntyMode::YubiKey.category(), SovereigntyCategory::HardwareWallet);
+        assert_eq!(SovereigntyMode::Ledger.category(), SovereigntyCategory::HardwareWallet);
+        assert_eq!(SovereigntyMode::Trezor.category(), SovereigntyCategory::HardwareWallet);
+        assert_eq!(SovereigntyMode::OnlyKey.category(), SovereigntyCategory::HardwareWallet);
+    }
+
+    // ── Stub providers return correct errors ────────────────────────
+
+    #[test]
+    fn ledger_stub_returns_not_implemented() {
+        use super::super::SovereigntyProvider;
+
+        let provider = ledger::LedgerProvider;
+        assert!(provider.save_secret(&[0u8; 32]).is_err());
+        assert!(provider.load_secret().is_err());
+        assert!(provider.verify_presence().is_err());
+        assert!(provider.enroll().is_err());
+
+        let err = format!("{}", provider.save_secret(&[0u8; 32]).unwrap_err());
+        assert!(err.contains("v0.3"), "Expected v0.3 mention: {}", err);
+    }
+
+    #[test]
+    fn onlykey_stub_returns_not_implemented() {
+        use super::super::SovereigntyProvider;
+
+        let provider = onlykey::OnlyKeyProvider;
+        assert!(provider.save_secret(&[0u8; 32]).is_err());
+        assert!(provider.load_secret().is_err());
+        assert!(provider.verify_presence().is_err());
+        assert!(provider.enroll().is_err());
+    }
+
+    #[test]
+    fn yubikey_stub_returns_feature_required() {
+        use super::super::SovereigntyProvider;
+
+        let provider = yubikey::YubiKeyProvider;
+        let err = format!("{}", provider.save_secret(&[0u8; 32]).unwrap_err());
+        // Should mention the feature flag or v0.3
+        assert!(
+            err.contains("hw-yubikey") || err.contains("v0.3"),
+            "Expected feature/version mention: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn trezor_without_feature_returns_not_implemented() {
+        use super::super::SovereigntyProvider;
+
+        if cfg!(feature = "hw-trezor") {
+            // Can't test the stub path when feature is enabled
+            return;
+        }
+
+        let provider = trezor::TrezorProvider;
+        assert!(provider.verify_presence().is_err());
+        assert!(provider.enroll().is_err());
+
+        let err = format!("{}", provider.verify_presence().unwrap_err());
+        assert!(
+            err.contains("hw-trezor"),
+            "Expected feature flag mention: {}",
+            err
+        );
+    }
+
+    // ── Trezor capabilities ─────────────────────────────────────────
+
+    #[test]
+    fn trezor_has_rewrap_capability() {
+        use super::super::{ProviderCapabilities, SovereigntyProvider};
+
+        let provider = trezor::TrezorProvider;
+        let caps = provider.capabilities();
+        assert!(caps.has(ProviderCapabilities::CAN_REWRAP));
+    }
+
+    // ── Detection description consistency ────────────────────────────
+
+    #[test]
+    fn detection_only_descriptions_do_not_say_connect_device() {
+        use super::super::SovereigntyProvider;
+
+        // These providers are stubs — their descriptions should NOT tell
+        // users to connect a device, because that won't help.
+        let stubs: Vec<Box<dyn SovereigntyProvider>> = vec![
+            Box::new(ledger::LedgerProvider),
+            Box::new(onlykey::OnlyKeyProvider),
+        ];
+
+        for provider in &stubs {
+            let cap = provider.detect();
+            if cap.implementation_status == super::super::ProviderStatus::DetectionOnly && !cap.available {
+                assert!(
+                    !cap.description.to_lowercase().contains("connect your"),
+                    "{:?} says 'connect your' but is DetectionOnly: {:?}",
+                    provider.mode(),
+                    cap.description
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn yubikey_detection_only_description_is_honest() {
+        use super::super::SovereigntyProvider;
+
+        if cfg!(feature = "hw-yubikey") {
+            return; // Feature enabled — not a stub
+        }
+
+        let cap = yubikey::YubiKeyProvider.detect();
+        if !cap.available {
+            // Should mention feature flag or version, not "insert your YubiKey"
+            assert!(
+                !cap.description.contains("insert your"),
+                "YubiKey DetectionOnly description should not say 'insert': {}",
+                cap.description
+            );
+        }
+    }
+
+    #[test]
+    fn trezor_detection_only_description_is_honest() {
+        use super::super::SovereigntyProvider;
+
+        if cfg!(feature = "hw-trezor") {
+            return; // Feature enabled — full support
+        }
+
+        let cap = trezor::TrezorProvider.detect();
+        if !cap.available {
+            assert!(
+                !cap.description.to_lowercase().contains("connect your"),
+                "Trezor DetectionOnly description should not say 'connect your': {}",
+                cap.description
+            );
+        }
+    }
+
+    // ── provider_for dispatch ───────────────────────────────────────
+
+    #[test]
+    fn provider_for_returns_correct_mode() {
+        use super::super::{provider_for, SovereigntyMode};
+
+        let modes = [
+            SovereigntyMode::TouchId,
+            SovereigntyMode::Fingerprint,
+            SovereigntyMode::LoginPassword,
+            SovereigntyMode::FileBased,
+            SovereigntyMode::YubiKey,
+            SovereigntyMode::Ledger,
+            SovereigntyMode::Trezor,
+            SovereigntyMode::OnlyKey,
+        ];
+
+        for mode in &modes {
+            let provider = provider_for(*mode);
+            assert_eq!(
+                provider.mode(),
+                *mode,
+                "provider_for({:?}) returned wrong mode",
+                mode
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_biometric_resolves_to_concrete_provider() {
+        use super::super::{provider_for, SovereigntyMode};
+
+        let provider = provider_for(SovereigntyMode::LegacyBiometric);
+        // Should resolve to TouchId on macOS, Fingerprint on Linux, etc.
+        let mode = provider.mode();
+        assert_ne!(
+            mode,
+            SovereigntyMode::LegacyBiometric,
+            "LegacyBiometric should resolve to a concrete provider"
+        );
+    }
+
+    // ── from_onboard_str for hardware modes ─────────────────────────
+
+    #[test]
+    fn from_onboard_str_parses_hardware_modes() {
+        use super::super::SovereigntyMode;
+
+        assert_eq!(SovereigntyMode::from_onboard_str("trezor"), SovereigntyMode::Trezor);
+        assert_eq!(SovereigntyMode::from_onboard_str("ledger"), SovereigntyMode::Ledger);
+        assert_eq!(SovereigntyMode::from_onboard_str("yubikey"), SovereigntyMode::YubiKey);
+        assert_eq!(SovereigntyMode::from_onboard_str("yubi-key"), SovereigntyMode::YubiKey);
+        assert_eq!(SovereigntyMode::from_onboard_str("yubi_key"), SovereigntyMode::YubiKey);
+        assert_eq!(SovereigntyMode::from_onboard_str("onlykey"), SovereigntyMode::OnlyKey);
+        assert_eq!(SovereigntyMode::from_onboard_str("only-key"), SovereigntyMode::OnlyKey);
+        assert_eq!(SovereigntyMode::from_onboard_str("only_key"), SovereigntyMode::OnlyKey);
+    }
+
+    #[test]
+    fn from_onboard_str_unknown_falls_back_to_login_password() {
+        use super::super::SovereigntyMode;
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("nonexistent"),
+            SovereigntyMode::LoginPassword
+        );
+    }
+}

@@ -142,9 +142,9 @@ fn detect_yubikey_basic() -> ProviderCapability {
         mode: SovereigntyMode::YubiKey,
         available: found,
         description: if found {
-            "YubiKey detected (enable 'hw-yubikey' feature for full support)".into()
+            "YubiKey detected — rebuild with --features hw-yubikey for full support".into()
         } else {
-            "No YubiKey detected — insert your YubiKey to use this mode".into()
+            "YubiKey support available — rebuild with --features hw-yubikey to enable".into()
         },
         requires_enrollment: true,
         detail: None,

@@ -65,10 +65,10 @@ impl SovereigntyProvider for TrezorProvider {
         // 2. Encrypt the Genesis secret with the device-derived wrapping key
         let ciphertext = super::encrypt_secret(secret, &wrapping_key)?;
 
-        // 3. Save the encrypted blob
-        super::save_encrypted_secret("trezor", &ciphertext)?;
-
-        // 4. Save enrollment metadata
+        // 3. Save enrollment metadata FIRST — if we crash after this but before
+        //    step 4, a stale enrollment file is harmless (re-genesis overwrites).
+        //    But saving the encrypted blob first would orphan it with no metadata,
+        //    making load_secret() fail with "No enrollment data found."
         let enrollment = super::EnrollmentMetadata {
             version: "2".into(),
             mode: "trezor".into(),
@@ -92,6 +92,17 @@ impl SovereigntyProvider for TrezorProvider {
             threshold: None,
         };
         super::save_enrollment(&enrollment)?;
+
+        // 4. Save the encrypted blob. If this fails, the enrollment metadata
+        //    from step 3 is stale but harmless — next attempt overwrites both.
+        if let Err(e) = super::save_encrypted_secret("trezor", &ciphertext) {
+            // Best-effort cleanup of the enrollment file we just wrote
+            let dir = super::sovereignty_dir().ok();
+            if let Some(dir) = dir {
+                let _ = std::fs::remove_file(dir.join("trezor_enrollment.json"));
+            }
+            return Err(e);
+        }
 
         tracing::info!(
             device = %device_label,
@@ -436,9 +447,9 @@ fn detect_trezor_basic() -> ProviderCapability {
         mode: SovereigntyMode::Trezor,
         available: found,
         description: if found {
-            "Trezor detected — enable hw-trezor feature for full support".into()
+            "Trezor detected — rebuild with --features hw-trezor for full support".into()
         } else {
-            "No Trezor device detected — connect your Trezor to use this mode".into()
+            "Trezor support available — rebuild with --features hw-trezor to enable".into()
         },
         requires_enrollment: true,
         detail: None,
