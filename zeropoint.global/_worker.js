@@ -13,12 +13,16 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
 
-    // Fetch the static asset from Pages
+    // Fetch the static asset
     const response = await env.ASSETS.fetch(request);
+
+    // Add debug header to confirm Worker is executing
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set('x-zp-worker', 'active');
 
     // Only rewrite the playground page
     if (path !== '/playground') {
-      return response;
+      return new Response(response.body, { status: response.status, headers: newHeaders });
     }
 
     const contentType = response.headers.get('content-type') || '';
