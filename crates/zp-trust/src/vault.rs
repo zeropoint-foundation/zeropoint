@@ -410,6 +410,15 @@ impl CredentialVault {
         matches!(self.find_entry(name), Some(VaultEntry::Ref { .. }))
     }
 
+    /// Return the target path of a Ref entry, or `None` if the entry
+    /// doesn't exist or is a Value.
+    pub fn resolve_ref(&self, name: &str) -> Option<String> {
+        match self.find_entry(name) {
+            Some(VaultEntry::Ref { target }) => Some(target.clone()),
+            _ => None,
+        }
+    }
+
     /// Remove a credential from the vault.
     pub fn remove(&mut self, name: &str) -> VaultResult<()> {
         self.entries
