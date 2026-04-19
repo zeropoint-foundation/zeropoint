@@ -481,6 +481,8 @@ fn offer_auto_configure(
             false, // not dry run
             vault,
             onboard_policy,
+            Some(vault_path),
+            false, // vault-backed by default
         );
         if exit == 0 {
             configured += 1;

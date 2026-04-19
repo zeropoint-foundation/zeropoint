@@ -198,6 +198,34 @@ impl Resolution {
     }
 }
 
+/// Result of storing tool configuration in the vault via [`ConfigEngine::resolve_to_vault`].
+#[derive(Debug, Clone)]
+pub struct VaultConfigResult {
+    /// Tool name
+    pub tool: String,
+    /// Number of vault references stored (credential vars → provider entries)
+    pub refs_stored: u32,
+    /// Number of direct values stored (defaults, preserved, non-secret config)
+    pub values_stored: u32,
+    /// Number of entries skipped (unresolved, missing, passthrough)
+    pub skipped: u32,
+}
+
+impl VaultConfigResult {
+    /// Total entries stored in vault.
+    pub fn total_stored(&self) -> u32 {
+        self.refs_stored + self.values_stored
+    }
+
+    /// Print a human-readable summary line.
+    pub fn print_summary(&self) {
+        println!(
+            "          vault: {} refs + {} values stored, {} skipped",
+            self.refs_stored, self.values_stored, self.skipped
+        );
+    }
+}
+
 // ============================================================================
 // Compiled Pattern (cached regex)
 // ============================================================================
@@ -748,6 +776,118 @@ impl ConfigEngine {
         }
 
         Ok(())
+    }
+
+    /// Store resolutions in the vault graph instead of writing a `.env` file.
+    ///
+    /// For each resolved variable:
+    /// - **VaultResolved**: Stores a `Ref` from `tools/{tool}/{VAR}` to the
+    ///   provider's vault path. The credential is NOT copied — the ref points
+    ///   to the canonical provider entry (which may be at the legacy flat path
+    ///   `{provider}/{field}` or the new tiered `providers/{provider}/{field}`).
+    /// - **DefaultResolved / Preserved**: Stores the value directly as a
+    ///   `tools/{tool}/{VAR}` entry encrypted with the Tools-tier key.
+    /// - **Unresolved / Missing / Passthrough**: Skipped (nothing to store).
+    ///
+    /// # Returns
+    /// A `VaultConfigResult` summarizing what was stored.
+    pub fn resolve_to_vault(
+        resolutions: &[Resolution],
+        tool_name: &str,
+        vault: &mut CredentialVault,
+    ) -> VaultConfigResult {
+        let mut refs_stored = 0u32;
+        let mut values_stored = 0u32;
+        let mut skipped = 0u32;
+
+        for resolution in resolutions {
+            match resolution {
+                Resolution::VaultResolved {
+                    var_name,
+                    vault_ref,
+                    ..
+                } => {
+                    // Store a Ref from tools/{tool}/{VAR} → the provider vault path.
+                    //
+                    // The vault_ref is the existing credential path (e.g. "anthropic/api_key").
+                    // We check if it exists at the legacy flat path or the new tiered path
+                    // and point the ref at whichever one exists.
+                    let target = if vault.contains(&format!("providers/{}", vault_ref)) {
+                        format!("providers/{}", vault_ref)
+                    } else {
+                        // Legacy flat path — still valid, alias resolution handles it
+                        vault_ref.clone()
+                    };
+
+                    let source = format!("tools/{}/{}", tool_name, var_name);
+                    if let Err(e) = vault.store_ref(&source, &target) {
+                        tracing::warn!(
+                            tool = tool_name,
+                            var = var_name,
+                            error = %e,
+                            "Failed to store vault ref"
+                        );
+                        skipped += 1;
+                    } else {
+                        refs_stored += 1;
+                    }
+                }
+                Resolution::DefaultResolved {
+                    var_name, value, ..
+                } => {
+                    if let Err(e) =
+                        vault.store_tool_env(tool_name, var_name, value.as_bytes())
+                    {
+                        tracing::warn!(
+                            tool = tool_name,
+                            var = var_name,
+                            error = %e,
+                            "Failed to store default value"
+                        );
+                        skipped += 1;
+                    } else {
+                        values_stored += 1;
+                    }
+                }
+                Resolution::Preserved {
+                    var_name, value, ..
+                } => {
+                    if let Err(e) =
+                        vault.store_tool_env(tool_name, var_name, value.as_bytes())
+                    {
+                        tracing::warn!(
+                            tool = tool_name,
+                            var = var_name,
+                            error = %e,
+                            "Failed to store preserved value"
+                        );
+                        skipped += 1;
+                    } else {
+                        values_stored += 1;
+                    }
+                }
+                Resolution::Unresolved { .. }
+                | Resolution::Missing { .. }
+                | Resolution::Passthrough { .. } => {
+                    skipped += 1;
+                }
+            }
+        }
+
+        info!(
+            tool = tool_name,
+            refs = refs_stored,
+            values = values_stored,
+            skipped = skipped,
+            "Tool config stored in vault"
+        );
+
+        VaultConfigResult {
+            tool: tool_name.to_string(),
+            refs_stored,
+            values_stored,
+            skipped,
+        }
     }
 
     /// Print a dry-run summary of resolutions.
@@ -1500,12 +1640,18 @@ pub fn parse_env_file(path: &Path) -> HashMap<String, String> {
 // ============================================================================
 
 /// Run `zp configure tool` — resolve a tool's .env from vault.
+///
+/// By default, stores all resolved configuration in the vault graph
+/// (zero plaintext on disk). Pass `legacy_env = true` to write a
+/// traditional `.env` file instead.
 pub fn run_tool(
     tool_path: &Path,
     tool_name: &str,
     dry_run: bool,
-    vault: &CredentialVault,
+    vault: &mut CredentialVault,
     policy_check: PolicyCheckFn,
+    vault_path: Option<&Path>,
+    legacy_env: bool,
 ) -> i32 {
     // Find the .env.example template
     let template = tool_path.join(".env.example");
@@ -1527,6 +1673,14 @@ pub fn run_tool(
     println!("ZeroPoint Configure — Semantic Sed");
     println!("Tool: {}", tool_name);
     println!("Template: {}", template.display());
+    println!(
+        "Storage: {}",
+        if legacy_env {
+            "legacy .env file"
+        } else {
+            "vault-backed (encrypted)"
+        }
+    );
     if existing_env_path.exists() {
         println!(
             "Existing .env: {} ({} values)",
@@ -1541,22 +1695,49 @@ pub fn run_tool(
             ConfigEngine::print_summary(&resolutions);
 
             if dry_run {
-                println!("\n(dry run — no files written)");
+                println!("\n(dry run — nothing stored)");
                 return 0;
             }
 
-            // Write the resolved .env
-            let output_path = tool_path.join(".env");
-            match ConfigEngine::write_env_file(&resolutions, &output_path) {
-                Ok(_) => {
-                    println!("\nWrote: {}", output_path.display());
-                    info!(tool = tool_name, path = %output_path.display(), "Configuration written");
-                    0
+            if legacy_env {
+                // Legacy path: write plaintext .env file
+                let output_path = tool_path.join(".env");
+                match ConfigEngine::write_env_file(&resolutions, &output_path) {
+                    Ok(_) => {
+                        println!("\nWrote: {}", output_path.display());
+                        info!(tool = tool_name, path = %output_path.display(), "Configuration written (legacy .env)");
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("Error writing .env: {}", e);
+                        1
+                    }
                 }
-                Err(e) => {
-                    eprintln!("Error writing .env: {}", e);
-                    1
+            } else {
+                // Vault-backed: store in vault graph, zero plaintext on disk
+                let result =
+                    ConfigEngine::resolve_to_vault(&resolutions, tool_name, vault);
+                result.print_summary();
+
+                // Persist vault to disk
+                if let Some(vp) = vault_path {
+                    if let Err(e) = vault.save(vp) {
+                        eprintln!("Warning: config stored in memory but vault persist failed: {}", e);
+                    }
                 }
+
+                println!(
+                    "\n\x1b[32m✓\x1b[0m {} config stored in vault ({} entries, zero plaintext)",
+                    tool_name,
+                    result.total_stored()
+                );
+                info!(
+                    tool = tool_name,
+                    refs = result.refs_stored,
+                    values = result.values_stored,
+                    "Configuration stored in vault"
+                );
+                0
             }
         }
         Err(e) => {
@@ -1600,7 +1781,11 @@ pub fn run_providers(vault: &CredentialVault) -> i32 {
     0
 }
 
-/// Run `zp configure vault-add` — store a credential in the vault.
+/// Run `zp configure vault-add` — store a provider credential in the vault.
+///
+/// Stores at the tiered path `providers/{provider}/{field}` for new entries,
+/// and also writes a legacy alias at `{provider}/{field}` for backward
+/// compatibility with existing code that uses flat vault paths.
 pub fn run_vault_add(
     vault: &mut CredentialVault,
     provider: &str,
@@ -1608,9 +1793,18 @@ pub fn run_vault_add(
     value: &str,
     vault_path: &Path,
 ) -> i32 {
-    let vault_ref = format!("{}/{}", provider, field);
-    match vault.store(&vault_ref, value.as_bytes()) {
+    // Store at the canonical tiered path
+    let tiered_ref = format!("providers/{}/{}", provider, field);
+    match vault.store_provider(provider, field, value.as_bytes()) {
         Ok(_) => {
+            // Also store at legacy flat path for backward compatibility
+            // (existing code references "anthropic/api_key", not "providers/anthropic/api_key")
+            let legacy_ref = format!("{}/{}", provider, field);
+            if let Err(e) = vault.store_ref(&legacy_ref, &tiered_ref) {
+                // Non-fatal — tiered path is canonical
+                debug!("Could not create legacy alias {}: {}", legacy_ref, e);
+            }
+
             // Persist to disk so credentials survive across invocations
             if let Err(e) = vault.save(vault_path) {
                 eprintln!(
@@ -1618,15 +1812,14 @@ pub fn run_vault_add(
                     e
                 );
                 eprintln!("Vault path: {}", vault_path.display());
-                // Still return success — the credential IS stored for this session
             } else {
                 println!(
                     "Stored credential: {} ({} bytes, persisted)",
-                    vault_ref,
+                    tiered_ref,
                     value.len()
                 );
             }
-            info!(vault_ref = vault_ref, "Credential stored in vault");
+            info!(vault_ref = tiered_ref, "Credential stored in vault (providers tier)");
             0
         }
         Err(e) => {
@@ -1986,14 +2179,19 @@ pub enum AutoStatus {
 }
 
 /// Run `zp configure auto` — discover and configure all ready tools.
+///
+/// By default, stores all resolved config in the vault graph (zero
+/// plaintext on disk). Pass `legacy_env = true` to write `.env` files.
 pub fn run_auto(
     scan_path: &Path,
-    vault: &CredentialVault,
+    vault: &mut CredentialVault,
     policy_check: PolicyCheckFn,
     depth: usize,
     dry_run: bool,
     overwrite: bool,
     proxy_port: Option<u16>,
+    vault_path: Option<&Path>,
+    legacy_env: bool,
 ) -> i32 {
     let engine = match proxy_port {
         Some(port) => ConfigEngine::with_proxy(port),
@@ -2229,7 +2427,7 @@ pub fn run_auto(
                             "          would resolve {}/{} variables",
                             resolved_count, tool.total_vars
                         );
-                    } else {
+                    } else if legacy_env {
                         match ConfigEngine::write_env_file(&resolutions, &env_path) {
                             Ok(_) => {
                                 println!("          wrote {}", env_path.display());
@@ -2238,7 +2436,7 @@ pub fn run_auto(
                                     path = %env_path.display(),
                                     source = source_label,
                                     confidence = %resolved.confidence,
-                                    "MVC auto-configured"
+                                    "MVC auto-configured (legacy .env)"
                                 );
                             }
                             Err(e) => {
@@ -2253,6 +2451,25 @@ pub fn run_auto(
                                 continue;
                             }
                         }
+                    } else {
+                        // Vault-backed: store in vault graph
+                        let vr = ConfigEngine::resolve_to_vault(
+                            &resolutions,
+                            &tool.name,
+                            vault,
+                        );
+                        println!(
+                            "          vault: {} refs + {} values stored",
+                            vr.refs_stored, vr.values_stored
+                        );
+                        info!(
+                            tool = tool.name,
+                            source = source_label,
+                            confidence = %resolved.confidence,
+                            refs = vr.refs_stored,
+                            values = vr.values_stored,
+                            "MVC auto-configured (vault-backed)"
+                        );
                     }
                     mvc_results.push(AutoResult {
                         name: tool.name.clone(),
@@ -2372,11 +2589,11 @@ pub fn run_auto(
                         path: tool.path.clone(),
                         status: AutoStatus::Configured,
                     });
-                } else {
+                } else if legacy_env {
                     match ConfigEngine::write_env_file(&resolutions, &env_path) {
                         Ok(_) => {
                             println!("          wrote {}", env_path.display());
-                            info!(tool = tool.name, path = %env_path.display(), "Legacy auto-configured");
+                            info!(tool = tool.name, path = %env_path.display(), "Legacy auto-configured (.env)");
                             results.push(AutoResult {
                                 name: tool.name.clone(),
                                 path: tool.path.clone(),
@@ -2394,6 +2611,28 @@ pub fn run_auto(
                             });
                         }
                     }
+                } else {
+                    // Vault-backed storage
+                    let vr = ConfigEngine::resolve_to_vault(
+                        &resolutions,
+                        &tool.name,
+                        vault,
+                    );
+                    println!(
+                        "          vault: {} refs + {} values stored",
+                        vr.refs_stored, vr.values_stored
+                    );
+                    info!(
+                        tool = tool.name,
+                        refs = vr.refs_stored,
+                        values = vr.values_stored,
+                        "Legacy auto-configured (vault-backed)"
+                    );
+                    results.push(AutoResult {
+                        name: tool.name.clone(),
+                        path: tool.path.clone(),
+                        status: AutoStatus::Configured,
+                    });
                 }
             }
             Err(e) => {
@@ -2405,6 +2644,15 @@ pub fn run_auto(
                         error: e.to_string(),
                     },
                 });
+            }
+        }
+    }
+
+    // Persist vault if we stored anything (non-dry-run, non-legacy)
+    if !dry_run && !legacy_env {
+        if let Some(vp) = vault_path {
+            if let Err(e) = vault.save(vp) {
+                eprintln!("Warning: vault persist failed: {}", e);
             }
         }
     }
@@ -2962,7 +3210,7 @@ OLLAMA_SERVER_URL=http://localhost:11434
         vault.store("openai/api_key", b"sk-test-auto-key").unwrap();
 
         // Run auto in live mode
-        let exit_code = run_auto(&root, &vault, test_policy, 1, false, false, None);
+        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, None, None, true);
         assert_eq!(exit_code, 0);
 
         // Verify .env was written
@@ -2990,9 +3238,9 @@ OLLAMA_SERVER_URL=http://localhost:11434
         fs::write(tool.join(".env.example"), "ANTHROPIC_API_KEY=\n").unwrap();
 
         let master_key = [0x42u8; 32];
-        let vault = CredentialVault::new(&master_key); // empty vault
+        let mut vault = CredentialVault::new(&master_key); // empty vault
 
-        let exit_code = run_auto(&root, &vault, test_policy, 1, false, false, None);
+        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, None, None, true);
         assert_eq!(exit_code, 0);
 
         // .env should NOT have been created
@@ -3020,7 +3268,7 @@ OLLAMA_SERVER_URL=http://localhost:11434
         vault.store("openai/api_key", b"sk-new-key").unwrap();
 
         // Without --overwrite
-        let exit_code = run_auto(&root, &vault, test_policy, 1, false, false, None);
+        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, None, None, true);
         assert_eq!(exit_code, 0);
 
         // Original .env should be untouched
@@ -3050,7 +3298,7 @@ OLLAMA_SERVER_URL=http://localhost:11434
         vault.store("openai/api_key", b"sk-fresh-key").unwrap();
 
         // With --overwrite
-        let exit_code = run_auto(&root, &vault, test_policy, 1, false, true, None);
+        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, true, None, None, true);
         assert_eq!(exit_code, 0);
 
         // .env should now have the new key
@@ -3078,7 +3326,7 @@ OLLAMA_SERVER_URL=http://localhost:11434
         let mut vault = CredentialVault::new(&master_key);
         vault.store("openai/api_key", b"sk-dry-key").unwrap();
 
-        let exit_code = run_auto(&root, &vault, test_policy, 1, true, false, None);
+        let exit_code = run_auto(&root, &mut vault, test_policy, 1, true, false, None, None, true);
         assert_eq!(exit_code, 0);
 
         // Dry run — no .env should be written
@@ -3146,7 +3394,7 @@ LLM_MODEL=gpt-4
         vault.store("openai/api_key", b"sk-test-proxy-key").unwrap();
 
         // Run auto with proxy mode on port 3000
-        let exit_code = run_auto(&root, &vault, test_policy, 1, false, false, Some(3000));
+        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, Some(3000), None, true);
         assert_eq!(exit_code, 0);
 
         // Verify .env was written with proxy URL

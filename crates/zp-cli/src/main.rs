@@ -625,7 +625,15 @@ async fn main() -> anyhow::Result<()> {
                 name,
                 dry_run,
             } => match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-                Ok(vault) => configure::run_tool(path, name, *dry_run, &vault, configure_policy),
+                Ok(mut vault) => configure::run_tool(
+                    path,
+                    name,
+                    *dry_run,
+                    &mut vault,
+                    configure_policy,
+                    Some(&vault_path),
+                    false, // vault-backed by default
+                ),
                 Err(e) => {
                     eprintln!("Error loading vault: {}", e);
                     1
@@ -679,15 +687,17 @@ async fn main() -> anyhow::Result<()> {
             } => {
                 let proxy_opt = if *proxy { Some(*proxy_port) } else { None };
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-                    Ok(vault) => {
+                    Ok(mut vault) => {
                         let exit = configure::run_auto(
                             path,
-                            &vault,
+                            &mut vault,
                             configure_policy,
                             *depth,
                             *dry_run,
                             *overwrite,
                             proxy_opt,
+                            Some(&vault_path),
+                            false, // vault-backed by default
                         );
                         if *validate && exit == 0 && !*dry_run {
                             println!();

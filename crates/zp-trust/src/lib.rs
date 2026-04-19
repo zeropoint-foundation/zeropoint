@@ -20,7 +20,10 @@ pub use injector::{
     CredentialInjector, InjectorError, InjectorResult, PolicyCheckFn, PolicyContext,
 };
 pub use signer::{Signer, SignerError, SignerResult};
-pub use vault::{CredentialVault, EncryptedCredential, VaultError, VaultResult};
+pub use vault::{
+    CredentialVault, EncryptedCredential, VaultEntry, VaultError, VaultResult, VaultScope,
+    VaultScopeRef, VaultTier,
+};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
