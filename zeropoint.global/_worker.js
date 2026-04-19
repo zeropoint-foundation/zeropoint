@@ -13,6 +13,19 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
 
+    // Debug endpoint — remove after confirming secrets work
+    if (path === '/_debug/env') {
+      const keys = Object.keys(env).filter(k => k !== 'ASSETS');
+      const has = {
+        GOOGLE_API_KEY: !!env.GOOGLE_API_KEY,
+        CESIUM_TOKEN: !!env.CESIUM_TOKEN,
+        envKeys: keys,
+      };
+      return new Response(JSON.stringify(has, null, 2), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
     // Fetch the static asset
     const response = await env.ASSETS.fetch(request);
 
