@@ -101,6 +101,29 @@ const PORT_VARS: &[&str] = &[
 /// Receipts older than this are considered stale.
 const PREFLIGHT_FRESH_SECS: i64 = 3600; // 1 hour
 
+/// Set of tool names that have vault-backed configuration.
+/// Preflight uses this to skip `.env` completeness checks for vault-configured tools.
+pub type VaultConfiguredTools = std::collections::HashSet<String>;
+
+/// Build the set of vault-configured tool names from the vault.
+/// Returns an empty set if the vault can't be loaded.
+pub fn detect_vault_configured_tools(
+    vault_key: Option<&zp_trust::vault::CredentialVault>,
+) -> VaultConfiguredTools {
+    let mut set = VaultConfiguredTools::new();
+    if let Some(vault) = vault_key {
+        for entry in vault.list_prefix("tools/") {
+            // entries are "tools/{name}/{VAR}" — extract the tool name
+            if let Some(name) = entry.strip_prefix("tools/") {
+                if let Some(tool_name) = name.split('/').next() {
+                    set.insert(tool_name.to_string());
+                }
+            }
+        }
+    }
+    set
+}
+
 /// Run preflight on all tools in the scan path.
 /// Returns (results, streaming events).
 ///
@@ -114,8 +137,9 @@ const PREFLIGHT_FRESH_SECS: i64 = 3600; // 1 hour
 pub(crate) async fn run_preflight(
     scan_path: &Path,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
+    vault_tools: &VaultConfiguredTools,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
-    run_preflight_inner(scan_path, audit_store, false, None).await
+    run_preflight_inner(scan_path, audit_store, false, None, vault_tools).await
 }
 
 /// Force a full re-run of all tools, ignoring fresh chain receipts.
@@ -123,8 +147,9 @@ pub(crate) async fn run_preflight(
 pub(crate) async fn run_preflight_force(
     scan_path: &Path,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
+    vault_tools: &VaultConfiguredTools,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
-    run_preflight_inner(scan_path, audit_store, true, None).await
+    run_preflight_inner(scan_path, audit_store, true, None, vault_tools).await
 }
 
 /// Run preflight scoped to a single tool. Other tools are skipped.
@@ -133,8 +158,9 @@ pub(crate) async fn run_preflight_single(
     scan_path: &Path,
     tool_name: &str,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
+    vault_tools: &VaultConfiguredTools,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
-    run_preflight_inner(scan_path, audit_store, true, Some(tool_name)).await
+    run_preflight_inner(scan_path, audit_store, true, Some(tool_name), vault_tools).await
 }
 
 async fn run_preflight_inner(
@@ -142,6 +168,7 @@ async fn run_preflight_inner(
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
     force: bool,
     only_tool: Option<&str>,
+    vault_tools: &VaultConfiguredTools,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
     let mut events = Vec::new();
     let mut tool_results = Vec::new();
@@ -221,8 +248,8 @@ async fn run_preflight_inner(
             if name.starts_with('.') || name == "node_modules" || name == "target" {
                 continue;
             }
-            // Only preflight tools that have .env (configured)
-            if path.join(".env").exists() || path.join(".env.example").exists() {
+            // Preflight tools that are configured: vault-backed, .env, or discoverable
+            if vault_tools.contains(&name) || path.join(".env").exists() || path.join(".env.example").exists() {
                 tool_dirs.push((name, path));
             }
         }
@@ -264,7 +291,8 @@ async fn run_preflight_inner(
             continue;
         }
 
-        let (result, tool_events) = preflight_tool(name, path, docker_available).await;
+        let is_vault_configured = vault_tools.contains(name.as_str());
+        let (result, tool_events) = preflight_tool(name, path, docker_available, is_vault_configured).await;
 
         // Collect port for conflict detection
         if let Some(port) = detect_port(path) {
@@ -479,6 +507,7 @@ async fn preflight_tool(
     name: &str,
     path: &Path,
     docker_ok: bool,
+    vault_configured: bool,
 ) -> (ToolPreflight, Vec<OnboardEvent>) {
     let mut checks = Vec::new();
     let mut auto_fixed = Vec::new();
@@ -515,74 +544,79 @@ async fn preflight_tool(
         "none"
     };
 
-    // ── .env bootstrap: copy from .env.example if missing ──
-    let env_path = path.join(".env");
-    let env_example = path.join(".env.example");
-    if !env_path.exists() && env_example.exists() && std::fs::copy(&env_example, &env_path).is_ok()
-    {
-        auto_fixed.push("Created .env from .env.example".into());
+    // ── Configuration check: vault-backed or .env ──────────
+    let env_check = if vault_configured {
+        // Tool has vault config — .env is not needed. Secrets are injected
+        // at launch time via Command::env(). No plaintext on disk.
         events.push(OnboardEvent::terminal(
-            "    ✓ Created .env from .env.example",
+            "    ✓ Vault-configured (credentials encrypted, injected at launch)",
         ));
-    }
+        PreflightCheck {
+            name: "env_config".into(),
+            status: "pass".into(),
+            detail: "Vault-backed configuration — zero plaintext on disk".into(),
+        }
+    } else {
+        // No vault config — fall back to .env completeness check.
+        // Bootstrap .env from .env.example if missing (legacy tools only).
+        let env_path = path.join(".env");
+        let env_example = path.join(".env.example");
+        if !env_path.exists() && env_example.exists() && std::fs::copy(&env_example, &env_path).is_ok()
+        {
+            auto_fixed.push("Created .env from .env.example".into());
+            events.push(OnboardEvent::terminal(
+                "    ✓ Created .env from .env.example",
+            ));
+        }
 
-    // ── .env completeness (with vault auto-resolve) ────────
-    let mut env_check = check_env_completeness(path);
-    if env_check.status == "fail" {
-        // Critical env vars are missing — attempt vault resolution.
-        // Shell out to `zp configure tool` which reads the vault and
-        // resolves credentials semantically. This is the same pipeline
-        // as `zp configure auto` but targeted at a single tool.
-        events.push(OnboardEvent::terminal(&format!(
-            "    ⚠ {}",
-            env_check.detail
-        )));
-        events.push(OnboardEvent::terminal(
-            "    → Attempting vault auto-resolve...",
-        ));
+        let mut check = check_env_completeness(path);
+        if check.status == "fail" {
+            // Critical env vars missing — attempt vault resolution
+            events.push(OnboardEvent::terminal(&format!(
+                "    ⚠ {}",
+                check.detail
+            )));
+            events.push(OnboardEvent::terminal(
+                "    → Attempting vault auto-resolve...",
+            ));
 
-        let configure_result = run_cmd(
-            path,
-            "zp",
-            &[
-                "configure",
-                "tool",
-                "--path",
-                &path.display().to_string(),
-                "--name",
-                name,
-            ],
-        )
-        .await;
+            let configure_result = run_cmd(
+                path,
+                "zp",
+                &[
+                    "configure",
+                    "tool",
+                    "--path",
+                    &path.display().to_string(),
+                    "--name",
+                    name,
+                ],
+            )
+            .await;
 
-        if configure_result.success {
-            // Re-check after vault resolution
-            let recheck = check_env_completeness(path);
-            if recheck.status != "fail" {
-                env_check = recheck;
-                env_check.detail = format!("{} (auto-resolved from vault)", env_check.detail);
+            if configure_result.success {
+                // configure now stores to vault, not .env — so re-check
+                // won't see changes in .env. Mark as resolved if configure succeeded.
+                check = PreflightCheck {
+                    name: "env_config".into(),
+                    status: "pass".into(),
+                    detail: "Credentials auto-resolved into vault".into(),
+                };
                 auto_fixed.push("Resolved credentials from vault".into());
                 events.push(OnboardEvent::terminal(
                     "    ✓ Credentials resolved from vault",
                 ));
             } else {
-                // Vault didn't have what we needed — report what's still missing
-                env_check = recheck;
-                events.push(OnboardEvent::terminal(&format!(
-                    "    ✗ {}",
-                    env_check.detail
-                )));
+                events.push(OnboardEvent::terminal(
+                    "    ⚠ Vault auto-resolve unavailable",
+                ));
                 events.push(OnboardEvent::terminal(
                     "    → Store missing credentials: zp configure vault-add --provider <name> --field api_key"
                 ));
             }
-        } else {
-            // zp binary not on PATH or configure failed — fall through with original check
-            events.push(OnboardEvent::terminal(
-                "    ⚠ Vault auto-resolve unavailable",
-            ));
         }
-    }
+        check
+    };
     checks.push(env_check.clone());
 
     // ── Docker-based tools ─────────────────────────────────
@@ -1641,6 +1675,15 @@ pub(crate) async fn handle_preflight(
     // canonical chain — not just the JSON cache.  Without this, tools
     // preflighted during onboarding show "awaiting preflight" on the
     // dashboard because chain-based readiness finds no entries.
-    let (_results, events) = run_preflight(&scan_path, Some(&app_state.0.audit_store)).await;
+    // Detect vault-configured tools for the preflight
+    let vault = app_state.0.vault_key.get()
+        .and_then(|k| k.as_ref())
+        .and_then(|resolved_key| {
+            let vault_path = std::path::PathBuf::from(&app_state.0.data_dir).join("vault.json");
+            zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path).ok()
+        });
+    let vault_tools = detect_vault_configured_tools(vault.as_ref());
+
+    let (_results, events) = run_preflight(&scan_path, Some(&app_state.0.audit_store), &vault_tools).await;
     events
 }
