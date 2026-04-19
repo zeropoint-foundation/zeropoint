@@ -26,9 +26,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
-use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 
 use crate::{auth, tool_chain, AppState};
 
@@ -224,51 +222,12 @@ async fn execute_and_stream(
         return None;
     }
 
-    // ── Command governance: check allowlist before spawning ──────────
-    if let Err(reason) = auth::check_command(cmd) {
-        tracing::warn!("exec_ws: BLOCKED '{}' — {}", cmd, reason);
-        let _ = tx
-            .send(WsMessage::Text(
-                serde_json::json!({
-                    "type": "error",
-                    "message": format!("🛡 {}", reason)
-                })
-                .to_string(),
-            ))
-            .await;
-
-        // Emit a blocked-command receipt for the audit chain
-        tool_chain::emit_tool_receipt(
-            &app_state.0.audit_store,
-            "tool:cmd:blocked",
-            Some(&format!(
-                "cmd_prefix={}, reason={}",
-                cmd.split_whitespace().next().unwrap_or("?"),
-                reason
-            )),
-        );
-
-        return None;
-    }
-
-    // ── EXEC-01 fix: NO SHELL. ────────────────────────────────────────
-    // The previous implementation passed `cmd` to `sh -c`, which made
-    // every metacharacter an injection vector and made command
-    // governance fundamentally unsound (auth::check_command saw the
-    // string but the shell saw a different parse tree). The new path:
-    //
-    //   1. Reject any string containing shell metacharacters outright,
-    //      even if some downstream tool would have wanted them. This is
-    //      defense in depth — we cannot represent these meanings in a
-    //      structured argv anyway.
-    //   2. Tokenize with shlex (POSIX shell-quoting rules without any
-    //      execution semantics) so quoted strings still work.
-    //   3. exec the resulting argv directly via `Command::new(argv[0])`
-    //      with no shell anywhere in the chain.
-    //
-    // Catalog mapping: this is a P3 (the gate) hardening — closing the
-    // gap where the gate's view of the action and the executor's view
-    // of the action could differ. See INVARIANT-CATALOG-v0.md §M1.
+    // ── EXEC-01 fix: NO SHELL — metacharacter rejection (defense-in-depth) ──
+    // Reject shell metacharacters outright before any parsing. Even
+    // though validate_command() tokenizes via shlex without execution
+    // semantics, we keep this layer so the gate's view and the
+    // executor's view can never diverge.
+    // See INVARIANT-CATALOG-v0.md §M1.
     const SHELL_METACHARS: &[char] = &[
         '|', '&', ';', '<', '>', '$', '`', '\\', '\n', '\r', '(', ')', '{', '}',
     ];
@@ -292,40 +251,49 @@ async fn execute_and_stream(
         return None;
     }
 
-    let argv: Vec<String> = match shlex::split(cmd) {
-        Some(v) if !v.is_empty() => v,
-        Some(_) => {
-            let _ = tx.send(WsMessage::Text(
-                serde_json::json!({ "type": "error", "message": "🛡 Empty command after tokenization" }).to_string()
-            )).await;
-            return None;
-        }
-        None => {
-            let _ = tx.send(WsMessage::Text(
-                serde_json::json!({ "type": "error", "message": "🛡 Command failed to parse (unbalanced quotes?)" }).to_string()
-            )).await;
+    // ── Command governance: validate against program allowlist (P2-1) ──
+    // validate_command() tokenizes via shlex, checks program allowlist,
+    // runs per-program argument validators, and returns a ValidatedCommand
+    // that can only be constructed by passing all checks.
+    let validated_cmd = match auth::validate_command(cmd) {
+        Ok(vc) => vc,
+        Err(e) => {
+            tracing::warn!("exec_ws: BLOCKED '{}' — {}", cmd, e);
+            let _ = tx
+                .send(WsMessage::Text(
+                    serde_json::json!({
+                        "type": "error",
+                        "message": format!("🛡 {}", e)
+                    })
+                    .to_string(),
+                ))
+                .await;
+
+            // Emit a blocked-command receipt for the audit chain
             tool_chain::emit_tool_receipt(
                 &app_state.0.audit_store,
                 "tool:cmd:blocked",
-                Some("reason=tokenize_failed"),
+                Some(&format!(
+                    "cmd_prefix={}, reason={}",
+                    cmd.split_whitespace().next().unwrap_or("?"),
+                    e
+                )),
             );
+
             return None;
         }
     };
 
-    tracing::info!("exec_ws: running argv {:?} in '{}'", argv, resolved_cwd);
+    tracing::info!(
+        "exec_ws: running {:?} in '{}'",
+        validated_cmd,
+        resolved_cwd
+    );
 
-    let program = &argv[0];
-    let args = &argv[1..];
-
-    let mut child = match Command::new(program)
-        .args(args)
-        .current_dir(&resolved_cwd)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .stdin(Stdio::null())
-        .spawn()
-    {
+    // Spawn directly from the ValidatedCommand — no shell, no re-parsing.
+    // The program + args were locked in by validate_command(); spawn()
+    // uses Command::new(program).args(args) with stdin closed.
+    let mut child = match validated_cmd.spawn(&resolved_cwd) {
         Ok(c) => c,
         Err(e) => {
             let _ = tx.send(WsMessage::Text(
