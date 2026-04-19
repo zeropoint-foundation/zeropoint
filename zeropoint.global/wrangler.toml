@@ -1,6 +1,8 @@
 name = "zeropoint-global"
+main = "_worker.js"
 compatibility_date = "2025-04-01"
 
 # Static assets served from the current directory
 [assets]
 directory = "."
+binding = "ASSETS"
