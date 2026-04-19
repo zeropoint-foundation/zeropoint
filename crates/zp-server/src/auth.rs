@@ -738,6 +738,134 @@ pub fn is_tls_enabled() -> bool {
     std::env::var("ZP_TLS_CERT").is_ok() && std::env::var("ZP_TLS_KEY").is_ok()
 }
 
+// ── Path canonicalization boundary (P2-2) ────────────────────────────
+//
+// Centralized path validation for all entry points that accept
+// file paths from external input. Canonicalizes, resolves symlinks,
+// and verifies the result stays within an allowed boundary.
+//
+// SECURITY NOTE: This function uses std::fs::canonicalize which
+// requires the path to exist. For paths that may not yet exist,
+// callers should check parent directories or use the component-
+// based validation in validate_scan_path / safe_resolve.
+
+/// Errors from path canonicalization.
+#[derive(Debug, Clone)]
+pub enum PathError {
+    /// The path could not be resolved (doesn't exist, permission denied, etc.)
+    ResolveFailed { path: String, reason: String },
+    /// The canonicalized path escapes the allowed boundary.
+    EscapesBoundary { path: PathBuf, boundary: PathBuf },
+    /// The raw path contains traversal sequences (before canonicalization).
+    TraversalAttempt(String),
+    /// The path lands in a system-sensitive location.
+    SystemPath(String),
+}
+
+impl fmt::Display for PathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PathError::ResolveFailed { path, reason } => {
+                write!(f, "Path '{}' could not be resolved: {}", path, reason)
+            }
+            PathError::EscapesBoundary { path, boundary } => {
+                write!(
+                    f,
+                    "Path '{}' escapes boundary '{}'",
+                    path.display(),
+                    boundary.display()
+                )
+            }
+            PathError::TraversalAttempt(p) => {
+                write!(f, "Path traversal (..) not permitted: '{}'", p)
+            }
+            PathError::SystemPath(p) => {
+                write!(f, "Access to system path '{}' not permitted", p)
+            }
+        }
+    }
+}
+
+/// System path prefixes that are never permitted as targets.
+const SYSTEM_PATH_PREFIXES: &[&str] = &[
+    "/etc",
+    "/var",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/root",
+    "/boot",
+    "/dev",
+    "/proc",
+    "/sys",
+    "/tmp",
+    // macOS equivalents
+    "/private/etc",
+    "/private/var",
+    "/private/tmp",
+];
+
+/// Canonicalize a path and verify it falls within the allowed boundary.
+///
+/// Returns `Err` if:
+/// - The raw path contains `..` (rejected before canonicalization)
+/// - The path cannot be resolved (doesn't exist, broken symlink, etc.)
+/// - The canonicalized path escapes the boundary
+/// - The canonicalized path is in a system-sensitive location
+///
+/// The `boundary` is typically the operator's home directory.
+pub fn safe_path(raw: &str, boundary: &Path) -> Result<PathBuf, PathError> {
+    // 1. Reject traversal sequences BEFORE canonicalization.
+    //    This prevents TOCTOU: an attacker can't race between
+    //    our traversal check and the canonicalize call.
+    if raw.contains("..") {
+        return Err(PathError::TraversalAttempt(raw.to_string()));
+    }
+
+    // 2. Expand tilde for ergonomics.
+    let expanded = if raw.starts_with("~/") || raw == "~" {
+        match dirs::home_dir() {
+            Some(home) => home
+                .join(raw.strip_prefix("~/").unwrap_or(""))
+                .to_string_lossy()
+                .to_string(),
+            None => raw.to_string(),
+        }
+    } else {
+        raw.to_string()
+    };
+
+    // 3. Canonicalize — resolves symlinks, normalizes components.
+    let canonical = std::fs::canonicalize(&expanded).map_err(|e| PathError::ResolveFailed {
+        path: raw.to_string(),
+        reason: e.to_string(),
+    })?;
+
+    // 4. Verify we're within the boundary.
+    let canonical_boundary = boundary.canonicalize().map_err(|e| PathError::ResolveFailed {
+        path: boundary.to_string_lossy().to_string(),
+        reason: e.to_string(),
+    })?;
+
+    if !canonical.starts_with(&canonical_boundary) {
+        return Err(PathError::EscapesBoundary {
+            path: canonical,
+            boundary: canonical_boundary,
+        });
+    }
+
+    // 5. Reject system paths (defense-in-depth — should be caught
+    //    by boundary check, but guards against mis-set boundaries).
+    let canonical_str = canonical.to_string_lossy();
+    for prefix in SYSTEM_PATH_PREFIXES {
+        if canonical_str.starts_with(prefix) {
+            return Err(PathError::SystemPath(canonical_str.to_string()));
+        }
+    }
+
+    Ok(canonical)
+}
+
 // ── Command governance for /ws/exec (P2-1) ────────────────────────────
 //
 // Exact program allowlist with per-program argument validators.
@@ -1676,5 +1804,69 @@ mod tests {
         );
         assert!(limiter.is_blocked(ip).is_some());
         std::env::remove_var("ZP_AUTH_RATE_LIMIT_PER_MIN");
+    }
+
+    // ── P2-2: safe_path tests ─────────────────────────────────────────
+
+    #[test]
+    fn test_safe_path_traversal_rejected() {
+        let boundary = std::path::Path::new("/tmp");
+        assert!(matches!(
+            safe_path("../etc/passwd", boundary),
+            Err(PathError::TraversalAttempt(_))
+        ));
+        assert!(matches!(
+            safe_path("/tmp/../../etc/shadow", boundary),
+            Err(PathError::TraversalAttempt(_))
+        ));
+        assert!(matches!(
+            safe_path("foo/../../../bar", boundary),
+            Err(PathError::TraversalAttempt(_))
+        ));
+    }
+
+    #[test]
+    fn test_safe_path_nonexistent_rejected() {
+        let boundary = std::path::Path::new("/tmp");
+        assert!(matches!(
+            safe_path("/tmp/does_not_exist_zp_test_12345", boundary),
+            Err(PathError::ResolveFailed { .. })
+        ));
+    }
+
+    #[test]
+    fn test_safe_path_escape_rejected() {
+        // /usr exists but is outside /tmp boundary
+        let boundary = std::path::Path::new("/tmp");
+        assert!(matches!(
+            safe_path("/usr", boundary),
+            Err(PathError::EscapesBoundary { .. })
+        ));
+    }
+
+    #[test]
+    fn test_safe_path_valid_within_boundary() {
+        // A path within the home directory boundary should succeed.
+        let home = dirs::home_dir().expect("need $HOME for test");
+        assert!(safe_path(&home.to_string_lossy(), &home).is_ok());
+    }
+
+    #[test]
+    fn test_safe_path_system_paths_blocked() {
+        // Even if we set boundary to /, system paths are blocked
+        // as defense-in-depth
+        let boundary = std::path::Path::new("/");
+        assert!(matches!(
+            safe_path("/etc", boundary),
+            Err(PathError::SystemPath(_))
+        ));
+        assert!(matches!(
+            safe_path("/proc", boundary),
+            Err(PathError::SystemPath(_))
+        ));
+        assert!(matches!(
+            safe_path("/var", boundary),
+            Err(PathError::SystemPath(_))
+        ));
     }
 }
