@@ -1,83 +1,56 @@
 /**
- * ZeroPoint Global — Pages Advanced Mode Worker
+ * ZeroPoint Global — Worker with credential injection
  *
  * Serves static assets normally. Intercepts /playground to inject
- * map credentials from encrypted environment secrets.
- *
- * Secrets (set via wrangler or dashboard):
- *   GOOGLE_API_KEY — Google Maps Platform API key
- *   CESIUM_TOKEN   — Cesium Ion access token
+ * map credentials from encrypted environment secrets via HTMLRewriter.
  */
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
 
-    // Debug endpoint — remove after confirming secrets work
+    // Debug endpoint — remove after confirming injection works
     if (path === '/_debug/env') {
-      const assetResp = await env.ASSETS.fetch(new Request(url.origin + '/playground'));
-      const ct = assetResp.headers.get('content-type') || 'NONE';
-      const body = await assetResp.text();
-      const hasHead = body.includes('<head');
-      const first200 = body.substring(0, 200);
       const keys = Object.keys(env).filter(k => k !== 'ASSETS');
-      const has = {
+      return new Response(JSON.stringify({
         GOOGLE_API_KEY: !!env.GOOGLE_API_KEY,
         CESIUM_TOKEN: !!env.CESIUM_TOKEN,
         envKeys: keys,
-        pathname: url.pathname,
-        computedPath: path,
-        assetContentType: ct,
-        assetStatus: assetResp.status,
-        assetHasHead: hasHead,
-        assetFirst200: first200,
-      };
-      return new Response(JSON.stringify(has, null, 2), {
+      }, null, 2), {
         headers: { 'content-type': 'application/json' },
       });
     }
 
-    // Fetch the static asset
-    const response = await env.ASSETS.fetch(request);
-
-    // Add debug header to confirm Worker is executing
-    const newHeaders = new Headers(response.headers);
-    newHeaders.set('x-zp-worker', 'active');
-
-    // Only rewrite the playground page
+    // For non-playground routes, pass through to static assets
     if (path !== '/playground') {
-      return new Response(response.body, { status: response.status, headers: newHeaders });
+      return env.ASSETS.fetch(request);
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('text/html')) {
-      return response;
-    }
-
+    // Playground route — fetch asset and inject credentials
     const googleApiKey = env.GOOGLE_API_KEY || '';
     const cesiumToken = env.CESIUM_TOKEN || '';
 
-    // If neither key is configured, pass through unmodified
+    // If no keys configured, just serve static
     if (!googleApiKey && !cesiumToken) {
-      return response;
+      return env.ASSETS.fetch(request);
     }
 
-    // Inject credentials as <meta> tags into <head>
+    const response = await env.ASSETS.fetch(request);
+
+    // Build the meta tags to inject
+    let inject = '';
+    if (cesiumToken) {
+      inject += `<meta name="zp-cesium-token" content="${escapeAttr(cesiumToken)}">`;
+    }
+    if (googleApiKey) {
+      inject += `<meta name="zp-google-api-key" content="${escapeAttr(googleApiKey)}">`;
+    }
+
+    // Use HTMLRewriter to prepend meta tags into <head>
     return new HTMLRewriter()
       .on('head', {
         element(el) {
-          if (googleApiKey) {
-            el.prepend(
-              `<meta name="zp-google-api-key" content="${escapeAttr(googleApiKey)}">`,
-              { html: true }
-            );
-          }
-          if (cesiumToken) {
-            el.prepend(
-              `<meta name="zp-cesium-token" content="${escapeAttr(cesiumToken)}">`,
-              { html: true }
-            );
-          }
+          el.prepend(inject, { html: true });
         },
       })
       .transform(response);
