@@ -422,6 +422,17 @@ enum ConfigureCmd {
         #[arg(long)]
         json: bool,
     },
+    /// Rotate a provider credential — verify the old key, prompt for the new one,
+    /// update the vault, and report which tools are affected.
+    Rotate {
+        /// Provider name (e.g., "anthropic", "openai")
+        #[arg(long)]
+        provider: String,
+
+        /// Field to rotate (e.g., "api_key")
+        #[arg(long)]
+        field: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -719,6 +730,15 @@ async fn main() -> anyhow::Result<()> {
             ConfigureCmd::Validate { provider, json } => {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(vault) => configure::run_validate(&vault, provider.as_deref(), *json),
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
+            ConfigureCmd::Rotate { provider, field } => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(vault) => configure::run_rotate(&vault, provider, field),
                     Err(e) => {
                         eprintln!("Error loading vault: {}", e);
                         1
