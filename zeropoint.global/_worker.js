@@ -2,20 +2,22 @@
  * ZeroPoint Global — Worker with credential injection
  *
  * Serves static assets normally. Intercepts /playground to inject
- * map credentials from encrypted environment secrets via HTMLRewriter.
+ * map credentials from encrypted environment secrets via string
+ * replacement (more reliable than HTMLRewriter with asset responses).
  */
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
+    const raw = url.pathname;
+    const path = raw.replace(/\.html$/, '').replace(/\/$/, '') || '/';
 
     // Debug endpoint — remove after confirming injection works
     if (path === '/_debug/env') {
-      const keys = Object.keys(env).filter(k => k !== 'ASSETS');
       return new Response(JSON.stringify({
         GOOGLE_API_KEY: !!env.GOOGLE_API_KEY,
         CESIUM_TOKEN: !!env.CESIUM_TOKEN,
-        envKeys: keys,
+        rawPath: raw,
+        normalizedPath: path,
       }, null, 2), {
         headers: { 'content-type': 'application/json' },
       });
@@ -35,7 +37,11 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
+    // Fetch the static asset
     const response = await env.ASSETS.fetch(request);
+
+    // Read the full HTML body as text
+    const html = await response.text();
 
     // Build the meta tags to inject
     let inject = '';
@@ -46,14 +52,22 @@ export default {
       inject += `<meta name="zp-google-api-key" content="${escapeAttr(googleApiKey)}">`;
     }
 
-    // Use HTMLRewriter to prepend meta tags into <head>
-    return new HTMLRewriter()
-      .on('head', {
-        element(el) {
-          el.prepend(inject, { html: true });
-        },
-      })
-      .transform(response);
+    // Inject right after <head> (or <head ...>)
+    const modified = html.replace(
+      /(<head[^>]*>)/i,
+      '$1\n' + inject
+    );
+
+    // Return new response with same headers but modified body
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set('x-zp-worker', 'injected');
+    newHeaders.delete('content-length'); // length changed
+
+    return new Response(modified, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: newHeaders,
+    });
   },
 };
 
