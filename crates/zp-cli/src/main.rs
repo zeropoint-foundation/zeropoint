@@ -632,7 +632,6 @@ async fn main() -> anyhow::Result<()> {
                     &mut vault,
                     configure_policy,
                     Some(&vault_path),
-                    false, // vault-backed by default
                 ),
                 Err(e) => {
                     eprintln!("Error loading vault: {}", e);
@@ -697,7 +696,6 @@ async fn main() -> anyhow::Result<()> {
                             *overwrite,
                             proxy_opt,
                             Some(&vault_path),
-                            false, // vault-backed by default
                         );
                         if *validate && exit == 0 && !*dry_run {
                             println!();
