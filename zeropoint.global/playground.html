@@ -960,28 +960,9 @@ document.addEventListener('click', function(e) {
 // ============================================================
 // CONFIG
 // ============================================================
-// Map credentials are injected at deploy time — never committed.
-// Provide via one of:
-//   1. <meta name="zp-google-api-key" content="..."> / <meta name="zp-cesium-token" content="...">
-//   2. window.__ZP_PLAYGROUND_CONFIG__ = { googleApiKey, cesiumToken } (inline script from server)
-//   3. Runtime fetch of /api/v1/playground/config (populated from env vars on the server)
-// If none resolve, the 3D map is disabled and a notice is shown in its place.
-function readMapCredentials() {
-  const meta = (name) => {
-    const el = document.querySelector(`meta[name="${name}"]`);
-    const v = el && el.getAttribute('content');
-    return v && v.trim() ? v.trim() : '';
-  };
-  const injected = (typeof window !== 'undefined' && window.__ZP_PLAYGROUND_CONFIG__) || {};
-  return {
-    googleApiKey: meta('zp-google-api-key') || injected.googleApiKey || '',
-    cesiumToken:  meta('zp-cesium-token')   || injected.cesiumToken  || '',
-  };
-}
-const __ZP_MAP_CREDS = readMapCredentials();
 const CONFIG = {
-  googleApiKey: __ZP_MAP_CREDS.googleApiKey,
-  cesiumToken:  __ZP_MAP_CREDS.cesiumToken,
+  googleApiKey: 'AIzaSyBdKLfc6vAiCtkOYiUBL4cYfIWeOmGrmSk',
+  cesiumToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3NDY5ZTlhMS04NTJiLTRkODYtYTQwZC1lYTk3NzI4ZjkyZjciLCJpZCI6Mzk5NjE4LCJpYXQiOjE3NzI4NjA0MTZ9.5SZl3k4FNwhpoHOi3hcKEJO5k__1hyTbV75DDCizFro',
 
   // San Francisco — Financial District / SoMa / Embarcadero
   camera: {
