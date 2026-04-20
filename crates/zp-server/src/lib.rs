@@ -4556,11 +4556,15 @@ const FONTS_CSS: &str = include_str!("../assets/fonts/fonts.css");
 const FONT_INTER: &[u8] = include_bytes!("../assets/fonts/inter-latin.woff2");
 const FONT_JETBRAINS: &[u8] = include_bytes!("../assets/fonts/jetbrainsmono-latin.woff2");
 
-/// Bootstrap the assets directory if it doesn't exist or is missing critical files.
-/// Writes compiled-in HTML, CSS, and JS so that a fresh `zp serve` works without
-/// any manual copying.  Existing files are NOT overwritten — only missing ones
-/// are created.  Users who want hot-reload can still use `./zp-dev.sh html`.
+/// Bootstrap the assets directory — write compiled-in HTML, CSS, and JS so that
+/// a fresh `zp serve` works without any manual copying.
+///
+/// **Staleness guard**: files are overwritten when they differ from the compiled-in
+/// version.  This prevents stale assets from shadowing new builds.  If `ZP_ASSETS_DIR`
+/// is set, we skip overwriting (the operator is managing assets explicitly).
 fn bootstrap_assets(assets_dir: &std::path::Path) {
+    let explicit_override = std::env::var("ZP_ASSETS_DIR").is_ok();
+
     let text_files: &[(&str, &str)] = &[
         ("dashboard.html", DASHBOARD_HTML_FALLBACK),
         ("onboard.html", ONBOARD_HTML_FALLBACK),
@@ -4592,6 +4596,7 @@ fn bootstrap_assets(assets_dir: &std::path::Path) {
     let _ = std::fs::create_dir_all(assets_dir.join("fonts"));
 
     let mut bootstrapped = 0u32;
+    let mut refreshed = 0u32;
     for (name, content) in text_files {
         let path = assets_dir.join(name);
         if !path.exists() {
@@ -4599,6 +4604,17 @@ fn bootstrap_assets(assets_dir: &std::path::Path) {
                 tracing::warn!("Could not write {}: {}", path.display(), e);
             } else {
                 bootstrapped += 1;
+            }
+        } else if !explicit_override {
+            // Overwrite stale files unless the operator is managing assets
+            if let Ok(existing) = std::fs::read_to_string(&path) {
+                if existing != *content {
+                    if let Err(e) = std::fs::write(&path, content) {
+                        tracing::warn!("Could not refresh {}: {}", path.display(), e);
+                    } else {
+                        refreshed += 1;
+                    }
+                }
             }
         }
     }
@@ -4609,6 +4625,16 @@ fn bootstrap_assets(assets_dir: &std::path::Path) {
                 tracing::warn!("Could not write {}: {}", path.display(), e);
             } else {
                 bootstrapped += 1;
+            }
+        } else if !explicit_override {
+            if let Ok(existing) = std::fs::read(&path) {
+                if existing != *content {
+                    if let Err(e) = std::fs::write(&path, content) {
+                        tracing::warn!("Could not refresh {}: {}", path.display(), e);
+                    } else {
+                        refreshed += 1;
+                    }
+                }
             }
         }
     }
@@ -4634,32 +4660,30 @@ fn bootstrap_assets(assets_dir: &std::path::Path) {
         );
     }
 
-    if bootstrapped > 0 {
-        tracing::info!("Bootstrapped {} asset files to {}", bootstrapped, assets_dir.display());
+    if bootstrapped > 0 || refreshed > 0 {
+        tracing::info!(
+            "Assets: {} bootstrapped, {} refreshed in {}",
+            bootstrapped, refreshed, assets_dir.display()
+        );
     }
 }
 
-/// Resolve an HTML asset: check $ZP_ASSETS_DIR or ~/ZeroPoint/assets/{name}
-/// first (override), then fall back to the compiled-in copy.
+/// Resolve an HTML asset.
 ///
-/// Two-tier system:
-///   1. Override dir  — hot-reload via `./zp-dev.sh html`, or persistent files
-///   2. Compiled-in   — always available, matches last Rust build
+/// If `ZP_ASSETS_DIR` is set, check that directory first (explicit override
+/// for hot-reload or custom theming).  Otherwise, use the compiled-in copy
+/// directly — this guarantees the HTML always matches the current binary,
+/// eliminating stale-asset bugs.
 fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
-    // 1. Override: $ZP_ASSETS_DIR or ~/ZeroPoint/assets/<name>
-    let override_dir = std::env::var("ZP_ASSETS_DIR")
-        .map(std::path::PathBuf::from)
-        .ok()
-        .or_else(|| zp_paths::assets_dir().ok());
-
-    if let Some(dir) = override_dir {
-        let path = dir.join(name);
+    // Only check the override dir if the operator explicitly asked for it
+    if let Ok(dir) = std::env::var("ZP_ASSETS_DIR") {
+        let path = std::path::PathBuf::from(dir).join(name);
         if let Ok(contents) = std::fs::read_to_string(&path) {
             return contents;
         }
     }
 
-    // 2. Compiled-in fallback
+    // Compiled-in copy — always current, always available
     fallback.to_string()
 }
 
