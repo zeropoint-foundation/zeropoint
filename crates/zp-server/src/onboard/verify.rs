@@ -44,12 +44,17 @@ pub struct CapabilityResult {
 ///
 /// This is an async function meant to be spawned as a background task
 /// from the launch/health transition path.
+///
+/// P2-3: Each probe carries an internal capability token scoped to the
+/// specific action and target, preventing SSRF from leveraging
+/// verification endpoints.
 pub async fn verify_tool_capabilities(
     tool_name: &str,
     tool_port: u16,
     manifest: &ToolManifest,
     verification: &VerificationConfig,
     audit_store: &Arc<Mutex<AuditStore>>,
+    internal_auth: Option<&crate::internal_auth::InternalAuthority>,
 ) -> VerificationResult {
     let base = format!("http://127.0.0.1:{}", tool_port);
     let client = match reqwest::Client::builder()
@@ -77,7 +82,18 @@ pub async fn verify_tool_capabilities(
         let url = format!("{}{}", base, providers_ep);
         tracing::info!("verify[{}]: Tier 1 — probing {}", tool_name, url);
 
-        match probe_with_retry(&client, "GET", &url, &Default::default(), None, retries).await {
+        // P2-3: Issue a scoped internal token for this Tier 1 probe
+        let mut tier1_headers: std::collections::HashMap<String, String> =
+            Default::default();
+        if let Some(auth) = internal_auth {
+            let token = auth.issue("verify:tier1", tool_name);
+            tier1_headers.insert(
+                crate::internal_auth::HEADER_NAME.to_string(),
+                token.to_header_value(),
+            );
+        }
+
+        match probe_with_retry(&client, "GET", &url, &tier1_headers, None, retries).await {
             ProbeResult::Success(body) => {
                 // Parse response to determine which providers loaded.
                 // Expected shape: { "provider_id": { ... }, ... }
@@ -156,8 +172,17 @@ pub async fn verify_tool_capabilities(
         let url = format!("{}{}", base, endpoint);
         let probe_cfg = verification.probes.get(capability);
         let method = probe_cfg.map(|p| p.method.as_str()).unwrap_or("GET");
-        let headers = probe_cfg.map(|p| &p.headers).cloned().unwrap_or_default();
+        let mut headers = probe_cfg.map(|p| &p.headers).cloned().unwrap_or_default();
         let body = probe_cfg.and_then(|p| p.body.as_deref());
+
+        // P2-3: Issue a scoped internal token for this Tier 2 probe
+        if let Some(auth) = internal_auth {
+            let token = auth.issue("verify:tier2", tool_name);
+            headers.insert(
+                crate::internal_auth::HEADER_NAME.to_string(),
+                token.to_header_value(),
+            );
+        }
 
         tracing::info!(
             "verify[{}]: Tier 2 — probing {} {} ({})",

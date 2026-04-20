@@ -8,6 +8,7 @@ pub mod attestations;
 pub mod auth;
 pub mod codebase;
 pub mod exec_ws;
+pub mod internal_auth;
 pub mod genesis_verify;
 pub mod onboard;
 pub mod proxy;
@@ -459,6 +460,10 @@ pub struct AppStateInner {
     /// unauthenticated access to the genesis ceremony on network-facing
     /// deployments. `None` after genesis (onboard is already 403).
     pub onboard_token: Option<String>,
+    /// Internal zero-trust authority (P2-3: SSRF-VULN-01/02).
+    /// Issues and verifies short-lived capability tokens for internal
+    /// service calls (verification probes, tool proxy, etc.).
+    pub internal_auth: Arc<internal_auth::InternalAuthority>,
 }
 
 #[derive(Clone)]
@@ -528,6 +533,12 @@ impl AppState {
         let rate_limiter = Arc::new(auth::FailedAuthLimiter::new());
         let endpoint_limiter = Arc::new(auth::EndpointRateLimiter::new());
 
+        // Internal zero-trust authority (P2-3: SSRF-VULN-01/02).
+        // Derives an internal HMAC key from the operator key via BLAKE3.
+        let internal_auth = Arc::new(
+            internal_auth::InternalAuthority::new(&identity.signing_key.to_bytes()),
+        );
+
         // One-time onboard setup token (AUTH-VULN-06).
         // Only generated when:
         //   1. genesis.json does not exist (pre-genesis), AND
@@ -562,6 +573,7 @@ impl AppState {
             rate_limiter,
             endpoint_limiter,
             onboard_token,
+            internal_auth,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -3400,6 +3412,7 @@ async fn tools_launch_handler(
                                     &vmanifest,
                                     &verification,
                                     &vstate.0.audit_store,
+                                    Some(&vstate.0.internal_auth),
                                 )
                                 .await;
                                 let verified = !result.capabilities.is_empty()
