@@ -1055,7 +1055,7 @@ mod tests {
         };
         let receipt = build_receipt("rm -rf /tmp/test", &config, &result, &decision, 1);
 
-        assert!(receipt.id.starts_with("rcpt-"));
+        assert!(receipt.id.starts_with("plcy-"));
         assert!(!receipt.content_hash.is_empty());
         assert_eq!(receipt.trust_grade, zp_receipt::TrustGrade::B);
         assert_eq!(receipt.version, "1.0.0");
