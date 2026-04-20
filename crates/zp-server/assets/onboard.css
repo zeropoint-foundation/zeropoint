@@ -1,22 +1,22 @@
-  :root {
-    --bg: #0a0a0c;
-    --bg-card: #111116;
-    --bg-card-hover: #1a1a22;
-    --border: #2a2a35;
-    --border-active: #7eb8da;
-    --text: #e0e0e6;
-    --text-dim: #8888a0;
-    --text-bright: #ffffff;
-    --accent: #7eb8da;
-    --accent-dim: rgba(126,184,218,0.15);
-    --green: #66bb88;
-    --yellow: #dda855;
-    --red: #dd5566;
-    --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-    --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  }
+@import url('/assets/fonts/fonts.css');
 
-  @import url('/assets/fonts/fonts.css');
+:root {
+  --bg: #0a0a0c;
+  --bg-card: #111116;
+  --bg-card-hover: #1a1a22;
+  --border: #2a2a35;
+  --border-active: #7eb8da;
+  --text: #e0e0e6;
+  --text-dim: #8888a0;
+  --text-bright: #ffffff;
+  --accent: #7eb8da;
+  --accent-dim: rgba(126,184,218,0.15);
+  --green: #66bb88;
+  --yellow: #dda855;
+  --red: #dd5566;
+  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
