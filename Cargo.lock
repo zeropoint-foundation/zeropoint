@@ -5826,6 +5826,7 @@ dependencies = [
  "zp-engine",
  "zp-keys",
  "zp-memory",
+ "zp-mesh",
  "zp-observation",
  "zp-pipeline",
  "zp-policy",

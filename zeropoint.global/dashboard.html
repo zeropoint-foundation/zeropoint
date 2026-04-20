@@ -513,6 +513,16 @@ const phases = [
       { id: "P4-3", label: "Dashboard observability panels (cognition + analysis + events)", done: true },
     ]
   },
+  {
+    name: "Phase 5: Enterprise & Genesis",
+    status: "complete",
+    items: [
+      { id: "P5-1", label: "Trust Tier 2 runtime enforcement — per-action tier requirements in policy engine", done: true },
+      { id: "P5-2", label: "Fleet node registry — heartbeat, status tracking, and fleet summary API", done: true },
+      { id: "P5-3", label: "Policy push distribution — fleet-wide rollout with delivery tracking", done: true },
+      { id: "P5-4", label: "Genesis v2 ceremony — Shamir secret sharing for key escrow + rotation schedule", done: true },
+    ]
+  },
 ];
 
 // ── Architecture tree data (updated statuses) ──
@@ -764,10 +774,12 @@ const data = [
       { label: "Dashboard observability panels (cognition + analysis + events)", status: "shipped", phase: "P4-3" },
       { label: "Channel adapters (Slack webhook + adapter framework)", status: "shipped", phase: "P4-2" },
     ]},
-    { label: "Enterprise", status: "roadmap", children: [
+    { label: "Enterprise & Fleet", status: "shipped", children: [
+      { label: "Trust Tier 2 runtime enforcement (per-action tier gating)", status: "shipped", phase: "P5-1" },
+      { label: "Fleet node registry (heartbeat + status + summary)", status: "shipped", phase: "P5-2" },
+      { label: "Policy push distribution (rollout + delivery tracking)", status: "shipped", phase: "P5-3" },
+      { label: "Genesis v2 ceremony (Shamir SSS key escrow + rotation)", status: "shipped", phase: "P5-4" },
       { label: "Genesis ceremony UI", status: "roadmap" },
-      { label: "Fleet policy distribution", status: "roadmap" },
-      { label: "Multi-node management", status: "roadmap" },
     ]},
   ]},
 ];

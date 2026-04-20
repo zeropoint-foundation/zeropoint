@@ -69,7 +69,9 @@ pub mod error;
 pub mod identity;
 pub mod interface;
 pub mod link;
+pub mod node_registry;
 pub mod packet;
+pub mod policy_distributor;
 pub mod peer_keystore;
 pub mod policy_sync;
 pub mod reputation;
@@ -100,6 +102,8 @@ pub use reputation::{
     CompactReputationSummary, PeerReputation, ReputationGrade, ReputationScore, ReputationSignal,
     ReputationWeights, SignalCategory, SignalPolarity,
 };
+pub use node_registry::{FleetNode, FleetSummary, NodeHeartbeat, NodeRegistry, NodeStatus};
+pub use policy_distributor::{PolicyDistributor, PolicyRollout, RolloutSummary};
 pub use runtime::{InboundEnvelope, MeshRuntime, RuntimeConfig, RuntimeStats};
 pub use store::MeshStore;
 pub use tcp::{TcpClientInterface, TcpServerInterface};

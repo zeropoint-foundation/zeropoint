@@ -22,6 +22,7 @@ pub mod biometric;
 pub mod blast_radius;
 pub mod certificate;
 pub mod error;
+pub mod genesis_v2;
 pub mod hierarchy;
 pub mod keyring;
 pub mod recovery;
