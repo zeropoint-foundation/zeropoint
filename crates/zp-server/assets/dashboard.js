@@ -1472,3 +1472,155 @@ document.addEventListener('click', function(e) {
       break;
   }
 });
+
+// ── P4-3: Observability Panels ────────────────────────────────────
+
+// Cognition Pipeline panel
+(async function loadCognitionPanel() {
+  const panel = document.getElementById('cognitionPanel');
+  if (!panel) return;
+  try {
+    const res = await zpFetch('/api/v1/cognition/status');
+    if (!res.ok) throw new Error('Status ' + res.status);
+    const data = await res.json();
+    const cards = [
+      { label: 'Observations', value: data.observation_count || data.total_observations || 0 },
+      { label: 'Promoted', value: data.promoted_count || 0 },
+      { label: 'Pending Review', value: data.pending_reviews || 0 },
+      { label: 'Pipeline', value: data.pipeline_active ? 'Active' : 'Idle', active: data.pipeline_active },
+    ];
+    panel.innerHTML = cards.map(c =>
+      '<div class="cognition-card">' +
+        '<div class="cognition-card-label">' + c.label + '</div>' +
+        '<div class="cognition-card-value' + (c.active ? ' active' : '') + '">' + c.value + '</div>' +
+      '</div>'
+    ).join('');
+  } catch (e) {
+    panel.innerHTML = '<div style="color:#555;font-size:12px">Cognition pipeline not available</div>';
+  }
+})();
+
+// Analysis Engines panel
+(async function loadAnalysisPanel() {
+  const panel = document.getElementById('analysisPanel');
+  if (!panel) return;
+  try {
+    const res = await zpFetch('/api/v1/analysis/tools');
+    if (!res.ok) throw new Error('Status ' + res.status);
+    const data = await res.json();
+    if (!data.tools || data.tools.length === 0) {
+      panel.innerHTML = '<div style="color:#555;font-size:12px">No analysis data yet — launch and use tools to generate observations</div>';
+      return;
+    }
+    panel.innerHTML = data.tools.map(t => {
+      const pct = Math.round((t.readiness_score || 0) * 100);
+      const cls = pct >= 80 ? 'green' : pct >= 50 ? 'yellow' : 'red';
+      return '<div class="analysis-tool">' +
+        '<div class="analysis-tool-name">' + (t.name || '?') + '</div>' +
+        '<div class="analysis-tool-bar"><div class="analysis-tool-fill ' + cls + '" style="width:' + pct + '%"></div></div>' +
+        '<div class="analysis-tool-score">' + pct + '%</div>' +
+        '<div class="analysis-tool-obs">' + (t.observation_count || 0) + ' obs</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    panel.innerHTML = '<div style="color:#555;font-size:12px">Analysis engines not available</div>';
+  }
+})();
+
+// Live Event Feed via SSE
+(function initEventFeed() {
+  const feed = document.getElementById('eventFeed');
+  const status = document.getElementById('eventFeedStatus');
+  const counter = document.getElementById('eventFeedCount');
+  if (!feed || !status) return;
+
+  var eventCount = 0;
+  var maxEvents = 100;
+
+  function connect() {
+    var es = new EventSource('/api/v1/events/stream');
+
+    es.onopen = function() {
+      status.textContent = '● Connected';
+      status.classList.add('connected');
+    };
+
+    es.onerror = function() {
+      status.textContent = '● Reconnecting...';
+      status.classList.remove('connected');
+    };
+
+    // Listen for all event types
+    ['audit', 'channel', 'system'].forEach(function(cat) {
+      es.addEventListener(cat, function(e) {
+        try {
+          var item = JSON.parse(e.data);
+          addEventRow(item, cat);
+        } catch (_) {}
+      });
+    });
+  }
+
+  function addEventRow(item, cat) {
+    // Remove empty placeholder
+    var empty = feed.querySelector('.event-feed-empty');
+    if (empty) empty.remove();
+
+    var row = document.createElement('div');
+    row.className = 'event-row';
+
+    var ts = item.timestamp ? new Date(item.timestamp) : new Date();
+    var timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    row.innerHTML =
+      '<span class="event-time">' + timeStr + '</span>' +
+      '<span class="event-cat ' + cat + '">' + cat + '</span>' +
+      '<span class="event-text">' + escapeHtml(item.event_type || '') +
+        (item.summary ? ' — ' + escapeHtml(item.summary) : '') +
+      '</span>';
+
+    feed.insertBefore(row, feed.firstChild);
+    eventCount++;
+
+    // Trim old events
+    while (feed.children.length > maxEvents) {
+      feed.removeChild(feed.lastChild);
+    }
+
+    if (counter) counter.textContent = eventCount + ' events';
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  connect();
+})();
+
+// Channel Status panel
+(async function loadChannelsPanel() {
+  const panel = document.getElementById('channelsPanel');
+  if (!panel) return;
+  try {
+    const res = await zpFetch('/api/v1/channels/status');
+    if (!res.ok) throw new Error('Status ' + res.status);
+    const data = await res.json();
+    if (!data.channels || data.channels.length === 0) {
+      panel.innerHTML = '<div style="color:#555;font-size:12px">No channels configured</div>';
+      return;
+    }
+    panel.innerHTML = data.channels.map(ch => {
+      const dotCls = ch.connected ? 'connected' : ch.configured ? 'disconnected' : 'error';
+      const statusText = ch.connected ? 'Connected' : ch.error || 'Not configured';
+      return '<div class="channel-card">' +
+        '<div class="channel-platform">' +
+          '<span class="channel-status-dot ' + dotCls + '"></span>' +
+          ch.platform.charAt(0).toUpperCase() + ch.platform.slice(1) +
+        '</div>' +
+        '<div class="channel-status-text">' + statusText + '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    panel.innerHTML = '<div style="color:#555;font-size:12px">Channel status not available</div>';
+  }
+})();

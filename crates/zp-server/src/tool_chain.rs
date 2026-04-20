@@ -387,3 +387,33 @@ pub struct ToolReceiptRequest {
     /// Optional detail/evidence
     pub detail: Option<String>,
 }
+
+// ── Broadcast-aware emission (P4-1) ────────────────────────────────────
+
+/// Emit a tool lifecycle receipt AND broadcast it to the SSE event stream.
+///
+/// This is the preferred entry point for handlers that have access to
+/// AppState — it combines audit chain persistence with real-time
+/// notification in a single call.
+pub fn emit_and_broadcast(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    event_tx: &tokio::sync::broadcast::Sender<crate::events::EventStreamItem>,
+    event: &str,
+    detail: Option<&str>,
+) -> Option<String> {
+    let entry_hash = emit_tool_receipt(audit_store, event, detail);
+
+    // Broadcast to SSE subscribers (best-effort)
+    let item = crate::events::EventStreamItem::from_audit(
+        event,
+        entry_hash.clone(),
+    );
+    let item = if let Some(d) = detail {
+        item.with_summary(d)
+    } else {
+        item
+    };
+    crate::events::broadcast_event(event_tx, item);
+
+    entry_hash
+}

@@ -501,6 +501,51 @@
     .warning-text { color: #FFB020; }
     .error-text { color: #FF4444; }
 
+    /* Cognition Pipeline (P4-3) */
+    .cognition-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .cognition-card { background: #111114; border: 1px solid #1E1E22; border-radius: 4px; padding: 20px; }
+    .cognition-card-label { font-size: 10px; color: #8B8984; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+    .cognition-card-value { font-size: 28px; font-weight: 600; color: #E8E6E3; }
+    .cognition-card-value.active { color: #00C896; }
+
+    /* Analysis Engines (P4-3) */
+    .analysis-panel { display: flex; flex-direction: column; gap: 12px; }
+    .analysis-tool { display: flex; align-items: center; gap: 16px; background: #111114; border: 1px solid #1E1E22; border-radius: 4px; padding: 16px 20px; }
+    .analysis-tool-name { font-size: 13px; color: #E8E6E3; font-weight: 500; min-width: 120px; }
+    .analysis-tool-bar { flex: 1; height: 6px; background: #1E1E22; border-radius: 3px; overflow: hidden; }
+    .analysis-tool-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+    .analysis-tool-fill.green { background: #00C896; }
+    .analysis-tool-fill.yellow { background: #FFB020; }
+    .analysis-tool-fill.red { background: #FF4444; }
+    .analysis-tool-score { font-size: 12px; color: #8B8984; min-width: 40px; text-align: right; }
+    .analysis-tool-obs { font-size: 11px; color: #555; min-width: 60px; text-align: right; }
+
+    /* Live Event Feed (P4-3) */
+    .event-feed-controls { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+    .event-feed-status { font-size: 11px; color: #FFB020; }
+    .event-feed-status.connected { color: #00C896; }
+    .event-feed-count { font-size: 11px; color: #8B8984; margin-left: auto; }
+    .event-feed { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 0; }
+    .event-feed-empty { color: #555; font-size: 12px; padding: 20px 0; text-align: center; }
+    .event-row { display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1A1A1E; font-size: 12px; }
+    .event-row:last-child { border-bottom: none; }
+    .event-time { color: #555; min-width: 70px; font-variant-numeric: tabular-nums; }
+    .event-cat { min-width: 60px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .event-cat.audit { color: #7eb8da; }
+    .event-cat.channel { color: #C59AFF; }
+    .event-cat.system { color: #FFB020; }
+    .event-text { color: #E8E6E3; flex: 1; word-break: break-word; }
+
+    /* Channel Status (P4-3) */
+    .channels-panel { display: flex; gap: 16px; flex-wrap: wrap; }
+    .channel-card { background: #111114; border: 1px solid #1E1E22; border-radius: 4px; padding: 20px; min-width: 200px; }
+    .channel-platform { font-size: 14px; font-weight: 500; color: #E8E6E3; margin-bottom: 8px; }
+    .channel-status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .channel-status-dot.connected { background: #00C896; }
+    .channel-status-dot.disconnected { background: #555; }
+    .channel-status-dot.error { background: #FF4444; }
+    .channel-status-text { font-size: 11px; color: #8B8984; }
+
     /* Footer */
     .footer { margin-top: 120px; padding-top: 40px; border-top: 1px solid #2A2A2E; text-align: center; color: #8B8984; }
     .footer-tagline { font-size: 13px; margin-bottom: 16px; letter-spacing: 0.02em; }
@@ -674,6 +719,50 @@
         </div>
         <div class="posture-checks" id="postureChecks">
           <div class="loading">Loading checks...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cognition Pipeline (P4-3) -->
+    <div class="section">
+      <div class="section-title">Cognition Pipeline</div>
+      <div class="section-content">
+        <div id="cognitionPanel" class="cognition-panel">
+          <div class="loading">Loading cognition status...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis Engines (P4-3) -->
+    <div class="section">
+      <div class="section-title">Analysis Engines</div>
+      <div class="section-content">
+        <div id="analysisPanel" class="analysis-panel">
+          <div class="loading">Loading analysis data...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Event Feed (P4-3) -->
+    <div class="section">
+      <div class="section-title">Live Event Feed</div>
+      <div class="section-content">
+        <div class="event-feed-controls">
+          <span class="event-feed-status" id="eventFeedStatus">● Connecting...</span>
+          <span class="event-feed-count" id="eventFeedCount">0 events</span>
+        </div>
+        <div id="eventFeed" class="event-feed">
+          <div class="event-feed-empty">Waiting for events...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Channel Status (P4-3) -->
+    <div class="section">
+      <div class="section-title">Channels</div>
+      <div class="section-content">
+        <div id="channelsPanel" class="channels-panel">
+          <div class="loading">Loading channel status...</div>
         </div>
       </div>
     </div>
