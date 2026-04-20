@@ -502,10 +502,17 @@ pub async fn decide_review_handler(
     }))
 }
 
+/// Response for POST /api/v1/cognition/reviews/sweep.
+#[derive(Serialize)]
+pub struct SweepReviewsResponse {
+    pub swept: usize,
+    pub expired_ids: Vec<String>,
+}
+
 /// `POST /api/v1/cognition/reviews/sweep` — sweep expired reviews.
 pub async fn sweep_reviews_handler(
     State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+) -> Result<Json<SweepReviewsResponse>, (StatusCode, String)> {
     let review_queue = state.0.review_queue.as_ref().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,
         "Review queue not available".to_string(),
@@ -514,8 +521,8 @@ pub async fn sweep_reviews_handler(
     let mut queue = review_queue.lock().unwrap();
     let expired = queue.sweep_expired();
 
-    Ok(Json(serde_json::json!({
-        "swept": expired.len(),
-        "expired_ids": expired,
-    })))
+    Ok(Json(SweepReviewsResponse {
+        swept: expired.len(),
+        expired_ids: expired,
+    }))
 }

@@ -2817,6 +2817,104 @@ fn redact_paths(s: &str) -> String {
 }
 
 // ============================================================================
+// Tools / Cockpit — Typed Response Structs (P2-4)
+// ============================================================================
+
+/// Response for GET /api/v1/tools — lists all configured tools.
+#[derive(Serialize)]
+struct ToolsListResponse {
+    tools: Vec<CockpitTool>,
+    scan_path: String,
+    has_genesis: bool,
+    chain_receipts: bool,
+}
+
+/// Response for POST /api/v1/tools/launch — tool started successfully.
+#[derive(Serialize)]
+struct ToolLaunchResponse {
+    status: String,
+    name: String,
+    cmd: String,
+    url: String,
+    raw_url: String,
+    port: u16,
+    kind: String,
+    pid: u32,
+}
+
+/// Response for POST /api/v1/tools/stop — tool stopped.
+#[derive(Serialize)]
+struct ToolStopResponse {
+    status: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    killed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+/// Response for GET /api/v1/tools/log — tool launch log tail.
+#[derive(Serialize)]
+struct ToolLogResponse {
+    name: String,
+    log: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lines: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+/// Query parameters for GET /api/v1/tools/log.
+#[derive(Deserialize)]
+struct ToolLogQuery {
+    name: Option<String>,
+}
+
+/// Response for POST /api/v1/tools/:tool_name/configure.
+#[derive(Serialize)]
+struct ToolConfigureResponse {
+    ok: bool,
+    tool: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    port_var: Option<String>,
+}
+
+/// Response for POST /api/v1/tools/:tool_name/repair.
+#[derive(Serialize)]
+struct ToolRepairResponse {
+    ok: bool,
+    tool: String,
+    action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
+}
+
+/// Response for POST /api/v1/tools/receipt.
+#[derive(Serialize)]
+struct ToolReceiptResponse {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    entry_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+/// Response for GET /api/v1/tools/chain.
+#[derive(Serialize)]
+struct ToolChainResponse {
+    tools: Vec<tool_chain::ToolChainState>,
+    source: String,
+}
+
+// ============================================================================
 // Tools / Cockpit Handler
 // ============================================================================
 
@@ -3070,16 +3168,18 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
 ///
 /// Readiness is derived from the **audit chain** (canonical source),
 /// with a fallback to the preflight JSON cache for backward compat.
-async fn tools_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse> {
     let scan_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
 
     if !scan_path.exists() {
-        return Json(serde_json::json!({
-            "tools": [],
-            "scan_path": scan_path.display().to_string(),
-        }));
+        return Json(ToolsListResponse {
+            tools: vec![],
+            scan_path: scan_path.display().to_string(),
+            has_genesis: false,
+            chain_receipts: false,
+        });
     }
 
     let results = zp_engine::scan::scan_tools(&scan_path);
@@ -3211,12 +3311,12 @@ async fn tools_handler(State(state): State<AppState>) -> Json<serde_json::Value>
         .collect();
 
     let chain_receipts = !chain_state.is_empty();
-    Json(serde_json::json!({
-        "tools": tools,
-        "scan_path": scan_path.display().to_string(),
-        "has_genesis": has_genesis,
-        "chain_receipts": chain_receipts,
-    }))
+    Json(ToolsListResponse {
+        tools,
+        scan_path: scan_path.display().to_string(),
+        has_genesis,
+        chain_receipts,
+    })
 }
 
 // ── Tool Lifecycle ──────────────────────────────────────────────────────────
@@ -3688,16 +3788,16 @@ async fn tools_launch_handler(
 
             (
                 StatusCode::ACCEPTED,
-                Json(serde_json::json!({
-                    "status": if restarted { "restarting" } else { "starting" },
-                    "name": req.name,
-                    "cmd": full_cmd,
-                    "url": proxy_url,
-                    "raw_url": raw_url,
-                    "port": assignment.port,
-                    "kind": launch.kind,
-                    "pid": child.id(),
-                })),
+                Json(serde_json::to_value(ToolLaunchResponse {
+                    status: if restarted { "restarting" } else { "starting" }.to_string(),
+                    name: req.name.clone(),
+                    cmd: full_cmd.clone(),
+                    url: proxy_url,
+                    raw_url,
+                    port: assignment.port,
+                    kind: launch.kind.clone(),
+                    pid: child.id(),
+                }).unwrap_or_default()),
             )
         }
         Err(e) => {
@@ -3751,39 +3851,54 @@ async fn tools_stop_handler(
 
             (
                 StatusCode::OK,
-                Json(serde_json::json!({
-                    "status": "stopped",
-                    "name": req.name,
-                    "pid": pid,
-                    "killed": killed,
-                })),
+                Json(serde_json::to_value(ToolStopResponse {
+                    status: "stopped".to_string(),
+                    name: req.name.clone(),
+                    pid: Some(pid),
+                    killed: Some(killed),
+                    message: None,
+                }).unwrap_or_default()),
             )
         }
         None => (
             StatusCode::NOT_FOUND,
-            Json(serde_json::json!({
-                "status": "not_running",
-                "name": req.name,
-                "message": format!("No running process found for '{}'", req.name),
-            })),
+            Json(serde_json::to_value(ToolStopResponse {
+                status: "not_running".to_string(),
+                name: req.name.clone(),
+                pid: None,
+                killed: None,
+                message: Some(format!("No running process found for '{}'", req.name)),
+            }).unwrap_or_default()),
         ),
     }
 }
 
 /// Return the last 50 lines of a tool's launch log for diagnostics.
 async fn tools_log_handler(
-    Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
-    let name = match params.get("name") {
-        Some(n) => n,
-        None => return Json(serde_json::json!({ "error": "Missing 'name' parameter" })),
+    Query(params): Query<ToolLogQuery>,
+) -> Json<ToolLogResponse> {
+    let name = match params.name {
+        Some(ref n) => n,
+        None => return Json(ToolLogResponse {
+            name: String::new(),
+            log: None,
+            lines: None,
+            path: None,
+            message: Some("Missing 'name' parameter".to_string()),
+        }),
     };
 
     // P2-2: Validate the name before using it to construct a file path.
     // Without this, an attacker could use traversal sequences like
     // "../../etc/passwd" to read arbitrary files.
     if !is_safe_tool_name(name) {
-        return Json(serde_json::json!({ "error": "Invalid tool name" }));
+        return Json(ToolLogResponse {
+            name: name.clone(),
+            log: None,
+            lines: None,
+            path: None,
+            message: Some("Invalid tool name".to_string()),
+        });
     }
 
     let log_path = dirs::home_dir()
@@ -3793,11 +3908,13 @@ async fn tools_log_handler(
         .join(format!("{}.log", name));
 
     if !log_path.exists() {
-        return Json(serde_json::json!({
-            "name": name,
-            "log": null,
-            "message": "No launch log found. Tool may not have been started from the cockpit.",
-        }));
+        return Json(ToolLogResponse {
+            name: name.clone(),
+            log: None,
+            lines: None,
+            path: None,
+            message: Some("No launch log found. Tool may not have been started from the cockpit.".to_string()),
+        });
     }
 
     let contents = std::fs::read_to_string(&log_path).unwrap_or_default();
@@ -3809,12 +3926,13 @@ async fn tools_log_handler(
     };
     let tail: String = lines[tail_start..].join("\n");
 
-    Json(serde_json::json!({
-        "name": name,
-        "log": tail,
-        "lines": lines.len(),
-        "path": log_path.display().to_string(),
-    }))
+    Json(ToolLogResponse {
+        name: name.clone(),
+        log: Some(tail),
+        lines: Some(lines.len()),
+        path: Some(log_path.display().to_string()),
+        message: None,
+    })
 }
 
 // ── Tool Preflight ──────────────────────────────────────────────────────────
@@ -4004,12 +4122,12 @@ async fn tools_configure_handler(
 
                     (
                         StatusCode::OK,
-                        Json(serde_json::json!({
-                            "ok": true,
-                            "tool": tool_name,
-                            "new_port": assignment.port,
-                            "port_var": port_var,
-                        })),
+                        Json(serde_json::to_value(ToolConfigureResponse {
+                            ok: true,
+                            tool: tool_name.clone(),
+                            new_port: Some(assignment.port),
+                            port_var: Some(port_var.clone()),
+                        }).unwrap_or_default()),
                     )
                 }
                 Err(e) => (
@@ -4083,12 +4201,12 @@ async fn tools_repair_handler(
                     tracing::info!("Restarted Docker Compose for {}", tool_name);
                     (
                         StatusCode::OK,
-                        Json(serde_json::json!({
-                            "ok": true,
-                            "tool": tool_name,
-                            "action": "restart_compose",
-                            "hint": "Run preflight again to verify the fix.",
-                        })),
+                        Json(serde_json::to_value(ToolRepairResponse {
+                            ok: true,
+                            tool: tool_name.clone(),
+                            action: "restart_compose".to_string(),
+                            hint: Some("Run preflight again to verify the fix.".to_string()),
+                        }).unwrap_or_default()),
                     )
                 }
                 Ok(o) => {
@@ -4143,20 +4261,23 @@ async fn tools_repair_handler(
 async fn tools_receipt_handler(
     State(state): State<AppState>,
     Json(body): Json<tool_chain::ToolReceiptRequest>,
-) -> Json<serde_json::Value> {
+) -> Json<ToolReceiptResponse> {
     let event = format!("tool:{}:{}", body.event, body.name);
     let detail = body.detail.as_deref();
 
     match tool_chain::emit_tool_receipt(&state.0.audit_store, &event, detail) {
-        Some(hash) => Json(serde_json::json!({
-            "ok": true,
-            "event": event,
-            "entry_hash": hash,
-        })),
-        None => Json(serde_json::json!({
-            "ok": false,
-            "error": "Failed to append to audit chain",
-        })),
+        Some(hash) => Json(ToolReceiptResponse {
+            ok: true,
+            event: Some(event),
+            entry_hash: Some(hash),
+            error: None,
+        }),
+        None => Json(ToolReceiptResponse {
+            ok: false,
+            event: None,
+            entry_hash: None,
+            error: Some("Failed to append to audit chain".to_string()),
+        }),
     }
 }
 
@@ -4164,13 +4285,13 @@ async fn tools_receipt_handler(
 ///
 /// This is the canonical view — the cockpit can call this to see
 /// which lifecycle receipts exist for each tool.
-async fn tools_chain_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn tools_chain_handler(State(state): State<AppState>) -> Json<ToolChainResponse> {
     let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
-    let tools: Vec<&tool_chain::ToolChainState> = chain_state.values().collect();
-    Json(serde_json::json!({
-        "tools": tools,
-        "source": "audit_chain",
-    }))
+    let tools: Vec<tool_chain::ToolChainState> = chain_state.into_values().collect();
+    Json(ToolChainResponse {
+        tools,
+        source: "audit_chain".to_string(),
+    })
 }
 
 // ============================================================================

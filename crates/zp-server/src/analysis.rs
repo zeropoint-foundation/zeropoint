@@ -36,7 +36,7 @@
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -252,6 +252,10 @@ pub struct IndexQuery {
 ///
 /// Returns the capabilities available through the analysis API,
 /// including what engines are active and what endpoints exist.
+///
+/// NOTE: Response intentionally untyped — this is a static capability
+/// discovery document whose shape is self-describing and not consumed
+/// programmatically by Rust code.
 pub async fn index_handler(
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
@@ -329,6 +333,10 @@ pub struct ExpertiseQuery {
 ///
 /// Returns the MLE STAR expertise profile for a tool, including
 /// readiness assessment and optional hypotheses.
+///
+/// NOTE: Response intentionally untyped — three distinct shapes
+/// (no_data, success with optional hypotheses, insufficient_data)
+/// with deeply nested engine output that varies by observation state.
 pub async fn expertise_handler(
     State(state): State<AppState>,
     Query(q): Query<ExpertiseQuery>,
@@ -417,11 +425,27 @@ pub struct ListQuery {
     pub tool: Option<String>,
 }
 
+/// Summary of a single tool's analysis data.
+#[derive(Serialize)]
+pub struct ToolAnalysisSummary {
+    pub name: String,
+    pub observation_count: usize,
+    pub readiness_score: f64,
+    pub production_ready: bool,
+}
+
+/// Response for GET /api/v1/analysis/tools.
+#[derive(Serialize)]
+pub struct ToolsAnalysisResponse {
+    pub tools: Vec<ToolAnalysisSummary>,
+    pub total: usize,
+}
+
 /// `GET /api/v1/analysis/tools` — list all tools with observation data.
 pub async fn tools_handler(
     State(state): State<AppState>,
     Query(q): Query<ListQuery>,
-) -> (StatusCode, Json<serde_json::Value>) {
+) -> (StatusCode, Json<ToolsAnalysisResponse>) {
     let tool = q.tool.as_deref().unwrap_or("unknown");
     let engines = &state.0.analysis;
 
@@ -435,12 +459,12 @@ pub async fn tools_handler(
     for target in &targets {
         let count = engines.mle_star.observation_count(target).await;
         let readiness = engines.mle_star.assess_readiness_for(target).await;
-        tool_summaries.push(serde_json::json!({
-            "name": target,
-            "observation_count": count,
-            "readiness_score": readiness.score,
-            "production_ready": readiness.production_ready,
-        }));
+        tool_summaries.push(ToolAnalysisSummary {
+            name: target.clone(),
+            observation_count: count,
+            readiness_score: readiness.score,
+            production_ready: readiness.production_ready,
+        });
     }
 
     // Emit receipt
@@ -448,13 +472,11 @@ pub async fn tools_handler(
     let detail = format!("targets={}", targets.len());
     tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "tools": tool_summaries,
-            "total": targets.len(),
-        })),
-    )
+    let total = targets.len();
+    (StatusCode::OK, Json(ToolsAnalysisResponse {
+        tools: tool_summaries,
+        total,
+    }))
 }
 
 /// Request body for Monte Carlo simulation.
@@ -475,6 +497,10 @@ pub struct SimulateRequest {
 ///
 /// Runs a Monte Carlo simulation using the tool's expertise profile
 /// to project performance distributions and risk metrics.
+///
+/// NOTE: Response intentionally untyped — three distinct shapes
+/// (no_expertise, no_data, success with optional risk assessment)
+/// with deeply nested simulation output from the Monte Carlo engine.
 pub async fn simulate_handler(
     State(state): State<AppState>,
     Json(req): Json<SimulateRequest>,

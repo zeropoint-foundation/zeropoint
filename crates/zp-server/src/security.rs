@@ -21,6 +21,43 @@ use zp_policy::{DowngradeError, PolicyVersion};
 
 use crate::AppState;
 
+// ============================================================================
+// Typed response structs (P2-4: schema validation at API boundaries)
+// ============================================================================
+
+/// Response for POST /api/v1/security/blast-radius/register.
+#[derive(Debug, Serialize)]
+pub struct BlastRadiusRegisterResponse {
+    pub registered: String,
+    #[serde(flatten)]
+    pub details: serde_json::Value,
+}
+
+/// Response for POST /api/v1/security/reconstitute.
+#[derive(Debug, Serialize)]
+pub struct ReconstitutionResponse {
+    pub entries_processed: usize,
+    pub chain_integrity: bool,
+    pub valid_operator_keys: usize,
+    pub valid_agent_keys: usize,
+    pub revoked_keys: usize,
+    pub active_capabilities: usize,
+    pub memory_states: usize,
+    pub quarantined_memories: usize,
+    pub anomaly_count: usize,
+    pub critical_anomaly_count: usize,
+    pub anomalies: Vec<AnomalyDetail>,
+}
+
+/// A single anomaly detail in the reconstitution response.
+#[derive(Debug, Serialize)]
+pub struct AnomalyDetail {
+    pub kind: String,
+    pub severity: String,
+    pub entry_id: String,
+    pub description: String,
+}
+
 /// A single security check result.
 #[derive(Serialize, Clone)]
 pub struct SecurityCheck {
@@ -693,7 +730,7 @@ pub enum BlastRadiusRegistration {
 pub async fn blast_radius_register_handler(
     State(state): State<AppState>,
     AxumJson(body): AxumJson<BlastRadiusRegistration>,
-) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
+) -> Result<AxumJson<BlastRadiusRegisterResponse>, (StatusCode, String)> {
     let mut tracker = state.0.blast_radius_tracker.lock().unwrap();
 
     match &body {
@@ -702,11 +739,13 @@ pub async fn blast_radius_register_handler(
             receipt_id,
         } => {
             tracker.register_signed_receipt(signer_key, receipt_id);
-            Ok(AxumJson(serde_json::json!({
-                "registered": "signed_receipt",
-                "signer_key": signer_key,
-                "receipt_id": receipt_id,
-            })))
+            Ok(AxumJson(BlastRadiusRegisterResponse {
+                registered: "signed_receipt".to_string(),
+                details: serde_json::json!({
+                    "signer_key": signer_key,
+                    "receipt_id": receipt_id,
+                }),
+            }))
         }
         BlastRadiusRegistration::Delegation {
             parent_key,
@@ -714,34 +753,40 @@ pub async fn blast_radius_register_handler(
             delegation_id,
         } => {
             tracker.register_delegation(parent_key, child_key, delegation_id);
-            Ok(AxumJson(serde_json::json!({
-                "registered": "delegation",
-                "parent_key": parent_key,
-                "child_key": child_key,
-                "delegation_id": delegation_id,
-            })))
+            Ok(AxumJson(BlastRadiusRegisterResponse {
+                registered: "delegation".to_string(),
+                details: serde_json::json!({
+                    "parent_key": parent_key,
+                    "child_key": child_key,
+                    "delegation_id": delegation_id,
+                }),
+            }))
         }
         BlastRadiusRegistration::Grant {
             delegation_id,
             grant_id,
         } => {
             tracker.register_grant(delegation_id, grant_id);
-            Ok(AxumJson(serde_json::json!({
-                "registered": "grant",
-                "delegation_id": delegation_id,
-                "grant_id": grant_id,
-            })))
+            Ok(AxumJson(BlastRadiusRegisterResponse {
+                registered: "grant".to_string(),
+                details: serde_json::json!({
+                    "delegation_id": delegation_id,
+                    "grant_id": grant_id,
+                }),
+            }))
         }
         BlastRadiusRegistration::MemoryEvidence {
             receipt_id,
             memory_id,
         } => {
             tracker.register_memory_evidence(receipt_id, memory_id);
-            Ok(AxumJson(serde_json::json!({
-                "registered": "memory_evidence",
-                "receipt_id": receipt_id,
-                "memory_id": memory_id,
-            })))
+            Ok(AxumJson(BlastRadiusRegisterResponse {
+                registered: "memory_evidence".to_string(),
+                details: serde_json::json!({
+                    "receipt_id": receipt_id,
+                    "memory_id": memory_id,
+                }),
+            }))
         }
     }
 }
@@ -756,7 +801,7 @@ pub async fn blast_radius_register_handler(
 /// returns the reconstructed state + any anomalies detected.
 pub async fn reconstitute_handler(
     State(state): State<AppState>,
-) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
+) -> Result<AxumJson<ReconstitutionResponse>, (StatusCode, String)> {
     let audit_store = state.0.audit_store.lock().unwrap();
 
     let chain = audit_store
@@ -789,32 +834,30 @@ pub async fn reconstitute_handler(
         "Reconstitution completed via API"
     );
 
-    let anomalies: Vec<serde_json::Value> = recon_state
+    let anomalies: Vec<AnomalyDetail> = recon_state
         .anomalies
         .iter()
-        .map(|a| {
-            serde_json::json!({
-                "kind": format!("{:?}", a.kind),
-                "severity": format!("{:?}", a.severity),
-                "entry_id": a.entry_id,
-                "description": a.description,
-            })
+        .map(|a| AnomalyDetail {
+            kind: format!("{:?}", a.kind),
+            severity: format!("{:?}", a.severity),
+            entry_id: a.entry_id.clone(),
+            description: a.description.clone(),
         })
         .collect();
 
-    Ok(AxumJson(serde_json::json!({
-        "entries_processed": recon_state.entries_processed,
-        "chain_integrity": recon_state.chain_integrity_verified,
-        "valid_operator_keys": recon_state.valid_operator_keys.len(),
-        "valid_agent_keys": recon_state.valid_agent_keys.len(),
-        "revoked_keys": recon_state.revoked_keys.len(),
-        "active_capabilities": recon_state.active_capabilities.len(),
-        "memory_states": recon_state.memory_states.len(),
-        "quarantined_memories": recon_state.quarantined_memories.len(),
-        "anomaly_count": anomaly_count,
-        "critical_anomaly_count": critical_count,
-        "anomalies": anomalies,
-    })))
+    Ok(AxumJson(ReconstitutionResponse {
+        entries_processed: recon_state.entries_processed,
+        chain_integrity: recon_state.chain_integrity_verified,
+        valid_operator_keys: recon_state.valid_operator_keys.len(),
+        valid_agent_keys: recon_state.valid_agent_keys.len(),
+        revoked_keys: recon_state.revoked_keys.len(),
+        active_capabilities: recon_state.active_capabilities.len(),
+        memory_states: recon_state.memory_states.len(),
+        quarantined_memories: recon_state.quarantined_memories.len(),
+        anomaly_count,
+        critical_anomaly_count: critical_count,
+        anomalies,
+    }))
 }
 
 // ============================================================================

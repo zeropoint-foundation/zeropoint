@@ -227,6 +227,36 @@ fn build_tree(
     entries
 }
 
+// ── Typed response structs (P2-4) ──────────────────────────────────────
+
+/// Success response for `GET /api/v1/codebase/tree`.
+#[derive(Serialize)]
+struct TreeResponse {
+    root: String,
+    depth: usize,
+    entries: Vec<TreeEntry>,
+}
+
+/// Success response for `GET /api/v1/codebase/read`.
+#[derive(Serialize)]
+struct ReadResponse {
+    path: String,
+    size: u64,
+    lines: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
+    content: String,
+}
+
+/// Success response for `GET /api/v1/codebase/search`.
+#[derive(Serialize)]
+struct SearchResponse {
+    pattern: String,
+    matches: Vec<SearchMatch>,
+    files_searched: u32,
+    truncated: bool,
+}
+
 // ── Handlers ────────────────────────────────────────────────────────────
 
 /// ZeroPoint project root — the repo directory.
@@ -298,13 +328,14 @@ pub async fn tree_handler(
     );
     tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
+    let resp = TreeResponse {
+        root: subpath.to_string(),
+        depth: max_depth,
+        entries: tree,
+    };
     (
         StatusCode::OK,
-        Json(serde_json::json!({
-            "root": subpath,
-            "depth": max_depth,
-            "entries": tree,
-        })),
+        Json(serde_json::to_value(resp).unwrap_or_default()),
     )
 }
 
@@ -398,15 +429,16 @@ pub async fn read_handler(
     let detail = format!("path={} size={} lines={}", path, metadata.len(), lines);
     tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
+    let resp = ReadResponse {
+        path: path.to_string(),
+        size: metadata.len(),
+        lines,
+        language,
+        content,
+    };
     (
         StatusCode::OK,
-        Json(serde_json::json!({
-            "path": path,
-            "size": metadata.len(),
-            "lines": lines,
-            "language": language,
-            "content": content,
-        })),
+        Json(serde_json::to_value(resp).unwrap_or_default()),
     )
 }
 
@@ -458,14 +490,16 @@ pub async fn search_handler(
     );
     tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
+    let truncated = results.len() >= max_results;
+    let resp = SearchResponse {
+        pattern: pattern.to_string(),
+        matches: results,
+        files_searched,
+        truncated,
+    };
     (
         StatusCode::OK,
-        Json(serde_json::json!({
-            "pattern": pattern,
-            "matches": results,
-            "files_searched": files_searched,
-            "truncated": results.len() >= max_results,
-        })),
+        Json(serde_json::to_value(resp).unwrap_or_default()),
     )
 }
 
