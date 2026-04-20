@@ -352,6 +352,8 @@
       populateSummary();
     }
 
+    // Auto-play narration via Piper TTS on step transition
+    setTimeout(() => playStepNarration(step), 400);
   };
 
   // Enable clicking completed/active tabs
@@ -774,6 +776,9 @@
     });
 
     document.getElementById('recoveryKit').style.display = 'block';
+
+    // Play recovery-specific narration (overrides the step 3 default)
+    playRecoveryNarration();
   }
 
   // ── Step 3 → 4: Vault → Inference Posture ──────────────
@@ -2223,8 +2228,74 @@
     });
   }
 
+  // ── Narration scripts (spoken by Piper TTS via tts.js) ──────────
+  // Curated narration for each onboarding step. When Piper TTS is available,
+  // these play automatically on step transitions instead of reading raw DOM text.
+  const stepNarrationScripts = {
+    0: "Every API key you've ever used was a borrowed secret. Copied into .env files. Stored in plaintext. Shared across tools you didn't build, on infrastructure you don't control. In the Agentic Age, that model doesn't just leak credentials — it leaks sovereignty. What you're about to do is different. You're going to create your own cryptographic root of trust. Your own vault. Your own governance. And it starts right now, in under five minutes.",
+
+    1: "Your sovereignty boundary is the line between authorized and unauthorized. In the old model, that line was drawn by someone else — a corporate SSO, an OAuth provider, a certificate authority. You trusted their infrastructure to prove you were you. ZeroPoint flips that. You choose the credential. A fingerprint, a hardware key, a face, or a login password — something that can't be phished, can't be copied, and can't be faked by a process running on your machine. You prove presence. ZeroPoint trusts the proof. This is the foundation. Everything else — your vault, your policies, your agent certificates — derives from this one decision.",
+
+    2: "This is the Genesis Ceremony. You're creating an Ed25519 keypair — a public key that identifies you, and a private key that proves it's really you. This isn't issued by an authority. There's no certificate chain leading back to a corporation. You are the root. The Genesis secret is sealed in your OS credential store, gated by whatever sovereignty boundary you chose. From this one key, ZeroPoint derives everything — your vault encryption key, your operator certificate, your governance chain. One secret. Deterministic derivation. No passwords to manage, no tokens to rotate.",
+
+    3: "Your vault replaces every .env file, every password manager entry, every cloud secrets service you've been trusting with your API keys. Your Genesis secret is used to derive a vault key through BLAKE3 keyed hashing. That vault key encrypts every credential you store using ChaCha20-Poly1305 authenticated encryption. The vault key is ephemeral — it exists only in memory, derived on demand, then wiped. There's nothing to remember, nothing to back up, nothing to rotate. Your credentials are encrypted at rest, on your machine, under your control.",
+
+    4: "Where your inference runs is a sovereignty decision, not just a performance one. Local models keep everything on your hardware — your prompts, your data, your chain of thought never leave the machine. Cloud models give you access to frontier capability, but every call passes through a governance proxy that enforces your policies. Mixed mode — the recommended default — gives you both. Routine tasks stay local. Frontier tasks go to the cloud. And your governance proxy routes each call based on rules you define.",
+
+    5: "ZeroPoint scans your project directories for AI tools — anything with a .env.example file that defines credential requirements. Each tool it finds becomes a candidate for governance. The scan identifies which providers each tool needs, which credentials are already present, and which are missing. This is the bridge between discovery and configuration — once you know what your tools need, you can supply the credentials and bring them under governance.",
+
+    6: "Now we add your API keys. But notice how this is different from what you're used to. The moment you press Store, the key is encrypted in your vault — ChaCha20-Poly1305, authenticated encryption, using a key derived from the Genesis secret that only you control. The plaintext never touches disk. Second, ZeroPoint validates the key in real time. A lightweight health check reaches out to the provider's API and confirms the credential is live. By the time you leave this step, you know exactly which credentials are working and which need attention.",
+
+    7: "This is where Act 2 begins. Governance, with verified credentials. Before configuration starts, ZeroPoint runs a full health check across every credential in your vault. If you enable the governance proxy, every API call from your tools routes through your local policy engine. Every request is checked against your governance gates, metered for cost, and stamped with a signed receipt that chains cryptographically to the one before it. This isn't surveillance. It's awareness. You can't govern what you can't see.",
+
+    8: "Look at what you've built. Your own cryptographic identity — not issued, created. A vault that encrypts every credential under keys only you control. A governance proxy that enforces your policies on every API call. Verified credentials that are proven live against their providers. And an attestation chain that's growing with every governed action. Everything is local. Everything is sovereign. Everything is yours.",
+  };
+
+  // Recovery narration — spoken during Step 3 recovery kit display
+  const recoveryNarrationScript = "These twenty-four words are the only way to recover your Genesis secret if you lose access to your sovereignty provider. Write them down — on paper, not in a notes app, not in a screenshot. Store them somewhere physical and secure. This screen will not appear again. If you lose both your provider access and these words, your Genesis key is gone. Your vault contents become unrecoverable. That's not a bug — that's the sovereignty model working as designed. You control the keys. You control the recovery. No one else can help you, and no one else can compromise you.";
+
+  // Auto-play narration on step transition via Piper TTS.
+  // Sets data-tts-script on each step element so tts.js floating button
+  // also uses the curated script, then speaks immediately if TTS is available.
+  let narrationEnabled = true;
+
+  function playStepNarration(step) {
+    // Set data-tts-script on the step element for the floating button
+    const el = document.getElementById('step-' + step);
+    if (el && stepNarrationScripts[step]) {
+      el.dataset.ttsScript = stepNarrationScripts[step];
+    }
+    // Auto-speak if TTS is available and narration hasn't been muted
+    if (narrationEnabled && window.zpTTS && window.zpTTS.isAvailable()) {
+      window.zpTTS.speak(stepNarrationScripts[step] || '');
+    }
+  }
+
+  function playRecoveryNarration() {
+    if (narrationEnabled && window.zpTTS && window.zpTTS.isAvailable()) {
+      window.zpTTS.speak(recoveryNarrationScript);
+    }
+  }
+
   // ── Init ────────────────────────────────────────────────
   connect();
-  // Narration is handled by tts.js (Piper local TTS) — no pre-recorded MP3s.
+
+  // Set data-tts-script on all steps so the floating button uses curated scripts
+  Object.keys(stepNarrationScripts).forEach(function(step) {
+    const el = document.getElementById('step-' + step);
+    if (el) el.dataset.ttsScript = stepNarrationScripts[step];
+  });
+
+  // Auto-play Step 0 narration on first user interaction
+  // (browsers require a user gesture before playing audio)
+  function autoplayOnFirstInteraction() {
+    playStepNarration(currentStep);
+    document.removeEventListener('click', autoplayOnFirstInteraction);
+    document.removeEventListener('keydown', autoplayOnFirstInteraction);
+    document.removeEventListener('touchstart', autoplayOnFirstInteraction);
+  }
+  document.addEventListener('click', autoplayOnFirstInteraction);
+  document.addEventListener('keydown', autoplayOnFirstInteraction);
+  document.addEventListener('touchstart', autoplayOnFirstInteraction);
 
 })();
