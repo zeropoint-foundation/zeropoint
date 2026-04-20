@@ -800,9 +800,8 @@ const SYSTEM_PATH_PREFIXES: &[&str] = &[
     "/sys",
     "/tmp",
     // macOS equivalents
-    "/private/etc",
-    "/private/var",
-    "/private/tmp",
+    "/private",
+    "/System",
 ];
 
 /// Canonicalize a path and verify it falls within the allowed boundary.
@@ -1861,12 +1860,36 @@ mod tests {
             Err(PathError::SystemPath(_))
         ));
         assert!(matches!(
-            safe_path("/proc", boundary),
-            Err(PathError::SystemPath(_))
-        ));
-        assert!(matches!(
             safe_path("/var", boundary),
             Err(PathError::SystemPath(_))
         ));
+
+        // /proc and /sys are Linux-only virtual filesystems — they
+        // don't exist on macOS, so canonicalization fails before the
+        // prefix check. Only assert these on Linux.
+        #[cfg(target_os = "linux")]
+        {
+            assert!(matches!(
+                safe_path("/proc", boundary),
+                Err(PathError::SystemPath(_))
+            ));
+            assert!(matches!(
+                safe_path("/sys", boundary),
+                Err(PathError::SystemPath(_))
+            ));
+        }
+
+        // macOS system paths
+        #[cfg(target_os = "macos")]
+        {
+            assert!(matches!(
+                safe_path("/System", boundary),
+                Err(PathError::SystemPath(_))
+            ));
+            assert!(matches!(
+                safe_path("/private", boundary),
+                Err(PathError::SystemPath(_))
+            ));
+        }
     }
 }
