@@ -8,6 +8,7 @@
 //! WASM policy module loading via wasmtime is optional — enable with:
 //! `cargo build --features policy-wasm`
 
+pub mod downgrade;
 pub mod engine;
 pub mod gate;
 pub mod rules;
@@ -18,6 +19,7 @@ pub mod policy_registry;
 pub mod wasm_runtime;
 
 // Re-export commonly used types — always available
+pub use downgrade::{DowngradeError, DowngradeGuard, PolicyVersion};
 pub use engine::PolicyEngine;
 pub use gate::{GateResult, GovernanceGate};
 pub use rules::{PolicyRule, ReputationGateRule, ReputationThresholds};
