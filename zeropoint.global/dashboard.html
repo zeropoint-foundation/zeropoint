@@ -478,9 +478,9 @@ const phases = [
   },
   {
     name: "Phase 2.8: Pathway Polish",
-    status: "in-progress",
+    status: "complete",
     items: [
-      { id: "P2-4", label: "Schema validation at API boundaries (~9/30 endpoints typed)", done: false },
+      { id: "P2-4", label: "Schema validation at API boundaries (17 typed, 3 intentionally untyped)", done: true },
       { id: "P2-5", label: "Canonical serialization before signing", done: true },
     ]
   },
@@ -538,7 +538,7 @@ const data = [
       { label: "System path rejection (/etc, /proc, /sys)", status: "shipped", phase: "P2-2" },
       { label: "Internal capability tokens (BLAKE3 HMAC, 30s TTL, nonce replay)", status: "shipped", phase: "P2-3" },
       { label: "Scoped action+target token verification", status: "shipped", phase: "P2-3" },
-      { label: "Typed schema validation at every API endpoint (~9/30 done)", status: "active", phase: "P2-4" },
+      { label: "Typed schema validation at every API endpoint (17 typed + 3 intentionally untyped)", status: "shipped", phase: "P2-4" },
       { label: "Canonical serialization before cryptographic signing", status: "shipped", phase: "P2-5" },
     ]},
     { label: "Configure Engine", status: "shipped", children: [
