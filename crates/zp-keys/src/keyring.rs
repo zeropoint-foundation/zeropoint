@@ -1,8 +1,8 @@
 //! Keyring — persistent storage for the key hierarchy.
 //!
-//! Stores keys and certificates to `~/.zeropoint/keys/`:
+//! Stores keys and certificates to `~/ZeroPoint/keys/`:
 //! ```text
-//! ~/.zeropoint/keys/
+//! ~/ZeroPoint/keys/
 //!   genesis.json        ← genesis certificate (public only)
 //!   operator.json       ← operator certificate
 //!   operator.secret     ← operator secret key
@@ -182,7 +182,7 @@ impl Keyring {
         std::fs::create_dir_all(&base_dir)?;
         std::fs::create_dir_all(base_dir.join("agents"))?;
         // Lock down directory perms so other local accounts can't even list
-        // the keyring. Also tighten the parent (~/.zeropoint) so audit.db
+        // the keyring. Also tighten the parent (~/ZeroPoint) so audit.db
         // and sibling state aren't cross-user readable (CROSS-USER-01).
         let _ = chmod_700(&base_dir);
         let _ = chmod_700(&base_dir.join("agents"));
@@ -192,12 +192,11 @@ impl Keyring {
         Ok(Self { base_dir })
     }
 
-    /// Open the default keyring at `~/.zeropoint/keys/`.
+    /// Open the default keyring at `~/ZeroPoint/keys/`.
     pub fn open_default() -> Result<Self, KeyError> {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("."));
-        Self::open(home.join(".zeropoint").join("keys"))
+        let keys_dir =
+            zp_core::paths::keys_dir().unwrap_or_else(|_| PathBuf::from("ZeroPoint/keys"));
+        Self::open(keys_dir)
     }
 
     /// Get the keyring directory path.

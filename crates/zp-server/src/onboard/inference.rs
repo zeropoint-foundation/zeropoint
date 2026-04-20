@@ -2,6 +2,7 @@
 
 use super::{OnboardAction, OnboardEvent, OnboardState};
 use serde::Serialize;
+use zp_core::paths as zp_paths;
 
 /// Set the user's inference posture choice.
 pub async fn handle_set_inference_posture(
@@ -467,11 +468,8 @@ fn recommend_model(system: &SystemResources, runtime: &str) -> ModelRecommendati
 }
 
 fn load_model_override(inference_memory_gb: u64, runtime: &str) -> Option<ModelRecommendation> {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .ok()?;
-    let path = std::path::Path::new(&home)
-        .join(".zeropoint")
+    let path = zp_paths::home()
+        .ok()?
         .join("config")
         .join("model-recommendations.toml");
 

@@ -3,12 +3,13 @@
 use super::{OnboardAction, OnboardEvent, OnboardState};
 use serde::{Deserialize, Serialize};
 use zp_engine::validate::{self, CredentialToValidate, ValidationStatus};
+use zp_core::paths as zp_paths;
 
 // ============================================================================
 // Provider catalog — data-driven, TOML-backed
 // ============================================================================
 
-/// Embedded default catalog. Overridden by ~/.zeropoint/config/providers.toml.
+/// Embedded default catalog. Overridden by ~/ZeroPoint/config/providers.toml.
 const PROVIDERS_DEFAULT_TOML: &str = include_str!("../../assets/providers-default.toml");
 
 /// A known AI/LLM provider loaded from the TOML catalog.
@@ -74,15 +75,9 @@ fn load_provider_catalog() -> Vec<ProviderProfile> {
             .map(|f| f.providers)
             .unwrap_or_default();
 
-    let user_path = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
+    let user_path = zp_paths::home()
         .ok()
-        .map(|h| {
-            std::path::Path::new(&h)
-                .join(".zeropoint")
-                .join("config")
-                .join("providers.toml")
-        });
+        .map(|h| h.join("config").join("providers.toml"));
 
     if let Some(path) = user_path {
         if let Ok(content) = std::fs::read_to_string(&path) {
@@ -155,10 +150,8 @@ pub async fn handle_get_provider_catalog(state: &mut OnboardState) -> Vec<Onboar
     // even after a WS reconnect or page refresh.
     let mut stored_refs: Vec<String> = Vec::new();
     if let Some(vault_key) = &state.vault_key {
-        let vault_path = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".zeropoint")
-            .join("vault.json");
+        let vault_path = zp_paths::vault_path()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
         if vault_path.exists() {
             match zp_trust::CredentialVault::load_or_create(vault_key, &vault_path) {
@@ -249,11 +242,9 @@ pub async fn handle_vault_store(
         }
     };
 
-    // Open (or create) the vault file at ~/.zeropoint/vault.json
-    let vault_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint")
-        .join("vault.json");
+    // Open (or create) the vault file at ~/ZeroPoint/vault.json
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let mut vault = match zp_trust::CredentialVault::load_or_create(&vault_key, &vault_path) {
         Ok(v) => v,
@@ -341,10 +332,8 @@ pub async fn handle_vault_import_all(
         }
     };
 
-    let vault_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint")
-        .join("vault.json");
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     // Open (or create) the encrypted vault — same format as vault_store
     let mut vault = match zp_trust::CredentialVault::load_or_create(&vault_key, &vault_path) {
@@ -554,10 +543,8 @@ pub async fn handle_validate_all(
         }
     };
 
-    let vault_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint")
-        .join("vault.json");
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let vault = match zp_trust::CredentialVault::load_or_create(&vault_key, &vault_path) {
         Ok(v) => v,

@@ -27,6 +27,7 @@ use axum::response::IntoResponse;
 use futures::stream::StreamExt;
 use futures::SinkExt;
 use serde::{Deserialize, Serialize};
+use zp_core::paths as zp_paths;
 
 use crate::AppState;
 
@@ -93,8 +94,10 @@ pub async fn onboard_ws_handler(
     axum::extract::Query(query): axum::extract::Query<OnboardWsQuery>,
 ) -> impl IntoResponse {
     // Post-genesis: reject onboard WebSocket connections
-    let home = dirs::home_dir().unwrap_or_default();
-    let genesis_path = home.join(".zeropoint").join("genesis.json");
+    let genesis_path = zp_paths::home()
+        .ok()
+        .map(|h| h.join("genesis.json"))
+        .unwrap_or_default();
     if genesis_path.exists() {
         return (
             axum::http::StatusCode::FORBIDDEN,
@@ -475,7 +478,7 @@ fn validate_scan_path(path: &str) -> Result<(), String> {
         ".docker",
         "id_rsa",
         "id_ed25519",
-        ".zeropoint/keys",
+        "ZeroPoint/keys",  // Keys directory (new canonical location)
     ];
 
     for prefix in blocked_prefixes {

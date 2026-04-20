@@ -1,6 +1,7 @@
 //! Onboard session state — tracks progress through the 8-step flow.
 
 use serde::Serialize;
+use zp_core::paths as zp_paths;
 
 /// Tracks the onboard session state so reconnects can resume.
 #[derive(Debug, Clone, Serialize, Default)]
@@ -37,7 +38,7 @@ pub struct OnboardState {
 impl OnboardState {
     /// Reconstruct state from filesystem reality.
     ///
-    /// Probes ~/.zeropoint/ for genesis, vault, configured tools,
+    /// Probes ~/ZeroPoint/ for genesis, vault, configured tools,
     /// and inference posture. Returns the furthest step the user
     /// has actually completed.
     ///
@@ -51,9 +52,9 @@ impl OnboardState {
 
     pub fn from_filesystem_with_vault(cached_vault_key: Option<&[u8; 32]>) -> Self {
         let mut state = Self::default();
-        let home = match dirs::home_dir() {
-            Some(h) => h.join(".zeropoint"),
-            None => return state,
+        let home = match zp_paths::home() {
+            Ok(h) => h,
+            Err(_) => return state,
         };
 
         // ── Genesis ──
@@ -84,8 +85,7 @@ impl OnboardState {
             if let Some(key) = cached_vault_key {
                 state.vault_key = Some(*key);
             } else {
-                let keyring_path = home.join("keys");
-                if let Ok(keyring) = zp_keys::Keyring::open(keyring_path) {
+                if let Ok(keyring) = zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default()) {
                     if let Ok(resolved) = zp_keys::resolve_vault_key(&keyring) {
                         state.vault_key = Some(*resolved.key);
                     }

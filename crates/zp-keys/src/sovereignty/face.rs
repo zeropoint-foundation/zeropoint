@@ -11,7 +11,7 @@
 // on disk), and the face verification must succeed before it's released.
 //
 // Privacy: The face template is stored locally in
-// `~/.zeropoint/sovereignty/face_template.bin`. No images are saved.
+// `~/ZeroPoint/sovereignty/face_template.bin`. No images are saved.
 // No data leaves the machine.
 //
 // v0.1 (face-enroll feature only):
@@ -75,10 +75,8 @@ impl SovereigntyProvider for FaceEnrollProvider {
         #[cfg(feature = "face-enroll")]
         {
             // Face enrollment must have already run (template exists)
-            let home = dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join(".zeropoint")
-                .join("sovereignty");
+            // Use sovereignty_dir from hardware mod (which also uses centralized paths)
+            let home = crate::sovereignty::hardware::sovereignty_dir()?;
             let template_path = home.join("face_template.bin");
             if !template_path.exists() {
                 return Err(KeyError::CredentialStore(
@@ -319,12 +317,11 @@ mod embeddings {
     use crate::error::KeyError;
 
     /// Path to the MobileFaceNet ONNX model.
-    /// The model is expected at ~/.zeropoint/models/mobilefacenet.onnx
+    /// The model is expected at ~/ZeroPoint/models/mobilefacenet.onnx
     /// It can be downloaded during onboarding or bundled with the binary.
     fn model_path() -> std::path::PathBuf {
-        dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".zeropoint")
+        zp_core::paths::home()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
             .join("models")
             .join("mobilefacenet.onnx")
     }
@@ -527,11 +524,7 @@ fn enroll_face() -> Result<EnrollmentResult, KeyError> {
     let (template_bytes, summary) = build_face_template(&face_rois)?;
 
     // Persist template
-    let home = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint")
-        .join("sovereignty");
-    std::fs::create_dir_all(&home)?;
+    let home = crate::sovereignty::hardware::sovereignty_dir()?;
     std::fs::write(home.join("face_template.bin"), &template_bytes)?;
 
     tracing::info!("{}", summary);
@@ -646,10 +639,7 @@ fn build_face_template(face_rois: &[Vec<u8>]) -> Result<(Vec<u8>, String), KeyEr
 fn verify_face() -> Result<(), KeyError> {
     use opencv::{objdetect, prelude::*, videoio};
 
-    let home = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint")
-        .join("sovereignty");
+    let home = crate::sovereignty::hardware::sovereignty_dir()?;
     let template_path = home.join("face_template.bin");
 
     let template_bytes = std::fs::read(&template_path).map_err(|_| {

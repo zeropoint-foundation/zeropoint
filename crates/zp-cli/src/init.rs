@@ -28,12 +28,12 @@ pub struct InitConfig {
 
 /// Run the init command.
 pub fn run(config: &InitConfig) -> i32 {
-    let zp_dir = config.project_dir.join(".zeropoint");
+    let zp_dir = config.project_dir.join("ZeroPoint");
     let toml_path = config.project_dir.join("zeropoint.toml");
 
-    // The keyring always lives at ~/.zeropoint/keys/ (home directory),
+    // The keyring always lives at ~/ZeroPoint/keys/ (home directory),
     // consistent with `zp keys`, `zp secure`, `zp guard`, and `zp policy`.
-    // The project-local .zeropoint/ holds config, policies, and data only.
+    // The project-local ZeroPoint/ holds config, policies, and data only.
 
     // ── Guard: don't re-init ────────────────────────────────────
     // Check both the certificate file AND the credential store. A previous
@@ -50,7 +50,7 @@ pub fn run(config: &InitConfig) -> i32 {
         eprintln!("  ZeroPoint is already initialized.");
         eprintln!("  Keyring: {}", home_zp.join("keys").display());
         eprintln!();
-        eprintln!("  Remove ~/.zeropoint/ to re-initialize (this destroys all keys).");
+        eprintln!("  Remove ~/ZeroPoint/ to re-initialize (this destroys all keys).");
         if has_genesis_secret && !has_genesis_cert {
             eprintln!(
                 "  Note: Genesis secret found in credential store but genesis.json is missing."
@@ -81,7 +81,7 @@ pub fn run(config: &InitConfig) -> i32 {
     let constitutional_hash = seal_bedrock();
     eprintln!("\x1b[32m✓\x1b[0m 5 gates installed");
 
-    // ── Step 3: Persist keys to ~/.zeropoint/keys/ ──────────────
+    // ── Step 3: Persist keys to ~/ZeroPoint/keys/ ──────────────
     let keyring = match Keyring::open(home_zp.join("keys")) {
         Ok(k) => k,
         Err(e) => {
@@ -235,7 +235,7 @@ pub fn run(config: &InitConfig) -> i32 {
         return 1;
     }
 
-    // Write genesis record to ~/.zeropoint/genesis.json
+    // Write genesis record to ~/ZeroPoint/genesis.json
     let genesis_record = serde_json::json!({
         "version": "2.0",
         "timestamp": Utc::now().to_rfc3339(),
@@ -269,7 +269,7 @@ pub fn run(config: &InitConfig) -> i32 {
     let _ = std::fs::create_dir_all(home_zp.join("policies"));
     let _ = std::fs::create_dir_all(home_zp.join("data"));
 
-    // Also create project-local .zeropoint/ for config and project-specific overrides
+    // Also create project-local ZeroPoint/ for config and project-specific overrides
     let _ = std::fs::create_dir_all(zp_dir.join("policies"));
     let _ = std::fs::create_dir_all(zp_dir.join("data"));
 
@@ -293,17 +293,17 @@ port = 3000
 
 [identity]
 operator = "{}"
-key_path = "~/.zeropoint/keys"
+key_path = "~/ZeroPoint/keys"
 # How the genesis secret is gated: "biometric", "login_password", or "file_based"
 sovereignty_mode = "{}"
 
 [policy]
 # Custom WASM gates, evaluated after constitutional bedrock.
-# Add .wasm files to .zeropoint/policies/ and list them here.
+# Add .wasm files to ZeroPoint/policies/ and list them here.
 gates = []
 
 [audit]
-data_dir = ".zeropoint/data"
+data_dir = "ZeroPoint/data"
 "#,
             Utc::now().format("%Y-%m-%d"),
             config.operator_name,
@@ -351,11 +351,11 @@ data_dir = ".zeropoint/data"
         }
     } else if config.store_genesis_secret {
         if actual_mode == SovereigntyMode::FileBased {
-            eprintln!("  Genesis secret stored in ~/.zeropoint/keys/genesis.secret");
+            eprintln!("  Genesis secret stored in ~/ZeroPoint/keys/genesis.secret");
             eprintln!("  \x1b[2mFor production use, consider biometric or hardware wallet sovereignty.\x1b[0m");
         } else {
             eprintln!(
-                "  \x1b[33mNote:\x1b[0m Genesis secret stored in ~/.zeropoint/keys/genesis.secret"
+                "  \x1b[33mNote:\x1b[0m Genesis secret stored in ~/ZeroPoint/keys/genesis.secret"
             );
             eprintln!("  (OS credential store unavailable — will auto-migrate when available)");
         }

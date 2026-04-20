@@ -13,7 +13,7 @@
 //! Tools without vault config are auto-resolved via `zp configure tool`.
 //! No `.env` files are read or written — the vault is the sole authority.
 //!
-//! Results are persisted to `~/.zeropoint/state/preflight.json`
+//! Results are persisted to `~/ZeroPoint/state/preflight.json`
 //! so the cockpit knows which tools are launch-ready.
 
 use super::{OnboardEvent, OnboardState};
@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use zp_audit::AuditStore;
+use zp_core::paths as zp_paths;
 
 /// Result of preflight for a single tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,11 +62,10 @@ impl PreflightResults {
         self.tools.iter().filter(|t| t.ready).count()
     }
 
-    /// Persist to ~/.zeropoint/state/preflight.json
+    /// Persist to ~/ZeroPoint/state/preflight.json
     pub fn save(&self) {
-        let state_dir = dirs::home_dir()
+        let state_dir = zp_paths::home()
             .unwrap_or_default()
-            .join(".zeropoint")
             .join("state");
         std::fs::create_dir_all(&state_dir).ok();
         let path = state_dir.join("preflight.json");
@@ -76,8 +76,8 @@ impl PreflightResults {
 
     /// Load from disk, if available.
     pub fn load() -> Option<Self> {
-        let path = dirs::home_dir()?
-            .join(".zeropoint")
+        let path = zp_paths::home()
+            .ok()?
             .join("state")
             .join("preflight.json");
         let contents = std::fs::read_to_string(path).ok()?;

@@ -486,7 +486,7 @@ enum ConfigureCmd {
 enum CfgCmd {
     /// Show all configuration with provenance (where each value came from)
     Show,
-    /// Set a configuration value in ~/.zeropoint/config.toml
+    /// Set a configuration value in ~/ZeroPoint/config.toml
     Set {
         /// Config key (e.g. "port", "posture", "log_level")
         key: String,
@@ -647,7 +647,7 @@ async fn main() -> anyhow::Result<()> {
             },
             None => {
                 eprintln!();
-                eprintln!("  \x1b[31mNo keyring found at ~/.zeropoint/keys/\x1b[0m");
+                eprintln!("  \x1b[31mNo keyring found at ~/ZeroPoint/keys/\x1b[0m");
                 eprintln!();
                 eprintln!("  Run `zp init` to create your Genesis key.");
                 eprintln!();
@@ -675,7 +675,8 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
 
-        let vault_path = commands::resolve_zp_home().join("vault.json");
+        let vault_path = zp_core::paths::vault_path()
+            .unwrap_or_else(|_| commands::resolve_zp_home().join("vault.json"));
 
         let exit_code = match cmd {
             ConfigureCmd::Tool {
@@ -824,7 +825,8 @@ async fn main() -> anyhow::Result<()> {
             }
         };
         let padded_key = *resolved.key;
-        let vault_path = home_zp.join("vault.json");
+        let vault_path = zp_core::paths::vault_path()
+            .unwrap_or_else(|_| home_zp.join("vault.json"));
         let mut vault =
             match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                 Ok(v) => v,
@@ -1109,7 +1111,7 @@ async fn main() -> anyhow::Result<()> {
             CfgCmd::Set { key, value } => match zp_config::resolve::config_set(key, value) {
                 Ok(()) => {
                     println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
-                    println!("  Written to ~/.zeropoint/config.toml");
+                    println!("  Written to ~/ZeroPoint/config.toml");
                 }
                 Err(e) => {
                     eprintln!("\x1b[31m✗\x1b[0m {}", e);

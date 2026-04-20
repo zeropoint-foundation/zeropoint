@@ -6,7 +6,7 @@
 //!
 //! Flow:
 //! 1. Read 24 words from stdin (interactive prompt)
-//! 2. Load genesis certificate from ~/.zeropoint/keys/genesis.json
+//! 2. Load genesis certificate from ~/ZeroPoint/keys/genesis.json
 //! 3. Decode mnemonic → 32-byte secret
 //! 4. Verify the derived Ed25519 public key matches the certificate
 //! 5. Re-seal the genesis secret into the OS credential store

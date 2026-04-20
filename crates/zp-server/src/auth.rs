@@ -31,6 +31,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::warn;
+use zp_core::paths as zp_paths;
 
 /// On-disk representation of a persisted session. Kept owner-only (0600)
 /// alongside the identity key. The bearer token in here grants the same
@@ -60,7 +61,7 @@ impl PersistedSession {
     }
 }
 
-/// Filename under `~/.zeropoint/` where the session record lives.
+/// Filename under `~/ZeroPoint/` where the session record lives.
 const SESSION_FILENAME: &str = "session.json";
 
 /// Session token state — shared via AppState.
@@ -85,7 +86,7 @@ pub struct SessionAuth {
     /// session is purely in-memory (no restart continuity). Stored so
     /// [`Self::rotate`] writes to the same path the constructor used —
     /// avoids the bug where rotation silently clobbers
-    /// `~/.zeropoint/session.json` even when the auth context was built
+    /// `~/ZeroPoint/session.json` even when the auth context was built
     /// with a different path (e.g. unit tests, future multi-tenant runs).
     persist_path: Option<PathBuf>,
 }
@@ -93,7 +94,7 @@ pub struct SessionAuth {
 impl SessionAuth {
     /// Create a new session auth context from the server's signing key bytes.
     ///
-    /// Attempts to reuse a persisted token from `~/.zeropoint/session.json`
+    /// Attempts to reuse a persisted token from `~/ZeroPoint/session.json`
     /// if one exists, is still within `max_age_secs`, and was bound to the
     /// same HMAC key material. Otherwise mints a fresh token and writes it
     /// to disk. This eliminates the "every restart invalidates all
@@ -104,7 +105,7 @@ impl SessionAuth {
     }
 
     /// Ephemeral variant: no disk persistence. Used by unit tests so
-    /// `cargo test` doesn't touch `~/.zeropoint/session.json`.
+    /// `cargo test` doesn't touch `~/ZeroPoint/session.json`.
     #[cfg(test)]
     pub fn new_in_memory(signing_key_bytes: &[u8; 32]) -> Self {
         Self::new_with_persistence(signing_key_bytes, None)
@@ -236,7 +237,7 @@ impl SessionAuth {
 // ── Session persistence helpers ──────────────────────────────────────
 //
 // These keep the single-token-per-session model but survive `zp serve`
-// restarts. The file lives at `~/.zeropoint/session.json`, is owner-only
+// restarts. The file lives at `~/ZeroPoint/session.json`, is owner-only
 // (0600), and contains a key-material fingerprint so a rotated identity
 // doesn't accidentally inherit a stale session.
 //
@@ -244,10 +245,10 @@ impl SessionAuth {
 // site mints a fresh token and rewrites the file on the next successful
 // write. Persistence failures never block startup or rotation.
 
-/// Path to the persisted session file, or `None` if we can't find a home
+/// Path to the persisted session file, or `None` if we can't resolve home
 /// directory (unusual — we'll just run without persistence in that case).
 fn session_file_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".zeropoint").join(SESSION_FILENAME))
+    zp_paths::session_path().ok()
 }
 
 /// Short fingerprint of the HMAC key. Used to detect mismatches between
@@ -986,7 +987,7 @@ const BLOCKED_PATTERNS: &[&str] = &[
     "id_ed25519",
     "ssh-keygen",
     "authorized_keys",
-    ".zeropoint/keys",
+    "ZeroPoint/keys",
     // Code execution via eval/interpreters
     "eval ",
     "base64 -d",
@@ -1152,7 +1153,7 @@ fn validate_fs_read_args(program: &str, args: &[String]) -> Result<(), CommandEr
             || lower.contains("id_rsa")
             || lower.contains("id_ed25519")
             || lower.contains("authorized_keys")
-            || lower.contains(".zeropoint/keys")
+            || lower.contains("zeropoint/keys")
         {
             return Err(CommandError::ArgumentsRejected {
                 program: program.to_string(),
@@ -1295,7 +1296,7 @@ fn validate_sysinfo_args(program: &str, args: &[String]) -> Result<(), CommandEr
             continue; // flags are fine for read-only tools
         }
         // Reject sensitive paths (reuse fs_read logic)
-        if arg.contains("..") || arg.contains(".ssh/") || arg.contains(".zeropoint/keys") {
+        if arg.contains("..") || arg.contains(".ssh/") || arg.contains("ZeroPoint/keys") {
             return Err(CommandError::ArgumentsRejected {
                 program: program.to_string(),
                 reason: format!("sensitive path '{}' not permitted", arg),
@@ -1346,8 +1347,8 @@ const BLOCKED_PATH_COMPONENTS: &[&str] = &[
     ".docker",
     "id_rsa",
     "id_ed25519",
-    ".zeropoint/keys",
-    ".zeropoint/data",
+    "ZeroPoint/keys",
+    "ZeroPoint/data",
     "node_modules",
     "__pycache__",
     ".git",
@@ -1639,11 +1640,11 @@ mod tests {
     #[test]
     fn test_validate_command_fs_sensitive_files() {
         // These hit BLOCKED_PATTERNS (defense-in-depth) for .ssh/,
-        // id_rsa, authorized_keys, .zeropoint/keys. The important
+        // id_rsa, authorized_keys, ZeroPoint/keys. The important
         // invariant is that they're all rejected.
         assert!(validate_command("cat .ssh/id_rsa").is_err());
         assert!(validate_command("cat .ssh/authorized_keys").is_err());
-        assert!(validate_command("ls .zeropoint/keys/").is_err());
+        assert!(validate_command("ls ZeroPoint/keys/").is_err());
     }
 
     #[test]
@@ -1718,7 +1719,7 @@ mod tests {
 
     #[test]
     fn test_session_persistence_roundtrip() {
-        // Isolate this test from the real ~/.zeropoint — redirect HOME
+        // Isolate this test from the real ~/ZeroPoint — redirect HOME
         // to a fresh tempdir so that any regression that ignores the
         // passed persist_path and falls back to session_file_path()
         // lands in isolated space and is visible as a local test
@@ -1773,7 +1774,7 @@ mod tests {
         assert_ne!(foreign.current_token(), rotated);
 
         // Fake home MUST remain clean — no rotate-to-default-path bug.
-        let leaked = fake_home.join(".zeropoint").join(SESSION_FILENAME);
+        let leaked = fake_home.join("ZeroPoint").join(SESSION_FILENAME);
         assert!(
             !leaked.exists(),
             "rotate() leaked session.json into HOME at {:?}",

@@ -5613,6 +5613,7 @@ dependencies = [
  "uuid",
  "whoami",
  "zeroize",
+ "zp-core",
  "zp-receipt",
 ]
 

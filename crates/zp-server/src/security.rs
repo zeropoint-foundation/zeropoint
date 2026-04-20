@@ -20,6 +20,7 @@ use zp_memory::CompromiseReport as MemoryCompromiseReport;
 use zp_policy::{DowngradeError, PolicyVersion};
 
 use crate::AppState;
+use zp_core::paths as zp_paths;
 
 // ============================================================================
 // Typed response structs (P2-4: schema validation at API boundaries)
@@ -104,7 +105,7 @@ pub struct NetworkTopology {
 
 /// Build network topology from config or sensible defaults.
 pub fn topology() -> NetworkTopology {
-    let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
+    let home = zp_paths::home().unwrap_or_default();
 
     // Try to read topology config
     let topo_path = home.join("config").join("topology.toml");
@@ -128,7 +129,7 @@ pub fn topology() -> NetworkTopology {
             detail: "Governance proxy + verification surface".into(),
         }],
         description:
-            "Single node — configure ~/.zeropoint/config/topology.toml for full network map".into(),
+            "Single node — configure ~/ZeroPoint/config/topology.toml for full network map".into(),
     }
 }
 
@@ -187,7 +188,7 @@ fn parse_topology_config(config: &toml::Value) -> NetworkTopology {
 /// Run all security checks against the current environment.
 pub fn assess(state: &crate::AppState) -> SecurityPosture {
     let mut checks = Vec::new();
-    let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
+    let home = zp_paths::home().unwrap_or_default();
 
     // ── Network ──────────────────────────────────────────────
 
