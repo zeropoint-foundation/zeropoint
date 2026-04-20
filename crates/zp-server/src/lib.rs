@@ -43,8 +43,14 @@ use tracing::{debug, error, info, warn};
 use zp_audit::AuditStore;
 use zp_core::{
     ActionType as CoreActionType, ActorId, CapabilityGrant, Channel, ConversationId,
-    DelegationChain, GrantProvenance, GrantedCapability, OperatorIdentity, PolicyContext,
-    PolicyDecision, Request, TrustTier,
+    DelegationChain, EventProvenance, GrantProvenance, GrantedCapability, OperatorIdentity,
+    PolicyContext, PolicyDecision, Request, TrustTier,
+};
+use zp_core::governance::{
+    ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent,
+};
+use zp_observation::{
+    candidate_to_observation, event_to_observation, ObservationStore,
 };
 use zp_pipeline::{Pipeline, PipelineConfig};
 use zp_policy::{GateResult, GovernanceGate};
@@ -464,6 +470,10 @@ pub struct AppStateInner {
     /// Issues and verifies short-lived capability tokens for internal
     /// service calls (verification probes, tool proxy, etc.).
     pub internal_auth: Arc<internal_auth::InternalAuthority>,
+    /// Observation store for governance→memory bridge (M4-2).
+    /// Governance gate decisions are bridged to observations so repeated
+    /// patterns can promote through the memory lifecycle.
+    pub observation_store: Option<Arc<std::sync::Mutex<ObservationStore>>>,
 }
 
 #[derive(Clone)]
@@ -539,6 +549,25 @@ impl AppState {
             internal_auth::InternalAuthority::new(&identity.signing_key.to_bytes()),
         );
 
+        // Observation store (M4-2: governance→memory bridge).
+        // Stores observations derived from governance events so they can
+        // enter the memory promotion pipeline.
+        let obs_path = std::path::Path::new(&config.data_dir).join("observations.db");
+        let observation_store = match ObservationStore::new(&obs_path) {
+            Ok(store) => {
+                info!("Observation store opened at {}", obs_path.display());
+                Some(Arc::new(std::sync::Mutex::new(store)))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Observation store unavailable ({}): {} — governance bridge disabled",
+                    obs_path.display(),
+                    e
+                );
+                None
+            }
+        };
+
         // One-time onboard setup token (AUTH-VULN-06).
         // Only generated when:
         //   1. genesis.json does not exist (pre-genesis), AND
@@ -574,6 +603,7 @@ impl AppState {
             endpoint_limiter,
             onboard_token,
             internal_auth,
+            observation_store,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -1338,7 +1368,7 @@ fn enforce_gate(
     actor_label: &str,
 ) -> Result<GateResult, (StatusCode, String)> {
     let context = PolicyContext {
-        action,
+        action: action.clone(),
         trust_tier: TrustTier::Tier0,
         channel: Channel::Api,
         conversation_id: ConversationId::new(),
@@ -1348,6 +1378,10 @@ fn enforce_gate(
     };
     let actor = ActorId::User(actor_label.to_string());
     let result = state.0.gate.evaluate(&context, actor);
+
+    // M4-2: Bridge governance decisions to the observation pipeline.
+    // Blocked actions become observations that feed memory promotion.
+    bridge_gate_result_to_observations(state, &result, &action, actor_label);
 
     if result.is_blocked() {
         let reason = match &result.decision {
@@ -1361,6 +1395,78 @@ fn enforce_gate(
         Err((StatusCode::FORBIDDEN, reason))
     } else {
         Ok(result)
+    }
+}
+
+/// M4-2: Bridge a governance gate result to the observation pipeline.
+///
+/// Constructs a `GovernanceEvent` from the gate result and passes it through
+/// `event_to_observation()`. If the event is observation-worthy (violations,
+/// blocks, rejections), the resulting observation is stored for the memory
+/// promotion lifecycle.
+fn bridge_gate_result_to_observations(
+    state: &AppState,
+    result: &GateResult,
+    action: &CoreActionType,
+    actor_label: &str,
+) {
+    let obs_store = match &state.0.observation_store {
+        Some(store) => store.lock().unwrap(),
+        None => return, // observation store not available
+    };
+
+    // Map PolicyDecision to GovernanceDecision
+    let gov_decision = match &result.decision {
+        PolicyDecision::Block {
+            reason,
+            policy_module,
+        } => GovernanceDecision::Block {
+            reason: reason.clone(),
+            authority: policy_module.clone(),
+        },
+        PolicyDecision::Allow { conditions } => GovernanceDecision::Allow {
+            conditions: conditions.clone(),
+        },
+        PolicyDecision::Warn { message, .. } => GovernanceDecision::Escalate {
+            to: GovernanceActor::System {
+                component: "operator".to_string(),
+            },
+            reason: message.clone(),
+            timeout_secs: Some(300),
+        },
+        PolicyDecision::Review { summary, .. } => GovernanceDecision::Escalate {
+            to: GovernanceActor::Human {
+                id: "reviewer".to_string(),
+            },
+            reason: summary.clone(),
+            timeout_secs: Some(600),
+        },
+        PolicyDecision::Sanitize { .. } => GovernanceDecision::Allow {
+            conditions: vec!["content sanitized".to_string()],
+        },
+    };
+
+    let gov_actor = GovernanceActor::System {
+        component: format!("gate:{}", actor_label),
+    };
+    let action_ctx = ActionContext {
+        action_type: format!("{:?}", action),
+        target: None,
+        trust_tier: match result.trust_tier {
+            TrustTier::Tier0 => 0,
+            TrustTier::Tier1 => 1,
+            TrustTier::Tier2 => 2,
+        },
+        risk_level: format!("{:?}", result.risk_level),
+    };
+
+    let event = GovernanceEvent::policy_evaluation(gov_actor, action_ctx, gov_decision);
+
+    if let Some(candidate) = event_to_observation(&event) {
+        let obs = candidate_to_observation(&candidate);
+        if let Err(e) = obs_store.append(&obs) {
+            tracing::debug!("Failed to store governance observation: {}", e);
+        }
     }
 }
 
@@ -1660,7 +1766,21 @@ async fn grant_handler(
         capability,
         format!("rcpt-{}", uuid::Uuid::now_v7()),
     )
-    .with_max_delegation_depth(body.max_delegation_depth.unwrap_or(3));
+    .with_max_delegation_depth(body.max_delegation_depth.unwrap_or(3))
+    // M4-3: Tag grant with API origin so validate_issuance() can detect
+    // external requests attempting to issue internal-only capabilities.
+    .with_issued_via(EventProvenance::external_request("api-grant-handler", None));
+
+    // M4-3: Validate issuance — rejects external requests on internal-only
+    // capabilities (ConfigChange, CredentialAccess). This closes the SSRF
+    // self-grant vector.
+    state.0.gate.validate_grant(&grant).map_err(|e| {
+        tracing::warn!("Grant issuance rejected by M4-3 gate: {}", e);
+        (
+            StatusCode::FORBIDDEN,
+            format!("Grant issuance rejected: {}", e),
+        )
+    })?;
 
     // Sign the grant
     grant.sign(&state.0.identity.signing_key);
@@ -1782,6 +1902,16 @@ async fn delegate_handler(
         parent_grant_id: parent.id.clone(),
         delegator_key: body.delegator_identity.clone(),
     };
+
+    // M4-3: Tag delegated grant with API origin and validate issuance.
+    child = child.with_issued_via(EventProvenance::external_request("api-delegate-handler", None));
+    state.0.gate.validate_grant(&child).map_err(|e| {
+        tracing::warn!("Delegated grant rejected by M4-3 gate: {}", e);
+        (
+            StatusCode::FORBIDDEN,
+            format!("Delegated grant issuance rejected: {}", e),
+        )
+    })?;
 
     let depth = child.delegation_depth;
     let child_json = serde_json::to_value(&child).unwrap_or_default();

@@ -9,3 +9,5 @@ description = "Receipt and chain verification utilities for ZeroPoint"
 [dependencies]
 chrono = { workspace = true }
 serde = { workspace = true }
+zp-receipt = { path = "../zp-receipt" }
+tracing = { workspace = true }

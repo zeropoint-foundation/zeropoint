@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 
 use zp_audit::UnsealedEntry;
 use zp_core::audit::{ActorId, AuditAction};
+use zp_core::capability_grant::{CapabilityGrant, IssuanceError};
 use zp_core::policy::{PolicyContext, PolicyDecision, RiskLevel, TrustTier};
 
 use crate::engine::PolicyEngine;
@@ -292,6 +293,19 @@ impl GovernanceGate {
             receipt_id: None,
             applied_rules,
         }
+    }
+
+    /// Validate a capability grant before accepting it into the system.
+    ///
+    /// This is the M4-3 enforcement point: every grant MUST pass through
+    /// `validate_issuance()` before being stored. Grants with
+    /// `ExternalRequest` origin on internal-only capabilities (ConfigChange,
+    /// CredentialAccess) are rejected, closing the SSRF self-grant vector.
+    ///
+    /// Returns `Ok(())` if the grant passes validation, or the
+    /// [`IssuanceError`] describing the rejection.
+    pub fn validate_grant(&self, grant: &CapabilityGrant) -> Result<(), IssuanceError> {
+        grant.validate_issuance()
     }
 
     pub fn guard(&self) -> &Guard {
@@ -647,5 +661,111 @@ mod tests {
 
         let decision = guard.check(&context, &actor);
         assert!(decision.is_some());
+    }
+
+    // M4-3: validate_grant tests
+
+    #[test]
+    fn test_validate_grant_allows_read_from_external() {
+        use zp_core::governance::EventProvenance;
+        use zp_core::GrantedCapability;
+
+        let gate = GovernanceGate::new("test_gate");
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "rcpt-test".to_string(),
+        )
+        .with_issued_via(EventProvenance::external_request("api", None));
+
+        assert!(gate.validate_grant(&grant).is_ok());
+    }
+
+    #[test]
+    fn test_validate_grant_rejects_config_from_external() {
+        use zp_core::governance::EventProvenance;
+        use zp_core::GrantedCapability;
+
+        let gate = GovernanceGate::new("test_gate");
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::ConfigChange {
+                settings: vec!["*".to_string()],
+            },
+            "rcpt-test".to_string(),
+        )
+        .with_issued_via(EventProvenance::external_request("attacker", None));
+
+        let result = gate.validate_grant(&grant);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IssuanceError::ExternalOnInternalCapability { .. }
+        ));
+    }
+
+    #[test]
+    fn test_validate_grant_rejects_credential_from_external() {
+        use zp_core::governance::EventProvenance;
+        use zp_core::GrantedCapability;
+
+        let gate = GovernanceGate::new("test_gate");
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::CredentialAccess {
+                credential_refs: vec!["aws_key".to_string()],
+            },
+            "rcpt-test".to_string(),
+        )
+        .with_issued_via(EventProvenance::external_request("attacker", None));
+
+        assert!(gate.validate_grant(&grant).is_err());
+    }
+
+    #[test]
+    fn test_validate_grant_allows_config_from_system_internal() {
+        use zp_core::governance::EventProvenance;
+        use zp_core::GrantedCapability;
+
+        let gate = GovernanceGate::new("test_gate");
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::ConfigChange {
+                settings: vec!["*".to_string()],
+            },
+            "rcpt-test".to_string(),
+        )
+        .with_issued_via(EventProvenance::system_internal("pipeline"));
+
+        assert!(gate.validate_grant(&grant).is_ok());
+    }
+
+    #[test]
+    fn test_validate_grant_rejects_missing_provenance() {
+        use zp_core::GrantedCapability;
+
+        let gate = GovernanceGate::new("test_gate");
+        // No with_issued_via — issued_via is None
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "rcpt-test".to_string(),
+        );
+
+        let result = gate.validate_grant(&grant);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IssuanceError::MissingProvenance
+        ));
     }
 }

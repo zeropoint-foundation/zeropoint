@@ -125,6 +125,45 @@ impl RotationCertificate {
         })
     }
 
+    /// Issue a rotation certificate AND emit typed receipts (C3-3).
+    ///
+    /// Returns the certificate plus a DelegationClaim (new key authorized)
+    /// and a RevocationClaim (old key revoked).
+    pub fn issue_with_receipts(
+        old_signing_key: &SigningKey,
+        new_public_key: &[u8; 32],
+        role: KeyRole,
+        sequence: u32,
+        prev_rotation_hash: Option<String>,
+        reason: Option<String>,
+    ) -> Result<(Self, zp_receipt::Receipt, zp_receipt::Receipt), KeyError> {
+        let cert = Self::issue(old_signing_key, new_public_key, role, sequence, prev_rotation_hash, reason)?;
+
+        let delegation_receipt = zp_receipt::Receipt::delegation(&cert.body.old_public_key)
+            .status(zp_receipt::Status::Success)
+            .claim_semantics(zp_receipt::ClaimSemantics::AuthorizationGrant)
+            .claim_metadata(zp_receipt::ClaimMetadata::Delegation {
+                capability_id: format!("signing:{}", cert.body.role),
+                delegator_id: cert.body.old_public_key.clone(),
+                delegate_id: cert.body.new_public_key.clone(),
+                max_depth: 0,
+            })
+            .parent(&cert.body.id)
+            .finalize();
+
+        let revocation_receipt = zp_receipt::Receipt::revocation(&cert.body.old_public_key)
+            .status(zp_receipt::Status::Success)
+            .claim_semantics(zp_receipt::ClaimSemantics::IntegrityAttestation)
+            .claim_metadata(zp_receipt::ClaimMetadata::Revocation {
+                revoked_receipt_id: cert.body.old_public_key.clone(),
+                reason: "key_rotation".to_string(),
+                revoker_id: cert.body.old_public_key.clone(),
+            })
+            .finalize();
+
+        Ok((cert, delegation_receipt, revocation_receipt))
+    }
+
     /// Add a parent key co-signature (defense-in-depth).
     ///
     /// For operator rotation, the genesis key co-signs.
