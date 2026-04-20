@@ -494,6 +494,14 @@ const phases = [
       { id: "R6-2", label: "Compromise-triggered memory quarantine", done: true },
     ]
   },
+  {
+    name: "Phase 3.5: Recovery Infrastructure",
+    status: "shipped",
+    items: [
+      { id: "R6-3", label: "Receipt-based reconstitution engine", done: true },
+      { id: "R6-4", label: "Downgrade resistance (monotonic policy versions)", done: true },
+    ]
+  },
 ];
 
 // ── Architecture tree data (updated statuses) ──
@@ -682,9 +690,11 @@ const data = [
       { label: "Automated response actions per affected element", status: "shipped", phase: "R6-1" },
       { label: "Compromise-triggered memory quarantine", status: "shipped", phase: "R6-2" },
     ]},
-    { label: "Receipt-Based Reconstitution", status: "active", children: [
+    { label: "Receipt-Based Reconstitution", status: "shipped", phase: "R6-3", children: [
       { label: "State derived from receipt chain, never stored mutably", status: "shipped", detail: "Design principle" },
-      { label: "System state reconstruction from chain replay", status: "active" },
+      { label: "System state reconstruction from chain replay", status: "shipped", phase: "R6-3" },
+      { label: "Anomaly detection (broken hash links, timestamp regression)", status: "shipped", phase: "R6-3" },
+      { label: "Blast radius report (live vs reconstituted state diff)", status: "shipped", phase: "R6-3" },
       { label: "Checkpoint snapshots for fast recovery", status: "roadmap" },
     ]},
     { label: "Tamper Evidence", status: "shipped", children: [
@@ -703,8 +713,9 @@ const data = [
       { label: "Touch ID biometric provider", status: "active" },
       { label: "Additional hardware wallet providers", status: "roadmap" },
     ]},
-    { label: "Downgrade Resistance", status: "roadmap", children: [
-      { label: "Monotonic policy version enforcement", status: "roadmap" },
+    { label: "Downgrade Resistance", status: "shipped", phase: "R6-4", children: [
+      { label: "Monotonic policy version enforcement", status: "shipped", phase: "R6-4" },
+      { label: "Version transition audit trail", status: "shipped", phase: "R6-4" },
     ]},
   ]},
 
