@@ -45,6 +45,41 @@ pub struct ChainEntry {
     pub receipt_extensions: Option<HashMap<String, serde_json::Value>>,
 }
 
+impl ChainEntry {
+    /// Convert from a full `AuditEntry` (from zp-core / AuditStore).
+    ///
+    /// Extracts receipt extensions (metadata key-value pairs) into the
+    /// generic `receipt_extensions` map so the reconstitution engine can
+    /// interpret state transitions without coupling to receipt internals.
+    pub fn from_audit_entry(entry: &zp_core::AuditEntry) -> Self {
+        let receipt_extensions = entry.receipt.as_ref().map(|r| {
+            let mut ext = HashMap::new();
+            // Extract claim metadata if present.
+            if let Some(ref meta) = r.claim_metadata {
+                ext.insert(
+                    "claim_type".to_string(),
+                    serde_json::Value::String(format!("{:?}", meta)),
+                );
+            }
+            // Extract action type as an extension.
+            ext.insert(
+                "action".to_string(),
+                serde_json::json!(format!("{:?}", entry.action)),
+            );
+            ext
+        });
+
+        Self {
+            id: entry.id.0.to_string(),
+            timestamp: entry.timestamp,
+            prev_hash: entry.prev_hash.clone(),
+            entry_hash: entry.entry_hash.clone(),
+            signature: entry.signature.clone(),
+            receipt_extensions,
+        }
+    }
+}
+
 // ============================================================================
 // Reconstituted state
 // ============================================================================
@@ -151,6 +186,8 @@ pub enum AnomalyKind {
     AnchorMismatch,
     /// A receipt's signature fails verification.
     InvalidReceiptSignature,
+    /// A policy version in the chain is lower than a previously seen version.
+    PolicyDowngradeDetected,
 }
 
 /// How severe is the anomaly.
@@ -243,6 +280,9 @@ pub struct ReconstitutionEngine {
     state: ReconstitutedState,
     last_timestamp: Option<DateTime<Utc>>,
     last_entry_hash: Option<String>,
+    /// Highest policy version seen so far (R6-4: downgrade resistance).
+    /// Tracked during chain walk to detect rollback attempts in the audit trail.
+    highest_policy_version: Option<(u32, u32, u32)>,
 }
 
 impl ReconstitutionEngine {
@@ -252,6 +292,7 @@ impl ReconstitutionEngine {
             state: ReconstitutedState::default(),
             last_timestamp: None,
             last_entry_hash: None,
+            highest_policy_version: None,
         }
     }
 
@@ -448,6 +489,39 @@ impl ReconstitutionEngine {
             self.state.quarantined_memories.remove(reinstated_id);
             if let Some(mem) = self.state.memory_states.get_mut(reinstated_id) {
                 mem.quarantined = false;
+            }
+        }
+
+        // Policy version tracking (R6-4: downgrade resistance).
+        // Detect any attempt to load a lower policy version in the chain.
+        if let Some(version_str) = extensions
+            .get("zp.policy.version")
+            .and_then(|v| v.as_str())
+        {
+            let parts: Vec<&str> = version_str.split('.').collect();
+            if let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(patch))) = (
+                parts.first().map(|s| s.parse::<u32>()),
+                parts.get(1).map(|s| s.parse::<u32>()),
+                parts.get(2).map(|s| s.parse::<u32>()),
+            ) {
+                let new_ver = (major, minor, patch);
+                if let Some(prev_ver) = self.highest_policy_version {
+                    if new_ver < prev_ver {
+                        self.state.anomalies.push(ReconstitutionAnomaly {
+                            kind: AnomalyKind::PolicyDowngradeDetected,
+                            entry_id: entry_id.to_string(),
+                            description: format!(
+                                "Policy downgrade detected: v{}.{}.{} < v{}.{}.{}",
+                                major, minor, patch,
+                                prev_ver.0, prev_ver.1, prev_ver.2
+                            ),
+                            severity: AnomalySeverity::Critical,
+                        });
+                    }
+                }
+                if self.highest_policy_version.map_or(true, |prev| new_ver > prev) {
+                    self.highest_policy_version = Some(new_ver);
+                }
             }
         }
     }
@@ -879,5 +953,70 @@ mod tests {
 
         assert!(!engine.state.active_capabilities.contains_key("grant-1"));
         assert!(engine.state.revoked_capabilities.contains("grant-1"));
+    }
+
+    #[test]
+    fn policy_downgrade_detected_in_chain() {
+        let config = ReconstitutionConfig::default();
+        let mut engine = ReconstitutionEngine::new(config);
+
+        // Load policy v1.0.0
+        let entry = make_entry_with_ext(
+            "1",
+            "genesis",
+            "hash-1",
+            serde_json::json!({ "zp.policy.version": "1.0.0" }),
+        );
+        engine.process_entry(&entry);
+        assert_eq!(engine.anomaly_count(), 0);
+
+        // Upgrade to v2.0.0 — allowed
+        let entry = make_entry_with_ext(
+            "2",
+            "hash-1",
+            "hash-2",
+            serde_json::json!({ "zp.policy.version": "2.0.0" }),
+        );
+        engine.process_entry(&entry);
+        assert_eq!(engine.anomaly_count(), 0);
+
+        // Downgrade to v1.5.0 — detected as anomaly
+        let entry = make_entry_with_ext(
+            "3",
+            "hash-2",
+            "hash-3",
+            serde_json::json!({ "zp.policy.version": "1.5.0" }),
+        );
+        engine.process_entry(&entry);
+        assert_eq!(engine.anomaly_count(), 1);
+        assert_eq!(
+            engine.state.anomalies[0].kind,
+            AnomalyKind::PolicyDowngradeDetected
+        );
+        assert_eq!(engine.state.anomalies[0].severity, AnomalySeverity::Critical);
+    }
+
+    #[test]
+    fn policy_same_version_no_anomaly() {
+        let config = ReconstitutionConfig::default();
+        let mut engine = ReconstitutionEngine::new(config);
+
+        let entry = make_entry_with_ext(
+            "1",
+            "genesis",
+            "hash-1",
+            serde_json::json!({ "zp.policy.version": "1.0.0" }),
+        );
+        engine.process_entry(&entry);
+
+        // Same version reload — no anomaly
+        let entry = make_entry_with_ext(
+            "2",
+            "hash-1",
+            "hash-2",
+            serde_json::json!({ "zp.policy.version": "1.0.0" }),
+        );
+        engine.process_entry(&entry);
+        assert_eq!(engine.anomaly_count(), 0);
     }
 }

@@ -498,8 +498,8 @@ const phases = [
     name: "Phase 3.5: Recovery Infrastructure",
     status: "in-progress",
     items: [
-      { id: "R6-3", label: "Receipt-based reconstitution (wiring: CLI/server surface)", done: false },
-      { id: "R6-4", label: "Downgrade resistance (wiring: policy engine loading)", done: false },
+      { id: "R6-3", label: "Receipt-based reconstitution (wiring: CLI/server + ChainEntry bridge)", done: true },
+      { id: "R6-4", label: "Downgrade resistance (wiring: AppState + reconstitution engine + API + CLI)", done: true },
       { id: "G5-3", label: "Cross-context memory merging", done: false },
       { id: "G5-4", label: "Narrative synthesis engine", done: false },
     ]
@@ -654,7 +654,7 @@ const data = [
       { label: "Pending promotion queue with expiry and deferral limits", status: "shipped", phase: "G5-2" },
       { label: "Approve / Reject / Defer decision processing (wired: 4 server endpoints + CLI)", status: "shipped", phase: "G5-2" },
       { label: "Expired review sweep and audit trail", status: "shipped", phase: "G5-2" },
-      { label: "CLI review surface (no zp memory review command yet)", status: "active" },
+      { label: "CLI review surface (`zp memory review/approve/reject/defer`)", status: "shipped" },
       { label: "Web dashboard review surface", status: "roadmap" },
     ]},
     { label: "Learning Loop", status: "shipped", children: [
@@ -692,12 +692,12 @@ const data = [
       { label: "Automated response actions (wired: compromise API endpoint + tracker in AppState)", status: "shipped", phase: "R6-1" },
       { label: "Compromise\u2192quarantine pipeline (wired: handler chains to quarantine store)", status: "shipped", phase: "R6-2" },
     ]},
-    { label: "Receipt-Based Reconstitution", status: "active", phase: "R6-3", children: [
+    { label: "Receipt-Based Reconstitution", status: "shipped", phase: "R6-3", children: [
       { label: "State derived from receipt chain, never stored mutably", status: "shipped", detail: "Design principle" },
       { label: "System state reconstruction from chain replay", status: "shipped", phase: "R6-3" },
       { label: "Anomaly detection (broken hash links, timestamp regression)", status: "shipped", phase: "R6-3" },
       { label: "Blast radius report (live vs reconstituted state diff)", status: "shipped", phase: "R6-3" },
-      { label: "CLI/server surface for reconstitution", status: "active", phase: "R6-3" },
+      { label: "CLI/server surface for reconstitution", status: "shipped", phase: "R6-3" },
       { label: "Checkpoint snapshots for fast recovery", status: "roadmap" },
     ]},
     { label: "Tamper Evidence", status: "shipped", children: [
@@ -716,8 +716,8 @@ const data = [
       { label: "Touch ID biometric provider", status: "active" },
       { label: "Additional hardware wallet providers", status: "roadmap" },
     ]},
-    { label: "Downgrade Resistance", status: "active", phase: "R6-4", children: [
-      { label: "Monotonic policy version enforcement (guard exists, not called by engine)", status: "active", phase: "R6-4" },
+    { label: "Downgrade Resistance", status: "shipped", phase: "R6-4", children: [
+      { label: "Monotonic policy version enforcement (AppState + reconstitution engine + API)", status: "shipped", phase: "R6-4" },
       { label: "Version transition audit trail", status: "shipped", phase: "R6-4" },
     ]},
   ]},

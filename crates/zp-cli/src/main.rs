@@ -189,6 +189,10 @@ enum Commands {
         /// Emit machine-readable JSON instead of formatted text
         #[arg(long)]
         json: bool,
+
+        /// R6-3: Reconstitute trust state from the audit chain and report anomalies
+        #[arg(long)]
+        reconstitute: bool,
     },
 
     /// Manage ZeroPoint configuration
@@ -262,6 +266,8 @@ enum PolicyCmd {
         /// Module name or content hash prefix
         identifier: String,
     },
+    /// Show current policy version and transition history (R6-4: downgrade resistance)
+    Version,
 }
 
 #[derive(Subcommand)]
@@ -998,7 +1004,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Verify — run the catalog grammar verifier over the audit chain. No pipeline needed.
-    if let Some(Commands::Verify { audit_db, json }) = &args.command {
+    if let Some(Commands::Verify { audit_db, json, reconstitute }) = &args.command {
         let db_path = audit_db
             .clone()
             .unwrap_or_else(|| args.data_dir.join("audit.db"));
@@ -1044,6 +1050,52 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        // R6-3: Reconstitution — rebuild trust state from chain.
+        if *reconstitute {
+            eprintln!("\n\x1b[1m── R6-3: Chain Reconstitution ──\x1b[0m\n");
+            let chain = match store.export_chain(100_000) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Error exporting chain: {}", e);
+                    std::process::exit(2);
+                }
+            };
+
+            let config = zp_audit::ReconstitutionConfig::default();
+            let mut engine = zp_audit::ReconstitutionEngine::new(config);
+
+            let mut chain_integrity = true;
+            let mut prev_hash = String::new();
+            for entry in &chain {
+                let chain_entry = zp_audit::ChainEntry::from_audit_entry(entry);
+                if !prev_hash.is_empty() && chain_entry.prev_hash != prev_hash {
+                    chain_integrity = false;
+                }
+                prev_hash = chain_entry.entry_hash.clone();
+                engine.process_entry(&chain_entry);
+            }
+
+            let state = engine.finalize(chain_integrity);
+
+            eprintln!("entries processed:  {}", state.entries_processed);
+            eprintln!("chain integrity:    {}", if state.chain_integrity_verified { "\x1b[32mOK\x1b[0m" } else { "\x1b[31mBROKEN\x1b[0m" });
+            eprintln!("valid operator keys: {}", state.valid_operator_keys.len());
+            eprintln!("valid agent keys:    {}", state.valid_agent_keys.len());
+            eprintln!("revoked keys:        {}", state.revoked_keys.len());
+            eprintln!("active capabilities: {}", state.active_capabilities.len());
+            eprintln!("memory states:       {}", state.memory_states.len());
+            eprintln!("quarantined:         {}", state.quarantined_memories.len());
+
+            if state.anomalies.is_empty() {
+                eprintln!("\nanomalies:           \x1b[32mnone\x1b[0m");
+            } else {
+                eprintln!("\nanomalies:           \x1b[31m{}\x1b[0m", state.anomalies.len());
+                for a in &state.anomalies {
+                    eprintln!("  [{:?}] entry={} {:?}: {}", a.severity, a.entry_id, a.kind, a.description);
+                }
+            }
+        }
+
         std::process::exit(if report.violations().is_empty() { 0 } else { 1 });
     }
 
@@ -1492,6 +1544,45 @@ async fn main() -> anyhow::Result<()> {
 
     // Policy subcommand — manages WASM policy modules (requires policy-wasm feature)
     if let Some(Commands::Policy(_cmd)) = &args.command {
+        // R6-4: `zp policy version` — query downgrade guard via server API.
+        if matches!(_cmd, PolicyCmd::Version) {
+            let port: u16 = std::env::var("ZP_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(3000);
+            let url = format!("http://127.0.0.1:{}/api/v1/security/policy-version", port);
+            let client = reqwest::Client::new();
+            match client.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    let body: serde_json::Value = resp.json().await.unwrap_or_default();
+                    println!("Policy version: {}", body["current_version"].as_str().unwrap_or("unknown"));
+                    if let Some(history) = body["history"].as_array() {
+                        if history.is_empty() {
+                            println!("No version transitions recorded.");
+                        } else {
+                            println!("\nVersion history:");
+                            for t in history {
+                                println!(
+                                    "  {} → {}  ({})",
+                                    t["from"].as_str().unwrap_or("?"),
+                                    t["to"].as_str().unwrap_or("?"),
+                                    t["timestamp"].as_str().unwrap_or("?"),
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    eprintln!("Server returned {}", resp.status());
+                }
+                Err(e) => {
+                    eprintln!("Failed to connect to server: {}", e);
+                    eprintln!("Is `zp serve` running?");
+                }
+            }
+            std::process::exit(0);
+        }
+
         #[cfg(feature = "policy-wasm")]
         let exit_code = match _cmd {
             PolicyCmd::Load { path } => policy_commands::load(path),
@@ -1499,6 +1590,7 @@ async fn main() -> anyhow::Result<()> {
             PolicyCmd::Status => policy_commands::status(),
             PolicyCmd::Verify => policy_commands::verify(),
             PolicyCmd::Remove { identifier } => policy_commands::remove(identifier),
+            PolicyCmd::Version => unreachable!(), // handled above
         };
         #[cfg(not(feature = "policy-wasm"))]
         let exit_code = {
