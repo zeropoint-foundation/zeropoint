@@ -111,13 +111,25 @@ pub struct Receipt {
     #[serde(default = "default_claim_semantics")]
     pub claim_semantics: ClaimSemantics,
 
-    /// ID of the receipt that supersedes this one (soft replacement).
-    /// The original claim still exists but is no longer the active version.
+    /// Receipt IDs this receipt supersedes (forward reference).
+    /// The superseded receipts remain in the chain but are no longer
+    /// the current authority for whatever they claimed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supersedes: Vec<String>,
+
+    /// Receipt IDs this receipt explicitly revokes (forward reference).
+    /// Revoked receipts are treated as void — any downstream claims
+    /// that depend on them are also invalidated.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub revokes: Vec<String>,
+
+    /// ID of the receipt that supersedes this one (backward reference,
+    /// set on the *old* receipt after supersession).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub superseded_by: Option<String>,
 
-    /// Timestamp when this receipt was revoked.
-    /// A revoked receipt is permanently invalidated.
+    /// Timestamp when this receipt was revoked (backward reference,
+    /// set on the *old* receipt after revocation).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub revoked_at: Option<DateTime<Utc>>,
 }
@@ -215,13 +227,17 @@ impl Receipt {
         self.superseded_by = Some(new_receipt_id.to_string());
     }
 
-    /// Revoke this receipt. Returns a RevocationClaim receipt that should be
-    /// appended to the chain as proof of revocation.
+    /// Revoke this receipt. Returns a RevocationClaim receipt builder that
+    /// should be finalized and appended to the chain as proof of revocation.
+    ///
+    /// Sets both the backward reference (`revoked_at` on this receipt) and
+    /// the forward reference (`revokes` on the new revocation receipt).
     pub fn revoke(&mut self, revoker_id: &str, reason: &str) -> crate::ReceiptBuilder {
         self.revoked_at = Some(Utc::now());
 
         Receipt::revocation(revoker_id)
             .parent(&self.id)
+            .revokes_receipt(&self.id)
             .claim_metadata(ClaimMetadata::Revocation {
                 revoked_receipt_id: self.id.clone(),
                 reason: reason.to_string(),

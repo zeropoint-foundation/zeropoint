@@ -29,6 +29,8 @@ pub struct ReceiptBuilder {
     expires_at: Option<chrono::DateTime<Utc>>,
     claim_metadata: Option<ClaimMetadata>,
     claim_semantics: ClaimSemantics,
+    supersedes: Vec<String>,
+    revokes: Vec<String>,
     #[cfg(feature = "signing")]
     #[allow(dead_code)] // Placeholder for future auto-signing on finalize()
     signer: Option<&'static crate::Signer>,
@@ -60,6 +62,8 @@ impl ReceiptBuilder {
             expires_at: None,
             claim_metadata: None,
             claim_semantics: ClaimSemantics::default(),
+            supersedes: Vec::new(),
+            revokes: Vec::new(),
             #[cfg(feature = "signing")]
             signer: None,
         }
@@ -240,8 +244,90 @@ impl ReceiptBuilder {
         self
     }
 
+    /// Declare that this receipt supersedes a prior receipt.
+    /// The prior receipt's claim is replaced by this one.
+    pub fn supersedes(mut self, receipt_id: &str) -> Self {
+        self.supersedes.push(receipt_id.to_string());
+        self
+    }
+
+    /// Declare that this receipt supersedes multiple prior receipts.
+    pub fn supersedes_all(mut self, receipt_ids: &[&str]) -> Self {
+        self.supersedes.extend(receipt_ids.iter().map(|id| id.to_string()));
+        self
+    }
+
+    /// Declare that this receipt revokes a prior receipt.
+    /// The revoked receipt and its downstream dependents are void.
+    pub fn revokes_receipt(mut self, receipt_id: &str) -> Self {
+        self.revokes.push(receipt_id.to_string());
+        self
+    }
+
+    /// Declare that this receipt revokes multiple prior receipts.
+    pub fn revokes_all(mut self, receipt_ids: &[&str]) -> Self {
+        self.revokes.extend(receipt_ids.iter().map(|id| id.to_string()));
+        self
+    }
+
+    /// Finalize the receipt with full type validation.
+    ///
+    /// Returns `Err(ValidationError)` if the receipt violates per-type
+    /// constraints (wrong semantics, missing metadata, TTL exceeded).
+    /// Prefer this over `finalize()` for new code paths.
+    pub fn try_finalize(self) -> Result<Receipt, crate::validation::ValidationError> {
+        let created_at = chrono::Utc::now();
+
+        // Compute expires_at early so we can validate it
+        let expires_at = self
+            .expires_at
+            .or_else(|| self.receipt_type.default_expiry().map(|d| created_at + d));
+
+        // Run per-type validation before constructing the receipt
+        crate::validation::validate_receipt_type(
+            self.receipt_type,
+            self.claim_semantics,
+            self.claim_metadata.as_ref(),
+            expires_at,
+            created_at,
+        )?;
+
+        Ok(self.finalize_inner(created_at, expires_at))
+    }
+
     /// Finalize the receipt: generate ID, compute content hash.
+    ///
+    /// Logs a warning if per-type validation fails but still produces
+    /// the receipt for backward compatibility. New code should prefer
+    /// `try_finalize()`.
     pub fn finalize(self) -> Receipt {
+        let created_at = Utc::now();
+
+        // Apply default expiry if no explicit one was set
+        let expires_at = self
+            .expires_at
+            .or_else(|| self.receipt_type.default_expiry().map(|d| created_at + d));
+
+        // Run per-type validation; warn but don't fail for backward compat
+        if let Err(e) = crate::validation::validate_receipt_type(
+            self.receipt_type,
+            self.claim_semantics,
+            self.claim_metadata.as_ref(),
+            expires_at,
+            created_at,
+        ) {
+            eprintln!("[zp-receipt] validation warning: {}", e);
+        }
+
+        self.finalize_inner(created_at, expires_at)
+    }
+
+    /// Shared receipt construction — called by both `finalize()` and `try_finalize()`.
+    fn finalize_inner(
+        self,
+        created_at: chrono::DateTime<Utc>,
+        expires_at: Option<chrono::DateTime<Utc>>,
+    ) -> Receipt {
         let id = generate_receipt_id(self.receipt_type);
 
         let executor = Some(Executor {
@@ -268,11 +354,6 @@ impl ReceiptBuilder {
             Some(self.extensions)
         };
 
-        // Apply default expiry if no explicit one was set
-        let expires_at = self
-            .expires_at
-            .or_else(|| self.receipt_type.default_expiry().map(|d| Utc::now() + d));
-
         let mut receipt = Receipt {
             id,
             version: RECEIPT_SCHEMA_VERSION.to_string(),
@@ -283,7 +364,7 @@ impl ReceiptBuilder {
             signature: None,
             signer_public_key: None,
             trust_grade: self.trust_grade,
-            created_at: Utc::now(),
+            created_at,
             executor,
             action: self.action,
             timing: self.timing,
@@ -298,6 +379,8 @@ impl ReceiptBuilder {
             expires_at,
             claim_metadata: self.claim_metadata,
             claim_semantics: self.claim_semantics,
+            supersedes: self.supersedes,
+            revokes: self.revokes,
             superseded_by: None,
             revoked_at: None,
         };

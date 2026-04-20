@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 zp-core = { path = "../zp-core" }
+zp-receipt = { path = "../zp-receipt" }
 zp-verify = { path = "../zp-verify" }
 rusqlite = { workspace = true }
 blake3 = { workspace = true }
