@@ -478,10 +478,10 @@ const phases = [
   },
   {
     name: "Phase 2.8: Pathway Polish",
-    status: "pending",
+    status: "shipped",
     items: [
-      { id: "P3-1", label: "Argument-level enforcement", done: false },
-      { id: "P3-2", label: "Pentest regression CI", done: false },
+      { id: "P2-4", label: "Schema validation at API boundaries (deny_unknown_fields)", done: true },
+      { id: "P2-5", label: "Canonical serialization before signing", done: true },
     ]
   },
 ];
@@ -518,8 +518,8 @@ const data = [
       { label: "System path rejection (/etc, /proc, /sys)", status: "shipped", phase: "P2-2" },
       { label: "Internal capability tokens (BLAKE3 HMAC, 30s TTL, nonce replay)", status: "shipped", phase: "P2-3" },
       { label: "Scoped action+target token verification", status: "shipped", phase: "P2-3" },
-      { label: "Typed schema validation at every API endpoint", status: "shipped" },
-      { label: "Canonical serialization before cryptographic signing", status: "shipped" },
+      { label: "Typed schema validation at every API endpoint", status: "shipped", phase: "P2-4" },
+      { label: "Canonical serialization before cryptographic signing", status: "shipped", phase: "P2-5" },
     ]},
     { label: "Configure Engine", status: "shipped", children: [
       { label: "Semantic pattern matching for env variable resolution", status: "shipped" },

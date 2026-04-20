@@ -9,21 +9,33 @@
 
 use super::{OnboardAction, OnboardEvent, OnboardState};
 
+/// Typed parameters for the genesis ceremony action.
+/// Phase 2.8 (P2-4): replaces loose `.get().and_then()` extraction.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GenesisParams {
+    #[serde(default = "default_operator_name")]
+    operator_name: String,
+    #[serde(default = "default_sovereignty_mode")]
+    sovereignty_mode: String,
+}
+fn default_operator_name() -> String { "Operator".to_string() }
+fn default_sovereignty_mode() -> String { "auto".to_string() }
+
 /// Create Genesis + Operator keys.
 pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) -> Vec<OnboardEvent> {
     let mut events = Vec::new();
 
-    // Extract parameters
-    let operator_name = action
-        .params
-        .get("operator_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Operator");
-    let sovereignty = action
-        .params
-        .get("sovereignty_mode")
-        .and_then(|v| v.as_str())
-        .unwrap_or("auto");
+    // Phase 2.8 (P2-4): typed parameter extraction with schema validation.
+    // Falls back to defaults if params don't match the schema — backward compatible
+    // with existing clients that may send extra fields during onboarding.
+    let params: GenesisParams = serde_json::from_value(action.params.clone())
+        .unwrap_or(GenesisParams {
+            operator_name: default_operator_name(),
+            sovereignty_mode: default_sovereignty_mode(),
+        });
+    let operator_name = params.operator_name.as_str();
+    let sovereignty = params.sovereignty_mode.as_str();
 
     events.push(OnboardEvent::terminal(""));
     events.push(OnboardEvent::terminal("ZeroPoint Genesis"));

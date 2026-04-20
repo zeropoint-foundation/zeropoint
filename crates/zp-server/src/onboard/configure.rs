@@ -2,6 +2,19 @@
 
 use super::{OnboardAction, OnboardEvent, OnboardState};
 
+/// Typed parameters for the configure action.
+/// Phase 2.8 (P2-4): replaces loose `.get().and_then()` extraction.
+#[derive(Debug, serde::Deserialize)]
+struct ConfigureParams {
+    #[serde(default = "default_proxy")]
+    proxy: bool,
+    #[serde(default = "default_proxy_port")]
+    proxy_port: u16,
+    scan_path: Option<String>,
+}
+fn default_proxy() -> bool { true }
+fn default_proxy_port() -> u16 { 3000 }
+
 /// Configure discovered tools by invoking `zp configure auto`.
 ///
 /// Shells out to the CLI configure engine so we get identical behavior
@@ -13,25 +26,20 @@ pub async fn handle_configure(
 ) -> Vec<OnboardEvent> {
     let mut events = Vec::new();
 
-    let use_proxy = action
-        .params
-        .get("proxy")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+    // Phase 2.8 (P2-4): typed parameter extraction
+    let params: ConfigureParams = serde_json::from_value(action.params.clone())
+        .unwrap_or(ConfigureParams {
+            proxy: default_proxy(),
+            proxy_port: default_proxy_port(),
+            scan_path: None,
+        });
 
-    let proxy_port = action
-        .params
-        .get("proxy_port")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(3000) as u16;
+    let use_proxy = params.proxy;
+    let proxy_port = params.proxy_port;
 
     // Determine scan path — prefer what the user set in Step 5,
     // fall back to ~/projects, then accept an override from the action.
-    let scan_path = action
-        .params
-        .get("scan_path")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+    let scan_path = params.scan_path
         .or_else(|| state.scan_path.clone())
         .unwrap_or_else(|| "~/projects".to_string());
 

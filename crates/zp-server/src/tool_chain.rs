@@ -378,6 +378,7 @@ fn empty_state(name: &str) -> ToolChainState {
 /// Request body for tools to announce their own lifecycle events.
 /// POST /api/v1/tools/receipt
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolReceiptRequest {
     /// Tool name (must match a configured tool)
     pub name: String,
