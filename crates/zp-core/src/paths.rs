@@ -20,8 +20,7 @@
 //! ├── policies/           # WASM policy modules
 //! ├── config.toml         # Operator configuration
 //! ├── guard-receipts/     # Guard execution receipts
-//! ├── session.json        # Runtime session token (ephemeral)
-//! └── assets/             # Dashboard override assets
+//! └── session.json        # Runtime session token (ephemeral)
 //! ```
 //!
 //! # No legacy support
@@ -104,12 +103,6 @@ pub fn config_path() -> Result<PathBuf, PathError> {
 /// `~/ZeroPoint/guard-receipts/`
 pub fn guard_receipts_dir() -> Result<PathBuf, PathError> {
     Ok(home()?.join("guard-receipts"))
-}
-
-/// Assets override directory (dashboard customizations).
-/// `~/ZeroPoint/assets/`
-pub fn assets_dir() -> Result<PathBuf, PathError> {
-    Ok(home()?.join("assets"))
 }
 
 #[cfg(test)]

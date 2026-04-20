@@ -831,7 +831,7 @@ async fn security_headers_middleware(
     // WebSocket connections to localhost are permitted for exec_ws/onboard_ws.
     // connect-src includes localhost:8473 for local Piper TTS health checks.
     // font-src includes data: for inline fonts and the external CDN for brand fonts.
-    // media-src 'self' for narration MP3s served from /assets/narration/.
+    // media-src 'self' for narration MP3s (served via ZP_ASSETS_DIR override).
     headers.insert(
         axum::http::header::HeaderName::from_static("content-security-policy"),
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
@@ -1292,31 +1292,21 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         },
     ));
 
-    // Serve static assets (CSS, JS, narration audio, etc.)
-    // Single authoritative location: $ZP_ASSETS_DIR or ~/ZeroPoint/assets/
-    // In dev: `./zp-dev.sh html` copies source files here for hot reload.
-    // In release: compiled-in HTML serves via resolve_html_asset(); static
-    //   files (narration MP3s, images) live here permanently.
-    let assets_dir = std::env::var("ZP_ASSETS_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| config.home_dir.join("assets"));
-
-    // Bootstrap compiled-in assets to disk on first run.  This ensures
-    // `cargo build --release && zp serve` works out of the box — no
-    // manual `cp -r` step required.
-    bootstrap_assets(&assets_dir);
-
-    if assets_dir.exists() {
-        info!(
-            "Assets:     http://localhost:{}/assets/  ({})",
-            config.port,
-            assets_dir.display()
-        );
+    // Static assets — served directly from the compiled binary.
+    // No filesystem dance, no bootstrap, no staleness bugs.
+    // If ZP_ASSETS_DIR is set, it takes precedence (operator override for theming).
+    if let Ok(override_dir) = std::env::var("ZP_ASSETS_DIR") {
+        let dir = std::path::PathBuf::from(&override_dir);
+        if dir.exists() {
+            info!("Assets:     http://localhost:{}/assets/  (override: {})", config.port, override_dir);
+            router = router.nest_service("/assets", ServeDir::new(&dir));
+        } else {
+            tracing::warn!("ZP_ASSETS_DIR={} does not exist, using compiled-in assets", override_dir);
+            router = router.nest_service("/assets", embedded_assets_router());
+        }
     } else {
-        info!("Assets:     {} (not yet created)", assets_dir.display());
+        router = router.nest_service("/assets", embedded_assets_router());
     }
-    let assets_service = ServeDir::new(&assets_dir);
-    router = router.nest_service("/assets", assets_service);
 
     info!("Tool proxy: http://{{tool}}.localhost:{}/", config.port);
 
@@ -4529,162 +4519,60 @@ async fn tools_configured_receipts_handler(
 // ============================================================================
 
 // Embedded fallbacks — used only if the on-disk file is missing.
-const DASHBOARD_HTML_FALLBACK: &str = include_str!("../assets/dashboard.html");
-const ONBOARD_HTML_FALLBACK: &str = include_str!("../assets/onboard.html");
-const SPEAK_HTML_FALLBACK: &str = include_str!("../assets/speak.html");
-const ECOSYSTEM_HTML_FALLBACK: &str = include_str!("../assets/ecosystem.html");
+// ─── Compiled-in assets ─────────────────────────────────────────────────────
+// Everything below is baked into the binary at compile time.  No filesystem
+// pipeline, no bootstrap, no staleness.  `cargo build && zp serve` just works.
 
-// Embedded CSS and JS — bootstrapped to ~/ZeroPoint/assets/ on first run
-// so the ServeDir handler can serve them.  This means `cargo build && zp serve`
-// works out of the box with no manual `cp` step.
-const ONBOARD_CSS_EMBEDDED: &str = include_str!("../assets/onboard.css");
-const ONBOARD_JS_EMBEDDED: &str = include_str!("../assets/onboard.js");
-const TTS_JS_EMBEDDED: &str = include_str!("../assets/tts.js");
-const DASHBOARD_JS_EMBEDDED: &str = include_str!("../assets/dashboard.js");
-const ECOSYSTEM_JS_EMBEDDED: &str = include_str!("../assets/ecosystem.js");
-const SPEAK_JS_EMBEDDED: &str = include_str!("../assets/speak.js");
+const DASHBOARD_HTML: &str = include_str!("../assets/dashboard.html");
+const ONBOARD_HTML: &str = include_str!("../assets/onboard.html");
+const SPEAK_HTML: &str = include_str!("../assets/speak.html");
+const ECOSYSTEM_HTML: &str = include_str!("../assets/ecosystem.html");
 
-// Vendored 3rd-party libraries — no CDN dependency.  A sovereignty tool
-// shouldn't require third-party infrastructure to render its UI.
+const ONBOARD_CSS: &str = include_str!("../assets/onboard.css");
+const ONBOARD_JS: &str = include_str!("../assets/onboard.js");
+const TTS_JS: &str = include_str!("../assets/tts.js");
+const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
+const ECOSYSTEM_JS: &str = include_str!("../assets/ecosystem.js");
+const SPEAK_JS: &str = include_str!("../assets/speak.js");
+
 const VENDOR_XTERM_JS: &str = include_str!("../assets/vendor/xterm.min.js");
 const VENDOR_XTERM_CSS: &str = include_str!("../assets/vendor/xterm.min.css");
 const VENDOR_XTERM_FIT_JS: &str = include_str!("../assets/vendor/xterm-addon-fit.min.js");
 const VENDOR_D3_JS: &str = include_str!("../assets/vendor/d3.min.js");
 
-// Vendored fonts — served locally under /assets/fonts/.
 const FONTS_CSS: &str = include_str!("../assets/fonts/fonts.css");
 const FONT_INTER: &[u8] = include_bytes!("../assets/fonts/inter-latin.woff2");
 const FONT_JETBRAINS: &[u8] = include_bytes!("../assets/fonts/jetbrainsmono-latin.woff2");
 
-/// Bootstrap the assets directory — write compiled-in HTML, CSS, and JS so that
-/// a fresh `zp serve` works without any manual copying.
-///
-/// **Staleness guard**: files are overwritten when they differ from the compiled-in
-/// version.  This prevents stale assets from shadowing new builds.  If `ZP_ASSETS_DIR`
-/// is set, we skip overwriting (the operator is managing assets explicitly).
-fn bootstrap_assets(assets_dir: &std::path::Path) {
-    let explicit_override = std::env::var("ZP_ASSETS_DIR").is_ok();
+/// Build a router that serves all assets from compiled-in memory.
+/// No filesystem, no bootstrap, no staleness.
+fn embedded_assets_router() -> axum::Router {
+    use axum::response::IntoResponse;
 
-    let text_files: &[(&str, &str)] = &[
-        ("dashboard.html", DASHBOARD_HTML_FALLBACK),
-        ("onboard.html", ONBOARD_HTML_FALLBACK),
-        ("speak.html", SPEAK_HTML_FALLBACK),
-        ("ecosystem.html", ECOSYSTEM_HTML_FALLBACK),
-        ("onboard.css", ONBOARD_CSS_EMBEDDED),
-        ("onboard.js", ONBOARD_JS_EMBEDDED),
-        ("tts.js", TTS_JS_EMBEDDED),
-        ("dashboard.js", DASHBOARD_JS_EMBEDDED),
-        ("ecosystem.js", ECOSYSTEM_JS_EMBEDDED),
-        ("speak.js", SPEAK_JS_EMBEDDED),
-        ("vendor/xterm.min.js", VENDOR_XTERM_JS),
-        ("vendor/xterm.min.css", VENDOR_XTERM_CSS),
-        ("vendor/xterm-addon-fit.min.js", VENDOR_XTERM_FIT_JS),
-        ("vendor/d3.min.js", VENDOR_D3_JS),
-        ("fonts/fonts.css", FONTS_CSS),
-    ];
-    let binary_files: &[(&str, &[u8])] = &[
-        ("fonts/inter-latin.woff2", FONT_INTER),
-        ("fonts/jetbrainsmono-latin.woff2", FONT_JETBRAINS),
-    ];
-
-    if let Err(e) = std::fs::create_dir_all(assets_dir) {
-        tracing::warn!("Could not create assets dir {}: {}", assets_dir.display(), e);
-        return;
+    fn text_response(body: &'static str, content_type: &'static str) -> Response {
+        ([(axum::http::header::CONTENT_TYPE, content_type)], body).into_response()
     }
-    // Ensure nested dirs exist
-    let _ = std::fs::create_dir_all(assets_dir.join("vendor"));
-    let _ = std::fs::create_dir_all(assets_dir.join("fonts"));
-
-    let mut bootstrapped = 0u32;
-    let mut refreshed = 0u32;
-    for (name, content) in text_files {
-        let path = assets_dir.join(name);
-        if !path.exists() {
-            if let Err(e) = std::fs::write(&path, content) {
-                tracing::warn!("Could not write {}: {}", path.display(), e);
-            } else {
-                bootstrapped += 1;
-            }
-        } else if !explicit_override {
-            // Overwrite stale files unless the operator is managing assets
-            if let Ok(existing) = std::fs::read_to_string(&path) {
-                if existing != *content {
-                    if let Err(e) = std::fs::write(&path, content) {
-                        tracing::warn!("Could not refresh {}: {}", path.display(), e);
-                    } else {
-                        refreshed += 1;
-                    }
-                }
-            }
-        }
-    }
-    for (name, content) in binary_files {
-        let path = assets_dir.join(name);
-        if !path.exists() {
-            if let Err(e) = std::fs::write(&path, content) {
-                tracing::warn!("Could not write {}: {}", path.display(), e);
-            } else {
-                bootstrapped += 1;
-            }
-        } else if !explicit_override {
-            if let Ok(existing) = std::fs::read(&path) {
-                if existing != *content {
-                    if let Err(e) = std::fs::write(&path, content) {
-                        tracing::warn!("Could not refresh {}: {}", path.display(), e);
-                    } else {
-                        refreshed += 1;
-                    }
-                }
-            }
-        }
+    fn binary_response(body: &'static [u8], content_type: &'static str) -> Response {
+        ([(axum::http::header::CONTENT_TYPE, content_type)], body).into_response()
     }
 
-    // Create narration directory so the server doesn't 404 on audio requests.
-    // MP3s are too large for include_bytes! — they're deployed by `zp-dev.sh`
-    // (which rsync's from $REPO/assets/narration/ to this directory). If the
-    // directory is empty after bootstrap, log a hint so developers know why
-    // narration is silent.
-    let narration_dir = assets_dir.join("narration").join("onboard");
-    let _ = std::fs::create_dir_all(&narration_dir);
-    let has_mp3s = std::fs::read_dir(&narration_dir)
-        .ok()
-        .map(|rd| rd.filter_map(|e| e.ok()).any(|e| {
-            e.path().extension().map(|ext| ext == "mp3").unwrap_or(false)
-        }))
-        .unwrap_or(false);
-    if !has_mp3s {
-        tracing::info!(
-            "No narration MP3s in {} — onboarding will run without audio. \
-             Run `./zp-dev.sh` from the repo root to deploy narration assets.",
-            narration_dir.display()
-        );
-    }
-
-    if bootstrapped > 0 || refreshed > 0 {
-        tracing::info!(
-            "Assets: {} bootstrapped, {} refreshed in {}",
-            bootstrapped, refreshed, assets_dir.display()
-        );
-    }
-}
-
-/// Resolve an HTML asset.
-///
-/// If `ZP_ASSETS_DIR` is set, check that directory first (explicit override
-/// for hot-reload or custom theming).  Otherwise, use the compiled-in copy
-/// directly — this guarantees the HTML always matches the current binary,
-/// eliminating stale-asset bugs.
-fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
-    // Only check the override dir if the operator explicitly asked for it
-    if let Ok(dir) = std::env::var("ZP_ASSETS_DIR") {
-        let path = std::path::PathBuf::from(dir).join(name);
-        if let Ok(contents) = std::fs::read_to_string(&path) {
-            return contents;
-        }
-    }
-
-    // Compiled-in copy — always current, always available
-    fallback.to_string()
+    axum::Router::new()
+        // CSS
+        .route("/onboard.css", get(|| async { text_response(ONBOARD_CSS, "text/css; charset=utf-8") }))
+        .route("/vendor/xterm.min.css", get(|| async { text_response(VENDOR_XTERM_CSS, "text/css; charset=utf-8") }))
+        .route("/fonts/fonts.css", get(|| async { text_response(FONTS_CSS, "text/css; charset=utf-8") }))
+        // JS
+        .route("/onboard.js", get(|| async { text_response(ONBOARD_JS, "application/javascript; charset=utf-8") }))
+        .route("/tts.js", get(|| async { text_response(TTS_JS, "application/javascript; charset=utf-8") }))
+        .route("/dashboard.js", get(|| async { text_response(DASHBOARD_JS, "application/javascript; charset=utf-8") }))
+        .route("/ecosystem.js", get(|| async { text_response(ECOSYSTEM_JS, "application/javascript; charset=utf-8") }))
+        .route("/speak.js", get(|| async { text_response(SPEAK_JS, "application/javascript; charset=utf-8") }))
+        .route("/vendor/xterm.min.js", get(|| async { text_response(VENDOR_XTERM_JS, "application/javascript; charset=utf-8") }))
+        .route("/vendor/xterm-addon-fit.min.js", get(|| async { text_response(VENDOR_XTERM_FIT_JS, "application/javascript; charset=utf-8") }))
+        .route("/vendor/d3.min.js", get(|| async { text_response(VENDOR_D3_JS, "application/javascript; charset=utf-8") }))
+        // Fonts
+        .route("/fonts/inter-latin.woff2", get(|| async { binary_response(FONT_INTER, "font/woff2") }))
+        .route("/fonts/jetbrainsmono-latin.woff2", get(|| async { binary_response(FONT_JETBRAINS, "font/woff2") }))
 }
 
 /// Root handler: redirect to /onboard if no genesis ceremony has been completed,
@@ -4714,10 +4602,7 @@ async fn root_handler(State(state): State<AppState>) -> Response {
     );
 
     let mut resp = if has_complete_genesis {
-        Html(resolve_html_asset(
-            "dashboard.html",
-            DASHBOARD_HTML_FALLBACK,
-        ))
+        Html(DASHBOARD_HTML)
         .into_response()
     } else {
         // Pre-genesis: redirect to /onboard WITHOUT the setup token.
@@ -4739,11 +4624,7 @@ async fn dashboard_handler(State(state): State<AppState>) -> Response {
         &state.0.session_auth.current_token(),
         state.0.session_auth.max_age_secs(),
     );
-    let mut resp = Html(resolve_html_asset(
-        "dashboard.html",
-        DASHBOARD_HTML_FALLBACK,
-    ))
-    .into_response();
+    let mut resp = Html(DASHBOARD_HTML).into_response();
     resp.headers_mut().insert(
         axum::http::header::SET_COOKIE,
         cookie
@@ -4830,7 +4711,7 @@ async fn onboard_page_handler(
         state.0.session_auth.max_age_secs(),
     );
 
-    let html = resolve_html_asset("onboard.html", ONBOARD_HTML_FALLBACK);
+    let html = ONBOARD_HTML.to_string();
 
     let mut resp = Html(html).into_response();
     resp.headers_mut().insert(
@@ -4847,7 +4728,7 @@ async fn speak_page_handler(State(state): State<AppState>) -> Response {
         &state.0.session_auth.current_token(),
         state.0.session_auth.max_age_secs(),
     );
-    let mut resp = Html(resolve_html_asset("speak.html", SPEAK_HTML_FALLBACK)).into_response();
+    let mut resp = Html(SPEAK_HTML).into_response();
     resp.headers_mut().insert(
         axum::http::header::SET_COOKIE,
         cookie
@@ -4862,11 +4743,7 @@ async fn ecosystem_page_handler(State(state): State<AppState>) -> Response {
         &state.0.session_auth.current_token(),
         state.0.session_auth.max_age_secs(),
     );
-    let mut resp = Html(resolve_html_asset(
-        "ecosystem.html",
-        ECOSYSTEM_HTML_FALLBACK,
-    ))
-    .into_response();
+    let mut resp = Html(ECOSYSTEM_HTML).into_response();
     resp.headers_mut().insert(
         axum::http::header::SET_COOKIE,
         cookie
