@@ -169,6 +169,12 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+        ReceiptType::ConfigurationClaim => TypeRules {
+            required_semantics: ClaimSemantics::AuthorshipProof,
+            max_ttl_hours: None, // configuration records persist indefinitely
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -207,6 +213,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::NarrativeSynthesis { .. } => "NarrativeSynthesis",
         ClaimMetadata::Reflection { .. } => "Reflection",
         ClaimMetadata::Revocation { .. } => "Revocation",
+        ClaimMetadata::Configuration { .. } => "Configuration",
     }
 }
 
@@ -225,6 +232,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             )
             | (ReceiptType::RevocationClaim, ClaimMetadata::Revocation { .. })
             | (ReceiptType::ReflectionClaim, ClaimMetadata::Reflection { .. })
+            | (ReceiptType::ConfigurationClaim, ClaimMetadata::Configuration { .. })
     )
 }
 
@@ -530,6 +538,67 @@ mod tests {
             Utc::now(),
         )
         .is_ok());
+    }
+
+    #[test]
+    fn test_configuration_claim_requires_metadata() {
+        // Without metadata: fails
+        assert!(matches!(
+            validate_receipt_type(
+                ReceiptType::ConfigurationClaim,
+                ClaimSemantics::AuthorshipProof,
+                None,
+                None,
+                Utc::now(),
+            ),
+            Err(ValidationError::MissingClaimMetadata(_))
+        ));
+
+        // With correct metadata: passes
+        let meta = ClaimMetadata::Configuration {
+            tool_id: "my-tool".to_string(),
+            parameter: "max_tokens".to_string(),
+            value: serde_json::json!(4096),
+            source: crate::types::ConfigurationSource::ManifestDefault,
+            previous_value: None,
+        };
+        assert!(validate_receipt_type(
+            ReceiptType::ConfigurationClaim,
+            ClaimSemantics::AuthorshipProof,
+            Some(&meta),
+            None,
+            Utc::now(),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_configuration_claim_rules() {
+        let rules = rules_for(ReceiptType::ConfigurationClaim);
+        assert_eq!(rules.required_semantics, ClaimSemantics::AuthorshipProof);
+        assert_eq!(rules.max_ttl_hours, None); // no TTL for configuration
+        assert!(!rules.requires_human_review);
+        assert!(rules.requires_claim_metadata);
+    }
+
+    #[test]
+    fn test_configuration_claim_wrong_metadata_rejected() {
+        let wrong_meta = ClaimMetadata::Observation {
+            observation_type: "test".to_string(),
+            observer_id: "obs-1".to_string(),
+            confidence: None,
+            tags: vec![],
+        };
+        assert!(matches!(
+            validate_receipt_type(
+                ReceiptType::ConfigurationClaim,
+                ClaimSemantics::AuthorshipProof,
+                Some(&wrong_meta),
+                None,
+                Utc::now(),
+            ),
+            Err(ValidationError::MetadataMismatch { .. })
+        ));
     }
 
     #[test]

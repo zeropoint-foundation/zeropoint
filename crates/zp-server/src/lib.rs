@@ -11,6 +11,7 @@ pub mod codebase;
 pub mod cognition;
 pub mod events;
 pub mod fleet;
+pub mod wasm_policy;
 pub mod exec_ws;
 pub mod internal_auth;
 pub mod genesis_verify;
@@ -533,12 +534,27 @@ impl AppState {
         let audit_store_inner = AuditStore::open(&audit_path).expect("Failed to open audit store");
         let audit_store = Arc::new(std::sync::Mutex::new(audit_store_inner));
 
-        // Governance gate
-        let gate = GovernanceGate::new(&identity.destination_hash);
-        // Note: set_audit_chain_head() no longer exists in GovernanceGate
-        // if let Ok(latest) = audit_store.lock().unwrap().get_latest_hash() {
-        //     gate.set_audit_chain_head(latest);
-        // }
+        // Governance gate — with optional WASM policy runtime (P6-4)
+        let gate = {
+            #[cfg(feature = "policy-wasm")]
+            {
+                match zp_policy::PolicyModuleRegistry::new() {
+                    Ok(registry) => {
+                        tracing::info!("WASM policy runtime initialized");
+                        let engine = zp_policy::PolicyEngine::with_wasm(registry);
+                        GovernanceGate::with_policy_engine(&identity.destination_hash, engine)
+                    }
+                    Err(e) => {
+                        tracing::warn!("WASM policy runtime unavailable: {} — falling back to native-only", e);
+                        GovernanceGate::new(&identity.destination_hash)
+                    }
+                }
+            }
+            #[cfg(not(feature = "policy-wasm"))]
+            {
+                GovernanceGate::new(&identity.destination_hash)
+            }
+        };
 
         // Optional pipeline
         let pipeline = if config.llm_enabled {
@@ -1002,6 +1018,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         )
         .route("/api/v1/tools/receipt", post(tools_receipt_handler))
         .route("/api/v1/tools/chain", get(tools_chain_handler))
+        // P6-2: sidecar endpoint — tools query their own configuration receipts
+        .route(
+            "/api/v1/tools/:tool_name/receipts/configured",
+            get(tools_configured_receipts_handler),
+        )
         .route(
             "/api/v1/tools/ports",
             get(tool_proxy::port_assignments_handler),
@@ -1017,6 +1038,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route(
             "/api/v1/tools/:tool_name/repair",
             post(tools_repair_handler),
+        )
+        // P6-3: runtime reconfiguration with audit trail
+        .route(
+            "/api/v1/tools/:tool_name/reconfigure",
+            post(tools_reconfigure_handler),
         )
         // Governed codebase — self-describing trust infrastructure
         // AUTHZ-VULN-13: codebase read/search only available in dev builds.
@@ -1038,6 +1064,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/fleet/policy/rollouts", get(fleet::fleet_rollouts_handler))
         .route("/api/v1/fleet/policy/rollouts/:id", get(fleet::fleet_rollout_detail_handler))
         .route("/api/v1/fleet/policy/rollouts/:id/ack", post(fleet::fleet_rollout_ack_handler))
+        // P6-4: WASM policy runtime management (feature-gated, fallback on non-WASM builds)
+        .route("/api/v1/policy/wasm/load", post(wasm_policy::wasm_load_handler))
+        .route("/api/v1/policy/wasm", get(wasm_policy::wasm_list_handler))
+        .route("/api/v1/policy/wasm/:hash/disable", post(wasm_policy::wasm_disable_handler))
+        .route("/api/v1/policy/wasm/:hash/enable", post(wasm_policy::wasm_enable_handler))
         // Analysis engines — receipt chain intelligence (MLE STAR + Monte Carlo)
         .route("/api/v1/analysis/index", get(analysis::index_handler))
         .route(
@@ -4156,6 +4187,16 @@ async fn tools_configure_handler(
 
                     tracing::info!("Reassigned {}: new port {}", tool_name, assignment.port);
 
+                    // P6-1: emit ConfigurationClaim receipt for the port change
+                    tool_chain::emit_configuration_receipt(
+                        &state.0.audit_store,
+                        &tool_name,
+                        &port_var,
+                        &serde_json::json!(assignment.port),
+                        "runtime_change",
+                        None,
+                    );
+
                     (
                         StatusCode::OK,
                         Json(serde_json::to_value(ToolConfigureResponse {
@@ -4328,6 +4369,162 @@ async fn tools_chain_handler(State(state): State<AppState>) -> Json<ToolChainRes
         tools,
         source: "audit_chain".to_string(),
     })
+}
+
+// ── P6-3: Runtime reconfiguration with receipt chain audit trail ────────
+
+/// Request body for POST /api/v1/tools/:tool_name/reconfigure.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReconfigureRequest {
+    /// Parameter to reconfigure (must match a ConfigurableParam name)
+    parameter: String,
+    /// New value to apply
+    value: serde_json::Value,
+}
+
+/// POST /api/v1/tools/:tool_name/reconfigure
+///
+/// Reconfigure a tool parameter at runtime. Validates the parameter exists
+/// in the tool's manifest, checks allowed_values if specified, emits a
+/// ConfigurationClaim receipt with the previous value, and returns the
+/// updated configuration.
+async fn tools_reconfigure_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+    Json(body): Json<ReconfigureRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if !is_safe_tool_name(&tool_name) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+            })),
+        );
+    }
+
+    // Locate the tool's manifest to validate the parameter
+    let scan_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("projects");
+    let manifest_path = scan_path.join(&tool_name).join(".zp-configure.toml");
+
+    let manifest = match zp_engine::capability::load_manifest(&manifest_path) {
+        Ok(m) => m,
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": format!("No manifest found for tool '{}'", tool_name),
+                    "hint": "Tool must have a .zp-configure.toml with configurable parameters",
+                })),
+            );
+        }
+    };
+
+    // Find the configurable param
+    let param = manifest.configurable.iter().find(|p| p.name == body.parameter);
+    let param = match param {
+        Some(p) => p,
+        None => {
+            let available: Vec<&str> = manifest.configurable.iter().map(|p| p.name.as_str()).collect();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": format!("Parameter '{}' is not configurable for tool '{}'", body.parameter, tool_name),
+                    "available_parameters": available,
+                })),
+            );
+        }
+    };
+
+    // Validate allowed_values constraint
+    if !param.allowed_values.is_empty() && !param.allowed_values.contains(&body.value) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": format!("Value {:?} not in allowed_values for '{}'", body.value, body.parameter),
+                "allowed_values": param.allowed_values,
+            })),
+        );
+    }
+
+    // Query the previous value from the configuration receipt chain
+    let existing = tool_chain::query_tool_configuration(&state.0.audit_store, &tool_name);
+    let previous = existing
+        .iter()
+        .find(|r| r.parameter == body.parameter)
+        .and_then(|r| r.value.clone());
+
+    // Emit ConfigurationClaim receipt with audit trail
+    let entry_hash = tool_chain::emit_configuration_receipt(
+        &state.0.audit_store,
+        &tool_name,
+        &body.parameter,
+        &body.value,
+        "runtime_change",
+        previous.as_ref(),
+    );
+
+    // Also broadcast to SSE stream (P4-1)
+    let event_name = tool_chain::ToolEvent::capability_configured(&tool_name, &body.parameter);
+    {
+        let summary = format!("{}.{} = {}", tool_name, body.parameter, body.value);
+        let item = crate::events::EventStreamItem::system(&event_name, &summary);
+        let _ = state.0.event_tx.send(item);
+    }
+
+    tracing::info!(
+        "Reconfigured {}.{} = {:?} (was {:?})",
+        tool_name,
+        body.parameter,
+        body.value,
+        previous
+    );
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "tool": tool_name,
+            "parameter": body.parameter,
+            "value": body.value,
+            "previous_value": previous,
+            "entry_hash": entry_hash,
+        })),
+    )
+}
+
+// ── P6-2: Sidecar endpoint — tools query their own configuration receipts ──
+
+/// GET /api/v1/tools/:tool_name/receipts/configured
+///
+/// Returns all configuration receipts for the given tool, one per parameter
+/// (latest value only). Tools call this to discover their own configured
+/// parameters without having to parse the audit chain directly.
+async fn tools_configured_receipts_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(tool_name): axum::extract::Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if !is_safe_tool_name(&tool_name) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid tool name — must be alphanumeric with hyphens/underscores only",
+            })),
+        );
+    }
+
+    let receipts = tool_chain::query_tool_configuration(&state.0.audit_store, &tool_name);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "tool": tool_name,
+            "parameters": receipts,
+            "count": receipts.len(),
+        })),
+    )
 }
 
 // ============================================================================

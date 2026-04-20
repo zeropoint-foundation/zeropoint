@@ -408,6 +408,24 @@ async fn run_preflight_inner(
                 );
             }
 
+            // P6-1: emit ConfigurationClaim receipts for manifest configurable params
+            {
+                let tool_path = std::path::PathBuf::from(&tool.path);
+                let manifest_path = tool_path.join(".zp-configure.toml");
+                if let Ok(manifest) = zp_engine::capability::load_manifest(&manifest_path) {
+                    for param in &manifest.configurable {
+                        crate::tool_chain::emit_configuration_receipt(
+                            store,
+                            &tool.name,
+                            &param.name,
+                            &param.default,
+                            "manifest_default",
+                            None,
+                        );
+                    }
+                }
+            }
+
             // Emit individual check receipts
             for check in &tool.checks {
                 let event = ToolEvent::preflight_check(&tool.name, &check.name, &check.status);

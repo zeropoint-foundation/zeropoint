@@ -14,6 +14,7 @@
 //!   tool:capability:verified:<name>:<cap> — Tier 2: capability auth probe returned 2xx
 //!   tool:capability:degraded:<name>:<cap> — Tier 2: optional capability probe failed
 //!   tool:capability:failed:<name>:<cap>   — Tier 2: required capability probe failed
+//!   tool:capability:configured:<name>:<param> — P6-1: configurable param set/changed
 //!
 //! The cockpit reads the chain to determine readiness. Missing receipts
 //! tell you exactly what's outstanding, and every receipt is signed and
@@ -82,6 +83,9 @@ impl ToolEvent {
     pub fn capability_failed(name: &str, capability: &str) -> String {
         format!("tool:capability:failed:{}:{}", name, capability)
     }
+    pub fn capability_configured(name: &str, parameter: &str) -> String {
+        format!("tool:capability:configured:{}:{}", name, parameter)
+    }
 }
 
 // ── Emit receipts ───────────────────────────────────────────────────────
@@ -135,6 +139,30 @@ pub fn emit_tool_receipts(
         }
     }
     count
+}
+
+/// Emit a ConfigurationClaim receipt into the audit chain.
+///
+/// Records a tool parameter being configured — used by the configure
+/// handler and the manifest-defaults bootstrap path to produce an
+/// auditable trail of every parameter value applied.
+pub fn emit_configuration_receipt(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    tool_name: &str,
+    parameter: &str,
+    value: &serde_json::Value,
+    source: &str,
+    previous_value: Option<&serde_json::Value>,
+) -> Option<String> {
+    let event = ToolEvent::capability_configured(tool_name, parameter);
+    let detail = serde_json::json!({
+        "tool_id": tool_name,
+        "parameter": parameter,
+        "value": value,
+        "source": source,
+        "previous_value": previous_value,
+    });
+    emit_tool_receipt(audit_store, &event, Some(&detail.to_string()))
 }
 
 // ── Query the chain ─────────────────────────────────────────────────────
@@ -371,6 +399,85 @@ fn empty_state(name: &str) -> ToolChainState {
         ready: false,
         verified: false,
     }
+}
+
+// ── P6-2: Configuration receipt query ─────────────────────────────────
+
+/// A single configuration parameter receipt, derived from the audit chain.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigurationReceipt {
+    pub parameter: String,
+    pub value: Option<serde_json::Value>,
+    pub source: Option<String>,
+    pub previous_value: Option<serde_json::Value>,
+    pub configured_at: String,
+    pub entry_hash: String,
+}
+
+/// Query the audit chain for all configuration receipts for a specific tool.
+///
+/// Returns the latest configuration receipt per parameter, ordered by timestamp.
+pub fn query_tool_configuration(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    tool_name: &str,
+) -> Vec<ConfigurationReceipt> {
+    let store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let entries = match store.get_entries(tool_lifecycle_conv_id(), 500) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+
+    let prefix = format!("tool:capability:configured:{}:", tool_name);
+    let mut seen: HashMap<String, ConfigurationReceipt> = HashMap::new();
+
+    // Walk entries (most recent first) — only take first per parameter
+    for entry in &entries {
+        if let AuditAction::SystemEvent { event } = &entry.action {
+            if let Some(param) = event.strip_prefix(&prefix) {
+                if seen.contains_key(param) {
+                    continue; // already have a newer receipt for this param
+                }
+
+                // Parse the detail JSON from the policy conditions
+                let detail_json: Option<serde_json::Value> =
+                    if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
+                        conditions.first().and_then(|s| serde_json::from_str(s).ok())
+                    } else {
+                        None
+                    };
+
+                let (value, source, previous_value) = if let Some(ref dj) = detail_json {
+                    (
+                        dj.get("value").cloned(),
+                        dj.get("source").and_then(|s| s.as_str()).map(String::from),
+                        dj.get("previous_value").cloned().filter(|v| !v.is_null()),
+                    )
+                } else {
+                    (None, None, None)
+                };
+
+                seen.insert(
+                    param.to_string(),
+                    ConfigurationReceipt {
+                        parameter: param.to_string(),
+                        value,
+                        source,
+                        previous_value,
+                        configured_at: entry.timestamp.to_rfc3339(),
+                        entry_hash: entry.entry_hash.clone(),
+                    },
+                );
+            }
+        }
+    }
+
+    let mut receipts: Vec<ConfigurationReceipt> = seen.into_values().collect();
+    receipts.sort_by(|a, b| a.parameter.cmp(&b.parameter));
+    receipts
 }
 
 // ── REST endpoint for tool-issued receipts ──────────────────────────────

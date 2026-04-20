@@ -205,6 +205,11 @@ impl Receipt {
         crate::ReceiptBuilder::new(ReceiptType::RevocationClaim, executor_id)
     }
 
+    /// Start building a configuration claim receipt.
+    pub fn configuration(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::ConfigurationClaim, executor_id)
+    }
+
     /// Verify the content_hash matches the receipt body.
     pub fn verify_hash(&self) -> bool {
         let computed = crate::canonical_hash(self);
@@ -302,6 +307,8 @@ pub enum ReceiptType {
     NarrativeSynthesisClaim,
     /// Revocation of a previously issued receipt
     RevocationClaim,
+    /// Configuration of a tool's capabilities with specific values
+    ConfigurationClaim,
 
     // --- Phase 4.1: Cognition plane receipt types ---
     /// A reflection (consolidation pass) over observations by a reflector agent
@@ -326,6 +333,7 @@ impl ReceiptType {
             ReceiptType::NarrativeSynthesisClaim => "nrtv",
             ReceiptType::RevocationClaim => "revk",
             ReceiptType::ReflectionClaim => "rflt",
+            ReceiptType::ConfigurationClaim => "cfgr",
         }
     }
 
@@ -352,6 +360,7 @@ impl ReceiptType {
             ReceiptType::NarrativeSynthesisClaim => None,
             ReceiptType::RevocationClaim => None,
             ReceiptType::ReflectionClaim => None,
+            ReceiptType::ConfigurationClaim => None,
         }
     }
 
@@ -406,6 +415,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::NarrativeSynthesisClaim => write!(f, "narrative_synthesis_claim"),
             ReceiptType::RevocationClaim => write!(f, "revocation_claim"),
             ReceiptType::ReflectionClaim => write!(f, "reflection_claim"),
+            ReceiptType::ConfigurationClaim => write!(f, "configuration_claim"),
         }
     }
 }
@@ -831,4 +841,34 @@ pub enum ClaimMetadata {
         /// Who authorized the revocation
         revoker_id: String,
     },
+
+    /// Metadata for a tool capability configuration claim.
+    /// Emitted when a tool's configurable parameters are set or changed.
+    Configuration {
+        /// The tool being configured
+        tool_id: String,
+        /// Parameter name (e.g., "max_tokens", "temperature", "model")
+        parameter: String,
+        /// The configured value (serialized)
+        value: serde_json::Value,
+        /// Whether this is a default from the manifest or an operator override
+        source: ConfigurationSource,
+        /// The previous value, if this is a reconfiguration
+        #[serde(skip_serializing_if = "Option::is_none")]
+        previous_value: Option<serde_json::Value>,
+    },
+}
+
+/// Source of a configuration value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigurationSource {
+    /// Default from the tool manifest
+    ManifestDefault,
+    /// Explicitly set by the operator
+    OperatorOverride,
+    /// Set during initial onboarding/configure
+    InitialSetup,
+    /// Changed at runtime via reconfiguration
+    RuntimeChange,
 }
