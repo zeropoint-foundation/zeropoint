@@ -23,6 +23,7 @@ zp-pipeline = { path = "../zp-pipeline" }
 zp-policy = { path = "../zp-policy" }
 zp-audit = { path = "../zp-audit" }
 zp-observation = { path = "../zp-observation" }
+zp-memory = { path = "../zp-memory" }
 zp-trust = { path = "../zp-trust" }
 zp-receipt = { path = "../zp-receipt" }
 mle-star-engine = { path = "../mle-star-engine" }
