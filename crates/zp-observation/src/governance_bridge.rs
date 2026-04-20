@@ -273,6 +273,7 @@ mod tests {
     use super::*;
     use zp_core::governance::{ActionContext, GovernanceActor, GovernanceDecision};
 
+    #[allow(dead_code)]
     fn make_event(
         event_type: GovernanceEventType,
         decision: GovernanceDecision,

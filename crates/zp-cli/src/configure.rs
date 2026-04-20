@@ -3642,6 +3642,7 @@ LLM_MODEL=gpt-4
             deluxe: None,
             provider_overrides: overrides,
             verification: None,
+            configurable: vec![],
         }
     }
 

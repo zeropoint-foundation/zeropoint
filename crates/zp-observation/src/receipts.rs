@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn source_range_verification() {
         let sr = SourceRange::new("chain-main", "hash_a", "hash_b", 0, 5);
-        let expected = sr.content_hash();
+        let _expected = sr.content_hash();
 
         // Build mock receipts matching the source range.
         let first = Receipt::execution("test")
