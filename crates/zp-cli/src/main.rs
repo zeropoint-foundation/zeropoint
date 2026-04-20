@@ -201,6 +201,47 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Memory lifecycle management (G5-2: review gate)
+    #[command(subcommand)]
+    Memory(MemoryCmd),
+}
+
+#[derive(Subcommand)]
+enum MemoryCmd {
+    /// List pending memory promotion reviews
+    Review {
+        /// Memory ID to filter reviews for
+        #[arg(long)]
+        memory_id: Option<String>,
+    },
+    /// Approve a pending promotion review
+    Approve {
+        /// Review ID to approve
+        review_id: String,
+        /// Comment (optional)
+        #[arg(long)]
+        comment: Option<String>,
+    },
+    /// Reject a pending promotion review
+    Reject {
+        /// Review ID to reject
+        review_id: String,
+        /// Reason for rejection
+        #[arg(long)]
+        reason: String,
+        /// Action: keep, quarantine, or demote:<stage>
+        #[arg(long, default_value = "keep")]
+        action: String,
+    },
+    /// Defer a pending promotion review
+    Defer {
+        /// Review ID to defer
+        review_id: String,
+        /// Reason for deferral
+        #[arg(long)]
+        reason: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1048,6 +1089,162 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
+    // Memory — review gate for memory promotion (G5-2).
+    // Talks to the running server via API, no pipeline needed.
+    if let Some(Commands::Memory(cmd)) = &args.command {
+        let port: u16 = std::env::var("ZP_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(3000);
+        let base_url = format!("http://127.0.0.1:{}", port);
+        let client = reqwest::Client::new();
+
+        match cmd {
+            MemoryCmd::Review { memory_id } => {
+                let resp = client
+                    .get(format!("{}/api/v1/cognition/reviews", base_url))
+                    .send()
+                    .await;
+                match resp {
+                    Ok(r) if r.status().is_success() => {
+                        let reviews: Vec<serde_json::Value> = r.json().await.unwrap_or_default();
+                        let filtered: Vec<_> = if let Some(mid) = memory_id {
+                            reviews
+                                .into_iter()
+                                .filter(|r| r.get("memory_id").and_then(|v| v.as_str()) == Some(mid.as_str()))
+                                .collect()
+                        } else {
+                            reviews
+                        };
+
+                        if filtered.is_empty() {
+                            eprintln!("No pending reviews.");
+                        } else {
+                            eprintln!("\x1b[1mPending Memory Promotion Reviews\x1b[0m\n");
+                            for r in &filtered {
+                                let id = r.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+                                let mem = r.get("memory_id").and_then(|v| v.as_str()).unwrap_or("?");
+                                let from = r.get("current_stage").and_then(|v| v.as_str()).unwrap_or("?");
+                                let to = r.get("target_stage").and_then(|v| v.as_str()).unwrap_or("?");
+                                let expires = r.get("expires_at").and_then(|v| v.as_str()).unwrap_or("?");
+                                let deferrals = r.get("deferral_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                                eprintln!(
+                                    "  \x1b[36m{}\x1b[0m  {} → {}  (memory: {}, deferrals: {}, expires: {})",
+                                    id, from, to, mem, deferrals, expires
+                                );
+                                if let Some(ev) = r.get("evidence").and_then(|v| v.as_str()) {
+                                    eprintln!("    evidence: {}", ev);
+                                }
+                            }
+                            eprintln!("\n  {} pending review(s)", filtered.len());
+                        }
+                    }
+                    Ok(r) => {
+                        eprintln!("Server returned {}", r.status());
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        eprintln!("Cannot reach ZP server at {}: {}", base_url, e);
+                        eprintln!("Is `zp serve` running?");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            MemoryCmd::Approve { review_id, comment } => {
+                let body = serde_json::json!({
+                    "decision": "approve",
+                    "reviewer": args.data_dir.display().to_string(),
+                    "comment": comment,
+                });
+                let resp = client
+                    .post(format!("{}/api/v1/cognition/reviews/{}/decide", base_url, review_id))
+                    .json(&body)
+                    .send()
+                    .await;
+                match resp {
+                    Ok(r) if r.status().is_success() => {
+                        let result: serde_json::Value = r.json().await.unwrap_or_default();
+                        let outcome = result.get("outcome").and_then(|v| v.as_str()).unwrap_or("?");
+                        let detail = result.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+                        eprintln!("\x1b[32m✓\x1b[0m Review {}: {} — {}", review_id, outcome, detail);
+                    }
+                    Ok(r) => {
+                        let status = r.status();
+                        let body = r.text().await.unwrap_or_default();
+                        eprintln!("\x1b[31m✗\x1b[0m Server returned {}: {}", status, body);
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        eprintln!("Cannot reach ZP server: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            MemoryCmd::Reject { review_id, reason, action } => {
+                let body = serde_json::json!({
+                    "decision": "reject",
+                    "reviewer": args.data_dir.display().to_string(),
+                    "reason": reason,
+                    "action": action,
+                });
+                let resp = client
+                    .post(format!("{}/api/v1/cognition/reviews/{}/decide", base_url, review_id))
+                    .json(&body)
+                    .send()
+                    .await;
+                match resp {
+                    Ok(r) if r.status().is_success() => {
+                        let result: serde_json::Value = r.json().await.unwrap_or_default();
+                        let outcome = result.get("outcome").and_then(|v| v.as_str()).unwrap_or("?");
+                        let detail = result.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+                        eprintln!("\x1b[32m✓\x1b[0m Review {}: {} — {}", review_id, outcome, detail);
+                    }
+                    Ok(r) => {
+                        let status = r.status();
+                        let body = r.text().await.unwrap_or_default();
+                        eprintln!("\x1b[31m✗\x1b[0m Server returned {}: {}", status, body);
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        eprintln!("Cannot reach ZP server: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            MemoryCmd::Defer { review_id, reason } => {
+                let body = serde_json::json!({
+                    "decision": "defer",
+                    "reviewer": args.data_dir.display().to_string(),
+                    "reason": reason,
+                });
+                let resp = client
+                    .post(format!("{}/api/v1/cognition/reviews/{}/decide", base_url, review_id))
+                    .json(&body)
+                    .send()
+                    .await;
+                match resp {
+                    Ok(r) if r.status().is_success() => {
+                        let result: serde_json::Value = r.json().await.unwrap_or_default();
+                        let outcome = result.get("outcome").and_then(|v| v.as_str()).unwrap_or("?");
+                        let detail = result.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+                        eprintln!("\x1b[32m✓\x1b[0m Review {}: {} — {}", review_id, outcome, detail);
+                    }
+                    Ok(r) => {
+                        let status = r.status();
+                        let body = r.text().await.unwrap_or_default();
+                        eprintln!("\x1b[31m✗\x1b[0m Server returned {}: {}", status, body);
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        eprintln!("Cannot reach ZP server: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        std::process::exit(0);
+    }
+
     // Doctor — post-install diagnostics
     if let Some(Commands::Doctor { json }) = &args.command {
         let cfg = zp_config::ConfigResolver::resolve_standard();
@@ -1388,6 +1585,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Verify { .. }) => unreachable!(), // handled above
         Some(Commands::Cfg(_)) => unreachable!(),       // handled above
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
+        Some(Commands::Memory(_)) => unreachable!(),    // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,

@@ -7,6 +7,7 @@ pub mod analysis;
 pub mod attestations;
 pub mod auth;
 pub mod codebase;
+pub mod cognition;
 pub mod exec_ws;
 pub mod internal_auth;
 pub mod genesis_verify;
@@ -50,7 +51,8 @@ use zp_core::governance::{
     ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent,
 };
 use zp_observation::{
-    candidate_to_observation, event_to_observation, ObservationStore,
+    candidate_to_observation, event_to_observation, CognitionPipeline, ObservationConfig,
+    ObservationStore,
 };
 use zp_pipeline::{Pipeline, PipelineConfig};
 use zp_policy::{GateResult, GovernanceGate};
@@ -474,6 +476,25 @@ pub struct AppStateInner {
     /// Governance gate decisions are bridged to observations so repeated
     /// patterns can promote through the memory lifecycle.
     pub observation_store: Option<Arc<std::sync::Mutex<ObservationStore>>>,
+    /// Cognition pipeline (G5-1: observation→promotion).
+    /// Orchestrates the Observer/Reflector cycle — Tier 1 heuristic fallback
+    /// when no LLM is available, LLM-powered observation/reflection otherwise.
+    pub cognition_pipeline: Option<CognitionPipeline>,
+    /// Human review queue (G5-2: review gate for memory promotion).
+    /// Promotions to Remembered and IdentityBearing stages require human
+    /// approval before the memory can advance.
+    pub review_queue: Option<Arc<std::sync::Mutex<zp_memory::ReviewQueue>>>,
+    /// Blast radius tracker (R6-1: key compromise scoping).
+    /// Maintains in-memory indices of key→receipt, delegation, grant, and
+    /// memory relationships so blast radius can be computed on compromise.
+    pub blast_radius_tracker: Arc<std::sync::Mutex<zp_keys::BlastRadiusTracker>>,
+    /// Quarantine store (R6-2: compromise → memory quarantine).
+    /// In-memory store for quarantined memories. Future: persist alongside
+    /// the observation store.
+    pub quarantine_store: Arc<std::sync::Mutex<zp_memory::QuarantineStore>>,
+    /// Memory entries (in-memory store for the memory lifecycle).
+    /// Maps memory_id → MemoryEntry. Populated by the promotion engine.
+    pub memory_store: Arc<std::sync::Mutex<std::collections::HashMap<String, zp_memory::MemoryEntry>>>,
 }
 
 #[derive(Clone)]
@@ -568,6 +589,36 @@ impl AppState {
             }
         };
 
+        // Cognition pipeline (G5-1: observation→promotion).
+        let cognition_pipeline = if observation_store.is_some() {
+            let obs_config = ObservationConfig::default();
+            Some(CognitionPipeline::new(obs_config, &identity.destination_hash))
+        } else {
+            None
+        };
+
+        // Human review queue (G5-2: review gate for memory promotion).
+        // In-memory for now — pending reviews survive only within a server
+        // session. Future: persist to SQLite alongside observations.
+        let review_queue = Some(Arc::new(std::sync::Mutex::new(
+            zp_memory::ReviewQueue::new(zp_memory::ReviewQueueConfig::default()),
+        )));
+
+        // Blast radius tracker (R6-1: key compromise scoping).
+        // In-memory indices populated as receipts are signed and delegations
+        // created. Future: rebuild from audit chain on startup.
+        let blast_radius_tracker = Arc::new(std::sync::Mutex::new(
+            zp_keys::BlastRadiusTracker::new(),
+        ));
+
+        // Quarantine store + memory store (R6-2: compromise → quarantine).
+        let quarantine_store = Arc::new(std::sync::Mutex::new(
+            zp_memory::QuarantineStore::new(&identity.destination_hash),
+        ));
+        let memory_store = Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::<String, zp_memory::MemoryEntry>::new(),
+        ));
+
         // One-time onboard setup token (AUTH-VULN-06).
         // Only generated when:
         //   1. genesis.json does not exist (pre-genesis), AND
@@ -604,6 +655,11 @@ impl AppState {
             onboard_token,
             internal_auth,
             observation_store,
+            cognition_pipeline,
+            review_queue,
+            blast_radius_tracker,
+            quarantine_store,
+            memory_store,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -874,6 +930,19 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Security posture + topology
         .route("/api/v1/security/posture", get(security_posture_handler))
         .route("/api/v1/security/topology", get(topology_handler))
+        // Blast radius — key compromise detection + response (R6-1)
+        .route(
+            "/api/v1/security/compromise",
+            post(security::compromise_handler),
+        )
+        .route(
+            "/api/v1/security/blast-radius/register",
+            post(security::blast_radius_register_handler),
+        )
+        .route(
+            "/api/v1/security/blast-radius/:key",
+            get(security::blast_radius_handler),
+        )
         // Configured tools (cockpit)
         .route("/api/v1/tools", get(tools_handler))
         .route("/api/v1/tools/launch", post(tools_launch_handler))
@@ -917,6 +986,31 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route(
             "/api/v1/analysis/simulate",
             post(analysis::simulate_handler),
+        )
+        // Cognition pipeline — observation→promotion (G5-1)
+        .route("/api/v1/cognition/observe", post(cognition::observe_handler))
+        .route("/api/v1/cognition/reflect", post(cognition::reflect_handler))
+        .route(
+            "/api/v1/cognition/status",
+            get(cognition::cognition_status_handler),
+        )
+        .route(
+            "/api/v1/cognition/observations",
+            get(cognition::list_observations_handler),
+        )
+        // Human review gate — memory promotion review (G5-2)
+        .route(
+            "/api/v1/cognition/reviews",
+            get(cognition::list_reviews_handler).post(cognition::submit_review_handler),
+        )
+        // Static route before parameterized to avoid axum conflicts.
+        .route(
+            "/api/v1/cognition/reviews/sweep",
+            post(cognition::sweep_reviews_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews/:id/decide",
+            post(cognition::decide_review_handler),
         )
         // System state — derived from receipt chain (the big one)
         .route(

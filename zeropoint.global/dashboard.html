@@ -485,13 +485,13 @@ const phases = [
     ]
   },
   {
-    name: "Phase 3: Cognition Integration",
-    status: "in-progress",
+    name: "Phase 3: Cognition Integration (Wiring Pass)",
+    status: "complete",
     items: [
-      { id: "G5-1", label: "Observation\u2192promotion pipeline (wiring: server runtime)", done: false },
-      { id: "G5-2", label: "Human review gate (wiring: CLI command + server)", done: false },
-      { id: "R6-1", label: "Blast radius model (wiring: key rotation trigger)", done: false },
-      { id: "R6-2", label: "Compromise-triggered quarantine (wiring: blast radius \u2192 quarantine)", done: false },
+      { id: "G5-1", label: "Observation\u2192promotion pipeline (wired: server runtime + 4 API endpoints)", done: true },
+      { id: "G5-2", label: "Human review gate (wired: CLI `zp memory review` + 4 server endpoints)", done: true },
+      { id: "R6-1", label: "Blast radius model (wired: compromise/blast-radius API + tracker in AppState)", done: true },
+      { id: "R6-2", label: "Compromise\u2192quarantine pipeline (wired: compromise handler chains to quarantine)", done: true },
     ]
   },
   {
@@ -636,13 +636,13 @@ const data = [
       { label: "Five-gate promotion logic with configurable thresholds", status: "shipped" },
       { label: "Reinforcement tracking", status: "shipped" },
       { label: "Receipt-backed promotion evidence", status: "shipped" },
-      { label: "Observation\u2192promotion ingestion pipeline (module exists, not called from runtime)", status: "active", phase: "G5-1" },
+      { label: "Observation\u2192promotion pipeline (wired: CognitionPipeline in AppState, 4 endpoints)", status: "shipped", phase: "G5-1" },
     ]},
     { label: "Memory Quarantine", status: "shipped", children: [
       { label: "Quarantine with source-indexed bulk operations", status: "shipped" },
       { label: "Reinstatement workflow", status: "shipped" },
       { label: "Receipt generation on quarantine actions", status: "shipped" },
-      { label: "Compromise-triggered quarantine (module exists, not fed from blast radius)", status: "active", phase: "R6-2" },
+      { label: "Compromise\u2192quarantine pipeline (wired: compromise handler chains quarantine_compromised_memories)", status: "shipped", phase: "R6-2" },
     ]},
     { label: "Lifecycle Management", status: "shipped", children: [
       { label: "Stage-specific expiry rules", status: "shipped" },
@@ -650,9 +650,9 @@ const data = [
       { label: "Batch expiry sweep", status: "shipped" },
       { label: "Demotion and reaffirmation", status: "shipped" },
     ]},
-    { label: "Human Review Gate", status: "active", phase: "G5-2", children: [
+    { label: "Human Review Gate", status: "shipped", phase: "G5-2", children: [
       { label: "Pending promotion queue with expiry and deferral limits", status: "shipped", phase: "G5-2" },
-      { label: "Approve / Reject / Defer decision processing", status: "shipped", phase: "G5-2" },
+      { label: "Approve / Reject / Defer decision processing (wired: 4 server endpoints + CLI)", status: "shipped", phase: "G5-2" },
       { label: "Expired review sweep and audit trail", status: "shipped", phase: "G5-2" },
       { label: "CLI review surface (no zp memory review command yet)", status: "active" },
       { label: "Web dashboard review surface", status: "roadmap" },
@@ -686,11 +686,11 @@ const data = [
       { label: "BIP-39 mnemonic recovery (24 words \u2192 full system restore)", status: "shipped" },
       { label: "Credential vault rotation verification", status: "shipped" },
     ]},
-    { label: "Blast Radius Analysis", status: "active", phase: "R6-1", children: [
+    { label: "Blast Radius Analysis", status: "shipped", phase: "R6-1", children: [
       { label: "Transitive delegation graph walker with cycle detection", status: "shipped", phase: "R6-1" },
       { label: "Receipt, grant, delegation, and memory impact computation", status: "shipped", phase: "R6-1" },
-      { label: "Automated response actions per affected element (not wired to key rotation)", status: "active", phase: "R6-1" },
-      { label: "Compromise-triggered memory quarantine (not fed from blast radius)", status: "active", phase: "R6-2" },
+      { label: "Automated response actions (wired: compromise API endpoint + tracker in AppState)", status: "shipped", phase: "R6-1" },
+      { label: "Compromise\u2192quarantine pipeline (wired: handler chains to quarantine store)", status: "shipped", phase: "R6-2" },
     ]},
     { label: "Receipt-Based Reconstitution", status: "active", phase: "R6-3", children: [
       { label: "State derived from receipt chain, never stored mutably", status: "shipped", detail: "Design principle" },

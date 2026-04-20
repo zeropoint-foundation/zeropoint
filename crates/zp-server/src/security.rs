@@ -8,7 +8,16 @@
 //! real security conditions. A score of 100 means every check
 //! passed a meaningful test — not that we skipped the hard ones.
 
-use serde::Serialize;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::Json as AxumJson;
+use serde::{Deserialize, Serialize};
+use tracing::info;
+
+use zp_keys::{BlastRadius, CompromiseResponse};
+use zp_memory::CompromiseReport as MemoryCompromiseReport;
+
+use crate::AppState;
 
 /// A single security check result.
 #[derive(Serialize, Clone)]
@@ -532,6 +541,205 @@ fn check_key_permissions(path: &std::path::Path, label: &str) -> SecurityCheck {
                 "{} exists — permission check not available on this platform",
                 label
             ),
+        }
+    }
+}
+
+// ============================================================================
+// R6-1: Blast radius — key compromise detection + response
+// ============================================================================
+
+/// Request body for reporting a key compromise.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompromiseRequest {
+    /// Hex-encoded public key that has been compromised.
+    pub compromised_key: String,
+    /// Optional reason for the compromise report.
+    pub reason: Option<String>,
+}
+
+/// Response from a compromise report — includes blast radius + response actions
+/// + quarantine results (R6-2).
+#[derive(Serialize)]
+pub struct CompromiseReportResponse {
+    pub blast_radius: BlastRadius,
+    pub response: CompromiseResponse,
+    pub keys_to_rotate: usize,
+    pub receipts_to_revoke: usize,
+    pub grants_to_revoke: usize,
+    pub memories_to_quarantine: usize,
+    /// R6-2: How many memories were actually quarantined.
+    pub memories_quarantined: usize,
+    /// R6-2: How many were already quarantined (idempotent).
+    pub memories_already_quarantined: usize,
+    /// R6-2: How many were not found in the memory store.
+    pub memories_not_found: usize,
+}
+
+/// `POST /api/v1/security/compromise` — report a key compromise and compute
+/// blast radius + recommended response actions.
+///
+/// This is the R6-1 wiring point: the server computes what's affected and
+/// returns the full response plan. The caller (CLI or automation) then
+/// executes the rotation/revocation steps.
+pub async fn compromise_handler(
+    State(state): State<AppState>,
+    AxumJson(body): AxumJson<CompromiseRequest>,
+) -> Result<AxumJson<CompromiseReportResponse>, (StatusCode, String)> {
+    let blast_radius = {
+        let tracker = state.0.blast_radius_tracker.lock().unwrap();
+        tracker.compute(&body.compromised_key)
+    };
+    let response = blast_radius.response_actions();
+
+    info!(
+        compromised_key = %body.compromised_key,
+        reason = ?body.reason,
+        affected_keys = response.keys_to_rotate.len(),
+        receipts_to_revoke = response.receipts_to_revoke.len(),
+        grants_to_revoke = response.grants_to_revoke.len(),
+        memories_to_quarantine = response.memories_to_quarantine.len(),
+        "Key compromise reported — blast radius computed"
+    );
+
+    // R6-2: Quarantine affected memories.
+    let (quarantined, already_quarantined, not_found) =
+        if !response.memories_to_quarantine.is_empty() {
+            let mem_report = MemoryCompromiseReport {
+                compromised_key: body.compromised_key.clone(),
+                affected_memory_ids: response.memories_to_quarantine.clone(),
+                memory_to_receipts: std::collections::HashMap::new(), // simplified — full mapping comes from tracker
+            };
+            let mut qstore = state.0.quarantine_store.lock().unwrap();
+            let mut mstore = state.0.memory_store.lock().unwrap();
+            let result =
+                zp_memory::quarantine_compromised_memories(&mem_report, &mut qstore, &mut mstore);
+            (
+                result.quarantined_ids.len(),
+                result.already_quarantined.len(),
+                result.not_found.len(),
+            )
+        } else {
+            (0, 0, 0)
+        };
+
+    let report = CompromiseReportResponse {
+        keys_to_rotate: response.keys_to_rotate.len(),
+        receipts_to_revoke: response.receipts_to_revoke.len(),
+        grants_to_revoke: response.grants_to_revoke.len(),
+        memories_to_quarantine: response.memories_to_quarantine.len(),
+        memories_quarantined: quarantined,
+        memories_already_quarantined: already_quarantined,
+        memories_not_found: not_found,
+        blast_radius,
+        response,
+    };
+
+    Ok(AxumJson(report))
+}
+
+/// `GET /api/v1/security/blast-radius/:key` — compute blast radius for a key
+/// without triggering response actions (dry run / inspection).
+pub async fn blast_radius_handler(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+) -> Result<AxumJson<BlastRadius>, (StatusCode, String)> {
+    let tracker = state.0.blast_radius_tracker.lock().unwrap();
+    let radius = tracker.compute(&key);
+
+    Ok(AxumJson(radius))
+}
+
+/// Request to register a relationship in the blast radius tracker.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, tag = "type")]
+pub enum BlastRadiusRegistration {
+    /// Register that a receipt was signed by a key.
+    #[serde(rename = "signed_receipt")]
+    SignedReceipt {
+        signer_key: String,
+        receipt_id: String,
+    },
+    /// Register a delegation from parent to child key.
+    #[serde(rename = "delegation")]
+    Delegation {
+        parent_key: String,
+        child_key: String,
+        delegation_id: String,
+    },
+    /// Register a grant authorized through a delegation.
+    #[serde(rename = "grant")]
+    Grant {
+        delegation_id: String,
+        grant_id: String,
+    },
+    /// Register that a memory was promoted using a receipt as evidence.
+    #[serde(rename = "memory_evidence")]
+    MemoryEvidence {
+        receipt_id: String,
+        memory_id: String,
+    },
+}
+
+/// `POST /api/v1/security/blast-radius/register` — register relationships
+/// in the blast radius tracker.
+///
+/// In production, these registrations happen automatically as receipts are
+/// signed, delegations are created, etc. This endpoint allows manual or
+/// batch registration for testing and migration.
+pub async fn blast_radius_register_handler(
+    State(state): State<AppState>,
+    AxumJson(body): AxumJson<BlastRadiusRegistration>,
+) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
+    let mut tracker = state.0.blast_radius_tracker.lock().unwrap();
+
+    match &body {
+        BlastRadiusRegistration::SignedReceipt {
+            signer_key,
+            receipt_id,
+        } => {
+            tracker.register_signed_receipt(signer_key, receipt_id);
+            Ok(AxumJson(serde_json::json!({
+                "registered": "signed_receipt",
+                "signer_key": signer_key,
+                "receipt_id": receipt_id,
+            })))
+        }
+        BlastRadiusRegistration::Delegation {
+            parent_key,
+            child_key,
+            delegation_id,
+        } => {
+            tracker.register_delegation(parent_key, child_key, delegation_id);
+            Ok(AxumJson(serde_json::json!({
+                "registered": "delegation",
+                "parent_key": parent_key,
+                "child_key": child_key,
+                "delegation_id": delegation_id,
+            })))
+        }
+        BlastRadiusRegistration::Grant {
+            delegation_id,
+            grant_id,
+        } => {
+            tracker.register_grant(delegation_id, grant_id);
+            Ok(AxumJson(serde_json::json!({
+                "registered": "grant",
+                "delegation_id": delegation_id,
+                "grant_id": grant_id,
+            })))
+        }
+        BlastRadiusRegistration::MemoryEvidence {
+            receipt_id,
+            memory_id,
+        } => {
+            tracker.register_memory_evidence(receipt_id, memory_id);
+            Ok(AxumJson(serde_json::json!({
+                "registered": "memory_evidence",
+                "receipt_id": receipt_id,
+                "memory_id": memory_id,
+            })))
         }
     }
 }

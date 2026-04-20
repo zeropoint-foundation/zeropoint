@@ -148,6 +148,11 @@ impl CognitionPipeline {
         }
     }
 
+    /// Access the configuration.
+    pub fn config(&self) -> &ObservationConfig {
+        &self.config
+    }
+
     /// Check if the observer should trigger based on current token count.
     pub fn should_observe(&self, current_receipt_tokens: usize) -> bool {
         self.config.should_observe(current_receipt_tokens)

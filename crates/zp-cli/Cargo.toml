@@ -44,6 +44,9 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+# HTTP client for server communication (zp memory review, etc.)
+reqwest.workspace = true
+
 # Additional dependencies
 ed25519-dalek.workspace = true
 anyhow.workspace = true
