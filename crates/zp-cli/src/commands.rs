@@ -914,9 +914,13 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     };
 
     // Open the audit store first so we can sync the chain head
-    let db_path = zp_core::paths::data_dir()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve data directory: {}", e))?
-        .join("audit.db");
+    let db_path = match zp_core::paths::data_dir() {
+        Ok(d) => d.join("audit.db"),
+        Err(e) => {
+            eprintln!("Failed to resolve data directory: {}", e);
+            return 1;
+        }
+    };
     if let Some(parent) = db_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
