@@ -6,8 +6,10 @@
 pub mod analysis;
 pub mod attestations;
 pub mod auth;
+pub mod channels;
 pub mod codebase;
 pub mod cognition;
+pub mod events;
 pub mod exec_ws;
 pub mod internal_auth;
 pub mod genesis_verify;
@@ -499,6 +501,10 @@ pub struct AppStateInner {
     /// Prevents rollback to a prior, less restrictive policy version.
     /// Checked on every policy load and during reconstitution chain walk.
     pub downgrade_guard: Arc<std::sync::Mutex<zp_policy::DowngradeGuard>>,
+    /// Real-time event broadcast channel (P4-1: SSE event stream).
+    /// Audit chain appends, tool lifecycle events, and cognition events
+    /// are broadcast here for SSE clients and channel adapters.
+    pub event_tx: tokio::sync::broadcast::Sender<events::EventStreamItem>,
 }
 
 #[derive(Clone)]
@@ -649,6 +655,8 @@ impl AppState {
             Some(hex::encode(token_bytes))
         };
 
+        let (event_tx, _event_rx) = events::event_channel();
+
         let state = AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -672,6 +680,7 @@ impl AppState {
             quarantine_store,
             memory_store,
             downgrade_guard,
+            event_tx,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -1002,6 +1011,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // In production, these endpoints expose source code to authenticated
         // users which is an unnecessary information disclosure risk.
         .route("/api/v1/codebase/tree", get(codebase::tree_handler))
+        // Real-time event stream — SSE for dashboard and channel adapters (P4-1)
+        .route("/api/v1/events/stream", get(events::event_stream_handler))
+        // Channel adapters — Slack/Discord integration (P4-2)
+        .route("/api/v1/channels/status", get(channels::channels_status_handler))
+        .route("/api/v1/channels/slack/webhook", post(channels::slack_webhook_handler))
         // Analysis engines — receipt chain intelligence (MLE STAR + Monte Carlo)
         .route("/api/v1/analysis/index", get(analysis::index_handler))
         .route(

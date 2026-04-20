@@ -496,12 +496,21 @@ const phases = [
   },
   {
     name: "Phase 3.5: Recovery Infrastructure",
-    status: "in-progress",
+    status: "complete",
     items: [
       { id: "R6-3", label: "Receipt-based reconstitution (wiring: CLI/server + ChainEntry bridge)", done: true },
       { id: "R6-4", label: "Downgrade resistance (wiring: AppState + reconstitution engine + API + CLI)", done: true },
-      { id: "G5-3", label: "Cross-context memory merging", done: false },
-      { id: "G5-4", label: "Narrative synthesis engine", done: false },
+      { id: "G5-3", label: "Cross-context memory merging (deferred — awaiting multi-agent mesh)", done: false },
+      { id: "G5-4", label: "Narrative synthesis engine (deferred — awaiting promotion pipeline maturity)", done: false },
+    ]
+  },
+  {
+    name: "Phase 4: Channels & Dashboard",
+    status: "complete",
+    items: [
+      { id: "P4-1", label: "Server-Sent Events endpoint for real-time audit stream", done: true },
+      { id: "P4-2", label: "Channel adapter framework + Slack webhook handler", done: true },
+      { id: "P4-3", label: "Dashboard observability panels (cognition + analysis + events)", done: true },
     ]
   },
 ];
@@ -746,13 +755,14 @@ const data = [
       { label: "v3 Design Spec & Build Plan", status: "shipped" },
       { label: "Builder course", status: "active" },
     ]},
-    { label: "Surfaces", status: "active", children: [
+    { label: "Surfaces", status: "shipped", children: [
       { label: "CLI interface", status: "shipped" },
       { label: "REST / WebSocket API", status: "shipped" },
       { label: "Interactive playground", status: "shipped" },
-      { label: "Live build dashboard", status: "active" },
-      { label: "Web dashboard", status: "roadmap" },
-      { label: "Channel adapters (Slack, Discord)", status: "roadmap" },
+      { label: "Live build dashboard", status: "shipped" },
+      { label: "SSE real-time event stream", status: "shipped", phase: "P4-1" },
+      { label: "Dashboard observability panels (cognition + analysis + events)", status: "shipped", phase: "P4-3" },
+      { label: "Channel adapters (Slack webhook + adapter framework)", status: "shipped", phase: "P4-2" },
     ]},
     { label: "Enterprise", status: "roadmap", children: [
       { label: "Genesis ceremony UI", status: "roadmap" },
