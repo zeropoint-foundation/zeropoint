@@ -14,8 +14,10 @@ use axum::Json as AxumJson;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use zp_audit::{ChainEntry, ReconstitutionConfig, ReconstitutionEngine};
 use zp_keys::{BlastRadius, CompromiseResponse};
 use zp_memory::CompromiseReport as MemoryCompromiseReport;
+use zp_policy::{DowngradeError, PolicyVersion};
 
 use crate::AppState;
 
@@ -740,6 +742,173 @@ pub async fn blast_radius_register_handler(
                 "receipt_id": receipt_id,
                 "memory_id": memory_id,
             })))
+        }
+    }
+}
+
+// ============================================================================
+// R6-3: Chain reconstitution endpoint
+// ============================================================================
+
+/// `POST /api/v1/security/reconstitute` — rebuild trust state from audit chain.
+///
+/// Exports the audit chain, feeds it through the ReconstitutionEngine, and
+/// returns the reconstructed state + any anomalies detected.
+pub async fn reconstitute_handler(
+    State(state): State<AppState>,
+) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
+    let audit_store = state.0.audit_store.lock().unwrap();
+
+    let chain = audit_store
+        .export_chain(100_000)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Chain export failed: {}", e)))?;
+
+    let config = ReconstitutionConfig::default();
+    let mut engine = ReconstitutionEngine::new(config);
+
+    let mut chain_integrity = true;
+    let mut prev_hash = String::new();
+    for entry in &chain {
+        let chain_entry = ChainEntry::from_audit_entry(entry);
+        if !prev_hash.is_empty() && chain_entry.prev_hash != prev_hash {
+            chain_integrity = false;
+        }
+        prev_hash = chain_entry.entry_hash.clone();
+        engine.process_entry(&chain_entry);
+    }
+
+    let anomaly_count = engine.anomaly_count();
+    let critical_count = engine.critical_anomaly_count();
+    let recon_state = engine.finalize(chain_integrity);
+
+    info!(
+        entries = recon_state.entries_processed,
+        anomalies = anomaly_count,
+        critical = critical_count,
+        chain_ok = chain_integrity,
+        "Reconstitution completed via API"
+    );
+
+    let anomalies: Vec<serde_json::Value> = recon_state
+        .anomalies
+        .iter()
+        .map(|a| {
+            serde_json::json!({
+                "kind": format!("{:?}", a.kind),
+                "severity": format!("{:?}", a.severity),
+                "entry_id": a.entry_id,
+                "description": a.description,
+            })
+        })
+        .collect();
+
+    Ok(AxumJson(serde_json::json!({
+        "entries_processed": recon_state.entries_processed,
+        "chain_integrity": recon_state.chain_integrity_verified,
+        "valid_operator_keys": recon_state.valid_operator_keys.len(),
+        "valid_agent_keys": recon_state.valid_agent_keys.len(),
+        "revoked_keys": recon_state.revoked_keys.len(),
+        "active_capabilities": recon_state.active_capabilities.len(),
+        "memory_states": recon_state.memory_states.len(),
+        "quarantined_memories": recon_state.quarantined_memories.len(),
+        "anomaly_count": anomaly_count,
+        "critical_anomaly_count": critical_count,
+        "anomalies": anomalies,
+    })))
+}
+
+// ============================================================================
+// Downgrade resistance — R6-4 wiring
+// ============================================================================
+
+/// Request to advance the policy version.
+#[derive(Debug, Deserialize)]
+pub struct PolicyAdvanceRequest {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+}
+
+/// Response from the policy version endpoint.
+#[derive(Debug, Serialize)]
+pub struct PolicyVersionResponse {
+    pub current_version: String,
+    pub history: Vec<serde_json::Value>,
+}
+
+/// GET /api/v1/security/policy-version — query current policy version + history.
+pub async fn policy_version_handler(
+    State(state): State<AppState>,
+) -> Result<AxumJson<PolicyVersionResponse>, StatusCode> {
+    let guard = state.0.downgrade_guard.lock().map_err(|_| {
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let history: Vec<serde_json::Value> = guard
+        .history()
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "from": t.from.to_string(),
+                "to": t.to.to_string(),
+                "timestamp": t.timestamp.to_rfc3339(),
+            })
+        })
+        .collect();
+
+    Ok(AxumJson(PolicyVersionResponse {
+        current_version: guard.current_version().to_string(),
+        history,
+    }))
+}
+
+/// POST /api/v1/security/policy-version/advance — advance the policy version.
+///
+/// Returns 200 on success (upgrade or same-version reload).
+/// Returns 409 Conflict if the requested version is lower than the current
+/// version (downgrade attempt).
+pub async fn policy_advance_handler(
+    State(state): State<AppState>,
+    AxumJson(req): AxumJson<PolicyAdvanceRequest>,
+) -> Result<AxumJson<serde_json::Value>, (StatusCode, AxumJson<serde_json::Value>)> {
+    let version = PolicyVersion::new(req.major, req.minor, req.patch);
+
+    let mut guard = state.0.downgrade_guard.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            AxumJson(serde_json::json!({"error": "lock poisoned"})),
+        )
+    })?;
+
+    match guard.check_and_advance(version) {
+        Ok(()) => {
+            info!(
+                version = %version,
+                "Policy version advanced via API"
+            );
+            Ok(AxumJson(serde_json::json!({
+                "status": "ok",
+                "current_version": guard.current_version().to_string(),
+            })))
+        }
+        Err(DowngradeError { attempted, current }) => {
+            info!(
+                attempted = %attempted,
+                current = %current,
+                "Policy downgrade rejected via API"
+            );
+            Err((
+                StatusCode::CONFLICT,
+                AxumJson(serde_json::json!({
+                    "error": "downgrade_rejected",
+                    "attempted": attempted.to_string(),
+                    "current": current.to_string(),
+                    "message": format!(
+                        "Policy downgrade rejected: v{} < current v{}",
+                        attempted, current
+                    ),
+                })),
+            ))
         }
     }
 }

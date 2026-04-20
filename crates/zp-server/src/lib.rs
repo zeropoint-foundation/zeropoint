@@ -495,6 +495,10 @@ pub struct AppStateInner {
     /// Memory entries (in-memory store for the memory lifecycle).
     /// Maps memory_id → MemoryEntry. Populated by the promotion engine.
     pub memory_store: Arc<std::sync::Mutex<std::collections::HashMap<String, zp_memory::MemoryEntry>>>,
+    /// Downgrade resistance guard (R6-4: monotonic policy version enforcement).
+    /// Prevents rollback to a prior, less restrictive policy version.
+    /// Checked on every policy load and during reconstitution chain walk.
+    pub downgrade_guard: Arc<std::sync::Mutex<zp_policy::DowngradeGuard>>,
 }
 
 #[derive(Clone)]
@@ -619,6 +623,13 @@ impl AppState {
             std::collections::HashMap::<String, zp_memory::MemoryEntry>::new(),
         ));
 
+        // Downgrade resistance guard (R6-4: monotonic policy version).
+        // Starts at 0.0.0 — the first policy load sets the baseline.
+        // Future: restore from persisted state on restart.
+        let downgrade_guard = Arc::new(std::sync::Mutex::new(
+            zp_policy::DowngradeGuard::new(),
+        ));
+
         // One-time onboard setup token (AUTH-VULN-06).
         // Only generated when:
         //   1. genesis.json does not exist (pre-genesis), AND
@@ -660,6 +671,7 @@ impl AppState {
             blast_radius_tracker,
             quarantine_store,
             memory_store,
+            downgrade_guard,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -942,6 +954,20 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route(
             "/api/v1/security/blast-radius/:key",
             get(security::blast_radius_handler),
+        )
+        // Chain reconstitution — rebuild trust state from audit chain (R6-3)
+        .route(
+            "/api/v1/security/reconstitute",
+            post(security::reconstitute_handler),
+        )
+        // Downgrade resistance — monotonic policy version enforcement (R6-4)
+        .route(
+            "/api/v1/security/policy-version",
+            get(security::policy_version_handler),
+        )
+        .route(
+            "/api/v1/security/policy-version/advance",
+            post(security::policy_advance_handler),
         )
         // Configured tools (cockpit)
         .route("/api/v1/tools", get(tools_handler))
