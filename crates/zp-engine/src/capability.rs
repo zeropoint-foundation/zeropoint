@@ -353,6 +353,30 @@ pub struct ToolManifest {
     /// to confirm credentials are not just delivered but actually working.
     #[serde(default)]
     pub verification: Option<VerificationConfig>,
+
+    /// Configurable parameters with defaults (P6-1: capability-configured receipts).
+    /// When present, the configure path emits a ConfigurationClaim receipt for each
+    /// parameter, recording the value applied (default or override).
+    #[serde(default)]
+    pub configurable: Vec<ConfigurableParam>,
+}
+
+/// A configurable parameter declared in the tool manifest.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigurableParam {
+    /// Parameter name (e.g., "max_tokens", "temperature", "model")
+    pub name: String,
+    /// Human-readable description
+    #[serde(default)]
+    pub description: String,
+    /// Default value (applied if operator doesn't override)
+    pub default: serde_json::Value,
+    /// Allowed values (empty = any value)
+    #[serde(default)]
+    pub allowed_values: Vec<serde_json::Value>,
+    /// The env var this maps to (e.g., "MAX_TOKENS")
+    #[serde(default)]
+    pub env_var: Option<String>,
 }
 
 // ── Capability Verification ────────────────────────────────────────────

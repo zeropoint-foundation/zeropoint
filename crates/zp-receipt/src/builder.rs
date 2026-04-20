@@ -476,4 +476,60 @@ mod tests {
         let detail = receipt.action.as_ref().unwrap().detail.as_ref().unwrap();
         assert_eq!(detail["amount_usd"], 29.99);
     }
+
+    #[test]
+    fn test_builder_configuration_receipt() {
+        let meta = crate::types::ClaimMetadata::Configuration {
+            tool_id: "my-tool".to_string(),
+            parameter: "max_tokens".to_string(),
+            value: serde_json::json!(4096),
+            source: crate::types::ConfigurationSource::ManifestDefault,
+            previous_value: None,
+        };
+
+        let receipt = Receipt::configuration("zp-preflight")
+            .status(Status::Success)
+            .claim_metadata(meta)
+            .finalize();
+
+        assert!(receipt.id.starts_with("cfgr-"));
+        assert_eq!(receipt.receipt_type, ReceiptType::ConfigurationClaim);
+        assert!(receipt.verify_hash());
+        assert!(receipt.claim_metadata.is_some());
+        if let Some(crate::types::ClaimMetadata::Configuration { tool_id, parameter, value, .. }) =
+            &receipt.claim_metadata
+        {
+            assert_eq!(tool_id, "my-tool");
+            assert_eq!(parameter, "max_tokens");
+            assert_eq!(*value, serde_json::json!(4096));
+        } else {
+            panic!("Expected Configuration metadata");
+        }
+    }
+
+    #[test]
+    fn test_builder_configuration_with_previous_value() {
+        let meta = crate::types::ClaimMetadata::Configuration {
+            tool_id: "my-tool".to_string(),
+            parameter: "temperature".to_string(),
+            value: serde_json::json!(0.7),
+            source: crate::types::ConfigurationSource::OperatorOverride,
+            previous_value: Some(serde_json::json!(1.0)),
+        };
+
+        let receipt = Receipt::configuration("operator")
+            .status(Status::Success)
+            .claim_metadata(meta)
+            .finalize();
+
+        assert!(receipt.id.starts_with("cfgr-"));
+        if let Some(crate::types::ClaimMetadata::Configuration { previous_value, source, .. }) =
+            &receipt.claim_metadata
+        {
+            assert_eq!(*previous_value, Some(serde_json::json!(1.0)));
+            assert!(matches!(source, crate::types::ConfigurationSource::OperatorOverride));
+        } else {
+            panic!("Expected Configuration metadata");
+        }
+    }
 }

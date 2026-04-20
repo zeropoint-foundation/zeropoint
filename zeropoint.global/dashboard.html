@@ -523,6 +523,16 @@ const phases = [
       { id: "P5-4", label: "Genesis v2 ceremony — Shamir secret sharing for key escrow + rotation schedule", done: true },
     ]
   },
+  {
+    name: "Phase 6: Capability Verification & Policy Runtime",
+    status: "complete",
+    items: [
+      { id: "P6-1", label: "ConfigurationClaim receipt emission — typed receipts for tool parameter changes", done: true },
+      { id: "P6-2", label: "Sidecar configuration endpoint — tools query own config from audit chain", done: true },
+      { id: "P6-3", label: "Runtime reconfiguration — parameter changes with audit trail and SSE broadcast", done: true },
+      { id: "P6-4", label: "WASM policy runtime integration — feature-gated module load/enable/disable/list", done: true },
+    ]
+  },
 ];
 
 // ── Architecture tree data (updated statuses) ──
@@ -780,6 +790,13 @@ const data = [
       { label: "Policy push distribution (rollout + delivery tracking)", status: "shipped", phase: "P5-3" },
       { label: "Genesis v2 ceremony (Shamir SSS key escrow + rotation)", status: "shipped", phase: "P5-4" },
       { label: "Genesis ceremony UI", status: "roadmap" },
+    ]},
+    { label: "Capability Verification & Policy Runtime", status: "shipped", children: [
+      { label: "ConfigurationClaim receipt type (typed metadata, validation rules)", status: "shipped", phase: "P6-1" },
+      { label: "Manifest configurable params (ConfigurableParam struct, defaults emission)", status: "shipped", phase: "P6-1" },
+      { label: "Sidecar endpoint /api/v1/tools/:tool/receipts/configured", status: "shipped", phase: "P6-2" },
+      { label: "Runtime reconfiguration with allowed_values validation", status: "shipped", phase: "P6-3" },
+      { label: "WASM policy runtime (feature-gated load/enable/disable/list)", status: "shipped", phase: "P6-4" },
     ]},
   ]},
 ];
