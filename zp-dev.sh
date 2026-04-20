@@ -32,6 +32,8 @@ kill_server() {
 start_server() {
     kill_server
     echo "→ Starting server..."
+    # Serve assets from source tree in dev — includes narration MP3s
+    ZP_ASSETS_DIR="$REPO/crates/zp-server/assets" \
     RUST_LOG=info nohup "$LOCAL_BIN" serve > "$LOG" 2>&1 &
     local tries=0
     while [ $tries -lt 15 ]; do
