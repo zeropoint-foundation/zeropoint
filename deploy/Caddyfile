@@ -36,12 +36,8 @@ zeropoint.global {
 	}
 
 	# Cache static assets
-	@static path *.css *.js *.woff2 *.png *.svg *.ico *.mp3
+	@static path *.css *.js *.woff2 *.png *.svg *.ico
 	header @static Cache-Control "public, max-age=86400"
-
-	# CORS for narration MP3s — local ZP servers fetch from this origin
-	@narration path /narration/*
-	header @narration Access-Control-Allow-Origin "*"
 
 	# Gzip
 	encode gzip

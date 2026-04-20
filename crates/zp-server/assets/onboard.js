@@ -7,13 +7,6 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // ── Narration CDN ───────────────────────────────────────
-  // Production: served from zeropoint.global.
-  // Dev override: set window.ZP_NARRATION_BASE before this script loads,
-  // or use ZP_ASSETS_DIR to serve from the local source tree.
-  const NARRATION_BASE = window.ZP_NARRATION_BASE
-    || 'https://zeropoint.global/narration/onboard';
-
   // ── State ───────────────────────────────────────────────
   let ws = null;
   let currentStep = 0;
@@ -789,7 +782,7 @@
 
     // Play recovery narration (conditional — only for biometric path)
     stopNarration();
-    narrationAudio = new Audio(`${NARRATION_BASE}/onboard-recovery.mp3`);
+    narrationAudio = new Audio('/assets/narration/onboard/onboard-recovery.mp3');
     showNarrationBar();
     document.getElementById('narrateLabel').textContent = 'Why your recovery kit matters';
     if (!isMuted) {
@@ -2141,7 +2134,7 @@
   }
 
   // ── Narration (auto-play) ────────────────────────────────
-  // MP3s served from NARRATION_BASE (zeropoint.global or local override)
+  // Narration files expected at /assets/narration/onboard/
   const stepNarrations = {
     0: 'onboard-welcome.mp3',
     1: 'onboard-sovereignty.mp3',
@@ -2211,7 +2204,7 @@
     showNarrationBar();
     document.getElementById('narrateProgress').style.width = '0%';
 
-    narrationAudio = new Audio(`${NARRATION_BASE}/${file}`);
+    narrationAudio = new Audio(`/assets/narration/onboard/${file}`);
     narrationAudio.play().catch(() => {});
 
     narrationAudio.onended = () => {
