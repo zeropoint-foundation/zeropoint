@@ -12,6 +12,127 @@ use uuid::Uuid;
 
 use crate::policy::{ActionType as CoreActionType, PolicyDecision as CorePolicyDecision};
 
+// ============================================================================
+// Event Provenance — who created a governance event, how, and under what
+// authority chain. Added in Phase 2.7 (M4-1) to close the SSRF self-grant
+// vector: every governance event now carries verifiable origin metadata.
+// ============================================================================
+
+/// Provenance of a governance event — who created it, how, and under what
+/// authority chain.
+///
+/// Without provenance, a capability grant created via SSRF is indistinguishable
+/// from one created via the legitimate governance pipeline. With provenance,
+/// the `EventOrigin::ExternalRequest` variant makes the difference visible to
+/// policy, and self-issued grants can be rejected.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventProvenance {
+    /// The entity that directly created this event.
+    pub creator: String,
+
+    /// How the event was created.
+    pub origin: EventOrigin,
+
+    /// The receipt ID of the capability grant that authorized this event, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization: Option<String>,
+
+    /// Receipt IDs forming the delegation chain backing the authorization.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation_chain: Option<Vec<String>>,
+}
+
+impl EventProvenance {
+    /// Create provenance for a direct user action.
+    pub fn user_action(creator: impl Into<String>) -> Self {
+        Self {
+            creator: creator.into(),
+            origin: EventOrigin::UserAction,
+            authorization: None,
+            delegation_chain: None,
+        }
+    }
+
+    /// Create provenance for a policy engine evaluation.
+    pub fn policy_evaluation(creator: impl Into<String>) -> Self {
+        Self {
+            creator: creator.into(),
+            origin: EventOrigin::PolicyEvaluation,
+            authorization: None,
+            delegation_chain: None,
+        }
+    }
+
+    /// Create provenance for an internal system process.
+    pub fn system_internal(creator: impl Into<String>) -> Self {
+        Self {
+            creator: creator.into(),
+            origin: EventOrigin::SystemInternal,
+            authorization: None,
+            delegation_chain: None,
+        }
+    }
+
+    /// Create provenance for an external service request.
+    pub fn external_request(creator: impl Into<String>, source_ip: Option<String>) -> Self {
+        Self {
+            creator: creator.into(),
+            origin: EventOrigin::ExternalRequest { source_ip },
+            authorization: None,
+            delegation_chain: None,
+        }
+    }
+
+    /// Create provenance for a delegated event.
+    pub fn delegated(creator: impl Into<String>, parent_event: impl Into<String>) -> Self {
+        Self {
+            creator: creator.into(),
+            origin: EventOrigin::Delegated {
+                parent_event: parent_event.into(),
+            },
+            authorization: None,
+            delegation_chain: None,
+        }
+    }
+
+    /// Builder: set the authorization receipt.
+    pub fn with_authorization(mut self, receipt_id: impl Into<String>) -> Self {
+        self.authorization = Some(receipt_id.into());
+        self
+    }
+
+    /// Builder: set the delegation chain.
+    pub fn with_delegation_chain(mut self, chain: Vec<String>) -> Self {
+        self.delegation_chain = Some(chain);
+        self
+    }
+
+    /// Whether this event originated from outside the system boundary.
+    pub fn is_external(&self) -> bool {
+        matches!(self.origin, EventOrigin::ExternalRequest { .. })
+    }
+
+    /// Whether this event was created by a direct user action.
+    pub fn is_user_action(&self) -> bool {
+        matches!(self.origin, EventOrigin::UserAction)
+    }
+}
+
+/// How a governance event was created.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EventOrigin {
+    /// Created by direct user action (CLI, API with authenticated session).
+    UserAction,
+    /// Created by the policy engine during evaluation.
+    PolicyEvaluation,
+    /// Created by an internal system process (pipeline orchestration, etc.).
+    SystemInternal,
+    /// Created by an external service request (potential SSRF vector).
+    ExternalRequest { source_ip: Option<String> },
+    /// Created by delegation from another event.
+    Delegated { parent_event: String },
+}
+
 /// A governance event — the immutable record of a governance decision.
 ///
 /// This is the bridge between Guard (pre-action sovereignty), Policy (decision-time composition),
@@ -34,6 +155,11 @@ pub struct GovernanceEvent {
     pub receipt_id: Option<String>,
     /// Link to the audit entry in the hash chain
     pub audit_hash: Option<String>,
+    /// Provenance — who created this event, how, and under what authority.
+    /// Added in Phase 2.7 (M4-1). Events without provenance are legacy;
+    /// new code paths must always set this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<EventProvenance>,
 }
 
 impl GovernanceEvent {
@@ -53,6 +179,7 @@ impl GovernanceEvent {
             decision,
             receipt_id: None,
             audit_hash: None,
+            provenance: None,
         }
     }
 
@@ -378,6 +505,7 @@ impl GovernanceEvent {
             "action_context": serde_json::to_value(&self.action_context).unwrap(),
             "decision": serde_json::to_value(&self.decision).unwrap(),
             "receipt_id": self.receipt_id,
+            "provenance": self.provenance.as_ref().map(|p| serde_json::to_value(p).unwrap()),
         });
 
         canonical.to_string().into_bytes()
@@ -419,6 +547,12 @@ impl GovernanceEvent {
     /// Set the audit hash for this event.
     pub fn with_audit_hash(mut self, audit_hash: String) -> Self {
         self.audit_hash = Some(audit_hash);
+        self
+    }
+
+    /// Set the provenance for this event.
+    pub fn with_provenance(mut self, provenance: EventProvenance) -> Self {
+        self.provenance = Some(provenance);
         self
     }
 }
@@ -1422,6 +1556,105 @@ mod tests {
             event.event_type,
             GovernanceEventType::ReputationGateReview
         ));
+    }
+
+    // ========================================================================
+    // Phase 2.7 (M4-1): EventProvenance tests
+    // ========================================================================
+
+    #[test]
+    fn test_event_provenance_user_action() {
+        let prov = EventProvenance::user_action("operator-1");
+        assert!(prov.is_user_action());
+        assert!(!prov.is_external());
+        assert_eq!(prov.creator, "operator-1");
+    }
+
+    #[test]
+    fn test_event_provenance_external_request() {
+        let prov = EventProvenance::external_request("unknown", Some("10.0.0.1".to_string()));
+        assert!(prov.is_external());
+        assert!(!prov.is_user_action());
+        if let EventOrigin::ExternalRequest { source_ip } = &prov.origin {
+            assert_eq!(source_ip.as_deref(), Some("10.0.0.1"));
+        } else {
+            panic!("Expected ExternalRequest origin");
+        }
+    }
+
+    #[test]
+    fn test_event_provenance_with_delegation_chain() {
+        let prov = EventProvenance::delegated("agent-a", "gov-parent-123")
+            .with_authorization("receipt-456")
+            .with_delegation_chain(vec!["receipt-1".into(), "receipt-2".into()]);
+
+        assert_eq!(prov.authorization, Some("receipt-456".to_string()));
+        assert_eq!(prov.delegation_chain.as_ref().unwrap().len(), 2);
+        assert!(!prov.is_external());
+    }
+
+    #[test]
+    fn test_governance_event_with_provenance() {
+        let actor = GovernanceActor::Human {
+            id: "user-1".to_string(),
+        };
+        let ctx = ActionContext {
+            action_type: "Read".to_string(),
+            target: Some("/data".to_string()),
+            trust_tier: 0,
+            risk_level: "Low".to_string(),
+        };
+        let decision = GovernanceDecision::Allow {
+            conditions: vec![],
+        };
+
+        let event = GovernanceEvent::guard_evaluation(actor, ctx, decision)
+            .with_provenance(EventProvenance::user_action("user-1"));
+
+        assert!(event.provenance.is_some());
+        assert!(event.provenance.as_ref().unwrap().is_user_action());
+    }
+
+    #[test]
+    fn test_provenance_included_in_canonical_hash() {
+        let actor = GovernanceActor::System {
+            component: "guard".to_string(),
+        };
+        let ctx = ActionContext {
+            action_type: "Chat".to_string(),
+            target: None,
+            trust_tier: 0,
+            risk_level: "Low".to_string(),
+        };
+        let decision = GovernanceDecision::Allow {
+            conditions: vec![],
+        };
+
+        let event_no_prov =
+            GovernanceEvent::guard_evaluation(actor.clone(), ctx.clone(), decision.clone());
+        let event_with_prov = GovernanceEvent::guard_evaluation(actor, ctx, decision)
+            .with_provenance(EventProvenance::system_internal("pipeline"));
+
+        // Force same id and timestamp for comparison
+        let mut e2 = event_with_prov;
+        e2.id = event_no_prov.id.clone();
+        e2.timestamp = event_no_prov.timestamp;
+
+        // Hashes must differ when provenance is added
+        assert_ne!(event_no_prov.compute_hash(), e2.compute_hash());
+    }
+
+    #[test]
+    fn test_provenance_survives_serialization() {
+        let prov = EventProvenance::policy_evaluation("policy-engine")
+            .with_authorization("receipt-789");
+
+        let json = serde_json::to_string(&prov).unwrap();
+        let restored: EventProvenance = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.creator, "policy-engine");
+        assert!(matches!(restored.origin, EventOrigin::PolicyEvaluation));
+        assert_eq!(restored.authorization, Some("receipt-789".to_string()));
     }
 
     // ========================================================================

@@ -13,6 +13,7 @@ use ed25519_dalek::{Signer as DalekSigner, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+use crate::governance::EventProvenance;
 use crate::policy::{ActionType, TrustTier};
 
 /// A signed, portable capability grant — the unit of authorization in ZeroPoint.
@@ -74,6 +75,14 @@ pub struct CapabilityGrant {
     /// grants cannot be delegated and expire after a single use).
     #[serde(default)]
     pub provenance: GrantProvenance,
+
+    // --- Phase 2.7 (M4-3): Event-level provenance for self-issuance prevention ---
+    /// The governance event provenance that led to this grant being issued.
+    /// A grant without `issued_via`, or with `issued_via` showing
+    /// `EventOrigin::ExternalRequest` on an internal-only capability, MUST be
+    /// rejected by the governance gate. This closes the SSRF self-grant vector.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issued_via: Option<EventProvenance>,
 }
 
 /// How a capability grant was created.
@@ -174,6 +183,7 @@ impl CapabilityGrant {
             delegation_depth: 0,
             max_delegation_depth: 3,
             provenance,
+            issued_via: None,
         }
     }
 
@@ -205,6 +215,53 @@ impl CapabilityGrant {
     pub fn with_provenance(mut self, provenance: GrantProvenance) -> Self {
         self.provenance = provenance;
         self
+    }
+
+    /// Set the event provenance that led to this grant being issued (builder pattern).
+    /// Required by Phase 2.7 (M4-3) for self-issuance prevention.
+    pub fn with_issued_via(mut self, provenance: EventProvenance) -> Self {
+        self.issued_via = Some(provenance);
+        self
+    }
+
+    /// Validate that this grant was not self-issued via an external request.
+    ///
+    /// Returns `Err` if:
+    /// - The grant has no `issued_via` provenance (legacy or forged)
+    /// - The grant was issued via `EventOrigin::ExternalRequest` on an
+    ///   internal-only capability (ConfigChange, CredentialAccess)
+    ///
+    /// This is the enforcement point for the SSRF self-grant vector closed
+    /// by M4-3. The governance gate MUST call this before accepting any
+    /// new capability grant.
+    pub fn validate_issuance(&self) -> Result<(), IssuanceError> {
+        let provenance = self
+            .issued_via
+            .as_ref()
+            .ok_or(IssuanceError::MissingProvenance)?;
+
+        if provenance.is_external() && self.is_internal_only_capability() {
+            return Err(IssuanceError::ExternalOnInternalCapability {
+                capability: self.capability.name().to_string(),
+                source_ip: match &provenance.origin {
+                    crate::governance::EventOrigin::ExternalRequest { source_ip } => {
+                        source_ip.clone()
+                    }
+                    _ => None,
+                },
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Whether this capability is internal-only (should never be granted via
+    /// external requests).
+    fn is_internal_only_capability(&self) -> bool {
+        matches!(
+            self.capability,
+            GrantedCapability::ConfigChange { .. } | GrantedCapability::CredentialAccess { .. }
+        )
     }
 
     /// Set the expiration time to a relative duration from now (builder pattern).
@@ -902,6 +959,41 @@ impl std::fmt::Display for DelegationError {
 }
 
 impl std::error::Error for DelegationError {}
+
+/// Error type for grant issuance validation failures (M4-3).
+#[derive(Debug, Clone)]
+pub enum IssuanceError {
+    /// The grant has no `issued_via` provenance — cannot verify origin.
+    MissingProvenance,
+    /// An external request attempted to issue an internal-only capability.
+    ExternalOnInternalCapability {
+        capability: String,
+        source_ip: Option<String>,
+    },
+}
+
+impl std::fmt::Display for IssuanceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IssuanceError::MissingProvenance => {
+                write!(f, "grant has no issued_via provenance — cannot verify origin")
+            }
+            IssuanceError::ExternalOnInternalCapability {
+                capability,
+                source_ip,
+            } => {
+                write!(
+                    f,
+                    "external request (IP: {}) attempted to issue internal-only capability '{}'",
+                    source_ip.as_deref().unwrap_or("unknown"),
+                    capability
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for IssuanceError {}
 
 /// Internal type for canonical serialization (excludes signature).
 #[derive(Debug, Serialize, Deserialize)]
@@ -1823,5 +1915,140 @@ mod tests {
         assert_eq!(restored.parent_grant_id, child.parent_grant_id);
         assert_eq!(restored.delegation_depth, 1);
         assert_eq!(restored.max_delegation_depth, 3);
+    }
+
+    // ====================================================================
+    // Phase 2.7 (M4-3): Self-issuance prevention tests
+    // ====================================================================
+
+    #[test]
+    fn test_validate_issuance_with_user_action() {
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_issued_via(EventProvenance::user_action("operator"));
+
+        assert!(grant.validate_issuance().is_ok());
+    }
+
+    #[test]
+    fn test_validate_issuance_missing_provenance() {
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        );
+        // No issued_via set — should fail
+        assert!(matches!(
+            grant.validate_issuance(),
+            Err(IssuanceError::MissingProvenance)
+        ));
+    }
+
+    #[test]
+    fn test_validate_issuance_external_on_internal_capability() {
+        // ConfigChange is internal-only — external requests must be blocked
+        let grant = CapabilityGrant::new(
+            "ssrf-attacker".to_string(),
+            "ssrf-attacker".to_string(),
+            GrantedCapability::ConfigChange {
+                settings: vec!["*".to_string()],
+            },
+            "forged-receipt".to_string(),
+        )
+        .with_issued_via(EventProvenance::external_request(
+            "unknown",
+            Some("10.0.0.99".to_string()),
+        ));
+
+        let result = grant.validate_issuance();
+        assert!(matches!(
+            result,
+            Err(IssuanceError::ExternalOnInternalCapability { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validate_issuance_external_on_credential_access() {
+        // CredentialAccess is internal-only
+        let grant = CapabilityGrant::new(
+            "attacker".to_string(),
+            "attacker".to_string(),
+            GrantedCapability::CredentialAccess {
+                credential_refs: vec!["*".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_issued_via(EventProvenance::external_request("attacker", None));
+
+        assert!(matches!(
+            grant.validate_issuance(),
+            Err(IssuanceError::ExternalOnInternalCapability { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validate_issuance_external_on_read_ok() {
+        // Read capability via external request is allowed
+        let grant = CapabilityGrant::new(
+            "remote-agent".to_string(),
+            "local-agent".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["public/*".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_issued_via(EventProvenance::external_request(
+            "remote-agent",
+            Some("192.168.1.50".to_string()),
+        ));
+
+        assert!(grant.validate_issuance().is_ok());
+    }
+
+    #[test]
+    fn test_validate_issuance_system_internal_on_config_ok() {
+        // System-internal origin on ConfigChange is legitimate (pipeline orchestration)
+        let grant = CapabilityGrant::new(
+            "pipeline".to_string(),
+            "tool-proxy".to_string(),
+            GrantedCapability::ConfigChange {
+                settings: vec!["log_level".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_issued_via(EventProvenance::system_internal("pipeline"));
+
+        assert!(grant.validate_issuance().is_ok());
+    }
+
+    #[test]
+    fn test_issued_via_survives_serialization() {
+        let grant = CapabilityGrant::new(
+            "operator".to_string(),
+            "agent".to_string(),
+            GrantedCapability::Execute {
+                languages: vec!["python".to_string()],
+            },
+            "receipt".to_string(),
+        )
+        .with_issued_via(
+            EventProvenance::policy_evaluation("policy-engine")
+                .with_authorization("auth-receipt-1"),
+        );
+
+        let json = serde_json::to_string(&grant).unwrap();
+        let restored: CapabilityGrant = serde_json::from_str(&json).unwrap();
+
+        assert!(restored.issued_via.is_some());
+        assert!(restored.validate_issuance().is_ok());
     }
 }

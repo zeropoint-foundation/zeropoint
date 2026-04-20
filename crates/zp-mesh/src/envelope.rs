@@ -350,6 +350,7 @@ impl CompactDelegation {
             delegation_depth: self.dd,
             max_delegation_depth: self.md,
             provenance: zp_core::GrantProvenance::default(),
+            issued_via: None,
         }
     }
 
