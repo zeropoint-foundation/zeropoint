@@ -169,7 +169,6 @@
       const style = getComputedStyle(node);
       if (style.display === 'none' || style.visibility === 'hidden') return;
       if (node.classList.contains('terminal')) return;
-      if (node.classList.contains('narration-bar')) return;
       if (node.classList.contains('tts-float')) return;
       // Skip step-header (the small "05 — discover" labels)
       if (node.classList.contains('step-header')) return;

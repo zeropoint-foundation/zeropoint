@@ -831,7 +831,7 @@ async fn security_headers_middleware(
     // WebSocket connections to localhost are permitted for exec_ws/onboard_ws.
     // connect-src includes localhost:8473 for local Piper TTS health checks.
     // font-src includes data: for inline fonts and the external CDN for brand fonts.
-    // media-src 'self' for narration MP3s (served via ZP_ASSETS_DIR override).
+    // media-src 'self' for audio playback (Piper TTS blobs).
     headers.insert(
         axum::http::header::HeaderName::from_static("content-security-policy"),
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
