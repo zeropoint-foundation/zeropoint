@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────
 # ZeroPoint — Default Provider Catalog
 # Embedded in the binary via include_str!
-# User overrides: ~/.zeropoint/config/providers.toml
+# User overrides: ~/ZeroPoint/config/providers.toml
 # ─────────────────────────────────────────────────────────────
 # Each [[providers]] entry is a known AI/LLM service.
 # The onboarding engine uses this catalog for:

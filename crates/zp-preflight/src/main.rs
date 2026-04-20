@@ -21,7 +21,7 @@ use zp_preflight::runner;
     version
 )]
 struct Cli {
-    /// Output results as JSON (also saved to ~/.zeropoint/preflight-report.json)
+    /// Output results as JSON (also saved to ~/ZeroPoint/preflight-report.json)
     #[arg(long)]
     json: bool,
 
@@ -34,7 +34,7 @@ struct Cli {
     #[arg(long)]
     port: Option<u16>,
 
-    /// Skip saving report to ~/.zeropoint/
+    /// Skip saving report to ~/ZeroPoint/
     #[arg(long)]
     no_save: bool,
 }
@@ -118,7 +118,7 @@ fn print_json(report: &PreflightReport) {
 }
 
 fn save_report(report: &PreflightReport) {
-    let dir = home_dir().join(".zeropoint");
+    let dir = zp_home();
     if fs::create_dir_all(&dir).is_err() {
         return; // Silently skip if we can't create the directory
     }
@@ -133,4 +133,11 @@ fn home_dir() -> PathBuf {
         .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/tmp"))
+}
+
+fn zp_home() -> PathBuf {
+    if let Ok(h) = std::env::var("ZP_HOME") {
+        return PathBuf::from(h);
+    }
+    home_dir().join("ZeroPoint")
 }

@@ -7,7 +7,7 @@
 #   curl -fsSL https://install.zeropoint.global | sh
 #
 # Downloads pre-built binaries from GitHub Releases, installs to
-# ~/.zeropoint/bin/, and runs genesis. No Rust toolchain needed.
+# ~/ZeroPoint/bin/, and runs genesis. No Rust toolchain needed.
 #
 # Requirements: curl or wget, tar, uname
 # ============================================================================
@@ -17,7 +17,7 @@ set -euo pipefail
 # ─── Constants ────────────────────────────────────────────────
 
 REPO="zeropoint-foundation/zeropoint"
-ZP_HOME="$HOME/.zeropoint"
+ZP_HOME="$HOME/ZeroPoint"
 ZP_BIN="$ZP_HOME/bin"
 RELEASE_BASE="https://github.com/$REPO/releases"
 
@@ -177,11 +177,11 @@ if ! echo "$PATH" | grep -q "$ZP_BIN"; then
         fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
     esac
 
-    if [ -n "$RC_FILE" ] && ! grep -q ".zeropoint/bin" "$RC_FILE" 2>/dev/null; then
+    if [ -n "$RC_FILE" ] && ! grep -q "ZeroPoint/bin" "$RC_FILE" 2>/dev/null; then
         {
             echo ""
             echo "# ZeroPoint"
-            echo 'export PATH="$HOME/.zeropoint/bin:$PATH"'
+            echo 'export PATH="$HOME/ZeroPoint/bin:$PATH"'
         } >> "$RC_FILE"
         ok "Added to PATH in $RC_FILE"
     fi

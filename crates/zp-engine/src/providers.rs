@@ -115,7 +115,7 @@ const PROVIDERS_DEFAULT_TOML: &str = include_str!("../../zp-server/assets/provid
 
 /// Load the provider catalog: embedded defaults merged with user overrides.
 ///
-/// User overrides in `~/.zeropoint/config/providers.toml` are merged on top
+/// User overrides in `~/ZeroPoint/config/providers.toml` are merged on top
 /// of the compiled-in defaults. If a user entry has the same `id` as a default,
 /// the user version replaces it entirely. New user entries are appended.
 pub fn load_catalog() -> Vec<ProviderProfile> {
@@ -124,10 +124,9 @@ pub fn load_catalog() -> Vec<ProviderProfile> {
             .map(|f| f.providers)
             .unwrap_or_default();
 
-    // Try loading user overrides
-    if let Some(home) = dirs::home_dir() {
-        let user_path = home
-            .join(".zeropoint")
+    // Try loading user overrides from ~/ZeroPoint/config/providers.toml
+    if let Ok(zp_home) = zp_core::paths::home() {
+        let user_path = zp_home
             .join("config")
             .join("providers.toml");
         if let Ok(content) = std::fs::read_to_string(&user_path) {

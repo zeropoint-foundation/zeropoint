@@ -30,7 +30,7 @@ warn()  { echo -e "  ${YELLOW}⚠${NC} $1"; }
 dim()   { echo -e "  ${DIM}$1${NC}"; }
 
 # --- Config ---
-ZP_HOME="$HOME/.zeropoint"
+ZP_HOME="$HOME/ZeroPoint"
 ZP_BIN="$ZP_HOME/bin"
 INSTALL_DIR="${ZP_INSTALL_DIR:-$HOME/zeropoint}"
 FORCE=false
@@ -76,7 +76,7 @@ FOUND_ANYTHING=false
 # Shell rc modifications
 RC_FILES_MODIFIED=()
 for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.config/fish/config.fish"; do
-    if [ -f "$rc" ] && grep -q ".zeropoint" "$rc" 2>/dev/null; then
+    if [ -f "$rc" ] && grep -q "ZeroPoint" "$rc" 2>/dev/null; then
         RC_FILES_MODIFIED+=("$rc")
         FOUND_ANYTHING=true
     fi
@@ -237,14 +237,14 @@ if [ ${#RC_FILES_MODIFIED[@]} -gt 0 ]; then
         # Remove ZeroPoint PATH line
         if [[ "$OSTYPE" == "darwin"* ]]; then
             sed -i '' '/# ZeroPoint/d' "$rc"
-            sed -i '' '/\.zeropoint\/bin/d' "$rc"
+            sed -i '' '/ZeroPoint\/bin/d' "$rc"
             sed -i '' '/ZeroPoint Shell Governance/d' "$rc"
-            sed -i '' '/\.zeropoint\/hooks\/preexec/d' "$rc"
+            sed -i '' '/ZeroPoint\/hooks\/preexec/d' "$rc"
         else
             sed -i '/# ZeroPoint/d' "$rc"
-            sed -i '/\.zeropoint\/bin/d' "$rc"
+            sed -i '/ZeroPoint\/bin/d' "$rc"
             sed -i '/ZeroPoint Shell Governance/d' "$rc"
-            sed -i '/\.zeropoint\/hooks\/preexec/d' "$rc"
+            sed -i '/ZeroPoint\/hooks\/preexec/d' "$rc"
         fi
 
         # Clean up any trailing blank lines we left behind

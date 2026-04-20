@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────
 # ZeroPoint — Network Topology Configuration
-# Copy to ~/.zeropoint/config/topology.toml to customize.
+# Copy to ~/ZeroPoint/config/topology.toml to customize.
 # ─────────────────────────────────────────────────────────────
 # Each [[nodes]] entry represents a network component.
 # Roles: gateway, router, sentinel, node, device

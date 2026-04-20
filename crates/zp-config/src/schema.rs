@@ -61,7 +61,7 @@ pub struct ZpConfig {
 
 impl Default for ZpConfig {
     fn default() -> Self {
-        let home = dirs_home().join(".zeropoint");
+        let home = zp_home();
         Self {
             port: Sourced::default_value(3000),
             bind: Sourced::default_value("127.0.0.1".into()),
@@ -426,6 +426,14 @@ fn dirs_home() -> PathBuf {
         .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/tmp"))
+}
+
+/// Resolve the ZeroPoint home directory (mirrors zp_core::paths::home logic).
+fn zp_home() -> PathBuf {
+    if let Ok(h) = std::env::var("ZP_HOME") {
+        return PathBuf::from(h);
+    }
+    dirs_home().join("ZeroPoint")
 }
 
 fn whoami() -> String {

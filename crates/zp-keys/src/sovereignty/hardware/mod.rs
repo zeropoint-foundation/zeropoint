@@ -721,7 +721,7 @@ mod tests {
 
         // Create temp dir to simulate sovereignty_dir
         let tmp = tempfile::tempdir().unwrap();
-        let sov_dir = tmp.path().join(".zeropoint").join("sovereignty");
+        let sov_dir = tmp.path().join("ZeroPoint").join("sovereignty");
         std::fs::create_dir_all(&sov_dir).unwrap();
 
         std::fs::write(sov_dir.join("test_genesis.encrypted"), &old_blob).unwrap();

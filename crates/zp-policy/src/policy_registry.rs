@@ -280,7 +280,7 @@ impl PolicyModuleRegistry {
     /// modules from loading.
     ///
     /// This is the primary mechanism for operators to deploy custom
-    /// policy modules: drop a `.wasm` file into `~/.zeropoint/policies/`
+    /// policy modules: drop a `.wasm` file into `~/ZeroPoint/policies/`
     /// and the engine picks it up on next startup.
     pub fn load_directory(
         &self,

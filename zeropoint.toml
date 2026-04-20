@@ -7,12 +7,12 @@ port = 3000
 
 [identity]
 operator = "kenrom"
-key_path = "~/.zeropoint/keys"
+key_path = "~/ZeroPoint/keys"
 
 [policy]
 # Custom WASM gates, evaluated after constitutional bedrock.
-# Add .wasm files to .zeropoint/policies/ and list them here.
+# Add .wasm files to ZeroPoint/policies/ and list them here.
 gates = []
 
 [audit]
-data_dir = ".zeropoint/data"
+data_dir = "ZeroPoint/data"

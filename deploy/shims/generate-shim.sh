@@ -5,7 +5,7 @@
 #
 # Usage: generate-shim.sh <tool_name> <actor_type>
 #
-# Creates a PATH-priority wrapper shim in ~/.zeropoint/bin/ for the given tool.
+# Creates a PATH-priority wrapper shim in ~/ZeroPoint/bin/ for the given tool.
 # Actor types: codex (AI coding assistants), agent (autonomous agents)
 #
 # Examples:
@@ -18,7 +18,7 @@ set -euo pipefail
 
 TOOL_NAME="${1:?Usage: generate-shim.sh <tool_name> <actor_type>}"
 ACTOR="${2:-codex}"
-SHIM_DIR="$HOME/.zeropoint/bin"
+SHIM_DIR="$HOME/ZeroPoint/bin"
 TEMPLATE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Validate actor type
