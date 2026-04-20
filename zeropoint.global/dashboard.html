@@ -484,6 +484,16 @@ const phases = [
       { id: "P2-5", label: "Canonical serialization before signing", done: true },
     ]
   },
+  {
+    name: "Phase 3: Cognition Integration",
+    status: "shipped",
+    items: [
+      { id: "G5-1", label: "Wire observation\u2192promotion pipeline", done: true },
+      { id: "G5-2", label: "Human review gate for memory promotion", done: true },
+      { id: "R6-1", label: "Blast radius model for key compromise", done: true },
+      { id: "R6-2", label: "Compromise-triggered memory quarantine", done: true },
+    ]
+  },
 ];
 
 // ── Architecture tree data (updated statuses) ──
@@ -616,11 +626,13 @@ const data = [
       { label: "Five-gate promotion logic with configurable thresholds", status: "shipped" },
       { label: "Reinforcement tracking", status: "shipped" },
       { label: "Receipt-backed promotion evidence", status: "shipped" },
+      { label: "Observation\u2192promotion ingestion pipeline", status: "shipped", phase: "G5-1" },
     ]},
     { label: "Memory Quarantine", status: "shipped", children: [
       { label: "Quarantine with source-indexed bulk operations", status: "shipped" },
       { label: "Reinstatement workflow", status: "shipped" },
       { label: "Receipt generation on quarantine actions", status: "shipped" },
+      { label: "Compromise-triggered quarantine from blast radius", status: "shipped", phase: "R6-2" },
     ]},
     { label: "Lifecycle Management", status: "shipped", children: [
       { label: "Stage-specific expiry rules", status: "shipped" },
@@ -628,8 +640,10 @@ const data = [
       { label: "Batch expiry sweep", status: "shipped" },
       { label: "Demotion and reaffirmation", status: "shipped" },
     ]},
-    { label: "Human Review Gate", status: "active", children: [
-      { label: "Pending promotion queue for high-stage transitions", status: "active" },
+    { label: "Human Review Gate", status: "shipped", phase: "G5-2", children: [
+      { label: "Pending promotion queue with expiry and deferral limits", status: "shipped", phase: "G5-2" },
+      { label: "Approve / Reject / Defer decision processing", status: "shipped", phase: "G5-2" },
+      { label: "Expired review sweep and audit trail", status: "shipped", phase: "G5-2" },
       { label: "CLI review surface", status: "active" },
       { label: "Web dashboard review surface", status: "roadmap" },
     ]},
@@ -662,10 +676,11 @@ const data = [
       { label: "BIP-39 mnemonic recovery (24 words \u2192 full system restore)", status: "shipped" },
       { label: "Credential vault rotation verification", status: "shipped" },
     ]},
-    { label: "Blast Radius Analysis", status: "active", children: [
-      { label: "Compute affected trust relationships from compromised key", status: "active" },
-      { label: "Automated response actions per affected element", status: "active" },
-      { label: "Compromise-triggered memory quarantine", status: "active" },
+    { label: "Blast Radius Analysis", status: "shipped", phase: "R6-1", children: [
+      { label: "Transitive delegation graph walker with cycle detection", status: "shipped", phase: "R6-1" },
+      { label: "Receipt, grant, delegation, and memory impact computation", status: "shipped", phase: "R6-1" },
+      { label: "Automated response actions per affected element", status: "shipped", phase: "R6-1" },
+      { label: "Compromise-triggered memory quarantine", status: "shipped", phase: "R6-2" },
     ]},
     { label: "Receipt-Based Reconstitution", status: "active", children: [
       { label: "State derived from receipt chain, never stored mutably", status: "shipped", detail: "Design principle" },

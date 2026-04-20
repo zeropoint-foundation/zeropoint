@@ -38,6 +38,15 @@ pub enum QuarantineReason {
     },
     /// Memory content conflicts with a higher-trust source.
     TruthConflict { conflicting_memory_id: String },
+    /// Memory's promotion evidence includes receipts signed by a compromised key.
+    /// Triggered by the blast radius model (Phase 3, R6-2).
+    CompromisedEvidence {
+        /// The compromised public key (hex-encoded).
+        compromised_key: String,
+        /// Receipt IDs in this memory's evidence chain that were signed
+        /// by the compromised key.
+        affected_receipt_ids: Vec<String>,
+    },
 }
 
 impl std::fmt::Display for QuarantineReason {
@@ -60,6 +69,17 @@ impl std::fmt::Display for QuarantineReason {
                 conflicting_memory_id,
             } => {
                 write!(f, "truth_conflict({})", conflicting_memory_id)
+            }
+            QuarantineReason::CompromisedEvidence {
+                compromised_key,
+                affected_receipt_ids,
+            } => {
+                write!(
+                    f,
+                    "compromised_evidence(key={}, receipts={})",
+                    &compromised_key[..8.min(compromised_key.len())],
+                    affected_receipt_ids.len()
+                )
             }
         }
     }
