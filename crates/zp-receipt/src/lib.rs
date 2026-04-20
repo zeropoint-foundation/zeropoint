@@ -38,6 +38,7 @@ pub mod canonical;
 mod chain;
 mod epoch;
 mod hasher;
+pub mod revocation;
 mod types;
 mod validation;
 mod verifier;
@@ -55,6 +56,7 @@ pub use epoch::{Epoch, EpochCompactor, EpochError, MerkleProof};
 pub use hasher::canonical_hash;
 pub use types::*;
 pub use validation::{validate_receipt_type, ValidationError, TypeRules, rules_for};
+pub use revocation::RevocationIndex;
 pub use verifier::{ReceiptVerifier, VerificationError, VerificationResult};
 
 #[cfg(feature = "signing")]

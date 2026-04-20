@@ -460,46 +460,48 @@ const phases = [
   },
   {
     name: "Phase 2.6: Claim Formalization",
-    status: "in-progress",
+    status: "complete",
     items: [
       { id: "C3-1", label: "Per-type receipt validation", done: true },
-      { id: "C3-2", label: "Supersession & revocation", done: true },
-      { id: "C3-3", label: "Typed claim emission audit", done: false },
+      { id: "C3-2", label: "Supersession & revocation (RevocationIndex in zp-verify)", done: true },
+      { id: "C3-3", label: "Typed claim emission (authorization, delegation, revocation receipts)", done: true },
     ]
   },
   {
     name: "Phase 2.7: Meaning Layer",
-    status: "pending",
+    status: "complete",
     items: [
-      { id: "M4-1", label: "Event provenance tracking", done: true },
-      { id: "M4-3", label: "CapabilityGrant self-issuance prevention", done: true },
-      { id: "M4-2", label: "Governance\u2192memory bridge", done: true },
+      { id: "M4-1", label: "Event provenance auto-derivation in governance constructors", done: true },
+      { id: "M4-3", label: "CapabilityGrant self-issuance prevention (validate_issuance in gate)", done: true },
+      { id: "M4-2", label: "Governance\u2192memory bridge (wired into server runtime)", done: true },
     ]
   },
   {
     name: "Phase 2.8: Pathway Polish",
-    status: "shipped",
+    status: "in-progress",
     items: [
-      { id: "P2-4", label: "Schema validation at API boundaries (deny_unknown_fields)", done: true },
+      { id: "P2-4", label: "Schema validation at API boundaries (~9/30 endpoints typed)", done: false },
       { id: "P2-5", label: "Canonical serialization before signing", done: true },
     ]
   },
   {
     name: "Phase 3: Cognition Integration",
-    status: "shipped",
+    status: "in-progress",
     items: [
-      { id: "G5-1", label: "Wire observation\u2192promotion pipeline", done: true },
-      { id: "G5-2", label: "Human review gate for memory promotion", done: true },
-      { id: "R6-1", label: "Blast radius model for key compromise", done: true },
-      { id: "R6-2", label: "Compromise-triggered memory quarantine", done: true },
+      { id: "G5-1", label: "Observation\u2192promotion pipeline (wiring: server runtime)", done: false },
+      { id: "G5-2", label: "Human review gate (wiring: CLI command + server)", done: false },
+      { id: "R6-1", label: "Blast radius model (wiring: key rotation trigger)", done: false },
+      { id: "R6-2", label: "Compromise-triggered quarantine (wiring: blast radius \u2192 quarantine)", done: false },
     ]
   },
   {
     name: "Phase 3.5: Recovery Infrastructure",
-    status: "shipped",
+    status: "in-progress",
     items: [
-      { id: "R6-3", label: "Receipt-based reconstitution engine", done: true },
-      { id: "R6-4", label: "Downgrade resistance (monotonic policy versions)", done: true },
+      { id: "R6-3", label: "Receipt-based reconstitution (wiring: CLI/server surface)", done: false },
+      { id: "R6-4", label: "Downgrade resistance (wiring: policy engine loading)", done: false },
+      { id: "G5-3", label: "Cross-context memory merging", done: false },
+      { id: "G5-4", label: "Narrative synthesis engine", done: false },
     ]
   },
 ];
@@ -536,7 +538,7 @@ const data = [
       { label: "System path rejection (/etc, /proc, /sys)", status: "shipped", phase: "P2-2" },
       { label: "Internal capability tokens (BLAKE3 HMAC, 30s TTL, nonce replay)", status: "shipped", phase: "P2-3" },
       { label: "Scoped action+target token verification", status: "shipped", phase: "P2-3" },
-      { label: "Typed schema validation at every API endpoint", status: "shipped", phase: "P2-4" },
+      { label: "Typed schema validation at every API endpoint (~9/30 done)", status: "active", phase: "P2-4" },
       { label: "Canonical serialization before cryptographic signing", status: "shipped", phase: "P2-5" },
     ]},
     { label: "Configure Engine", status: "shipped", children: [
@@ -575,8 +577,8 @@ const data = [
       { label: "try_finalize() with strict validation, finalize() with warnings", status: "shipped", phase: "C3-1" },
       { label: "Receipt supersession (forward + backward references)", status: "shipped", phase: "C3-2" },
       { label: "Receipt revocation linkage with revoke() builder", status: "shipped", phase: "C3-2" },
-      { label: "RevocationIndex (in-memory, rebuilt from chain)", status: "shipped", phase: "C3-2" },
-      { label: "Typed claim emission audit across code paths", status: "shipped", phase: "C3-3" },
+      { label: "RevocationIndex (in-memory, rebuilt from chain, checked by zp-verify)", status: "shipped", phase: "C3-2" },
+      { label: "Typed claim emission (authorization, delegation, revocation receipts)", status: "shipped", phase: "C3-3" },
     ]},
     { label: "Key Hierarchy", status: "shipped", children: [
       { label: "Ed25519 three-tier chain (Genesis \u2192 Operator \u2192 Agent)", status: "shipped" },
@@ -607,11 +609,11 @@ const data = [
       { label: "Receipt-gated execution", status: "shipped" },
       { label: "Declarative policy DSL", status: "roadmap" },
     ]},
-    { label: "Event Provenance & Authority", status: "roadmap", phase: "M4", children: [
-      { label: "Creator and origin tracking on all governance events", status: "shipped", phase: "M4-1" },
+    { label: "Event Provenance & Authority", status: "active", phase: "M4", children: [
+      { label: "Creator and origin auto-derived in governance event constructors", status: "shipped", phase: "M4-1" },
       { label: "Authority chain linkage for capability grants", status: "shipped", phase: "M4-1" },
-      { label: "CapabilityGrant self-issuance prevention", status: "shipped", phase: "M4-3" },
-      { label: "Governance event \u2192 observation pipeline bridge", status: "shipped", phase: "M4-2" },
+      { label: "CapabilityGrant self-issuance prevention (validate_issuance in governance gate)", status: "shipped", phase: "M4-3" },
+      { label: "Governance event \u2192 observation bridge (wired into server runtime)", status: "shipped", phase: "M4-2" },
     ]},
     { label: "Trust Tiers", status: "shipped", children: [
       { label: "Tier 0: Permissive \u2014 install and run, zero ceremony", status: "shipped" },
@@ -634,13 +636,13 @@ const data = [
       { label: "Five-gate promotion logic with configurable thresholds", status: "shipped" },
       { label: "Reinforcement tracking", status: "shipped" },
       { label: "Receipt-backed promotion evidence", status: "shipped" },
-      { label: "Observation\u2192promotion ingestion pipeline", status: "shipped", phase: "G5-1" },
+      { label: "Observation\u2192promotion ingestion pipeline (module exists, not called from runtime)", status: "active", phase: "G5-1" },
     ]},
     { label: "Memory Quarantine", status: "shipped", children: [
       { label: "Quarantine with source-indexed bulk operations", status: "shipped" },
       { label: "Reinstatement workflow", status: "shipped" },
       { label: "Receipt generation on quarantine actions", status: "shipped" },
-      { label: "Compromise-triggered quarantine from blast radius", status: "shipped", phase: "R6-2" },
+      { label: "Compromise-triggered quarantine (module exists, not fed from blast radius)", status: "active", phase: "R6-2" },
     ]},
     { label: "Lifecycle Management", status: "shipped", children: [
       { label: "Stage-specific expiry rules", status: "shipped" },
@@ -648,11 +650,11 @@ const data = [
       { label: "Batch expiry sweep", status: "shipped" },
       { label: "Demotion and reaffirmation", status: "shipped" },
     ]},
-    { label: "Human Review Gate", status: "shipped", phase: "G5-2", children: [
+    { label: "Human Review Gate", status: "active", phase: "G5-2", children: [
       { label: "Pending promotion queue with expiry and deferral limits", status: "shipped", phase: "G5-2" },
       { label: "Approve / Reject / Defer decision processing", status: "shipped", phase: "G5-2" },
       { label: "Expired review sweep and audit trail", status: "shipped", phase: "G5-2" },
-      { label: "CLI review surface", status: "active" },
+      { label: "CLI review surface (no zp memory review command yet)", status: "active" },
       { label: "Web dashboard review surface", status: "roadmap" },
     ]},
     { label: "Learning Loop", status: "shipped", children: [
@@ -672,8 +674,8 @@ const data = [
       { label: "Policy-driven model selection", status: "shipped" },
     ]},
     { label: "Narrative Synthesis", status: "roadmap", children: [
-      { label: "Identity-bearing narrative construction from promoted memories", status: "roadmap" },
-      { label: "Cross-context memory merging with receipt requirements", status: "roadmap" },
+      { label: "Identity-bearing narrative construction from promoted memories", status: "roadmap", phase: "G5-4" },
+      { label: "Cross-context memory merging with receipt requirements", status: "roadmap", phase: "G5-3" },
     ]},
   ]},
 
@@ -684,17 +686,18 @@ const data = [
       { label: "BIP-39 mnemonic recovery (24 words \u2192 full system restore)", status: "shipped" },
       { label: "Credential vault rotation verification", status: "shipped" },
     ]},
-    { label: "Blast Radius Analysis", status: "shipped", phase: "R6-1", children: [
+    { label: "Blast Radius Analysis", status: "active", phase: "R6-1", children: [
       { label: "Transitive delegation graph walker with cycle detection", status: "shipped", phase: "R6-1" },
       { label: "Receipt, grant, delegation, and memory impact computation", status: "shipped", phase: "R6-1" },
-      { label: "Automated response actions per affected element", status: "shipped", phase: "R6-1" },
-      { label: "Compromise-triggered memory quarantine", status: "shipped", phase: "R6-2" },
+      { label: "Automated response actions per affected element (not wired to key rotation)", status: "active", phase: "R6-1" },
+      { label: "Compromise-triggered memory quarantine (not fed from blast radius)", status: "active", phase: "R6-2" },
     ]},
-    { label: "Receipt-Based Reconstitution", status: "shipped", phase: "R6-3", children: [
+    { label: "Receipt-Based Reconstitution", status: "active", phase: "R6-3", children: [
       { label: "State derived from receipt chain, never stored mutably", status: "shipped", detail: "Design principle" },
       { label: "System state reconstruction from chain replay", status: "shipped", phase: "R6-3" },
       { label: "Anomaly detection (broken hash links, timestamp regression)", status: "shipped", phase: "R6-3" },
       { label: "Blast radius report (live vs reconstituted state diff)", status: "shipped", phase: "R6-3" },
+      { label: "CLI/server surface for reconstitution", status: "active", phase: "R6-3" },
       { label: "Checkpoint snapshots for fast recovery", status: "roadmap" },
     ]},
     { label: "Tamper Evidence", status: "shipped", children: [
@@ -713,8 +716,8 @@ const data = [
       { label: "Touch ID biometric provider", status: "active" },
       { label: "Additional hardware wallet providers", status: "roadmap" },
     ]},
-    { label: "Downgrade Resistance", status: "shipped", phase: "R6-4", children: [
-      { label: "Monotonic policy version enforcement", status: "shipped", phase: "R6-4" },
+    { label: "Downgrade Resistance", status: "active", phase: "R6-4", children: [
+      { label: "Monotonic policy version enforcement (guard exists, not called by engine)", status: "active", phase: "R6-4" },
       { label: "Version transition audit trail", status: "shipped", phase: "R6-4" },
     ]},
   ]},

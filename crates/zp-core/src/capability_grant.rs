@@ -187,6 +187,24 @@ impl CapabilityGrant {
         }
     }
 
+    /// Create a new capability grant AND emit an AuthorizationClaim receipt.
+    ///
+    /// This is the preferred constructor — it ensures every grant has
+    /// a corresponding typed receipt in the chain (C3-3).
+    pub fn new_with_receipt(
+        grantor: String,
+        grantee: String,
+        capability: GrantedCapability,
+    ) -> (Self, zp_receipt::Receipt) {
+        let scope = format!("{:?}", capability);
+        let receipt = crate::receipt_emission::emit_authorization_receipt(
+            &grantor,
+            &scope,
+        );
+        let grant = Self::new(grantor, grantee, capability, receipt.id.clone());
+        (grant, receipt)
+    }
+
     /// Add a constraint to this grant (builder pattern).
     pub fn with_constraint(mut self, constraint: Constraint) -> Self {
         self.constraints.push(constraint);

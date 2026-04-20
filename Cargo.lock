@@ -5590,6 +5590,7 @@ dependencies = [
  "uuid",
  "whoami",
  "zeroize",
+ "zp-receipt",
 ]
 
 [[package]]
@@ -5800,6 +5801,7 @@ dependencies = [
  "zp-core",
  "zp-engine",
  "zp-keys",
+ "zp-observation",
  "zp-pipeline",
  "zp-policy",
  "zp-receipt",
@@ -5844,6 +5846,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
+ "tracing",
+ "zp-receipt",
 ]
 
 [[package]]

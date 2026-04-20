@@ -4,9 +4,20 @@
 //! audit entries. The `ChainEntry` trait abstracts over concrete entry types,
 //! and `Verifier` runs a set of verification rules (P1 chain extension,
 //! M3 hash-chain continuity, M4 trajectory monotonicity).
+//!
+//! Also provides revocation-aware receipt verification (C3-2): before
+//! accepting any receipt as valid evidence, callers should check it
+//! against the `RevocationIndex` via `verify_receipt_status()`.
+
+pub mod receipt_status;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+// Re-export revocation-aware verification
+pub use receipt_status::{
+    verify_receipt_status, verify_receipts_status, ReceiptStatus, ReceiptStatusReport,
+};
 
 /// Trait for entries in a hash-linked chain.
 ///

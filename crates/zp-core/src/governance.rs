@@ -164,12 +164,39 @@ pub struct GovernanceEvent {
 
 impl GovernanceEvent {
     /// Create a new GovernanceEvent with a generated ID.
+    ///
+    /// Provenance is auto-derived from the event type and actor (M4-1):
+    /// - GuardEvaluation / PolicyEvaluation → SystemInternal
+    /// - All other event types → derived from actor kind
     fn new(
         event_type: GovernanceEventType,
         actor: GovernanceActor,
         action_context: ActionContext,
         decision: GovernanceDecision,
     ) -> Self {
+        let creator = match &actor {
+            GovernanceActor::Human { id } => id.clone(),
+            GovernanceActor::Agent { destination_hash, .. } => destination_hash.clone(),
+            GovernanceActor::System { component } => component.clone(),
+        };
+
+        let origin = match &event_type {
+            GovernanceEventType::GuardEvaluation
+            | GovernanceEventType::PolicyEvaluation => EventOrigin::PolicyEvaluation,
+            _ => match &actor {
+                GovernanceActor::Human { .. } => EventOrigin::UserAction,
+                GovernanceActor::System { .. } => EventOrigin::SystemInternal,
+                GovernanceActor::Agent { .. } => EventOrigin::SystemInternal,
+            },
+        };
+
+        let provenance = EventProvenance {
+            creator,
+            origin,
+            authorization: None,
+            delegation_chain: None,
+        };
+
         Self {
             id: format!("gov-{}", Uuid::now_v7()),
             timestamp: Utc::now(),
@@ -179,7 +206,7 @@ impl GovernanceEvent {
             decision,
             receipt_id: None,
             audit_hash: None,
-            provenance: None,
+            provenance: Some(provenance),
         }
     }
 
