@@ -16,8 +16,6 @@
   let genesisComplete = false;  // Set by 'state' event; guards step 2
   let discoveredTools = [];
   let credentialsStored = 0;
-  let narrationAudio = null;
-  let isNarrating = false;
 
   // ── WebSocket ───────────────────────────────────────────
   let heartbeatInterval = null;
@@ -354,9 +352,6 @@
       populateSummary();
     }
 
-    // Auto-play narration on step transition
-    stopNarration();
-    setTimeout(() => startNarration(), 400); // slight delay for step animation
   };
 
   // Enable clicking completed/active tabs
@@ -779,30 +774,6 @@
     });
 
     document.getElementById('recoveryKit').style.display = 'block';
-
-    // Play recovery narration (conditional — only for biometric path)
-    stopNarration();
-    narrationAudio = new Audio('/assets/narration/onboard/onboard-recovery.mp3');
-    showNarrationBar();
-    document.getElementById('narrateLabel').textContent = 'Why your recovery kit matters';
-    if (!isMuted) {
-      narrationAudio.play().catch(() => {});
-      isNarrating = true;
-      document.getElementById('narrateToggle').innerHTML = '&#10074;&#10074;';
-      document.getElementById('narrationBar').classList.add('playing');
-      progressInterval = setInterval(updateProgress, 300);
-      narrationAudio.onended = () => {
-        isNarrating = false;
-        clearInterval(progressInterval);
-        document.getElementById('narrateProgress').style.width = '100%';
-        document.getElementById('narrateToggle').innerHTML = '&#9654;';
-        document.getElementById('narrationBar').classList.remove('playing');
-      };
-    }
-    narrationAudio.onerror = () => {
-      document.getElementById('narrationBar').style.display = 'none';
-      isNarrating = false;
-    };
   }
 
   // ── Step 3 → 4: Vault → Inference Posture ──────────────
@@ -2133,140 +2104,6 @@
     grid.appendChild(addTile);
   }
 
-  // ── Narration (auto-play) ────────────────────────────────
-  // Narration files expected at /assets/narration/onboard/
-  const stepNarrations = {
-    0: 'onboard-welcome.mp3',
-    1: 'onboard-sovereignty.mp3',
-    2: 'onboard-genesis.mp3',
-    3: 'onboard-vault.mp3',
-    4: 'onboard-inference.mp3',
-    5: 'onboard-discover.mp3',
-    6: 'onboard-credentials.mp3',
-    7: 'onboard-configure.mp3',
-    8: 'onboard-complete.mp3',
-  };
-
-  const stepLabels = {
-    0: 'The old model vs. the new model',
-    1: 'Why your body is the credential',
-    2: 'What it means to create your own root of trust',
-    3: 'How your vault protects your credentials',
-    4: 'Where your inference runs — and why it matters',
-    5: 'How tool discovery works',
-    6: 'Encrypting your keys — and proving they work',
-    7: 'Governance with verified credentials',
-    8: 'What you\'ve built — and what comes next',
-  };
-
-  let isMuted = false;
-  let progressInterval = null;
-
-  function showNarrationBar() {
-    const bar = document.getElementById('narrationBar');
-    // Insert bar at the top of the active step, right after step-header
-    const step = document.getElementById('step-' + currentStep);
-    if (step) {
-      const header = step.querySelector('.step-header');
-      if (header && header.nextSibling) {
-        step.insertBefore(bar, header.nextSibling);
-      } else {
-        step.prepend(bar);
-      }
-    }
-    bar.style.display = 'flex';
-    document.getElementById('narrateLabel').textContent = stepLabels[currentStep] || 'Narrating...';
-  }
-
-  function updateProgress() {
-    if (!narrationAudio || !narrationAudio.duration) return;
-    const pct = (narrationAudio.currentTime / narrationAudio.duration) * 100;
-    document.getElementById('narrateProgress').style.width = pct + '%';
-  }
-
-  function startNarration() {
-    const file = stepNarrations[currentStep];
-    if (!file || isMuted) {
-      // Still show the bar even if muted, so user can unmute
-      showNarrationBar();
-      if (isMuted) {
-        document.getElementById('narrateToggle').innerHTML = '&#9654;';
-        document.getElementById('narrationBar').classList.remove('playing');
-      }
-      return;
-    }
-
-    if (narrationAudio) {
-      narrationAudio.pause();
-      clearInterval(progressInterval);
-    }
-
-    showNarrationBar();
-    document.getElementById('narrateProgress').style.width = '0%';
-
-    narrationAudio = new Audio(`/assets/narration/onboard/${file}`);
-    narrationAudio.play().catch(() => {});
-
-    narrationAudio.onended = () => {
-      isNarrating = false;
-      clearInterval(progressInterval);
-      document.getElementById('narrateProgress').style.width = '100%';
-      document.getElementById('narrateToggle').innerHTML = '&#9654;';
-      document.getElementById('narrationBar').classList.remove('playing');
-    };
-
-    narrationAudio.onerror = () => {
-      // Audio file not found — hide bar gracefully
-      document.getElementById('narrationBar').style.display = 'none';
-      isNarrating = false;
-    };
-
-    isNarrating = true;
-    document.getElementById('narrateToggle').innerHTML = '&#10074;&#10074;';
-    document.getElementById('narrationBar').classList.add('playing');
-
-    progressInterval = setInterval(updateProgress, 300);
-  }
-
-  function stopNarration() {
-    if (narrationAudio) {
-      narrationAudio.pause();
-      narrationAudio.currentTime = 0;
-    }
-    clearInterval(progressInterval);
-    isNarrating = false;
-    const prog = document.getElementById('narrateProgress');
-    const tog = document.getElementById('narrateToggle');
-    const bar = document.getElementById('narrationBar');
-    if (prog) prog.style.width = '0%';
-    if (tog) tog.innerHTML = '&#9654;';
-    if (bar) bar.classList.remove('playing');
-  }
-
-  window.toggleNarration = function() {
-    if (isNarrating) {
-      stopNarration();
-    } else {
-      startNarration();
-    }
-  };
-
-  window.toggleMute = function() {
-    isMuted = !isMuted;
-    const muteBtn = document.getElementById('narrateMute');
-    if (isMuted) {
-      muteBtn.innerHTML = '&#x1f507;';
-      muteBtn.classList.add('muted');
-      muteBtn.title = 'Unmute narration';
-      stopNarration();
-    } else {
-      muteBtn.innerHTML = '&#x1f50a;';
-      muteBtn.classList.remove('muted');
-      muteBtn.title = 'Mute narration';
-      startNarration();
-    }
-  };
-
   // ── Event Delegation (CSP-compliant — no inline handlers) ──
   // All interactive elements use data-action attributes instead of onclick.
   // This single listener dispatches to the appropriate handler.
@@ -2347,14 +2184,6 @@
         runConfigure();
         break;
 
-      // Narration
-      case 'toggleNarration':
-        toggleNarration();
-        break;
-      case 'toggleMute':
-        toggleMute();
-        break;
-
       // Verification link hover (CSS handles this instead of JS)
       case 'viewVerification':
         // Navigation handled by the <a> href
@@ -2396,22 +2225,6 @@
 
   // ── Init ────────────────────────────────────────────────
   connect();
-
-  // Show narration bar after WebSocket has a chance to set the correct step.
-  // 600ms > the 300ms goStep delay in the state handler, so the bar appears
-  // on the right step even when resuming a session.
-  setTimeout(() => showNarrationBar(), 600);
-
-  // Auto-play Step 0 narration on first user interaction
-  // (browsers require a user gesture before playing audio)
-  function autoplayOnFirstInteraction() {
-    startNarration();
-    document.removeEventListener('click', autoplayOnFirstInteraction);
-    document.removeEventListener('keydown', autoplayOnFirstInteraction);
-    document.removeEventListener('touchstart', autoplayOnFirstInteraction);
-  }
-  document.addEventListener('click', autoplayOnFirstInteraction);
-  document.addEventListener('keydown', autoplayOnFirstInteraction);
-  document.addEventListener('touchstart', autoplayOnFirstInteraction);
+  // Narration is handled by tts.js (Piper local TTS) — no pre-recorded MP3s.
 
 })();
