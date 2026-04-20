@@ -1302,10 +1302,10 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             router = router.nest_service("/assets", ServeDir::new(&dir));
         } else {
             tracing::warn!("ZP_ASSETS_DIR={} does not exist, using compiled-in assets", override_dir);
-            router = router.nest_service("/assets", embedded_assets_router());
+            router = router.nest("/assets", embedded_assets_router());
         }
     } else {
-        router = router.nest_service("/assets", embedded_assets_router());
+        router = router.nest("/assets", embedded_assets_router());
     }
 
     info!("Tool proxy: http://{{tool}}.localhost:{}/", config.port);
