@@ -519,7 +519,7 @@ impl ReconstitutionEngine {
                         });
                     }
                 }
-                if self.highest_policy_version.map_or(true, |prev| new_ver > prev) {
+                if self.highest_policy_version.is_none_or(|prev| new_ver > prev) {
                     self.highest_policy_version = Some(new_ver);
                 }
             }

@@ -568,7 +568,7 @@ impl CredentialVault {
         let prefix = format!("tools/{}/", tool);
         let mut result = HashMap::new();
 
-        for (key, _entry) in &self.entries {
+        for key in self.entries.keys() {
             if let Some(var) = key.strip_prefix(&prefix) {
                 let value = self.retrieve(key)?;
                 result.insert(var.to_string(), value);

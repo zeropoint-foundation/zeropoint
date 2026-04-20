@@ -173,6 +173,7 @@ impl Resolution {
 
 /// Result of storing tool configuration in the vault via [`ConfigEngine::resolve_to_vault`].
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct VaultConfigResult {
     /// Tool name
     pub tool: String,
@@ -2429,6 +2430,7 @@ pub enum AutoStatus {
 ///
 /// All resolved config is stored in the vault graph (zero plaintext
 /// on disk).
+#[allow(clippy::too_many_arguments)]
 pub fn run_auto(
     scan_path: &Path,
     vault: &mut CredentialVault,

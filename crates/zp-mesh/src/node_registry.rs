@@ -212,11 +212,11 @@ impl NodeRegistry {
                     warn!(node_id = %node.node_id, age_secs = age.as_secs(), "node marked offline");
                     node.status = NodeStatus::Offline;
                 }
-            } else if age >= self.config.stale_timeout {
-                if node.status != NodeStatus::Stale {
-                    warn!(node_id = %node.node_id, age_secs = age.as_secs(), "node marked stale");
-                    node.status = NodeStatus::Stale;
-                }
+            } else if age >= self.config.stale_timeout
+                && node.status != NodeStatus::Stale
+            {
+                warn!(node_id = %node.node_id, age_secs = age.as_secs(), "node marked stale");
+                node.status = NodeStatus::Stale;
             }
         }
     }

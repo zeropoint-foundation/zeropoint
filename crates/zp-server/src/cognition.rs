@@ -109,8 +109,8 @@ pub async fn observe_handler(
 
     let source_range = SourceRange::new(
         "api-observe",
-        &format!("req-{}", uuid::Uuid::now_v7()),
-        &format!("req-{}", uuid::Uuid::now_v7()),
+        format!("req-{}", uuid::Uuid::now_v7()),
+        format!("req-{}", uuid::Uuid::now_v7()),
         0,
         0,
     );
