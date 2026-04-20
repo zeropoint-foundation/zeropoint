@@ -29,13 +29,11 @@ impl SovereigntyProvider for FileProvider {
     }
 
     fn save_secret(&self, secret: &[u8; 32]) -> Result<(), KeyError> {
-        let home = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".zeropoint")
-            .join("keys");
-        std::fs::create_dir_all(&home)?;
+        let keys_dir = zp_core::paths::keys_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("ZeroPoint/keys"));
+        std::fs::create_dir_all(&keys_dir)?;
 
-        let path = home.join("genesis.secret");
+        let path = keys_dir.join("genesis.secret");
         std::fs::write(&path, secret)?;
 
         // Restrict permissions on Unix
@@ -51,10 +49,8 @@ impl SovereigntyProvider for FileProvider {
     }
 
     fn load_secret(&self) -> Result<[u8; 32], KeyError> {
-        let path = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".zeropoint")
-            .join("keys")
+        let path = zp_core::paths::keys_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("ZeroPoint/keys"))
             .join("genesis.secret");
 
         let bytes = std::fs::read(&path)?;

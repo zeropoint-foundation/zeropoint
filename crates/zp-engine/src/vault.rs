@@ -5,12 +5,11 @@
 
 use std::path::PathBuf;
 
-/// Default vault file path: `~/.zeropoint/vault.json`
+/// Default vault file path: `~/ZeroPoint/vault.json`
 pub fn default_vault_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".zeropoint")
-        .join("vault.json")
+    zp_core::paths::vault_path().unwrap_or_else(|_| {
+        PathBuf::from(".").join("vault.json")
+    })
 }
 
 /// Result of a bulk vault import operation.

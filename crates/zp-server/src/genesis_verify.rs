@@ -1,8 +1,8 @@
 //! Genesis ceremony integrity verification.
 //!
 //! The Genesis ceremony writes two files:
-//!   * `~/.zeropoint/genesis.json`             — canonical record (unsigned)
-//!   * `~/.zeropoint/genesis_transcript.json`  — signed attestation
+//!   * `~/ZeroPoint/genesis.json`             — canonical record (unsigned)
+//!   * `~/ZeroPoint/genesis_transcript.json`  — signed attestation
 //!
 //! The transcript contains every substantive field from `genesis.json`
 //! plus additional ceremony metadata (platform, provider capabilities,
@@ -96,8 +96,8 @@ impl Verdict {
 }
 
 /// Inspect the Genesis ceremony artifacts under `zeropoint_home` and
-/// return a `Verdict`. `zeropoint_home` is typically
-/// `dirs::home_dir().join(".zeropoint")`.
+/// return a `Verdict`. `zeropoint_home` is typically the result of
+/// `zp_core::paths::home()`.
 pub fn verify(zeropoint_home: &Path) -> Verdict {
     let genesis_path = zeropoint_home.join("genesis.json");
     let transcript_path = zeropoint_home.join("genesis_transcript.json");

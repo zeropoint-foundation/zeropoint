@@ -39,6 +39,7 @@ tracing = { workspace = true }
 zeroize = { workspace = true }
 uuid = { workspace = true }
 zp-receipt = { path = "../zp-receipt" }
+zp-core = { path = "../zp-core" }
 chacha20poly1305 = { workspace = true }
 keyring = { workspace = true, optional = true }
 dirs = "5"

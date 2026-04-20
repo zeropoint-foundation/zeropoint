@@ -54,6 +54,7 @@ use zp_core::{
 use zp_core::governance::{
     ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent,
 };
+use zp_core::paths as zp_paths;
 use zp_observation::{
     candidate_to_observation, event_to_observation, CognitionPipeline, ObservationConfig,
     ObservationStore,
@@ -85,9 +86,8 @@ impl Default for ServerConfig {
             .and_then(|p| p.parse().ok())
             .unwrap_or(3000);
         let bind = std::env::var("ZP_BIND").unwrap_or_else(|_| "127.0.0.1".to_string());
-        let home = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".zeropoint");
+        let home = zp_paths::home()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
         Self {
             bind_addr: bind,
@@ -144,7 +144,7 @@ pub struct GenesisRecord {
 ///
 /// Priority:
 /// 1. **Operator key from keyring** (Genesis→Operator hierarchy) — the correct path.
-///    The signing key is the Operator's Ed25519 key from `~/.zeropoint/keys/`.
+///    The signing key is the Operator's Ed25519 key from `~/ZeroPoint/keys/`.
 /// 2. **Legacy `identity.key` file** — for deployments that predate the hierarchy.
 ///    Loads the raw Ed25519 key and logs a migration notice.
 /// 3. **First run (Genesis)** — no identity exists. Generates a new Ed25519 key
@@ -152,7 +152,7 @@ pub struct GenesisRecord {
 ///    create the full hierarchy and the next server start will use path 1.
 ///
 /// Canon permission check run at server startup. Refuses to boot if:
-/// - `~/.zeropoint` or `~/.zeropoint/keys` is not 0700
+/// - `~/ZeroPoint` or `~/ZeroPoint/keys` is not 0700
 /// - any `*.secret` or `*.secret.enc` file is group- or world-readable
 /// - a plaintext `genesis.secret` or `operator.secret` filename exists
 #[cfg(unix)]
@@ -360,7 +360,7 @@ fn load_or_create_identity(config: &ServerConfig) -> (ServerIdentity, bool) {
     // /onboard HTTP surface can respond. This is NOT Genesis and NOT
     // Operator — it's a disposable transport key, rotated away the moment
     // `zp init` completes and writes genesis.json.
-    std::fs::create_dir_all(&config.home_dir).expect("Failed to create ~/.zeropoint");
+    std::fs::create_dir_all(&config.home_dir).expect("Failed to create ~/ZeroPoint");
     let key = SigningKey::generate(&mut rand::rngs::OsRng);
 
     // Write bootstrap key with restrictive permissions.
@@ -716,8 +716,8 @@ impl AppState {
         let inner = state.0.clone();
         let audit_store_vk = state.0.audit_store.clone();
         std::thread::spawn(move || {
-            let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
-            match zp_keys::Keyring::open(home.join("keys"))
+            let home = zp_paths::home().unwrap_or_default();
+            match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default())
                 .and_then(|kr| zp_keys::resolve_vault_key(&kr))
             {
                 Ok(resolved) => {
@@ -1293,7 +1293,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     ));
 
     // Serve static assets (CSS, JS, narration audio, etc.)
-    // Single authoritative location: $ZP_ASSETS_DIR or ~/.zeropoint/assets/
+    // Single authoritative location: $ZP_ASSETS_DIR or ~/ZeroPoint/assets/
     // In dev: `./zp-dev.sh html` copies source files here for hot reload.
     // In release: compiled-in HTML serves via resolve_html_asset(); static
     //   files (narration MP3s, images) live here permanently.
@@ -3250,8 +3250,8 @@ async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse>
     }
 
     let results = zp_engine::scan::scan_tools(&scan_path);
-    let home = dirs::home_dir().unwrap_or_default().join(".zeropoint");
-    let has_genesis = home.join("genesis.json").exists();
+    let home = zp_paths::home().unwrap_or_default();
+    let has_genesis = zp_paths::home().ok().and_then(|h| Some(h.join("genesis.json").exists())).unwrap_or(false);
 
     // Load vault for status checks (read-only, best-effort)
     let vault_for_status: Option<zp_trust::CredentialVault> = state
@@ -3388,11 +3388,10 @@ async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse>
 
 // ── Tool Lifecycle ──────────────────────────────────────────────────────────
 
-/// PID file directory: ~/.zeropoint/pids/
+/// PID file directory: ~/ZeroPoint/pids/
 fn pid_dir() -> std::path::PathBuf {
-    let dir = dirs::home_dir()
+    let dir = zp_paths::home()
         .unwrap_or_default()
-        .join(".zeropoint")
         .join("pids");
     std::fs::create_dir_all(&dir).ok();
     dir
@@ -3577,7 +3576,7 @@ struct LaunchRequest {
 /// Start a tool process.  Returns immediately with the expected URL and
 /// the kind of process that was started so the frontend can poll.
 ///
-/// Output is captured to `~/.zeropoint/logs/<tool>.log` so the frontend
+/// Output is captured to `~/ZeroPoint/logs/<tool>.log` so the frontend
 /// can fetch diagnostics via `/api/v1/tools/log?name=<tool>` on failure.
 async fn tools_launch_handler(
     State(state): State<AppState>,
@@ -3689,10 +3688,9 @@ async fn tools_launch_handler(
         }
     };
 
-    // Log file for diagnostics: ~/.zeropoint/logs/<tool>.log
-    let log_dir = dirs::home_dir()
+    // Log file for diagnostics: ~/ZeroPoint/logs/<tool>.log
+    let log_dir = zp_paths::home()
         .unwrap_or_default()
-        .join(".zeropoint")
         .join("logs");
     std::fs::create_dir_all(&log_dir).ok();
     let log_path = log_dir.join(format!("{}.log", req.name));
@@ -3968,9 +3966,8 @@ async fn tools_log_handler(
         });
     }
 
-    let log_path = dirs::home_dir()
+    let log_path = zp_paths::home()
         .unwrap_or_default()
-        .join(".zeropoint")
         .join("logs")
         .join(format!("{}.log", name));
 
@@ -4537,7 +4534,7 @@ const ONBOARD_HTML_FALLBACK: &str = include_str!("../assets/onboard.html");
 const SPEAK_HTML_FALLBACK: &str = include_str!("../assets/speak.html");
 const ECOSYSTEM_HTML_FALLBACK: &str = include_str!("../assets/ecosystem.html");
 
-// Embedded CSS and JS — bootstrapped to ~/.zeropoint/assets/ on first run
+// Embedded CSS and JS — bootstrapped to ~/ZeroPoint/assets/ on first run
 // so the ServeDir handler can serve them.  This means `cargo build && zp serve`
 // works out of the box with no manual `cp` step.
 const ONBOARD_CSS_EMBEDDED: &str = include_str!("../assets/onboard.css");
@@ -4642,18 +4639,18 @@ fn bootstrap_assets(assets_dir: &std::path::Path) {
     }
 }
 
-/// Resolve an HTML asset: check $ZP_ASSETS_DIR or ~/.zeropoint/assets/{name}
+/// Resolve an HTML asset: check $ZP_ASSETS_DIR or ~/ZeroPoint/assets/{name}
 /// first (override), then fall back to the compiled-in copy.
 ///
 /// Two-tier system:
 ///   1. Override dir  — hot-reload via `./zp-dev.sh html`, or persistent files
 ///   2. Compiled-in   — always available, matches last Rust build
 fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
-    // 1. Override: $ZP_ASSETS_DIR or ~/.zeropoint/assets/<name>
+    // 1. Override: $ZP_ASSETS_DIR or ~/ZeroPoint/assets/<name>
     let override_dir = std::env::var("ZP_ASSETS_DIR")
         .map(std::path::PathBuf::from)
         .ok()
-        .or_else(|| dirs::home_dir().map(|h| h.join(".zeropoint").join("assets")));
+        .or_else(|| zp_paths::assets_dir().ok());
 
     if let Some(dir) = override_dir {
         let path = dir.join(name);
@@ -4669,9 +4666,8 @@ fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
 /// Root handler: redirect to /onboard if no genesis ceremony has been completed,
 /// otherwise serve the dashboard.
 async fn root_handler(State(state): State<AppState>) -> Response {
-    let genesis_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint")
+    let genesis_path = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .join("genesis.json");
 
     // Check for a complete genesis record (one with an operator field from onboarding)
@@ -4745,8 +4741,10 @@ async fn onboard_page_handler(
     Query(query): Query<OnboardQuery>,
 ) -> Response {
     // Post-genesis: redirect to dashboard
-    let home = dirs::home_dir().unwrap_or_default();
-    let genesis_path = home.join(".zeropoint").join("genesis.json");
+    let genesis_path = zp_paths::home()
+        .ok()
+        .and_then(|h| Some(h.join("genesis.json")))
+        .unwrap_or_default();
     if genesis_path.exists() {
         return axum::response::Redirect::to("/dashboard").into_response();
     }
@@ -4859,10 +4857,10 @@ async fn ecosystem_page_handler(State(state): State<AppState>) -> Response {
 // ============================================================================
 
 async fn genesis_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let home = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint")
+    let genesis_path = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .join("genesis.json");
+    let home = genesis_path.clone();
 
     if let Ok(contents) = std::fs::read_to_string(&home) {
         // Return raw JSON — supports both server-genesis and onboard-genesis formats

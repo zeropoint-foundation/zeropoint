@@ -14,6 +14,7 @@ pub mod epistemic;
 pub mod error;
 pub mod governance;
 pub mod internal_token;
+pub mod paths;
 pub mod policy;
 pub mod provider;
 pub mod receipt_emission;

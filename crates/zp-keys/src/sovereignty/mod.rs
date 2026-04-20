@@ -347,7 +347,7 @@ pub struct ProviderCapability {
 #[derive(Debug)]
 pub struct EnrollmentResult {
     /// Opaque enrollment data to persist (e.g., face template hash, device ID).
-    /// Stored in `~/.zeropoint/sovereignty/enrollment.json`.
+    /// Stored in `~/ZeroPoint/sovereignty/enrollment.json`.
     pub enrollment_data: Vec<u8>,
     /// Human-readable summary for the terminal.
     pub summary: String,

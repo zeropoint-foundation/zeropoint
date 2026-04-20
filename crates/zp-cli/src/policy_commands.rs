@@ -2,7 +2,7 @@
 //!
 //! Provides CLI operations for loading, listing, enabling/disabling,
 //! and inspecting WASM policy modules. Also supports auto-discovery
-//! from `~/.zeropoint/policies/`.
+//! from `~/ZeroPoint/policies/`.
 
 use std::path::PathBuf;
 
@@ -127,7 +127,7 @@ pub fn list() -> i32 {
 
     if !policy_dir.exists() {
         eprintln!("  {DIM}No policy directory found.{NC}");
-        eprintln!("  {DIM}Create ~/.zeropoint/policies/ and add .wasm files,{NC}");
+        eprintln!("  {DIM}Create ~/ZeroPoint/policies/ and add .wasm files,{NC}");
         eprintln!("  {DIM}or use: zp policy load <file.wasm>{NC}");
         eprintln!();
         return 0;
@@ -226,7 +226,7 @@ pub fn status() -> i32 {
     eprintln!();
 
     // Report WASM modules
-    eprintln!("  {BOLD}WASM Policy Modules{NC} {DIM}(~/.zeropoint/policies/){NC}");
+    eprintln!("  {BOLD}WASM Policy Modules{NC} {DIM}(~/ZeroPoint/policies/){NC}");
 
     if !policy_dir.exists() {
         eprintln!("  {DIM}No policy directory configured{NC}");

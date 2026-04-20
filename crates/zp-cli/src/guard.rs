@@ -748,10 +748,9 @@ pub fn run(config: &GuardConfig, command: &str) -> i32 {
 
 /// Save a receipt to the local guard receipts directory.
 fn save_receipt(receipt: &zp_receipt::Receipt) -> std::io::Result<()> {
-    // Try ~/.zeropoint/guard-receipts/
-    let receipts_dir = dirs_next_lite()
-        .map(|h| h.join(".zeropoint").join("guard-receipts"))
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "No home directory"))?;
+    // Use ~/ZeroPoint/guard-receipts/
+    let receipts_dir = zp_core::paths::guard_receipts_dir()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e.to_string()))?;
 
     std::fs::create_dir_all(&receipts_dir)?;
 
@@ -770,12 +769,6 @@ fn save_receipt(receipt: &zp_receipt::Receipt) -> std::io::Result<()> {
     std::fs::write(filepath, json)
 }
 
-/// Minimal home directory resolution (avoids heavy deps like `dirs`).
-fn dirs_next_lite() -> Option<std::path::PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(std::path::PathBuf::from)
-}
 
 // ============================================================================
 // Interactive Approval

@@ -8,6 +8,7 @@
 //!    If it says "trezor", the secret is actually gated by a Trezor.
 
 use super::{OnboardAction, OnboardEvent, OnboardState};
+use zp_core::paths as zp_paths;
 
 /// Typed parameters for the genesis ceremony action.
 /// Phase 2.8 (P2-4): replaces loose `.get().and_then()` extraction.
@@ -116,9 +117,8 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     }
 
     // ── Step 4: Persist keys ──────────────────────────────────────
-    let home = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint");
+    let home = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     // Check if already initialized (a complete genesis record with operator field)
     let has_genesis = if let Ok(contents) = std::fs::read_to_string(home.join("genesis.json")) {
@@ -135,7 +135,7 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
             "⚠ ZeroPoint is already initialized.",
         ));
         events.push(OnboardEvent::terminal(
-            "  Remove ~/.zeropoint/ to re-initialize.",
+            "  Remove ~/ZeroPoint/ to re-initialize.",
         ));
 
         if let Ok(genesis_json) = std::fs::read_to_string(home.join("genesis.json")) {
@@ -408,7 +408,7 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
 
     // Transcript write is now FATAL and atomic. A failure here means the
     // ceremony did not complete — returning early leaves the keyring and
-    // provider in whatever state they reached, but ~/.zeropoint/genesis.json
+    // provider in whatever state they reached, but ~/ZeroPoint/genesis.json
     // does not exist, so subsequent `zp serve` will offer re-onboarding.
     if let Err(e) = atomic_write_json(
         &home.join("genesis_transcript.json"),
@@ -521,11 +521,10 @@ pub async fn handle_vault_check(state: &mut OnboardState) -> Vec<OnboardEvent> {
 
     events.push(OnboardEvent::terminal("Verifying vault key derivation..."));
 
-    let home = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint");
+    let home = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
-    let keyring = match zp_keys::Keyring::open(home.join("keys")) {
+    let keyring = match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default()) {
         Ok(k) => k,
         Err(e) => {
             events.push(OnboardEvent::error(&format!("Cannot open keyring: {}", e)));
@@ -608,9 +607,8 @@ pub async fn handle_sovereignty_upgrade(
     )));
 
     // ── Step 1: Load current genesis record ──────────────────────
-    let home = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".zeropoint");
+    let home = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let genesis_path = home.join("genesis.json");
     let genesis_json = match std::fs::read_to_string(&genesis_path) {

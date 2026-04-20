@@ -19,62 +19,19 @@ use zp_policy::GovernanceGate;
 
 /// Resolve the ZeroPoint home directory.
 ///
-/// Resolution chain (first match wins):
-///   1. `ZP_HOME` env var         — explicit override (CI, Docker, production)
-///   2. `zeropoint.toml` key_path — project-level config (walks up from cwd)
-///   3. `~/.zeropoint/`           — sensible default for local dev
+/// Delegates to `zp_core::paths::home()` which implements the resolution chain.
+/// Returns `~/ZeroPoint/` by default, or `ZP_HOME` env override.
 ///
 /// Examples:
 ///   ZP_HOME=/opt/zeropoint zp keys list   → /opt/zeropoint
-///   (in project with toml key_path)       → whatever toml says
-///   (default)                             → ~/.zeropoint
+///   (default)                             → ~/ZeroPoint
 pub fn resolve_zp_home() -> PathBuf {
-    // 1. Explicit env override
-    if let Some(zp_home) = std::env::var_os("ZP_HOME") {
-        return PathBuf::from(zp_home);
-    }
-
-    // 2. Walk up from cwd looking for zeropoint.toml with key_path
-    if let Ok(cwd) = std::env::current_dir() {
-        let mut dir = cwd.as_path();
-        loop {
-            let toml_path = dir.join("zeropoint.toml");
-            if toml_path.exists() {
-                if let Ok(contents) = std::fs::read_to_string(&toml_path) {
-                    // Simple parse — look for key_path under [identity]
-                    if let Some(kp) = parse_key_path(&contents) {
-                        let expanded = expand_tilde(&kp);
-                        if expanded.is_absolute() {
-                            // Absolute paths are parent of "keys/"
-                            // key_path points to the keys dir, we want its parent
-                            if let Some(parent) = expanded.parent() {
-                                return parent.to_path_buf();
-                            }
-                            return expanded;
-                        } else {
-                            // Relative to the toml's directory
-                            let resolved = dir.join(&expanded);
-                            if let Some(parent) = resolved.parent() {
-                                return parent.to_path_buf();
-                            }
-                            return resolved;
-                        }
-                    }
-                }
-                break; // Found toml but no key_path — fall through to default
-            }
-            match dir.parent() {
-                Some(p) => dir = p,
-                None => break,
-            }
-        }
-    }
-
-    // 3. Default: ~/.zeropoint/
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".zeropoint")
+    zp_core::paths::home().unwrap_or_else(|_| {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("ZeroPoint")
+    })
 }
 
 /// Open a keyring using the resolved ZP home.
@@ -82,37 +39,6 @@ pub fn open_keyring() -> Result<Keyring, zp_keys::error::KeyError> {
     Keyring::open(resolve_zp_home().join("keys"))
 }
 
-/// Expand `~` at the start of a path to $HOME.
-fn expand_tilde(path: &str) -> PathBuf {
-    if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
-    }
-    PathBuf::from(path)
-}
-
-/// Extract key_path value from zeropoint.toml content.
-/// Simple line-based parse — no toml crate dependency needed.
-fn parse_key_path(contents: &str) -> Option<String> {
-    let mut in_identity = false;
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            in_identity = trimmed == "[identity]";
-            continue;
-        }
-        if in_identity && trimmed.starts_with("key_path") {
-            if let Some(val) = trimmed.split('=').nth(1) {
-                let val = val.trim().trim_matches('"').trim_matches('\'');
-                if !val.is_empty() {
-                    return Some(val.to_string());
-                }
-            }
-        }
-    }
-    None
-}
 
 /// List all registered skills
 #[allow(dead_code)]
@@ -177,7 +103,9 @@ pub async fn audit_show(_pipeline: &Pipeline, conversation_id: &str) -> Result<(
 
 /// Show recent audit log entries from the real AuditStore.
 pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str>) -> Result<()> {
-    let db_path = resolve_zp_home().join("data").join("audit.db");
+    let db_path = zp_core::paths::data_dir()
+        .map_err(|e| anyhow::anyhow!("Failed to resolve data directory: {}", e))?
+        .join("audit.db");
 
     if !db_path.exists() {
         eprintln!();
@@ -247,7 +175,9 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
 
 /// Verify audit chain integrity using the real AuditStore.
 pub async fn audit_verify(_pipeline: &Pipeline) -> Result<()> {
-    let db_path = resolve_zp_home().join("data").join("audit.db");
+    let db_path = zp_core::paths::data_dir()
+        .map_err(|e| anyhow::anyhow!("Failed to resolve data directory: {}", e))?
+        .join("audit.db");
 
     if !db_path.exists() {
         eprintln!();
@@ -381,7 +311,7 @@ pub fn keys_issue(name: &str, capabilities: Option<&str>, expires_days: u64) -> 
         eprintln!("  Failed to save agent key: {}", e);
         return 1;
     }
-    eprintln!("\x1b[32m✓\x1b[0m .zeropoint/keys/agents/{}.json", name);
+    eprintln!("\x1b[32m✓\x1b[0m ZeroPoint/keys/agents/{}.json", name);
 
     let pub_hex = hex::encode(agent.public_key());
     eprintln!();
@@ -984,7 +914,9 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     };
 
     // Open the audit store first so we can sync the chain head
-    let db_path = resolve_zp_home().join("data").join("audit.db");
+    let db_path = zp_core::paths::data_dir()
+        .map_err(|e| anyhow::anyhow!("Failed to resolve data directory: {}", e))?
+        .join("audit.db");
     if let Some(parent) = db_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -1013,7 +945,8 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     }
 
     // Check for custom WASM gates (informational — real WASM eval is TODO)
-    let policies_dir = resolve_zp_home().join("policies");
+    let policies_dir = zp_core::paths::policies_dir()
+        .map_err(|e| anyhow::anyhow!("Failed to resolve policies directory: {}", e))?;
     if policies_dir.exists() {
         if let Ok(entries) = std::fs::read_dir(&policies_dir) {
             for entry in entries.flatten() {
@@ -1087,7 +1020,8 @@ pub fn gate_list() -> i32 {
     eprintln!();
 
     // Custom WASM gates
-    let policies_dir = resolve_zp_home().join("policies");
+    let policies_dir = zp_core::paths::policies_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut custom_count = 0;
     if policies_dir.exists() {
         if let Ok(entries) = std::fs::read_dir(&policies_dir) {
