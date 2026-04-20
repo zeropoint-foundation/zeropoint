@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — Live Build Dashboard</title>
+<meta name="description" content="Live build dashboard tracking v3 design spec implementation across ZeroPoint's five security planes.">
+<style>
+:root {
+  --bg: #0a0a0c;
+  --bg-elevated: #111116;
+  --bg-subtle: #18181f;
+  --text: #e8e6e3;
+  --text-muted: #8a8a8e;
+  --text-dim: #5a5a5e;
+  --accent: #7eb8da;
+  --accent-dim: #4a7a96;
+  --green: #22c55e;
+  --green-glow: rgba(34, 197, 94, 0.12);
+  --green-border: rgba(34, 197, 94, 0.25);
+  --yellow: #eab308;
+  --yellow-glow: rgba(234, 179, 8, 0.15);
+  --yellow-border: rgba(234, 179, 8, 0.3);
+  --blue: #60a5fa;
+  --red: #f87171;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'IBM Plex Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ── Pulse animation for active items ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--yellow); }
+  50% { opacity: 0.4; box-shadow: 0 0 8px var(--yellow), 0 0 16px rgba(234, 179, 8, 0.3); }
+}
+@keyframes pulse-row {
+  0%, 100% { background: transparent; }
+  50% { background: var(--yellow-glow); }
+}
+@keyframes glow-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Nav ── */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--bg-subtle);
+}
+nav {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nav-logo {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+.nav-logo span { color: var(--accent); }
+.nav-badge {
+  font-size: 0.6rem;
+  background: var(--green);
+  color: #000;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+/* ── Container ── */
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  color: var(--text);
+  margin-bottom: 0.15rem;
+  font-weight: 600;
+}
+.subtitle {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 1.25rem;
+}
+
+/* ── Build Progress ── */
+.build-progress {
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-subtle);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.build-progress h2 {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.phase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.phase-card {
+  background: var(--bg);
+  border: 1px solid var(--bg-subtle);
+  border-radius: 6px;
+  padding: 0.75rem;
+  position: relative;
+  overflow: hidden;
+}
+.phase-card.complete {
+  border-color: var(--green-border);
+  background: linear-gradient(135deg, var(--bg) 0%, var(--green-glow) 100%);
+}
+.phase-card.in-progress {
+  border-color: var(--yellow-border);
+  animation: pulse-row 3s ease-in-out infinite;
+}
+.phase-card .phase-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+.phase-card .phase-items {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+.phase-bar {
+  height: 3px;
+  background: var(--bg-subtle);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.phase-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+.phase-card.complete .phase-bar-fill { background: var(--green); }
+.phase-card.in-progress .phase-bar-fill { background: var(--yellow); }
+.phase-card.pending .phase-bar-fill { background: var(--blue); width: 0% !important; }
+.phase-pct {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+  text-align: right;
+}
+.phase-card.complete .phase-pct { color: var(--green); }
+.phase-card.in-progress .phase-pct { color: var(--yellow); }
+
+/* ── Stats Row ── */
+.stats {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.stat-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-subtle);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  min-width: 100px;
+}
+.stat-box .stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.stat-box .stat-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 0.1rem;
+}
+.stat-box.highlight .stat-value { color: var(--green); }
+
+/* ── Legend ── */
+.legend {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.shipped { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+.dot.active { background: var(--yellow); animation: pulse-dot 2s ease-in-out infinite; }
+.dot.roadmap { background: var(--blue); opacity: 0.6; }
+
+/* ── Filter Bar ── */
+.filter-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--bg-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.filter-btn:hover { border-color: var(--accent-dim); color: var(--text); }
+.filter-btn.active-filter { border-color: var(--accent); color: var(--accent); background: rgba(126,184,218,0.08); }
+
+/* ── Tree ── */
+.tree ul { margin-left: 20px; border-left: 1px solid var(--bg-subtle); }
+.tree li {
+  list-style: none;
+  position: relative;
+  padding: 2px 0 2px 16px;
+}
+.tree li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 12px;
+  border-top: 1px solid var(--bg-subtle);
+}
+.node {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 0.78rem;
+}
+.node:hover { background: var(--bg-subtle); }
+
+/* Shipped nodes get a subtle green treatment */
+.node.node-shipped {
+  border-left: 2px solid var(--green-border);
+  padding-left: 6px;
+}
+.node.node-shipped .label { color: var(--green); opacity: 0.85; }
+
+/* Active nodes pulse */
+.node.node-active {
+  border-left: 2px solid var(--yellow-border);
+  padding-left: 6px;
+  animation: pulse-row 3s ease-in-out infinite;
+}
+.node.node-active .label { color: var(--yellow); }
+
+/* Roadmap nodes are dimmed */
+.node.node-roadmap .label { color: var(--text-dim); }
+
+.node .indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.node .indicator.shipped { background: var(--green); box-shadow: 0 0 4px rgba(34,197,94,0.5); }
+.node .indicator.active { background: var(--yellow); animation: pulse-dot 2s ease-in-out infinite; }
+.node .indicator.roadmap { background: var(--blue); opacity: 0.5; }
+.node .label { color: var(--text); }
+.node .detail {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  font-style: italic;
+}
+.node .phase-tag {
+  font-size: 0.55rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.node .phase-tag.done { background: rgba(34,197,94,0.15); color: var(--green); }
+.node .phase-tag.wip { background: rgba(234,179,8,0.15); color: var(--yellow); }
+
+.plane-header {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0.5rem 0 0.25rem 0;
+  margin-top: 0.75rem;
+  border-bottom: 1px solid var(--bg-subtle);
+  margin-bottom: 0.25rem;
+  cursor: pointer;
+  user-select: none;
+}
+.plane-header .plane-tag {
+  font-size: 0.62rem;
+  font-weight: 400;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+}
+.plane-header .plane-tag.pathway { background: #1a2e1a; color: #4ade80; }
+.plane-header .plane-tag.claim { background: #1a1a2e; color: #60a5fa; }
+.plane-header .plane-tag.meaning { background: #2e2a1a; color: #fbbf24; }
+.plane-header .plane-tag.cognition { background: #2e1a2e; color: #c084fc; }
+.plane-header .plane-tag.compromise { background: #2e1a1a; color: #f87171; }
+.plane-header .plane-tag.infra { background: #1a2020; color: #5eead4; }
+.plane-header .plane-progress {
+  float: right;
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.collapsed > ul { display: none; }
+.toggle {
+  display: inline-block;
+  width: 14px;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ── Footer ── */
+.footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--bg-subtle);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .container { padding: 1rem; }
+  nav { padding: 0.75rem 1rem; }
+  .phase-grid { grid-template-columns: 1fr; }
+  .stats { gap: 0.5rem; }
+  .stat-box { min-width: 75px; padding: 0.4rem 0.6rem; }
+  .stat-box .stat-value { font-size: 1.1rem; }
+  h1 { font-size: 1.15rem; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <div style="display:flex;align-items:center;">
+      <a href="/" class="nav-logo"><span>zero</span>point</a>
+      <span class="nav-badge">Live Dashboard</span>
+    </div>
+    <div class="nav-right">
+      <span class="live-dot"></span>
+      <span id="timestamp"></span>
+    </div>
+  </nav>
+</header>
+
+<div class="container">
+
+<h1>v3 Build Progress</h1>
+<div class="subtitle">Shannon pentest remediation &amp; claim formalization &mdash; live tracking</div>
+
+<!-- ── Build Phase Progress ── -->
+<div class="build-progress">
+  <h2>Build Phases</h2>
+  <div class="phase-grid" id="phases"></div>
+</div>
+
+<!-- ── Stats ── -->
+<div class="stats" id="stats-row"></div>
+
+<!-- ── Legend ── -->
+<div class="legend">
+  <div class="legend-item"><div class="dot shipped"></div> Shipped &amp; tested</div>
+  <div class="legend-item"><div class="dot active"></div> Active work</div>
+  <div class="legend-item"><div class="dot roadmap"></div> Roadmap</div>
+</div>
+
+<!-- ── Filter ── -->
+<div class="filter-bar" id="filters"></div>
+
+<!-- ── Tree ── -->
+<div class="tree" id="tree"></div>
+
+<div class="footer">
+  <a href="/">zeropoint.global</a> &mdash;
+  v3 Design Spec Build &mdash;
+  Updated <span id="footer-ts"></span>
+</div>
+
+</div>
+
+<script>
+// ── Build phases with completion data ──
+const phases = [
+  {
+    name: "Phase 2.5: Pathway Hardening",
+    status: "complete",
+    items: [
+      { id: "P2-1", label: "Command execution allowlist", done: true },
+      { id: "P2-2", label: "Path canonicalization", done: true },
+      { id: "P2-3", label: "Internal zero-trust boundaries", done: true },
+      { id: "P2-6", label: "Wire run_rotate into CLI", done: true },
+    ]
+  },
+  {
+    name: "Phase 2.6: Claim Formalization",
+    status: "in-progress",
+    items: [
+      { id: "C3-1", label: "Per-type receipt validation", done: true },
+      { id: "C3-2", label: "Supersession & revocation", done: true },
+      { id: "C3-3", label: "Typed claim emission audit", done: false },
+    ]
+  },
+  {
+    name: "Phase 2.7: Meaning Layer",
+    status: "pending",
+    items: [
+      { id: "M4-1", label: "Event provenance tracking", done: true },
+      { id: "M4-3", label: "CapabilityGrant self-issuance prevention", done: true },
+      { id: "M4-2", label: "Governance\u2192memory bridge", done: true },
+    ]
+  },
+  {
+    name: "Phase 2.8: Pathway Polish",
+    status: "pending",
+    items: [
+      { id: "P3-1", label: "Argument-level enforcement", done: false },
+      { id: "P3-2", label: "Pentest regression CI", done: false },
+    ]
+  },
+];
+
+// ── Architecture tree data (updated statuses) ──
+const data = [
+  { label: "PATHWAY PLANE", plane: "pathway", tag: "Engineering Enforcement", children: [
+    { label: "Authentication & Session Management", status: "shipped", children: [
+      { label: "HMAC-SHA256 session tokens with constant-time comparison", status: "shipped" },
+      { label: "Middleware-enforced auth on all sensitive endpoints", status: "shipped" },
+      { label: "Per-IP and per-endpoint rate limiting", status: "shipped" },
+      { label: "TLS-enforced cookies (HttpOnly, SameSite, Secure)", status: "shipped" },
+      { label: "Session expiry with stale vs missing distinction", status: "shipped" },
+      { label: "Canon permission enforcement at startup", status: "shipped" },
+    ]},
+    { label: "Credential Vault", status: "shipped", children: [
+      { label: "Tiered ontology (Providers, Tools, System, Ephemeral)", status: "shipped" },
+      { label: "Pointer-based credential sharing (VaultEntry::Ref)", status: "shipped" },
+      { label: "BLAKE3 per-tier key derivation", status: "shipped" },
+      { label: "Scoped vault access with derived encryption", status: "shipped" },
+      { label: "Zero plaintext on disk \u2014 vault is sole authority", status: "shipped" },
+      { label: "Credential rotation with ref-graph verification", status: "shipped" },
+      { label: "Policy-gated credential injection at host boundary", status: "shipped" },
+      { label: "MVC capability resolver writes directly to vault", status: "shipped" },
+    ]},
+    { label: "Command Execution Sandbox", status: "shipped", phase: "P2-1", children: [
+      { label: "Program-level allowlist with per-program argument validators", status: "shipped", phase: "P2-1" },
+      { label: "ValidatedCommand type \u2014 constructed only by validate_command()", status: "shipped", phase: "P2-1" },
+      { label: "Argv-based execution via shlex (no shell interpretation)", status: "shipped", phase: "P2-1" },
+      { label: "Environment isolation on spawned processes", status: "shipped" },
+    ]},
+    { label: "Boundary Enforcement", status: "shipped", phase: "P2-2/P2-3", children: [
+      { label: "Path canonicalization with safe_path() at all file boundaries", status: "shipped", phase: "P2-2" },
+      { label: "System path rejection (/etc, /proc, /sys)", status: "shipped", phase: "P2-2" },
+      { label: "Internal capability tokens (BLAKE3 HMAC, 30s TTL, nonce replay)", status: "shipped", phase: "P2-3" },
+      { label: "Scoped action+target token verification", status: "shipped", phase: "P2-3" },
+      { label: "Typed schema validation at every API endpoint", status: "shipped" },
+      { label: "Canonical serialization before cryptographic signing", status: "shipped" },
+    ]},
+    { label: "Configure Engine", status: "shipped", children: [
+      { label: "Semantic pattern matching for env variable resolution", status: "shipped" },
+      { label: "Provider catalog with capability-based tool matching", status: "shipped" },
+      { label: "Tool discovery and manifest system", status: "shipped" },
+      { label: "Auto-configure pipeline for multi-tool deployments", status: "shipped" },
+      { label: "Preflight diagnostics with remediation guidance", status: "shipped" },
+      { label: "Credential rotation via run_rotate", status: "shipped", phase: "P2-6" },
+    ]},
+    { label: "Content Security", status: "shipped", children: [
+      { label: "Full CSP (no inline scripts, no unsafe-eval)", status: "shipped" },
+      { label: "Vendored dependencies (no external CDN loads)", status: "shipped" },
+      { label: "Security headers (X-Frame-Options, Referrer-Policy)", status: "shipped" },
+    ]},
+    { label: "WASM Sandbox", status: "shipped", children: [
+      { label: "Wasmtime runtime with fuel metering", status: "shipped" },
+      { label: "Polyglot sandboxed execution", status: "shipped" },
+      { label: "Credentials injected at host boundary, never in WASM memory", status: "shipped" },
+    ]},
+  ]},
+
+  { label: "CLAIM PLANE", plane: "claim", tag: "Cryptographic Proof", children: [
+    { label: "Receipt System", status: "shipped", children: [
+      { label: "Typed receipts with 14 claim categories", status: "shipped" },
+      { label: "Claim semantics (AuthorshipProof, TruthAssertion, AuthorizationGrant)", status: "shipped" },
+      { label: "Builder pattern with Ed25519 signing", status: "shipped" },
+      { label: "BLAKE3 content hashing", status: "shipped" },
+      { label: "Receipt chaining with chain metadata", status: "shipped" },
+      { label: "Cryptographic verification", status: "shipped" },
+      { label: "Epoch compaction for long-lived chains", status: "shipped" },
+      { label: "OpenTelemetry export", status: "shipped" },
+    ]},
+    { label: "Claim Validation & Lifecycle", status: "active", phase: "C3", children: [
+      { label: "Per-type validation rules (semantics, TTL, metadata)", status: "shipped", phase: "C3-1" },
+      { label: "try_finalize() with strict validation, finalize() with warnings", status: "shipped", phase: "C3-1" },
+      { label: "Receipt supersession (forward + backward references)", status: "shipped", phase: "C3-2" },
+      { label: "Receipt revocation linkage with revoke() builder", status: "shipped", phase: "C3-2" },
+      { label: "RevocationIndex (in-memory, rebuilt from chain)", status: "shipped", phase: "C3-2" },
+      { label: "Typed claim emission audit across code paths", status: "shipped", phase: "C3-3" },
+    ]},
+    { label: "Key Hierarchy", status: "shipped", children: [
+      { label: "Ed25519 three-tier chain (Genesis \u2192 Operator \u2192 Agent)", status: "shipped" },
+      { label: "Certificate chain verification with 6 invariants", status: "shipped" },
+      { label: "Vault key derivation from Genesis via BLAKE3", status: "shipped" },
+      { label: "OS credential store integration", status: "shipped" },
+      { label: "BIP-39 mnemonic encoding for key backup", status: "shipped" },
+    ]},
+    { label: "Audit Trail", status: "shipped", children: [
+      { label: "Hash-chained append-only audit log", status: "shipped" },
+      { label: "Always-on at all trust tiers", status: "shipped" },
+      { label: "Tiered signing (hash-only \u2192 local key \u2192 genesis chain)", status: "shipped" },
+      { label: "Receipt gate \u2014 no action without audit entry", status: "shipped" },
+    ]},
+  ]},
+
+  { label: "MEANING PLANE", plane: "meaning", tag: "Semantic Governance", children: [
+    { label: "Governance Events", status: "shipped", children: [
+      { label: "35 typed event variants across 4 phases", status: "shipped" },
+      { label: "Graduated policy decisions (Allow/Block/Warn/Review/Sanitize)", status: "shipped" },
+      { label: "Capability grants with scope matching", status: "shipped" },
+      { label: "Delegation chains with 8 structural invariants", status: "shipped" },
+    ]},
+    { label: "Policy Engine", status: "shipped", children: [
+      { label: "Constitutional rules compiled into binary", status: "shipped" },
+      { label: "WASM policy module runtime", status: "active" },
+      { label: "Governance gate pipeline (Guard \u2192 Policy \u2192 Execute \u2192 Audit)", status: "shipped" },
+      { label: "Receipt-gated execution", status: "shipped" },
+      { label: "Declarative policy DSL", status: "roadmap" },
+    ]},
+    { label: "Event Provenance & Authority", status: "roadmap", phase: "M4", children: [
+      { label: "Creator and origin tracking on all governance events", status: "shipped", phase: "M4-1" },
+      { label: "Authority chain linkage for capability grants", status: "shipped", phase: "M4-1" },
+      { label: "CapabilityGrant self-issuance prevention", status: "shipped", phase: "M4-3" },
+      { label: "Governance event \u2192 observation pipeline bridge", status: "shipped", phase: "M4-2" },
+    ]},
+    { label: "Trust Tiers", status: "shipped", children: [
+      { label: "Tier 0: Permissive \u2014 install and run, zero ceremony", status: "shipped" },
+      { label: "Tier 1: Signed \u2014 local key, tamper detection", status: "shipped" },
+      { label: "Tier 2: Genesis \u2014 full signing chain with human root", status: "shipped" },
+      { label: "Biometric sovereignty (Touch ID / Secure Enclave)", status: "active" },
+    ]},
+  ]},
+
+  { label: "COGNITION PLANE", plane: "cognition", tag: "Machine Thought Lifecycle", children: [
+    { label: "Observation Pipeline", status: "shipped", children: [
+      { label: "Receipt-backed observations with priority classification", status: "shipped" },
+      { label: "Observer with structured output parsing", status: "shipped" },
+      { label: "Reflector (merge, upgrade, downgrade, complete, drop)", status: "shipped" },
+      { label: "Source range verification for observation provenance", status: "shipped" },
+      { label: "Heuristic fallback for non-LLM observation", status: "shipped" },
+    ]},
+    { label: "Memory Promotion Engine", status: "shipped", children: [
+      { label: "Six-stage lifecycle (Transient \u2192 IdentityBearing)", status: "shipped" },
+      { label: "Five-gate promotion logic with configurable thresholds", status: "shipped" },
+      { label: "Reinforcement tracking", status: "shipped" },
+      { label: "Receipt-backed promotion evidence", status: "shipped" },
+    ]},
+    { label: "Memory Quarantine", status: "shipped", children: [
+      { label: "Quarantine with source-indexed bulk operations", status: "shipped" },
+      { label: "Reinstatement workflow", status: "shipped" },
+      { label: "Receipt generation on quarantine actions", status: "shipped" },
+    ]},
+    { label: "Lifecycle Management", status: "shipped", children: [
+      { label: "Stage-specific expiry rules", status: "shipped" },
+      { label: "Review-due detection", status: "shipped" },
+      { label: "Batch expiry sweep", status: "shipped" },
+      { label: "Demotion and reaffirmation", status: "shipped" },
+    ]},
+    { label: "Human Review Gate", status: "active", children: [
+      { label: "Pending promotion queue for high-stage transitions", status: "active" },
+      { label: "CLI review surface", status: "active" },
+      { label: "Web dashboard review surface", status: "roadmap" },
+    ]},
+    { label: "Learning Loop", status: "shipped", children: [
+      { label: "Episode recording from interactions", status: "shipped" },
+      { label: "Pattern detection across episodes", status: "shipped" },
+      { label: "Skill candidate extraction and proposal", status: "shipped" },
+      { label: "Human-approve gate for skill deployment", status: "shipped" },
+    ]},
+    { label: "Skill Registry", status: "shipped", children: [
+      { label: "Skill matching and selection", status: "shipped" },
+      { label: "Versioning with provenance metadata", status: "shipped" },
+      { label: "Origin tracking (built-in, extracted, community, enterprise)", status: "shipped" },
+    ]},
+    { label: "LLM Provider Pool", status: "shipped", children: [
+      { label: "Multi-provider abstraction (local + cloud)", status: "shipped" },
+      { label: "Risk-based model routing", status: "shipped" },
+      { label: "Policy-driven model selection", status: "shipped" },
+    ]},
+    { label: "Narrative Synthesis", status: "roadmap", children: [
+      { label: "Identity-bearing narrative construction from promoted memories", status: "roadmap" },
+      { label: "Cross-context memory merging with receipt requirements", status: "roadmap" },
+    ]},
+  ]},
+
+  { label: "COMPROMISE PLANE", plane: "compromise", tag: "Recovery & Containment", children: [
+    { label: "Key Management", status: "shipped", children: [
+      { label: "Key rotation with parent co-signing", status: "shipped" },
+      { label: "Rotation certificate persistence", status: "shipped" },
+      { label: "BIP-39 mnemonic recovery (24 words \u2192 full system restore)", status: "shipped" },
+      { label: "Credential vault rotation verification", status: "shipped" },
+    ]},
+    { label: "Blast Radius Analysis", status: "active", children: [
+      { label: "Compute affected trust relationships from compromised key", status: "active" },
+      { label: "Automated response actions per affected element", status: "active" },
+      { label: "Compromise-triggered memory quarantine", status: "active" },
+    ]},
+    { label: "Receipt-Based Reconstitution", status: "active", children: [
+      { label: "State derived from receipt chain, never stored mutably", status: "shipped", detail: "Design principle" },
+      { label: "System state reconstruction from chain replay", status: "active" },
+      { label: "Checkpoint snapshots for fast recovery", status: "roadmap" },
+    ]},
+    { label: "Tamper Evidence", status: "shipped", children: [
+      { label: "Hash-chained audit trail (tamper-evident by construction)", status: "shipped" },
+      { label: "Portable offline-verifiable receipts", status: "shipped" },
+    ]},
+    { label: "Sovereign Transport", status: "shipped", children: [
+      { label: "Reticulum-compatible mesh networking", status: "shipped" },
+      { label: "Cryptographic addressing (public key hashes)", status: "shipped" },
+      { label: "No DNS, CA, or ISP dependency for core trust", status: "shipped" },
+      { label: "Governed cross-node trust establishment", status: "shipped" },
+      { label: "External chain verification (DLT anchor)", status: "active" },
+    ]},
+    { label: "Hardware Sovereignty", status: "active", children: [
+      { label: "Trezor hardware wallet provider", status: "shipped" },
+      { label: "Touch ID biometric provider", status: "active" },
+      { label: "Additional hardware wallet providers", status: "roadmap" },
+    ]},
+    { label: "Downgrade Resistance", status: "roadmap", children: [
+      { label: "Monotonic policy version enforcement", status: "roadmap" },
+    ]},
+  ]},
+
+  { label: "INFRASTRUCTURE", plane: "infra", tag: "Build & Deploy", children: [
+    { label: "Build System", status: "shipped", children: [
+      { label: "CI pipeline (build, test, clippy, fmt)", status: "shipped" },
+      { label: "Multi-stage Dockerfile (non-root, healthcheck)", status: "shipped" },
+      { label: "Dual license MIT / Apache-2.0", status: "shipped" },
+    ]},
+    { label: "Developer Tooling", status: "shipped", children: [
+      { label: "Multi-mode dev script (full, html, kill, status)", status: "shipped" },
+      { label: "Shared engine library (single source of truth)", status: "shipped" },
+      { label: "Modular server architecture", status: "shipped" },
+    ]},
+    { label: "Testing Infrastructure", status: "shipped", children: [
+      { label: "Pentest regression harness", status: "shipped" },
+      { label: "Greenfield install testing", status: "shipped" },
+      { label: "Multi-machine relay protocol", status: "shipped" },
+    ]},
+    { label: "Documentation", status: "shipped", children: [
+      { label: "Architecture design document", status: "shipped" },
+      { label: "Whitepaper v2.1 (public thesis)", status: "shipped" },
+      { label: "Key rotation and recovery runbooks", status: "shipped" },
+      { label: "Receipt-derived state formal treatment", status: "shipped" },
+      { label: "v3 Design Spec & Build Plan", status: "shipped" },
+      { label: "Builder course", status: "active" },
+    ]},
+    { label: "Surfaces", status: "active", children: [
+      { label: "CLI interface", status: "shipped" },
+      { label: "REST / WebSocket API", status: "shipped" },
+      { label: "Interactive playground", status: "shipped" },
+      { label: "Live build dashboard", status: "active" },
+      { label: "Web dashboard", status: "roadmap" },
+      { label: "Channel adapters (Slack, Discord)", status: "roadmap" },
+    ]},
+    { label: "Enterprise", status: "roadmap", children: [
+      { label: "Genesis ceremony UI", status: "roadmap" },
+      { label: "Fleet policy distribution", status: "roadmap" },
+      { label: "Multi-node management", status: "roadmap" },
+    ]},
+  ]},
+];
+
+// ── Render Build Phases ──
+function renderPhases() {
+  const container = document.getElementById('phases');
+  phases.forEach(phase => {
+    const done = phase.items.filter(i => i.done).length;
+    const total = phase.items.length;
+    const pct = Math.round((done / total) * 100);
+
+    const card = document.createElement('div');
+    card.className = `phase-card ${phase.status}`;
+    card.innerHTML = `
+      <div class="phase-name">${phase.name}</div>
+      <div class="phase-items">${phase.items.map(i =>
+        `<span style="color:${i.done ? 'var(--green)' : 'var(--text-dim)'}">${i.done ? '\u2713' : '\u2022'} ${i.id}</span>`
+      ).join(' &nbsp; ')}</div>
+      <div class="phase-bar"><div class="phase-bar-fill" style="width:${pct}%"></div></div>
+      <div class="phase-pct">${done}/${total} &mdash; ${pct}%</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// ── Compute Stats ──
+function countNodes(items) {
+  let shipped = 0, active = 0, roadmap = 0;
+  items.forEach(item => {
+    if (!item.plane) {
+      if (item.status === 'shipped') shipped++;
+      else if (item.status === 'active') active++;
+      else roadmap++;
+    }
+    if (item.children) {
+      const sub = countNodes(item.children);
+      shipped += sub.shipped;
+      active += sub.active;
+      roadmap += sub.roadmap;
+    }
+  });
+  return { shipped, active, roadmap };
+}
+
+function renderStats() {
+  const counts = countNodes(data);
+  const total = counts.shipped + counts.active + counts.roadmap;
+  const phaseDone = phases.reduce((a, p) => a + p.items.filter(i => i.done).length, 0);
+  const phaseTotal = phases.reduce((a, p) => a + p.items.length, 0);
+  const container = document.getElementById('stats-row');
+  const stats = [
+    { value: counts.shipped, label: 'Shipped', highlight: true },
+    { value: counts.active, label: 'In Progress', highlight: false },
+    { value: counts.roadmap, label: 'Roadmap', highlight: false },
+    { value: Math.round((counts.shipped / total) * 100) + '%', label: 'Complete', highlight: true },
+    { value: `${phaseDone}/${phaseTotal}`, label: 'v3 Items Done', highlight: false },
+    { value: '28', label: 'Crates', highlight: false },
+    { value: '700+', label: 'Tests', highlight: false },
+  ];
+  stats.forEach(s => {
+    const box = document.createElement('div');
+    box.className = `stat-box${s.highlight ? ' highlight' : ''}`;
+    box.innerHTML = `<div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div>`;
+    container.appendChild(box);
+  });
+}
+
+// ── Filters ──
+let activeFilter = 'all';
+function renderFilters() {
+  const container = document.getElementById('filters');
+  const filters = [
+    { key: 'all', label: 'All' },
+    { key: 'shipped', label: 'Shipped' },
+    { key: 'active', label: 'Active' },
+    { key: 'roadmap', label: 'Roadmap' },
+    { key: 'v3', label: 'v3 Spec Items' },
+  ];
+  filters.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = `filter-btn${f.key === activeFilter ? ' active-filter' : ''}`;
+    btn.textContent = f.label;
+    btn.addEventListener('click', () => {
+      activeFilter = f.key;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active-filter'));
+      btn.classList.add('active-filter');
+      document.getElementById('tree').innerHTML = '';
+      renderTree(data, document.getElementById('tree'));
+    });
+    container.appendChild(btn);
+  });
+}
+
+// ── Should show node based on filter ──
+function shouldShow(item) {
+  if (activeFilter === 'all') return true;
+  if (activeFilter === 'v3') return !!item.phase;
+  return item.status === activeFilter;
+}
+
+function hasVisibleDescendant(item) {
+  if (shouldShow(item)) return true;
+  if (item.children) return item.children.some(c => hasVisibleDescendant(c));
+  return false;
+}
+
+// ── Compute plane progress ──
+function planeProgress(items) {
+  let shipped = 0, total = 0;
+  items.forEach(item => {
+    if (!item.plane) {
+      total++;
+      if (item.status === 'shipped') shipped++;
+    }
+    if (item.children) {
+      const sub = planeProgress(item.children);
+      shipped += sub.shipped;
+      total += sub.total;
+    }
+  });
+  return { shipped, total };
+}
+
+// ── Render Tree ──
+function renderTree(items, parent) {
+  const ul = document.createElement('ul');
+  items.forEach(item => {
+    if (!hasVisibleDescendant(item) && !item.plane) return;
+
+    const li = document.createElement('li');
+    const hasChildren = item.children && item.children.length > 0;
+
+    if (item.plane) {
+      const header = document.createElement('div');
+      header.className = 'plane-header';
+      const toggle = document.createElement('span');
+      toggle.className = 'toggle';
+      toggle.textContent = '\u25BC';
+      header.appendChild(toggle);
+      header.appendChild(document.createTextNode(' ' + item.label + ' '));
+      const tag = document.createElement('span');
+      tag.className = 'plane-tag ' + item.plane;
+      tag.textContent = item.tag;
+      header.appendChild(tag);
+
+      // Plane progress
+      if (item.children) {
+        const prog = planeProgress(item.children);
+        const progSpan = document.createElement('span');
+        progSpan.className = 'plane-progress';
+        progSpan.textContent = `${prog.shipped}/${prog.total}`;
+        header.appendChild(progSpan);
+      }
+
+      li.appendChild(header);
+      header.addEventListener('click', () => {
+        li.classList.toggle('collapsed');
+        toggle.textContent = li.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+      });
+    } else {
+      const node = document.createElement('span');
+      node.className = `node node-${item.status || 'roadmap'}`;
+
+      if (hasChildren) {
+        const toggle = document.createElement('span');
+        toggle.className = 'toggle';
+        toggle.textContent = '\u25BC';
+        node.appendChild(toggle);
+        node.addEventListener('click', () => {
+          li.classList.toggle('collapsed');
+          toggle.textContent = li.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+        });
+      }
+
+      const indicator = document.createElement('span');
+      indicator.className = 'indicator ' + (item.status || 'roadmap');
+      node.appendChild(indicator);
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = item.label;
+      node.appendChild(label);
+
+      if (item.detail) {
+        const det = document.createElement('span');
+        det.className = 'detail';
+        det.textContent = item.detail;
+        node.appendChild(det);
+      }
+
+      if (item.phase) {
+        const phaseTag = document.createElement('span');
+        phaseTag.className = `phase-tag ${item.status === 'shipped' ? 'done' : (item.status === 'active' ? 'wip' : '')}`;
+        phaseTag.textContent = item.phase;
+        node.appendChild(phaseTag);
+      }
+
+      li.appendChild(node);
+    }
+
+    if (hasChildren) {
+      renderTree(item.children, li);
+    }
+
+    ul.appendChild(li);
+  });
+  parent.appendChild(ul);
+}
+
+// ── Timestamp ──
+function updateTimestamp() {
+  const now = new Date();
+  const ts = now.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+  document.getElementById('timestamp').textContent = ts;
+  document.getElementById('footer-ts').textContent = ts;
+}
+
+// ── Init ──
+renderPhases();
+renderStats();
+renderFilters();
+renderTree(data, document.getElementById('tree'));
+updateTimestamp();
+setInterval(updateTimestamp, 1000);
+</script>
+</body>
+</html>

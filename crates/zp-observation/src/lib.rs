@@ -9,6 +9,7 @@
 //! tamper-evident.
 
 pub mod config;
+pub mod governance_bridge;
 pub mod observer;
 pub mod pipeline;
 pub mod receipts;
@@ -17,6 +18,9 @@ pub mod store;
 pub mod types;
 
 pub use config::*;
+pub use governance_bridge::{
+    bridge_events, candidate_to_observation, event_to_observation, ObservationCandidate,
+};
 pub use observer::{build_observer_prompt, parse_observer_output, OBSERVER_SYSTEM_PROMPT};
 pub use pipeline::{CognitionPipeline, ObserverResult, ReflectorResult};
 pub use receipts::{

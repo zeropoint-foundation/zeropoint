@@ -24,14 +24,15 @@ pub use audit::{ActorId, AuditAction, AuditEntry, AuditId};
 pub use capability::{Capability, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
 pub use capability_grant::{
     CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation, DelegationError,
-    GrantProvenance, GrantedCapability,
+    GrantProvenance, GrantedCapability, IssuanceError,
 };
 pub use delegation_chain::{ChainError, DelegationChain};
 pub use episode::{Episode, EpisodeId, Feedback, FeedbackRating, Outcome, Pattern};
 pub use epistemic::{Epistemic, EpistemicError, EpistemicStatus, StatusTransition};
 pub use error::ZpError;
 pub use governance::{
-    ConsensusThreshold, GovernanceActor, GovernanceDecision, GovernanceEvent, GovernanceEventType,
+    ConsensusThreshold, EventOrigin, EventProvenance, GovernanceActor, GovernanceDecision,
+    GovernanceEvent, GovernanceEventType,
 };
 pub use internal_token::{
     InternalCapabilityToken, InternalScope, InternalTokenAuthority, TokenError,
