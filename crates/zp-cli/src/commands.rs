@@ -826,7 +826,7 @@ fn load_rotation_sequence(
         // rotation from it continues that sequence.
         if cert.body.new_public_key == old_pub_hex {
             let seq = cert.body.sequence;
-            if max_sequence.map_or(true, |m| seq > m) {
+            if max_sequence.is_none_or(|m| seq > m) {
                 max_sequence = Some(seq);
                 last_hash = Some(cert.content_hash());
             }
@@ -835,7 +835,7 @@ fn load_rotation_sequence(
         // This shouldn't happen in normal flow, but handle it.
         if cert.body.old_public_key == old_pub_hex {
             let seq = cert.body.sequence;
-            if max_sequence.map_or(true, |m| seq > m) {
+            if max_sequence.is_none_or(|m| seq > m) {
                 max_sequence = Some(seq);
                 last_hash = Some(cert.content_hash());
             }

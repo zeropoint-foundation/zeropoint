@@ -522,7 +522,7 @@ impl PolicyRule for ReputationGateRule {
 ///   - Tier 0: Chat, Read, basic file operations
 ///   - Tier 1: Execute, API calls, config changes, file writes
 ///   - Tier 2: Key delegation, credential access, policy changes,
-///             fleet management, genesis operations
+///     fleet management, genesis operations
 ///
 /// When an action's required tier exceeds the context's active tier,
 /// the rule blocks with a clear message about what tier is needed.

@@ -148,10 +148,10 @@ pub fn split_secret(
         .collect();
 
     // For each byte of the secret, create a random polynomial and evaluate
-    for byte_idx in 0..32 {
+    for (byte_idx, &secret_byte) in secret.iter().enumerate().take(32) {
         // Coefficients: a[0] = secret byte, a[1..threshold-1] = random
         let mut coeffs = vec![0u8; threshold];
-        coeffs[0] = secret[byte_idx];
+        coeffs[0] = secret_byte;
         let mut random_bytes = vec![0u8; threshold - 1];
         rng.fill_bytes(&mut random_bytes);
         coeffs[1..].copy_from_slice(&random_bytes);
@@ -182,7 +182,6 @@ pub fn reconstruct_secret(shares: &[ShamirShare]) -> Result<[u8; 32], KeyError> 
         ));
     }
 
-    let k = shares.len();
     let secret_len = shares[0].data.len();
     if secret_len != 32 {
         return Err(KeyError::InvalidKeyMaterial(format!(
@@ -210,20 +209,20 @@ pub fn reconstruct_secret(shares: &[ShamirShare]) -> Result<[u8; 32], KeyError> 
     let mut secret = [0u8; 32];
 
     // Lagrange interpolation at x=0 for each byte position
-    for byte_idx in 0..32 {
+    for (byte_idx, secret_byte) in secret.iter_mut().enumerate() {
         let mut result = 0u8;
 
-        for i in 0..k {
-            let xi = shares[i].index;
-            let yi = shares[i].data[byte_idx];
+        for (i, share_i) in shares.iter().enumerate() {
+            let xi = share_i.index;
+            let yi = share_i.data[byte_idx];
 
             // Compute Lagrange basis polynomial L_i(0)
             let mut basis = 1u8;
-            for j in 0..k {
+            for (j, share_j) in shares.iter().enumerate() {
                 if i == j {
                     continue;
                 }
-                let xj = shares[j].index;
+                let xj = share_j.index;
                 // L_i(0) *= (0 - xj) / (xi - xj) = xj / (xi ^ xj) in GF(256)
                 // Note: subtraction = XOR in GF(256), and -xj = xj
                 let num = xj;
@@ -234,7 +233,7 @@ pub fn reconstruct_secret(shares: &[ShamirShare]) -> Result<[u8; 32], KeyError> 
             result ^= gf256_mul(yi, basis);
         }
 
-        secret[byte_idx] = result;
+        *secret_byte = result;
     }
 
     Ok(secret)

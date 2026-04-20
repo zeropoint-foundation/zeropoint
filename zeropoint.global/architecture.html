@@ -321,16 +321,19 @@ const data = [
       { label: "Policy-gated credential injection at host boundary", status: "shipped" },
       { label: "MVC capability resolver writes directly to vault", status: "shipped" },
     ]},
-    { label: "Command Execution Sandbox", status: "active", children: [
-      { label: "Program-level allowlist with per-program argument validators", status: "active" },
-      { label: "Argv-based execution (no shell interpretation)", status: "active" },
-      { label: "Environment isolation on spawned processes", status: "active" },
+    { label: "Command Execution Sandbox", status: "shipped", children: [
+      { label: "Program-level allowlist with per-program argument validators", status: "shipped" },
+      { label: "ValidatedCommand type \u2014 constructed only by validate_command()", status: "shipped" },
+      { label: "Argv-based execution via shlex (no shell interpretation)", status: "shipped" },
+      { label: "Environment isolation on spawned processes", status: "shipped" },
     ]},
-    { label: "Boundary Enforcement", status: "active", children: [
-      { label: "Path canonicalization at all file operation boundaries", status: "active" },
-      { label: "Internal capability tokens for service-to-service calls", status: "active" },
-      { label: "Typed schema validation at every API endpoint", status: "active" },
-      { label: "Canonical serialization before cryptographic signing", status: "active" },
+    { label: "Boundary Enforcement", status: "shipped", children: [
+      { label: "Path canonicalization with safe_path() at all file boundaries", status: "shipped" },
+      { label: "System path rejection (/etc, /proc, /sys)", status: "shipped" },
+      { label: "Internal capability tokens (BLAKE3 HMAC, 30s TTL, nonce replay)", status: "shipped" },
+      { label: "Scoped action+target token verification", status: "shipped" },
+      { label: "Typed schema validation at every API endpoint (17 typed + 3 intentionally untyped)", status: "shipped" },
+      { label: "Canonical serialization before cryptographic signing", status: "shipped" },
     ]},
     { label: "Configure Engine", status: "shipped", children: [
       { label: "Semantic pattern matching for env variable resolution", status: "shipped" },
@@ -338,6 +341,7 @@ const data = [
       { label: "Tool discovery and manifest system", status: "shipped" },
       { label: "Auto-configure pipeline for multi-tool deployments", status: "shipped" },
       { label: "Preflight diagnostics with remediation guidance", status: "shipped" },
+      { label: "Credential rotation via run_rotate", status: "shipped" },
     ]},
     { label: "Content Security", status: "shipped", children: [
       { label: "Full CSP (no inline scripts, no unsafe-eval)", status: "shipped" },
@@ -362,10 +366,13 @@ const data = [
       { label: "Epoch compaction for long-lived chains", status: "shipped" },
       { label: "OpenTelemetry export", status: "shipped" },
     ]},
-    { label: "Claim Validation & Lifecycle", status: "active", children: [
-      { label: "Per-type validation rules (required fields, TTL, semantics)", status: "active" },
-      { label: "Receipt supersession and revocation linkage", status: "active" },
-      { label: "Revocation index with chain-aware verification", status: "active" },
+    { label: "Claim Validation & Lifecycle", status: "shipped", children: [
+      { label: "Per-type validation rules (semantics, TTL, metadata)", status: "shipped" },
+      { label: "try_finalize() with strict validation, finalize() with warnings", status: "shipped" },
+      { label: "Receipt supersession (forward + backward references)", status: "shipped" },
+      { label: "Receipt revocation linkage with revoke() builder", status: "shipped" },
+      { label: "RevocationIndex (in-memory, rebuilt from chain, checked by zp-verify)", status: "shipped" },
+      { label: "Typed claim emission (authorization, delegation, revocation receipts)", status: "shipped" },
     ]},
     { label: "Key Hierarchy", status: "shipped", children: [
       { label: "Ed25519 three-tier chain (Genesis \u2192 Operator \u2192 Agent)", status: "shipped" },
@@ -391,15 +398,16 @@ const data = [
     ]},
     { label: "Policy Engine", status: "shipped", children: [
       { label: "Constitutional rules compiled into binary", status: "shipped" },
-      { label: "WASM policy module runtime", status: "active" },
+      { label: "WASM policy module runtime (feature-gated, load/enable/disable)", status: "shipped" },
       { label: "Governance gate pipeline (Guard \u2192 Policy \u2192 Execute \u2192 Audit)", status: "shipped" },
       { label: "Receipt-gated execution", status: "shipped" },
       { label: "Declarative policy DSL", status: "roadmap" },
     ]},
-    { label: "Event Provenance & Authority", status: "active", children: [
-      { label: "Creator and origin tracking on all governance events", status: "active" },
-      { label: "Authority chain linkage for capability grants", status: "active" },
-      { label: "Governance event \u2192 observation pipeline bridge", status: "active" },
+    { label: "Event Provenance & Authority", status: "shipped", children: [
+      { label: "Creator and origin auto-derived in governance event constructors", status: "shipped" },
+      { label: "Authority chain linkage for capability grants", status: "shipped" },
+      { label: "CapabilityGrant self-issuance prevention (validate_issuance in governance gate)", status: "shipped" },
+      { label: "Governance event \u2192 observation bridge (wired into server runtime)", status: "shipped" },
     ]},
     { label: "Trust Tiers", status: "shipped", children: [
       { label: "Tier 0: Permissive \u2014 install and run, zero ceremony", status: "shipped" },
@@ -422,11 +430,13 @@ const data = [
       { label: "Five-gate promotion logic with configurable thresholds", status: "shipped" },
       { label: "Reinforcement tracking", status: "shipped" },
       { label: "Receipt-backed promotion evidence", status: "shipped" },
+      { label: "Observation\u2192promotion pipeline (wired: CognitionPipeline in AppState, 4 endpoints)", status: "shipped" },
     ]},
     { label: "Memory Quarantine", status: "shipped", children: [
       { label: "Quarantine with source-indexed bulk operations", status: "shipped" },
       { label: "Reinstatement workflow", status: "shipped" },
       { label: "Receipt generation on quarantine actions", status: "shipped" },
+      { label: "Compromise\u2192quarantine pipeline (wired: handler chains quarantine_compromised_memories)", status: "shipped" },
     ]},
     { label: "Lifecycle Management", status: "shipped", children: [
       { label: "Stage-specific expiry rules", status: "shipped" },
@@ -434,9 +444,11 @@ const data = [
       { label: "Batch expiry sweep", status: "shipped" },
       { label: "Demotion and reaffirmation", status: "shipped" },
     ]},
-    { label: "Human Review Gate", status: "active", children: [
-      { label: "Pending promotion queue for high-stage transitions", status: "active" },
-      { label: "CLI review surface", status: "active" },
+    { label: "Human Review Gate", status: "shipped", children: [
+      { label: "Pending promotion queue with expiry and deferral limits", status: "shipped" },
+      { label: "Approve / Reject / Defer decision processing (wired: 4 server endpoints + CLI)", status: "shipped" },
+      { label: "Expired review sweep and audit trail", status: "shipped" },
+      { label: "CLI review surface (zp memory review/approve/reject/defer)", status: "shipped" },
       { label: "Web dashboard review surface", status: "roadmap" },
     ]},
     { label: "Learning Loop", status: "shipped", children: [
@@ -468,14 +480,18 @@ const data = [
       { label: "BIP-39 mnemonic recovery (24 words \u2192 full system restore)", status: "shipped" },
       { label: "Credential vault rotation verification", status: "shipped" },
     ]},
-    { label: "Blast Radius Analysis", status: "active", children: [
-      { label: "Compute affected trust relationships from compromised key", status: "active" },
-      { label: "Automated response actions per affected element", status: "active" },
-      { label: "Compromise-triggered memory quarantine", status: "active" },
+    { label: "Blast Radius Analysis", status: "shipped", children: [
+      { label: "Transitive delegation graph walker with cycle detection", status: "shipped" },
+      { label: "Receipt, grant, delegation, and memory impact computation", status: "shipped" },
+      { label: "Automated response actions (wired: compromise API endpoint + tracker in AppState)", status: "shipped" },
+      { label: "Compromise\u2192quarantine pipeline (wired: handler chains to quarantine store)", status: "shipped" },
     ]},
-    { label: "Receipt-Based Reconstitution", status: "active", children: [
+    { label: "Receipt-Based Reconstitution", status: "shipped", children: [
       { label: "State derived from receipt chain, never stored mutably", status: "shipped", detail: "Design principle" },
-      { label: "System state reconstruction from chain replay", status: "active" },
+      { label: "System state reconstruction from chain replay", status: "shipped" },
+      { label: "Anomaly detection (broken hash links, timestamp regression)", status: "shipped" },
+      { label: "Blast radius report (live vs reconstituted state diff)", status: "shipped" },
+      { label: "CLI/server surface for reconstitution", status: "shipped" },
       { label: "Checkpoint snapshots for fast recovery", status: "roadmap" },
     ]},
     { label: "Tamper Evidence", status: "shipped", children: [
@@ -494,8 +510,9 @@ const data = [
       { label: "Touch ID biometric provider", status: "active" },
       { label: "Additional hardware wallet providers", status: "roadmap" },
     ]},
-    { label: "Downgrade Resistance", status: "roadmap", children: [
-      { label: "Monotonic policy version enforcement", status: "roadmap" },
+    { label: "Downgrade Resistance", status: "shipped", children: [
+      { label: "Monotonic policy version enforcement (AppState + reconstitution engine + API)", status: "shipped" },
+      { label: "Version transition audit trail", status: "shipped" },
     ]},
   ]},
 
@@ -520,19 +537,31 @@ const data = [
       { label: "Whitepaper v2.1 (public thesis)", status: "shipped" },
       { label: "Key rotation and recovery runbooks", status: "shipped" },
       { label: "Receipt-derived state formal treatment", status: "shipped" },
+      { label: "v3 Design Spec & Build Plan", status: "shipped" },
       { label: "Builder course", status: "active" },
     ]},
-    { label: "Surfaces", status: "active", children: [
+    { label: "Surfaces", status: "shipped", children: [
       { label: "CLI interface", status: "shipped" },
       { label: "REST / WebSocket API", status: "shipped" },
       { label: "Interactive playground", status: "shipped" },
-      { label: "Web dashboard", status: "roadmap" },
-      { label: "Channel adapters (Slack, Discord)", status: "roadmap" },
+      { label: "Live build dashboard", status: "shipped" },
+      { label: "SSE real-time event stream", status: "shipped" },
+      { label: "Dashboard observability panels (cognition + analysis + events)", status: "shipped" },
+      { label: "Channel adapters (Slack webhook + adapter framework)", status: "shipped" },
     ]},
-    { label: "Enterprise", status: "roadmap", children: [
+    { label: "Enterprise & Fleet", status: "shipped", children: [
+      { label: "Trust Tier 2 runtime enforcement (per-action tier gating)", status: "shipped" },
+      { label: "Fleet node registry (heartbeat + status + summary)", status: "shipped" },
+      { label: "Policy push distribution (rollout + delivery tracking)", status: "shipped" },
+      { label: "Genesis v2 ceremony (Shamir SSS key escrow + rotation)", status: "shipped" },
       { label: "Genesis ceremony UI", status: "roadmap" },
-      { label: "Fleet policy distribution", status: "roadmap" },
-      { label: "Multi-node management", status: "roadmap" },
+    ]},
+    { label: "Capability Verification & Policy Runtime", status: "shipped", children: [
+      { label: "ConfigurationClaim receipt type (typed metadata, validation rules)", status: "shipped" },
+      { label: "Manifest configurable params (ConfigurableParam struct, defaults emission)", status: "shipped" },
+      { label: "Sidecar endpoint for tool configuration queries", status: "shipped" },
+      { label: "Runtime reconfiguration with allowed_values validation", status: "shipped" },
+      { label: "WASM policy runtime (feature-gated load/enable/disable/list)", status: "shipped" },
     ]},
   ]},
 ];
