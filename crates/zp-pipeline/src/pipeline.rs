@@ -465,6 +465,28 @@ impl Pipeline {
         let decision = self.policy_engine.evaluate(&policy_context);
         debug!("Policy decision: {:?}", decision);
 
+        // C3-3: Emit a PolicyClaim receipt for the governance gate decision.
+        // This is the typed receipt for the policy evaluation — separate from
+        // the audit chain entry logged below.
+        let _policy_receipt = zp_receipt::Receipt::policy_claim("zp-pipeline")
+            .status(if decision.is_blocked() {
+                ReceiptStatus::Denied
+            } else {
+                ReceiptStatus::Success
+            })
+            .trust_grade(zp_receipt::TrustGrade::C)
+            .claim_semantics(zp_receipt::ClaimSemantics::IntegrityAttestation)
+            .claim_metadata(zp_receipt::ClaimMetadata::Policy {
+                rule_id: "pipeline-governance-gate".to_string(),
+                principle: None,
+                satisfied: !decision.is_blocked(),
+                rationale: match &decision {
+                    PolicyDecision::Block { reason, .. } => Some(reason.clone()),
+                    _ => None,
+                },
+            })
+            .finalize();
+
         if decision.is_blocked() {
             let reason = match &decision {
                 PolicyDecision::Block { reason, .. } => reason.clone(),

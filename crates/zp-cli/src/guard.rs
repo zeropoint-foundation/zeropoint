@@ -566,7 +566,9 @@ fn build_receipt(
         zp_receipt::Decision::Deny
     };
 
-    zp_receipt::Receipt::execution("zp-guard")
+    // C3-3: Guard emits PolicyClaim (not Execution) — this is a governance
+    // gate decision with IntegrityAttestation semantics.
+    zp_receipt::Receipt::policy_claim("zp-guard")
         .status(if exit_code == 0 {
             zp_receipt::Status::Success
         } else {
@@ -576,6 +578,13 @@ fn build_receipt(
         .executor_type(zp_receipt::ExecutorType::Service)
         .runtime("shell")
         .action(zp_receipt::Action::shell_command(command, exit_code))
+        .claim_semantics(zp_receipt::ClaimSemantics::IntegrityAttestation)
+        .claim_metadata(zp_receipt::ClaimMetadata::Policy {
+            rule_id: "zp-guard-embedded-v2".to_string(),
+            principle: None,
+            satisfied: result.allowed,
+            rationale: result.reason.clone(),
+        })
         .policy_full(zp_receipt::PolicyDecision {
             decision: policy_decision,
             policy_id: Some("zp-guard-embedded-v2".to_string()),
