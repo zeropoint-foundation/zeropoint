@@ -135,20 +135,29 @@
 
   // ── Content extraction ─────────────────────────────────────────
   function getVisibleText() {
-    // Custom selector
-    if (cfg.contentSelector) {
-      const el = document.querySelector(cfg.contentSelector);
-      if (el) return extractText(el);
-    }
-    // Onboarding: find the currently visible step
+    // Priority 1: data-tts-script attribute on the active element
+    // This allows pages to provide curated narration scripts instead of
+    // raw DOM text (e.g., onboarding steps with explanatory narration).
     const steps = document.querySelectorAll('.step');
     for (const s of steps) {
       if (s.style.display !== 'none' && s.offsetParent !== null) {
+        if (s.dataset.ttsScript) return s.dataset.ttsScript;
         return extractText(s);
       }
     }
+
+    // Priority 2: custom selector with data-tts-script check
+    if (cfg.contentSelector) {
+      const el = document.querySelector(cfg.contentSelector);
+      if (el) {
+        if (el.dataset.ttsScript) return el.dataset.ttsScript;
+        return extractText(el);
+      }
+    }
+
     // Fallback: main container or body
     const container = document.querySelector('.container') || document.body;
+    if (container.dataset && container.dataset.ttsScript) return container.dataset.ttsScript;
     return extractText(container);
   }
 
