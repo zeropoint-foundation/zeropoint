@@ -459,6 +459,7 @@ pub async fn tools_handler(
 
 /// Request body for Monte Carlo simulation.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SimulateRequest {
     /// Tool being analyzed.
     pub target: String,

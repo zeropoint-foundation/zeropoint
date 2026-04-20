@@ -34,6 +34,7 @@
 //! ```
 
 mod builder;
+pub mod canonical;
 mod chain;
 mod epoch;
 mod hasher;

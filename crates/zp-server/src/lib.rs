@@ -3684,6 +3684,24 @@ async fn tools_single_preflight_handler(
 // Tool configure / repair — ecosystem self-healing actions
 // ============================================================================
 
+/// Typed request body for POST /api/v1/tools/:tool_name/configure.
+/// Phase 2.8 (P2-4): replaces loose `serde_json::Value` parsing.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ToolConfigureRequest {
+    /// The configure action to perform. Currently: "reassign_port".
+    action: String,
+}
+
+/// Typed request body for POST /api/v1/tools/:tool_name/repair.
+/// Phase 2.8 (P2-4): replaces loose `serde_json::Value` parsing.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ToolRepairRequest {
+    /// The repair action to perform. Currently: "restart_compose".
+    action: String,
+}
+
 /// POST /api/v1/tools/:tool_name/configure
 ///
 /// Actions:
@@ -3693,7 +3711,7 @@ async fn tools_single_preflight_handler(
 async fn tools_configure_handler(
     State(state): State<AppState>,
     axum::extract::Path(tool_name): axum::extract::Path<String>,
-    Json(body): Json<serde_json::Value>,
+    Json(body): Json<ToolConfigureRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     // AUTHZ-VULN-10: validate tool_name to prevent path injection.
     // Tool names must be alphanumeric with hyphens/underscores only.
@@ -3706,7 +3724,7 @@ async fn tools_configure_handler(
         );
     }
 
-    let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
+    let action = body.action.as_str();
 
     match action {
         "reassign_port" => {
@@ -3772,7 +3790,7 @@ async fn tools_configure_handler(
 /// `restart_compose` which is a safe, non-destructive operation.
 async fn tools_repair_handler(
     axum::extract::Path(tool_name): axum::extract::Path<String>,
-    Json(body): Json<serde_json::Value>,
+    Json(body): Json<ToolRepairRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     // AUTHZ-VULN-11: validate tool_name to prevent command injection.
     if !is_safe_tool_name(&tool_name) {
@@ -3784,7 +3802,7 @@ async fn tools_repair_handler(
         );
     }
 
-    let action = body.get("action").and_then(|a| a.as_str()).unwrap_or("");
+    let action = body.action.as_str();
 
     match action {
         "restart_compose" => {

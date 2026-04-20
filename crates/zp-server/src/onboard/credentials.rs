@@ -192,6 +192,14 @@ pub async fn handle_get_provider_catalog(state: &mut OnboardState) -> Vec<Onboar
     events
 }
 
+/// Typed parameters for vault_store action.
+/// Phase 2.8 (P2-4): replaces loose `.get().and_then()` extraction.
+#[derive(Debug, serde::Deserialize)]
+struct VaultStoreParams {
+    vault_ref: Option<String>,
+    value: Option<String>,
+}
+
 /// Store a single credential in the vault.
 pub async fn handle_vault_store(
     action: &OnboardAction,
@@ -199,7 +207,11 @@ pub async fn handle_vault_store(
 ) -> Vec<OnboardEvent> {
     let mut events = Vec::new();
 
-    let vault_ref = match action.params.get("vault_ref").and_then(|v| v.as_str()) {
+    // Phase 2.8 (P2-4): typed parameter extraction
+    let params: VaultStoreParams = serde_json::from_value(action.params.clone())
+        .unwrap_or(VaultStoreParams { vault_ref: None, value: None });
+
+    let vault_ref = match params.vault_ref.as_deref() {
         Some(r) => r,
         None => {
             events.push(OnboardEvent::error(
@@ -209,7 +221,7 @@ pub async fn handle_vault_store(
         }
     };
 
-    let value = match action.params.get("value").and_then(|v| v.as_str()) {
+    let value = match params.value.as_deref() {
         Some(v) => v,
         None => {
             events.push(OnboardEvent::error(
