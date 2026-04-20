@@ -19,6 +19,7 @@
 //! between key distribution and policy evaluation.
 
 pub mod biometric;
+pub mod blast_radius;
 pub mod certificate;
 pub mod error;
 pub mod hierarchy;
@@ -48,6 +49,9 @@ pub(crate) mod test_sync {
         }
     }
 }
+
+// ── Blast radius (Phase 3 R6-1) ──
+pub use blast_radius::{BlastRadius, BlastRadiusTracker, CompromiseResponse, DelegationEdge};
 
 // ── Sovereignty system (new) ──
 pub use sovereignty::{

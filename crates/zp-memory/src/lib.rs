@@ -14,17 +14,30 @@
 //! | Remembered     | Promotion engine approval   | MemoryPromotionClaim   |
 //! | IdentityBearing| Human review + signing      | MemoryPromotionClaim   |
 
+pub mod compromise;
+pub mod ingestion;
 pub mod lifecycle;
 pub mod promotion;
 pub mod quarantine;
+pub mod review;
 pub mod sharing;
 pub mod types;
 
+pub use compromise::{
+    quarantine_compromised_memories, CompromiseQuarantineResult, CompromiseReport,
+};
+pub use ingestion::{
+    ingest_observation, ingest_observations, BatchIngestionResult, IngestionConfig, IngestionResult,
+};
 pub use lifecycle::{
     apply_lifecycle_rules, default_expiry, demote, demotion_target, is_expired, is_review_due,
     reaffirm, review_interval, sweep_lifecycle, ExpirySweepResult,
 };
 pub use promotion::PromotionEngine;
+pub use review::{
+    CompletedReview, PendingPromotion, ReviewAction, ReviewDecision, ReviewOutcome, ReviewQueue,
+    ReviewQueueConfig,
+};
 pub use quarantine::{
     BulkQuarantineResult, QuarantineReason, QuarantineRecord, QuarantineStore, ReinstatementResult,
 };
