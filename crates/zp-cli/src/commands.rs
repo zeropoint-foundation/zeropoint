@@ -945,8 +945,13 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     }
 
     // Check for custom WASM gates (informational — real WASM eval is TODO)
-    let policies_dir = zp_core::paths::policies_dir()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve policies directory: {}", e))?;
+    let policies_dir = match zp_core::paths::policies_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("  \x1b[33m⚠\x1b[0m  Failed to resolve policies directory: {}", e);
+            return 1;
+        }
+    };
     if policies_dir.exists() {
         if let Ok(entries) = std::fs::read_dir(&policies_dir) {
             for entry in entries.flatten() {
