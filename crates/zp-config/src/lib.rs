@@ -7,7 +7,7 @@
 //! # Resolution order (lowest to highest priority)
 //!
 //! 1. **Compiled defaults** — hardcoded sane values
-//! 2. **System config** — `~/.zeropoint/config.toml`
+//! 2. **System config** — `~/ZeroPoint/config.toml`
 //! 3. **Project config** — `./zeropoint.toml` (if present in cwd or ancestors)
 //! 4. **Environment variables** — `ZP_*` overrides
 //! 5. **CLI flags** — `--port`, `--bind`, etc.

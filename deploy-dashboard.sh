@@ -3,7 +3,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OVERRIDE_DIR="$HOME/.zeropoint/assets"
+OVERRIDE_DIR="$HOME/ZeroPoint/assets"
 SRC="$SCRIPT_DIR/crates/zp-server/assets/dashboard.html"
 
 echo "── Deploying dashboard override ──"

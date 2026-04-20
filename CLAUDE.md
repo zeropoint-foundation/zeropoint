@@ -64,7 +64,7 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 ## Asset Architecture (Two-Tier)
 | Tier | Location | When |
 |------|----------|------|
-| **Override** | `~/.zeropoint/assets/` (or `$ZP_ASSETS_DIR`) | Hot reload (`./zp-dev.sh html`) copies source here. Persistent files (narration MP3s, images) live here always. |
+| **Override** | `~/ZeroPoint/assets/` (or `$ZP_ASSETS_DIR`) | Hot reload (`./zp-dev.sh html`) copies source here. Persistent files (narration MP3s, images) live here always. |
 | **Compiled-in** | `include_str!()` in binary | Always available. Matches last `cargo build`. Dev/release builds delete overrides so compiled-in takes effect. |
 
 **Rules**: No relative ServeDir paths. Override dir is the single ServeDir root. `resolve_html_asset()` checks override → compiled-in. Two file categories in `zp-dev.sh`: `HTML_FILES` (have compiled-in fallback, deleted after build) and `STATIC_FILES` (CSS/JS, no fallback, always deployed to override dir).
@@ -79,7 +79,7 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 | **Speak page** | `localhost:3000/speak` — paste text, hear it via Piper. Auto-reads clipboard on focus. |
 | **CLI speak** | `./zp-speak.sh` — pipe text or reads clipboard, plays via `afplay` |
 | **Narration voices** | Kusal (even steps + recovery), Amy (odd steps). Params: length_scale 0.7692, noise_scale 0.360, noise_w 0.930, sentence_silence 0.30 |
-| **Narration output** | `~/.zeropoint/assets/narration/onboard/` — permanent, never compiled in |
+| **Narration output** | `~/ZeroPoint/assets/narration/onboard/` — permanent, never compiled in |
 | **Narration source** | `generate-narration-onboard.py` → `generate-audio-onboard.sh` |
 
 ## Sovereignty Provider System

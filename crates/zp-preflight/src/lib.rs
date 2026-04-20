@@ -11,7 +11,7 @@
 //! 2. **Actionable output.** Every failing check includes the *exact* command
 //!    an operator should run to fix it, for their detected OS and package manager.
 //! 3. **JSON-exportable.** The full report serialises to
-//!    `~/.zeropoint/preflight-report.json` for consumption by the installer.
+//!    `~/ZeroPoint/preflight-report.json` for consumption by the installer.
 
 pub mod checks;
 pub mod platform;

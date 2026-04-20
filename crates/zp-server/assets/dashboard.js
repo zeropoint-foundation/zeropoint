@@ -1277,7 +1277,7 @@
     function renderTopology(topo) {
       const map = document.getElementById('topologyMap');
       if (!topo || topo.error || !topo.nodes || topo.nodes.length === 0) {
-        map.innerHTML = `<div class="topology-desc">No topology data. Configure <code>~/.zeropoint/config/topology.toml</code> to map your network.</div>`;
+        map.innerHTML = `<div class="topology-desc">No topology data. Configure <code>~/ZeroPoint/config/topology.toml</code> to map your network.</div>`;
         return;
       }
 

@@ -20,7 +20,7 @@ impl ConfigResolver {
         }
     }
 
-    /// Layer 1: Load system config from `~/.zeropoint/config.toml`.
+    /// Layer 1: Load system config from `~/ZeroPoint/config.toml`.
     pub fn load_system_config(mut self) -> Self {
         let path = self.config.home_dir.value.join("config.toml");
         if path.exists() {
@@ -301,13 +301,18 @@ fn expand_tilde(path: &str) -> PathBuf {
 
 // ─── Config writing (for `zp config set`) ────────────────────
 
-/// Set a single key-value pair in ~/.zeropoint/config.toml.
+/// Set a single key-value pair in ~/ZeroPoint/config.toml.
 /// Reads the existing file, updates the value, and writes it back.
 pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| "/tmp".into());
-    let config_path = PathBuf::from(home).join(".zeropoint").join("config.toml");
+    let zp_home = if let Ok(h) = std::env::var("ZP_HOME") {
+        PathBuf::from(h)
+    } else {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| "/tmp".into());
+        PathBuf::from(home).join("ZeroPoint")
+    };
+    let config_path = zp_home.join("config.toml");
 
     // Load existing or create empty
     let mut file: ConfigFile = if config_path.exists() {

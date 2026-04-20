@@ -10,12 +10,12 @@
 # Safe commands (ls, pwd, git status, ...) bypass the guard entirely — zero overhead.
 # All other commands are evaluated locally in sub-millisecond time.
 #
-# Posture and actor mode are read from ~/.zeropoint/config.toml
+# Posture and actor mode are read from ~/ZeroPoint/config.toml
 # ============================================================================
 
 # --- Configuration ---
-# These are set by `zp secure` and can be changed in ~/.zeropoint/config.toml
-ZP_BIN="${ZP_BIN:-$HOME/.zeropoint/bin/zp}"
+# These are set by `zp secure` and can be changed in ~/ZeroPoint/config.toml
+ZP_BIN="${ZP_BIN:-$HOME/ZeroPoint/bin/zp}"
 ZP_POSTURE="${ZP_POSTURE:-balanced}"
 ZP_ACTOR="${ZP_ACTOR:-human}"
 

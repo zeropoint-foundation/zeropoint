@@ -239,7 +239,7 @@ pub fn assess(state: &crate::AppState) -> SecurityPosture {
     // 4. Genesis ceremony integrity.
     //
     // Historical note (ARTEMIS 035 issue 2): this check previously looked
-    // for `~/.zeropoint/genesis.sig`, a file that no code path has ever
+    // for `~/ZeroPoint/genesis.sig`, a file that no code path has ever
     // written. The ceremony produces `genesis_transcript.json` — a signed
     // attestation covering every substantive field in `genesis.json`. We
     // now actually verify the transcript (Ed25519 over BLAKE3) and

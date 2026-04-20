@@ -668,7 +668,7 @@
       details.push('✓ Genesis secret written to file (credential store unavailable)');
     }
 
-    details.push('✓ Genesis record written to ~/.zeropoint/');
+    details.push('✓ Genesis record written to ~/ZeroPoint/');
     details.push('');
     details.push('<span style="color:var(--text-dim)">This key is local for now. Later, you can anchor it to a public ledger — making your identity and governance verifiable by anyone, including other agents.</span>');
 

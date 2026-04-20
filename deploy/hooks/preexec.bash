@@ -10,14 +10,14 @@
 # Safe commands (ls, pwd, git status, ...) bypass the guard entirely — zero overhead.
 # All other commands are evaluated locally in sub-millisecond time.
 #
-# Posture and actor mode are read from ~/.zeropoint/config.toml
+# Posture and actor mode are read from ~/ZeroPoint/config.toml
 #
 # Note: bash doesn't have native preexec. This uses the DEBUG trap, which
 # fires before each command. Return non-zero from the trap to prevent execution.
 # ============================================================================
 
 # --- Configuration ---
-ZP_BIN="${ZP_BIN:-$HOME/.zeropoint/bin/zp}"
+ZP_BIN="${ZP_BIN:-$HOME/ZeroPoint/bin/zp}"
 ZP_POSTURE="${ZP_POSTURE:-balanced}"
 ZP_ACTOR="${ZP_ACTOR:-human}"
 

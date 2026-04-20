@@ -26,7 +26,7 @@ set -uo pipefail
 INSTALLER_VERSION="2.0.0"
 REPO="https://github.com/zeropoint-foundation/zeropoint.git"
 INSTALL_DIR="${ZP_INSTALL_DIR:-$HOME/zeropoint}"
-ZP_HOME="$HOME/.zeropoint"
+ZP_HOME="${ZP_HOME:-$HOME/ZeroPoint}"
 ZP_BIN="$ZP_HOME/bin"
 ZP_PORT="${ZP_PORT:-3000}"
 STATE_FILE="$ZP_HOME/install-state.json"
@@ -739,11 +739,11 @@ run_install() {
             fish) rc_file="$HOME/.config/fish/config.fish" ;;
         esac
 
-        if [ -n "$rc_file" ] && ! grep -q ".zeropoint/bin" "$rc_file" 2>/dev/null; then
+        if [ -n "$rc_file" ] && ! grep -q "ZeroPoint/bin" "$rc_file" 2>/dev/null; then
             {
                 echo ""
                 echo "# ZeroPoint"
-                echo 'export PATH="$HOME/.zeropoint/bin:$PATH"'
+                echo 'export PATH="$HOME/ZeroPoint/bin:$PATH"'
             } >> "$rc_file"
             ok "Added to PATH in $rc_file"
         fi
@@ -781,7 +781,7 @@ port = 3000
 bind = "127.0.0.1"
 
 [data]
-dir = "~/.zeropoint/data"
+dir = "~/ZeroPoint/data"
 
 [governance]
 posture = "balanced"

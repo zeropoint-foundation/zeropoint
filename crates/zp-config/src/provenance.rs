@@ -8,7 +8,7 @@ use std::fmt;
 pub enum Source {
     /// Hardcoded default in the binary.
     Default,
-    /// Read from `~/.zeropoint/config.toml`.
+    /// Read from `~/ZeroPoint/config.toml`.
     SystemConfig,
     /// Read from `./zeropoint.toml` (project-local).
     ProjectConfig,
@@ -24,7 +24,7 @@ impl fmt::Display for Source {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Source::Default => write!(f, "default"),
-            Source::SystemConfig => write!(f, "~/.zeropoint/config.toml"),
+            Source::SystemConfig => write!(f, "~/ZeroPoint/config.toml"),
             Source::ProjectConfig => write!(f, "./zeropoint.toml"),
             Source::EnvVar(var) => write!(f, "{var} env var"),
             Source::CliFlag(flag) => write!(f, "--{flag} flag"),
