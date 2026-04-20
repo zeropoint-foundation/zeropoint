@@ -10,6 +10,7 @@ pub mod channels;
 pub mod codebase;
 pub mod cognition;
 pub mod events;
+pub mod fleet;
 pub mod exec_ws;
 pub mod internal_auth;
 pub mod genesis_verify;
@@ -505,6 +506,11 @@ pub struct AppStateInner {
     /// Audit chain appends, tool lifecycle events, and cognition events
     /// are broadcast here for SSE clients and channel adapters.
     pub event_tx: tokio::sync::broadcast::Sender<events::EventStreamItem>,
+    /// Fleet node registry — tracks heartbeats, status, and policy versions
+    /// across all nodes in the fleet (P5-2).
+    pub node_registry: zp_mesh::NodeRegistry,
+    /// Policy distributor — pushes policy updates to fleet nodes (P5-3).
+    pub policy_distributor: zp_mesh::PolicyDistributor,
 }
 
 #[derive(Clone)]
@@ -657,6 +663,10 @@ impl AppState {
 
         let (event_tx, _event_rx) = events::event_channel();
 
+        // Fleet node registry + policy distributor share the same registry via Arc
+        let node_registry = zp_mesh::NodeRegistry::new();
+        let policy_distributor = zp_mesh::PolicyDistributor::new(node_registry.clone());
+
         let state = AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -681,6 +691,8 @@ impl AppState {
             memory_store,
             downgrade_guard,
             event_tx,
+            node_registry,
+            policy_distributor,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -1016,6 +1028,16 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Channel adapters — Slack/Discord integration (P4-2)
         .route("/api/v1/channels/status", get(channels::channels_status_handler))
         .route("/api/v1/channels/slack/webhook", post(channels::slack_webhook_handler))
+        // Fleet node registry — heartbeat, status, and management (P5-2)
+        .route("/api/v1/fleet/heartbeat", post(fleet::fleet_heartbeat_handler))
+        .route("/api/v1/fleet/nodes", get(fleet::fleet_nodes_handler))
+        .route("/api/v1/fleet/nodes/:id", get(fleet::fleet_node_detail_handler).delete(fleet::fleet_deregister_handler))
+        .route("/api/v1/fleet/summary", get(fleet::fleet_summary_handler))
+        // Fleet policy distribution (P5-3)
+        .route("/api/v1/fleet/policy/push", post(fleet::fleet_policy_push_handler))
+        .route("/api/v1/fleet/policy/rollouts", get(fleet::fleet_rollouts_handler))
+        .route("/api/v1/fleet/policy/rollouts/:id", get(fleet::fleet_rollout_detail_handler))
+        .route("/api/v1/fleet/policy/rollouts/:id/ack", post(fleet::fleet_rollout_ack_handler))
         // Analysis engines — receipt chain intelligence (MLE STAR + Monte Carlo)
         .route("/api/v1/analysis/index", get(analysis::index_handler))
         .route(

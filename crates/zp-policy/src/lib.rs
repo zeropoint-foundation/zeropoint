@@ -22,7 +22,7 @@ pub mod wasm_runtime;
 pub use downgrade::{DowngradeError, DowngradeGuard, PolicyVersion};
 pub use engine::PolicyEngine;
 pub use gate::{GateResult, GovernanceGate};
-pub use rules::{PolicyRule, ReputationGateRule, ReputationThresholds};
+pub use rules::{PolicyRule, ReputationGateRule, ReputationThresholds, TrustTierEnforcementRule};
 
 // WASM types — only available with policy-wasm feature
 #[cfg(feature = "policy-wasm")]

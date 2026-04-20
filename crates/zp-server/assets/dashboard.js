@@ -1624,3 +1624,39 @@ document.addEventListener('click', function(e) {
     panel.innerHTML = '<div style="color:#555;font-size:12px">Channel status not available</div>';
   }
 })();
+
+// ── Fleet Status Panel (P5-2) ──
+(async function loadFleetPanel() {
+  const panel = document.getElementById('fleetPanel');
+  if (!panel) return;
+  try {
+    const res = await zpFetch('/api/v1/fleet/summary');
+    if (!res.ok) throw new Error('Status ' + res.status);
+    const data = await res.json();
+    if (data.total_nodes === 0) {
+      panel.innerHTML = '<div style="color:#555;font-size:12px">No fleet nodes registered</div>';
+      return;
+    }
+    panel.innerHTML =
+      '<div class="channel-card">' +
+        '<div class="channel-platform">' +
+          '<span class="channel-status-dot connected"></span>' +
+          'Online: ' + data.online +
+        '</div>' +
+        '<div class="channel-status-text">of ' + data.total_nodes + ' nodes</div>' +
+      '</div>' +
+      '<div class="channel-card">' +
+        '<div class="channel-platform">' +
+          '<span class="channel-status-dot ' + (data.stale > 0 ? 'disconnected' : 'connected') + '"></span>' +
+          'Stale: ' + data.stale +
+        '</div>' +
+        '<div class="channel-status-text">' + (data.offline > 0 ? data.offline + ' offline' : 'All responsive') + '</div>' +
+      '</div>' +
+      '<div class="channel-card">' +
+        '<div class="channel-platform">Policy Versions</div>' +
+        '<div class="channel-status-text">' + (data.policy_versions || []).join(', ') + '</div>' +
+      '</div>';
+  } catch (e) {
+    panel.innerHTML = '<div style="color:#555;font-size:12px">Fleet status not available</div>';
+  }
+})();

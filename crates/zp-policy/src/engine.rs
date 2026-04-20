@@ -11,6 +11,7 @@
 use crate::policy_registry::PolicyModuleRegistry;
 use crate::rules::{
     BulkOperationRule, CatastrophicActionRule, DefaultAllowRule, HarmPrincipleRule, PolicyRule,
+    TrustTierEnforcementRule,
     ReputationGateRule, SovereigntyRule,
 };
 use tracing::debug;
@@ -81,6 +82,8 @@ impl PolicyEngine {
             Box::new(BulkOperationRule::with_default_threshold()),
             // Phase 4: Reputation-gated mesh actions
             Box::new(ReputationGateRule::new()),
+            // Phase 5: Per-action trust tier enforcement (P5-1)
+            Box::new(TrustTierEnforcementRule::new()),
             // Permissive baseline — evaluated last
             Box::new(DefaultAllowRule::new()),
         ]
@@ -342,10 +345,12 @@ mod tests {
     #[test]
     fn engine_warns_on_bulk_operations() {
         let engine = PolicyEngine::new();
-        let context = make_context(ActionType::FileOp {
+        let mut context = make_context(ActionType::FileOp {
             op: zp_core::policy::FileOperation::Delete,
             path: "/data/*.txt".to_string(),
         });
+        // Tier1 required for delete ops — satisfy tier enforcement so bulk-op warning surfaces
+        context.trust_tier = zp_core::policy::TrustTier::Tier1;
 
         let decision = engine.evaluate(&context);
         assert!(matches!(decision, PolicyDecision::Warn { .. }));

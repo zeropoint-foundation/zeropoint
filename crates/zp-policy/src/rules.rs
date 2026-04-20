@@ -511,6 +511,87 @@ impl PolicyRule for ReputationGateRule {
 }
 
 // ============================================================================
+// Trust Tier Enforcement Rule (P5-1)
+// ============================================================================
+
+/// Enforces per-action trust tier requirements at the policy layer.
+///
+/// While the Guard enforces a *floor* (minimum tier for any request),
+/// this rule enforces *action-specific* tier requirements:
+///
+///   - Tier 0: Chat, Read, basic file operations
+///   - Tier 1: Execute, API calls, config changes, file writes
+///   - Tier 2: Key delegation, credential access, policy changes,
+///             fleet management, genesis operations
+///
+/// When an action's required tier exceeds the context's active tier,
+/// the rule blocks with a clear message about what tier is needed.
+pub struct TrustTierEnforcementRule;
+
+impl TrustTierEnforcementRule {
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Determine the minimum trust tier required for a given action.
+    fn required_tier(action: &ActionType) -> zp_core::policy::TrustTier {
+        use zp_core::policy::TrustTier;
+
+        match action {
+            // Tier 0: read-only, low-risk
+            ActionType::Chat | ActionType::Read { .. } => TrustTier::Tier0,
+
+            // Tier 1: write operations, code execution, API calls
+            ActionType::Write { .. }
+            | ActionType::Execute { .. }
+            | ActionType::ApiCall { .. }
+            | ActionType::FileOp { op: FileOperation::Write, .. }
+            | ActionType::FileOp { op: FileOperation::Create, .. }
+            | ActionType::FileOp { op: FileOperation::Delete, .. }
+            | ActionType::ConfigChange { .. } => TrustTier::Tier1,
+
+            // Tier 0 for non-mutating file ops
+            ActionType::FileOp { op: FileOperation::Read, .. }
+            | ActionType::FileOp { op: FileOperation::List, .. } => TrustTier::Tier0,
+
+            // Tier 2: critical operations requiring genesis provenance
+            ActionType::CredentialAccess { .. }
+            | ActionType::KeyDelegation { .. }
+            | ActionType::PeerIntroduction { .. } => TrustTier::Tier2,
+        }
+    }
+}
+
+impl Default for TrustTierEnforcementRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PolicyRule for TrustTierEnforcementRule {
+    fn name(&self) -> &str {
+        "TrustTierEnforcement"
+    }
+
+    fn evaluate(&self, context: &PolicyContext) -> Option<PolicyDecision> {
+        let required = Self::required_tier(&context.action);
+
+        if context.trust_tier >= required {
+            return None; // tier sufficient — don't interfere
+        }
+
+        Some(PolicyDecision::Block {
+            reason: format!(
+                "Action {:?} requires trust tier {:?}, but active tier is {:?}. \
+                 Tier 2 requires genesis-rooted key provenance.",
+                context.action, required, context.trust_tier
+            ),
+            policy_module: self.name().to_string(),
+        })
+    }
+}
+
+// ============================================================================
 // Helper functions
 // ============================================================================
 
