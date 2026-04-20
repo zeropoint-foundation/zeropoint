@@ -1625,6 +1625,40 @@ document.addEventListener('click', function(e) {
   }
 })();
 
+// ── WASM Policy Panel (P6-4) ──
+(async function loadWasmPolicyPanel() {
+  const panel = document.getElementById('wasmPolicyPanel');
+  if (!panel) return;
+  try {
+    const res = await zpFetch('/api/v1/policy/wasm');
+    if (!res.ok) throw new Error('Status ' + res.status);
+    const data = await res.json();
+    if (!data.runtime_available) {
+      panel.innerHTML = '<div style="color:#555;font-size:12px">Native rules only (WASM feature not enabled)</div>';
+      return;
+    }
+    if (data.count === 0) {
+      panel.innerHTML = '<div style="color:#555;font-size:12px">WASM runtime ready · no modules loaded</div>';
+      return;
+    }
+    let html = '';
+    for (const m of data.modules) {
+      const dotCls = m.status === 'Active' ? 'connected' : 'disconnected';
+      html +=
+        '<div class="channel-card">' +
+          '<div class="channel-platform">' +
+            '<span class="channel-status-dot ' + dotCls + '"></span>' +
+            m.name +
+          '</div>' +
+          '<div class="channel-status-text">' + m.status + ' · ' + m.size_bytes + ' bytes</div>' +
+        '</div>';
+    }
+    panel.innerHTML = html;
+  } catch (e) {
+    panel.innerHTML = '<div style="color:#555;font-size:12px">Policy runtime not available</div>';
+  }
+})();
+
 // ── Fleet Status Panel (P5-2) ──
 (async function loadFleetPanel() {
   const panel = document.getElementById('fleetPanel');
