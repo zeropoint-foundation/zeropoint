@@ -829,50 +829,126 @@
 
           // ── Phased progress for native builds ──────────────────
           // Native (cargo) tools compile from source — first builds can
-          // take 5-10+ minutes.  Instead of a static "waiting for port"
-          // message, show build phase and tail the log.
+          // take 5-10+ minutes.  Show elapsed time, a progress bar, and
+          // the current crate being compiled by tailing the build log.
           if (isNative) {
-            showToast(`<strong>${escapeHtml(tool.name)}</strong> compiling &mdash; <code>cargo run --release</code><br><span style="opacity:.6">First build may take several minutes. You can keep working.</span>`, maxWait);
-            // Poll build log to update toast with progress
+            const buildStart = Date.now();
+            const fmtElapsed = () => {
+              const s = Math.floor((Date.now() - buildStart) / 1000);
+              return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+            };
+            const buildToast = (phase, detail, pct) => {
+              const bar = pct != null
+                ? `<div style="margin:6px 0 2px;height:3px;background:#1a1a1e;border-radius:2px;overflow:hidden">` +
+                  `<div style="height:100%;width:${pct}%;background:#7eb8da;transition:width 0.5s ease"></div></div>`
+                : `<div style="margin:6px 0 2px;height:3px;background:#1a1a1e;border-radius:2px;overflow:hidden">` +
+                  `<div style="height:100%;width:30%;background:#7eb8da;border-radius:2px;animation:zpPulse 1.5s ease-in-out infinite"></div></div>`;
+              const elapsed = `<span style="opacity:.5;float:right">${fmtElapsed()}</span>`;
+              showToast(
+                `<strong>${escapeHtml(tool.name)}</strong> ${phase} ${elapsed}<br>` +
+                (detail ? `<code style="font-size:0.8em;opacity:.7">${escapeHtml(detail)}</code>` : '') +
+                bar,
+                maxWait
+              );
+            };
+            // Inject keyframe for indeterminate pulse (once)
+            if (!document.getElementById('zpPulseStyle')) {
+              const sty = document.createElement('style');
+              sty.id = 'zpPulseStyle';
+              sty.textContent = '@keyframes zpPulse{0%{transform:translateX(-100%)}50%{transform:translateX(250%)}100%{transform:translateX(-100%)}}';
+              document.head.appendChild(sty);
+            }
+            buildToast('compiling', 'cargo run --release', null);
+
+            // Auto-open diagnostic panel with live build log stream
+            showDiagnostic(tool, {
+              status: 'running',
+              error: `${tool.name} — building (cargo run --release)`,
+              hint: 'Compiling release binary. Build output is streaming below.',
+            });
+            // Stream the build log via tail -f in the terminal
+            const toolPath = tool.path || `~/projects/${tool.name}`;
+            execInTerminal(`tail -f ~/ZeroPoint/logs/${tool.name}.log`, toolPath);
+
+            // Track compiled crate count for progress estimation
+            let compiledCount = 0;
+            let lastPhase = 'compiling';
             const logPollId = setInterval(async () => {
               try {
-                const logResp = await zpFetch(`/api/v1/tools/log?name=${encodeURIComponent(tool.name)}&tail=3`);
+                const logResp = await zpFetch(`/api/v1/tools/log?name=${encodeURIComponent(tool.name)}&tail=5`);
                 if (logResp.ok) {
                   const logData = await logResp.json();
-                  const lastLine = (logData.lines || []).slice(-1)[0] || '';
-                  if (lastLine) {
-                    // Detect compilation vs runtime phase
-                    const isCompiling = /Compiling|Downloading|Updating|Building/.test(lastLine);
-                    const isRunning = /Listening|listening|Started|Serving|Binding|bound|ready/.test(lastLine);
-                    const phase = isRunning ? 'starting up' : isCompiling ? 'compiling' : 'building';
-                    const short = lastLine.length > 80 ? lastLine.slice(0, 77) + '...' : lastLine;
-                    showToast(
-                      `<strong>${escapeHtml(tool.name)}</strong> ${phase}<br>` +
-                      `<code style="font-size:0.8em;opacity:.7">${escapeHtml(short)}</code>`,
-                      maxWait
-                    );
+                  const totalLines = logData.lines || 0;
+                  const logText = logData.log || '';
+                  const logLines = logText.split('\n').filter(l => l.trim());
+                  const lastLine = logLines[logLines.length - 1] || '';
+
+                  // Count total Compiling lines from total log line count
+                  // (rough: most log lines during cargo build are Compiling lines)
+                  compiledCount = totalLines;
+
+                  // Detect phase from last log line
+                  if (/Compiling|Downloading|Updating/.test(lastLine)) {
+                    lastPhase = 'compiling';
+                  } else if (/Linking|Finished/.test(lastLine)) {
+                    lastPhase = 'linking';
+                  } else if (/Running|Listening|listening|Started|Serving|Binding|bound|ready/i.test(lastLine)) {
+                    lastPhase = 'starting';
                   }
+
+                  // Extract crate name from "Compiling foo v1.2.3"
+                  const crateMatch = lastLine.match(/Compiling\s+(\S+)\s+v/);
+                  const detail = crateMatch
+                    ? `${crateMatch[1]} (${compiledCount} crates compiled)`
+                    : lastPhase === 'linking' ? `linking release binary (${compiledCount} crates compiled)`
+                    : lastPhase === 'starting' ? 'binary ready — starting server'
+                    : lastLine.length > 70 ? lastLine.slice(0, 67) + '...' : lastLine;
+
+                  // Progress: use indeterminate until we see Linking/Finished
+                  const pct = lastPhase === 'linking' ? 92
+                    : lastPhase === 'starting' ? 98
+                    : null;  // indeterminate during compilation
+
+                  buildToast(lastPhase, detail, pct);
                 }
               } catch {}
-            }, 4000);
+            }, 3000);
             const ready = await waitForPort(pollUrl, maxWait, pollInterval);
             clearInterval(logPollId);
+            // Kill the tail -f stream and dismiss the build panel
+            if (_diagExecWs) { _diagExecWs.close(); _diagExecWs = null; }
             if (ready) {
-              showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
-              if (pendingTab && !pendingTab.closed) {
-                pendingTab.location.href = openUrl;
-              } else {
-                window.open(openUrl, '_blank');
-              }
+              buildToast('ready', 'opening in browser', 100);
+              dismissDiag();
+              setTimeout(() => {
+                showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
+                if (pendingTab && !pendingTab.closed) {
+                  pendingTab.location.href = openUrl;
+                } else {
+                  window.open(openUrl, '_blank');
+                }
+              }, 400);
             } else {
               if (pendingTab) pendingTab.close();
               showToast('');
-              showDiagnostic(tool, {
-                error: `${tool.name} did not respond on port ${result.port}`,
-                cmd: result.cmd,
-                port: result.port,
-                hint: 'The build may still be running in the background. Check the log below, or try:\n  tail -f ~/ZeroPoint/logs/' + tool.name + '.log',
-              });
+              // Update the already-open diagnostic panel with timeout info
+              const diagTitle = document.getElementById('diagTitle');
+              if (diagTitle) {
+                diagTitle.textContent = `${tool.name} — Build Timed Out (${fmtElapsed()})`;
+                diagTitle.style.color = '#FFB020';
+              }
+              const body = document.getElementById('diagBody');
+              if (body) {
+                body.innerHTML =
+                  `<div class="diag-field"><div class="diag-label">Status</div><div class="diag-value" style="color:#FFB020">Port ${result.port} did not respond after ${fmtElapsed()}</div></div>` +
+                  `<div class="diag-field"><div class="diag-label">Hint</div><div class="diag-value hint-text">The build may still be running in the background. The terminal below is still streaming output. Once you see "Listening on ...", click Retry.</div></div>` +
+                  `<div class="diag-field"><div class="diag-label">Command</div><div class="diag-value"><code>${escapeHtml(result.cmd || '')}</code></div></div>`;
+              }
+              // Re-stream the log tail (the old tail -f was killed above)
+              execInTerminal(`tail -f ~/ZeroPoint/logs/${tool.name}.log`, toolPath);
+              // Show retry button
+              const retryBtn = document.getElementById('diagRetryBtn');
+              if (retryBtn) { retryBtn.style.display = 'inline-block'; }
             }
           } else {
             showToast(`<strong>${escapeHtml(tool.name)}</strong> starting &mdash; waiting for port ${escapeHtml(String(result.port || ''))}...`, maxWait);
