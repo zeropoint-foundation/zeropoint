@@ -51,17 +51,19 @@
   }
 
   // ── Core synthesis ─────────────────────────────────────────────
-  async function synthesize(text) {
+  // voiceOpts: optional override for voice, lengthScale, noiseScale, noiseW, sentenceSilence
+  async function synthesize(text, voiceOpts) {
+    const v = voiceOpts || {};
     const resp = await fetch(cfg.serverUrl + '/synthesize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
-        voice_file: cfg.voice,
-        length_scale: cfg.lengthScale,
-        noise_scale: cfg.noiseScale,
-        noise_w: cfg.noiseW,
-        sentence_silence: cfg.sentenceSilence,
+        voice_file: v.voice || cfg.voice,
+        length_scale: v.lengthScale || cfg.lengthScale,
+        noise_scale: v.noiseScale || cfg.noiseScale,
+        noise_w: v.noiseW || cfg.noiseW,
+        sentence_silence: v.sentenceSilence || cfg.sentenceSilence,
       }),
     });
     if (!resp.ok) throw new Error(`TTS ${resp.status}`);
@@ -87,7 +89,8 @@
   }
 
   // ── Playback pipeline ─────────────────────────────────────────
-  async function speak(text) {
+  // voiceOpts: optional {voice, lengthScale, noiseScale, noiseW, sentenceSilence}
+  async function speak(text, voiceOpts) {
     stop();
     aborted = false;
     speaking = true;
@@ -98,7 +101,7 @@
     for (let i = 0; i < chunks.length; i++) {
       if (aborted) break;
       try {
-        const url = await synthesize(chunks[i]);
+        const url = await synthesize(chunks[i], voiceOpts);
         if (aborted) { URL.revokeObjectURL(url); break; }
         await playBlob(url);
         URL.revokeObjectURL(url);

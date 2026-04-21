@@ -2255,8 +2255,28 @@
   const recoveryNarrationScript = "These twenty-four words are the only way to recover your Genesis secret if you lose access to your sovereignty provider. Write them down — on paper, not in a notes app, not in a screenshot. Store them somewhere physical and secure. This screen will not appear again. If you lose both your provider access and these words, your Genesis key is gone. Your vault contents become unrecoverable. That's not a bug — that's the sovereignty model working as designed. You control the keys. You control the recovery. No one else can help you, and no one else can compromise you.";
 
   // Auto-play narration on step transition via Piper TTS.
+  // Alternating voices: Amy (even steps), Ryan (odd steps + recovery).
   // Sets data-tts-script on each step element so tts.js floating button
   // also uses the curated script, then speaks immediately if TTS is available.
+  const voiceAmy = {
+    voice: 'en_US-amy-medium',
+    lengthScale: '0.7692',       // 1.30x
+    noiseScale: '0.360',
+    noiseW: '0.930',
+    sentenceSilence: '0.30',
+  };
+  const voiceRyan = {
+    voice: 'en_US-ryan-medium',
+    lengthScale: '0.7407',       // 1.35x
+    noiseScale: '0.670',
+    noiseW: '0.670',
+    sentenceSilence: '0.30',
+  };
+
+  function voiceForStep(step) {
+    return (step % 2 === 0) ? voiceAmy : voiceRyan;
+  }
+
   let narrationEnabled = true;
 
   function playStepNarration(step) {
@@ -2267,13 +2287,13 @@
     }
     // Auto-speak if TTS is available and narration hasn't been muted
     if (narrationEnabled && window.zpTTS && window.zpTTS.isAvailable()) {
-      window.zpTTS.speak(stepNarrationScripts[step] || '');
+      window.zpTTS.speak(stepNarrationScripts[step] || '', voiceForStep(step));
     }
   }
 
   function playRecoveryNarration() {
     if (narrationEnabled && window.zpTTS && window.zpTTS.isAvailable()) {
-      window.zpTTS.speak(recoveryNarrationScript);
+      window.zpTTS.speak(recoveryNarrationScript, voiceRyan);
     }
   }
 
