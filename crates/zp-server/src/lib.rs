@@ -1454,7 +1454,7 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     // ── Graceful shutdown: kill all tool processes on SIGINT/SIGTERM ──
-    let shutdown = async {
+    let shutdown = async move {
         tokio::signal::ctrl_c().await.ok();
         info!("Shutdown signal received — stopping launched tools...");
         // Walk PID directory, kill every tool process
