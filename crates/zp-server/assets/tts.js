@@ -198,7 +198,7 @@
     btn = document.createElement('button');
     btn.className = 'tts-float';
     btn.title = 'Read aloud (Piper TTS)';
-    btn.innerHTML = speakerIcon();
+    btn.innerHTML = speakerIcon() + '<span class="tts-label">listen</span>';
     btn.addEventListener('click', handleClick);
     document.body.appendChild(btn);
 
@@ -221,11 +221,11 @@
   function updateButton(state) {
     if (!btn) return;
     if (state === 'speaking') {
-      btn.innerHTML = stopIcon();
+      btn.innerHTML = stopIcon() + '<span class="tts-label">stop</span>';
       btn.classList.add('active');
       btn.title = 'Stop reading';
     } else {
-      btn.innerHTML = speakerIcon();
+      btn.innerHTML = speakerIcon() + '<span class="tts-label">listen</span>';
       btn.classList.remove('active');
       btn.title = 'Read aloud (Piper TTS)';
     }
@@ -233,15 +233,14 @@
 
   // ── Icons ──────────────────────────────────────────────────────
   function speakerIcon() {
-    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
       <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
     </svg>`;
   }
 
   function stopIcon() {
-    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
       <rect x="6" y="6" width="12" height="12" rx="2"/>
     </svg>`;
   }
@@ -252,11 +251,11 @@
     style.textContent = `
       .tts-float {
         position: fixed;
-        bottom: 1.5rem;
+        top: 1rem;
         right: 1.5rem;
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
+        height: 30px;
+        padding: 0 0.7rem;
+        border-radius: 4px;
         background: var(--bg-elevated, #111116);
         border: 1px solid var(--rule, #222228);
         color: var(--accent, #7eb8da);
@@ -264,14 +263,17 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 0.4rem;
         z-index: 9999;
         transition: all 0.2s ease;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        font-family: var(--mono, monospace);
+        font-size: 0.65rem;
+        letter-spacing: 0.03em;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.3);
       }
       .tts-float:hover {
         border-color: var(--accent, #7eb8da);
-        transform: scale(1.08);
-        box-shadow: 0 2px 20px rgba(126,184,218,0.2);
+        box-shadow: 0 1px 10px rgba(126,184,218,0.2);
       }
       .tts-float.active {
         background: var(--accent, #7eb8da);
@@ -280,8 +282,11 @@
         animation: tts-pulse 2s ease-in-out infinite;
       }
       @keyframes tts-pulse {
-        0%, 100% { box-shadow: 0 2px 12px rgba(126,184,218,0.3); }
-        50% { box-shadow: 0 2px 24px rgba(126,184,218,0.5); }
+        0%, 100% { box-shadow: 0 1px 8px rgba(126,184,218,0.3); }
+        50% { box-shadow: 0 1px 16px rgba(126,184,218,0.5); }
+      }
+      .tts-float .tts-label {
+        text-transform: uppercase;
       }
     `;
     document.head.appendChild(style);
