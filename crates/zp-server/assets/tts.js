@@ -15,10 +15,10 @@
 
   const DEFAULT_CONFIG = {
     serverUrl: 'http://localhost:8473',
-    voice: 'en_US-kusal-medium',      // primary narrator voice
-    lengthScale: '0.7692',             // 1.30x speed
-    noiseScale: '0.360',
-    noiseW: '0.930',
+    voice: 'en_US-ryan-medium',        // primary narrator voice
+    lengthScale: '0.7407',             // 1.35x speed
+    noiseScale: '0.670',
+    noiseW: '0.670',
     sentenceSilence: '0.30',
     // Selector for the content area to read when the floating button is clicked.
     // Defaults to the visible .step element (onboarding), or .container, or body.
