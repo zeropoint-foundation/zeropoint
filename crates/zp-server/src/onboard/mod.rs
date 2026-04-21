@@ -11,6 +11,7 @@
 
 mod configure;
 mod credentials;
+pub mod deep_scan;
 mod detect;
 mod genesis;
 mod inference;

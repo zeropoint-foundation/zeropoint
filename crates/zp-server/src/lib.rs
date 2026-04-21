@@ -4057,9 +4057,24 @@ async fn tools_launch_handler(
     // shell env vars.  cmd.env() is inherited and cannot be overridden.
     cmd.env(&assignment.port_var, assignment.port.to_string());
 
+    // Deep scan: cross-reference docker-compose, .env.example, and Cargo.toml
+    // to detect and auto-correct misconfigurations before launch.
+    let scan_result = onboard::deep_scan::analyze_tool(&req.name, &tool_path);
+    if !scan_result.corrected_env.is_empty() {
+        tracing::info!(
+            "Deep scan [{}]: applying {} env corrections",
+            req.name,
+            scan_result.corrected_env.len()
+        );
+    }
+    for finding in scan_result.warnings() {
+        tracing::warn!("Deep scan [{}]: {}", req.name, finding.message);
+    }
+
     // Source .env.example defaults into the process env so tools get
     // baseline config (DATABASE_URL, etc.) even without a .env file.
     // We parse .env.example and inject any vars NOT already set by vault.
+    // Deep scan corrections take priority over raw .env.example values.
     let env_example = tool_path.join(".env.example");
     if env_example.exists() {
         if let Ok(contents) = std::fs::read_to_string(&env_example) {
@@ -4075,9 +4090,27 @@ async fn tools_launch_handler(
                     let val = val.trim().trim_matches('"').trim_matches('\'');
                     // Don't override vault-injected vars or the ZP port var
                     if !vault_keys.contains(key) && key != assignment.port_var {
-                        cmd.env(key, val);
+                        // Use deep scan correction if available, else raw value
+                        let effective_val = scan_result
+                            .corrected_env
+                            .get(key)
+                            .map(|s| s.as_str())
+                            .unwrap_or(val);
+                        cmd.env(key, effective_val);
                     }
                 }
+            }
+        }
+    }
+
+    // Inject any deep scan corrections for vars NOT in .env.example
+    // (e.g. synthesized DATABASE_URL when none was declared)
+    {
+        let vault_keys: std::collections::HashSet<&str> =
+            vault_env.iter().map(|(k, _)| k.as_str()).collect();
+        for (key, val) in &scan_result.corrected_env {
+            if !vault_keys.contains(key.as_str()) && key != &assignment.port_var {
+                cmd.env(key, val);
             }
         }
     }
