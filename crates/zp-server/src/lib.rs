@@ -1570,21 +1570,13 @@ struct GuardEvaluateResponse {
 // Every action handler that modifies state or grants privileges MUST call
 // this before proceeding. Returns Ok(GateResult) on Allow/Warn/Review,
 // returns Err(403) on Block. This is the authoritative enforcement point.
-fn enforce_gate(
-    state: &AppState,
-    action: CoreActionType,
-    actor_label: &str,
-) -> Result<GateResult, (StatusCode, String)> {
-    enforce_gate_at_tier(state, action, actor_label, TrustTier::Tier0)
-}
-
 /// Gate enforcement with an explicit trust tier.
 ///
 /// Callers that perform privileged operations (tool launch = Tier1,
 /// credential access = Tier2) must pass the tier that matches the
 /// action they're authorizing.  The default `enforce_gate` uses Tier0,
 /// which is correct for read-only / chat actions.
-fn enforce_gate_at_tier(
+fn enforce_gate(
     state: &AppState,
     action: CoreActionType,
     actor_label: &str,
@@ -1957,7 +1949,7 @@ async fn grant_handler(
 ) -> Result<Json<GrantResponse>, (StatusCode, String)> {
     // ── Gate enforcement: capability grants are high-privilege ──
     // CredentialAccess requires Tier2 (genesis-rooted key provenance).
-    enforce_gate_at_tier(
+    enforce_gate(
         &state,
         CoreActionType::CredentialAccess {
             credential_ref: format!("grant:{}", body.capability),
@@ -2052,7 +2044,7 @@ async fn delegate_handler(
 ) -> Result<Json<DelegateResponse>, (StatusCode, String)> {
     // ── Gate enforcement: delegation is high-privilege ──
     // Delegation requires Tier2 (genesis-rooted key provenance).
-    enforce_gate_at_tier(
+    enforce_gate(
         &state,
         CoreActionType::CredentialAccess {
             credential_ref: format!("delegate:{}", body.capability),
@@ -3783,7 +3775,7 @@ async fn tools_launch_handler(
     // ── Gate enforcement: tool launch is a high-privilege Execute action ──
     // Tool launch requires Tier1 — the dashboard tile click is an explicit
     // user action that authorizes process execution.
-    if let Err((status, reason)) = enforce_gate_at_tier(
+    if let Err((status, reason)) = enforce_gate(
         &state,
         CoreActionType::Execute {
             language: format!("tool:{}", req.name),
