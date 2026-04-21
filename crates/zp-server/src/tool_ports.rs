@@ -303,12 +303,18 @@ fn detect_auth_var(tool_path: &Path) -> String {
     "GATEWAY_AUTH_TOKEN".to_string()
 }
 
-/// Build a shell preamble that sources `.env.zp` before the tool command.
+/// Build a shell preamble that sources env files in priority order.
+///
+/// Layering (last write wins):
+///   1. `.env.example`  — project defaults (DATABASE_URL, etc.)
+///   2. `.env`          — operator overrides
+///   3. `.env.zp`       — ZP port assignment + auth token (always wins)
 ///
 /// `set -a` exports all variables so child processes inherit them.
-/// This is prepended to the tool's launch command.
+/// Vault-injected env vars are set directly on the Command and always
+/// override everything (they bypass the shell entirely).
 pub fn env_zp_preamble() -> &'static str {
-    "set -a && [ -f .env.zp ] && . ./.env.zp && set +a && "
+    "set -a && [ -f .env.example ] && . ./.env.example && [ -f .env ] && . ./.env && [ -f .env.zp ] && . ./.env.zp && set +a && "
 }
 
 // ── Port variable detection ────────────────────────────────────────────
