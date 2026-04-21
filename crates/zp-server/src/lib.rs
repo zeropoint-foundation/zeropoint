@@ -837,7 +837,7 @@ async fn security_headers_middleware(
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
          img-src 'self' data:; \
          font-src 'self' data: https://r2cdn.perplexity.ai; \
-         media-src 'self'; \
+         media-src 'self' blob:; \
          connect-src 'self' ws://localhost:* wss://localhost:* http://localhost:8473; \
          frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
             .parse()
