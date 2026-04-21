@@ -548,13 +548,21 @@ const data = [
       { label: "SSE real-time event stream", status: "shipped" },
       { label: "Dashboard observability panels (cognition + analysis + events)", status: "shipped" },
       { label: "Channel adapters (Slack webhook + adapter framework)", status: "shipped" },
+      { label: "Onboarding review mode (post-genesis read-only walkthrough)", status: "shipped" },
+      { label: "Onboarding narration (Piper TTS, alternating voices, curated scripts)", status: "shipped" },
+      { label: "Setup & Maintenance surface (/setup)", status: "roadmap", children: [
+        { label: "Re-key / rotate sovereignty provider", status: "roadmap" },
+        { label: "Recovery kit export & verification", status: "roadmap" },
+        { label: "Genesis transcript viewer", status: "roadmap" },
+        { label: "Fleet enrollment from setup surface", status: "roadmap" },
+      ]},
     ]},
     { label: "Enterprise & Fleet", status: "shipped", children: [
       { label: "Trust Tier 2 runtime enforcement (per-action tier gating)", status: "shipped" },
       { label: "Fleet node registry (heartbeat + status + summary)", status: "shipped" },
       { label: "Policy push distribution (rollout + delivery tracking)", status: "shipped" },
       { label: "Genesis v2 ceremony (Shamir SSS key escrow + rotation)", status: "shipped" },
-      { label: "Genesis ceremony UI", status: "roadmap" },
+      { label: "Genesis ceremony UI (onboarding flow with narration)", status: "shipped" },
     ]},
     { label: "Capability Verification & Policy Runtime", status: "shipped", children: [
       { label: "ConfigurationClaim receipt type (typed metadata, validation rules)", status: "shipped" },

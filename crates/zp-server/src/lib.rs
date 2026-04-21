@@ -1349,6 +1349,37 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     let dashboard_port = config.port;
     let state = AppState::init(&config).await;
 
+    // ── SYSTEM CANONICALIZATION: Bead zero on the system wire ──────────
+    // If genesis.json exists but no system:canonicalized receipt is in the
+    // chain, emit one now. This anchors the root wire from which all
+    // provider and tool wires descend.
+    {
+        let genesis_path_canon = config.home_dir.join("genesis.json");
+        if genesis_path_canon.exists() {
+            if let Ok(raw) = std::fs::read_to_string(&genesis_path_canon) {
+                if let Ok(genesis_json) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    let initial_state = serde_json::json!({
+                        "genesis_public_key": genesis_json.get("genesis_public_key"),
+                        "operator": genesis_json.get("operator"),
+                        "operator_public_key": genesis_json.get("operator_public_key"),
+                        "sovereignty_mode": genesis_json.get("sovereignty_mode"),
+                        "constitutional_hash": genesis_json.get("constitutional_hash"),
+                        "version": genesis_json.get("version"),
+                        "timestamp": genesis_json.get("timestamp"),
+                    });
+                    tool_chain::emit_canonicalization_receipt(
+                        &state.0.audit_store,
+                        "system",
+                        "zeropoint",
+                        &initial_state,
+                        None, // system is root — no parent
+                        "zp-server",
+                    );
+                }
+            }
+        }
+    }
+
     let app = build_app(state.clone(), &config);
 
     info!("ZeroPoint server on {}", addr);
@@ -2884,6 +2915,9 @@ struct ToolsListResponse {
     scan_path: String,
     has_genesis: bool,
     chain_receipts: bool,
+    /// All canonicalization anchors (bead zeros) across all domain wires.
+    /// Keys: "provider:anthropic", "tool:ironclaw", "node:edge-1", etc.
+    canonicalization_anchors: std::collections::HashMap<String, String>, // key → timestamp
 }
 
 /// Response for POST /api/v1/tools/launch — tool started successfully.
@@ -2982,6 +3016,9 @@ struct CockpitTool {
     path: String,
     status: String,                // "governed", "configured", "unconfigured"
     governance: String,            // "genesis-bound", "unanchored", "none"
+    canonicalized: bool,           // bead zero: first-known-state receipt exists
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canonicalized_at: Option<String>,
     providers: Vec<String>,        // provider names found in .env.example
     launch: ToolLaunch,            // how to open this tool
     ready: bool,                   // preflight passed?
@@ -3223,41 +3260,33 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
 /// Scan ~/projects for tools and return their governance status.
 /// Used by the dashboard cockpit to render app launcher tiles.
 ///
-/// Readiness is derived from the **audit chain** (canonical source),
-/// with a fallback to the preflight JSON cache for backward compat.
+/// Primary source: **vault** (which tools have credentials stored).
+/// Secondary source: **audit chain** (lifecycle receipts for readiness).
+/// Tertiary source: **filesystem scan** (discovery of new unregistered tools).
+///
+/// The vault is the system's memory of what it governs. If credentials
+/// exist for a tool, that tool is governed — regardless of whether a
+/// filesystem scan can find it at request time.
 async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse> {
     let scan_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
 
-    if !scan_path.exists() {
-        return Json(ToolsListResponse {
-            tools: vec![],
-            scan_path: scan_path.display().to_string(),
-            has_genesis: false,
-            chain_receipts: false,
-        });
-    }
-
-    let results = zp_engine::scan::scan_tools(&scan_path);
-    let home = zp_paths::home().unwrap_or_default();
     let has_genesis = zp_paths::home().ok().and_then(|h| Some(h.join("genesis.json").exists())).unwrap_or(false);
 
-    // Load vault for status checks (read-only, best-effort)
+    // Load vault — this is the PRIMARY source of truth for governed tools
     let vault_for_status: Option<zp_trust::CredentialVault> = state
         .0
         .vault_key
         .get()
         .and_then(|k| k.as_ref())
         .and_then(|resolved_key| {
-            let vault_path = std::path::PathBuf::from(&state.0.data_dir).join("vault.json");
+            let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
             zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path).ok()
         });
 
-    // ── Chain state: canonical source of truth ──────────────
-    let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
-
-    // ── Fallback: JSON cache (for tools preflighted before chain was wired) ──
+    // ── Preflight JSON: used ONLY for port conflict detection, NOT readiness ──
+    // Readiness state is derived exclusively from the audit chain.
     let preflight_cache = onboard::preflight::PreflightResults::load();
 
     // ── Port conflicts: compose infrastructure ports vs live system ──
@@ -3286,93 +3315,253 @@ async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse>
         })
         .unwrap_or_default();
 
-    let tools: Vec<CockpitTool> = results
-        .tools
-        .into_iter()
-        .map(|tool| {
-            // Check if tool is configured — vault entries take precedence over .env
-            let env_path = tool.path.join(".env");
-            let has_vault_config = vault_for_status
-                .as_ref()
-                .map(|v| !v.list_prefix(&format!("tools/{}/", tool.name)).is_empty())
-                .unwrap_or(false);
-            let (status, governance) = if has_vault_config && has_genesis {
-                ("governed".to_string(), "genesis-bound".to_string())
-            } else if has_vault_config {
-                ("configured".to_string(), "vault-backed".to_string())
-            } else if env_path.exists() {
-                let is_zp = std::fs::read_to_string(&env_path)
-                    .map(|c| c.contains("Generated by: zp configure"))
-                    .unwrap_or(false);
-                if is_zp && has_genesis {
-                    ("governed".to_string(), "genesis-bound".to_string())
-                } else if is_zp {
-                    ("configured".to_string(), "unanchored".to_string())
-                } else {
-                    ("configured".to_string(), "none".to_string())
+    // ── PRIMARY: Derive governed tools from vault entries ──────────────
+    // Vault keys follow: tools/{name}/{credential_field}
+    // Extract unique tool names from the second path segment.
+    let mut vault_tool_names: Vec<String> = Vec::new();
+    if let Some(ref vault) = vault_for_status {
+        let tool_keys = vault.list_prefix("tools/");
+        let mut seen = std::collections::HashSet::new();
+        for key in &tool_keys {
+            // key = "tools/shannon/anthropic_api_key"
+            let parts: Vec<&str> = key.splitn(3, '/').collect();
+            if parts.len() >= 2 {
+                let name = parts[1].to_string();
+                if seen.insert(name.clone()) {
+                    vault_tool_names.push(name);
                 }
-            } else {
-                ("unconfigured".to_string(), "none".to_string())
-            };
+            }
+        }
+    }
 
-            let launch = detect_launch(&tool.path);
-
-            // Derive readiness: chain first, then JSON fallback
-            let (ready, preflight_issues) = if let Some(cs) = chain_state.get(&tool.name) {
-                // Chain has receipts for this tool — use chain state
-                (cs.ready, cs.preflight_issues.clone())
-            } else if let Some(ref pf) = preflight_cache {
-                // Fallback to JSON cache
-                if let Some(tp) = pf.tools.iter().find(|t| t.name == tool.name) {
-                    let issues: Vec<String> = tp
-                        .checks
+    // ── CANONICALIZATION: Emit bead-zero receipts for vault entities ──────
+    // For each provider and tool in the vault that lacks a canonicalization
+    // receipt, emit one now. This is idempotent — the emit function checks
+    // for existing receipts before appending.
+    if let Some(ref vault) = vault_for_status {
+        // Provider canonicalization: providers/{name}/{field}
+        let provider_keys = vault.list_prefix("providers/");
+        let mut seen_providers = std::collections::HashSet::new();
+        for key in &provider_keys {
+            let parts: Vec<&str> = key.splitn(3, '/').collect();
+            if parts.len() >= 2 {
+                let pname = parts[1].to_string();
+                if seen_providers.insert(pname.clone()) {
+                    let fields: Vec<String> = vault
+                        .list_prefix(&format!("providers/{}/", pname))
                         .iter()
-                        .filter(|c| c.status == "fail")
-                        .map(|c| c.detail.clone())
+                        .filter_map(|k| k.splitn(3, '/').nth(2).map(|s| s.to_string()))
                         .collect();
-                    (tp.ready, issues)
-                } else {
-                    (false, vec!["Not preflighted yet".to_string()])
+                    let initial_state = serde_json::json!({
+                        "fields": fields,
+                        "vault_prefix": format!("providers/{}", pname),
+                    });
+                    tool_chain::emit_canonicalization_receipt(
+                        &state.0.audit_store,
+                        "provider",
+                        &pname,
+                        &initial_state,
+                        Some("system:zeropoint"), // parent: system wire
+                        "zp-server",
+                    );
                 }
-            } else {
-                (false, vec!["Preflight not run".to_string()])
-            };
-
-            // Merge any compose port conflicts into preflight issues
-            let mut all_issues = preflight_issues;
-            if let Some(conflicts) = port_conflict_map.get(&tool.name) {
-                all_issues.extend(conflicts.iter().cloned());
             }
-            let effective_ready = ready && !port_conflict_map.contains_key(&tool.name);
+        }
 
-            // Derive verification state from chain
-            let (verified, capabilities) = if let Some(cs) = chain_state.get(&tool.name) {
-                (cs.verified, cs.capabilities.clone())
-            } else {
-                (false, vec![])
-            };
+        // Tool canonicalization: tools/{name}/{field}
+        for tool_name in &vault_tool_names {
+            let fields: Vec<String> = vault
+                .list_prefix(&format!("tools/{}/", tool_name))
+                .iter()
+                .filter_map(|k| k.splitn(3, '/').nth(2).map(|s| s.to_string()))
+                .collect();
+            // Derive primary provider from field names (e.g., "anthropic_api_key" → "anthropic")
+            let primary_provider = fields.iter()
+                .find_map(|f| {
+                    // Match common patterns: {provider}_api_key, {provider}_url
+                    if let Some(prov) = f.strip_suffix("_api_key") {
+                        Some(format!("provider:{}", prov))
+                    } else if let Some(prov) = f.strip_suffix("_key") {
+                        seen_providers.contains(prov).then(|| format!("provider:{}", prov))
+                    } else {
+                        None
+                    }
+                });
+            let initial_state = serde_json::json!({
+                "fields": fields,
+                "vault_prefix": format!("tools/{}", tool_name),
+                "has_genesis": has_genesis,
+            });
+            tool_chain::emit_canonicalization_receipt(
+                &state.0.audit_store,
+                "tool",
+                tool_name,
+                &initial_state,
+                primary_provider.as_deref(),
+                "zp-server",
+            );
+        }
+    }
 
-            CockpitTool {
-                name: tool.name,
-                path: tool.path.display().to_string(),
-                status,
-                governance,
-                providers: tool.provider_vars,
-                launch,
-                ready: effective_ready,
-                preflight_issues: all_issues,
-                verified,
-                capabilities,
-            }
-        })
+    // Re-query chain state after canonicalization emission so new anchors are visible
+    let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
+
+    // ── SECONDARY: Filesystem scan for discovery of unconfigured tools ──
+    let scanner_results = zp_engine::scan::scan_tools(&scan_path);
+    // Tools found by scanner but NOT in vault = discovered, unconfigured
+    let scanner_only: Vec<&zp_engine::scan::ToolScanResult> = scanner_results
+        .tools
+        .iter()
+        .filter(|t| !vault_tool_names.contains(&t.name))
         .collect();
 
+    // ── Build cockpit tiles: vault-derived first, then scanner-discovered ──
+    let mut tools: Vec<CockpitTool> = Vec::new();
+
+    // Vault-derived tools (governed / configured)
+    for tool_name in &vault_tool_names {
+        let tool_path = scan_path.join(tool_name);
+        let path_str = if tool_path.exists() {
+            tool_path.display().to_string()
+        } else {
+            // Tool has vault entries but no filesystem presence — still show it
+            format!("(vault-only) {}", tool_name)
+        };
+
+        // Governance status: vault + genesis = governed
+        let (status, governance) = if has_genesis {
+            ("governed".to_string(), "genesis-bound".to_string())
+        } else {
+            ("configured".to_string(), "vault-backed".to_string())
+        };
+
+        // Provider vars: derive from vault key names for this tool
+        let providers: Vec<String> = vault_for_status
+            .as_ref()
+            .map(|v| {
+                v.list_prefix(&format!("tools/{}/", tool_name))
+                    .iter()
+                    .filter_map(|k| k.splitn(3, '/').nth(2).map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Launch detection (only if path exists on disk)
+        let launch = if tool_path.exists() {
+            detect_launch(&tool_path)
+        } else {
+            ToolLaunch {
+                kind: "unknown".to_string(),
+                url: None,
+                port: None,
+                cmd: None,
+            }
+        };
+
+        // Readiness: chain is the SOLE source of truth.
+        // Lifecycle state is derived from the chain wire:
+        //   bead 0: canonicalized → configured → preflight:passed → launched
+        // No more JSON fallback — if it's not in the chain, it hasn't happened.
+        let (ready, preflight_issues) = if let Some(cs) = chain_state.get(tool_name) {
+            (cs.ready, cs.preflight_issues.clone())
+        } else {
+            // No chain state at all — tool is canonicalized (we just emitted)
+            // but has no configure/preflight receipts yet
+            (false, vec!["Awaiting configuration and preflight".to_string()])
+        };
+
+        // Merge port conflicts
+        let mut all_issues = preflight_issues;
+        if let Some(conflicts) = port_conflict_map.get(tool_name) {
+            all_issues.extend(conflicts.iter().cloned());
+        }
+        let effective_ready = ready && !port_conflict_map.contains_key(tool_name);
+
+        // Verification state from chain
+        let (verified, capabilities) = if let Some(cs) = chain_state.get(tool_name) {
+            (cs.verified, cs.capabilities.clone())
+        } else {
+            (false, vec![])
+        };
+
+        // Canonicalization state from chain
+        let (canonicalized, canonicalized_at) = if let Some(cs) = chain_state.get(tool_name) {
+            (cs.canonicalized, cs.canonicalized_at.clone())
+        } else {
+            (false, None)
+        };
+
+        tools.push(CockpitTool {
+            name: tool_name.clone(),
+            path: path_str,
+            status,
+            governance,
+            canonicalized,
+            canonicalized_at,
+            providers,
+            launch,
+            ready: effective_ready,
+            preflight_issues: all_issues,
+            verified,
+            capabilities,
+        });
+    }
+
+    // Scanner-discovered tools (not in vault — show as unconfigured for discovery)
+    for tool in scanner_only {
+        let launch = detect_launch(&tool.path);
+
+        // Chain-only derivation: scanner-discovered tools have no vault
+        // entries and no canonicalization anchor, so they're never ready.
+        let (ready, preflight_issues) = if let Some(cs) = chain_state.get(&tool.name) {
+            (cs.ready, cs.preflight_issues.clone())
+        } else {
+            (false, vec!["Not governed — add to vault to begin lifecycle".to_string()])
+        };
+
+        let mut all_issues = preflight_issues;
+        if let Some(conflicts) = port_conflict_map.get(&tool.name) {
+            all_issues.extend(conflicts.iter().cloned());
+        }
+        let effective_ready = ready && !port_conflict_map.contains_key(&tool.name);
+
+        let (verified, capabilities) = if let Some(cs) = chain_state.get(&tool.name) {
+            (cs.verified, cs.capabilities.clone())
+        } else {
+            (false, vec![])
+        };
+
+        tools.push(CockpitTool {
+            name: tool.name.clone(),
+            path: tool.path.display().to_string(),
+            status: "unconfigured".to_string(),
+            governance: "none".to_string(),
+            canonicalized: false,    // scanner-only tools have no bead zero
+            canonicalized_at: None,
+            providers: tool.provider_vars.clone(),
+            launch,
+            ready: effective_ready,
+            preflight_issues: all_issues,
+            verified,
+            capabilities,
+        });
+    }
+
     let chain_receipts = !chain_state.is_empty();
+
+    // Query all canonicalization anchors for the response
+    let anchors_full = tool_chain::query_canonicalization_anchors(&state.0.audit_store);
+    let canonicalization_anchors: std::collections::HashMap<String, String> = anchors_full
+        .into_iter()
+        .map(|(key, (ts, _detail))| (key, ts))
+        .collect();
+
     Json(ToolsListResponse {
         tools,
         scan_path: scan_path.display().to_string(),
         has_genesis,
         chain_receipts,
+        canonicalization_anchors,
     })
 }
 
@@ -3613,6 +3802,16 @@ async fn tools_launch_handler(
     // direct API calls from bypassing the dashboard's client-side gate.
     let chain_state = tool_chain::query_tool_readiness(&state.0.audit_store);
     if let Some(cs) = chain_state.get(&req.name) {
+        if !cs.canonicalized {
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "error": format!("{} has no canonicalization anchor — the tool must be configured via vault before launch", req.name),
+                    "stage": "canonicalization",
+                    "hint": "Run: zp configure vault-add --provider <name> --field api_key",
+                })),
+            );
+        }
         if !cs.ready {
             let issues = if cs.preflight_issues.is_empty() {
                 vec!["Preflight not passed".to_string()]
@@ -3626,6 +3825,7 @@ async fn tools_launch_handler(
                     "preflight_issues": issues,
                     "configured": cs.configured,
                     "preflight_passed": cs.preflight_passed,
+                    "canonicalized": cs.canonicalized,
                 })),
             );
         }
@@ -3725,7 +3925,7 @@ async fn tools_launch_handler(
     // alternative to .env files — secrets never touch the filesystem.
     let mut vault_env: Vec<(String, String)> = Vec::new();
     if let Some(resolved_key) = state.0.vault_key.get().and_then(|k| k.as_ref()) {
-        let vault_path = std::path::PathBuf::from(&state.0.data_dir).join("vault.json");
+        let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
         if let Ok(vault) =
             zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path)
         {
@@ -4002,7 +4202,7 @@ async fn tools_preflight_handler(State(state): State<AppState>) -> Json<serde_js
     let vault = state.0.vault_key.get()
         .and_then(|k| k.as_ref())
         .and_then(|resolved_key| {
-            let vault_path = std::path::PathBuf::from(&state.0.data_dir).join("vault.json");
+            let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
             zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path).ok()
         });
     let vault_tools = onboard::preflight::detect_vault_configured_tools(vault.as_ref());
@@ -4056,7 +4256,7 @@ async fn tools_single_preflight_handler(
     let vault = state.0.vault_key.get()
         .and_then(|k| k.as_ref())
         .and_then(|resolved_key| {
-            let vault_path = std::path::PathBuf::from(&state.0.data_dir).join("vault.json");
+            let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
             zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path).ok()
         });
     let vault_tools = onboard::preflight::detect_vault_configured_tools(vault.as_ref());
@@ -4638,6 +4838,9 @@ async fn dashboard_handler(State(state): State<AppState>) -> Response {
 #[derive(Debug, Deserialize)]
 struct OnboardQuery {
     token: Option<String>,
+    /// When `?review=true`, serve onboarding post-genesis as a read-only
+    /// reference instead of redirecting to the dashboard.
+    review: Option<String>,
 }
 
 async fn onboard_page_handler(
@@ -4645,12 +4848,13 @@ async fn onboard_page_handler(
     headers: axum::http::HeaderMap,
     Query(query): Query<OnboardQuery>,
 ) -> Response {
-    // Post-genesis: redirect to dashboard
+    // Post-genesis: redirect to dashboard unless ?review=true (read-only reference mode)
+    let review_mode = query.review.as_deref() == Some("true");
     let genesis_path = zp_paths::home()
         .ok()
         .and_then(|h| Some(h.join("genesis.json")))
         .unwrap_or_default();
-    if genesis_path.exists() {
+    if genesis_path.exists() && !review_mode {
         return axum::response::Redirect::to("/dashboard").into_response();
     }
 

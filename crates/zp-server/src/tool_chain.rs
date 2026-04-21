@@ -86,6 +86,18 @@ impl ToolEvent {
     pub fn capability_configured(name: &str, parameter: &str) -> String {
         format!("tool:capability:configured:{}:{}", name, parameter)
     }
+    /// Bead zero: provider first-known-state
+    pub fn provider_canonicalized(name: &str) -> String {
+        format!("provider:canonicalized:{}", name)
+    }
+    /// Bead zero: tool first-known-state
+    pub fn tool_canonicalized(name: &str) -> String {
+        format!("tool:canonicalized:{}", name)
+    }
+    /// Bead zero: node first-known-state
+    pub fn node_canonicalized(name: &str) -> String {
+        format!("node:canonicalized:{}", name)
+    }
 }
 
 // ── Emit receipts ───────────────────────────────────────────────────────
@@ -165,12 +177,109 @@ pub fn emit_configuration_receipt(
     emit_tool_receipt(audit_store, &event, Some(&detail.to_string()))
 }
 
+// ── Canonicalization (bead zero) ────────────────────────────────────────
+
+/// Emit a canonicalization receipt — the first-known-state anchor for a
+/// domain wire. Returns the entry_hash if successful, None if the receipt
+/// already exists (idempotent) or append fails.
+///
+/// `domain` is one of "provider", "tool", or "node".
+/// `entity_id` is the name within that domain (e.g., "anthropic", "ironclaw").
+/// `initial_state` captures the snapshot at canonicalization time.
+pub fn emit_canonicalization_receipt(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    domain: &str,
+    entity_id: &str,
+    initial_state: &serde_json::Value,
+    parent_entity: Option<&str>,
+    canonicalized_by: &str,
+) -> Option<String> {
+    // Idempotency: check if a canonicalization receipt already exists
+    let event = format!("{}:canonicalized:{}", domain, entity_id);
+    if has_canonicalization_receipt(audit_store, &event) {
+        return None; // already anchored — bead zero exists
+    }
+
+    let detail = serde_json::json!({
+        "domain": domain,
+        "entity_id": entity_id,
+        "parent_entity": parent_entity,
+        "initial_state": initial_state,
+        "canonicalized_by": canonicalized_by,
+    });
+    emit_tool_receipt(audit_store, &event, Some(&detail.to_string()))
+}
+
+/// Check if a canonicalization receipt already exists for the given event.
+fn has_canonicalization_receipt(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    event_name: &str,
+) -> bool {
+    let store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let entries = match store.get_entries(tool_lifecycle_conv_id(), 500) {
+        Ok(e) => e,
+        Err(_) => return false,
+    };
+
+    entries.iter().any(|entry| {
+        if let AuditAction::SystemEvent { event } = &entry.action {
+            event == event_name
+        } else {
+            false
+        }
+    })
+}
+
+/// Query all canonicalization receipts from the chain.
+/// Returns a map of "domain:entity_id" → (timestamp, detail_json).
+pub fn query_canonicalization_anchors(
+    audit_store: &Arc<Mutex<AuditStore>>,
+) -> HashMap<String, (String, Option<serde_json::Value>)> {
+    let store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return HashMap::new(),
+    };
+
+    let entries = match store.get_entries(tool_lifecycle_conv_id(), 500) {
+        Ok(e) => e,
+        Err(_) => return HashMap::new(),
+    };
+
+    let mut anchors = HashMap::new();
+    for entry in &entries {
+        if let AuditAction::SystemEvent { event } = &entry.action {
+            // Match patterns: provider:canonicalized:X, tool:canonicalized:X, node:canonicalized:X
+            let parts: Vec<&str> = event.splitn(3, ':').collect();
+            if parts.len() == 3 && parts[1] == "canonicalized" {
+                let key = format!("{}:{}", parts[0], parts[2]);
+                if !anchors.contains_key(&key) {
+                    let detail = if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
+                        conditions.first().and_then(|s| serde_json::from_str(s).ok())
+                    } else {
+                        None
+                    };
+                    anchors.insert(key, (entry.timestamp.to_rfc3339(), detail));
+                }
+            }
+        }
+    }
+
+    anchors
+}
+
 // ── Query the chain ─────────────────────────────────────────────────────
 
 /// Readiness state for a single tool, derived from the chain.
 #[derive(Debug, Clone, Serialize)]
 pub struct ToolChainState {
     pub name: String,
+    /// Bead zero: whether a canonicalization receipt anchors this tool's wire
+    pub canonicalized: bool,
+    pub canonicalized_at: Option<String>,
     pub configured: bool,
     pub configured_at: Option<String>,
     pub preflight_passed: bool,
@@ -186,7 +295,7 @@ pub struct ToolChainState {
     pub providers_detail: Option<String>,
     /// Tier 2: per-capability verification results
     pub capabilities: Vec<CapabilityChainState>,
-    /// True only if configured + preflight passed
+    /// True only if canonicalized + configured + preflight passed
     pub ready: bool,
     /// True only if ready + providers resolved + all required capabilities verified
     pub verified: bool,
@@ -239,6 +348,16 @@ pub fn query_tool_readiness(
             let timestamp = entry.timestamp.to_rfc3339();
 
             match parts[1] {
+                "canonicalized" => {
+                    let name = parts[2].to_string();
+                    let state = states
+                        .entry(name.clone())
+                        .or_insert_with(|| empty_state(&name));
+                    if !state.canonicalized {
+                        state.canonicalized = true;
+                        state.canonicalized_at = Some(timestamp);
+                    }
+                }
                 "configured" => {
                     let name = parts[2].to_string();
                     let state = states
@@ -366,9 +485,20 @@ pub fn query_tool_readiness(
         }
     }
 
+    // Also check for provider:canonicalized events (different prefix)
+    for entry in &entries {
+        if let AuditAction::SystemEvent { event } = &entry.action {
+            if event.starts_with("provider:canonicalized:") {
+                // Provider canonicalization doesn't directly map to a tool state,
+                // but we note it for completeness — the cockpit will use
+                // query_canonicalization_anchors() for the full picture.
+            }
+        }
+    }
+
     // Compute readiness and verification
     for state in states.values_mut() {
-        state.ready = state.configured && state.preflight_passed;
+        state.ready = state.canonicalized && state.configured && state.preflight_passed;
         // Verified = ready + providers resolved + no failed required capabilities
         // (empty capabilities list means verification hasn't run yet → not verified)
         state.verified = state.ready
@@ -383,6 +513,8 @@ pub fn query_tool_readiness(
 fn empty_state(name: &str) -> ToolChainState {
     ToolChainState {
         name: name.to_string(),
+        canonicalized: false,
+        canonicalized_at: None,
         configured: false,
         configured_at: None,
         preflight_passed: false,

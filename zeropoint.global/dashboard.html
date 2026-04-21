@@ -533,6 +533,19 @@ const phases = [
       { id: "P6-4", label: "WASM policy runtime integration — feature-gated module load/enable/disable/list", done: true },
     ]
   },
+  {
+    name: "Phase 7: Operator Surfaces & Lifecycle",
+    status: "in-progress",
+    items: [
+      { id: "S7-1", label: "Onboarding review mode — post-genesis read-only walkthrough (?review=true)", done: true },
+      { id: "S7-2", label: "Setup & Maintenance surface — /setup route with identity, key, and provider management", done: false },
+      { id: "S7-3", label: "Re-key / rotate sovereignty provider (change login_password → Trezor, etc.)", done: false },
+      { id: "S7-4", label: "Recovery kit export & verification panel", done: false },
+      { id: "S7-5", label: "Genesis transcript viewer with receipt chain walkthrough", done: false },
+      { id: "S7-6", label: "Fleet enrollment & node onboarding from /setup", done: false },
+      { id: "S7-7", label: "Onboarding narration — Piper TTS with alternating voices and curated scripts", done: true },
+    ]
+  },
 ];
 
 // ── Architecture tree data (updated statuses) ──
@@ -783,13 +796,21 @@ const data = [
       { label: "SSE real-time event stream", status: "shipped", phase: "P4-1" },
       { label: "Dashboard observability panels (cognition + analysis + events)", status: "shipped", phase: "P4-3" },
       { label: "Channel adapters (Slack webhook + adapter framework)", status: "shipped", phase: "P4-2" },
+      { label: "Onboarding review mode (post-genesis read-only walkthrough)", status: "shipped", phase: "S7-1" },
+      { label: "Onboarding narration (Piper TTS, alternating voices, curated scripts)", status: "shipped", phase: "S7-7" },
+      { label: "Setup & Maintenance surface (/setup)", status: "roadmap", phase: "S7-2", children: [
+        { label: "Re-key / rotate sovereignty provider", status: "roadmap", phase: "S7-3" },
+        { label: "Recovery kit export & verification", status: "roadmap", phase: "S7-4" },
+        { label: "Genesis transcript viewer", status: "roadmap", phase: "S7-5" },
+        { label: "Fleet enrollment from setup surface", status: "roadmap", phase: "S7-6" },
+      ]},
     ]},
     { label: "Enterprise & Fleet", status: "shipped", children: [
       { label: "Trust Tier 2 runtime enforcement (per-action tier gating)", status: "shipped", phase: "P5-1" },
       { label: "Fleet node registry (heartbeat + status + summary)", status: "shipped", phase: "P5-2" },
       { label: "Policy push distribution (rollout + delivery tracking)", status: "shipped", phase: "P5-3" },
       { label: "Genesis v2 ceremony (Shamir SSS key escrow + rotation)", status: "shipped", phase: "P5-4" },
-      { label: "Genesis ceremony UI", status: "roadmap" },
+      { label: "Genesis ceremony UI (onboarding flow with narration)", status: "shipped" },
     ]},
     { label: "Capability Verification & Policy Runtime", status: "shipped", children: [
       { label: "ConfigurationClaim receipt type (typed metadata, validation rules)", status: "shipped", phase: "P6-1" },

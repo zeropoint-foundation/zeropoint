@@ -175,6 +175,12 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+        ReceiptType::CanonicalizedClaim => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None, // canonicalization anchors persist forever
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -214,6 +220,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::Reflection { .. } => "Reflection",
         ClaimMetadata::Revocation { .. } => "Revocation",
         ClaimMetadata::Configuration { .. } => "Configuration",
+        ClaimMetadata::Canonicalization { .. } => "Canonicalization",
     }
 }
 
@@ -233,6 +240,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::RevocationClaim, ClaimMetadata::Revocation { .. })
             | (ReceiptType::ReflectionClaim, ClaimMetadata::Reflection { .. })
             | (ReceiptType::ConfigurationClaim, ClaimMetadata::Configuration { .. })
+            | (ReceiptType::CanonicalizedClaim, ClaimMetadata::Canonicalization { .. })
     )
 }
 

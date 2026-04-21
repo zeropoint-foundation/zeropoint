@@ -7,13 +7,17 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // ── Review mode ─────────────────────────────────────────
+  // Post-genesis read-only mode: all steps navigable, genesis button disabled.
+  const reviewMode = new URLSearchParams(location.search).get('review') === 'true';
+
   // ── State ───────────────────────────────────────────────
   let ws = null;
   let currentStep = 0;
   let selectedSovereignty = null;
   let platformInfo = null;
   let genesisData = null;
-  let genesisComplete = false;  // Set by 'state' event; guards step 2
+  let genesisComplete = reviewMode ? true : false;  // Set by 'state' event; guards step 2
   let discoveredTools = [];
   let credentialsStored = 0;
 
@@ -294,18 +298,21 @@
 
   // ── Step navigation ─────────────────────────────────────
   window.goStep = function(step, animate) {
-    // Guard: never show the genesis creation UI if genesis is already
-    // complete. This handles cached/stale page loads where the browser
-    // renders step 2 before the WS state event can advance forward.
-    if (step === 2 && genesisComplete) {
-      step = 3; // genesis already complete — skip step 2, advance to step 3
-    }
+    // In review mode all steps are freely navigable — skip guards.
+    if (!reviewMode) {
+      // Guard: never show the genesis creation UI if genesis is already
+      // complete. This handles cached/stale page loads where the browser
+      // renders step 2 before the WS state event can advance forward.
+      if (step === 2 && genesisComplete) {
+        step = 3; // genesis already complete — skip step 2, advance to step 3
+      }
 
-    // Guard: cannot advance to step 3 (recovery kit) until genesis is complete.
-    // Prevents nav-tab clicks or stale onclick handlers from skipping ahead.
-    if (step === 3 && !genesisComplete) {
-      console.log('[ZP] Genesis not complete — cannot advance to step 3');
-      return;
+      // Guard: cannot advance to step 3 (recovery kit) until genesis is complete.
+      // Prevents nav-tab clicks or stale onclick handlers from skipping ahead.
+      if (step === 3 && !genesisComplete) {
+        console.log('[ZP] Genesis not complete — cannot advance to step 3');
+        return;
+      }
     }
 
     // Hide all steps
@@ -320,7 +327,7 @@
       tab.classList.remove('active', 'disabled');
       if (tabStep === step) {
         tab.classList.add('active');
-      } else if (tabStep > step && tabStep > currentStep) {
+      } else if (!reviewMode && tabStep > step && tabStep > currentStep) {
         tab.classList.add('disabled');
       }
       if (tabStep < step) {
@@ -674,7 +681,12 @@
     ).join('');
 
     document.getElementById('genesisInfo').style.display = 'block';
-    document.getElementById('genesisNext').style.display = 'flex';
+
+    // Reset genesisNext in case a prior failure changed it to "Choose Different Provider"
+    const genesisNext = document.getElementById('genesisNext');
+    genesisNext.textContent = 'Continue';
+    genesisNext.onclick = function() { goStep(3); };
+    genesisNext.style.display = 'flex';
 
     // Update HW connect prompt to final status
     const mode = data.sovereignty_mode || '';
@@ -2298,6 +2310,26 @@
   }
 
   // ── Init ────────────────────────────────────────────────
+
+  // Review mode: disable destructive actions, enable free navigation
+  if (reviewMode) {
+    const genesisBtn = document.getElementById('genesisBtn');
+    if (genesisBtn) {
+      genesisBtn.disabled = true;
+      genesisBtn.title = 'Genesis already complete — review mode';
+    }
+    // Add a subtle review-mode indicator
+    const indicator = document.createElement('div');
+    indicator.style.cssText = 'position:fixed;top:0.5rem;left:50%;transform:translateX(-50%);' +
+      'background:var(--bg-elevated,#111116);border:1px solid var(--rule,#222228);' +
+      'color:var(--text-dim,#666);font-size:0.65rem;padding:0.2rem 0.8rem;' +
+      'border-radius:3px;z-index:9998;font-family:var(--mono,monospace);letter-spacing:0.03em;';
+    indicator.textContent = 'REVIEW MODE';
+    document.body.appendChild(indicator);
+    // All nav tabs should be clickable
+    document.querySelectorAll('.step-tab').forEach(tab => tab.classList.remove('disabled'));
+  }
+
   connect();
 
   // Set data-tts-script on all steps so the floating button uses curated scripts

@@ -210,6 +210,11 @@ impl Receipt {
         crate::ReceiptBuilder::new(ReceiptType::ConfigurationClaim, executor_id)
     }
 
+    /// Start building a canonicalization claim receipt (bead zero).
+    pub fn canonicalized(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::CanonicalizedClaim, executor_id)
+    }
+
     /// Verify the content_hash matches the receipt body.
     pub fn verify_hash(&self) -> bool {
         let computed = crate::canonical_hash(self);
@@ -313,6 +318,12 @@ pub enum ReceiptType {
     // --- Phase 4.1: Cognition plane receipt types ---
     /// A reflection (consolidation pass) over observations by a reflector agent
     ReflectionClaim,
+
+    // --- Phase 7: Canonicalization (bead zero) ---
+    /// First-known-state receipt that anchors a domain wire on the abacus.
+    /// Emitted once per domain entity (provider, tool, node) to establish
+    /// the canonical starting point from which all subsequent state is derived.
+    CanonicalizedClaim,
 }
 
 impl ReceiptType {
@@ -334,6 +345,7 @@ impl ReceiptType {
             ReceiptType::RevocationClaim => "revk",
             ReceiptType::ReflectionClaim => "rflt",
             ReceiptType::ConfigurationClaim => "cfgr",
+            ReceiptType::CanonicalizedClaim => "cano",
         }
     }
 
@@ -361,6 +373,7 @@ impl ReceiptType {
             ReceiptType::RevocationClaim => None,
             ReceiptType::ReflectionClaim => None,
             ReceiptType::ConfigurationClaim => None,
+            ReceiptType::CanonicalizedClaim => None,
         }
     }
 
@@ -416,6 +429,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::RevocationClaim => write!(f, "revocation_claim"),
             ReceiptType::ReflectionClaim => write!(f, "reflection_claim"),
             ReceiptType::ConfigurationClaim => write!(f, "configuration_claim"),
+            ReceiptType::CanonicalizedClaim => write!(f, "canonicalized_claim"),
         }
     }
 }
@@ -857,6 +871,25 @@ pub enum ClaimMetadata {
         #[serde(skip_serializing_if = "Option::is_none")]
         previous_value: Option<serde_json::Value>,
     },
+
+    /// Metadata for a canonicalization claim (bead zero).
+    /// Captures the first-known-state of a domain entity, anchoring
+    /// the wire from which all subsequent state transitions are derived.
+    Canonicalization {
+        /// The domain being canonicalized: "system", "provider", "tool", "node"
+        domain: CanonicalDomain,
+        /// The entity name within that domain (e.g., "anthropic", "ironclaw")
+        entity_id: String,
+        /// Parent domain entity this was canonicalized under
+        /// (e.g., tool "ironclaw" under provider "anthropic")
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent_entity: Option<String>,
+        /// Snapshot of the entity's state at canonicalization time
+        /// (e.g., vault keys present, provider fields set)
+        initial_state: serde_json::Value,
+        /// Who triggered the canonicalization
+        canonicalized_by: String,
+    },
 }
 
 /// Source of a configuration value.
@@ -871,4 +904,18 @@ pub enum ConfigurationSource {
     InitialSetup,
     /// Changed at runtime via reconfiguration
     RuntimeChange,
+}
+
+/// Domain of a canonicalization event — which wire on the abacus.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanonicalDomain {
+    /// The system itself (genesis is bead zero on this wire)
+    System,
+    /// A credential provider (e.g., "anthropic", "openai")
+    Provider,
+    /// A governed tool (e.g., "ironclaw", "shannon")
+    Tool,
+    /// A fleet node in a multi-node deployment
+    Node,
 }
