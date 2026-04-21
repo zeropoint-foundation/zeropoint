@@ -44,6 +44,11 @@
   .hero img {
     width: 100%;
     display: block;
+    cursor: zoom-in;
+    transition: opacity 0.15s ease;
+  }
+  .hero img:hover {
+    opacity: 0.85;
   }
 
   /* Content container */
@@ -51,6 +56,87 @@
     max-width: 680px;
     margin: 0 auto;
     padding: 60px 24px 120px;
+  }
+
+  /* Audio player */
+  .audio-player {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--slate-mid);
+    border: 1px solid var(--slate-light);
+    border-radius: 6px;
+    padding: 14px 20px;
+    margin-bottom: 32px;
+  }
+  .audio-player .play-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--teal);
+    background: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .audio-player .play-btn:hover {
+    background: rgba(45, 212, 191, 0.1);
+  }
+  .audio-player .play-btn svg {
+    fill: var(--teal);
+    width: 16px;
+    height: 16px;
+  }
+  .audio-player .player-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .audio-player .player-label {
+    font-family: 'Jura', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--teal-dim);
+    margin-bottom: 6px;
+  }
+  .audio-player .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--slate-light);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+  }
+  .audio-player .progress-fill {
+    height: 100%;
+    background: var(--teal);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+  .audio-player .time-display {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--gray);
+    margin-top: 4px;
+  }
+  .audio-player .speed-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--white-dim);
+    background: var(--slate-light);
+    border: none;
+    border-radius: 3px;
+    padding: 3px 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .audio-player .speed-btn:hover {
+    color: var(--white);
   }
 
   /* Series label */
@@ -129,10 +215,56 @@
     width: 540px;
     border: 1px solid var(--slate-light);
     border-radius: 4px;
+    cursor: zoom-in;
+    transition: opacity 0.15s ease;
+  }
+  .card-break img:hover {
+    opacity: 0.85;
   }
   @media (max-width: 720px) {
     .card-break { margin: 2em 0; }
     .card-break img { width: 100%; }
+  }
+
+  /* Lightbox */
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(6, 6, 10, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+  }
+  .lightbox.active {
+    display: flex;
+  }
+  .lightbox img {
+    max-width: 92vw;
+    max-height: 90vh;
+    border-radius: 4px;
+    box-shadow: 0 8px 60px rgba(0, 0, 0, 0.6);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 24px;
+    right: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--white-dim);
+    background: none;
+    border: 1px solid var(--slate-light);
+    border-radius: 3px;
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .lightbox-close:hover {
+    color: var(--white);
+    border-color: var(--white-dim);
   }
 
   /* Stats bar */
@@ -221,6 +353,22 @@
 
   <div class="series-label">ZeroPoint / Building in Public / Post 1</div>
   <div class="post-date">April 21, 2026</div>
+
+  <div class="audio-player" id="audio-player">
+    <audio id="narration" preload="none" src="audio/01-trust-is-infrastructure.mp3"></audio>
+    <button class="play-btn" id="play-btn" onclick="togglePlay()">
+      <svg id="play-icon" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+      <svg id="pause-icon" viewBox="0 0 24 24" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
+    </button>
+    <div class="player-info">
+      <div class="player-label">Listen to this post</div>
+      <div class="progress-bar" id="progress-bar" onclick="seek(event)">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="time-display"><span id="current-time">0:00</span> / <span id="duration">--:--</span></div>
+    </div>
+    <button class="speed-btn" id="speed-btn" onclick="cycleSpeed()">1x</button>
+  </div>
 
   <p>There is a question that the AI industry is not asking clearly enough, and the answer is going to matter more than any model benchmark, any agent framework, or any alignment paper published this year.</p>
 
@@ -343,11 +491,100 @@
   <div class="closing">
     <p>I'm Ken Romero, founder of ThinkStream Labs. ZeroPoint is open-source and under active development. If you're interested in agent governance, trust infrastructure, or the intersection of cryptography and AI safety, follow along. The next post is about where these ideas come from — the intellectual lineage that converged into a trust grammar.</p>
     <p style="margin-top: 16px;">
+      <a href="https://zeropoint.global">zeropoint.global</a><br>
       <a href="https://github.com/zeropoint-foundation/zeropoint">github.com/zeropoint-foundation/zeropoint</a>
     </p>
   </div>
 
 </div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" onclick="closeLightbox()">esc</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightbox-img');
+
+  document.querySelectorAll('.card-break img, .hero img').forEach(img => {
+    img.addEventListener('click', () => {
+      lightboxImg.src = img.src;
+      lightboxImg.alt = img.alt;
+      lightbox.classList.add('active');
+    });
+  });
+
+  function closeLightbox() {
+    lightbox.classList.remove('active');
+  }
+
+  lightbox.addEventListener('click', (e) => {
+    if (e.target !== lightboxImg) closeLightbox();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox();
+  });
+
+  // Audio player
+  const audio = document.getElementById('narration');
+  const playIcon = document.getElementById('play-icon');
+  const pauseIcon = document.getElementById('pause-icon');
+  const progressFill = document.getElementById('progress-fill');
+  const currentTimeEl = document.getElementById('current-time');
+  const durationEl = document.getElementById('duration');
+  const speeds = [1, 1.25, 1.5, 1.75, 2];
+  let speedIdx = 0;
+
+  function fmt(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function togglePlay() {
+    if (audio.paused) {
+      audio.play();
+      playIcon.style.display = 'none';
+      pauseIcon.style.display = 'block';
+    } else {
+      audio.pause();
+      playIcon.style.display = 'block';
+      pauseIcon.style.display = 'none';
+    }
+  }
+
+  audio.addEventListener('loadedmetadata', () => {
+    durationEl.textContent = fmt(audio.duration);
+  });
+
+  audio.addEventListener('timeupdate', () => {
+    if (audio.duration) {
+      progressFill.style.width = (audio.currentTime / audio.duration * 100) + '%';
+      currentTimeEl.textContent = fmt(audio.currentTime);
+    }
+  });
+
+  audio.addEventListener('ended', () => {
+    playIcon.style.display = 'block';
+    pauseIcon.style.display = 'none';
+    progressFill.style.width = '0%';
+    currentTimeEl.textContent = '0:00';
+  });
+
+  function seek(e) {
+    const bar = document.getElementById('progress-bar');
+    const pct = e.offsetX / bar.offsetWidth;
+    audio.currentTime = pct * audio.duration;
+  }
+
+  function cycleSpeed() {
+    speedIdx = (speedIdx + 1) % speeds.length;
+    audio.playbackRate = speeds[speedIdx];
+    document.getElementById('speed-btn').textContent = speeds[speedIdx] + 'x';
+  }
+</script>
 
 </body>
 </html>
