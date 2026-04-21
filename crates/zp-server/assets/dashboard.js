@@ -541,6 +541,7 @@
 
       const errorLower = ((result && result.error) || '').toLowerCase();
       const isConfigIssue = errorLower.includes('needs configuration') || errorLower.includes('add a tool');
+      const isGateBlocked = errorLower.includes('blocked by') || errorLower.includes('trust tier');
       const isRunning = result && result.status === 'running';
       const isLaunchFailure = !isConfigIssue && !isRunning;
 
@@ -548,6 +549,8 @@
         ? `${tool.name} — Configuration Required`
         : isRunning
         ? `${tool.name} — Running`
+        : isGateBlocked
+        ? `${tool.name} — Governance Gate Blocked`
         : `${tool.name} — Launch Failed`;
       // Color the title and card border: green for running, amber for config, red for failure
       title.style.color = isRunning ? '#7CDB8A' : isConfigIssue ? '#E8C547' : '#FF4444';
@@ -583,6 +586,9 @@
         if (result && result.hint) {
           html += `<div class="diag-field"><div class="diag-label">Details</div><div class="diag-value hint-text">${result.hint}</div></div>`;
         }
+      } else if (isGateBlocked) {
+        html += `<div class="diag-field"><div class="diag-label">Governance</div><div class="diag-value error-text">${result.error}</div></div>`;
+        html += `<div class="diag-field"><div class="diag-label">Explanation</div><div class="diag-value hint-text">The governance engine blocked this launch. Tool execution requires sufficient trust tier authorization. Check that the server&#39;s gate context matches the action&#39;s required tier.</div></div>`;
       } else {
         if (result && result.error) {
           html += `<div class="diag-field"><div class="diag-label">Error</div><div class="diag-value error-text">${result.error}</div></div>`;
@@ -592,6 +598,12 @@
         }
         if (result && result.port) {
           html += `<div class="diag-field"><div class="diag-label">Expected Port</div><div class="diag-value">${result.port} (no response)</div></div>`;
+        }
+        if (result && result.stage) {
+          html += `<div class="diag-field"><div class="diag-label">Stage</div><div class="diag-value">${result.stage}</div></div>`;
+        }
+        if (result && result.preflight_issues && result.preflight_issues.length > 0) {
+          html += `<div class="diag-field"><div class="diag-label">Preflight Issues</div><div class="diag-value hint-text">${result.preflight_issues.join('<br>')}</div></div>`;
         }
       }
       body.innerHTML = html;
