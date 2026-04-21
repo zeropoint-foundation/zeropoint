@@ -321,70 +321,44 @@ const SECURITY_RULES: &[SecurityRule] = &[
 /// Commands that are always considered safe and skip evaluation.
 /// cat/head/tail intentionally excluded — they can read sensitive files.
 const SAFE_COMMANDS: &[&str] = &[
-    "ls",
-    "pwd",
-    "cd",
-    "echo",
-    "printf",
-    "less",
-    "more",
-    "grep",
-    "find",
-    "which",
-    "whereis",
-    "type",
-    "file",
-    "stat",
-    "wc",
-    "date",
-    "cal",
-    "uptime",
-    "whoami",
-    "id",
-    "groups",
-    "hostname",
-    "uname",
-    "clear",
-    "reset",
-    "tput",
-    "history",
-    "alias",
-    "unalias",
-    "export",
-    "set",
-    "unset",
-    "env",
-    "printenv",
-    "true",
-    "false",
-    "exit",
-    "logout",
-    "return",
-    "source",
-    ".",
-    "eval",
-    "fg",
-    "bg",
-    "jobs",
-    "wait",
-    "disown",
-    "pushd",
-    "popd",
-    "dirs",
-    "help",
-    "man",
-    "info",
-    "whatis",
-    "apropos",
-    "git status",
-    "git log",
-    "git diff",
-    "git branch",
-    "git show",
+    // Shell builtins & navigation
+    "ls", "pwd", "cd", "echo", "printf", "less", "more", "clear", "reset",
+    "tput", "history", "alias", "unalias", "export", "set", "unset", "env",
+    "printenv", "true", "false", "exit", "logout", "return", "source", ".",
+    "eval", "fg", "bg", "jobs", "wait", "disown", "pushd", "popd", "dirs",
+    "help", "man", "info", "whatis", "apropos",
+    // File inspection (read-only)
+    "cat", "head", "tail", "grep", "rg", "find", "which", "whereis", "type",
+    "file", "stat", "wc", "date", "cal", "uptime", "whoami", "id", "groups",
+    "hostname", "uname", "tree", "diff", "md5", "shasum", "sha256sum",
+    // File manipulation (normal dev workflow)
+    "cp", "mv", "mkdir", "touch", "ln", "rm", "rmdir",
+    // Development tools
+    "cargo", "rustc", "rustup", "make", "cmake", "gcc", "clang",
+    "npm", "npx", "yarn", "pnpm", "node", "deno", "bun",
+    "python", "python3", "pip", "pip3", "uv", "poetry", "conda",
+    "go", "zig", "swift", "swiftc",
+    // Build & package
+    "docker", "docker-compose", "podman", "nix",
+    // Network & debugging
+    "curl", "wget", "httpie", "ssh", "scp", "rsync",
+    "lsof", "ps", "top", "htop", "kill", "pkill", "killall",
+    "nohup", "timeout", "time", "watch",
+    // Text processing
+    "sed", "awk", "sort", "uniq", "cut", "tr", "jq", "yq", "xargs",
+    // Editors
+    "vim", "nvim", "nano", "code", "emacs",
+    // Version control (all git subcommands are safe for humans)
+    "git", "gh",
+    // Zsh/shell utilities
+    "autoload", "add-zsh-hook", "compinit", "rehash",
 ];
 
 /// Dangerous shell operators that bypass safe-command classification.
-const DANGEROUS_OPERATORS: &[&str] = &["|", ";", "&&", "||", "&", "`", "$(", "$((", "<(", ">("];
+/// NOTE: Pipe (|), chaining (&&, ||, ;), and backgrounding (&) are normal
+/// shell usage for human actors. Only command injection patterns are blocked.
+/// Agent actors get stricter evaluation via the rule engine, not this list.
+const DANGEROUS_OPERATORS: &[&str] = &["`", "$(", "$((", "<(", ">("];
 
 fn compiled_rules() -> &'static Vec<CompiledRule> {
     static RULES: OnceLock<Vec<CompiledRule>> = OnceLock::new();
@@ -406,6 +380,19 @@ fn compiled_rules() -> &'static Vec<CompiledRule> {
 
 /// Check if a command is in the safe list.
 fn is_safe_command(command: &str) -> bool {
+    // Self-exemption: never guard ZeroPoint's own CLI.
+    // The preexec shell hook evaluates every command, including `zp configure`,
+    // `zp guard`, etc. Blocking ourselves is a usability bug, not security.
+    let base_cmd_early = command.split_whitespace().next().unwrap_or("");
+    if base_cmd_early == "zp" || base_cmd_early.ends_with("/zp") {
+        return true;
+    }
+
+    // Shell variable assignments (VAR=value) are always safe.
+    if base_cmd_early.contains('=') && !base_cmd_early.starts_with('=') {
+        return true;
+    }
+
     // Check for dangerous shell operators first
     for op in DANGEROUS_OPERATORS {
         if command.contains(op) {

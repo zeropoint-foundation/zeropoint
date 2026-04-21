@@ -1390,16 +1390,100 @@ pub fn status() -> i32 {
         ok("Guard: binary available");
     }
 
-    // Receipt chain
-    let receipts_dir = zp_home.join("guard-receipts");
-    if receipts_dir.exists() {
-        let count = std::fs::read_dir(&receipts_dir)
-            .map(|rd| rd.count())
-            .unwrap_or(0);
-        ok(&format!("Receipts: {} records", count));
-    }
-
     ok("Gates: 6 rules loaded (2 constitutional, 4 operational)");
+
+    // ── Audit Chain: wire/bead positions ────────────────────────────
+    let audit_db = zp_home.join("audit.db");
+    if audit_db.exists() {
+        if let Ok(store) = zp_audit::AuditStore::open(&audit_db) {
+            let store_arc = std::sync::Arc::new(std::sync::Mutex::new(store));
+
+            // Query canonicalization anchors
+            eprintln!();
+            header("Abacus — Wire Positions");
+
+            // Use the tool lifecycle conversation ID to query events
+            let conv_id = zp_core::ConversationId(
+                uuid::Uuid::parse_str("00000000-0000-7000-8000-746f6f6c6c63").unwrap()
+            );
+            let entries = store_arc.lock().ok()
+                .and_then(|s| s.get_entries(&conv_id, 500).ok())
+                .unwrap_or_default();
+
+            // Scan for canonicalization, configured, preflight, and launched events
+            let mut system_anchor: Option<String> = None;
+            let mut provider_anchors: Vec<(String, String)> = Vec::new();
+            let mut tool_states: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+
+            for entry in &entries {
+                if let zp_core::AuditAction::SystemEvent { event } = &entry.action {
+                    let ts = entry.timestamp.format("%Y-%m-%d %H:%M").to_string();
+
+                    if event == "system:canonicalized:zeropoint" {
+                        system_anchor = Some(ts);
+                    } else if let Some(rest) = event.strip_prefix("provider:canonicalized:") {
+                        provider_anchors.push((rest.to_string(), ts));
+                    } else if event.starts_with("tool:") {
+                        let parts: Vec<&str> = event.splitn(4, ':').collect();
+                        if parts.len() >= 3 {
+                            let tool_name = match parts[1] {
+                                "canonicalized" | "configured" | "launched" | "stopped" => parts[2].to_string(),
+                                "preflight" if parts.len() >= 4 => parts[3].to_string(),
+                                "providers" if parts.len() >= 4 => parts[3].to_string(),
+                                "setup" if parts.len() >= 4 => parts[3].to_string(),
+                                _ => continue,
+                            };
+                            let bead = format!("{}:{}", parts[1], ts);
+                            tool_states.entry(tool_name).or_default().push(bead);
+                        }
+                    }
+                }
+            }
+
+            // Display system wire
+            if let Some(ref ts) = system_anchor {
+                ok(&format!("System wire — anchored at {}", ts));
+            } else {
+                dim("System wire — no anchor (genesis not canonicalized)");
+            }
+
+            // Display provider wires
+            if provider_anchors.is_empty() {
+                dim("Provider wires — none canonicalized");
+            } else {
+                for (pname, ts) in &provider_anchors {
+                    ok(&format!("Provider wire [{}] — anchored at {}", pname, ts));
+                }
+            }
+
+            // Display tool wires
+            if tool_states.is_empty() {
+                dim("Tool wires — none canonicalized");
+            } else {
+                for (tname, beads) in &tool_states {
+                    let bead_summary: Vec<&str> = beads.iter().map(|b| {
+                        b.split(':').next().unwrap_or("?")
+                    }).collect();
+                    let unique_stages: Vec<&str> = {
+                        let mut s: Vec<&str> = bead_summary.clone();
+                        s.dedup();
+                        s
+                    };
+                    ok(&format!("Tool wire [{}] — {} beads: {}", tname, beads.len(), unique_stages.join(" → ")));
+                }
+            }
+
+            // Chain integrity summary
+            let total_entries = entries.len();
+            if total_entries > 0 {
+                eprintln!();
+                ok(&format!("Audit chain: {} lifecycle entries", total_entries));
+            }
+        }
+    } else {
+        eprintln!();
+        dim("Audit chain: not yet initialized (start server to create)");
+    }
 
     eprintln!();
     dim("Run `zp secure --wizard` to reconfigure.");
