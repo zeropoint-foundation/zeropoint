@@ -716,7 +716,7 @@ impl AppState {
         let inner = state.0.clone();
         let audit_store_vk = state.0.audit_store.clone();
         std::thread::spawn(move || {
-            let home = zp_paths::home().unwrap_or_default();
+            let _home = zp_paths::home().unwrap_or_default();
             match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default())
                 .and_then(|kr| zp_keys::resolve_vault_key(&kr))
             {
@@ -1422,8 +1422,64 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         open_browser(&url);
     }
 
+    // ── Server PID management ───────────────────────────────────
+    // Kill any stale server process before we try to bind the port.
+    let server_pid_path = pid_dir().join("zp-server.pid");
+    if let Ok(old_pid_str) = std::fs::read_to_string(&server_pid_path) {
+        if let Ok(old_pid) = old_pid_str.trim().parse::<u32>() {
+            let alive = std::process::Command::new("kill")
+                .args(["-0", &old_pid.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if alive {
+                warn!("Stale zp-server (PID {}) still running — killing", old_pid);
+                let _ = std::process::Command::new("kill")
+                    .args(["-TERM", &old_pid.to_string()])
+                    .status();
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                // SIGKILL if it didn't exit
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", &old_pid.to_string()])
+                    .status();
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        }
+    }
+    // Write our own PID
+    std::fs::write(&server_pid_path, std::process::id().to_string()).ok();
+
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+
+    // ── Graceful shutdown: kill all tool processes on SIGINT/SIGTERM ──
+    let shutdown = async {
+        tokio::signal::ctrl_c().await.ok();
+        info!("Shutdown signal received — stopping launched tools...");
+        // Walk PID directory, kill every tool process
+        if let Ok(entries) = std::fs::read_dir(pid_dir()) {
+            for entry in entries.flatten() {
+                let fname = entry.file_name();
+                let name = fname.to_string_lossy();
+                if name == "zp-server.pid" {
+                    continue; // don't kill ourselves
+                }
+                if let Some(tool_name) = name.strip_suffix(".pid") {
+                    if let Some(pid) = read_live_pid(tool_name) {
+                        kill_tool_process(tool_name, pid);
+                    }
+                }
+            }
+        }
+        // Remove server PID file
+        std::fs::remove_file(&server_pid_path).ok();
+        info!("All tools stopped. Goodbye.");
+    };
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await?;
     Ok(())
 }
 

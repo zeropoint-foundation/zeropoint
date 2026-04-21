@@ -521,7 +521,7 @@ pub async fn handle_vault_check(state: &mut OnboardState) -> Vec<OnboardEvent> {
 
     events.push(OnboardEvent::terminal("Verifying vault key derivation..."));
 
-    let home = zp_paths::home()
+    let _home = zp_paths::home()
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let keyring = match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default()) {

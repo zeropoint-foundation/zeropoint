@@ -62,6 +62,7 @@ impl PersistedSession {
 }
 
 /// Filename under `~/ZeroPoint/` where the session record lives.
+#[allow(dead_code)]
 const SESSION_FILENAME: &str = "session.json";
 
 /// Session token state — shared via AppState.
