@@ -52,8 +52,8 @@ start_server() {
 case "${1:-dev}" in
   dev|d|"")
     cd "$REPO"
-    echo "→ cargo build -p zp-server -p zp-cli..."
-    cargo build -p zp-server -p zp-cli 2>&1 | tail -5
+    echo "→ cargo build -p zp-server -p zp-cli --features full..."
+    cargo build -p zp-server -p zp-cli --features full 2>&1 | tail -5
     mkdir -p "$(dirname "$LOCAL_BIN")"
     cp "$DEBUG_BIN" "$LOCAL_BIN"
     codesign -s - -f "$LOCAL_BIN" 2>/dev/null || true
