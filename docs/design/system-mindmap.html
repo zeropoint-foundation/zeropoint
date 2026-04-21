@@ -115,6 +115,7 @@
   .plane-header .plane-tag.meaning { background: #2e2a1a; color: #fbbf24; }
   .plane-header .plane-tag.cognition { background: #2e1a2e; color: #c084fc; }
   .plane-header .plane-tag.compromise { background: #2e1a1a; color: #f87171; }
+  .plane-header .plane-tag.gar { background: #1a2e2e; color: #2dd4bf; }
 
   .section { margin-bottom: 16px; }
 
@@ -453,6 +454,63 @@ const data = [
       { label: "YubiKey provider", status: "planned" },
       { label: "Ledger provider", status: "planned" },
       { label: "OnlyKey provider", status: "planned" },
+    ]},
+  ]},
+
+  { label: "GOVERNED AGENT RUNTIME", plane: "gar", tag: "Phase 4 — Autonomous Agent Containment", children: [
+    { label: "Containment Model", status: "designed", children: [
+      { label: "Linux namespace isolation (mount, network, PID)", status: "designed", detail: "docs/design/governed-agent-runtime.md §4" },
+      { label: "Overlay filesystem (read-through, write-capture)", status: "designed" },
+      { label: "Network namespace (default-deny, ZP proxy only)", status: "designed" },
+      { label: "macOS containment (Virtualization.framework / sandbox-exec)", status: "designed" },
+    ]},
+    { label: "Five Mediation Surfaces", status: "designed", children: [
+      { label: "Model API proxy (endpoint allowlist, token metering, credential injection)", status: "designed" },
+      { label: "Overlay filesystem (write classification, policy gating)", status: "designed" },
+      { label: "Controlled exec path (capability envelope per subprocess)", status: "designed" },
+      { label: "Network namespace (per-task domain allowlists)", status: "designed" },
+      { label: "IPC channels (parent-child receipting)", status: "designed" },
+    ]},
+    { label: "Memory Governance", status: "designed", children: [
+      { label: "Four-tier classification (ephemeral, attributed, procedural, constitutional)", status: "designed" },
+      { label: "Third-party memory provider elimination (Sovereign Mode)", status: "designed" },
+      { label: "Memory write receipting (MemoryWriteClaim)", status: "designed" },
+    ]},
+    { label: "Skill Governance", status: "designed", children: [
+      { label: "Skill lifecycle (proposed → quarantined → verified → signed → active → revoked)", status: "designed" },
+      { label: "Adaptive Capability Quarantine (Browser Harness self-healing)", status: "designed" },
+      { label: "SkillProposalClaim / SkillPromotionClaim receipts", status: "designed" },
+    ]},
+    { label: "Execution Governance", status: "designed", children: [
+      { label: "BrowserExecutionEnvelope (domains, duration, action categories)", status: "designed" },
+      { label: "Worktree-as-construction-bay (attested merge)", status: "designed" },
+      { label: "Subagent sub-containment (inherited/scoped permissions)", status: "designed" },
+    ]},
+    { label: "Reasoning Attestation", status: "designed", children: [
+      { label: "Two-layer governance (enforcement + attestation)", status: "designed", detail: "§5.5" },
+      { label: "reasoning_hash linkage on every receipt", status: "designed" },
+      { label: "Three inference trust tiers (attested / observed / unattested)", status: "designed" },
+      { label: "ReasoningTraceClaim receipt type", status: "designed" },
+      { label: "Precursor to cognitive accountability layer", status: "planned", detail: "docs/future-work/cognitive-accountability.md" },
+    ]},
+    { label: "Agent Receipt Types (11 new)", status: "designed", children: [
+      { label: "AgentSessionClaim (agsn-)", status: "designed" },
+      { label: "MemoryWriteClaim (amem-)", status: "designed" },
+      { label: "SkillProposalClaim (askl-) / SkillPromotionClaim (apro-)", status: "designed" },
+      { label: "BrowserSessionClaim (abro-) / BrowserActionClaim (abra-)", status: "designed" },
+      { label: "SubprocessClaim (asub-) / InferenceRequestClaim (ainf-)", status: "designed" },
+      { label: "WorktreeResultClaim (awtr-) / CapabilityQuarantineClaim (aqrn-)", status: "designed" },
+      { label: "ReasoningTraceClaim (artr-)", status: "designed" },
+    ]},
+    { label: "GAR Implementation Phases", status: "designed", children: [
+      { label: "GAR Phase 1: Contained Execution (MVP — Hermes in namespace)", status: "designed" },
+      { label: "GAR Phase 2: Skill and Memory Governance (classification, verification)", status: "planned" },
+      { label: "GAR Phase 3: Multi-Agent Orchestration (sub-containment, fleet)", status: "planned" },
+      { label: "GAR Phase 4: Portable Governance (second tenant, agent.yaml)", status: "planned" },
+    ]},
+    { label: "First Tenant: Hermes Agent (Nous Research)", status: "designed", children: [
+      { label: "Wrapper architecture (ZP outer process, Hermes as tenant)", status: "designed" },
+      { label: "Sovereign Mode profile (no third parties in trust path)", status: "designed" },
     ]},
   ]},
 

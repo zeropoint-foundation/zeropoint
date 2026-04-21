@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="Trust Is Infrastructure — ZeroPoint">
+<meta property="og:description" content="Governance as grammar, not policy. Building an autorecursive trust substrate for autonomous AI agents.">
+<meta property="og:image" content="images/01-hero-trust-is-infrastructure.png">
+<title>Trust Is Infrastructure — ZeroPoint</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;600&family=Jura:wght@300;500&family=Big+Shoulders+Display:wght@700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --slate: #0a0a0f;
+    --slate-mid: #16161e;
+    --slate-light: #23232f;
+    --teal: #2dd4bf;
+    --teal-dim: #1e8c7e;
+    --amber: #f5b43c;
+    --amber-dim: #a07323;
+    --white: #e8e6e3;
+    --white-dim: #8c8984;
+    --gray: #504e4a;
+  }
+
+  body {
+    background: var(--slate);
+    color: var(--white);
+    font-family: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 19px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Hero */
+  .hero {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0;
+  }
+  .hero img {
+    width: 100%;
+    display: block;
+  }
+
+  /* Content container */
+  .content {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 60px 24px 120px;
+  }
+
+  /* Series label */
+  .series-label {
+    font-family: 'Jura', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--teal-dim);
+    margin-bottom: 8px;
+  }
+
+  .post-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--gray);
+    margin-bottom: 40px;
+  }
+
+  /* Prose */
+  p {
+    margin-bottom: 1.5em;
+    color: var(--white);
+  }
+
+  /* Headings */
+  h2 {
+    font-family: 'Big Shoulders Display', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--teal);
+    letter-spacing: 0.02em;
+    margin-top: 3em;
+    margin-bottom: 1em;
+  }
+
+  /* Pull quotes */
+  .pull-quote {
+    border-left: 2px solid var(--teal);
+    padding: 16px 0 16px 28px;
+    margin: 2.5em 0;
+    font-style: italic;
+    color: var(--white-dim);
+    font-size: 20px;
+    line-height: 1.6;
+  }
+  .pull-quote strong {
+    color: var(--white);
+    font-style: normal;
+  }
+
+  /* Inline emphasis */
+  strong {
+    color: var(--white);
+    font-weight: 600;
+  }
+
+  /* Monospace / technical */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    background: var(--slate-mid);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--teal);
+  }
+
+  /* Image cards inline */
+  .card-break {
+    margin: 3em -40px;
+    text-align: center;
+  }
+  .card-break img {
+    max-width: 100%;
+    width: 540px;
+    border: 1px solid var(--slate-light);
+    border-radius: 4px;
+  }
+  @media (max-width: 720px) {
+    .card-break { margin: 2em 0; }
+    .card-break img { width: 100%; }
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 40px;
+    margin: 3em 0;
+    padding: 24px 0;
+    border-top: 1px solid var(--slate-light);
+    border-bottom: 1px solid var(--slate-light);
+  }
+  .stat {
+    text-align: left;
+  }
+  .stat-num {
+    font-family: 'Big Shoulders Display', sans-serif;
+    font-size: 36px;
+    color: var(--teal);
+    line-height: 1;
+  }
+  .stat-label {
+    font-family: 'Jura', sans-serif;
+    font-size: 12px;
+    color: var(--white-dim);
+    letter-spacing: 0.05em;
+  }
+
+  /* Closing */
+  .closing {
+    margin-top: 4em;
+    padding-top: 2em;
+    border-top: 1px solid var(--slate-light);
+    font-style: italic;
+    color: var(--white-dim);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .closing a {
+    color: var(--teal);
+    text-decoration: none;
+    border-bottom: 1px solid var(--teal-dim);
+  }
+  .closing a:hover {
+    color: var(--white);
+    border-bottom-color: var(--white);
+  }
+
+  /* Horizontal rule */
+  hr {
+    border: none;
+    border-top: 1px solid var(--slate-light);
+    margin: 3em 0;
+  }
+
+  /* List — for the governance gap */
+  .gap-list {
+    margin: 1.5em 0;
+    padding-left: 0;
+    list-style: none;
+  }
+  .gap-list li {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 0.8em;
+    color: var(--white-dim);
+  }
+  .gap-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 8px;
+    height: 8px;
+    background: var(--amber);
+    border-radius: 1px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <img src="images/01-hero-trust-is-infrastructure.png" alt="Trust Is Infrastructure — governance as grammar, not policy">
+</div>
+
+<div class="content">
+
+  <div class="series-label">ZeroPoint / Building in Public / Post 1</div>
+  <div class="post-date">April 21, 2026</div>
+
+  <p>There is a question that the AI industry is not asking clearly enough, and the answer is going to matter more than any model benchmark, any agent framework, or any alignment paper published this year.</p>
+
+  <p>The question is: <strong>when an autonomous AI agent acts in the world — writes code, manages files, browses the web, spawns subprocesses, accumulates memory, and learns new skills over days and weeks — how do you know what it did, why it did it, and whether it had the authority to do it?</strong></p>
+
+  <p>Not "how do you hope." Not "how do you check after the fact." How do you <em>know</em>, with the same structural certainty that a TLS certificate gives you about the identity of a web server?</p>
+
+  <p>The honest answer, today, is: you don't. And the agent frameworks are getting more capable faster than the governance infrastructure is getting more real.</p>
+
+  <h2>The Guardrails Illusion</h2>
+
+  <p>The current approach to AI governance is policy layers. Guardrails. Content filters. System prompts that say "don't do bad things." Compliance dashboards that report what the model said it did.</p>
+
+  <p>All of these share a structural flaw: <strong>they depend on the agent's cooperation.</strong></p>
+
+  <p>A policy layer that the agent's code path can bypass is not a policy layer. It's a suggestion. A content filter that operates on the output but not the reasoning chain is a checkpoint, not a boundary. A compliance dashboard that reads the agent's self-report is an honor system.</p>
+
+  <p>I don't say this to criticize the people building these tools. They're solving real problems under real constraints. But the architecture is wrong. It's wrong the same way that application-level security was wrong before operating systems enforced process isolation. You can write all the access-control code you want inside your application. If the kernel doesn't enforce it, a sufficiently motivated process walks right past it.</p>
+
+  <p>We learned this lesson forty years ago in systems programming. We are about to relearn it with autonomous agents.</p>
+
+  <h2>Governance as Grammar</h2>
+
+  <div class="card-break">
+    <img src="images/03-card-grammar.png" alt="The Grammar — productions P1 through M3">
+  </div>
+
+  <p>ZeroPoint starts from a different premise: <strong>trust is not a policy. Trust is a grammar.</strong></p>
+
+  <p>A system has a state and you check whether the state is correct. A grammar has productions and you check whether the derivation is well-formed. The difference matters because a grammar is <em>open</em> — it accepts new well-formed strings indefinitely, and its correctness is a property of the parse, not of any single moment.</p>
+
+  <p>In ZeroPoint, every action an agent takes is a step in a hash-linked, signed, replayable derivation. Each step is conditioned on the full prior context — not just the last action, but the entire chain of actions that preceded it. The derivation is well-formed if and only if it parses against a fixed grammar of constitutional, delegation, and continuity invariants.</p>
+
+  <p>What does that mean in practice?</p>
+
+  <p>It means that when an agent writes to memory, that write is classified, policy-gated, and receipted before it touches persistent storage. It means that when an agent proposes a new skill, that skill enters quarantine — it does not become trusted because it worked once. It means that when an agent spawns a subprocess, that subprocess runs inside a controlled namespace where the only way to reach the outside world is through host functions that ZeroPoint explicitly exposes.</p>
+
+  <div class="pull-quote">
+    The audit chain is not a log of what happened. It <strong>is</strong> what happened. The chain is the state, and the state is the history.
+  </div>
+
+  <p>Verification, in this model, is not checking. It is re-derivation. The verifier walks the full chain from genesis and asks: can I reproduce this state from the grammar's productions? If yes, accept. If no, reject. The verifier is a parser.</p>
+
+  <p>This is not a metaphor. It is the actual architecture. 22 Rust crates. 700+ tests. Running code.</p>
+
+  <h2>What a Pentest Taught Me About Architecture</h2>
+
+  <div class="card-break">
+    <img src="images/02-card-gate-optional.png" alt="The gate was not weak. The gate was optional.">
+  </div>
+
+  <p>Earlier this year, I ran a black-box penetration test against ZeroPoint using an autonomous adversarial agent. The agent found 20 vulnerabilities across four categories. One of them was a shell injection in the command execution path. That was bad.</p>
+
+  <p>But the structural finding was bigger than any single vulnerability. What the pentest revealed was that <strong>gate coverage was disciplinary, not structural.</strong> The governance engine — the policy rules, the constitutional checks, the delegation chains — all of it existed and all of it worked <em>when it was consulted.</em> The problem was that not every code path consulted it. There was a direct route from an API endpoint to <code>Command::spawn</code> that never passed through the gate.</p>
+
+  <p>The gate was not weak. The gate was <em>optional.</em></p>
+
+  <p>That distinction changed how I think about everything. It is the difference between a security guard and a locked door. A security guard works when the guard is present, awake, and incorruptible. A locked door works because the door is the only path and the lock is the mechanism. You don't need to trust the door's intentions.</p>
+
+  <p>The fix is not "be more careful about calling the gate." The fix is to make the gate the only path — structurally, at the type level, so that a code path that bypasses governance is not just wrong but <em>unrepresentable.</em></p>
+
+  <h2>The Agent Problem</h2>
+
+  <div class="card-break">
+    <img src="images/04-card-five-surfaces.png" alt="Five surfaces every agent touches">
+  </div>
+
+  <p>This matters now — not in some theoretical future — because the agent frameworks have already crossed the threshold into persistent autonomy.</p>
+
+  <p>Hermes Agent, from Nous Research, has over 106,000 GitHub stars. It runs 24/7 on a VPS. It accumulates persistent memory across sessions. It learns new skills from experience and stores them for reuse. It spawns browser automation sessions that can self-heal when the DOM changes. It creates child agent instances for parallel work.</p>
+
+  <p>This is not a chatbot. This is a durable autonomous actor. And it is not the exception — it is where the entire ecosystem is heading. Claude Code, Cursor, Devin, Codex — they all have the same surfaces: filesystem, network, subprocess, model API, inter-process communication. The capability set has converged. The governance has not.</p>
+
+  <p>The governance gap is specific and measurable:</p>
+
+  <ul class="gap-list">
+    <li>Memory writes are not policy-gated. An agent can silently promote speculation into trusted fact.</li>
+    <li>Skill creation is not verified. A learned behavior becomes trusted because it worked once.</li>
+    <li>Browser actions are not bounded. Self-healing execution can extend the operational surface mid-task.</li>
+    <li>Subprocess spawning is not receipted. Parallel workers can act without attestation.</li>
+  </ul>
+
+  <p>Each of these individually is a manageable risk. Together, compounding over time in a persistent agent that runs unsupervised, they constitute a category of system that we do not yet have the infrastructure to govern.</p>
+
+  <p>ZeroPoint is that infrastructure.</p>
+
+  <h2>What ZeroPoint Actually Is</h2>
+
+  <p>ZeroPoint is an <strong>autorecursive trust substrate</strong>. Each word is load-bearing.</p>
+
+  <p><strong>Autorecursive</strong> means each step is conditioned on the full prior context. Not just the last action — the entire history. The chain is not a log; it is the state. The present compresses the past. This is the same principle that makes autoregressive language models work: each token is conditioned on all prior tokens. It is also, I believe, a more fundamental computational principle than its current use in language modeling suggests — but that is a longer conversation for a future post.</p>
+
+  <p><strong>Trust</strong> means the system's guarantees are structural, not contractual. You do not trust the agent to honor its commitments. You trust the namespace that makes violation unrepresentable. You do not trust the channel. You trust the math.</p>
+
+  <p><strong>Substrate</strong> means this is not an application. It is not a guardrail. It is the layer that lives below the application and refuses to be bypassed. Applications are built on top of it. Governance is the foundation, not the fence.</p>
+
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-num">22</div><div class="stat-label">Rust crates</div></div>
+    <div class="stat"><div class="stat-num">700+</div><div class="stat-label">tests</div></div>
+    <div class="stat"><div class="stat-num">20</div><div class="stat-label">pentest findings</div></div>
+    <div class="stat"><div class="stat-num">4</div><div class="stat-label">core claims</div></div>
+  </div>
+
+  <p>It is not finished. Two of the four core claims I make about it are not yet true in the running code. I know which two, I know why, and I know the path to making them true. That honesty is part of the project.</p>
+
+  <h2>Why I'm Writing This</h2>
+
+  <p>I have been building ZeroPoint in near-complete isolation. The architecture documents are hundreds of pages. The codebase is tens of thousands of lines. The thinking has evolved through dozens of iterations, each conditioned on what the prior iteration revealed. And almost none of it is visible to anyone outside my own terminal.</p>
+
+  <p>That changes now.</p>
+
+  <p>I'm not writing this because I have a product to launch. I'm writing it because the problem ZeroPoint addresses — <em>how do you make autonomous AI systems trustworthy at a structural level</em> — is too important to solve in a cave. The ideas need to be tested against other minds. The architecture needs to be challenged by people who think differently than I do. And the story of building it — the breakthroughs, the mistakes, the moments where the thinking pivoted — is itself a contribution, because there are others out there trying to solve the same problem and they deserve to see someone else's working notes.</p>
+
+  <div class="pull-quote">
+    Trust is infrastructure. <strong>I intend to prove it.</strong>
+  </div>
+
+  <hr>
+
+  <div class="closing">
+    <p>I'm Ken Romero, founder of ThinkStream Labs. ZeroPoint is open-source and under active development. If you're interested in agent governance, trust infrastructure, or the intersection of cryptography and AI safety, follow along. The next post is about where these ideas come from — the intellectual lineage that converged into a trust grammar.</p>
+    <p style="margin-top: 16px;">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">github.com/zeropoint-foundation/zeropoint</a>
+    </p>
+  </div>
+
+</div>
+
+</body>
+</html>
