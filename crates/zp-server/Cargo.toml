@@ -57,5 +57,6 @@ which = "7"
 toml = { workspace = true }
 zeroize = { workspace = true }
 shlex = "1"
+base64 = { workspace = true }
 
 [dev-dependencies]
