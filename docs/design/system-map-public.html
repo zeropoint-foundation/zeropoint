@@ -112,6 +112,7 @@
   .plane-header .plane-tag.cognition { background: #2e1a2e; color: #c084fc; }
   .plane-header .plane-tag.compromise { background: #2e1a1a; color: #f87171; }
   .plane-header .plane-tag.infra { background: #1a2020; color: #5eead4; }
+  .plane-header .plane-tag.gar { background: #1a2e2e; color: #2dd4bf; }
 
   .stats {
     display: flex;
@@ -394,6 +395,30 @@ const data = [
     { label: "Downgrade Resistance", status: "roadmap", children: [
       { label: "Monotonic policy version enforcement", status: "roadmap" },
     ]},
+  ]},
+
+  { label: "GOVERNED AGENT RUNTIME", plane: "gar", tag: "Phase 4 — Autonomous Agent Governance", children: [
+    { label: "Wrapper Architecture", status: "roadmap", children: [
+      { label: "Process-level containment (Linux namespaces)", status: "roadmap" },
+      { label: "Overlay filesystem (write-capture, policy gating)", status: "roadmap" },
+      { label: "Network namespace (default-deny egress)", status: "roadmap" },
+    ]},
+    { label: "Five Mediation Surfaces", status: "roadmap", children: [
+      { label: "Model API proxy (allowlist, metering, credential injection)", status: "roadmap" },
+      { label: "Filesystem governance (memory classification, skill verification)", status: "roadmap" },
+      { label: "Subprocess control (capability envelopes)", status: "roadmap" },
+      { label: "Network mediation (per-task domain allowlists)", status: "roadmap" },
+      { label: "IPC receipting (parent-child agent channels)", status: "roadmap" },
+    ]},
+    { label: "Reasoning Attestation", status: "roadmap", children: [
+      { label: "Two-layer governance (enforcement + attestation)", status: "roadmap" },
+      { label: "Reasoning hash linkage on receipts", status: "roadmap" },
+      { label: "Three inference trust tiers (attested / observed / unattested)", status: "roadmap" },
+    ]},
+    { label: "Agent Receipt Types (11 new types)", status: "roadmap" },
+    { label: "Sovereign Mode (hardened default, no third parties in trust path)", status: "roadmap" },
+    { label: "First tenant: Hermes Agent (Nous Research)", status: "roadmap" },
+    { label: "Portable governance (generalized agent manifest, second tenant)", status: "roadmap" },
   ]},
 
   { label: "INFRASTRUCTURE", plane: "infra", tag: "Build & Deploy", children: [

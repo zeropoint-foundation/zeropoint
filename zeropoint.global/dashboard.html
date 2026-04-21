@@ -353,6 +353,7 @@ h1 {
 .plane-header .plane-tag.cognition { background: #2e1a2e; color: #c084fc; }
 .plane-header .plane-tag.compromise { background: #2e1a1a; color: #f87171; }
 .plane-header .plane-tag.infra { background: #1a2020; color: #5eead4; }
+.plane-header .plane-tag.gar { background: #1a2e2e; color: #2dd4bf; }
 .plane-header .plane-progress {
   float: right;
   font-size: 0.65rem;
@@ -544,6 +545,20 @@ const phases = [
       { id: "S7-5", label: "Genesis transcript viewer with receipt chain walkthrough", done: false },
       { id: "S7-6", label: "Fleet enrollment & node onboarding from /setup", done: false },
       { id: "S7-7", label: "Onboarding narration — Piper TTS with alternating voices and curated scripts", done: true },
+    ]
+  },
+  {
+    name: "Phase 8: Governed Agent Runtime (GAR)",
+    status: "pending",
+    items: [
+      { id: "GAR-1", label: "Linux namespace containment (mount, network, PID) — Hermes as first tenant", done: false },
+      { id: "GAR-2", label: "Five-surface mediation (Model API, Filesystem, Subprocess, Network, IPC)", done: false },
+      { id: "GAR-3", label: "Memory governance — four-tier classification, write receipting", done: false },
+      { id: "GAR-4", label: "Skill governance — lifecycle pipeline (proposed → signed → active → revoked)", done: false },
+      { id: "GAR-5", label: "Reasoning attestation — reasoning_hash linkage, inference trust tiers", done: false },
+      { id: "GAR-6", label: "11 new agent receipt types (AgentSession, MemoryWrite, SkillProposal, etc.)", done: false },
+      { id: "GAR-7", label: "Sovereign Mode profile — hardened default, no third parties in trust path", done: false },
+      { id: "GAR-8", label: "Portable governance — generalized agent manifest, second tenant", done: false },
     ]
   },
 ];
@@ -762,6 +777,30 @@ const data = [
       { label: "Monotonic policy version enforcement (AppState + reconstitution engine + API)", status: "shipped", phase: "R6-4" },
       { label: "Version transition audit trail", status: "shipped", phase: "R6-4" },
     ]},
+  ]},
+
+  { label: "GOVERNED AGENT RUNTIME", plane: "gar", tag: "Phase 4 — Autonomous Agent Governance", children: [
+    { label: "Wrapper Architecture", status: "roadmap", children: [
+      { label: "Process-level containment (Linux namespaces)", status: "roadmap" },
+      { label: "Overlay filesystem (write-capture, policy gating)", status: "roadmap" },
+      { label: "Network namespace (default-deny egress)", status: "roadmap" },
+    ]},
+    { label: "Five Mediation Surfaces", status: "roadmap", children: [
+      { label: "Model API proxy (allowlist, metering, credential injection)", status: "roadmap" },
+      { label: "Filesystem governance (memory classification, skill verification)", status: "roadmap" },
+      { label: "Subprocess control (capability envelopes)", status: "roadmap" },
+      { label: "Network mediation (per-task domain allowlists)", status: "roadmap" },
+      { label: "IPC receipting (parent-child agent channels)", status: "roadmap" },
+    ]},
+    { label: "Reasoning Attestation", status: "roadmap", children: [
+      { label: "Two-layer governance (enforcement + attestation)", status: "roadmap" },
+      { label: "Reasoning hash linkage on receipts", status: "roadmap" },
+      { label: "Three inference trust tiers (attested / observed / unattested)", status: "roadmap" },
+    ]},
+    { label: "Agent Receipt Types (11 new types)", status: "roadmap" },
+    { label: "Sovereign Mode (hardened default, no third parties in trust path)", status: "roadmap" },
+    { label: "First tenant: Hermes Agent (Nous Research)", status: "roadmap" },
+    { label: "Portable governance (generalized agent manifest, second tenant)", status: "roadmap" },
   ]},
 
   { label: "INFRASTRUCTURE", plane: "infra", tag: "Build & Deploy", children: [

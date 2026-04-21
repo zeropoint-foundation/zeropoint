@@ -9,6 +9,8 @@
 - `security/pentest-2026-04-06/PENTEST-REPORT.md` — what the 2026-04-06 black-box pentest found
 - `security/pentest-2026-04-06/INVARIANT-CATALOG-v0.md` — the grammar that the substrate is supposed to satisfy
 - `security/pentest-2026-04-06/REMEDIATION-NOTES.md` — working notes, decisions, deferred questions
+- `docs/design/governed-agent-runtime.md` — the Governed Agent Runtime (GAR) architecture specification (Phase 4)
+- `docs/future-work/cognitive-accountability.md` — the cognitive accountability layer (Layer 3 trace vision, parked until foundation hardening completes)
 
 This document sits *above* all four. The whitepaper is the thesis; the pentest is the evidence; the catalog is the grammar; the notes are the workshop. This document is the operating spec — the thing that says what ZeroPoint actually is now, what it is supposed to become, and how the work between those two states is sequenced.
 
@@ -330,6 +332,40 @@ Each phase has:
 
 **What Phase 3 acknowledges that Phase 0–2 do not.** Phase 3 is research. It might fail. The first mechanism might prove inadequate; the second might too. The phase has an indefinite duration on purpose. The other three phases are engineering with known shapes; Phase 3 is the place where the project earns its claim to be doing something novel.
 
+### Phase 4 — The Governed Agent Runtime (starts when Phase 1 exit lands)
+
+**Goal.** Extend the substrate from governing *tools and delegations* to governing *persistent autonomous agents*. Make ZeroPoint the runtime, not the accessory.
+
+**Why Phase 4 exists.** Section 4a says the substrate is never finished, and that Phase 4 is "whatever the first three phases made visible." What they made visible is this: the grammar, the gate, the five-surface mediation model, and the WASM trust boundary are exactly the machinery needed to run a durable autonomous agent as a *governed tenant* — an entity that persists across sessions, accumulates memory and skills, spawns subprocesses, and reaches the outside world through surfaces that ZeroPoint already knows how to mediate.
+
+The agent ecosystem has converged on a common capability set: persistent memory, learned skills, tool use, browser automation, scheduled execution, and multi-agent orchestration. This creates a new category of software — the durable autonomous actor — and a governance gap that the substrate is architecturally positioned to close. The first concrete tenant is Hermes Agent (Nous Research), chosen because it exhibits all five surfaces that Phases 0-3 taught ZeroPoint to govern.
+
+**Architecture.** The Governed Agent Runtime (GAR) uses a wrapper model, not a plugin model. ZeroPoint is the outer process; the agent is a managed tenant inside controlled Linux namespaces. Every I/O surface the agent touches — model API, filesystem, subprocess, network, IPC — is mediated by the same host-function boundary that Phase 1 established. The grammar is the same; the productions are new.
+
+The full GAR architecture, including containment model, governance surfaces, receipt schema, and phased implementation, is specified in `docs/design/governed-agent-runtime.md`.
+
+**Relationship to existing commitments.**
+
+- **Commitment A (WASM trust boundary)** extends directly: the five mediation surfaces are host functions. The agent's namespace isolation is the kernel-level expression of the same principle — no ambient authority, no side effects outside the grammar.
+
+- **Commitment B (catalog as spec, verifier as parser)** extends: 11 new receipt types (AgentSessionClaim, MemoryWriteClaim, SkillProposalClaim, SkillPromotionClaim, BrowserSessionClaim, BrowserActionClaim, SubprocessClaim, InferenceRequestClaim, WorktreeResultClaim, CapabilityQuarantineClaim, ReasoningTraceClaim) join the existing chain. `zp-verify` gains rules for agent lifecycle events. The catalog's grammar absorbs new productions without changing its shape.
+
+- **Commitment C (continuous adversarial testing)** extends: the GAR's containment model is a new attack surface. Shannon's next campaign must attempt namespace escape, overlay bypass, and proxy circumvention.
+
+- **Commitment D (X3)** is where the GAR produces its deepest contribution. A persistent agent that accumulates memory, learns skills, and spawns subprocesses over days or weeks is *exactly* the workload where sequence-level constitutional compliance matters. Individual actions may be benign; the trajectory may not be. The GAR provides the receipt stream that X3 needs to operate against real agent behavior, not synthetic fixtures.
+
+**The reasoning attestation extension.** The GAR introduces a sixth governance concern beyond the five I/O surfaces: the autoregressive reasoning chain that *produces* the decisions manifesting at those surfaces. If autoregression is understood as a universal computational principle — a fundamental mode of computation alongside recursion, iteration, and reduction — then the reasoning chain is the primary computational substrate, and I/O-surface actions are its side effects. Governing the side effects without governing the computation that produces them is like an operating system that controls file I/O but has no concept of process memory.
+
+The GAR addresses this through two-layer governance: an enforcement layer (five surfaces, kernel-enforced) and an attestation layer (reasoning chain, cryptographically linked to receipts via `reasoning_hash`). Every receipt carries a content-addressed reference to the chain of thought that produced it, creating causal provenance across the autoregressive boundary.
+
+This is the concrete precursor to the cognitive accountability layer designed in `docs/future-work/cognitive-accountability.md`. The GAR's reasoning attestation provides Layer 3's anchor point — the hash-linked bridge between "what happened" (receipts) and "what computation produced what happened" (traces). When the foundation is hardened enough to support LARQL decomposition and MEDS fingerprinting, the GAR's attestation infrastructure is what they plug into.
+
+**Three inference trust tiers.** The GAR distinguishes local models with full trace capture (attested), remote APIs with prompt/response logging (observed), and untraced inference (unattested, not permitted in sovereign mode). The trust tier determines what the attestation layer can prove and what the operator can audit.
+
+**Planning posture.** Phase 4 is engineering, not research. Its shape is known because Phases 0-3 defined the grammar and the surfaces. The implementation phases within the GAR (contained execution → skill/memory governance → multi-agent orchestration → portable governance) are specified in the companion document with concrete deliverables. Phase 4 can begin in parallel with Phase 3's research work, since it depends on Phase 1's WASM trust boundary and Phase 2's adversarial loop, not on X3's resolution.
+
+**Exit criterion.** A Hermes Agent instance runs as a GAR tenant with all five surfaces mediated, memory writes classified and policy-gated, skill proposals quarantined and verified, subprocess spawns receipted, and `zp-verify` validating the full agent-session chain against the extended catalog. A second agent framework (Claude Code, Cursor, or equivalent) runs under the same governance model, proving the wrapper is general.
+
 ---
 
 ## Part V — Calibrated Uncertainty
@@ -394,4 +430,4 @@ Start there. The rest follows.
 
 ---
 
-*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Next revision expected after Phase 1 exit.*
+*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Phase 4 (Governed Agent Runtime) added April 21, 2026 following the Hermes Agent integration analysis. Next revision expected after Phase 1 exit.*

@@ -73,6 +73,9 @@ test-outputs/
 # Misc experimental files
 *.jsx
 *.html
+# Allow HTML in docs (GitHub Pages) and dashboard
+!docs/**/*.html
+!zeropoint.global/**/*.html
 INPUT/
 logs/
 .pids/

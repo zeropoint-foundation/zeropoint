@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="ZeroPoint — Building in Public">
+<meta property="og:description" content="An autorecursive trust substrate for autonomous AI agents. Posts from the build.">
+<meta property="og:image" content="images/01-hero-trust-is-infrastructure.png">
+<title>ZeroPoint — Building in Public</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;600&family=Jura:wght@300;500&family=Big+Shoulders+Display:wght@700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --slate: #0a0a0f;
+    --slate-mid: #16161e;
+    --slate-light: #23232f;
+    --teal: #2dd4bf;
+    --teal-dim: #1e8c7e;
+    --amber: #f5b43c;
+    --amber-dim: #a07323;
+    --white: #e8e6e3;
+    --white-dim: #8c8984;
+    --gray: #504e4a;
+  }
+
+  body {
+    background: var(--slate);
+    color: var(--white);
+    font-family: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 18px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 80px 24px 120px;
+  }
+
+  /* Header */
+  .site-header {
+    margin-bottom: 60px;
+  }
+
+  .site-title {
+    font-family: 'Big Shoulders Display', sans-serif;
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--teal);
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+  }
+
+  .site-subtitle {
+    font-family: 'Jura', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teal-dim);
+    margin-top: 8px;
+  }
+
+  .site-desc {
+    margin-top: 24px;
+    color: var(--white-dim);
+    font-size: 16px;
+    max-width: 560px;
+  }
+
+  /* Divider */
+  hr {
+    border: none;
+    border-top: 1px solid var(--slate-light);
+    margin: 40px 0;
+  }
+
+  /* Posts list */
+  .posts-label {
+    font-family: 'Jura', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gray);
+    margin-bottom: 24px;
+  }
+
+  .post-card {
+    display: block;
+    text-decoration: none;
+    padding: 28px 0;
+    border-bottom: 1px solid var(--slate-light);
+    transition: all 0.15s ease;
+  }
+
+  .post-card:first-of-type {
+    border-top: 1px solid var(--slate-light);
+  }
+
+  .post-card:hover {
+    padding-left: 12px;
+  }
+
+  .post-card:hover .post-title {
+    color: var(--teal);
+  }
+
+  .post-number {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--teal-dim);
+    margin-bottom: 4px;
+  }
+
+  .post-title {
+    font-family: 'Big Shoulders Display', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: 0.01em;
+    transition: color 0.15s ease;
+    line-height: 1.2;
+  }
+
+  .post-excerpt {
+    color: var(--white-dim);
+    font-size: 15px;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+
+  .post-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--gray);
+    margin-top: 8px;
+  }
+
+  /* Footer */
+  .site-footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--slate-light);
+    font-size: 14px;
+    color: var(--gray);
+  }
+
+  .site-footer a {
+    color: var(--teal-dim);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+
+  .site-footer a:hover {
+    color: var(--teal);
+    border-bottom-color: var(--teal-dim);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 24px;
+    margin-top: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="site-header">
+    <div class="site-title">ZEROPOINT</div>
+    <div class="site-subtitle">Building in Public</div>
+    <p class="site-desc">An autorecursive trust substrate for autonomous AI agents. These posts document the build — the architecture, the thinking, the breakthroughs, and the honest uncertainties.</p>
+  </div>
+
+  <hr>
+
+  <div class="posts-label">Posts</div>
+
+  <a class="post-card" href="01-trust-is-infrastructure.html">
+    <div class="post-number">01</div>
+    <div class="post-title">Trust Is Infrastructure</div>
+    <div class="post-excerpt">Governance as grammar, not policy. Why the current approach to AI agent governance is structurally wrong, and what an autorecursive trust substrate looks like.</div>
+    <div class="post-date">2026-04-21</div>
+  </a>
+
+  <!-- Future posts go here -->
+
+  <div class="site-footer">
+    <p>Ken Romero / ThinkStream Labs</p>
+    <div class="footer-links">
+      <a href="https://github.com/zeropoint-foundation/zeropoint">github</a>
+      <a href="https://thinkstreamlabs.ai">thinkstreamlabs.ai</a>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
