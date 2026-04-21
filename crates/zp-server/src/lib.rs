@@ -3030,6 +3030,8 @@ struct ToolLogResponse {
 #[derive(Deserialize)]
 struct ToolLogQuery {
     name: Option<String>,
+    /// Number of trailing lines to return (default 50).
+    tail: Option<usize>,
 }
 
 /// Response for POST /api/v1/tools/:tool_name/configure.
@@ -4243,11 +4245,8 @@ async fn tools_log_handler(
 
     let contents = std::fs::read_to_string(&log_path).unwrap_or_default();
     let lines: Vec<&str> = contents.lines().collect();
-    let tail_start = if lines.len() > 50 {
-        lines.len() - 50
-    } else {
-        0
-    };
+    let tail_n = params.tail.unwrap_or(50).min(200);
+    let tail_start = lines.len().saturating_sub(tail_n);
     let tail: String = lines[tail_start..].join("\n");
 
     Json(ToolLogResponse {

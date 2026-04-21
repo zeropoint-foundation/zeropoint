@@ -823,29 +823,80 @@
         const pollUrl = openUrl;  // poll the subdomain proxy — returns 502 until tool is up
         if (openUrl && result.port) {
           const isNative = result.kind === 'native';
-          const maxWait = isNative ? 180000 : 30000;   // 3 min vs 30 s
+          const isDocker = result.kind === 'docker';
+          const maxWait = isNative ? 600000 : isDocker ? 120000 : 30000;
           const pollInterval = isNative ? 3000 : 1500;
-          const timeLabel = isNative ? '3 minutes' : '30 seconds';
-          showToast(`<strong>${escapeHtml(tool.name)}</strong> starting &mdash; waiting for port ${escapeHtml(String(result.port || ''))}...`, maxWait);
-          const ready = await waitForPort(pollUrl, maxWait, pollInterval);
-          if (ready) {
-            showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
-            if (pendingTab && !pendingTab.closed) {
-              pendingTab.location.href = openUrl;
+
+          // ── Phased progress for native builds ──────────────────
+          // Native (cargo) tools compile from source — first builds can
+          // take 5-10+ minutes.  Instead of a static "waiting for port"
+          // message, show build phase and tail the log.
+          if (isNative) {
+            showToast(`<strong>${escapeHtml(tool.name)}</strong> compiling &mdash; <code>cargo run --release</code><br><span style="opacity:.6">First build may take several minutes. You can keep working.</span>`, maxWait);
+            // Poll build log to update toast with progress
+            const logPollId = setInterval(async () => {
+              try {
+                const logResp = await zpFetch(`/api/v1/tools/log?name=${encodeURIComponent(tool.name)}&tail=3`);
+                if (logResp.ok) {
+                  const logData = await logResp.json();
+                  const lastLine = (logData.lines || []).slice(-1)[0] || '';
+                  if (lastLine) {
+                    // Detect compilation vs runtime phase
+                    const isCompiling = /Compiling|Downloading|Updating|Building/.test(lastLine);
+                    const isRunning = /Listening|listening|Started|Serving|Binding|bound|ready/.test(lastLine);
+                    const phase = isRunning ? 'starting up' : isCompiling ? 'compiling' : 'building';
+                    const short = lastLine.length > 80 ? lastLine.slice(0, 77) + '...' : lastLine;
+                    showToast(
+                      `<strong>${escapeHtml(tool.name)}</strong> ${phase}<br>` +
+                      `<code style="font-size:0.8em;opacity:.7">${escapeHtml(short)}</code>`,
+                      maxWait
+                    );
+                  }
+                }
+              } catch {}
+            }, 4000);
+            const ready = await waitForPort(pollUrl, maxWait, pollInterval);
+            clearInterval(logPollId);
+            if (ready) {
+              showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
+              if (pendingTab && !pendingTab.closed) {
+                pendingTab.location.href = openUrl;
+              } else {
+                window.open(openUrl, '_blank');
+              }
             } else {
-              window.open(openUrl, '_blank');
+              if (pendingTab) pendingTab.close();
+              showToast('');
+              showDiagnostic(tool, {
+                error: `${tool.name} did not respond on port ${result.port}`,
+                cmd: result.cmd,
+                port: result.port,
+                hint: 'The build may still be running in the background. Check the log below, or try:\n  tail -f ~/ZeroPoint/logs/' + tool.name + '.log',
+              });
             }
           } else {
-            if (pendingTab) pendingTab.close();
-            showToast('');
-            showDiagnostic(tool, {
-              error: `Port ${result.port} did not respond within ${timeLabel}`,
-              cmd: result.cmd,
-              port: result.port,
-              hint: isNative
-                ? 'Native tools may need a first-time build. Try `cargo build --release` in the tool directory, then retry.'
-                : 'The process may have crashed on startup. Check the log below.',
-            });
+            showToast(`<strong>${escapeHtml(tool.name)}</strong> starting &mdash; waiting for port ${escapeHtml(String(result.port || ''))}...`, maxWait);
+            const ready = await waitForPort(pollUrl, maxWait, pollInterval);
+            if (ready) {
+              showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
+              if (pendingTab && !pendingTab.closed) {
+                pendingTab.location.href = openUrl;
+              } else {
+                window.open(openUrl, '_blank');
+              }
+            } else {
+              if (pendingTab) pendingTab.close();
+              showToast('');
+              const timeLabel = isDocker ? '2 minutes' : '30 seconds';
+              showDiagnostic(tool, {
+                error: `Port ${result.port} did not respond within ${timeLabel}`,
+                cmd: result.cmd,
+                port: result.port,
+                hint: isDocker
+                  ? 'Container may still be pulling images. Check: docker compose logs -f'
+                  : 'The process may have crashed on startup. Check the log below.',
+              });
+            }
           }
         } else {
           if (pendingTab) pendingTab.close();
