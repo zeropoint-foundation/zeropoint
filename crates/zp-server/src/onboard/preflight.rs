@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tracing::debug;
 use zp_audit::AuditStore;
 use zp_core::paths as zp_paths;
 
