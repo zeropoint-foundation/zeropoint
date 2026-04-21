@@ -868,7 +868,7 @@
             });
             // Stream the build log via tail -f in the terminal
             const toolPath = tool.path || `~/projects/${tool.name}`;
-            execInTerminal(`tail -f $HOME/ZeroPoint/logs/${tool.name}.log`, toolPath);
+            execInTerminal('tail -f ' + (result.log_path || '/tmp/zp-no-log'), toolPath);
 
             // Track compiled crate count for progress estimation
             let compiledCount = 0;
@@ -945,7 +945,7 @@
                   `<div class="diag-field"><div class="diag-label">Command</div><div class="diag-value"><code>${escapeHtml(result.cmd || '')}</code></div></div>`;
               }
               // Re-stream the log tail (the old tail -f was killed above)
-              execInTerminal(`tail -f $HOME/ZeroPoint/logs/${tool.name}.log`, toolPath);
+              execInTerminal('tail -f ' + (result.log_path || '/tmp/zp-no-log'), toolPath);
               // Show retry button
               const retryBtn = document.getElementById('diagRetryBtn');
               if (retryBtn) { retryBtn.style.display = 'inline-block'; }

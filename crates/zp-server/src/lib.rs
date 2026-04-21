@@ -2998,6 +2998,8 @@ struct ToolLaunchResponse {
     port: u16,
     kind: String,
     pid: u32,
+    /// Absolute path to the tool's launch log (for terminal streaming).
+    log_path: String,
 }
 
 /// Response for POST /api/v1/tools/stop — tool stopped.
@@ -4048,6 +4050,38 @@ async fn tools_launch_handler(
         cmd.env(key, value);
     }
 
+    // Inject ZP port assignment directly into the process env.
+    // This is the nuclear option — cmd.env() overrides even dotenvy/dotenv
+    // crates that load .env files at runtime.  The shell preamble handles
+    // most tools, but Rust tools that call dotenvy::overload() can clobber
+    // shell env vars.  cmd.env() is inherited and cannot be overridden.
+    cmd.env(&assignment.port_var, assignment.port.to_string());
+
+    // Source .env.example defaults into the process env so tools get
+    // baseline config (DATABASE_URL, etc.) even without a .env file.
+    // We parse .env.example and inject any vars NOT already set by vault.
+    let env_example = tool_path.join(".env.example");
+    if env_example.exists() {
+        if let Ok(contents) = std::fs::read_to_string(&env_example) {
+            let vault_keys: std::collections::HashSet<&str> =
+                vault_env.iter().map(|(k, _)| k.as_str()).collect();
+            for line in contents.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') {
+                    continue;
+                }
+                if let Some((key, val)) = trimmed.split_once('=') {
+                    let key = key.trim();
+                    let val = val.trim().trim_matches('"').trim_matches('\'');
+                    // Don't override vault-injected vars or the ZP port var
+                    if !vault_keys.contains(key) && key != assignment.port_var {
+                        cmd.env(key, val);
+                    }
+                }
+            }
+        }
+    }
+
     let spawn_result = cmd.spawn();
 
     match spawn_result {
@@ -4124,6 +4158,7 @@ async fn tools_launch_handler(
                     port: assignment.port,
                     kind: launch.kind.clone(),
                     pid: child.id(),
+                    log_path: log_path.display().to_string(),
                 }).unwrap_or_default()),
             )
         }
