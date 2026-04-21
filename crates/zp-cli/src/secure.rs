@@ -1380,17 +1380,21 @@ pub fn status() -> i32 {
             dim("Filesystem: not configured");
         }
     } else {
-        eprintln!("  {YELLOW}⚠{NC} Not secured yet. Run: zp secure");
-        return 1;
+        dim("Config: not secured yet (run: zp secure)");
     }
 
     // Guard
     let guard_bin = zp_home.join("bin/zp");
     if guard_bin.exists() {
         ok("Guard: binary available");
+    } else {
+        dim("Guard: binary not found");
     }
 
-    ok("Gates: 6 rules loaded (2 constitutional, 4 operational)");
+    // Gates — only report if config exists
+    if config_path.exists() {
+        ok("Gates: 6 rules loaded (2 constitutional, 4 operational)");
+    }
 
     // ── Audit Chain: wire/bead positions ────────────────────────────
     let audit_db = zp_home.join("audit.db");

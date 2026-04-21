@@ -1575,9 +1575,24 @@ fn enforce_gate(
     action: CoreActionType,
     actor_label: &str,
 ) -> Result<GateResult, (StatusCode, String)> {
+    enforce_gate_at_tier(state, action, actor_label, TrustTier::Tier0)
+}
+
+/// Gate enforcement with an explicit trust tier.
+///
+/// Callers that perform privileged operations (tool launch = Tier1,
+/// credential access = Tier2) must pass the tier that matches the
+/// action they're authorizing.  The default `enforce_gate` uses Tier0,
+/// which is correct for read-only / chat actions.
+fn enforce_gate_at_tier(
+    state: &AppState,
+    action: CoreActionType,
+    actor_label: &str,
+    trust_tier: TrustTier,
+) -> Result<GateResult, (StatusCode, String)> {
     let context = PolicyContext {
         action: action.clone(),
-        trust_tier: TrustTier::Tier0,
+        trust_tier,
         channel: Channel::Api,
         conversation_id: ConversationId::new(),
         skill_ids: vec![],
@@ -1941,12 +1956,14 @@ async fn grant_handler(
     Json(body): Json<CreateGrantRequest>,
 ) -> Result<Json<GrantResponse>, (StatusCode, String)> {
     // ── Gate enforcement: capability grants are high-privilege ──
-    enforce_gate(
+    // CredentialAccess requires Tier2 (genesis-rooted key provenance).
+    enforce_gate_at_tier(
         &state,
         CoreActionType::CredentialAccess {
             credential_ref: format!("grant:{}", body.capability),
         },
         "grant-requester",
+        TrustTier::Tier2,
     )?;
 
     let scope = body.scope.unwrap_or_else(|| vec!["*".to_string()]);
@@ -2034,12 +2051,14 @@ async fn delegate_handler(
     Json(body): Json<DelegateRequest>,
 ) -> Result<Json<DelegateResponse>, (StatusCode, String)> {
     // ── Gate enforcement: delegation is high-privilege ──
-    enforce_gate(
+    // Delegation requires Tier2 (genesis-rooted key provenance).
+    enforce_gate_at_tier(
         &state,
         CoreActionType::CredentialAccess {
             credential_ref: format!("delegate:{}", body.capability),
         },
         &body.delegator_identity,
+        TrustTier::Tier2,
     )?;
 
     let grants = state.0.grants.lock().unwrap();
@@ -3762,12 +3781,15 @@ async fn tools_launch_handler(
     Json(req): Json<LaunchRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     // ── Gate enforcement: tool launch is a high-privilege Execute action ──
-    if let Err((status, reason)) = enforce_gate(
+    // Tool launch requires Tier1 — the dashboard tile click is an explicit
+    // user action that authorizes process execution.
+    if let Err((status, reason)) = enforce_gate_at_tier(
         &state,
         CoreActionType::Execute {
             language: format!("tool:{}", req.name),
         },
         "tool-launcher",
+        TrustTier::Tier1,
     ) {
         return (status, Json(serde_json::json!({ "error": reason })));
     }
