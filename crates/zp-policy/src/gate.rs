@@ -246,6 +246,12 @@ impl GovernanceGate {
         }
     }
 
+    /// Get a reference to the WASM policy module registry, if attached.
+    #[cfg(feature = "policy-wasm")]
+    pub fn wasm_registry(&self) -> Option<&crate::policy_registry::PolicyModuleRegistry> {
+        self.policy_engine.wasm_registry()
+    }
+
     /// Evaluate an action through the full governance pipeline.
     ///
     /// Returns a [`GateResult`] carrying the decision, risk level, applied
