@@ -1005,6 +1005,70 @@ async fn preflight_tool(
         }
     }
 
+    // ── Deep scan: cross-reference config files ─────────
+    let scan_result = super::deep_scan::analyze_tool(name, path);
+    events.push(OnboardEvent::terminal(&format!(
+        "    ▸ Deep scan: {} ({})",
+        scan_result.archetype,
+        if scan_result.findings.len() == 1 {
+            "1 finding".to_string()
+        } else {
+            format!("{} findings", scan_result.findings.len())
+        }
+    )));
+
+    for finding in &scan_result.findings {
+        match finding.severity {
+            super::deep_scan::FindingSeverity::Error => {
+                checks.push(PreflightCheck {
+                    name: format!("deep_scan:{}", finding.category),
+                    status: "fail".into(),
+                    detail: finding.message.clone(),
+                });
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✗ {}",
+                    finding.message
+                )));
+            }
+            super::deep_scan::FindingSeverity::Warning => {
+                checks.push(PreflightCheck {
+                    name: format!("deep_scan:{}", finding.category),
+                    status: "pass".into(), // warnings don't block launch
+                    detail: finding.message.clone(),
+                });
+                if finding.correction.is_some() {
+                    events.push(OnboardEvent::terminal(&format!(
+                        "    ⚠ {} (auto-corrected)",
+                        finding.category
+                    )));
+                    auto_fixed.push(format!("Deep scan: {}", finding.category));
+                } else {
+                    events.push(OnboardEvent::terminal(&format!(
+                        "    ⚠ {}",
+                        finding.message
+                    )));
+                }
+            }
+            super::deep_scan::FindingSeverity::Info => {
+                // Info findings are logged but don't produce PreflightChecks
+                debug!("Deep scan [{}]: {}", name, finding.message);
+            }
+        }
+    }
+
+    if !scan_result.corrected_env.is_empty() {
+        let corrections: Vec<String> = scan_result.corrected_env.keys().cloned().collect();
+        checks.push(PreflightCheck {
+            name: "deep_scan:corrections".into(),
+            status: "fixed".into(),
+            detail: format!(
+                "Auto-corrected env vars from config cross-reference: {}",
+                corrections.join(", ")
+            ),
+        });
+        auto_fixed.push(format!("Deep scan corrected: {}", corrections.join(", ")));
+    }
+
     // Determine readiness
     let has_failures = checks.iter().any(|c| c.status == "fail");
     let ready = !has_failures;
