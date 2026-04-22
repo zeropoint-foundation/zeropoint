@@ -3915,8 +3915,10 @@ async fn tools_launch_handler(
     // Assign a ZP-managed port so tools don't collide on shared defaults
     // (3000, 8080, etc.).  The .env.zp sidecar overrides the tool's port
     // variable without touching .env.
-    let port_var = tool_ports::detect_port_var(&tool_path);
-    let assignment = match state.0.port_allocator.get_or_assign(&req.name, &port_var) {
+    let all_port_vars = tool_ports::detect_all_port_vars(&tool_path);
+    let port_var = all_port_vars.first().cloned().unwrap_or_else(|| "PORT".to_string());
+    let extra_vars: Vec<String> = all_port_vars.iter().skip(1).cloned().collect();
+    let assignment = match state.0.port_allocator.get_or_assign_multi(&req.name, &port_var, &extra_vars) {
         Ok(a) => a,
         Err(e) => {
             return (
@@ -4056,6 +4058,12 @@ async fn tools_launch_handler(
     // most tools, but Rust tools that call dotenvy::overload() can clobber
     // shell env vars.  cmd.env() is inherited and cannot be overridden.
     cmd.env(&assignment.port_var, assignment.port.to_string());
+    // Inject all extra port assignments (e.g. GATEWAY_PORT alongside HTTP_PORT)
+    for (var, port) in &assignment.extra_ports {
+        cmd.env(var, port.to_string());
+    }
+    // Signal to the tool that ZP is managing it
+    cmd.env("ZP_MANAGED", "1");
 
     // Deep scan: cross-reference docker-compose, .env.example, and Cargo.toml
     // to detect and auto-correct misconfigurations before launch.
@@ -4088,8 +4096,10 @@ async fn tools_launch_handler(
                 if let Some((key, val)) = trimmed.split_once('=') {
                     let key = key.trim();
                     let val = val.trim().trim_matches('"').trim_matches('\'');
-                    // Don't override vault-injected vars or the ZP port var
-                    if !vault_keys.contains(key) && key != assignment.port_var {
+                    // Don't override vault-injected vars or any ZP-managed port var
+                    let is_zp_port = key == assignment.port_var
+                        || assignment.extra_ports.contains_key(key);
+                    if !vault_keys.contains(key) && !is_zp_port {
                         // Use deep scan correction if available, else raw value
                         let effective_val = scan_result
                             .corrected_env
@@ -4109,7 +4119,9 @@ async fn tools_launch_handler(
         let vault_keys: std::collections::HashSet<&str> =
             vault_env.iter().map(|(k, _)| k.as_str()).collect();
         for (key, val) in &scan_result.corrected_env {
-            if !vault_keys.contains(key.as_str()) && key != &assignment.port_var {
+            let is_zp_port = key == &assignment.port_var
+                || assignment.extra_ports.contains_key(key.as_str());
+            if !vault_keys.contains(key.as_str()) && !is_zp_port {
                 cmd.env(key, val);
             }
         }
@@ -4495,10 +4507,12 @@ async fn tools_configure_handler(
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
                 .join("projects");
             let tool_path = scan_path.join(&tool_name);
-            let port_var = tool_ports::detect_port_var(&tool_path);
+            let all_port_vars = tool_ports::detect_all_port_vars(&tool_path);
+            let port_var = all_port_vars.first().cloned().unwrap_or_else(|| "PORT".to_string());
+            let extra_vars: Vec<String> = all_port_vars.iter().skip(1).cloned().collect();
 
             // Re-assign to next free port
-            match state.0.port_allocator.get_or_assign(&tool_name, &port_var) {
+            match state.0.port_allocator.get_or_assign_multi(&tool_name, &port_var, &extra_vars) {
                 Ok(assignment) => {
                     // Re-write .env.zp with new port
                     if tool_path.exists() {

@@ -47,6 +47,10 @@ pub struct PortAssignment {
     /// request, so the user never sees a login screen.
     #[serde(default = "generate_auth_token")]
     pub auth_token: String,
+    /// Additional port vars the tool declares (e.g. GATEWAY_PORT alongside
+    /// HTTP_PORT).  Each gets its own ZP-assigned port so nothing collides.
+    #[serde(default)]
+    pub extra_ports: HashMap<String, u16>,
 }
 
 /// Generate a cryptographically random auth token.
@@ -120,32 +124,95 @@ impl PortAllocator {
         tool_name: &str,
         port_var: &str,
     ) -> Result<PortAssignment, PortError> {
+        self.get_or_assign_multi(tool_name, port_var, &[])
+    }
+
+    /// Get or assign ports for a tool.  `primary_var` is the main port
+    /// (used by the subdomain proxy).  `extra_vars` are additional port
+    /// variables the tool declares — each gets its own ZP-assigned port.
+    pub fn get_or_assign_multi(
+        &self,
+        tool_name: &str,
+        primary_var: &str,
+        extra_vars: &[String],
+    ) -> Result<PortAssignment, PortError> {
         let mut map = self.assignments.lock().unwrap();
 
-        // Already assigned?
+        // Already assigned?  Reconcile extra_ports if new vars appeared.
         if let Some(existing) = map.get(tool_name) {
-            return Ok(existing.clone());
-        }
-
-        // Find next free port
-        let used: std::collections::HashSet<u16> = map.values().map(|a| a.port).collect();
-
-        for port in self.range_start..=self.range_end {
-            if !used.contains(&port) {
-                let assignment = PortAssignment {
-                    port,
-                    port_var: port_var.to_string(),
-                    auth_token: generate_auth_token(),
-                };
-                info!("Port allocator: {} → :{} ({})", tool_name, port, port_var);
-                map.insert(tool_name.to_string(), assignment.clone());
+            let mut updated = existing.clone();
+            let mut changed = false;
+            let all_used: std::collections::HashSet<u16> =
+                map.values().flat_map(|a| {
+                    std::iter::once(a.port).chain(a.extra_ports.values().copied())
+                }).collect();
+            let mut next_port = self.range_start;
+            for var in extra_vars {
+                if !updated.extra_ports.contains_key(var.as_str()) {
+                    // Allocate a new port for this var
+                    while next_port <= self.range_end && all_used.contains(&next_port) {
+                        next_port += 1;
+                    }
+                    if next_port > self.range_end {
+                        return Err(PortError::RangeExhausted(self.range_start, self.range_end));
+                    }
+                    info!("Port allocator: {} → :{} ({}, extra)", tool_name, next_port, var);
+                    updated.extra_ports.insert(var.clone(), next_port);
+                    next_port += 1;
+                    changed = true;
+                }
+            }
+            if changed {
+                map.insert(tool_name.to_string(), updated.clone());
                 drop(map);
                 self.persist();
-                return Ok(assignment);
             }
+            return Ok(updated);
         }
 
-        Err(PortError::RangeExhausted(self.range_start, self.range_end))
+        // Find next free port for primary
+        let all_used: std::collections::HashSet<u16> =
+            map.values().flat_map(|a| {
+                std::iter::once(a.port).chain(a.extra_ports.values().copied())
+            }).collect();
+
+        let mut next_free = self.range_start;
+        while next_free <= self.range_end && all_used.contains(&next_free) {
+            next_free += 1;
+        }
+        if next_free > self.range_end {
+            return Err(PortError::RangeExhausted(self.range_start, self.range_end));
+        }
+        let primary_port = next_free;
+        next_free += 1;
+
+        // Allocate extra ports
+        let mut extra_ports = HashMap::new();
+        for var in extra_vars {
+            while next_free <= self.range_end
+                && (all_used.contains(&next_free) || next_free == primary_port)
+            {
+                next_free += 1;
+            }
+            if next_free > self.range_end {
+                return Err(PortError::RangeExhausted(self.range_start, self.range_end));
+            }
+            info!("Port allocator: {} → :{} ({}, extra)", tool_name, next_free, var);
+            extra_ports.insert(var.clone(), next_free);
+            next_free += 1;
+        }
+
+        let assignment = PortAssignment {
+            port: primary_port,
+            port_var: primary_var.to_string(),
+            auth_token: generate_auth_token(),
+            extra_ports,
+        };
+        info!("Port allocator: {} → :{} ({})", tool_name, primary_port, primary_var);
+        map.insert(tool_name.to_string(), assignment.clone());
+        drop(map);
+        self.persist();
+        Ok(assignment)
     }
 
     /// Release a tool's port assignment.
@@ -202,20 +269,32 @@ pub fn write_env_zp(
         "# Subdomain proxy: {}.localhost:3000 -> 127.0.0.1:{}",
         tool_name, assignment.port,
     );
-    let content = format!(
+    let mut content = format!(
         "# Auto-generated by ZeroPoint — do not edit\n\
-         # Overrides port and injects auth so the proxy authenticates transparently.\n\
+         # Overrides port(s) and injects auth so the proxy authenticates transparently.\n\
          {}\n\
-         {}={}\n\
          {}={}\n",
-        proxy_comment, assignment.port_var, assignment.port, auth_var, assignment.auth_token,
+        proxy_comment, assignment.port_var, assignment.port,
     );
+    // Write extra port assignments
+    for (var, port) in &assignment.extra_ports {
+        content.push_str(&format!("{}={}\n", var, port));
+    }
+    content.push_str(&format!("{}={}\n", auth_var, assignment.auth_token));
+    // Signal to the tool that ZP is managing it
+    content.push_str("ZP_MANAGED=1\n");
+
     std::fs::write(&zp_env, &content)?;
     debug!(
-        "Wrote .env.zp for {} → {}={}, {}=<redacted>",
+        "Wrote .env.zp for {} → {}={}{}, {}=<redacted>",
         tool_path.display(),
         assignment.port_var,
         assignment.port,
+        if assignment.extra_ports.is_empty() {
+            String::new()
+        } else {
+            format!(" +{} extra", assignment.extra_ports.len())
+        },
         auth_var,
     );
 
@@ -228,7 +307,10 @@ pub fn write_env_zp(
     let dot_env = tool_path.join(".env");
     if dot_env.exists() {
         if let Ok(env_contents) = std::fs::read_to_string(&dot_env) {
-            let zp_owned = [auth_var.as_str(), assignment.port_var.as_str()];
+            let mut zp_owned: Vec<&str> = vec![auth_var.as_str(), assignment.port_var.as_str(), "ZP_MANAGED"];
+            for var in assignment.extra_ports.keys() {
+                zp_owned.push(var.as_str());
+            }
             let filtered: Vec<&str> = env_contents
                 .lines()
                 .filter(|line| {
@@ -257,9 +339,8 @@ pub fn write_env_zp(
                     };
                 std::fs::write(&dot_env, &final_contents)?;
                 info!(
-                    "Removed ZP-managed vars ({}, {}) from {}.env to prevent shadow conflicts",
-                    auth_var,
-                    assignment.port_var,
+                    "Removed ZP-managed vars ({}) from {}.env to prevent shadow conflicts",
+                    zp_owned.join(", "),
                     tool_path.display()
                 );
             }
@@ -339,11 +420,21 @@ const PORT_VAR_PRIORITY: &[&str] = &[
 ];
 
 pub fn detect_port_var(tool_path: &Path) -> String {
+    let all = detect_all_port_vars(tool_path);
+    all.into_iter().next().unwrap_or_else(|| "PORT".to_string())
+}
+
+/// Detect ALL port variable names a tool declares, ordered by priority.
+///
+/// Returns a vec where the first element is the primary (proxy) port var
+/// and the rest are secondary ports that also need ZP-assigned values.
+pub fn detect_all_port_vars(tool_path: &Path) -> Vec<String> {
+    let mut found: Vec<(usize, String)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
     for filename in &[".env", ".env.example"] {
         let file = tool_path.join(filename);
         if let Ok(contents) = std::fs::read_to_string(&file) {
-            let mut best: Option<(usize, &str)> = None;
-
             for line in contents.lines() {
                 let trimmed = line.trim();
                 if trimmed.starts_with('#') || !trimmed.contains('=') {
@@ -352,19 +443,15 @@ pub fn detect_port_var(tool_path: &Path) -> String {
                 if let Some((key, _)) = trimmed.split_once('=') {
                     let key = key.trim();
                     if let Some(priority) = PORT_VAR_PRIORITY.iter().position(|&p| p == key) {
-                        if best.is_none_or(|(bp, _)| priority < bp) {
-                            best = Some((priority, key));
+                        if seen.insert(key.to_string()) {
+                            found.push((priority, key.to_string()));
                         }
                     }
                 }
             }
-
-            if let Some((_, var)) = best {
-                return var.to_string();
-            }
         }
     }
 
-    // Fallback — most tools respect PORT
-    "PORT".to_string()
+    found.sort_by_key(|(p, _)| *p);
+    found.into_iter().map(|(_, v)| v).collect()
 }
