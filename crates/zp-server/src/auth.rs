@@ -10,6 +10,7 @@
 //!
 //! Routes that bypass auth:
 //!   - GET  /api/v1/health          (monitoring probes)
+//!   - GET  /api/v1/version         (build commit — stale binary detection)
 //!   - GET  /onboard                (pre-genesis setup UI)
 //!   - GET  /api/onboard/ws         (pre-genesis WebSocket)
 //!   - GET  /assets/*               (static files — handled by ServeDir, not routes)
@@ -533,6 +534,7 @@ fn is_exempt(path: &str) -> bool {
     matches!(
         path,
         "/" | "/api/v1/health"
+            | "/api/v1/version"
             | "/healthz"
             | "/readyz"
             | "/onboard"
