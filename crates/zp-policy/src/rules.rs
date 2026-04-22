@@ -519,8 +519,8 @@ impl PolicyRule for ReputationGateRule {
 /// While the Guard enforces a *floor* (minimum tier for any request),
 /// this rule enforces *action-specific* tier requirements:
 ///
-///   - Tier 0: Chat, Read, basic file operations
-///   - Tier 1: Execute, API calls, config changes, file writes
+///   - Tier 0: Chat, Read, Execute (local tool launch), basic file ops
+///   - Tier 1: API calls, config changes, file writes
 ///   - Tier 2: Key delegation, credential access, policy changes,
 ///     fleet management, genesis operations
 ///
@@ -538,12 +538,17 @@ impl TrustTierEnforcementRule {
         use zp_core::policy::TrustTier;
 
         match action {
-            // Tier 0: read-only, low-risk
-            ActionType::Chat | ActionType::Read { .. } => TrustTier::Tier0,
+            // Tier 0: read-only, low-risk, and local execution
+            // Execute is Tier0 because the user clicking "launch" on their own
+            // dashboard is sufficient authorization.  The caller (enforce_gate)
+            // already elevates to Tier1 for the audit trail, but the *rule*
+            // should not block a local operator from running their own tools.
+            ActionType::Chat
+            | ActionType::Read { .. }
+            | ActionType::Execute { .. } => TrustTier::Tier0,
 
-            // Tier 1: write operations, code execution, API calls
+            // Tier 1: write operations, API calls, config changes
             ActionType::Write { .. }
-            | ActionType::Execute { .. }
             | ActionType::ApiCall { .. }
             | ActionType::FileOp { op: FileOperation::Write, .. }
             | ActionType::FileOp { op: FileOperation::Create, .. }
