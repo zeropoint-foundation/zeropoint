@@ -1382,7 +1382,12 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
 
     let app = build_app(state.clone(), &config);
 
-    info!("ZeroPoint server on {}", addr);
+    info!(
+        "ZeroPoint server on {} (build: {}{})",
+        addr,
+        env!("ZP_BUILD_COMMIT"),
+        env!("ZP_BUILD_DIRTY"),
+    );
     info!("Dashboard: http://{}:{}", config.bind_addr, config.port);
 
     // AUTH-VULN-06: On network-facing deployments, print the setup-token-bearing

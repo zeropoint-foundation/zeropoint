@@ -8,20 +8,19 @@
 #
 # Assets are compiled into the binary. There is no asset pipeline.
 # Edit files in crates/zp-server/assets/, rebuild, done.
+#
+# IMPORTANT: The server runs DIRECTLY from target/. There is no copy
+# step and no ~/.local/bin indirection. `cargo build` is all you need.
 set -e
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
 CLI_NAME="zp"
-LOCAL_BIN="$HOME/.local/bin/$CLI_NAME"
-CARGO_BIN="$HOME/.cargo/bin/$CLI_NAME"
 TARGET_DIR=$(sed -n 's/^target-dir *= *"\(.*\)"/\1/p' "$REPO/.cargo/config.toml" 2>/dev/null)
 TARGET_DIR="${TARGET_DIR:-$REPO/target}"
-DEBUG_BIN="$TARGET_DIR/debug/$CLI_NAME"
 PORT=3000
 LOG="/tmp/zp-serve.log"
 
 kill_server() {
-    # PID on port
     local pids
     pids=$(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null || true)
     [ -n "$pids" ] && echo "$pids" | xargs kill 2>/dev/null || true
@@ -30,11 +29,12 @@ kill_server() {
 }
 
 start_server() {
+    local bin="$1"
     kill_server
-    echo "→ Starting server..."
-    # Serve assets from source tree in dev — includes narration MP3s
+    echo "→ Starting server from $bin"
+    echo "  commit: $(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
     ZP_ASSETS_DIR="$REPO/crates/zp-server/assets" \
-    RUST_LOG=info nohup "$LOCAL_BIN" serve > "$LOG" 2>&1 &
+    RUST_LOG=info nohup "$bin" serve > "$LOG" 2>&1 &
     local tries=0
     while [ $tries -lt 15 ]; do
         if lsof -i :$PORT -sTCP:LISTEN > /dev/null 2>&1; then
@@ -54,22 +54,19 @@ case "${1:-dev}" in
     cd "$REPO"
     echo "→ cargo build -p zp-server -p zp-cli --features full..."
     cargo build -p zp-server -p zp-cli --features full 2>&1 | tail -5
-    mkdir -p "$(dirname "$LOCAL_BIN")"
-    cp "$DEBUG_BIN" "$LOCAL_BIN"
-    codesign -s - -f "$LOCAL_BIN" 2>/dev/null || true
-    echo "✓ $LOCAL_BIN (debug)"
-    start_server
+    BIN="$TARGET_DIR/debug/$CLI_NAME"
+    [ -f "$BIN" ] || { echo "✗ Binary not found: $BIN"; exit 1; }
+    echo "✓ Built: $BIN (debug)"
+    start_server "$BIN"
     ;;
   release|rel|r)
     cd "$REPO"
-    echo "→ cargo install (release)..."
-    cargo install --path crates/zp-server 2>&1 | tail -3
-    cargo install --path crates/zp-cli 2>&1 | tail -3
-    mkdir -p "$(dirname "$LOCAL_BIN")"
-    cp "$CARGO_BIN" "$LOCAL_BIN"
-    codesign -s - -f "$LOCAL_BIN" 2>/dev/null || true
-    echo "✓ $LOCAL_BIN (release)"
-    start_server
+    echo "→ cargo build --release -p zp-server -p zp-cli --features full..."
+    cargo build --release -p zp-server -p zp-cli --features full 2>&1 | tail -5
+    BIN="$TARGET_DIR/release/$CLI_NAME"
+    [ -f "$BIN" ] || { echo "✗ Binary not found: $BIN"; exit 1; }
+    echo "✓ Built: $BIN (release)"
+    start_server "$BIN"
     ;;
   kill|stop|k)
     kill_server
