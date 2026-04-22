@@ -6,11 +6,8 @@
 #   ./zp-dev.sh kill       Stop the server
 #   ./zp-dev.sh log        Tail server log
 #
-# Assets are compiled into the binary. There is no asset pipeline.
-# Edit files in crates/zp-server/assets/, rebuild, done.
-#
-# IMPORTANT: The server runs DIRECTLY from target/. There is no copy
-# step and no ~/.local/bin indirection. `cargo build` is all you need.
+# The server runs DIRECTLY from target/. No copy. No ~/.local/bin.
+# `cargo build` is all you need.
 set -e
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
@@ -19,6 +16,20 @@ TARGET_DIR=$(sed -n 's/^target-dir *= *"\(.*\)"/\1/p' "$REPO/.cargo/config.toml"
 TARGET_DIR="${TARGET_DIR:-$REPO/target}"
 PORT=3000
 LOG="/tmp/zp-serve.log"
+
+# ── STALE BINARY GUARD ──────────────────────────────────────────────
+# If a copy exists outside target/, it WILL cause confusion. Kill it.
+STALE_LOCATIONS=(
+    "$HOME/.local/bin/$CLI_NAME"
+    "$HOME/.cargo/bin/$CLI_NAME"
+)
+for stale in "${STALE_LOCATIONS[@]}"; do
+    if [ -f "$stale" ] && [ ! -L "$stale" ]; then
+        echo "⚠ Removing stale binary: $stale"
+        echo "  (dev mode runs from target/ — copies cause silent version skew)"
+        rm -f "$stale"
+    fi
+done
 
 kill_server() {
     local pids
@@ -31,14 +42,29 @@ kill_server() {
 start_server() {
     local bin="$1"
     kill_server
+
+    # Verify no stale process survived
+    local lingering
+    lingering=$(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n "$lingering" ]; then
+        echo "⚠ Port $PORT still occupied (PID $lingering) — force killing"
+        echo "$lingering" | xargs kill -9 2>/dev/null || true
+        sleep 0.5
+    fi
+
+    local commit
+    commit=$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown')
     echo "→ Starting server from $bin"
-    echo "  commit: $(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+    echo "  commit: $commit"
+
     ZP_ASSETS_DIR="$REPO/crates/zp-server/assets" \
     RUST_LOG=info nohup "$bin" serve > "$LOG" 2>&1 &
+    local server_pid=$!
+
     local tries=0
     while [ $tries -lt 15 ]; do
         if lsof -i :$PORT -sTCP:LISTEN > /dev/null 2>&1; then
-            echo "✓ localhost:$PORT"
+            echo "✓ localhost:$PORT (PID $server_pid, build $commit)"
             return 0
         fi
         sleep 0.4
@@ -47,6 +73,28 @@ start_server() {
     echo "✗ Failed to start — check: ./zp-dev.sh log"
     tail -10 "$LOG"
     return 1
+}
+
+# ── Verify the running server matches source ────────────────────────
+verify_running() {
+    local running_build
+    running_build=$(curl -s http://localhost:$PORT/api/v1/version 2>/dev/null | grep -o '"commit":"[^"]*"' | cut -d'"' -f4)
+    local source_commit
+    source_commit=$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null)
+
+    if [ -z "$running_build" ]; then
+        echo "⚠ Cannot reach running server (is it up?)"
+        return 1
+    fi
+
+    if [ "$running_build" = "$source_commit" ]; then
+        echo "✓ Running server matches source ($running_build)"
+        return 0
+    else
+        echo "✗ VERSION SKEW: running=$running_build, source=$source_commit"
+        echo "  Run: ./zp-dev.sh    to rebuild and restart"
+        return 1
+    fi
 }
 
 case "${1:-dev}" in
@@ -75,8 +123,11 @@ case "${1:-dev}" in
   log|l)
     [ -f "$LOG" ] && tail -50 -f "$LOG" || echo "No log yet"
     ;;
+  verify|v|check)
+    verify_running
+    ;;
   *)
-    echo "Usage: ./zp-dev.sh [dev|release|kill|log]"
+    echo "Usage: ./zp-dev.sh [dev|release|kill|log|verify]"
     exit 1
     ;;
 esac

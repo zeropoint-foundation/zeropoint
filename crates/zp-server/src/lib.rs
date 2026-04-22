@@ -951,6 +951,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/dashboard", get(dashboard_handler))
         // Health
         .route("/api/v1/health", get(health_handler))
+        .route("/api/v1/version", get(version_handler))
         // Identity
         .route("/api/v1/identity", get(identity_handler))
         // Gate evaluation (SDK endpoint)
@@ -1523,6 +1524,19 @@ async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
         version: env!("CARGO_PKG_VERSION").to_string(),
         pipeline_enabled: state.0.pipeline.is_some(),
     })
+}
+
+/// Build version endpoint — returns the exact commit this binary was built from.
+/// Used by `./zp-dev.sh verify` to detect version skew.
+async fn version_handler() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "commit": env!("ZP_BUILD_COMMIT"),
+        "dirty": env!("ZP_BUILD_DIRTY"),
+        "version": env!("CARGO_PKG_VERSION"),
+        "binary": std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "unknown".to_string()),
+    }))
 }
 
 // ============================================================================
