@@ -43,6 +43,17 @@
     function showStaleSessionBanner() {
       if (_staleSessionNoticeShown) return;
       _staleSessionNoticeShown = true;
+
+      // Stop polling — every request with the stale cookie counts against
+      // the per-IP auth rate limiter, so continued polling will trigger 429s
+      // and lock out the operator. (Phase 0 greenfield fix.)
+      stopAutoRefresh();
+
+      // Clear the stale cookie so that if the user manually refreshes (or
+      // clicks the banner), subsequent requests take the "missing" token
+      // path which does NOT trigger rate-limit recording.
+      document.cookie = 'zp_session=; Max-Age=0; Path=/; SameSite=Strict';
+
       var bar = document.createElement('div');
       bar.setAttribute('data-action', 'reload-page');
       bar.style.cssText = [
@@ -115,7 +126,7 @@
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 2000);
       try {
-        // Subdomain URLs (ember.localhost:3000) are cross-origin but
+        // Subdomain URLs (ember.localhost:17770) are cross-origin but
         // our CORS predicate allows *.localhost:{port}, so use 'cors'
         // mode to get a real status code back.
         const isSubdomain = url.includes('.localhost');
@@ -340,12 +351,15 @@
       const hintLower = ((result && result.hint) || '').toLowerCase();
       const steps = [];
 
-      // 1. Configuration needed
+      // 1. Configuration needed — call the resolve API directly (no CLI shell-out)
       if (tool.status === 'unconfigured' || errorLower.includes('needs configuration') ||
           hintLower.includes('vault') || hintLower.includes('.env')) {
         steps.push({
+          kind: 'fetch',
           label: 'Resolving vault credentials',
-          cmd: `zp configure tool --path "${toolPath}" --name "${tool.name}"`,
+          method: 'POST',
+          url: `/api/v1/tools/${encodeURIComponent(tool.name)}/resolve`,
+          body: { path: toolPath },
           cwd: toolPath,
         });
       }
@@ -396,7 +410,8 @@
       return steps;
     }
 
-    /// Execute a sequence of commands, one at a time, streaming each to the terminal.
+    /// Execute a sequence of steps, one at a time, streaming each to the terminal.
+    /// Steps can be shell (`kind: 'shell'` or omitted, default) or HTTP (`kind: 'fetch'`).
     function execSequence(steps, index, defaultCwd, onComplete) {
       if (index >= steps.length) {
         onComplete(true);
@@ -407,11 +422,53 @@
       const cwd = step.cwd || defaultCwd;
 
       _diagTerm.writeln(`\x1b[36m── Step ${index + 1}/${steps.length}: ${step.label} ──\x1b[0m`);
-      _diagTerm.writeln('\x1b[90m$ ' + step.cmd + '\x1b[0m');
-      _diagTerm.writeln('');
 
       document.getElementById('diagTermCwd').textContent = cwd;
       document.getElementById('diagTermReceipt').textContent = '';
+
+      // HTTP-backed step (e.g., vault credential resolution via /api/v1/tools/:name/resolve)
+      if (step.kind === 'fetch') {
+        _diagTerm.writeln('\x1b[90m' + (step.method || 'POST') + ' ' + step.url + '\x1b[0m');
+        _diagTerm.writeln('');
+        (async () => {
+          try {
+            const resp = await zpFetch(step.url, {
+              method: step.method || 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(step.body || {}),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || data.error || data.resolved === false) {
+              _diagTerm.writeln('\x1b[31m✗ ' + (data.error || ('HTTP ' + resp.status)) + '\x1b[0m');
+              _diagTerm.writeln('');
+              onComplete(false);
+              return;
+            }
+            const s = data.summary || {};
+            _diagTerm.writeln(`refs stored:     ${s.refs_stored ?? 0}`);
+            _diagTerm.writeln(`values stored:   ${s.values_stored ?? 0}`);
+            _diagTerm.writeln(`vault resolved:  ${s.vault_resolved ?? 0}`);
+            _diagTerm.writeln(`defaults:        ${s.default_resolved ?? 0}`);
+            _diagTerm.writeln(`preserved:       ${s.preserved ?? 0}`);
+            _diagTerm.writeln(`unresolved:      ${s.unresolved ?? 0}`);
+            if (s.env_backed_up) {
+              _diagTerm.writeln('\x1b[33m.env archived to .env.pre-vault\x1b[0m');
+            }
+            _diagTerm.writeln('\x1b[32m✓ Done\x1b[0m');
+            _diagTerm.writeln('');
+            execSequence(steps, index + 1, defaultCwd, onComplete);
+          } catch (err) {
+            _diagTerm.writeln('\x1b[31m✗ ' + err.message + '\x1b[0m');
+            _diagTerm.writeln('');
+            onComplete(false);
+          }
+        })();
+        return;
+      }
+
+      // Shell-backed step — WebSocket relay to /ws/exec
+      _diagTerm.writeln('\x1b[90m$ ' + step.cmd + '\x1b[0m');
+      _diagTerm.writeln('');
 
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = zpWebSocket(`${proto}//${location.host}/ws/exec`);
@@ -719,7 +776,7 @@
       }
 
       // ── Already running? Just open it via the ZP proxy. ───
-      const proxyUrl = `http://${tool.name}.localhost:${window.location.port || 3000}/`;
+      const proxyUrl = `http://${tool.name}.localhost:${window.location.port || 17770}/`;
       if (launch.url || launch.kind === 'web' || launch.kind === 'native') {
         // Open tab synchronously (user gesture) before any async check
         const earlyTab = window.open('about:blank', '_blank');
@@ -754,7 +811,7 @@
 
         // Not running yet — launch via API
         launching.add(tool.name);
-        showToast(`Starting <strong>${escapeHtml(tool.name)}</strong>...`, 15000);
+        showToast(`Launching <strong>${escapeHtml(tool.name)}</strong>...`, 15000);
         setTileLaunching(tool.name, true);
         try {
           const resp = await zpFetch('/api/v1/tools/launch', {
@@ -791,7 +848,7 @@
 
       // ── Web tools: ask the server to start, then open in browser ──
       launching.add(tool.name);
-      showToast(`Starting <strong>${escapeHtml(tool.name)}</strong>...`, 30000);
+      showToast(`Launching <strong>${escapeHtml(tool.name)}</strong>...`, 30000);
       setTileLaunching(tool.name, true);
 
       // Open the tab NOW (synchronous with user click) to avoid popup
@@ -819,7 +876,7 @@
         // give them a much longer leash than container/script tools.
         // result.url = subdomain URL (http://name.localhost:port/) — null for headless tools
         // result.port = ZP-assigned port — null for headless tools
-        const openUrl = result.url || (result.port ? `http://${tool.name}.localhost:${window.location.port || 3000}/` : null);
+        const openUrl = result.url || (result.port ? `http://${tool.name}.localhost:${window.location.port || 17770}/` : null);
         const pollUrl = openUrl;  // poll the subdomain proxy — returns 502 until tool is up
         if (openUrl && result.port) {
           const isNative = result.kind === 'native';
@@ -827,30 +884,10 @@
           const maxWait = isNative ? 600000 : isDocker ? 120000 : 30000;
           const pollInterval = isNative ? 3000 : 1500;
 
-          // ── Phased progress for native builds ──────────────────
-          // Native (cargo) tools compile from source — first builds can
-          // take 5-10+ minutes.  Show elapsed time, a progress bar, and
-          // the current crate being compiled by tailing the build log.
+          // ── Native build launch ──────────────────────────────────
+          // No timers, no fake progress. Launch, wait for port, open.
+          // The build log streams in the diagnostic panel if you want it.
           if (isNative) {
-            const buildStart = Date.now();
-            const fmtElapsed = () => {
-              const s = Math.floor((Date.now() - buildStart) / 1000);
-              return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
-            };
-            const buildToast = (phase, detail, pct) => {
-              const bar = pct != null
-                ? `<div style="margin:6px 0 2px;height:3px;background:#1a1a1e;border-radius:2px;overflow:hidden">` +
-                  `<div style="height:100%;width:${pct}%;background:#7eb8da;transition:width 0.5s ease"></div></div>`
-                : `<div style="margin:6px 0 2px;height:3px;background:#1a1a1e;border-radius:2px;overflow:hidden">` +
-                  `<div style="height:100%;width:30%;background:#7eb8da;border-radius:2px;animation:zpPulse 1.5s ease-in-out infinite"></div></div>`;
-              const elapsed = `<span style="opacity:.5;float:right">${fmtElapsed()}</span>`;
-              showToast(
-                `<strong>${escapeHtml(tool.name)}</strong> ${phase} ${elapsed}<br>` +
-                (detail ? `<code style="font-size:0.8em;opacity:.7">${escapeHtml(detail)}</code>` : '') +
-                bar,
-                maxWait
-              );
-            };
             // Inject keyframe for indeterminate pulse (once)
             if (!document.getElementById('zpPulseStyle')) {
               const sty = document.createElement('style');
@@ -858,100 +895,59 @@
               sty.textContent = '@keyframes zpPulse{0%{transform:translateX(-100%)}50%{transform:translateX(250%)}100%{transform:translateX(-100%)}}';
               document.head.appendChild(sty);
             }
-            buildToast('compiling', 'cargo run --release', null);
+            // Single quiet toast — no elapsed timer, no phase labels
+            showToast(
+              `<strong>${escapeHtml(tool.name)}</strong> launching` +
+              `<div style="margin:6px 0 2px;height:3px;background:#1a1a1e;border-radius:2px;overflow:hidden">` +
+              `<div style="height:100%;width:30%;background:#7eb8da;border-radius:2px;animation:zpPulse 1.5s ease-in-out infinite"></div></div>`,
+              maxWait
+            );
 
-            // Auto-open diagnostic panel with live build log stream
+            // Stream the build log in the diagnostic panel (optional viewing)
+            const toolPath = tool.path || `~/projects/${tool.name}`;
             showDiagnostic(tool, {
               status: 'running',
-              error: `${tool.name} — building (cargo run --release)`,
-              hint: 'Compiling release binary. Build output is streaming below.',
+              error: `${tool.name} — building`,
+              hint: 'Build output streaming below.',
             });
-            // Stream the build log via tail -f in the terminal
-            const toolPath = tool.path || `~/projects/${tool.name}`;
             execInTerminal('tail -f ' + (result.log_path || '/tmp/zp-no-log'), toolPath);
 
-            // Track compiled crate count for progress estimation
-            let compiledCount = 0;
-            let lastPhase = 'compiling';
-            const logPollId = setInterval(async () => {
-              try {
-                const logResp = await zpFetch(`/api/v1/tools/log?name=${encodeURIComponent(tool.name)}&tail=5`);
-                if (logResp.ok) {
-                  const logData = await logResp.json();
-                  const totalLines = logData.lines || 0;
-                  const logText = logData.log || '';
-                  const logLines = logText.split('\n').filter(l => l.trim());
-                  const lastLine = logLines[logLines.length - 1] || '';
-
-                  // Count total Compiling lines from total log line count
-                  // (rough: most log lines during cargo build are Compiling lines)
-                  compiledCount = totalLines;
-
-                  // Detect phase from last log line
-                  if (/Compiling|Downloading|Updating/.test(lastLine)) {
-                    lastPhase = 'compiling';
-                  } else if (/Linking|Finished/.test(lastLine)) {
-                    lastPhase = 'linking';
-                  } else if (/Running|Listening|listening|Started|Serving|Binding|bound|ready/i.test(lastLine)) {
-                    lastPhase = 'starting';
-                  }
-
-                  // Extract crate name from "Compiling foo v1.2.3"
-                  const crateMatch = lastLine.match(/Compiling\s+(\S+)\s+v/);
-                  const detail = crateMatch
-                    ? `${crateMatch[1]} (${compiledCount} crates compiled)`
-                    : lastPhase === 'linking' ? `linking release binary (${compiledCount} crates compiled)`
-                    : lastPhase === 'starting' ? 'binary ready — starting server'
-                    : lastLine.length > 70 ? lastLine.slice(0, 67) + '...' : lastLine;
-
-                  // Progress: use indeterminate until we see Linking/Finished
-                  const pct = lastPhase === 'linking' ? 92
-                    : lastPhase === 'starting' ? 98
-                    : null;  // indeterminate during compilation
-
-                  buildToast(lastPhase, detail, pct);
-                }
-              } catch {}
-            }, 3000);
             const ready = await waitForPort(pollUrl, maxWait, pollInterval);
-            clearInterval(logPollId);
-            // Kill the tail -f stream and dismiss the build panel
+            // Kill the tail -f stream
             if (_diagExecWs) { _diagExecWs.close(); _diagExecWs = null; }
             if (ready) {
-              buildToast('ready', 'opening in browser', 100);
               dismissDiag();
-              setTimeout(() => {
-                showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
-                if (pendingTab && !pendingTab.closed) {
-                  pendingTab.location.href = openUrl;
-                } else {
-                  window.open(openUrl, '_blank');
-                }
-              }, 400);
+              showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
+              if (pendingTab && !pendingTab.closed) {
+                pendingTab.location.href = openUrl;
+              } else {
+                window.open(openUrl, '_blank');
+              }
             } else {
               if (pendingTab) pendingTab.close();
               showToast('');
-              // Update the already-open diagnostic panel with timeout info
+              // Show actionable failure — not a stalled progress bar
               const diagTitle = document.getElementById('diagTitle');
               if (diagTitle) {
-                diagTitle.textContent = `${tool.name} — Build Timed Out (${fmtElapsed()})`;
+                diagTitle.textContent = `${tool.name} — not responding on port ${result.port}`;
                 diagTitle.style.color = '#FFB020';
               }
               const body = document.getElementById('diagBody');
               if (body) {
                 body.innerHTML =
-                  `<div class="diag-field"><div class="diag-label">Status</div><div class="diag-value" style="color:#FFB020">Port ${result.port} did not respond after ${fmtElapsed()}</div></div>` +
-                  `<div class="diag-field"><div class="diag-label">Hint</div><div class="diag-value hint-text">The build may still be running in the background. The terminal below is still streaming output. Once you see "Listening on ...", click Retry.</div></div>` +
+                  `<div class="diag-field"><div class="diag-label">Port</div><div class="diag-value" style="color:#FFB020">${result.port} — no response from proxy</div></div>` +
+                  `<div class="diag-field"><div class="diag-label">What to check</div><div class="diag-value hint-text">` +
+                  `1. Is the tool binding to port ${result.port}? (check .env.zp)<br>` +
+                  `2. Did the build finish? (scroll the log below)<br>` +
+                  `3. Did the process crash? <code>cat ~/ZeroPoint/logs/${escapeHtml(tool.name)}.log | tail -20</code></div></div>` +
                   `<div class="diag-field"><div class="diag-label">Command</div><div class="diag-value"><code>${escapeHtml(result.cmd || '')}</code></div></div>`;
               }
-              // Re-stream the log tail (the old tail -f was killed above)
               execInTerminal('tail -f ' + (result.log_path || '/tmp/zp-no-log'), toolPath);
-              // Show retry button
               const retryBtn = document.getElementById('diagRetryBtn');
               if (retryBtn) { retryBtn.style.display = 'inline-block'; }
             }
           } else {
-            showToast(`<strong>${escapeHtml(tool.name)}</strong> starting &mdash; waiting for port ${escapeHtml(String(result.port || ''))}...`, maxWait);
+            showToast(`<strong>${escapeHtml(tool.name)}</strong> launching...`, maxWait);
             const ready = await waitForPort(pollUrl, maxWait, pollInterval);
             if (ready) {
               showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
@@ -963,14 +959,13 @@
             } else {
               if (pendingTab) pendingTab.close();
               showToast('');
-              const timeLabel = isDocker ? '2 minutes' : '30 seconds';
               showDiagnostic(tool, {
-                error: `Port ${result.port} did not respond within ${timeLabel}`,
+                error: `Port ${result.port} not responding`,
                 cmd: result.cmd,
                 port: result.port,
                 hint: isDocker
                   ? 'Container may still be pulling images. Check: docker compose logs -f'
-                  : 'The process may have crashed on startup. Check the log below.',
+                  : 'Process may have crashed. Check: cat ~/ZeroPoint/logs/' + tool.name + '.log | tail -20',
               });
             }
           }
@@ -1019,7 +1014,7 @@
       if (issuesEl) issuesEl.remove();
     }
 
-    // Visual feedback: pulse the tile while it's starting
+    // Visual feedback: pulse the tile while it's launching
     function setTileLaunching(name, active) {
       const tile = document.querySelector(`.cockpit-tile[data-tool-name="${name}"]`);
       if (!tile) return;
@@ -1547,10 +1542,24 @@
       }
     }
 
+    // Auto-refresh: the vault takes ~9 seconds to resolve after server start,
+    // so the first initialize() often gets an empty tools array.  Poll every
+    // 12 seconds so the dashboard catches up once the vault is ready, and
+    // keeps tool status current while the tab is open.
+    let _refreshTimer = null;
+    function startAutoRefresh() {
+      if (_refreshTimer) return;
+      _refreshTimer = setInterval(refreshAll, 12000);
+    }
+    function stopAutoRefresh() {
+      if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; }
+    }
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initialize);
+      document.addEventListener('DOMContentLoaded', () => { initialize(); startAutoRefresh(); });
     } else {
       initialize();
+      startAutoRefresh();
     }
 
 // ── CSP-safe event delegation ─────────────────────────────
