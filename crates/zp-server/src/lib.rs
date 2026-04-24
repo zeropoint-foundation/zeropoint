@@ -3713,8 +3713,10 @@ async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse>
 
     let chain_receipts = !chain_state.is_empty();
 
-    // Query all canonicalization anchors for the response
-    let anchors_full = tool_chain::query_canonicalization_anchors(&state.0.audit_store);
+    // Query all canonicalization anchors (bead-zero receipts) for the response.
+    // `query_bead_zeros` is the current name — it returns the same shape the
+    // caller expects: HashMap<String, (timestamp_string, Option<detail>)>.
+    let anchors_full = tool_chain::query_bead_zeros(&state.0.audit_store);
     let canonicalization_anchors: std::collections::HashMap<String, String> = anchors_full
         .into_iter()
         .map(|(key, (ts, _detail))| (key, ts))
