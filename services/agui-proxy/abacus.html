@@ -171,6 +171,7 @@
   const WIRES = ["lifecycle", "content", "tool", "gate", "telemetry", "other"];
   const ROW_H = 64;
   const BEAD_R = 4.5;
+  const BEAD_SPACING = 11;   // min pixels between bead centers on a wire
   const LEFT_PAD = 130;
   const RIGHT_PAD = 40;
   const TOP_PAD = 32;
@@ -207,6 +208,12 @@
   }
 
   // ── Rendering ─────────────────────────────────────────────
+  // v0.2: ordinal per-wire packing. Beads position by their index within
+  // the wire, not by absolute timestamp. Fixes v0.1's "scroll hunt for
+  // activity" disease where event gaps in wall-clock time (sessions hours
+  // apart, bursts seconds wide) created empty canvas with all the beads
+  // piled at the far right. Absolute timestamps move to tooltip + detail
+  // panel. The bead ribbon reads like an abacus, left→right, first→last.
   function render() {
     canvas.innerHTML = "";
 
@@ -214,13 +221,20 @@
       ? WIRES.filter(w => events.some(e => e.wire === w))
       : WIRES;
 
-    const tMin = events.length ? events[0].timestamp : 0;
-    const tMax = events.length ? events[events.length - 1].timestamp : 1;
-    const span = Math.max(1, tMax - tMin);
+    // Group events by wire; events are already time-sorted so this gives
+    // per-wire ordinal sequence automatically.
+    const perWire = Object.fromEntries(WIRES.map(w => [w, []]));
+    events.forEach(ev => {
+      if (perWire[ev.wire]) {
+        ev._wireIdx = perWire[ev.wire].length;
+        perWire[ev.wire].push(ev);
+      }
+    });
 
-    const baseW = Math.max(canvasWrap.clientWidth, MIN_CANVAS_W);
-    const densityW = LEFT_PAD + RIGHT_PAD + events.length * 3.2;
-    const W = Math.max(baseW, Math.min(densityW, 20000));
+    // Canvas width: widest wire drives it. Bound below by viewport / min.
+    const maxWireLen = Math.max(0, ...Object.values(perWire).map(a => a.length));
+    const packedW = LEFT_PAD + RIGHT_PAD + maxWireLen * BEAD_SPACING + BEAD_SPACING;
+    const W = Math.max(canvasWrap.clientWidth, MIN_CANVAS_W, packedW);
     const H = TOP_PAD + wires.length * ROW_H + 32;
 
     canvas.setAttribute("width", W);
@@ -246,7 +260,7 @@
       lbl.textContent = wire;
       canvas.appendChild(lbl);
 
-      const n = events.filter(e => e.wire === wire).length;
+      const n = perWire[wire].length;
       const cnt = document.createElementNS("http://www.w3.org/2000/svg", "text");
       cnt.setAttribute("class", "wire-label");
       cnt.setAttribute("x", 86);
@@ -263,13 +277,12 @@
       canvas.appendChild(bz);
     });
 
-    // Beads: time-positioned on their wire
-    const plotW = W - LEFT_PAD - RIGHT_PAD;
+    // Beads: ordinal per-wire x, packed at BEAD_SPACING.
     events.forEach(ev => {
       const widx = wires.indexOf(ev.wire);
       if (widx < 0) return;
       const y = TOP_PAD + widx * ROW_H + ROW_H / 2;
-      const x = LEFT_PAD + ((ev.timestamp - tMin) / span) * plotW;
+      const x = LEFT_PAD + (ev._wireIdx + 1) * BEAD_SPACING;
 
       const bead = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       bead.setAttribute("class", "bead");
@@ -290,6 +303,8 @@
     });
 
     // Stats
+    const tMin = events.length ? events[0].timestamp : 0;
+    const tMax = events.length ? events[events.length - 1].timestamp : 1;
     const ts0 = events.length ? new Date(tMin).toISOString().slice(11, 19) : "—";
     const ts1 = events.length ? new Date(tMax).toISOString().slice(11, 19) : "—";
     const durMin = events.length ? ((tMax - tMin) / 60000).toFixed(1) : 0;
@@ -297,7 +312,7 @@
       <span><span class="n">${events.length}</span> beads</span>
       <span>${ts0} → ${ts1} (<span class="n">${durMin}m</span>)</span>
       ${WIRES.map(w => {
-        const n = events.filter(e => e.wire === w).length;
+        const n = perWire[w].length;
         return n > 0 ? `<span>${w}: <span class="n">${n}</span></span>` : "";
       }).filter(Boolean).join(" ")}
     `;
