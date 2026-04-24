@@ -533,34 +533,16 @@ async fn preflight_tool(
 
     events.push(OnboardEvent::terminal(&format!("  ▸ {}", name)));
 
-    // Detect launch method
+    // Single source of truth for launch inference — same call the cockpit
+    // uses, so the preflight kind/cmd cannot drift from what gets executed.
     let has_cargo = path.join("Cargo.toml").exists();
     let has_compose = has_compose_file(path);
     let has_package_json = path.join("package.json").exists();
-    let has_pnpm_lock = path.join("pnpm-lock.yaml").exists();
-    let has_npm_lock = path.join("package-lock.json").exists();
     let start_script = find_start_script(path);
-    let has_makefile = path.join("Makefile").exists();
 
-    // Priority: native > local package manager (pnpm > npm) > docker > script > make
-    // Local-first: prefer pnpm/npm over Docker when lockfile present
-    let launch_method = if has_cargo {
-        "native"
-    } else if has_package_json && has_pnpm_lock {
-        "pnpm"
-    } else if has_package_json && has_npm_lock {
-        "npm"
-    } else if has_compose {
-        "docker"
-    } else if has_package_json {
-        "npm"
-    } else if start_script.is_some() {
-        "script"
-    } else if has_makefile {
-        "make"
-    } else {
-        "none"
-    };
+    let inferred = crate::detect_launch(path);
+    let launch_method: String = inferred.kind.clone();
+    let launch_cmd: Option<String> = inferred.cmd.clone();
 
     // ── Configuration check: vault-backed or .env ──────────
     let env_check = if vault_configured {
@@ -738,6 +720,153 @@ async fn preflight_tool(
         }
     }
 
+    // ── Python tools ───────────────────────────────────────
+    // Mirrors node_deps: detect a Python project, check for an installed
+    // .venv, attempt auto-install (uv preferred when uv.lock or pyproject
+    // present, else venv + pip). Avoids polluting the ambient Python env
+    // by always installing into a project-local .venv.
+    let has_pyproject = path.join("pyproject.toml").exists();
+    let has_requirements = path.join("requirements.txt").exists();
+    let has_setup_py = path.join("setup.py").exists();
+    let is_python_project = has_pyproject || has_requirements || has_setup_py;
+
+    if is_python_project {
+        let venv_py = path.join(".venv").join("bin").join("python");
+        let venv_py_alt = path.join("venv").join("bin").join("python");
+        let venv_path = if venv_py.exists() {
+            Some(venv_py.clone())
+        } else if venv_py_alt.exists() {
+            Some(venv_py_alt.clone())
+        } else {
+            None
+        };
+
+        match venv_path {
+            Some(py) => {
+                // Sanity-check the venv Python actually runs.
+                let py_str = py.to_string_lossy().to_string();
+                let py_check = run_cmd(path, &py_str, &["--version"]).await;
+                if py_check.success {
+                    let rel = py.strip_prefix(path).unwrap_or(&py).display().to_string();
+                    checks.push(PreflightCheck {
+                        name: "python_deps".into(),
+                        status: "pass".into(),
+                        detail: format!("{} present", rel),
+                    });
+                } else {
+                    checks.push(PreflightCheck {
+                        name: "python_deps".into(),
+                        status: "fail".into(),
+                        detail: format!(
+                            "venv exists but python failed: {}",
+                            py_check.stderr_tail()
+                        ),
+                    });
+                }
+            }
+            None => {
+                // No venv — try auto-install. Prefer uv for projects with
+                // uv.lock (deterministic) or pyproject.toml (uv handles both
+                // venv creation + dep install in one shot).
+                let has_uv_lock = path.join("uv.lock").exists();
+                let uv_available = run_cmd(path, "uv", &["--version"]).await.success;
+
+                if uv_available && (has_uv_lock || has_pyproject) {
+                    events.push(OnboardEvent::terminal("    Installing Python deps via uv sync..."));
+                    let install_ok = run_cmd(path, "uv", &["sync"]).await;
+                    if install_ok.success {
+                        checks.push(PreflightCheck {
+                            name: "python_deps".into(),
+                            status: "fixed".into(),
+                            detail: "Dependencies installed (uv sync)".into(),
+                        });
+                        auto_fixed.push("Installed Python dependencies via uv sync".into());
+                        events.push(OnboardEvent::terminal("    ✓ uv sync complete"));
+                    } else {
+                        checks.push(PreflightCheck {
+                            name: "python_deps".into(),
+                            status: "fail".into(),
+                            detail: format!("uv sync failed: {}", install_ok.stderr_tail()),
+                        });
+                        events.push(OnboardEvent::terminal(&format!(
+                            "    ✗ uv sync failed: {}",
+                            install_ok.stderr_tail()
+                        )));
+                    }
+                } else if has_pyproject || has_requirements {
+                    // Fallback: python -m venv .venv ; .venv/bin/pip install ...
+                    events.push(OnboardEvent::terminal(
+                        "    Creating .venv and installing Python deps via pip...",
+                    ));
+                    let venv_create = run_cmd(path, "python", &["-m", "venv", ".venv"]).await;
+                    if !venv_create.success {
+                        checks.push(PreflightCheck {
+                            name: "python_deps".into(),
+                            status: "fail".into(),
+                            detail: format!(
+                                "python -m venv failed: {}",
+                                venv_create.stderr_tail()
+                            ),
+                        });
+                        events.push(OnboardEvent::terminal(&format!(
+                            "    ✗ venv create failed: {}",
+                            venv_create.stderr_tail()
+                        )));
+                    } else {
+                        let pip = path
+                            .join(".venv")
+                            .join("bin")
+                            .join("pip")
+                            .to_string_lossy()
+                            .to_string();
+                        let install_args: Vec<&str> = if has_requirements {
+                            vec!["install", "-r", "requirements.txt"]
+                        } else {
+                            vec!["install", "."]
+                        };
+                        let pip_install = run_cmd(path, &pip, &install_args).await;
+                        if pip_install.success {
+                            let what = if has_requirements {
+                                "pip install -r requirements.txt"
+                            } else {
+                                "pip install ."
+                            };
+                            checks.push(PreflightCheck {
+                                name: "python_deps".into(),
+                                status: "fixed".into(),
+                                detail: format!("Dependencies installed ({})", what),
+                            });
+                            auto_fixed.push(format!("Installed Python dependencies via {}", what));
+                            events.push(OnboardEvent::terminal(&format!("    ✓ {}", what)));
+                        } else {
+                            checks.push(PreflightCheck {
+                                name: "python_deps".into(),
+                                status: "fail".into(),
+                                detail: format!(
+                                    "pip install failed: {}",
+                                    pip_install.stderr_tail()
+                                ),
+                            });
+                            events.push(OnboardEvent::terminal(&format!(
+                                "    ✗ pip install failed: {}",
+                                pip_install.stderr_tail()
+                            )));
+                        }
+                    }
+                } else if has_setup_py {
+                    // setup.py-only project (rare/legacy) — flag but don't
+                    // auto-install since the install command is ambiguous.
+                    checks.push(PreflightCheck {
+                        name: "python_deps".into(),
+                        status: "fail".into(),
+                        detail: "setup.py-only project — install with: pip install . into a venv"
+                            .into(),
+                    });
+                }
+            }
+        }
+    }
+
     // ── Start script permissions ───────────────────────────
     if let Some(ref script) = start_script {
         let script_path = path.join(script);
@@ -780,22 +909,43 @@ async fn preflight_tool(
         }
     }
 
-    // ── No launch method ───────────────────────────────────
-    if launch_method == "none" {
-        checks.push(PreflightCheck {
-            name: "launch_method".into(),
-            status: "fail".into(),
-            detail: "No docker-compose.yml, start.sh, package.json, or Makefile found".into(),
-        });
-        events.push(OnboardEvent::terminal(
-            "    ✗ No launch method — add docker-compose.yml or start.sh",
-        ));
-    } else {
-        checks.push(PreflightCheck {
-            name: "launch_method".into(),
-            status: "pass".into(),
-            detail: format!("Launch via: {}", launch_method),
-        });
+    // ── Launch method validation ───────────────────────────
+    // Three failure modes we must surface (Fix B):
+    //   1. detect_launch couldn't infer any cmd at all → no launch method.
+    //   2. Generated cmd references npm/pnpm scripts that don't exist in
+    //      package.json → would silently fail at runtime.
+    //   3. Otherwise: pass with the inferred kind.
+    match &launch_cmd {
+        None => {
+            checks.push(PreflightCheck {
+                name: "launch_method".into(),
+                status: "fail".into(),
+                detail: format!(
+                    "No runnable entry detected (kind: {}). Add a `.zp-launch.toml` override or a recognised entry file.",
+                    launch_method
+                ),
+            });
+            events.push(OnboardEvent::terminal(
+                "    ✗ No launch method — add .zp-launch.toml or a runnable entry",
+            ));
+        }
+        Some(cmd) => match crate::launch_inference::validate_launch_scripts(path, cmd) {
+            Ok(()) => {
+                checks.push(PreflightCheck {
+                    name: "launch_method".into(),
+                    status: "pass".into(),
+                    detail: format!("Launch via: {}", launch_method),
+                });
+            }
+            Err(msg) => {
+                checks.push(PreflightCheck {
+                    name: "launch_method".into(),
+                    status: "fail".into(),
+                    detail: msg.clone(),
+                });
+                events.push(OnboardEvent::terminal(&format!("    ✗ {}", msg)));
+            }
+        },
     }
 
     // ── Zombie container detection ────────────────────────
@@ -1466,7 +1616,7 @@ const CMD_TIMEOUT_PROBE: std::time::Duration = std::time::Duration::from_secs(30
 const CMD_TIMEOUT_HEAVY: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// Programs that get the extended 5-minute timeout.
-const HEAVY_PROGRAMS: &[&str] = &["pnpm", "npm", "yarn", "cargo"];
+const HEAVY_PROGRAMS: &[&str] = &["pnpm", "npm", "yarn", "cargo", "uv", "pip", "pip3"];
 /// Args that upgrade docker to the heavy timeout.
 const HEAVY_DOCKER_ARGS: &[&str] = &["pull", "build", "up", "install"];
 

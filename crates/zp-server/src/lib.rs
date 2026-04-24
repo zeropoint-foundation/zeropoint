@@ -15,6 +15,7 @@ pub mod wasm_policy;
 pub mod exec_ws;
 pub mod internal_auth;
 pub mod genesis_verify;
+pub mod launch_inference;
 pub mod onboard;
 pub mod proxy;
 pub mod security;
@@ -3201,13 +3202,36 @@ fn detect_tool_port(tool_path: &std::path::Path) -> Option<u16> {
 ///   3. docker-compose.yml only → containerized tool
 ///   4. start.sh / package.json / Makefile → scripted tool (pnpm > npm)
 ///   5. None of the above → CLI fallback
-fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
+pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
+    // (A) Per-tool override wins over all inference.
+    if let Some(o) = launch_inference::read_launch_override(tool_path) {
+        let url = o
+            .launch
+            .url
+            .clone()
+            .or_else(|| o.launch.port.map(|p| format!("http://localhost:{}", p)));
+        return ToolLaunch {
+            kind: o.launch.kind,
+            url,
+            port: o.launch.port,
+            cmd: Some(format!(
+                "cd '{}' && {}",
+                tool_path.display(),
+                o.launch.cmd
+            )),
+        };
+    }
+
     let has_docker_compose = tool_path.join("docker-compose.yml").exists()
         || tool_path.join("docker-compose.yaml").exists()
         || tool_path.join("compose.yml").exists()
         || tool_path.join("compose.yaml").exists();
     let has_cargo = tool_path.join("Cargo.toml").exists();
     let port = detect_tool_port(tool_path);
+    // (C) Polyglot: package.json may be present only for browser tooling deps;
+    // treat as "runnable Node" only when there's an actual launch surface.
+    let has_runnable_node = tool_path.join("package.json").exists()
+        && launch_inference::package_json_is_runnable(tool_path);
 
     if has_cargo {
         // Native Rust tool — compose provides deps, cargo runs the app
@@ -3234,62 +3258,72 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             cmd: Some(cmd),
         }
     } else if let Some(p) = port {
-        // Web tool with detectable port (non-Rust)
-        // Prefer local package manager execution when available (pnpm > npm > docker)
-        let has_package_json = tool_path.join("package.json").exists();
+        // Web tool with detectable port (non-Rust).
+        // Prefer real launch surfaces over Node-by-default: Node only when
+        // package.json declares a usable entry, then Python, then Docker.
         let has_pnpm_lock = tool_path.join("pnpm-lock.yaml").exists();
-        let has_npm_lock = tool_path.join("package-lock.json").exists();
 
-        let cmd = if has_package_json && (has_pnpm_lock || has_npm_lock) {
-            // Local-first: run via package manager (pnpm preferred)
+        let scripts = launch_inference::read_npm_scripts(tool_path);
+        let has_script = |name: &str| {
+            scripts
+                .as_ref()
+                .map(|s| s.contains(name))
+                .unwrap_or(false)
+        };
+
+        let (cmd, kind) = if has_runnable_node {
             let pkg_mgr = if has_pnpm_lock { "pnpm" } else { "npm" };
-            // Build-before-start: Next.js needs .next/BUILD_ID (dev mode creates .next/ without it)
             let has_next_build = tool_path.join(".next").join("BUILD_ID").exists();
             let has_dist = tool_path.join("dist").exists();
             let has_build_dir = tool_path.join("build").exists();
-            let needs_build = !has_next_build && !has_dist && !has_build_dir;
+            // Only emit `<pm> run build` when the project both lacks a built
+            // output AND actually has a `build` script (Fix B).
+            let needs_build =
+                !has_next_build && !has_dist && !has_build_dir && has_script("build");
             let build_prefix = if needs_build {
                 format!("{} run build && ", pkg_mgr)
             } else {
                 String::new()
             };
 
-            // Next.js standalone: if .next/standalone/server.js exists
-            // (pre-built via CI or manual webpack build), use node directly
-            // since `next start` doesn't work with standalone output.
-            // In practice, Turbopack (Next 16 default) ignores standalone
-            // config, so most local tools just use `pnpm start` normally.
             let standalone_server = tool_path.join(".next/standalone/server.js");
-            if standalone_server.exists() {
-                Some(format!(
+            let body = if standalone_server.exists() {
+                format!(
                     "cd '{}' && {}HOSTNAME=0.0.0.0 node .next/standalone/server.js",
                     tool_path.display(),
                     build_prefix
-                ))
+                )
             } else {
-                Some(format!(
+                format!(
                     "cd '{}' && {}{} start",
                     tool_path.display(),
                     build_prefix,
                     pkg_mgr
-                ))
-            }
+                )
+            };
+            let kind = if has_pnpm_lock { "pnpm" } else { "npm" };
+            (Some(body), kind)
+        } else if let Some(entry) = launch_inference::detect_python_entrypoint(tool_path) {
+            let py = launch_inference::python_invocation(tool_path);
+            (
+                Some(format!(
+                    "cd '{}' && {} {}",
+                    tool_path.display(),
+                    py,
+                    entry
+                )),
+                "python",
+            )
         } else if has_docker_compose {
-            Some(format!(
-                "cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d",
-                tool_path.display()
-            ))
+            (
+                Some(format!(
+                    "cd '{}' && docker compose down --remove-orphans 2>/dev/null; docker compose up -d",
+                    tool_path.display()
+                )),
+                "docker",
+            )
         } else {
-            None
-        };
-        let kind = if has_package_json && has_pnpm_lock {
-            "pnpm"
-        } else if has_package_json && has_npm_lock {
-            "npm"
-        } else if has_docker_compose {
-            "docker"
-        } else {
-            "web"
+            (None, "web")
         };
         ToolLaunch {
             kind: kind.to_string(),
@@ -3309,13 +3343,25 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             )),
         }
     } else {
-        // Scripted or CLI — check for start.sh, npm, make
-        let scripts = ["start.sh", "run.sh", "launch.sh"];
-        let script = scripts.iter().find(|s| tool_path.join(s).exists());
-        let cmd = if let Some(s) = script {
-            format!("cd '{}' && bash '{}'", tool_path.display(), s)
-        } else if tool_path.join("package.json").exists() {
-            // Detect package manager: pnpm (pnpm-lock.yaml) > npm
+        // Scripted or CLI — check for start.sh, runnable Node, Python, make.
+        let start_scripts = ["start.sh", "run.sh", "launch.sh"];
+        let script = start_scripts
+            .iter()
+            .find(|s| tool_path.join(s).exists());
+        let npm_scripts = launch_inference::read_npm_scripts(tool_path);
+        let has_npm_script = |name: &str| {
+            npm_scripts
+                .as_ref()
+                .map(|s| s.contains(name))
+                .unwrap_or(false)
+        };
+
+        let (cmd, kind) = if let Some(s) = script {
+            (
+                Some(format!("cd '{}' && bash '{}'", tool_path.display(), s)),
+                "script",
+            )
+        } else if has_runnable_node {
             let pkg_mgr = if tool_path.join("pnpm-lock.yaml").exists() {
                 "pnpm"
             } else {
@@ -3324,28 +3370,51 @@ fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             let has_next_build = tool_path.join(".next").join("BUILD_ID").exists();
             let has_dist = tool_path.join("dist").exists();
             let has_build_dir = tool_path.join("build").exists();
-            let needs_build = !has_next_build && !has_dist && !has_build_dir;
+            let needs_build =
+                !has_next_build && !has_dist && !has_build_dir && has_npm_script("build");
             let build_prefix = if needs_build {
                 format!("{} run build && ", pkg_mgr)
             } else {
                 String::new()
             };
-            format!(
-                "cd '{}' && {}{} start",
-                tool_path.display(),
-                build_prefix,
-                pkg_mgr
+            (
+                Some(format!(
+                    "cd '{}' && {}{} start",
+                    tool_path.display(),
+                    build_prefix,
+                    pkg_mgr
+                )),
+                pkg_mgr,
             )
+        } else if let Some(entry) = launch_inference::detect_python_entrypoint(tool_path) {
+            let py = launch_inference::python_invocation(tool_path);
+            (
+                Some(format!(
+                    "cd '{}' && {} {}",
+                    tool_path.display(),
+                    py,
+                    entry
+                )),
+                "python",
+            )
+        } else if launch_inference::looks_like_python_project(tool_path) {
+            // Project declares pyproject.toml scripts but lacks a top-level
+            // entry file — surface this without inventing a command.
+            (None, "python")
         } else if tool_path.join("Makefile").exists() {
-            format!("cd '{}' && make start", tool_path.display())
+            (
+                Some(format!("cd '{}' && make start", tool_path.display())),
+                "make",
+            )
         } else {
-            format!("cd '{}'", tool_path.display())
+            (None, "cli")
         };
+
         ToolLaunch {
-            kind: "cli".to_string(),
+            kind: kind.to_string(),
             url: None,
             port: None,
-            cmd: Some(cmd),
+            cmd,
         }
     }
 }
