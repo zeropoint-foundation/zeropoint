@@ -1013,6 +1013,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/register", post(tools_register_handler))
         .route("/api/v1/tools/:tool_name/unregister", post(tools_unregister_handler))
         .route("/api/v1/tools/:tool_name/resolve", post(tools_resolve_handler))
+        .route("/api/v1/credentials/:provider", get(credentials_handler))
         .route("/api/v1/tools/launch", post(tools_launch_handler))
         .route("/api/v1/tools/stop", post(tools_stop_handler))
         .route("/api/v1/tools/log", get(tools_log_handler))
@@ -4628,6 +4629,95 @@ async fn tools_resolve_handler(
                 })),
             )
         }
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct CredentialsQuery {
+    /// Defaults to "api_key" — the most common credential field.
+    field: Option<String>,
+}
+
+/// GET /api/v1/credentials/:provider — return a vault-stored provider
+/// credential for governed forwarders (the AG-UI proxy in particular).
+///
+/// Auth-gated like every other /api/v1/* route. The value is returned in the
+/// JSON body — there's no plaintext on disk and nothing leaves the localhost
+/// boundary unless the operator deliberately remote-binds the server.
+async fn credentials_handler(
+    State(state): State<AppState>,
+    AxumPath(provider): AxumPath<String>,
+    Query(q): Query<CredentialsQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if provider.is_empty()
+        || provider.contains('/')
+        || provider.contains("..")
+        || provider.len() > 64
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid provider name"})),
+        );
+    }
+    let field_str = q.field.as_deref().unwrap_or("api_key");
+    if field_str.is_empty()
+        || field_str.contains('/')
+        || field_str.contains("..")
+        || field_str.len() > 64
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid field name"})),
+        );
+    }
+
+    let resolved_key = match state.0.vault_key.as_ref() {
+        Some(k) => k,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Vault key unavailable"})),
+            )
+        }
+    };
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+    let vault = match zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Failed to load vault: {}", e)})),
+            )
+        }
+    };
+
+    let key = format!("providers/{}/{}", provider, field_str);
+    match vault.retrieve(&key) {
+        Ok(bytes) => {
+            let value = String::from_utf8_lossy(&bytes).to_string();
+            info!(
+                "Credential disclosed: provider={} field={} (length={})",
+                provider,
+                field_str,
+                value.len()
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "provider": provider,
+                    "field": field_str,
+                    "value": value,
+                })),
+            )
+        }
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("Credential not found: {}", key),
+            })),
+        ),
     }
 }
 
