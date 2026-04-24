@@ -19,6 +19,7 @@
       --danger:    #f87171;
       --success:   #4ade80;
       --warn:      #fbbf24;
+      --rail:      #3d4454;   /* abacus rod — visible, structural, not noise */
       --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
       --font-ui:   "Inter", system-ui, sans-serif;
     }
@@ -99,7 +100,11 @@
     }
 
     /* ── SVG visual grammar ── */
-    .wire-rail { stroke: var(--border); stroke-width: 1; }
+    .wire-rail {
+      stroke: var(--rail);
+      stroke-width: 1.75;
+      stroke-linecap: round;   /* subtle "physical rod" endcaps */
+    }
     .wire-label {
       font-family: var(--font-mono); font-size: 10px; font-weight: 500;
       text-transform: uppercase; letter-spacing: 0.1em; fill: var(--muted);
