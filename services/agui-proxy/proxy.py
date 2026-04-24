@@ -235,19 +235,32 @@ def _wire_for(claim_type: str) -> str:
     return "other"
 
 
-@app.get("/journal")
-async def journal(limit: int = 5000):
-    """
-    Normalized merge of the two receipt journals for the abacus renderer.
-    Returns events sorted by timestamp ascending. Schema per event:
-      { receipt_id, timestamp (ms), claim_type, wire, source, approved,
-        event_type, metadata, reason }
-    """
-    out: list[dict] = []
+def _normalize_receipt(r: dict, source: str) -> Optional[dict]:
+    """Project a journal record into the shape the abacus expects.
+    Returns None for records that can't be normalized (missing timestamp)."""
+    ts = r.get("timestamp")
+    if not isinstance(ts, (int, float)):
+        return None
+    ct = r.get("claim_type") or "event.unknown"
+    return {
+        "receipt_id": r.get("receipt_id"),
+        "timestamp": int(ts),
+        "claim_type": ct,
+        "wire": _wire_for(ct),
+        "source": source,
+        "approved": r.get("approved"),
+        "event_type": r.get("event_type"),
+        "metadata": r.get("metadata") or {},
+        "reason": r.get("reason"),
+    }
 
-    def _load(path: Path, source: str) -> None:
+
+def _load_journal_snapshot() -> list[dict]:
+    """Read both journal files, normalize, sort by timestamp."""
+    out: list[dict] = []
+    for path, source in ((PROXY_JOURNAL, "proxy"), (ZP_EXTERNAL_JOURNAL, "zp")):
         if not path.exists():
-            return
+            continue
         try:
             with path.open() as f:
                 for line in f:
@@ -258,37 +271,118 @@ async def journal(limit: int = 5000):
                         r = json.loads(line)
                     except Exception:
                         continue
-                    ts = r.get("timestamp")
-                    if not isinstance(ts, (int, float)):
-                        continue
-                    ct = r.get("claim_type") or "event.unknown"
-                    out.append({
-                        "receipt_id": r.get("receipt_id"),
-                        "timestamp": int(ts),
-                        "claim_type": ct,
-                        "wire": _wire_for(ct),
-                        "source": source,
-                        "approved": r.get("approved"),
-                        "event_type": r.get("event_type"),
-                        "metadata": r.get("metadata") or {},
-                        "reason": r.get("reason"),
-                    })
+                    norm = _normalize_receipt(r, source)
+                    if norm:
+                        out.append(norm)
         except OSError as e:
             log.warning(f"journal: could not read {path}: {e}")
-
-    _load(PROXY_JOURNAL, "proxy")
-    _load(ZP_EXTERNAL_JOURNAL, "zp")
-
     out.sort(key=lambda e: e["timestamp"])
-    # Trim head if over limit — keep most recent `limit` events.
+    return out
+
+
+@app.get("/journal")
+async def journal(limit: int = 5000):
+    """
+    One-shot snapshot of the merged receipt journals for the abacus.
+    Returns events sorted by timestamp. Use /journal/stream for live updates.
+    Schema per event:
+      { receipt_id, timestamp (ms), claim_type, wire, source, approved,
+        event_type, metadata, reason }
+    """
+    out = _load_journal_snapshot()
     if len(out) > limit:
         out = out[-limit:]
-
     return {
         "count": len(out),
         "events": out,
         "wires": ["lifecycle", "content", "tool", "gate", "telemetry", "other"],
     }
+
+
+@app.get("/journal/stream")
+async def journal_stream():
+    """
+    Live SSE stream of journal events. First event is the current snapshot
+    (event: `snapshot`), then subsequent events are incremental `append`
+    events as new lines land in either journal. Polls the file sizes every
+    500ms — no inotify, no filesystem-watcher dep — which is fine at
+    receipt-emission rates (tens per second tops).
+
+    Events:
+      event: snapshot    one-time, full current state
+      event: append      {events: [...]} — new receipts since last tick
+      (bare heartbeat comment every few seconds to keep the connection open)
+    """
+    import asyncio
+
+    async def gen():
+        # 1. Initial snapshot
+        snapshot = _load_journal_snapshot()
+        yield f"event: snapshot\ndata: {json.dumps({'events': snapshot, 'wires': ['lifecycle', 'content', 'tool', 'gate', 'telemetry', 'other']})}\n\n".encode()
+
+        # 2. Track byte offsets per journal so we only re-read deltas.
+        offsets: dict[Path, int] = {}
+        for p in (PROXY_JOURNAL, ZP_EXTERNAL_JOURNAL):
+            try:
+                offsets[p] = p.stat().st_size if p.exists() else 0
+            except OSError:
+                offsets[p] = 0
+
+        heartbeat_ticks = 0
+        while True:
+            await asyncio.sleep(0.5)
+            heartbeat_ticks += 1
+            appended: list[dict] = []
+
+            for path, source in ((PROXY_JOURNAL, "proxy"), (ZP_EXTERNAL_JOURNAL, "zp")):
+                if not path.exists():
+                    continue
+                try:
+                    current_size = path.stat().st_size
+                    if current_size <= offsets.get(path, 0):
+                        # File truncated? — reset offset to current end to
+                        # avoid re-streaming old content after a rotate.
+                        if current_size < offsets.get(path, 0):
+                            offsets[path] = current_size
+                        continue
+                    with path.open() as f:
+                        f.seek(offsets[path])
+                        chunk = f.read()
+                        offsets[path] = f.tell()
+                    if not chunk:
+                        continue
+                    for line in chunk.splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            r = json.loads(line)
+                        except Exception:
+                            continue
+                        norm = _normalize_receipt(r, source)
+                        if norm:
+                            appended.append(norm)
+                except OSError:
+                    continue
+
+            if appended:
+                appended.sort(key=lambda e: e["timestamp"])
+                yield f"event: append\ndata: {json.dumps({'events': appended})}\n\n".encode()
+                heartbeat_ticks = 0
+            elif heartbeat_ticks >= 20:
+                # Every 10s of quiet, send a comment-only keep-alive.
+                yield b": keep-alive\n\n"
+                heartbeat_ticks = 0
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── Health ─────────────────────────────────────────────────────────

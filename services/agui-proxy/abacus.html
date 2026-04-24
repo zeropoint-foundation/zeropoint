@@ -476,8 +476,49 @@
     }[m]));
   }
 
-  // ── Data load ────────────────────────────────────────────
-  async function load() {
+  // ── Data load + live stream ──────────────────────────────
+  // Prefer the SSE stream so new beads appear as they land. Fall back to
+  // one-shot /journal if EventSource isn't available (unlikely in any
+  // modern browser, but keeps local probing / curl-style use working).
+  let eventSource = null;
+
+  function connectStream() {
+    if (!("EventSource" in window)) { loadSnapshot(); return; }
+    try {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource("/journal/stream");
+    } catch (e) { loadSnapshot(); return; }
+
+    eventSource.addEventListener("snapshot", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        events = data.events || [];
+        render();
+      } catch { /* malformed event — ignore */ }
+    });
+
+    eventSource.addEventListener("append", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const incoming = data.events || [];
+        if (!incoming.length) return;
+        // Receipts arrive in roughly timestamp order; push + sort is
+        // acceptable at these rates. If out-of-order becomes common we
+        // can switch to insertion-sort by timestamp.
+        events.push(...incoming);
+        events.sort((a, b) => a.timestamp - b.timestamp);
+        render();
+      } catch { /* ignore */ }
+    });
+
+    eventSource.onerror = () => {
+      // Don't aggressively reconnect — EventSource has built-in backoff.
+      // If the proxy goes down and comes back, the browser handles it.
+      statsEl.innerHTML += ' <span style="color:var(--danger)">stream disconnected</span>';
+    };
+  }
+
+  async function loadSnapshot() {
     statsEl.textContent = "loading…";
     try {
       const r = await fetch("/journal");
@@ -487,6 +528,12 @@
     } catch (e) {
       statsEl.textContent = "failed to load /journal: " + e.message;
     }
+  }
+
+  // Public entry point — used by Refresh button, external window.abacus.refresh().
+  function load() {
+    if (eventSource) { eventSource.close(); eventSource = null; }
+    connectStream();
   }
 
   // ── Wiring ───────────────────────────────────────────────
