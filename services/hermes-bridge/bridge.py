@@ -37,6 +37,8 @@ from typing import AsyncGenerator, Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from classifier import StdoutClassifier
+
 # ── Logging ────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -275,22 +277,22 @@ async def agent(request: Request):
             )
             return
 
-        # 4. Stream stdout lines as text deltas
+        # 4. Stream stdout, classifying each line into the right AG-UI event
+        # type instead of dumping every line as TEXT_MESSAGE_CONTENT. Chat
+        # body lives inside the `🎯 FINAL RESPONSE:` block; everything else
+        # becomes STEP_* / CUSTOM events routed to telemetry / timeline.
         assert proc.stdout is not None
+        classifier = StdoutClassifier(
+            message_id=message_id, thread_id=thread_id, run_id=run_id
+        )
         try:
             while True:
                 line = await proc.stdout.readline()
                 if not line:
                     break
                 text = line.decode("utf-8", errors="replace")
-                yield sse(
-                    {
-                        "type": "TEXT_MESSAGE_CONTENT",
-                        "messageId": message_id,
-                        "delta": text,
-                        "timestamp": now_ms(),
-                    }
-                )
+                for event in classifier.classify(text):
+                    yield sse(event)
         except Exception as e:
             log.exception("Stream interrupted")
             yield sse(
