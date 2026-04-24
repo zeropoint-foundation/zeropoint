@@ -30,6 +30,7 @@ zp-keys = { path = "../zp-keys" }
 zp-mesh = { path = "../zp-mesh" }
 zp-pipeline = { path = "../zp-pipeline" }
 zp-trust = { path = "../zp-trust" }
+zp-configure = { path = "../zp-configure" }
 zp-receipt = { path = "../zp-receipt" }
 zp-policy = { path = "../zp-policy" }
 zp-audit = { path = "../zp-audit" }

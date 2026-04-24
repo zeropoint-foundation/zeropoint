@@ -221,7 +221,7 @@ pub struct ConfigEngine {
     /// Compiled pattern rules
     patterns: Vec<CompiledPattern>,
     /// When set, URL defaults are rewritten to point to the ZP proxy.
-    /// Value is the ZP server port (e.g., 3000).
+    /// Value is the ZP server port (e.g., 17770).
     proxy_port: Option<u16>,
 }
 
@@ -3083,6 +3083,91 @@ pub fn run_validate(
 }
 
 // ============================================================================
+// HTTP-friendly helper — used by zp-server's /api/v1/tools/:name/resolve
+// ============================================================================
+
+/// Structured summary of a `resolve_tool` call, safe to serialize as JSON.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolveSummary {
+    pub tool: String,
+    pub total_vars: u32,
+    pub refs_stored: u32,
+    pub values_stored: u32,
+    pub vault_resolved: u32,
+    pub default_resolved: u32,
+    pub preserved: u32,
+    pub unresolved: u32,
+    pub env_backed_up: bool,
+}
+
+/// Resolve a tool's `.env.example` template against the vault, persist the
+/// entries, and archive any legacy plaintext `.env`.
+///
+/// Mirrors `run_tool`'s orchestration but returns a structured summary
+/// instead of printing — designed for HTTP callers.
+pub fn resolve_tool(
+    tool_path: &Path,
+    tool_name: &str,
+    vault: &mut CredentialVault,
+    vault_path: &Path,
+) -> Result<ResolveSummary, String> {
+    fn allow_all_policy(
+        _skill_id: &str,
+        _credential_name: &str,
+        _context: &zp_trust::injector::PolicyContext,
+    ) -> Result<(), zp_trust::injector::InjectorError> {
+        Ok(())
+    }
+
+    let template = tool_path.join(".env.example");
+    if !template.exists() {
+        return Err(format!(
+            "no .env.example found at {}",
+            template.display()
+        ));
+    }
+
+    let engine = ConfigEngine::new();
+    let resolutions = engine
+        .process_env_file(&template, vault, allow_all_policy, tool_name)
+        .map_err(|e| format!("process_env_file: {}", e))?;
+
+    let mut vault_resolved = 0u32;
+    let mut default_resolved = 0u32;
+    let mut preserved = 0u32;
+    let mut unresolved = 0u32;
+    for r in &resolutions {
+        match r {
+            Resolution::VaultResolved { .. } => vault_resolved += 1,
+            Resolution::DefaultResolved { .. } => default_resolved += 1,
+            Resolution::Preserved { .. } => preserved += 1,
+            Resolution::Unresolved { .. }
+            | Resolution::Missing { .. }
+            | Resolution::Passthrough { .. } => unresolved += 1,
+        }
+    }
+
+    let store_result = ConfigEngine::resolve_to_vault(&resolutions, tool_name, vault);
+    vault
+        .save(vault_path)
+        .map_err(|e| format!("vault.save: {}", e))?;
+
+    let env_stripped = strip_legacy_env(tool_path, tool_name);
+
+    Ok(ResolveSummary {
+        tool: tool_name.to_string(),
+        total_vars: resolutions.len() as u32,
+        refs_stored: store_result.refs_stored,
+        values_stored: store_result.values_stored,
+        vault_resolved,
+        default_resolved,
+        preserved,
+        unresolved,
+        env_backed_up: env_stripped,
+    })
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -3544,7 +3629,7 @@ OLLAMA_SERVER_URL=http://localhost:11434
 
     #[test]
     fn test_proxy_url_rewriting() {
-        let engine = ConfigEngine::with_proxy(3000);
+        let engine = ConfigEngine::with_proxy(17770);
 
         // Match an OpenAI URL pattern
         let m = engine.match_var("OPENAI_BASE_URL");
@@ -3554,7 +3639,7 @@ OLLAMA_SERVER_URL=http://localhost:11434
 
         // The proxy_url method should rewrite
         let url = engine.proxy_url("openai", "https://api.openai.com/v1");
-        assert_eq!(url, "http://localhost:3000/api/v1/proxy/openai/v1");
+        assert_eq!(url, "http://localhost:17770/api/v1/proxy/openai/v1");
     }
 
     #[test]
@@ -3593,7 +3678,7 @@ LLM_MODEL=gpt-4
         vault.store("openai/api_key", b"sk-test-proxy-key").unwrap();
 
         // Run auto with proxy mode on port 3000
-        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, Some(3000), Some(&vault_file));
+        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, Some(17770), Some(&vault_file));
         assert_eq!(exit_code, 0);
 
         // Verify vault has the proxy URL and API key
@@ -3601,7 +3686,7 @@ LLM_MODEL=gpt-4
 
         let base_url = env.get("OPENAI_BASE_URL").expect("OPENAI_BASE_URL should be in vault");
         assert!(
-            std::str::from_utf8(base_url).unwrap().contains("localhost:3000/api/v1/proxy/openai"),
+            std::str::from_utf8(base_url).unwrap().contains("localhost:17770/api/v1/proxy/openai"),
             "URL should be rewritten to proxy"
         );
 

@@ -5491,6 +5491,7 @@ dependencies = [
  "uuid",
  "zp-audit",
  "zp-config",
+ "zp-configure",
  "zp-core",
  "zp-engine",
  "zp-keys",
@@ -5512,6 +5513,19 @@ dependencies = [
  "thiserror 2.0.18",
  "toml",
  "tracing",
+]
+
+[[package]]
+name = "zp-configure"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "zp-engine",
+ "zp-trust",
 ]
 
 [[package]]
@@ -5825,6 +5839,7 @@ dependencies = [
  "zeroize",
  "zp-audit",
  "zp-config",
+ "zp-configure",
  "zp-core",
  "zp-engine",
  "zp-keys",

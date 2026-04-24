@@ -1,0 +1,18 @@
+[package]
+name = "zp-configure"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "ZeroPoint tool configuration engine — the Semantic Sed library shared by CLI and server"
+
+[dependencies]
+zp-trust = { path = "../zp-trust" }
+zp-engine = { path = "../zp-engine" }
+regex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }

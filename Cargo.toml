@@ -30,6 +30,7 @@ members = [
     "crates/zp-hardening-tests",
     "crates/zp-anchor",
     "crates/zp-memory",
+    "crates/zp-configure",
 ]
 
 [workspace.package]

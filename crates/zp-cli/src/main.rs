@@ -2,7 +2,7 @@
 
 mod chat;
 mod commands;
-mod configure;
+use zp_configure as configure;
 mod guard;
 mod init;
 mod mesh_commands;
@@ -53,8 +53,8 @@ enum Commands {
         #[arg(long, default_value = "127.0.0.1")]
         bind: String,
 
-        /// Port (default: 3000)
-        #[arg(long, default_value = "3000")]
+        /// Port (default: 17770)
+        #[arg(long, default_value = "17770")]
         port: u16,
 
         /// Don't open the dashboard in browser
@@ -160,8 +160,8 @@ enum Commands {
         #[arg(long, default_value = "2")]
         depth: usize,
 
-        /// ZP server port for proxy mode (default: 3000)
-        #[arg(long, default_value = "3000")]
+        /// ZP server port for proxy mode (default: 17770)
+        #[arg(long, default_value = "17770")]
         proxy_port: u16,
     },
 
@@ -445,8 +445,8 @@ enum ConfigureCmd {
         #[arg(long)]
         proxy: bool,
 
-        /// ZP server port for proxy mode (default: 3000)
-        #[arg(long, default_value = "3000")]
+        /// ZP server port for proxy mode (default: 17770)
+        #[arg(long, default_value = "17770")]
         proxy_port: u16,
 
         /// Validate credentials against live APIs after configuration
@@ -1069,7 +1069,7 @@ async fn main() -> anyhow::Result<()> {
             let mut chain_integrity = true;
             let mut prev_hash = String::new();
             for entry in &chain {
-                let chain_entry = zp_audit::ChainEntry::from_audit_entry(entry);
+                let chain_entry = zp_audit::ReconstitutionEntry::from_audit_entry(entry);
                 if !prev_hash.is_empty() && chain_entry.prev_hash != prev_hash {
                     chain_integrity = false;
                 }
@@ -1149,7 +1149,7 @@ async fn main() -> anyhow::Result<()> {
         let port: u16 = std::env::var("ZP_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
-            .unwrap_or(3000);
+            .unwrap_or(17770);
         let base_url = format!("http://127.0.0.1:{}", port);
         let client = reqwest::Client::new();
 
@@ -1551,7 +1551,7 @@ async fn main() -> anyhow::Result<()> {
             let port: u16 = std::env::var("ZP_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(3000);
+                .unwrap_or(17770);
             let url = format!("http://127.0.0.1:{}/api/v1/security/policy-version", port);
             let client = reqwest::Client::new();
             match client.get(&url).send().await {
