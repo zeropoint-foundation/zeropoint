@@ -124,6 +124,16 @@
     }
     .bead.selected { stroke: var(--text); stroke-width: 2; }
 
+    /* Highlighted beads (Hermes- or operator-driven emphasis). Glows at
+       the accent color so it reads as an overlay, not a replacement of the
+       bead's own claim-type palette. */
+    .bead.highlighted {
+      stroke: var(--accent2);
+      stroke-width: 2.5;
+      filter: drop-shadow(0 0 4px var(--accent2));
+    }
+    .bead.highlighted.selected { stroke: var(--text); }
+
     .bead[data-wire="lifecycle"]  { fill: var(--accent); }
     .bead[data-wire="content"]    { fill: var(--accent2); }
     .bead[data-wire="tool"]       { fill: var(--warn); }
@@ -206,6 +216,12 @@
   // pressing Escape collapses.
   let expandedCluster = null;
   let selectedReceiptId = null;
+  // Presentation overlays driven externally (Hermes, cockpit, operator).
+  // See window.abacus API below. None of these affect the receipt chain —
+  // they only change what the viewer sees. Principle 7: mutations to the
+  // substrate itself must go through signed receipts, not the UI.
+  let highlightedReceiptIds = new Set();
+  let filterClaimTypes = null;   // null ⇒ show all; array ⇒ restrict
 
   // ── Pipeline health ──────────────────────────────────────
   // Per Abacus principle: "is the stack alive?" is answered at the top of
@@ -243,9 +259,15 @@
       : WIRES;
 
     // Group events by wire; events are already time-sorted so per-wire
-    // iteration gives chronological order.
+    // iteration gives chronological order. Filter (if active) drops beads
+    // whose claim_type isn't in the allowed set — events still exist in
+    // memory so navigate/highlight can reference them; they're just not
+    // painted this pass.
     const perWire = Object.fromEntries(WIRES.map(w => [w, []]));
-    events.forEach(ev => {
+    const visible = filterClaimTypes
+      ? events.filter(e => filterClaimTypes.includes(e.claim_type))
+      : events;
+    visible.forEach(ev => {
       if (perWire[ev.wire]) perWire[ev.wire].push(ev);
     });
 
@@ -321,7 +343,7 @@
     });
 
     // Beads: ordinal per-wire x with temporal-gap clustering.
-    events.forEach(ev => {
+    visible.forEach(ev => {
       const widx = wires.indexOf(ev.wire);
       if (widx < 0) return;
       const y = TOP_PAD + widx * ROW_H + ROW_H / 2;
@@ -338,9 +360,12 @@
       bead.setAttribute("r", BEAD_R);
       bead.__event = ev;
 
-      // Preserve selection across rerenders (expansion forces re-layout).
+      // Preserve selection + highlight across rerenders.
       if (selectedReceiptId && ev.receipt_id === selectedReceiptId) {
         bead.classList.add("selected");
+      }
+      if (ev.receipt_id && highlightedReceiptIds.has(ev.receipt_id)) {
+        bead.classList.add("highlighted");
       }
 
       bead.addEventListener("click", onBeadClick);
@@ -494,6 +519,108 @@
         detailEl.textContent = "Click a bead to inspect its receipt.";
         render();
       }
+    }
+  });
+
+  // ── External drive surface ───────────────────────────────
+  // Hermes / the cockpit / any same-origin UI can drive the abacus via:
+  //   1. window.abacus.<method>(...)         (direct, same-window)
+  //   2. window.postMessage({type:"abacus",   (same-origin, cross-window)
+  //                          command, args})
+  //
+  // These commands affect *presentation only* — navigation, highlight,
+  // filter. They cannot add, remove, or modify receipts. The receipt
+  // chain is authoritative; the abacus is a view.
+  //
+  // Commands:
+  //   navigate_to       {receipt_id}        → expand its cluster, select,
+  //                                            scroll into view, open detail
+  //   expand            {wire, cluster_idx} → fan out a specific cluster
+  //   collapse                              → un-fan whatever is expanded
+  //   highlight         {receipt_ids: [..]} → replace the highlight set
+  //   highlight_add     {receipt_ids: [..]} → add to the highlight set
+  //   clear_highlights                      → drop all highlights
+  //   filter            {claim_types: [..]} → show only matching beads
+  //   clear_filter                          → show all beads
+  //   refresh                               → re-fetch /journal
+  const COMMANDS = {
+    navigate_to(args) {
+      const ev = events.find(e => e.receipt_id === args.receipt_id);
+      if (!ev) return { ok: false, reason: "unknown receipt_id" };
+      expandedCluster = { wire: ev.wire, idx: ev._clusterIdx };
+      selectedReceiptId = ev.receipt_id;
+      render();
+      autoScrollToExpansion();
+      renderDetail(ev);
+      return { ok: true };
+    },
+    expand(args) {
+      if (!args || typeof args.wire !== "string") return { ok: false };
+      expandedCluster = { wire: args.wire, idx: args.cluster_idx | 0 };
+      render();
+      autoScrollToExpansion();
+      return { ok: true };
+    },
+    collapse() {
+      expandedCluster = null;
+      render();
+      return { ok: true };
+    },
+    highlight(args) {
+      highlightedReceiptIds = new Set(args.receipt_ids || []);
+      render();
+      return { ok: true, count: highlightedReceiptIds.size };
+    },
+    highlight_add(args) {
+      (args.receipt_ids || []).forEach(id => highlightedReceiptIds.add(id));
+      render();
+      return { ok: true, count: highlightedReceiptIds.size };
+    },
+    clear_highlights() {
+      highlightedReceiptIds = new Set();
+      render();
+      return { ok: true };
+    },
+    filter(args) {
+      filterClaimTypes = Array.isArray(args.claim_types)
+        ? args.claim_types.slice()
+        : null;
+      render();
+      return { ok: true, showing: filterClaimTypes ? filterClaimTypes.length : "all" };
+    },
+    clear_filter() {
+      filterClaimTypes = null;
+      render();
+      return { ok: true };
+    },
+    refresh() {
+      load();
+      return { ok: true };
+    },
+  };
+
+  function dispatch(command, args) {
+    const fn = COMMANDS[command];
+    if (!fn) return { ok: false, reason: "unknown command: " + command };
+    try { return fn(args || {}); }
+    catch (e) { return { ok: false, reason: e.message }; }
+  }
+
+  // Expose on window for direct same-window use.
+  window.abacus = Object.fromEntries(
+    Object.keys(COMMANDS).map(cmd => [cmd, (args) => dispatch(cmd, args)])
+  );
+
+  // Listen for postMessage commands. Same-origin only — an opener window
+  // or parent iframe can drive the abacus without direct DOM access.
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin) return;
+    const msg = e.data;
+    if (!msg || typeof msg !== "object" || msg.type !== "abacus") return;
+    const result = dispatch(msg.command, msg.args);
+    if (e.source && msg.id) {
+      try { e.source.postMessage({ type: "abacus_result", id: msg.id, result }, e.origin); }
+      catch {}
     }
   });
 
