@@ -1,0 +1,6 @@
+name: zp-governance
+version: 0.1.0
+description: "ZeroPoint governance gate — consults ZP at every tool dispatch (pre_tool_call hook) and blocks on deny. Stage 1 of the Hermes × ZP integration. See docs/design/zp-hermes-interfaces.md in the ZeroPoint repo."
+author: "ThinkStream Labs"
+hooks:
+  - pre_tool_call

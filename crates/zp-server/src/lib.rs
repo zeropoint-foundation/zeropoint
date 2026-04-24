@@ -1015,6 +1015,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/:tool_name/resolve", post(tools_resolve_handler))
         .route("/api/v1/credentials/:provider", get(credentials_handler))
         .route("/api/v1/receipts", post(receipts_external_handler))
+        .route("/api/v1/gate/tool-call", post(gate_tool_call_handler))
         .route("/api/v1/tools/launch", post(tools_launch_handler))
         .route("/api/v1/tools/stop", post(tools_stop_handler))
         .route("/api/v1/tools/log", get(tools_log_handler))
@@ -4813,6 +4814,126 @@ async fn receipts_external_handler(
         StatusCode::OK,
         Json(serde_json::json!({
             "accepted": true,
+            "receipt_id": receipt_id,
+        })),
+    )
+}
+
+#[derive(Deserialize)]
+struct GateToolCallRequest {
+    tool_name: String,
+    #[serde(default)]
+    args_hash: Option<String>,
+    #[serde(default)]
+    thread_id: Option<String>,
+    #[serde(default)]
+    run_id: Option<String>,
+    #[serde(default)]
+    agent: Option<String>,
+}
+
+/// POST /api/v1/gate/tool-call — pre-dispatch gate for agent tool calls.
+///
+/// Stage 1 of the Hermes integration (per `docs/design/zp-hermes-interfaces.md`):
+/// a governance check consulted by the Hermes `pre_tool_call` plugin hook
+/// before each tool invocation. Returns `{allow, reason}`; either way, the
+/// decision is journaled as an external receipt.
+///
+/// Policy (MVP): reads an optional deny-list at `~/ZeroPoint/gate-policy.json`:
+///   { "deny_tool_names": ["terminal", "execute_code"] }
+/// Missing file or missing key = allow everything. Deny-list matches are
+/// case-sensitive exact-match on the tool name.
+///
+/// Future: capability-grant evaluation, WASM policy modules, envelope
+/// consumption for browser_* tools (Interface 2).
+async fn gate_tool_call_handler(
+    Json(req): Json<GateToolCallRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if req.tool_name.is_empty() || req.tool_name.len() > 128 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "tool_name required, max 128 chars"})),
+        );
+    }
+
+    // Load deny-list policy (best-effort; missing file = empty list).
+    let policy_path = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("gate-policy.json");
+    let deny: Vec<String> = std::fs::read_to_string(&policy_path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| {
+            v.get("deny_tool_names")
+                .and_then(|d| d.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+        })
+        .unwrap_or_default();
+
+    let denied = deny.iter().any(|t| t == &req.tool_name);
+    let allow = !denied;
+    let reason = if denied {
+        format!("tool '{}' is on the gate-policy deny list", req.tool_name)
+    } else {
+        String::new()
+    };
+
+    let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
+    let ts_ms = Utc::now().timestamp_millis();
+    let claim_type = if allow {
+        "gate.tool_call.allowed"
+    } else {
+        "gate.tool_call.blocked"
+    };
+
+    // Append to the external-receipts journal. Schema matches
+    // receipts_external_handler so a single downstream (abacus artifact,
+    // operator tools) can read either stream.
+    let journal_receipt = serde_json::json!({
+        "receipt_id": receipt_id,
+        "timestamp": ts_ms,
+        "claim_type": claim_type,
+        "approved": allow,
+        "reason": if allow { serde_json::Value::Null } else { serde_json::Value::String(reason.clone()) },
+        "metadata": {
+            "tool_name": req.tool_name,
+            "args_hash": req.args_hash,
+            "thread_id": req.thread_id,
+            "run_id": req.run_id,
+            "agent": req.agent,
+        },
+    });
+    if let Ok(home) = zp_paths::home() {
+        let path = home.join("logs").join("external-receipts.jsonl");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            if let Ok(line) = serde_json::to_string(&journal_receipt) {
+                let _ = writeln!(file, "{}", line);
+            }
+        }
+    }
+
+    info!(
+        "Gate decision: tool={} allow={} reason={}",
+        req.tool_name, allow, reason
+    );
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "allow": allow,
+            "reason": reason,
             "receipt_id": receipt_id,
         })),
     )
