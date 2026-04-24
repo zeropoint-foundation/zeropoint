@@ -1757,7 +1757,7 @@ pub(crate) async fn handle_preflight(
         &scan_path,
         Some(&app_state.0.audit_store),
         &vault_tools,
-        app_state.0.vault_key.as_ref(),
+        app_state.0.vault_key.get().and_then(|k| k.as_ref()),
     )
     .await;
     events

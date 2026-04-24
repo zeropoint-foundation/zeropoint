@@ -4473,7 +4473,7 @@ async fn tools_unregister_handler(
         );
     }
 
-    let resolved_key = match state.0.vault_key.as_ref() {
+    let resolved_key = match state.0.vault_key.get().and_then(|k| k.as_ref()) {
         Some(k) => k,
         None => {
             return (
@@ -4581,7 +4581,7 @@ async fn tools_resolve_handler(
         );
     }
 
-    let resolved_key = match state.0.vault_key.as_ref() {
+    let resolved_key = match state.0.vault_key.get().and_then(|k| k.as_ref()) {
         Some(k) => k,
         None => {
             return (
@@ -4672,7 +4672,7 @@ async fn credentials_handler(
         );
     }
 
-    let resolved_key = match state.0.vault_key.as_ref() {
+    let resolved_key = match state.0.vault_key.get().and_then(|k| k.as_ref()) {
         Some(k) => k,
         None => {
             return (
@@ -4854,7 +4854,7 @@ async fn tools_preflight_handler(State(state): State<AppState>) -> Json<serde_js
         &scan_path,
         Some(&state.0.audit_store),
         &vault_tools,
-        state.0.vault_key.as_ref(),
+        state.0.vault_key.get().and_then(|k| k.as_ref()),
     )
     .await;
     Json(serde_json::to_value(&results).unwrap_or_default())
@@ -4914,7 +4914,7 @@ async fn tools_single_preflight_handler(
         &tool_name,
         Some(&state.0.audit_store),
         &vault_tools,
-        state.0.vault_key.as_ref(),
+        state.0.vault_key.get().and_then(|k| k.as_ref()),
     )
     .await;
 
