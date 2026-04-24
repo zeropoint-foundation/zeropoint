@@ -109,11 +109,19 @@
       font-family: var(--font-mono); font-size: 10px; font-weight: 500;
       text-transform: uppercase; letter-spacing: 0.1em; fill: var(--muted);
     }
+    /* Poker-chip stacking: beads overlap tightly so the stack reads as
+       "a pack of N" rather than "a row of N", but each bead's edge stays
+       visible via a contrasting stroke — same way you count chips in a
+       stack by seeing the rim of each one. Selected / hover states bring
+       the chosen bead to front and boost its rim. */
     .bead {
-      stroke: rgba(0,0,0,0.4); stroke-width: 0.5;
+      stroke: rgba(13,15,20,0.85);   /* bg color at high alpha = chip rim */
+      stroke-width: 1;
       cursor: pointer; transition: r 0.1s, stroke-width 0.1s;
     }
-    .bead:hover { stroke: var(--text); stroke-width: 1.5; }
+    .bead:hover {
+      stroke: var(--text); stroke-width: 1.5;
+    }
     .bead.selected { stroke: var(--text); stroke-width: 2; }
 
     .bead[data-wire="lifecycle"]  { fill: var(--accent); }
@@ -175,10 +183,12 @@
   // ── Config ────────────────────────────────────────────────
   const WIRES = ["lifecycle", "content", "tool", "gate", "telemetry", "other"];
   const ROW_H = 64;
-  const BEAD_R = 4.5;
-  const BEAD_SPACING = 11;             // min pixels between bead centers on a wire
-  const CLUSTER_GAP_MS = 5000;         // time gap > 5s ⇒ visible break between clusters
-  const CLUSTER_GAP_PX = 18;           // extra spacing inserted at a cluster boundary
+  const BEAD_R = 5.5;                  // slightly larger so the overlap reads as a chip
+  const BEAD_SPACING = 4;              // distance between consecutive bead centers —
+                                        // ~2/3 of the bead overlaps its neighbor, creating
+                                        // the poker-chip stack look. Each rim stays visible.
+  const CLUSTER_GAP_MS = 5000;         // time gap > 5s ⇒ visible break between stacks
+  const CLUSTER_GAP_PX = 14;           // extra spacing inserted at a cluster boundary
   const LEFT_PAD = 130;
   const RIGHT_PAD = 40;
   const TOP_PAD = 32;
