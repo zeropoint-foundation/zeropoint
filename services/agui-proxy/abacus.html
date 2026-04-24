@@ -184,9 +184,8 @@
   const WIRES = ["lifecycle", "content", "tool", "gate", "telemetry", "other"];
   const ROW_H = 64;
   const BEAD_R = 5.5;                  // slightly larger so the overlap reads as a chip
-  const BEAD_SPACING = 4;              // distance between consecutive bead centers —
-                                        // ~2/3 of the bead overlaps its neighbor, creating
-                                        // the poker-chip stack look. Each rim stays visible.
+  const BEAD_SPACING = 4;              // default: chips overlap 2/3 each (poker-chip stack)
+  const BEAD_SPACING_EXPANDED = 14;    // fanned: chips separated, each individually readable
   const CLUSTER_GAP_MS = 5000;         // time gap > 5s ⇒ visible break between stacks
   const CLUSTER_GAP_PX = 14;           // extra spacing inserted at a cluster boundary
   const LEFT_PAD = 130;
@@ -202,6 +201,11 @@
 
   let events = [];
   let hideEmpty = false;
+  // Which cluster (if any) is currently fanned out. Shape: {wire, idx} | null.
+  // Clicking a bead toggles its cluster. Clicking the canvas background or
+  // pressing Escape collapses.
+  let expandedCluster = null;
+  let selectedReceiptId = null;
 
   // ── Pipeline health ──────────────────────────────────────
   // Per Abacus principle: "is the stack alive?" is answered at the top of
@@ -245,21 +249,27 @@
       if (perWire[ev.wire]) perWire[ev.wire].push(ev);
     });
 
-    // Per-wire bead x-positions: pack at BEAD_SPACING, but insert a larger
-    // gap when consecutive beads are separated in time by more than
-    // CLUSTER_GAP_MS. This makes run/session boundaries visible as natural
-    // breaks on each wire — the way beads on a real abacus clump in
-    // groups when they've been pushed into separate reckonings.
+    // Per-wire bead x-positions: pack at BEAD_SPACING into tight chip
+    // stacks, insert CLUSTER_GAP_PX between clusters (time-gap > 5s). The
+    // currently-expanded cluster uses BEAD_SPACING_EXPANDED so its beads
+    // fan apart and become individually readable; downstream beads shift
+    // right to make room.
     let maxWireEnd = 0;
-    Object.values(perWire).forEach(beads => {
-      let cursor = BEAD_SPACING;  // offset from LEFT_PAD
+    Object.entries(perWire).forEach(([wire, beads]) => {
+      let cursor = BEAD_SPACING;
       let prevTs = null;
+      let clusterIdx = 0;
       beads.forEach(ev => {
         if (prevTs !== null && ev.timestamp - prevTs > CLUSTER_GAP_MS) {
+          clusterIdx += 1;
           cursor += CLUSTER_GAP_PX;
         }
+        ev._clusterIdx = clusterIdx;
         ev._packedX = LEFT_PAD + cursor;
-        cursor += BEAD_SPACING;
+        const isExpanded = expandedCluster
+          && expandedCluster.wire === wire
+          && expandedCluster.idx === clusterIdx;
+        cursor += isExpanded ? BEAD_SPACING_EXPANDED : BEAD_SPACING;
         prevTs = ev.timestamp;
       });
       if (cursor > maxWireEnd) maxWireEnd = cursor;
@@ -328,6 +338,11 @@
       bead.setAttribute("r", BEAD_R);
       bead.__event = ev;
 
+      // Preserve selection across rerenders (expansion forces re-layout).
+      if (selectedReceiptId && ev.receipt_id === selectedReceiptId) {
+        bead.classList.add("selected");
+      }
+
       bead.addEventListener("click", onBeadClick);
       bead.addEventListener("mouseenter", onBeadEnter);
       bead.addEventListener("mouseleave", onBeadLeave);
@@ -352,13 +367,36 @@
   }
 
   // ── Bead interactions ────────────────────────────────────
+  // Click a bead: (a) select it for the detail panel, (b) fan out its
+  // cluster if it wasn't already — or collapse if re-clicking into the
+  // same cluster. Stacks away from the clicked one stay tight.
   function onBeadClick(e) {
     const bead = e.currentTarget;
     const ev = bead.__event;
-    document.querySelectorAll(".bead.selected").forEach(b => b.classList.remove("selected"));
-    bead.classList.add("selected");
+    selectedReceiptId = ev.receipt_id || null;
     renderDetail(ev);
+
+    const sameCluster = expandedCluster
+      && expandedCluster.wire === ev.wire
+      && expandedCluster.idx === ev._clusterIdx;
+    expandedCluster = sameCluster ? null : { wire: ev.wire, idx: ev._clusterIdx };
+
+    render();
+    autoScrollToExpansion();
     e.stopPropagation();
+  }
+
+  // After expansion, bring the fanned cluster near the left of the viewport
+  // so its beads are all reachable without hunting.
+  function autoScrollToExpansion() {
+    if (!expandedCluster) return;
+    const beads = Array.from(canvas.querySelectorAll(".bead"))
+      .filter(b => b.__event.wire === expandedCluster.wire
+                && b.__event._clusterIdx === expandedCluster.idx);
+    if (!beads.length) return;
+    const firstX = parseFloat(beads[0].getAttribute("cx"));
+    const vw = canvasWrap.clientWidth;
+    canvasWrap.scrollLeft = Math.max(0, firstX - vw / 4);
   }
 
   function onBeadEnter(e) {
@@ -435,6 +473,28 @@
     hideEmpty = !hideEmpty;
     e.target.textContent = hideEmpty ? "show empty wires" : "hide empty wires";
     render();
+  });
+
+  // Click canvas background (not a bead) → collapse expansion.
+  canvasWrap.addEventListener("click", (e) => {
+    if (e.target.tagName === "circle" && e.target.classList.contains("bead")) return;
+    if (expandedCluster) {
+      expandedCluster = null;
+      render();
+    }
+  });
+
+  // Escape → collapse expansion and deselect.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (expandedCluster || selectedReceiptId) {
+        expandedCluster = null;
+        selectedReceiptId = null;
+        detailEl.classList.add("empty");
+        detailEl.textContent = "Click a bead to inspect its receipt.";
+        render();
+      }
+    }
   });
 
   refreshPipeline();
