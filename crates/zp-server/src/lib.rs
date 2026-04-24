@@ -27,7 +27,7 @@ use axum::http::HeaderValue;
 use axum::{
     extract::{
         ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
-        Query, State,
+        Path as AxumPath, Query, State,
     },
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
@@ -1009,6 +1009,8 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         )
         // Configured tools (cockpit)
         .route("/api/v1/tools", get(tools_handler))
+        .route("/api/v1/tools/register", post(tools_register_handler))
+        .route("/api/v1/tools/:tool_name/unregister", post(tools_unregister_handler))
         .route("/api/v1/tools/launch", post(tools_launch_handler))
         .route("/api/v1/tools/stop", post(tools_stop_handler))
         .route("/api/v1/tools/log", get(tools_log_handler))
@@ -4210,6 +4212,241 @@ async fn tools_launch_handler(
             )
         }
     }
+}
+
+// ── Tool registration / unregistration ─────────────────────────────
+// POST /api/v1/tools/register inspects a path for ecosystem markers, env
+// state, launch profile, and required providers, returning detection JSON
+// the dashboard's Add-Tool flow renders. Persistent governance begins when
+// vault entries are written via the configure path. POST /api/v1/tools/
+// :tool_name/unregister removes all tools/{name}/* entries from the vault.
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RegisterToolRequest {
+    path: String,
+}
+
+async fn tools_register_handler(
+    Json(req): Json<RegisterToolRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let raw_path = req.path.trim();
+    if raw_path.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "path is required"})),
+        );
+    }
+
+    // Tilde expansion (the dashboard accepts ~/projects/foo style).
+    let expanded = if let Some(stripped) = raw_path.strip_prefix("~/") {
+        dirs::home_dir()
+            .map(|h| h.join(stripped))
+            .unwrap_or_else(|| std::path::PathBuf::from(raw_path))
+    } else if raw_path == "~" {
+        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from(raw_path))
+    } else {
+        std::path::PathBuf::from(raw_path)
+    };
+
+    let canonical = match expanded.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("Path does not exist: {}", e)})),
+            )
+        }
+    };
+    if !canonical.is_dir() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Path is not a directory"})),
+        );
+    }
+
+    let name: String = canonical
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+    if !is_safe_tool_name(&name) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Directory name must be alphanumeric (hyphens, underscores, dots permitted)"
+            })),
+        );
+    }
+
+    // Detection: presence of common ecosystem files.
+    let exists = |f: &str| canonical.join(f).exists();
+    let docker_compose = exists("docker-compose.yml")
+        || exists("docker-compose.yaml")
+        || exists("compose.yml")
+        || exists("compose.yaml");
+    let makefile = exists("Makefile") || exists("makefile");
+    let env_example = exists(".env.example");
+    let env_present = exists(".env");
+    let detection = serde_json::json!({
+        "package_json": exists("package.json"),
+        "cargo_toml": exists("Cargo.toml"),
+        "docker_compose": docker_compose,
+        "dockerfile": exists("Dockerfile"),
+        "requirements_txt": exists("requirements.txt"),
+        "pyproject_toml": exists("pyproject.toml"),
+        "go_mod": exists("go.mod"),
+        "makefile": makefile,
+        "env_example": env_example,
+        "env": env_present,
+    });
+
+    let ecosystem = if exists("Cargo.toml") {
+        "rust"
+    } else if exists("go.mod") {
+        "go"
+    } else if exists("package.json") {
+        if exists("pnpm-lock.yaml") {
+            "node-pnpm"
+        } else if exists("yarn.lock") {
+            "node-yarn"
+        } else if exists("package-lock.json") {
+            "node-npm"
+        } else {
+            "node"
+        }
+    } else if exists("pyproject.toml") || exists("requirements.txt") {
+        "python"
+    } else if exists("Dockerfile") || docker_compose {
+        "docker"
+    } else {
+        "unknown"
+    };
+
+    let launch = detect_launch(&canonical);
+
+    // Provider extraction from .env.example via the canonical catalog.
+    let mut providers: Vec<String> = Vec::new();
+    if env_example {
+        if let Ok(content) = std::fs::read_to_string(canonical.join(".env.example")) {
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(eq) = line.find('=') {
+                    let key = line[..eq].trim();
+                    let key = key.strip_prefix("export ").unwrap_or(key).trim();
+                    if let Some(provider) = zp_engine::providers::detect_provider(key) {
+                        if seen.insert(provider.clone()) {
+                            providers.push(provider);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let status = if env_present && env_example {
+        "configured"
+    } else if env_present {
+        "has_env"
+    } else if env_example {
+        "unconfigured"
+    } else {
+        "no_env_template"
+    };
+    let needs_config = status == "unconfigured";
+
+    // Symlink check on the pre-canonicalized path so we report whether the
+    // user's input was a symlink (e.g., something linked into ~/projects/).
+    let symlinked = std::fs::symlink_metadata(&expanded)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false);
+
+    info!(
+        "Registered tool scan: name={} path={} ecosystem={} status={}",
+        name,
+        canonical.display(),
+        ecosystem,
+        status
+    );
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "tool": {
+                "name": name,
+                "path": canonical.to_string_lossy(),
+                "ecosystem": ecosystem,
+                "launch": launch,
+                "status": status,
+                "needs_config": needs_config,
+                "providers": providers,
+                "symlinked": symlinked,
+            },
+            "detection": detection,
+        })),
+    )
+}
+
+async fn tools_unregister_handler(
+    State(state): State<AppState>,
+    AxumPath(tool_name): AxumPath<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if !is_safe_tool_name(&tool_name) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid tool name"})),
+        );
+    }
+
+    let resolved_key = match state.0.vault_key.as_ref() {
+        Some(k) => k,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Vault key unavailable"})),
+            )
+        }
+    };
+
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+
+    let mut vault = match zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path)
+    {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Failed to load vault: {}", e)})),
+            )
+        }
+    };
+
+    let removed_count = vault.remove_tool(&tool_name);
+    if let Err(e) = vault.save(&vault_path) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Failed to save vault: {}", e)})),
+        );
+    }
+
+    info!(
+        "Unregistered tool '{}' — {} vault entries removed",
+        tool_name, removed_count
+    );
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "removed": true,
+            "tool": tool_name,
+            "entries_removed": removed_count,
+        })),
+    )
 }
 
 /// Stop a running tool process.
