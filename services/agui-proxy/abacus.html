@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZeroPoint · Abacus</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #13161e;
+      --surface2:  #1b1f2b;
+      --border:    #252a38;
+      --accent:    #7c6af7;
+      --accent2:   #5eead4;
+      --accent3:   #f472b6;
+      --text:      #e2e4ed;
+      --muted:     #6b7280;
+      --danger:    #f87171;
+      --success:   #4ade80;
+      --warn:      #fbbf24;
+      --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      --font-ui:   "Inter", system-ui, sans-serif;
+    }
+    html, body { background: var(--bg); color: var(--text); height: 100%; font-family: var(--font-ui); }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; gap: 20px;
+      padding: 10px 20px; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex: 0 0 auto;
+    }
+    header h1 {
+      font-size: 14px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--text); flex: 0 0 auto;
+    }
+    header h1 span { color: var(--accent); }
+
+    /* Pipeline health strip (inherited from the earlier sketch — the
+       "is the stack alive?" signal belongs at the top of every governance
+       view). */
+    .pipeline { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+    .node {
+      display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      font-family: var(--font-mono); font-size: 11px;
+    }
+    .node-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+    .node.up     .node-dot { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .node.down   .node-dot { background: var(--danger);  box-shadow: 0 0 6px var(--danger); }
+    .node-port { color: var(--muted); }
+    .pipe-arrow { color: var(--border); font-size: 12px; }
+
+    .stats {
+      display: flex; gap: 16px; font-family: var(--font-mono); font-size: 11px;
+      color: var(--muted); flex: 1 1 auto;
+    }
+    .stats .n { color: var(--text); font-weight: 600; }
+
+    header button {
+      font-family: var(--font-mono); font-size: 11px;
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px;
+      cursor: pointer; flex: 0 0 auto;
+    }
+    header button:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Main layout ── */
+    main { display: flex; flex: 1 1 auto; min-height: 0; }
+    #canvas-wrap {
+      flex: 1 1 auto; overflow: auto; background: var(--bg); position: relative;
+    }
+    #canvas { display: block; }
+
+    /* ── Detail panel ── */
+    #detail {
+      flex: 0 0 380px; border-left: 1px solid var(--border);
+      background: var(--surface); padding: 16px; overflow: auto;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    #detail.empty { color: var(--muted); font-size: 12px; }
+    #detail h2 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--muted); font-weight: 500;
+    }
+    #detail .kv { display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; font-size: 12px; font-family: var(--font-mono); }
+    #detail .kv dt { color: var(--muted); }
+    #detail .kv dd { color: var(--text); word-break: break-all; }
+    #detail pre {
+      font-family: var(--font-mono); font-size: 11px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 10px; overflow: auto; max-height: 360px;
+      color: var(--text); white-space: pre-wrap;
+    }
+    #detail .close {
+      align-self: flex-start; font-size: 10px; color: var(--muted); cursor: pointer;
+      background: none; border: none;
+    }
+
+    /* ── SVG visual grammar ── */
+    .wire-rail { stroke: var(--border); stroke-width: 1; }
+    .wire-label {
+      font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.1em; fill: var(--muted);
+    }
+    .bead {
+      stroke: rgba(0,0,0,0.4); stroke-width: 0.5;
+      cursor: pointer; transition: r 0.1s, stroke-width 0.1s;
+    }
+    .bead:hover { stroke: var(--text); stroke-width: 1.5; }
+    .bead.selected { stroke: var(--text); stroke-width: 2; }
+
+    .bead[data-wire="lifecycle"]  { fill: var(--accent); }
+    .bead[data-wire="content"]    { fill: var(--accent2); }
+    .bead[data-wire="tool"]       { fill: var(--warn); }
+    .bead[data-wire="gate"]       { fill: var(--success); }
+    .bead[data-wire="gate"][data-approved="false"] { fill: var(--danger); }
+    .bead[data-wire="telemetry"]  { fill: var(--muted); opacity: 0.55; }
+    .bead[data-wire="telemetry"]:hover { opacity: 1; }
+    .bead[data-wire="other"]      { fill: var(--accent3); }
+
+    /* Bead-zero marker — anchor each wire visually at its origin. Will be
+       load-bearing once signed bead-zero receipts are emitted per wire. */
+    .bead-zero-marker {
+      fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 2;
+      opacity: 0.7;
+    }
+
+    #tip {
+      position: absolute; pointer-events: none; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 6px 10px; font-family: var(--font-mono); font-size: 11px;
+      color: var(--text); white-space: nowrap; opacity: 0; transition: opacity 0.08s;
+      z-index: 10; max-width: 500px; overflow: hidden; text-overflow: ellipsis;
+    }
+    #tip.on { opacity: 1; }
+    #tip .mono { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Zero<span>Point</span> · Abacus</h1>
+
+  <div class="pipeline" id="pipeline">
+    <div class="node" id="node-zp"><span class="node-dot"></span>zp <span class="node-port">:17010</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="node" id="node-proxy"><span class="node-dot"></span>proxy <span class="node-port">:17020</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="node" id="node-bridge"><span class="node-dot"></span>bridge <span class="node-port">:17030</span></div>
+  </div>
+
+  <div class="stats" id="stats">loading…</div>
+
+  <button id="toggle-empty">hide empty wires</button>
+  <button id="refresh">refresh</button>
+</header>
+
+<main>
+  <div id="canvas-wrap">
+    <svg id="canvas"></svg>
+    <div id="tip"></div>
+  </div>
+  <aside id="detail" class="empty">Click a bead to inspect its receipt.</aside>
+</main>
+
+<script>
+(() => {
+  // ── Config ────────────────────────────────────────────────
+  const WIRES = ["lifecycle", "content", "tool", "gate", "telemetry", "other"];
+  const ROW_H = 64;
+  const BEAD_R = 4.5;
+  const LEFT_PAD = 130;
+  const RIGHT_PAD = 40;
+  const TOP_PAD = 32;
+  const MIN_CANVAS_W = 1400;
+
+  const canvas = document.getElementById("canvas");
+  const canvasWrap = document.getElementById("canvas-wrap");
+  const statsEl = document.getElementById("stats");
+  const detailEl = document.getElementById("detail");
+  const tipEl = document.getElementById("tip");
+
+  let events = [];
+  let hideEmpty = false;
+
+  // ── Pipeline health ──────────────────────────────────────
+  // Per Abacus principle: "is the stack alive?" is answered at the top of
+  // every governance view. Pings the health endpoints of each service.
+  async function refreshPipeline() {
+    const checks = [
+      { id: "node-zp",     url: "http://127.0.0.1:17010/api/v1/version" },
+      { id: "node-proxy",  url: "/health" },
+      { id: "node-bridge", url: "http://127.0.0.1:17030/health" },
+    ];
+    await Promise.all(checks.map(async c => {
+      const el = document.getElementById(c.id);
+      try {
+        const r = await fetch(c.url, { method: "GET" });
+        el.classList.remove("up", "down");
+        el.classList.add(r.ok || r.status === 401 ? "up" : "down");
+      } catch (e) {
+        el.classList.remove("up"); el.classList.add("down");
+      }
+    }));
+  }
+
+  // ── Rendering ─────────────────────────────────────────────
+  function render() {
+    canvas.innerHTML = "";
+
+    const wires = hideEmpty
+      ? WIRES.filter(w => events.some(e => e.wire === w))
+      : WIRES;
+
+    const tMin = events.length ? events[0].timestamp : 0;
+    const tMax = events.length ? events[events.length - 1].timestamp : 1;
+    const span = Math.max(1, tMax - tMin);
+
+    const baseW = Math.max(canvasWrap.clientWidth, MIN_CANVAS_W);
+    const densityW = LEFT_PAD + RIGHT_PAD + events.length * 3.2;
+    const W = Math.max(baseW, Math.min(densityW, 20000));
+    const H = TOP_PAD + wires.length * ROW_H + 32;
+
+    canvas.setAttribute("width", W);
+    canvas.setAttribute("height", H);
+    canvas.style.minWidth = W + "px";
+
+    // Rails + labels
+    wires.forEach((wire, idx) => {
+      const y = TOP_PAD + idx * ROW_H + ROW_H / 2;
+
+      const rail = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      rail.setAttribute("class", "wire-rail");
+      rail.setAttribute("x1", LEFT_PAD);
+      rail.setAttribute("y1", y);
+      rail.setAttribute("x2", W - RIGHT_PAD);
+      rail.setAttribute("y2", y);
+      canvas.appendChild(rail);
+
+      const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      lbl.setAttribute("class", "wire-label");
+      lbl.setAttribute("x", 16);
+      lbl.setAttribute("y", y + 4);
+      lbl.textContent = wire;
+      canvas.appendChild(lbl);
+
+      const n = events.filter(e => e.wire === wire).length;
+      const cnt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      cnt.setAttribute("class", "wire-label");
+      cnt.setAttribute("x", 86);
+      cnt.setAttribute("y", y + 4);
+      cnt.setAttribute("fill", n > 0 ? "var(--text)" : "var(--border)");
+      cnt.textContent = n;
+      canvas.appendChild(cnt);
+
+      const bz = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      bz.setAttribute("class", "bead-zero-marker");
+      bz.setAttribute("cx", LEFT_PAD);
+      bz.setAttribute("cy", y);
+      bz.setAttribute("r", 6);
+      canvas.appendChild(bz);
+    });
+
+    // Beads: time-positioned on their wire
+    const plotW = W - LEFT_PAD - RIGHT_PAD;
+    events.forEach(ev => {
+      const widx = wires.indexOf(ev.wire);
+      if (widx < 0) return;
+      const y = TOP_PAD + widx * ROW_H + ROW_H / 2;
+      const x = LEFT_PAD + ((ev.timestamp - tMin) / span) * plotW;
+
+      const bead = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      bead.setAttribute("class", "bead");
+      bead.setAttribute("data-wire", ev.wire);
+      if (ev.approved !== undefined && ev.approved !== null) {
+        bead.setAttribute("data-approved", String(!!ev.approved));
+      }
+      bead.setAttribute("cx", x);
+      bead.setAttribute("cy", y);
+      bead.setAttribute("r", BEAD_R);
+      bead.__event = ev;
+
+      bead.addEventListener("click", onBeadClick);
+      bead.addEventListener("mouseenter", onBeadEnter);
+      bead.addEventListener("mouseleave", onBeadLeave);
+
+      canvas.appendChild(bead);
+    });
+
+    // Stats
+    const ts0 = events.length ? new Date(tMin).toISOString().slice(11, 19) : "—";
+    const ts1 = events.length ? new Date(tMax).toISOString().slice(11, 19) : "—";
+    const durMin = events.length ? ((tMax - tMin) / 60000).toFixed(1) : 0;
+    statsEl.innerHTML = `
+      <span><span class="n">${events.length}</span> beads</span>
+      <span>${ts0} → ${ts1} (<span class="n">${durMin}m</span>)</span>
+      ${WIRES.map(w => {
+        const n = events.filter(e => e.wire === w).length;
+        return n > 0 ? `<span>${w}: <span class="n">${n}</span></span>` : "";
+      }).filter(Boolean).join(" ")}
+    `;
+  }
+
+  // ── Bead interactions ────────────────────────────────────
+  function onBeadClick(e) {
+    const bead = e.currentTarget;
+    const ev = bead.__event;
+    document.querySelectorAll(".bead.selected").forEach(b => b.classList.remove("selected"));
+    bead.classList.add("selected");
+    renderDetail(ev);
+    e.stopPropagation();
+  }
+
+  function onBeadEnter(e) {
+    const bead = e.currentTarget;
+    const ev = bead.__event;
+    const cx = parseFloat(bead.getAttribute("cx"));
+    const cy = parseFloat(bead.getAttribute("cy"));
+    const dtMs = events.length ? ev.timestamp - events[0].timestamp : 0;
+    tipEl.innerHTML = `
+      <div>${escHtml(ev.claim_type)}</div>
+      <div class="mono">+${(dtMs / 1000).toFixed(2)}s · ${escHtml(ev.source)}${ev.approved === false ? " · BLOCKED" : ""}</div>
+    `;
+    tipEl.style.left = (cx - canvasWrap.scrollLeft + 10) + "px";
+    tipEl.style.top = (cy - canvasWrap.scrollTop - 40) + "px";
+    tipEl.classList.add("on");
+  }
+
+  function onBeadLeave() { tipEl.classList.remove("on"); }
+
+  function renderDetail(ev) {
+    detailEl.classList.remove("empty");
+    const iso = new Date(ev.timestamp).toISOString();
+    const metadata = ev.metadata && Object.keys(ev.metadata).length
+      ? JSON.stringify(ev.metadata, null, 2)
+      : "(none)";
+    detailEl.innerHTML = `
+      <button class="close">× close</button>
+      <h2>Bead detail</h2>
+      <dl class="kv">
+        <dt>claim_type</dt><dd>${escHtml(ev.claim_type)}</dd>
+        <dt>wire</dt><dd>${escHtml(ev.wire)}</dd>
+        <dt>source</dt><dd>${escHtml(ev.source)}</dd>
+        <dt>timestamp</dt><dd>${iso}</dd>
+        <dt>receipt_id</dt><dd>${escHtml(ev.receipt_id || "—")}</dd>
+        ${ev.event_type ? `<dt>event_type</dt><dd>${escHtml(ev.event_type)}</dd>` : ""}
+        ${ev.approved !== undefined && ev.approved !== null ? `<dt>approved</dt><dd>${ev.approved}</dd>` : ""}
+        ${ev.reason ? `<dt>reason</dt><dd>${escHtml(ev.reason)}</dd>` : ""}
+      </dl>
+      <h2>metadata</h2>
+      <pre>${escHtml(metadata)}</pre>
+    `;
+    detailEl.querySelector(".close").addEventListener("click", () => {
+      document.querySelectorAll(".bead.selected").forEach(b => b.classList.remove("selected"));
+      detailEl.classList.add("empty");
+      detailEl.textContent = "Click a bead to inspect its receipt.";
+    });
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, m => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[m]));
+  }
+
+  // ── Data load ────────────────────────────────────────────
+  async function load() {
+    statsEl.textContent = "loading…";
+    try {
+      const r = await fetch("/journal");
+      const j = await r.json();
+      events = j.events || [];
+      render();
+    } catch (e) {
+      statsEl.textContent = "failed to load /journal: " + e.message;
+    }
+  }
+
+  // ── Wiring ───────────────────────────────────────────────
+  document.getElementById("refresh").addEventListener("click", () => {
+    refreshPipeline();
+    load();
+  });
+  document.getElementById("toggle-empty").addEventListener("click", e => {
+    hideEmpty = !hideEmpty;
+    e.target.textContent = hideEmpty ? "show empty wires" : "hide empty wires";
+    render();
+  });
+
+  refreshPipeline();
+  load();
+})();
+</script>
+</body>
+</html>

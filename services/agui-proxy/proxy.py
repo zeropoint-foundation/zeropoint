@@ -142,6 +142,13 @@ app.add_middleware(
 # the browser doesn't pin a stale version during iteration.
 
 COCKPIT_PATH = Path(__file__).parent / "cockpit.html"
+ABACUS_PATH = Path(__file__).parent / "abacus.html"
+
+# The two journals the abacus reads. Proxy-local journal (per-event SSE
+# receipts) and ZP-server journal (gate decisions + external receipts
+# posted by forwarders). Normalized into a single event stream for render.
+PROXY_JOURNAL = Path(os.environ.get("AGUI_PROXY_RECEIPT_JOURNAL", "/tmp/agui-receipts.jsonl"))
+ZP_EXTERNAL_JOURNAL = Path.home() / "ZeroPoint" / "logs" / "external-receipts.jsonl"
 
 
 @app.get("/", include_in_schema=False)
@@ -170,6 +177,118 @@ async def cockpit():
             "Pragma": "no-cache",
         },
     )
+
+
+# ── Abacus ─────────────────────────────────────────────────────────
+# The receipt-stream visualizer. Reads both journals, groups beads by
+# claim-type category onto horizontal wires, time flows left → right.
+# See docs/design/zp-visual-language.md for the visual grammar.
+
+@app.get("/abacus", response_class=HTMLResponse)
+async def abacus_page():
+    try:
+        html = ABACUS_PATH.read_text()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>abacus.html not on disk</h1>",
+            status_code=404,
+        )
+    return HTMLResponse(
+        content=html,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+# Claim-type → wire assignment. Five horizontal rails, palette aligned to
+# the cockpit's accent vocabulary.
+# - lifecycle: session / run / step boundaries
+# - content:   assistant message body
+# - tool:      tool calls (use) + gate decisions (governance)
+# - telemetry: agent.* classifier customs
+# - other:     anything unmapped, for visibility rather than silence
+_WIRE_MAP: dict[str, str] = {
+    "session.begin": "lifecycle", "session.seal": "lifecycle", "session.fault": "lifecycle",
+    "step.begin": "lifecycle", "step.seal": "lifecycle",
+    "message.begin": "content", "message.stream": "content", "message.seal": "content",
+    "action.request": "tool", "action.params": "tool",
+    "action.execute": "tool", "action.result": "tool",
+    "state.snapshot": "tool", "state.mutation": "tool", "state.messages": "tool",
+    "gate.tool_call.allowed": "gate", "gate.tool_call.blocked": "gate",
+    "event.ping": "other", "event.unknown": "other", "event.raw": "other", "event.custom": "other",
+    "activity.snapshot": "telemetry", "activity.delta": "telemetry",
+    "reasoning.begin": "telemetry", "reasoning.seal": "telemetry",
+    "reasoning.message.begin": "telemetry", "reasoning.message.stream": "telemetry",
+    "reasoning.message.seal": "telemetry", "reasoning.encrypted": "telemetry",
+}
+
+
+def _wire_for(claim_type: str) -> str:
+    if claim_type in _WIRE_MAP:
+        return _WIRE_MAP[claim_type]
+    if claim_type.startswith("agent."):
+        return "telemetry"
+    if claim_type.startswith("gate."):
+        return "gate"
+    return "other"
+
+
+@app.get("/journal")
+async def journal(limit: int = 5000):
+    """
+    Normalized merge of the two receipt journals for the abacus renderer.
+    Returns events sorted by timestamp ascending. Schema per event:
+      { receipt_id, timestamp (ms), claim_type, wire, source, approved,
+        event_type, metadata, reason }
+    """
+    out: list[dict] = []
+
+    def _load(path: Path, source: str) -> None:
+        if not path.exists():
+            return
+        try:
+            with path.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        r = json.loads(line)
+                    except Exception:
+                        continue
+                    ts = r.get("timestamp")
+                    if not isinstance(ts, (int, float)):
+                        continue
+                    ct = r.get("claim_type") or "event.unknown"
+                    out.append({
+                        "receipt_id": r.get("receipt_id"),
+                        "timestamp": int(ts),
+                        "claim_type": ct,
+                        "wire": _wire_for(ct),
+                        "source": source,
+                        "approved": r.get("approved"),
+                        "event_type": r.get("event_type"),
+                        "metadata": r.get("metadata") or {},
+                        "reason": r.get("reason"),
+                    })
+        except OSError as e:
+            log.warning(f"journal: could not read {path}: {e}")
+
+    _load(PROXY_JOURNAL, "proxy")
+    _load(ZP_EXTERNAL_JOURNAL, "zp")
+
+    out.sort(key=lambda e: e["timestamp"])
+    # Trim head if over limit — keep most recent `limit` events.
+    if len(out) > limit:
+        out = out[-limit:]
+
+    return {
+        "count": len(out),
+        "events": out,
+        "wires": ["lifecycle", "content", "tool", "gate", "telemetry", "other"],
+    }
 
 
 # ── Health ─────────────────────────────────────────────────────────
