@@ -4760,8 +4760,13 @@ async fn tools_preflight_handler(State(state): State<AppState>) -> Json<serde_js
         });
     let vault_tools = onboard::preflight::detect_vault_configured_tools(vault.as_ref());
 
-    let (results, _events) =
-        onboard::preflight::run_preflight(&scan_path, Some(&state.0.audit_store), &vault_tools).await;
+    let (results, _events) = onboard::preflight::run_preflight(
+        &scan_path,
+        Some(&state.0.audit_store),
+        &vault_tools,
+        state.0.vault_key.as_ref(),
+    )
+    .await;
     Json(serde_json::to_value(&results).unwrap_or_default())
 }
 
@@ -4819,6 +4824,7 @@ async fn tools_single_preflight_handler(
         &tool_name,
         Some(&state.0.audit_store),
         &vault_tools,
+        state.0.vault_key.as_ref(),
     )
     .await;
 

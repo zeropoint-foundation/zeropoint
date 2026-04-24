@@ -142,8 +142,9 @@ pub(crate) async fn run_preflight(
     scan_path: &Path,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
     vault_tools: &VaultConfiguredTools,
+    vault_key: Option<&zp_keys::ResolvedVaultKey>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
-    run_preflight_inner(scan_path, audit_store, false, None, vault_tools).await
+    run_preflight_inner(scan_path, audit_store, false, None, vault_tools, vault_key).await
 }
 
 /// Force a full re-run of all tools, ignoring fresh chain receipts.
@@ -152,8 +153,9 @@ pub(crate) async fn run_preflight_force(
     scan_path: &Path,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
     vault_tools: &VaultConfiguredTools,
+    vault_key: Option<&zp_keys::ResolvedVaultKey>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
-    run_preflight_inner(scan_path, audit_store, true, None, vault_tools).await
+    run_preflight_inner(scan_path, audit_store, true, None, vault_tools, vault_key).await
 }
 
 /// Run preflight scoped to a single tool. Other tools are skipped.
@@ -163,8 +165,9 @@ pub(crate) async fn run_preflight_single(
     tool_name: &str,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,
     vault_tools: &VaultConfiguredTools,
+    vault_key: Option<&zp_keys::ResolvedVaultKey>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
-    run_preflight_inner(scan_path, audit_store, true, Some(tool_name), vault_tools).await
+    run_preflight_inner(scan_path, audit_store, true, Some(tool_name), vault_tools, vault_key).await
 }
 
 async fn run_preflight_inner(
@@ -173,6 +176,7 @@ async fn run_preflight_inner(
     force: bool,
     only_tool: Option<&str>,
     vault_tools: &VaultConfiguredTools,
+    vault_key: Option<&zp_keys::ResolvedVaultKey>,
 ) -> (PreflightResults, Vec<OnboardEvent>) {
     let mut events = Vec::new();
     let mut tool_results = Vec::new();
@@ -296,7 +300,8 @@ async fn run_preflight_inner(
         }
 
         let is_vault_configured = vault_tools.contains(name.as_str());
-        let (result, tool_events) = preflight_tool(name, path, docker_available, is_vault_configured).await;
+        let (result, tool_events) =
+            preflight_tool(name, path, docker_available, is_vault_configured, vault_key).await;
 
         // Collect port for conflict detection
         if let Some(port) = detect_port(path) {
@@ -526,6 +531,7 @@ async fn preflight_tool(
     path: &Path,
     docker_ok: bool,
     vault_configured: bool,
+    vault_key: Option<&zp_keys::ResolvedVaultKey>,
 ) -> (ToolPreflight, Vec<OnboardEvent>) {
     let mut checks = Vec::new();
     let mut auto_fixed = Vec::new();
@@ -557,46 +563,56 @@ async fn preflight_tool(
             detail: "Vault-backed configuration — zero plaintext on disk".into(),
         }
     } else {
-        // No vault config — attempt vault auto-resolution.
+        // No vault config — attempt auto-resolution via the same library
+        // function `zp configure tool` and `POST /api/v1/tools/:name/resolve`
+        // use, in-process. No subprocess, no PATH dependency.
         events.push(OnboardEvent::terminal(
             "    ⚠ Not vault-configured — attempting auto-resolve...",
         ));
 
-        let configure_result = run_cmd(
-            path,
-            "zp",
-            &[
-                "configure",
-                "tool",
-                "--path",
-                &path.display().to_string(),
-                "--name",
-                name,
-            ],
-        )
-        .await;
-
-        if configure_result.success {
-            auto_fixed.push("Resolved credentials into vault".into());
-            events.push(OnboardEvent::terminal(
-                "    ✓ Credentials resolved into vault",
-            ));
-            PreflightCheck {
-                name: "env_config".into(),
-                status: "pass".into(),
-                detail: "Credentials auto-resolved into vault".into(),
+        let resolve_outcome: Result<zp_configure::ResolveSummary, String> = match vault_key {
+            None => Err("vault key unavailable in server state".to_string()),
+            Some(key) => {
+                let vault_path = zp_core::paths::vault_path()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("vault.json"));
+                match zp_trust::CredentialVault::load_or_create(&key.key, &vault_path) {
+                    Ok(mut vault) => {
+                        zp_configure::resolve_tool(path, name, &mut vault, &vault_path)
+                    }
+                    Err(e) => Err(format!("vault load: {}", e)),
+                }
             }
-        } else {
-            events.push(OnboardEvent::terminal(
-                "    ✗ Vault auto-resolve failed",
-            ));
-            events.push(OnboardEvent::terminal(
-                "    → Store credentials: zp configure vault-add --provider <name> --field api_key"
-            ));
-            PreflightCheck {
-                name: "env_config".into(),
-                status: "fail".into(),
-                detail: "No vault configuration — run `zp configure tool` or `zp configure vault-add`".into(),
+        };
+
+        match resolve_outcome {
+            Ok(summary) => {
+                auto_fixed.push("Resolved credentials into vault".into());
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✓ Credentials resolved into vault ({} refs, {} values, {} unresolved)",
+                    summary.refs_stored, summary.values_stored, summary.unresolved
+                )));
+                PreflightCheck {
+                    name: "env_config".into(),
+                    status: "pass".into(),
+                    detail: format!(
+                        "Auto-resolved into vault — {} refs, {} values, {} unresolved",
+                        summary.refs_stored, summary.values_stored, summary.unresolved
+                    ),
+                }
+            }
+            Err(msg) => {
+                events.push(OnboardEvent::terminal(&format!(
+                    "    ✗ Vault auto-resolve failed: {}",
+                    msg
+                )));
+                events.push(OnboardEvent::terminal(
+                    "    → Store credentials: zp configure vault-add --provider <name> --field api_key",
+                ));
+                PreflightCheck {
+                    name: "env_config".into(),
+                    status: "fail".into(),
+                    detail: format!("Vault auto-resolve failed: {}", msg),
+                }
             }
         }
     };
@@ -1737,6 +1753,12 @@ pub(crate) async fn handle_preflight(
         });
     let vault_tools = detect_vault_configured_tools(vault.as_ref());
 
-    let (_results, events) = run_preflight(&scan_path, Some(&app_state.0.audit_store), &vault_tools).await;
+    let (_results, events) = run_preflight(
+        &scan_path,
+        Some(&app_state.0.audit_store),
+        &vault_tools,
+        app_state.0.vault_key.as_ref(),
+    )
+    .await;
     events
 }
