@@ -14,7 +14,7 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 CLI_NAME="zp"
 TARGET_DIR=$(sed -n 's/^target-dir *= *"\(.*\)"/\1/p' "$REPO/.cargo/config.toml" 2>/dev/null)
 TARGET_DIR="${TARGET_DIR:-$REPO/target}"
-PORT=3000
+PORT=17010
 LOG="/tmp/zp-serve.log"
 
 # ── STALE BINARY GUARD ──────────────────────────────────────────────
@@ -58,19 +58,20 @@ start_server() {
     echo "  commit: $commit"
 
     ZP_ASSETS_DIR="$REPO/crates/zp-server/assets" \
-    RUST_LOG=info nohup "$bin" serve > "$LOG" 2>&1 &
+    RUST_LOG=info nohup "$bin" serve --port "$PORT" > "$LOG" 2>&1 &
     local server_pid=$!
 
+    # Vault key resolution takes ~9 seconds; give the server up to 25 seconds
     local tries=0
-    while [ $tries -lt 15 ]; do
+    while [ $tries -lt 50 ]; do
         if lsof -i :$PORT -sTCP:LISTEN > /dev/null 2>&1; then
             echo "✓ localhost:$PORT (PID $server_pid, build $commit)"
             return 0
         fi
-        sleep 0.4
+        sleep 0.5
         tries=$((tries + 1))
     done
-    echo "✗ Failed to start — check: ./zp-dev.sh log"
+    echo "✗ Failed to start after 25s — check: ./zp-dev.sh log"
     tail -10 "$LOG"
     return 1
 }
@@ -101,7 +102,10 @@ case "${1:-dev}" in
   dev|d|"")
     cd "$REPO"
     echo "→ cargo build -p zp-server -p zp-cli --features full..."
-    cargo build -p zp-server -p zp-cli --features full 2>&1 | tail -5
+    if ! cargo build -p zp-server -p zp-cli --features full; then
+        echo "✗ BUILD FAILED — not starting server with stale binary"
+        exit 1
+    fi
     BIN="$TARGET_DIR/debug/$CLI_NAME"
     [ -f "$BIN" ] || { echo "✗ Binary not found: $BIN"; exit 1; }
     echo "✓ Built: $BIN (debug)"
@@ -110,7 +114,10 @@ case "${1:-dev}" in
   release|rel|r)
     cd "$REPO"
     echo "→ cargo build --release -p zp-server -p zp-cli --features full..."
-    cargo build --release -p zp-server -p zp-cli --features full 2>&1 | tail -5
+    if ! cargo build --release -p zp-server -p zp-cli --features full; then
+        echo "✗ BUILD FAILED — not starting server with stale binary"
+        exit 1
+    fi
     BIN="$TARGET_DIR/release/$CLI_NAME"
     [ -f "$BIN" ] || { echo "✗ Binary not found: $BIN"; exit 1; }
     echo "✓ Built: $BIN (release)"
