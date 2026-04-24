@@ -157,7 +157,7 @@ async fn handle_onboard_ws(socket: WebSocket, app_state: AppState, ui_mode: bool
         .0
         .vault_key
         .get()
-        .and_then(|opt| opt.as_ref())
+        .and_then(|k| k.as_ref())
         .map(|v| &*v.key);
     let mut onboard = OnboardState::from_filesystem_with_vault(cached_vk);
 
