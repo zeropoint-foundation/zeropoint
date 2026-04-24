@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes Cockpit</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #13161e;
+      --surface2:  #1b1f2b;
+      --border:    #252a38;
+      --accent:    #7c6af7;
+      --accent2:   #5eead4;
+      --accent3:   #f472b6;
+      --text:      #e2e4ed;
+      --muted:     #6b7280;
+      --danger:    #f87171;
+      --success:   #4ade80;
+      --warn:      #fbbf24;
+      --radius:    10px;
+      --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      --font-ui:   "Inter", system-ui, sans-serif;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
+
+    /* ── Layout ─────────────────────────────────────────── */
+    #app {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      grid-template-rows: 56px 1fr;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ── Top bar ─────────────────────────────────────────── */
+    #topbar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+    #topbar .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      white-space: nowrap;
+    }
+    #topbar .sep { flex: 1; }
+    #status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 10px;
+    }
+    #status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background .3s;
+    }
+    #status-dot.live { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    #status-dot.err  { background: var(--danger);  box-shadow: 0 0 6px var(--danger);  }
+    #topbar .endpoint {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Chat pane ────────────────────────────────────────── */
+    #chat-col {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+    #messages::-webkit-scrollbar { width: 6px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .msg {
+      display: flex;
+      gap: 12px;
+      max-width: 820px;
+      animation: fadeSlide .2s ease;
+    }
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .msg.assistant { align-self: flex-start; }
+
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .msg.user     .avatar { background: linear-gradient(135deg, var(--accent), var(--accent3)); }
+    .msg.assistant .avatar { background: linear-gradient(135deg, #1e2640, var(--accent)); border: 1px solid var(--border); }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      line-height: 1.65;
+      max-width: 640px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user     .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+    .msg.assistant .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 3px;
+      color: var(--text);
+    }
+    .bubble code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: rgba(255,255,255,.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .bubble pre {
+      background: #0a0c12;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 12px;
+      overflow-x: auto;
+      margin-top: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .bubble pre code { background: none; padding: 0; }
+
+    .cursor {
+      display: inline-block;
+      width: 2px; height: 14px;
+      background: var(--accent2);
+      margin-left: 2px;
+      vertical-align: middle;
+      animation: blink .8s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Input bar ───────────────────────────────────────── */
+    #input-bar {
+      padding: 12px 16px 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+    #input-wrap {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      transition: border-color .2s;
+    }
+    #input-wrap:focus-within { border-color: var(--accent); }
+    #chat-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      line-height: 1.5;
+      resize: none;
+      max-height: 140px;
+      min-height: 24px;
+    }
+    #chat-input::placeholder { color: var(--muted); }
+    #send-btn {
+      width: 34px; height: 34px;
+      border-radius: 7px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background .15s, transform .1s;
+    }
+    #send-btn:hover { background: #6c5ce7; }
+    #send-btn:active { transform: scale(.93); }
+    #send-btn:disabled { background: var(--border); cursor: not-allowed; }
+    #send-btn svg { width: 16px; height: 16px; }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    #sidebar {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    #sidebar-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #sidebar-header .title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    #event-count {
+      font-size: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1px 7px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+
+    #beads {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #beads::-webkit-scrollbar { width: 4px; }
+    #beads::-webkit-scrollbar-track { background: transparent; }
+    #beads::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .bead {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 9px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 11.5px;
+      line-height: 1.45;
+      animation: beadIn .18s ease;
+      cursor: default;
+      transition: background .15s;
+    }
+    @keyframes beadIn {
+      from { opacity: 0; transform: translateX(8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .bead:hover { background: var(--surface2) !important; }
+
+    .bead-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-top: 3px;
+      flex-shrink: 0;
+    }
+    .bead-body { flex: 1; min-width: 0; }
+    .bead-type {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      margin-bottom: 1px;
+    }
+    .bead-detail {
+      color: var(--muted);
+      font-size: 10.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .bead-ts {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--muted);
+      white-space: nowrap;
+      opacity: .6;
+    }
+
+    /* event-type colour scheme */
+    .bead.RUN_STARTED       { background: rgba(124,106,247,.08); border-color: rgba(124,106,247,.2); }
+    .bead.RUN_STARTED       .bead-dot  { background: var(--accent); }
+    .bead.RUN_STARTED       .bead-type { color: var(--accent); }
+
+    .bead.TEXT_MESSAGE_START,
+    .bead.TEXT_MESSAGE_CONTENT,
+    .bead.TEXT_MESSAGE_END  { background: rgba(94,234,212,.06); border-color: rgba(94,234,212,.15); }
+    .bead.TEXT_MESSAGE_START .bead-dot,
+    .bead.TEXT_MESSAGE_CONTENT .bead-dot,
+    .bead.TEXT_MESSAGE_END .bead-dot  { background: var(--accent2); }
+    .bead.TEXT_MESSAGE_START .bead-type,
+    .bead.TEXT_MESSAGE_CONTENT .bead-type,
+    .bead.TEXT_MESSAGE_END .bead-type { color: var(--accent2); }
+
+    .bead.TOOL_CALL_START,
+    .bead.TOOL_CALL_ARGS,
+    .bead.TOOL_CALL_END     { background: rgba(251,191,36,.06); border-color: rgba(251,191,36,.15); }
+    .bead.TOOL_CALL_START .bead-dot,
+    .bead.TOOL_CALL_ARGS .bead-dot,
+    .bead.TOOL_CALL_END .bead-dot { background: var(--warn); }
+    .bead.TOOL_CALL_START .bead-type,
+    .bead.TOOL_CALL_ARGS .bead-type,
+    .bead.TOOL_CALL_END .bead-type { color: var(--warn); }
+
+    .bead.STATE_SNAPSHOT,
+    .bead.STATE_DELTA       { background: rgba(244,114,182,.06); border-color: rgba(244,114,182,.15); }
+    .bead.STATE_SNAPSHOT .bead-dot,
+    .bead.STATE_DELTA .bead-dot    { background: var(--accent3); }
+
+    /* CUSTOM beads — agent telemetry (init, tools, cache, stats, step details).
+       Muted by default so they don't drown the first-class events. */
+    .bead.CUSTOM            { background: rgba(107,114,128,.04); border-color: rgba(107,114,128,.12); opacity: 0.7; }
+    .bead.CUSTOM .bead-dot  { background: var(--muted); }
+    .bead.CUSTOM .bead-type { color: var(--muted); font-weight: 400; }
+    .bead.CUSTOM:hover      { opacity: 1; }
+
+    /* STEP_STARTED / STEP_FINISHED — first-class lifecycle on the timeline. */
+    .bead.STEP_STARTED,
+    .bead.STEP_FINISHED     { background: rgba(251,191,36,.04); border-color: rgba(251,191,36,.12); }
+    .bead.STEP_STARTED .bead-dot,
+    .bead.STEP_FINISHED .bead-dot  { background: var(--warn); }
+    .bead.STEP_STARTED .bead-type,
+    .bead.STEP_FINISHED .bead-type { color: var(--warn); }
+    .bead.STATE_SNAPSHOT .bead-type,
+    .bead.STATE_DELTA .bead-type   { color: var(--accent3); }
+
+    .bead.RUN_FINISHED,
+    .bead.RUN_ERROR         { background: rgba(74,222,128,.06); border-color: rgba(74,222,128,.15); }
+    .bead.RUN_ERROR         { background: rgba(248,113,113,.06); border-color: rgba(248,113,113,.15); }
+    .bead.RUN_FINISHED .bead-dot { background: var(--success); }
+    .bead.RUN_ERROR    .bead-dot { background: var(--danger); }
+    .bead.RUN_FINISHED .bead-type { color: var(--success); }
+    .bead.RUN_ERROR    .bead-type { color: var(--danger); }
+
+    .bead.STEP_STARTED,
+    .bead.STEP_FINISHED     { background: rgba(124,106,247,.05); border-color: rgba(124,106,247,.1); }
+    .bead.STEP_STARTED .bead-dot,
+    .bead.STEP_FINISHED .bead-dot { background: #a78bfa; }
+    .bead.STEP_STARTED .bead-type,
+    .bead.STEP_FINISHED .bead-type { color: #a78bfa; }
+
+    .bead.MESSAGES_SNAPSHOT { background: rgba(255,255,255,.03); border-color: var(--border); }
+    .bead.MESSAGES_SNAPSHOT .bead-dot { background: var(--muted); }
+    .bead.MESSAGES_SNAPSHOT .bead-type { color: var(--muted); }
+
+    /* ── Sidebar footer ───────────────────────────────────── */
+    #sidebar-footer {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 6px;
+    }
+    .sf-btn {
+      flex: 1;
+      padding: 5px 0;
+      font-size: 10.5px;
+      font-family: var(--font-ui);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .sf-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ── Empty state ──────────────────────────────────────── */
+    #empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      user-select: none;
+    }
+    #empty-state .hero { font-size: 48px; }
+    #empty-state .tagline { font-size: 14px; }
+    #empty-state .hint { font-size: 12px; opacity: .5; }
+
+    /* ── Scrollbar global ─────────────────────────────────── */
+    * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+    /* ── Tooltip ─────────────────────────────────────────── */
+    [title] { cursor: default; }
+
+    /* ── Responsive collapse ─────────────────────────────── */
+    @media (max-width: 700px) {
+      #app { grid-template-columns: 1fr; }
+      #sidebar { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Top bar -->
+  <header id="topbar">
+    <span class="logo">⚡ Hermes Cockpit</span>
+    <span class="endpoint">POST → http://127.0.0.1:17020/agent</span>
+    <span class="sep"></span>
+    <div id="status-pill">
+      <span id="status-dot"></span>
+      <span id="status-label">idle</span>
+    </div>
+  </header>
+
+  <!-- Chat column -->
+  <main id="chat-col">
+    <div id="messages">
+      <div id="empty-state">
+        <div class="hero">🪩</div>
+        <div class="tagline">Hermes Agent — governed cockpit</div>
+        <div class="hint">Type a query below · Events stream to the sidebar</div>
+      </div>
+    </div>
+    <div id="input-bar">
+      <div id="input-wrap">
+        <textarea id="chat-input" rows="1" placeholder="Ask Hermes anything…" autocomplete="off" spellcheck="false"></textarea>
+        <button id="send-btn" title="Send (Enter)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Governance sidebar -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <span class="title">AG-UI Event Log</span>
+      <span id="event-count">0 events</span>
+    </div>
+    <div id="beads"></div>
+    <div id="sidebar-footer">
+      <button class="sf-btn" id="clear-beads-btn">Clear log</button>
+      <button class="sf-btn" id="copy-log-btn">Copy JSON</button>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ── DOM refs ─────────────────────────────────────────── */
+  const messagesEl   = document.getElementById('messages');
+  const emptyState   = document.getElementById('empty-state');
+  const inputEl      = document.getElementById('chat-input');
+  const sendBtn      = document.getElementById('send-btn');
+  const beadsEl      = document.getElementById('beads');
+  const eventCountEl = document.getElementById('event-count');
+  const statusDot    = document.getElementById('status-dot');
+  const statusLabel  = document.getElementById('status-label');
+
+  /* ── State ────────────────────────────────────────────── */
+  let isStreaming      = false;
+  let eventLog         = [];
+  let eventCount       = 0;
+  let currentAssistant = null;   // { el, bubble, text }
+  let conversationId   = crypto.randomUUID();
+  let threadId         = crypto.randomUUID();
+
+  /* ── Status helpers ───────────────────────────────────── */
+  function setStatus(state, label) {
+    statusDot.className   = state;
+    statusLabel.textContent = label;
+  }
+
+  /* ── Auto-grow textarea ───────────────────────────────── */
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+  });
+
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  sendBtn.addEventListener('click', send);
+
+  /* ── Append a user message bubble ────────────────────── */
+  function appendUserMsg(text) {
+    hideEmpty();
+    const wrap   = document.createElement('div');
+    wrap.className = 'msg user';
+    wrap.innerHTML = `
+      <div class="avatar">👤</div>
+      <div class="bubble">${escHtml(text)}</div>`;
+    messagesEl.appendChild(wrap);
+    scrollBottom();
+  }
+
+  /* ── Create / return assistant bubble ────────────────── */
+  function openAssistantBubble() {
+    hideEmpty();
+    const wrap   = document.createElement('div');
+    wrap.className = 'msg assistant';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = '<span class="cursor"></span>';
+    wrap.innerHTML = `<div class="avatar">🪩</div>`;
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    scrollBottom();
+    currentAssistant = { el: wrap, bubble, text: '' };
+    return currentAssistant;
+  }
+
+  function appendToAssistant(delta) {
+    if (!currentAssistant) openAssistantBubble();
+    currentAssistant.text += delta;
+    currentAssistant.bubble.innerHTML = renderMarkdown(currentAssistant.text) + '<span class="cursor"></span>';
+    scrollBottom();
+  }
+
+  function closeAssistantBubble() {
+    if (!currentAssistant) return;
+    currentAssistant.bubble.innerHTML = renderMarkdown(currentAssistant.text);
+    currentAssistant = null;
+  }
+
+  /* ── Basic markdown ──────────────────────────────────── */
+  function renderMarkdown(raw) {
+    let s = escHtml(raw);
+    // fenced code blocks
+    s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code class="lang-${lang}">${code}</code></pre>`);
+    // inline code
+    s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    // bold
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // italic
+    s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // newlines
+    s = s.replace(/\n/g, '<br>');
+    return s;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Scroll helpers ──────────────────────────────────── */
+  function scrollBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+  function hideEmpty() {
+    if (emptyState && emptyState.parentNode) emptyState.remove();
+  }
+
+  /* ── Governance bead ─────────────────────────────────── */
+  function addBead(eventType, detail = '', rawObj = null) {
+    eventCount++;
+    const entry = { seq: eventCount, ts: Date.now(), type: eventType, detail, raw: rawObj };
+    eventLog.push(entry);
+    eventCountEl.textContent = `${eventCount} event${eventCount !== 1 ? 's' : ''}`;
+
+    const bead = document.createElement('div');
+    const safeType = CSS.escape(eventType);
+    bead.className = `bead ${eventType}`;
+
+    const tsStr = new Date(entry.ts).toISOString().slice(11, 23);
+    const shortDetail = (detail || '').slice(0, 80);
+
+    bead.innerHTML = `
+      <div class="bead-dot"></div>
+      <div class="bead-body">
+        <div class="bead-type">${escHtml(eventType)}</div>
+        ${shortDetail ? `<div class="bead-detail" title="${escHtml(detail)}">${escHtml(shortDetail)}</div>` : ''}
+      </div>
+      <div class="bead-ts">${tsStr}</div>`;
+
+    if (rawObj) {
+      bead.title = JSON.stringify(rawObj, null, 2).slice(0, 400);
+    }
+
+    beadsEl.appendChild(bead);
+    beadsEl.scrollTop = beadsEl.scrollHeight;
+    return entry;
+  }
+
+  /* ── SSE / NDJSON dispatcher ─────────────────────────── */
+  function dispatchEvent(evt) {
+    const type   = evt.type || evt.event || 'UNKNOWN';
+    let   detail = '';
+
+    switch (type) {
+      case 'RUN_STARTED':
+        detail = `run=${evt.runId || evt.run_id || ''} thread=${evt.threadId || evt.thread_id || ''}`;
+        setStatus('live', 'running');
+        break;
+
+      case 'STEP_STARTED':
+        detail = `step=${evt.stepName || evt.step_name || evt.step_id || ''}`;
+        break;
+
+      case 'TEXT_MESSAGE_START':
+        detail = `msg_id=${evt.messageId || evt.message_id || ''}`;
+        if (evt.role === 'assistant') openAssistantBubble();
+        break;
+
+      case 'TEXT_MESSAGE_CONTENT':
+        detail = (evt.delta || '').slice(0, 60);
+        if (evt.delta) appendToAssistant(evt.delta);
+        break;
+
+      case 'TEXT_MESSAGE_END':
+        detail = `msg_id=${evt.messageId || evt.message_id || ''}`;
+        closeAssistantBubble();
+        break;
+
+      case 'CUSTOM':
+        /* Telemetry / agent-signal events classified by the Hermes bridge:
+           agent.init, agent.tools, agent.cache, agent.api_call_start, etc.
+           Render with name as the tag and a trimmed value.text as detail.
+           These do NOT leak into the chat bubble. */
+        {
+          const name = evt.name || 'custom';
+          const val  = evt.value && typeof evt.value === 'object'
+                         ? (evt.value.text || JSON.stringify(evt.value))
+                         : String(evt.value || '');
+          type   = 'CUSTOM';
+          detail = `${name}${val ? ' · ' + val.slice(0, 80) : ''}`;
+        }
+        break;
+
+      case 'TOOL_CALL_START':
+        detail = `${evt.tool_call_id || ''} fn=${evt.tool_name || evt.function_name || ''}`;
+        break;
+
+      case 'TOOL_CALL_ARGS':
+        detail = (typeof evt.delta === 'string' ? evt.delta : JSON.stringify(evt.delta || {})).slice(0, 60);
+        break;
+
+      case 'TOOL_CALL_END':
+        detail = `tool_call_id=${evt.tool_call_id || ''}`;
+        break;
+
+      case 'STATE_SNAPSHOT':
+        detail = `keys=${Object.keys(evt.snapshot || {}).join(', ').slice(0, 60)}`;
+        break;
+
+      case 'STATE_DELTA':
+        detail = JSON.stringify(evt.delta || {}).slice(0, 60);
+        break;
+
+      case 'MESSAGES_SNAPSHOT':
+        detail = `${(evt.messages || []).length} messages`;
+        break;
+
+      case 'STEP_FINISHED':
+        detail = `step=${evt.stepName || evt.step_name || evt.step_id || ''}`;
+        break;
+
+      case 'RUN_FINISHED':
+        detail = `run=${evt.runId || evt.run_id || ''}`;
+        closeAssistantBubble();
+        setStatus('live', 'done');
+        setTimeout(() => setStatus('', 'idle'), 2000);
+        break;
+
+      case 'RUN_ERROR':
+        detail = evt.message || evt.error || 'error';
+        closeAssistantBubble();
+        appendErrorMsg(detail);
+        setStatus('err', 'error');
+        setTimeout(() => setStatus('', 'idle'), 4000);
+        break;
+
+      default:
+        detail = JSON.stringify(evt).slice(0, 80);
+    }
+
+    addBead(type, detail, evt);
+  }
+
+  /* ── Error bubble ────────────────────────────────────── */
+  function appendErrorMsg(msg) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg assistant';
+    wrap.innerHTML = `
+      <div class="avatar" style="background:rgba(248,113,113,.2);border:1px solid var(--danger)">⚠️</div>
+      <div class="bubble" style="border-color:var(--danger);background:rgba(248,113,113,.08);color:var(--danger)">
+        ${escHtml(msg)}
+      </div>`;
+    messagesEl.appendChild(wrap);
+    scrollBottom();
+  }
+
+  /* ── Main send / stream ───────────────────────────────── */
+  async function send() {
+    const text = inputEl.value.trim();
+    if (!text || isStreaming) return;
+
+    isStreaming = true;
+    sendBtn.disabled = true;
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    setStatus('live', 'connecting…');
+
+    appendUserMsg(text);
+
+    const payload = {
+      thread_id:       threadId,
+      run_id:          crypto.randomUUID(),
+      forwarded_props: {},
+      messages: [
+        { role: 'user', id: crypto.randomUUID(), content: text }
+      ]
+    };
+
+    addBead('CLIENT_SEND', text.slice(0, 80), { text });
+
+    try {
+      const res = await fetch('http://127.0.0.1:17020/agent', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body:    JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText);
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+      }
+
+      setStatus('live', 'streaming…');
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let   buf     = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines
+        const lines = buf.split('\n');
+        buf = lines.pop(); // incomplete last line
+
+        let pendingData = '';
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            pendingData = line.slice(5).trim();
+          } else if (line === '' && pendingData) {
+            // SSE event boundary
+            if (pendingData === '[DONE]') { pendingData = ''; break; }
+            try {
+              const obj = JSON.parse(pendingData);
+              dispatchEvent(obj);
+            } catch {
+              // raw text delta fallback
+              appendToAssistant(pendingData);
+              addBead('RAW_DELTA', pendingData.slice(0, 60));
+            }
+            pendingData = '';
+          } else if (line.startsWith('{')) {
+            // bare NDJSON line
+            try {
+              const obj = JSON.parse(line);
+              dispatchEvent(obj);
+            } catch { /* skip */ }
+          }
+        }
+      }
+
+      // flush any remaining buffer
+      if (buf.trim() && buf.trim() !== '[DONE]') {
+        try { dispatchEvent(JSON.parse(buf.trim())); } catch { /* ignore */ }
+      }
+
+    } catch (err) {
+      console.error('[cockpit]', err);
+      setStatus('err', 'error');
+      appendErrorMsg(err.message);
+      addBead('RUN_ERROR', err.message, { error: err.message });
+      setTimeout(() => setStatus('', 'idle'), 4000);
+    } finally {
+      closeAssistantBubble();
+      isStreaming   = false;
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  /* ── Sidebar controls ────────────────────────────────── */
+  document.getElementById('clear-beads-btn').addEventListener('click', () => {
+    beadsEl.innerHTML = '';
+    eventLog   = [];
+    eventCount = 0;
+    eventCountEl.textContent = '0 events';
+  });
+
+  document.getElementById('copy-log-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(JSON.stringify(eventLog, null, 2))
+      .then(() => {
+        const btn = document.getElementById('copy-log-btn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.style.color = 'var(--success)';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1800);
+      })
+      .catch(() => {});
+  });
+
+  /* ── Focus on load ───────────────────────────────────── */
+  inputEl.focus();
+
+})();
+</script>
+</body>
+</html>

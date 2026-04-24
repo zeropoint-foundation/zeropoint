@@ -19,7 +19,7 @@ from typing import AsyncGenerator, Optional
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from ag_ui.core import Event
 from pydantic import TypeAdapter
@@ -133,6 +133,43 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Cockpit ────────────────────────────────────────────────────────
+# Serve the Hermes-generated cockpit from disk, same-origin with /agent so
+# its SSE POSTs carry cookies + don't need CORS. Read-on-request so the
+# next Hermes regeneration is live without a proxy restart. no-cache so
+# the browser doesn't pin a stale version during iteration.
+
+COCKPIT_PATH = Path(__file__).parent / "cockpit.html"
+
+
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    return RedirectResponse(url="/cockpit", status_code=307)
+
+
+@app.get("/cockpit", response_class=HTMLResponse)
+async def cockpit():
+    try:
+        html = COCKPIT_PATH.read_text()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content=(
+                "<!DOCTYPE html><html><body style='font-family:monospace;padding:2em'>"
+                "<h1>No cockpit on disk</h1>"
+                "<p>Ask Hermes to build one, then save to "
+                f"<code>{COCKPIT_PATH}</code>.</p></body></html>"
+            ),
+            status_code=404,
+        )
+    return HTMLResponse(
+        content=html,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 # ── Health ─────────────────────────────────────────────────────────
