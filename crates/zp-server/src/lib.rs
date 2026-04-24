@@ -1014,6 +1014,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/:tool_name/unregister", post(tools_unregister_handler))
         .route("/api/v1/tools/:tool_name/resolve", post(tools_resolve_handler))
         .route("/api/v1/credentials/:provider", get(credentials_handler))
+        .route("/api/v1/receipts", post(receipts_external_handler))
         .route("/api/v1/tools/launch", post(tools_launch_handler))
         .route("/api/v1/tools/stop", post(tools_stop_handler))
         .route("/api/v1/tools/log", get(tools_log_handler))
@@ -4719,6 +4720,100 @@ async fn credentials_handler(
             })),
         ),
     }
+}
+
+/// POST /api/v1/receipts — accept an external receipt from a governed
+/// forwarder (the AG-UI proxy) and append it to the external-receipts
+/// journal.
+///
+/// These receipts are NOT added to the signed audit chain — the chain
+/// invariants require receipts be signed by the node's identity and to
+/// slot into the conversation-ordered bead structure, which an external
+/// proxy can't produce. The journal is an append-only observability
+/// stream that the abacus artifact (and operator tools) can read.
+///
+/// Auth-gated. Body is accepted as free-form JSON, but we require either
+/// `receipt_id` or `claim_type` as a sanity gate against random payloads.
+async fn receipts_external_handler(
+    State(_state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let receipt_id = body
+        .get("receipt_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let claim_type = body
+        .get("claim_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    if receipt_id.is_empty() && claim_type.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "receipt must have receipt_id or claim_type"
+            })),
+        );
+    }
+
+    let home = match zp_paths::home() {
+        Ok(h) => h,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("home path unavailable: {}", e)})),
+            )
+        }
+    };
+    let path = home.join("logs").join("external-receipts.jsonl");
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let line = match serde_json::to_string(&body) {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("encode failed: {}", e)})),
+            )
+        }
+    };
+
+    use std::io::Write;
+    let mut file = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("open journal: {}", e)})),
+            )
+        }
+    };
+    if let Err(e) = writeln!(file, "{}", line) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("write journal: {}", e)})),
+        );
+    }
+
+    debug!(
+        "External receipt logged: id={} claim={}",
+        receipt_id, claim_type
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "accepted": true,
+            "receipt_id": receipt_id,
+        })),
+    )
 }
 
 /// Stop a running tool process.
