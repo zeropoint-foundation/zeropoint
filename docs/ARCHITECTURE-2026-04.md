@@ -1,9 +1,9 @@
 # ZeroPoint Architecture — April 2026
 
-**Document type:** Internal north star. Working spec for ThinkStream Labs. Not for public consumption.
+**Document type:** Canonical Architecture Record. Referenced in `CLAUDE.md` as the north star for all structural decisions. Every session reads the six design principles and four claims from this document as binding constraints.
 **Author:** Ken Romero, with synthesis assistance from Claude.
-**Date:** 2026-04-06.
-**Status:** v1. This document is expected to be revised after every major adversarial test cycle and every architectural commitment.
+**Date:** 2026-04-06. Last updated: 2026-04-22.
+**Status:** Active. This document is revised after every major adversarial test cycle and every architectural commitment. Code that contradicts it is wrong.
 **Companion documents:**
 - `docs/whitepaper-v2.md` — the public thesis (autoregressive trust, the trajectory model)
 - `security/pentest-2026-04-06/PENTEST-REPORT.md` — what the 2026-04-06 black-box pentest found
@@ -422,6 +422,94 @@ The thing that converts all three claims from confidence to evidence is the same
 
 ---
 
+## Part V½ — Design Philosophy: The Zen of the Trust Layer
+
+**Inspirational debt:** Mark Qvist's *Zen of Reticulum* (early 2026). What Reticulum articulates for the networking layer — uncentralizability, encryption as gravity, portable identity, scarcity as craft, sovereignty through infrastructure — ZeroPoint articulates for the trust layer. The principles below are not decorative. They are load-bearing constraints that shape every architectural decision in the substrate. If code violates one, the code is wrong.
+
+### Principle 1 — Signing is gravity
+
+In Reticulum, encryption is not a feature; it is the force that allows the network to exist. Strip the encryption and the routing breaks.
+
+In ZeroPoint, signing is not a feature; it is the force that allows the trust layer to exist. The Receipt's `content_hash` IS the routing logic of trust. The governance gate validates cryptographic proofs, not permissions. The reconstitution engine replays signed evidence, not log messages. The blast radius model traces compromise through signature chains, not through configuration.
+
+An unsigned Receipt is structurally meaningless. It is an assertion without a witness. The abacus model requires that every bead on every wire carries an Ed25519 signature from the entity that attests to the claim. This is not a security feature bolted onto a logging system; it is the force without which the readiness state cannot be derived, the governance gate cannot validate, and the reconstitution engine cannot replay.
+
+To ask for a version of ZeroPoint without signing is to ask for a version of the ocean without liquid.
+
+### Principle 2 — Identity is a key, not a location
+
+In Reticulum, an address is a hash of an identity, not a coordinate in a grid. You can move from WiFi to LoRa to packet radio and your destination hash never changes.
+
+In ZeroPoint, a tool's identity is its bead zero — the `CanonicalizedClaim` receipt that captures its first-known-state, signed by the genesis key. The tool is not "the process listening on port 8080." It is "the entity whose bead zero was signed by key `<327c...>` and whose subsequent beads form an unbroken chain of attestations." Move the tool to a different machine, change its port, rotate its credentials — the bead chain persists. The identity is the cryptographic lineage, not the deployment coordinates.
+
+The genesis key is the operator's true name. It is not assigned by a service, granted by a registrar, or conditional on the uptime of a server. It is a 32-byte Ed25519 secret that the operator generates locally and carries sovereign. The vault encrypts around it. The audit chain is signed by it. The entire infrastructure can be destroyed and rebuilt, and the operator's identity — the mathematical entity that signed the genesis ceremony — persists.
+
+### Principle 3 — There is no center
+
+In Reticulum, there is no cloud. There is only other people's computers.
+
+In ZeroPoint, there is no trust server. There is only the local audit chain and the cryptographic proofs it contains. The cockpit does not ask a remote authority "is ironclaw ready?" It reads the local audit chain, finds the bead zero, verifies its signature, walks the subsequent beads, and derives the readiness state from mathematical evidence. The answer is in the chain or it is nowhere.
+
+This is uncentralizable by design. There is no DNS to hijack, no certificate authority to compromise, no API endpoint to DDoS. The trust state lives on-device, signed by keys the operator controls, verifiable by anyone with the public key. The audit chain is a sovereign artifact. It belongs to the operator, not to a platform.
+
+### Principle 4 — Every bit counts
+
+In Reticulum, 5 bits per second is a valid speed. The cost of a byte is energy, time, and spectrum. Efficiency is stewardship.
+
+In ZeroPoint, every field on a Receipt exists because removing it would break a verifiable claim. The canonical serialization (Phase 2.5) strips non-deterministic whitespace before signing. The epoch compaction (Merkle roots) reduces verification from O(n) chain walks to O(log n) proofs. The naming coherence pass ensures every term carries exactly one meaning — no byte of cognitive bandwidth wasted on ambiguity.
+
+Phase 6 applied this principle: lifecycle Receipts now carry `ClaimMetadata::Lifecycle` (self-describing event type, tool ID, detail), and the query path reads Receipt metadata first. The redundant detail JSON that was duplicated in `PolicyDecision::Allow` conditions has been stripped — the Receipt is the single source of truth. String events remain as lightweight indexes for wire lookups, but they carry no payload. Every bit in the audit chain earns its place through cryptographic necessity.
+
+### Principle 5 — Store-and-forward is the primary mode
+
+In Reticulum, connectivity is a spectrum, and Store & Forward is not a fallback but a primary mode of existence. You send a message; it arrives when it arrives.
+
+In ZeroPoint, the audit chain IS store-and-forward. You do not ask "is the system healthy right now?" — you ask "what does the chain say?" The readiness state is derived from accumulated evidence, not from a live heartbeat. If the system goes down and comes back, the chain persists. The beads are still signed. The truth survives the outage.
+
+This changes the psychological texture of trust. You are not anxiously polling a health endpoint. You are reading a permanent, hash-linked, signed record of everything that happened, and deriving the current state from first principles. The audit chain is not a log you might read later; it is the ground truth from which all other state is projected.
+
+### Principle 6 — A tool is intent, crystallized
+
+In Reticulum, a tool is never neutral. Architecture is politics.
+
+In ZeroPoint, the governance gate is not a guardrail; it is the protocol. A `CanonicalizedClaim` receipt does not merely record that something happened — it makes a cryptographic claim with specific semantics (`ClaimSemantics::IntegrityAttestation` means "this entity's state has not changed since I last attested to it"). The claim type, the metadata structure, the signature — these are not logging conventions. They are the grammar of trust.
+
+The HarmPrincipleRule and SovereigntyRule are constitutional — non-removable, non-overridable, evaluated first. They are conservation laws, not policy preferences. Their presence in the governance gate is not a feature; it is the substrate's statement about what kind of tool it is. A tool that can be turned against its operator is not a tool but a trap.
+
+By encoding these principles into the protocol's mathematical structure — not into a terms-of-service document, not into a configuration file, but into the cryptographic invariants themselves — we align the software with the interests of the operator. The network is not something that happens to you; it is something you make happen.
+
+### Principle 7 — Contact does not commit
+
+In Reticulum, reaching a destination does not make you authorized to speak through it. Only a key holder can. Contact is not credential.
+
+In ZeroPoint, contact with the world — a tool firing, a memory being proposed, a browser action adapting, a skill being learned from experience — does not automatically update the substrate. The receipt chain is not a log that faithfully records everything that happens; it is the substrate's own account of what it *chose to commit to*. Every update is a decision. Every bead is a signature on "this is what I accept as part of what I am now."
+
+This matters most where mutable agent systems touch the unmutable trust layer. An agent like Hermes learns skills from experience. A browser harness writes helpers mid-task to route around brittle DOM. A memory provider suggests that a new fact should persist. None of these are wrong. But if any of them silently become part of the trusted substrate, the substrate has lost agency over its own evolution — it is just an accumulating record of whatever contact produced. That is not governance; that is transcription.
+
+The distinction the substrate must make is between **adaptive use of existing capabilities** (the agent solves a problem in a new combination of what it already has — signed receipt, no promotion) and **creation of new operational capabilities** (a skill, helper, DOM strategy, or memory fact that would *extend* what the substrate allows next time — unsigned artifact, held in quarantine, signed only after review). The first is a bead on an existing wire. The second is a proposed new wire, and the substrate decides whether to open it.
+
+The integration sentence, in operational form:
+
+> *Hermes may learn from the world. Browser Harness may adapt to the world. ZeroPoint decides what the system is allowed to become because of that contact.*
+
+This principle was discovered during the Phase 4 Hermes integration analysis. It is the reason the Governed Agent Runtime distinguishes between dispatch-time gates (which govern *use*) and artifact-creation gates (which govern *becoming*). Receipts are the substrate's membrane. Events reach it; the substrate decides what passes through.
+
+### The design test
+
+When evaluating any architectural decision, apply the seven principles as a filter:
+
+1. Does this require signing to function, or does it work without? (If it works without, signing is decorative, not gravitational.)
+2. Is identity derived from cryptographic lineage, or from deployment coordinates? (If coordinates, it's fragile.)
+3. Does this require a central authority, or can it be verified locally? (If central, it's a single point of failure.)
+4. Is every field load-bearing, or is there waste? (If waste, strip it.)
+5. Does this survive an outage, or does it require live connectivity? (If live, it's brittle.)
+6. Are the semantics in the structure, or in the comments? (If comments, the intent isn't crystallized.)
+7. Does contact produce a commit, or is the commit a separate, signed decision? (If contact commits, the substrate is transcribing, not governing.)
+
+Code that fails any of these tests should be revised until it passes. The principles are not aspirational; they are operational.
+
+---
+
 ## Part VI — The One Thing to Do First
 
 If this document is too long to act on, the one thing to do first is: **start `crates/zp-verify` and implement P1 and M3.** Two rules, one crate, maybe 200 lines of code. The verifier runs against the existing chain and reports what is broken. That is the first concrete artifact that proves the catalog is real and the substrate is parseable. Everything else in Phase 1 depends on it. Everything in Phase 2 reuses it. Phase 3 cannot exist without it.
@@ -430,4 +518,4 @@ Start there. The rest follows.
 
 ---
 
-*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Phase 4 (Governed Agent Runtime) added April 21, 2026 following the Hermes Agent integration analysis. Next revision expected after Phase 1 exit.*
+*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Phase 4 (Governed Agent Runtime) added April 21, 2026 following the Hermes Agent integration analysis. Part V½ (Design Philosophy) added April 22, 2026 following the Zen of Reticulum alignment pass — inspired by Mark Qvist's articulation of uncentralizable networking principles, mapped to ZeroPoint's trust layer. Elevated to Canonical Architecture Record on April 22, 2026 — wired into CLAUDE.md as binding constraint for all sessions. Next revision expected after Phase 1 exit.*
