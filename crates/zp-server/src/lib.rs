@@ -1011,6 +1011,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools", get(tools_handler))
         .route("/api/v1/tools/register", post(tools_register_handler))
         .route("/api/v1/tools/:tool_name/unregister", post(tools_unregister_handler))
+        .route("/api/v1/tools/:tool_name/resolve", post(tools_resolve_handler))
         .route("/api/v1/tools/launch", post(tools_launch_handler))
         .route("/api/v1/tools/stop", post(tools_stop_handler))
         .route("/api/v1/tools/log", get(tools_log_handler))
@@ -4447,6 +4448,118 @@ async fn tools_unregister_handler(
             "entries_removed": removed_count,
         })),
     )
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+struct ResolveToolRequest {
+    /// Optional absolute path to the tool directory. Defaults to ~/projects/<name>.
+    path: Option<String>,
+}
+
+/// Resolve a tool's `.env.example` template against the vault.
+///
+/// Wraps `zp_configure::resolve_tool` — the same orchestration `zp configure
+/// tool` uses, but returns structured JSON instead of printing. Writes
+/// `tools/{name}/*` entries into the vault, persists, and archives any
+/// pre-vault `.env` to `.env.pre-vault`.
+async fn tools_resolve_handler(
+    State(state): State<AppState>,
+    AxumPath(tool_name): AxumPath<String>,
+    body: Option<Json<ResolveToolRequest>>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if !is_safe_tool_name(&tool_name) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid tool name"})),
+        );
+    }
+
+    let req = body.map(|Json(r)| r).unwrap_or_default();
+
+    // Resolve tool path. Explicit override from the body, else ~/projects/<name>.
+    let tool_path = match req.path.as_deref() {
+        Some(p) if !p.trim().is_empty() => {
+            let raw = p.trim();
+            let expanded = if let Some(stripped) = raw.strip_prefix("~/") {
+                dirs::home_dir()
+                    .map(|h| h.join(stripped))
+                    .unwrap_or_else(|| std::path::PathBuf::from(raw))
+            } else {
+                std::path::PathBuf::from(raw)
+            };
+            expanded
+        }
+        _ => dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("projects")
+            .join(&tool_name),
+    };
+
+    if !tool_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("Tool path does not exist: {}", tool_path.display()),
+            })),
+        );
+    }
+    if !tool_path.is_dir() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Tool path is not a directory"})),
+        );
+    }
+
+    let resolved_key = match state.0.vault_key.as_ref() {
+        Some(k) => k,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Vault key unavailable"})),
+            )
+        }
+    };
+
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+
+    let mut vault = match zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path)
+    {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Failed to load vault: {}", e)})),
+            )
+        }
+    };
+
+    match zp_configure::resolve_tool(&tool_path, &tool_name, &mut vault, &vault_path) {
+        Ok(summary) => {
+            info!(
+                "Resolved '{}' — refs={}, values={}, unresolved={}",
+                summary.tool, summary.refs_stored, summary.values_stored, summary.unresolved,
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "resolved": true,
+                    "summary": summary,
+                })),
+            )
+        }
+        Err(e) => {
+            warn!("Resolve failed for '{}': {}", tool_name, e);
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "resolved": false,
+                    "error": e,
+                })),
+            )
+        }
+    }
 }
 
 /// Stop a running tool process.
