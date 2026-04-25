@@ -17,10 +17,13 @@
 //!    Bitcoin OpenTimestamps, Ceramic streams, or a simple HTTPS timestamp
 //!    authority. ZP never depends on a single external infrastructure.
 //!
-//! 2. **Optional enrichment.** If no anchor is configured, ZeroPoint operates
-//!    without external verification. Local chain integrity remains fully
-//!    functional. DLT adds external verifiability — it doesn't replace
-//!    internal verification.
+//! 2. **Optional enrichment, event-driven.** If no anchor is configured,
+//!    ZeroPoint operates without external verification. Local chain integrity
+//!    remains fully functional. When anchoring is configured, it is triggered
+//!    by specific trust events (audits, cross-mesh introductions, disputes,
+//!    operator requests) or opportunistically when a blockchain transaction
+//!    is already in flight. There is no timer or cadence — the chain doesn't
+//!    get "more true" by being witnessed more often.
 //!
 //! 3. **Operator sovereignty.** The operator chooses their anchor backend.
 //!    Cross-mesh trust is established by exchanging anchor identifiers
@@ -29,15 +32,18 @@
 //! ## Usage
 //!
 //! ```rust,ignore
-//! use zp_anchor::{TruthAnchor, AnchorCommitment, ChainType};
+//! use zp_anchor::{TruthAnchor, AnchorCommitment, AnchorTrigger, ChainType};
 //!
-//! async fn anchor_chain_head(anchor: &dyn TruthAnchor, head_hash: &str) {
+//! async fn anchor_for_audit(anchor: &dyn TruthAnchor, head_hash: &str) {
 //!     let commitment = AnchorCommitment {
 //!         chain_head_hash: head_hash.to_string(),
 //!         chain_sequence: 42,
 //!         prev_anchor_hash: None,
 //!         operator_signature: "deadbeef".to_string(),
 //!         chain_type: ChainType::AuditChain,
+//!         trigger: AnchorTrigger::ComplianceCheckpoint {
+//!             reason: "quarterly audit export".to_string(),
+//!         },
 //!     };
 //!     let receipt = anchor.anchor(commitment).await.unwrap();
 //!     println!("Anchored at: {}", receipt.consensus_timestamp);
@@ -69,10 +75,6 @@ pub enum AnchorError {
     /// The anchor backend is not configured or unavailable.
     #[error("Anchor not available: {reason}")]
     NotAvailable { reason: String },
-
-    /// Budget exhausted for anchoring operations.
-    #[error("Anchor budget exhausted: {reason}")]
-    BudgetExhausted { reason: String },
 
     /// Generic internal error.
     #[error("Anchor internal error: {0}")]
@@ -123,6 +125,9 @@ pub struct AnchorCommitment {
 
     /// Which chain this commitment covers.
     pub chain_type: ChainType,
+
+    /// What triggered this anchoring operation.
+    pub trigger: AnchorTrigger,
 }
 
 /// A receipt from the external ledger proving that a commitment was published.
@@ -176,15 +181,13 @@ pub struct AnchorVerification {
 /// Pluggable interface for external truth anchoring.
 ///
 /// Any DLT backend (Hedera, Ethereum, Bitcoin, Ceramic, HTTPS timestamp
-/// authority) implements this trait. ZeroPoint's anchoring scheduler calls
-/// these methods on the configured backend.
+/// authority) implements this trait. Anchoring is event-driven: callers
+/// invoke `anchor()` in response to specific trust events (see
+/// [`AnchorTrigger`]), not on a timer or receipt-count cadence.
 ///
-/// ## Anchoring Cadence
-///
-/// The default cadence is every 100 receipts or every 15 minutes, whichever
-/// comes first. Operators can adjust based on their trust/cost tradeoff via
-/// the `anchoring.cadence_receipts` and `anchoring.cadence_minutes` config
-/// fields. If no backend is configured, anchoring is silently skipped.
+/// If no backend is configured, the [`NoOpAnchor`] implementation
+/// returns `NotAvailable` errors, and the system operates without
+/// external verification. Local chain integrity is unaffected.
 #[async_trait::async_trait]
 pub trait TruthAnchor: Send + Sync {
     /// Publish a chain-head commitment to the external ledger.
@@ -221,52 +224,56 @@ pub trait TruthAnchor: Send + Sync {
 }
 
 // ============================================================================
-// Anchoring Scheduler Configuration
+// Anchor Triggers
 // ============================================================================
 
-/// Configuration for the anchoring scheduler.
+/// Why an anchoring operation was initiated.
+///
+/// Truth anchoring is event-driven, not cadence-based. The chain's internal
+/// integrity is self-contained via hash-linking — external witnessing adds
+/// verifiability for specific trust events, not periodic reaffirmation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnchoringConfig {
-    /// Anchor after this many new receipts (default: 100).
-    #[serde(default = "default_cadence_receipts")]
-    pub cadence_receipts: u64,
+#[serde(rename_all = "snake_case")]
+pub enum AnchorTrigger {
+    /// The operator explicitly requested an anchor (CLI, API, or UI).
+    OperatorRequested,
 
-    /// Anchor after this many minutes regardless of receipt count (default: 15).
-    #[serde(default = "default_cadence_minutes")]
-    pub cadence_minutes: u64,
+    /// A cross-mesh introduction: two meshes exchanging trust require
+    /// each to anchor their current chain head so the other can verify.
+    CrossMeshIntroduction {
+        /// Identifier of the remote mesh being introduced.
+        remote_mesh_id: String,
+    },
 
-    /// Maximum cost per anchor in USD (default: 0.001).
-    /// The scheduler stops anchoring if cost exceeds this per-transaction.
-    #[serde(default = "default_max_cost_usd")]
-    pub max_cost_per_anchor_usd: f64,
+    /// A compliance or audit checkpoint (e.g., before generating an
+    /// audit export, before a scheduled compliance review).
+    ComplianceCheckpoint {
+        /// Human-readable reason for the checkpoint.
+        reason: String,
+    },
 
-    /// Whether anchoring is enabled at all (default: true if a backend is configured).
-    #[serde(default = "default_enabled")]
-    pub enabled: bool,
-}
+    /// A dispute or investigation requires a timestamped anchor to
+    /// establish chain state at a specific point.
+    DisputeEvidence {
+        /// Reference to the dispute or investigation.
+        reference: String,
+    },
 
-fn default_cadence_receipts() -> u64 {
-    100
-}
-fn default_cadence_minutes() -> u64 {
-    15
-}
-fn default_max_cost_usd() -> f64 {
-    0.001
-}
-fn default_enabled() -> bool {
-    true
-}
+    /// Opportunistic: a blockchain transaction is already happening for
+    /// another reason; embed the chain head as metadata at zero marginal cost.
+    Opportunistic {
+        /// What triggered the existing transaction (e.g., "token_transfer",
+        /// "contract_call", "nft_mint").
+        piggyback_on: String,
+    },
 
-impl Default for AnchoringConfig {
-    fn default() -> Self {
-        Self {
-            cadence_receipts: default_cadence_receipts(),
-            cadence_minutes: default_cadence_minutes(),
-            max_cost_per_anchor_usd: default_max_cost_usd(),
-            enabled: default_enabled(),
-        }
-    }
+    /// Governance lifecycle event: a significant state change (capability
+    /// revocation, constitutional rule update, trust tier change) that
+    /// warrants external witnessing.
+    GovernanceEvent {
+        /// The event type that triggered anchoring.
+        event_type: String,
+    },
 }
 
 // ============================================================================
