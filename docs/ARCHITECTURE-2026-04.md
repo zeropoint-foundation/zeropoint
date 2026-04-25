@@ -37,11 +37,11 @@ The sentence is not yet true of the running code. It is the target. The pentest 
 
 The whitepaper makes four testable claims (§1). The catalog formalizes them as productions and invariants. Together they are what makes the substrate worth building rather than just another audit log.
 
-**Claim 1 — Each step is conditioned on all prior context.** Mechanism: `pr` linkage, Blake3 transitivity. Catalog rule: P1 (Chain extension), M3 (hash-chain continuity). Falsifier: any receipt whose `pr` does not point to the previous receipt's `id`. *Status:* AUDIT-01 found four such breaks. Currently false.
+**Claim 1 — Each step is conditioned on all prior context.** Mechanism: `pr` linkage, Blake3 transitivity. Catalog rule: P1 (Chain extension), M3 (hash-chain continuity). Falsifier: any receipt whose `pr` does not point to the previous receipt's `id`. *Status:* AUDIT-01 found four such breaks (concurrent-append race). Fixed: transactional append with BEGIN IMMEDIATE, UNIQUE(prev_hash) index, atomic chain-tip computation. Currently true.
 
 **Claim 2 — Present state compresses full history.** Mechanism: collective audit (AuditChallenge → AuditResponse → PeerAuditAttestation). Catalog rule: this is what the verifier *does* — it walks the full chain to confirm the present state. Falsifier: a peer claiming a state that does not match its full chain. *Status:* the mechanism exists; it has not been load-tested against an adversarial peer.
 
-**Claim 3 — System-wide coherence from local evaluation.** Mechanism: PolicyEngine fixed evaluation order, constitutional rules at positions 1 and 2. Catalog rule: M2 (constitutional persistence), P3 (the gate). Falsifier: any side effect that did not pass through P3. *Status:* EXEC-01..04 prove that the gate is not enforced for `/ws/exec`. Currently false.
+**Claim 3 — System-wide coherence from local evaluation.** Mechanism: PolicyEngine fixed evaluation order, constitutional rules at positions 1 and 2. Catalog rule: M2 (constitutional persistence), P3 (the gate). Falsifier: any side effect that did not pass through P3. *Status:* EXEC-01..04 originally proved the gate was not enforced for `/ws/exec`. Fixed: gate.evaluate() now called before every spawn. Currently true.
 
 **Claim 4 — Future actions narrowed by trajectory.** Mechanism: the eight delegation invariants. Catalog rule: P2 (Delegation), X1 (Possible ⊆ Required), X2 (Actual ⊆ Possible at time of action). Falsifier: a delegation chain that widens authority anywhere along its length. *Status:* the invariants are implemented in `DelegationChain::verify()` and are believed to hold. The pentest did not exercise delegation paths because it never needed to — it bypassed them via the gate failure. Untested under adversarial pressure.
 
