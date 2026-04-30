@@ -5532,6 +5532,7 @@ fn lease_prereq_for_agent(state: &AppState, agent_id: &str) -> Option<&'static s
 }
 
 /// Verify a hex-encoded Ed25519 signature over `payload` using `pubkey_hex`.
+#[allow(dead_code)] // Used by anchor pipeline once external anchoring is wired
 fn verify_ed25519_signature(pubkey_hex: &str, signature_hex: &str, payload: &[u8]) -> bool {
     let Ok(pk_bytes) = hex::decode(pubkey_hex) else {
         return false;
