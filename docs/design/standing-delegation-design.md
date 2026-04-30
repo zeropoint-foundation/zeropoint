@@ -27,10 +27,10 @@
 - `verify()` enforcing: parent linkage, depth monotonicity, scope containment, grantor-grantee matching, expiration inheritance, signature validity
 - Comprehensive error types for each invariant violation
 
-**`ZpDelegationPolicy`** (delegation_bridge.rs, 225 lines) provides:
+**`ZpDelegationPolicy`** (formerly in zp-agent-bridge, now superseded) provided:
 - Agent-bridge type mapping (agent-zp → zp-core)
 - Authorization and chain validation
-- `revoke()` — currently a stub (no-op)
+- Agent integration now via MCP governance surface in `zp-server`
 
 ### What Standing Delegation Adds
 

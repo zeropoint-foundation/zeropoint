@@ -77,7 +77,6 @@ crates. The project is approximately 80% through the original Phase 2
 
 **Cross-cutting**:
 `zp-config` (unified configuration with provenance),
-`zp-agent-bridge` (governance wrapper bridge),
 `zp-preflight` (installation readiness diagnostics)
 
 ### 1.2 Test Baseline

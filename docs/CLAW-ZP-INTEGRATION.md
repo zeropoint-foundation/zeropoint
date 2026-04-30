@@ -647,24 +647,14 @@ All implemented in a single `agent-zp` crate with `AuditSink` trait (dependency-
     - Connects to ZP's `zp configure auto --path` preflight pipeline
 12. **ZP Dashboard integration**: Via audit chain — `derive_system_state()` already sees all events. *No additional code needed.* ✅
 
-### Phase 4: Bridge Crate ✅ COMPLETE
-13. **`zp-agent-bridge` crate** — concrete adapters connecting agent-zp to ZP native infrastructure: ✅
-    - Lives in `zeropoint/crates/zp-agent-bridge/` with cross-workspace path dep to `agent-zp`
-    - **`ZpAuditSink`**: `impl AuditSink` backed by `Arc<Mutex<AuditStore>>` + `ConversationId`
-      - `emit()`: maps `GovernanceRecord` → `AuditEntry` via `ChainBuilder::build_entry()`, hash-links to chain
-      - `emit_receipt()`: maps `ExecutionReceipt` → `AuditEntry` with portable `zp_receipt::Receipt` attached
-      - Type mapping: `ActorRef` → `ActorId`, `DecisionOutcome` → `PolicyDecision`, `GovernanceEventType` → `AuditAction`
-      - `build_portable_receipt()`: converts agent-zp receipt → `zp_receipt::Receipt` via `ReceiptBuilder` with correct field mapping
-    - **`ZpSovereigntyBridge`**: `impl SovereigntyBridge` backed by ZP's native sovereignty system
-      - `detect_providers()`: wraps `detect_all_providers()`, maps `ProviderCapability` → `SovereigntyStatus`
-      - `verify_presence()`: resolves mode string → `SovereigntyMode`, delegates to `provider_for(mode).verify_presence()`
-      - `create_identity()`: full sovereignty-rooted identity creation — verify → load Genesis → derive session key (BLAKE3) → build signed token → return `AgentIdentity`
-      - `reverify()`: re-verifies presence for long-running sessions
-    - Added to ZP workspace `Cargo.toml` members list
-    - **Compiles clean with zero errors, zero warnings** against both workspaces
+### Phase 4: Bridge Crate — SUPERSEDED
+> **`zp-agent-bridge` has been removed.** The compile-time bridge pattern (ZP depending
+> on agent-zp via cross-workspace path) is replaced by the MCP governance surface in
+> `zp-server`. Agents connect as MCP clients — no compile-time coupling required.
+> The dependency arrow is now correct: agents depend on ZP, not the reverse.
 
 ### Phase 5: Advanced Governance ✅ COMPLETE
-All three modules implemented in `agent-zp` (claw side) with bridge adapters in `zp-agent-bridge` (ZP side).
+All three governance modules (delegation, quorum, mesh) are implemented in `agent-zp` (claw side). Agent integration now happens via MCP governance tools exposed by `zp-server`.
 
 14. **Multi-agent delegation chains** — parent agents delegate scoped capabilities to child agents: ✅
     - `DelegationPolicy` async trait: `authorize_delegation()`, `validate_chain()`, `revoke()`
@@ -819,7 +809,7 @@ blake3 = "1"
 
 ### Resolved
 
-1. **Bridge crate location**: → `zeropoint/crates/zp-agent-bridge/` with cross-workspace path dep to `agent-zp` at `../../../projects/claw-code-rust/crates/agent-zp`. ✅
+1. **Bridge crate location**: Removed. Agent integration now via MCP governance surface in `zp-server`.
 
 2. **ToolContext extensibility**: → `Extensions` type-map in `agent-tools`. ✅
    - `Extensions` struct: `HashMap<TypeId, Box<dyn Any + Send + Sync>>` with `insert<T>()`, `get<T>()`, `remove<T>()`

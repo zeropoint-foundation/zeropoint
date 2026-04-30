@@ -13,7 +13,7 @@ P3 complete. Chain at 502 entries, Merkle anchoring live.
 There is already substantial delegation infrastructure in `zp-core`:
 - `capability_grant.rs` (2072 lines) — CapabilityGrant with delegation depth, parent_grant_id, expiration, signatures, scope narrowing
 - `delegation_chain.rs` (544 lines) — DelegationChain with full invariant verification
-- `delegation_bridge.rs` (225 lines) — Agent bridge type mapping
+- ~~`delegation_bridge.rs`~~ — Removed (agent integration via MCP governance surface)
 - `zp-keys/blast_radius.rs` — Indexes capability grants for compromise scoping
 
 **Do NOT create a parallel type system.** Standing delegation extends `CapabilityGrant` with new fields. All new fields are `Option` or have defaults for backward compatibility. Existing tests must pass unchanged.
@@ -272,7 +272,7 @@ Exit criterion: Full lease lifecycle end-to-end. Gate enforces delegation. `zp v
 | `zp-core/src/revocation.rs` | **Create** | RevocationClaim, CascadePolicy, RevocationReason |
 | `zp-core/src/capability_grant.rs` | **Modify** | Add lease/renewal/revocation fields, extend delegate() and verify() |
 | `zp-core/src/delegation_chain.rs` | **Modify** | Validate lease fields in verify() |
-| `zp-agent-bridge/src/delegation_bridge.rs` | **Modify** | Implement revoke() (currently stub) |
+| ~~`zp-agent-bridge/src/delegation_bridge.rs`~~ | **Removed** | Agent integration via MCP governance surface |
 | `zp-server/src/tool_chain.rs` | **Modify** | Add emit_delegation_receipt, emit_revocation_receipt |
 | `zp-server/src/anchor_pipeline.rs` | **Modify** | Add delegation events to trigger list |
 | `zp-server/src/lib.rs` | **Modify** | Add /api/v1/lease/renew, lease check in gate |

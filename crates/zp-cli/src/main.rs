@@ -1203,8 +1203,61 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
-    // Verify — run the catalog grammar verifier over the audit chain. No pipeline needed.
+    // Verify — run the catalog grammar verifier over the audit chain.
+    // Strategy: try the running server's API first (no DB lock contention),
+    // fall back to direct DB access if the server isn't reachable.
     if let Some(Commands::Verify { audit_db, json, reconstitute, anchors }) = &args.command {
+        // Try server API first — works even while the server holds the DB lock
+        let port: u16 = 17770; // ZeroPoint default server port
+        let server_ok = (|| -> Option<()> {
+            use std::io::{Read as _, Write as _};
+            let mut conn = std::net::TcpStream::connect_timeout(
+                &format!("127.0.0.1:{}", port).parse().ok()?,
+                std::time::Duration::from_secs(2),
+            ).ok()?;
+            conn.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok()?;
+            write!(conn, "GET /api/v1/audit/verify HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n", port).ok()?;
+            let mut buf = Vec::new();
+            conn.read_to_end(&mut buf).ok()?;
+            let raw = String::from_utf8_lossy(&buf);
+            // Extract JSON body after \r\n\r\n
+            let body = raw.split("\r\n\r\n").nth(1)?;
+            if *json {
+                println!("{}", body);
+            } else {
+                let v: serde_json::Value = serde_json::from_str(body).ok()?;
+                let valid = v["valid"].as_bool().unwrap_or(false);
+                let entries = v["entries_examined"].as_u64().unwrap_or(0);
+                let sigs_total = v["signatures_checked"].as_u64().unwrap_or(0);
+                let sigs_pass = v["signatures_valid"].as_u64().unwrap_or(0);
+                let issues = v["issues"].as_array();
+
+                println!("\x1b[1mzp verify — Chain Attestation (via server)\x1b[0m");
+                println!();
+                if valid {
+                    println!("  \x1b[32m✓\x1b[0m Chain integrity: {} entries, {}/{} signatures pass, hash-link intact",
+                        entries, sigs_pass, sigs_total);
+                } else {
+                    println!("  \x1b[31m✗\x1b[0m Chain integrity: FAILED ({} entries examined)", entries);
+                }
+                if let Some(issues) = issues {
+                    if !issues.is_empty() {
+                        println!();
+                        for issue in issues {
+                            println!("  \x1b[33m⚠\x1b[0m {}", issue.as_str().unwrap_or("?"));
+                        }
+                    }
+                }
+                println!();
+            }
+            Some(())
+        })();
+
+        if server_ok.is_some() {
+            std::process::exit(0);
+        }
+
+        // Fallback: direct DB access (server not running)
         let db_path = audit_db
             .clone()
             .unwrap_or_else(|| args.data_dir.join("audit.db"));
@@ -1212,6 +1265,7 @@ async fn main() -> anyhow::Result<()> {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("Error opening audit store at {}: {}", db_path.display(), e);
+                eprintln!("Hint: if the server is running, check that port {} is correct", port);
                 std::process::exit(2);
             }
         };

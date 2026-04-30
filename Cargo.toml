@@ -23,7 +23,8 @@ members = [
     "crates/course-examples",
     "crates/mle-star-engine",
     "crates/monte-carlo-engine",
-    # "crates/zp-agent-bridge",  # temporarily excluded: depends on missing cross-workspace path
+    # zp-agent-bridge removed — agent integration via MCP governance surface in zp-server
+    # trust-triangle excluded — standalone reference demo, not part of core build
     "crates/zp-observation",
     "crates/zp-preflight",
     "crates/zp-config",
