@@ -54,10 +54,10 @@ Do not start the cognitive layer until these are true:
 - **ZP Guard allowlist is tuned.** Guard blocking routine operations will
   block trace emission too. Latency budget matters.
 
-## The three-layer accountability stack (formalized in whitepaper v2.1, §1)
+## The three-layer accountability stack (formalized in whitepaper v2, §1)
 
 The cognitive accountability layer is specifically Layer 3 of a three-layer
-accountability architecture now formalized in the whitepaper:
+accountability architecture now formalized in the whitepaper (Problem Statement section):
 
 - **Layer 1 — Receipt chain (what happened).** Implemented today. Receipts,
   delegations, outcomes — hash-linked, tamper-evident, replayable.
@@ -221,14 +221,14 @@ story. Fourth is the consumer-legible thesis.
 - `docs/ARCHITECTURE-2026-04.md` — north star document. Phase 4 section
   positions the GAR as the bridge between the current substrate (Phases 0-3)
   and this cognitive accountability layer.
-- `docs/related-work-larql.md` — whitepaper §15 stub entries (LARQL + MEDS)
+- `docs/related-work-larql.md` — whitepaper §12 (Conclusion) stub entries (LARQL + MEDS) and related-work appendix
 - `docs/design/larql-integration.md` — cognitive accountability layer design
   note with schema sketches (TraceCommitment, KnowledgeEditProposal,
   ReasoningFingerprint, DriftSignal) and open questions
-- `docs/whitepaper-v2.md` §1 — "The Three Layers of Accountability"
+- `docs/whitepaper-v2.md` §1 (Problem Statement) — "The Three Layers of Accountability"
   subsection (formalized in whitepaper)
-- `docs/whitepaper-v2.md` §12, item 9 — roadmap entry for cognitive
-  accountability layer
+- `docs/ARCHITECTURE.md` § (roadmap section) — roadmap entry for cognitive
+  accountability layer (formerly whitepaper §13)
 - `docs/whitepaper-v2.md` Appendix B — glossary entries for Trace
   Commitment, Error Basin, Confabulation Gap
 - `docs/whitepaper-v2.md` Appendix D — new row for subsurface
@@ -247,6 +247,45 @@ core looks like.
 3. Which open-weights model family is the first target? Llama, Mistral,
    Phi — all have different FFN structures and tokenizer quirks. Pick
    one and commit.
+
+   *Recommendation, dated 2026-04-26 (CLIC01, in conversation):*
+   **Llama 3.2 3B as Slice 1 primary; Phi-3.5 Mini as Slice 2 cross-
+   architecture validator.** Reasoning, against the selection axes
+   that matter:
+   - **FFN structure** — both are standard transformer + SwiGLU,
+     LARQL's natural target. No MoE (Mixtral disqualified per the
+     architecture-coverage caveat above), no state-space (Mamba/
+     Jamba), no logit-cap quirks (Gemma 2).
+   - **Size** — 3B / 3.8B fits APOLLO M4 Pro at fp16 with room
+     (~6 GB / 7.6 GB VRAM, ~30 tok/s) and ARTEMIS for travel.
+     Big enough for non-trivial features, small enough for fast
+     iteration.
+   - **Mechinterp tooling depth** — Llama 3 is best-in-class.
+     TransformerLens has first-class Llama 3 support → Vindex
+     extraction inherits years of accumulated tooling. Anthropic
+     circuits work, EleutherAI tools, neel nanda's tutorials all
+     use Llama as canonical example.
+   - **License** — Llama 3 Community License has commercial
+     threshold at 700M MAU; fine for OSS substrate work, license
+     review worth doing before slice 3 productization. Phi-3.5
+     is MIT, cleaner long-term.
+   - **Path-independence on LARQL release** — if Bytez ships LARQL
+     publicly, Llama 3 is one of the most likely architectures to
+     be supported day one. If we reimplement, Llama 3 is also the
+     architecture with the most published reference material.
+
+   *Two models, not one*: a methodology that works only on Llama
+   could be coincidence of architecture, training data, or
+   tokenizer. Demonstrating slice 1 on both Llama 3.2 and Phi-3.5
+   is the difference between "a thing that works on Llama" and
+   "a methodology" — directly addresses the architecture-coverage
+   caveat above without needing to tackle MoE or state-space yet.
+
+   *Decisively out for Slice 1*: Anthropic / OpenAI / Mistral-API
+   (closed weights — Vindex needs weight access; deferred via the
+   ZK-proof problem). Mixtral and DeepSeek-V2 (MoE). Mamba and
+   Jamba (state-space). Llama 3.1 8B or larger (slows iteration
+   without adding decomposition value at this stage).
 4. Does LARQL (Bytez) have a stable public release by then, or are we
    reimplementing the decomposition ourselves? This changes the
    engineering scope materially.

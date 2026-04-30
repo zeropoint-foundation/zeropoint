@@ -25,7 +25,7 @@ Autonomous AI agents are the most urgent application: agents are proliferating f
 
 This version of the whitepaper introduces a theoretical foundation that has been implicit in ZeroPoint's architecture from the beginning: trust is not a state to be checked but a trajectory to be verified. The architecture independently converged on the same computational pattern — stepwise unfolding conditioned on accumulated context — that is being recognized as fundamental in language modeling, cognitive science, and theoretical physics. This convergence is not incidental. It reflects a structural truth about how trust actually works.
 
-ZeroPoint is technically complete: 700+ tests across 22 crates, six delivered development phases, and full documentation including a dual-backend discovery layer (the Presence Plane) that solves peer discovery without centralized registries. It does not claim to "solve AI safety" or solve trust generally. It provides cryptographic primitives and governance constraints that make actions provable and refusable — shifting the terms of trust between participants, operators, and systems.
+ZeroPoint is implemented in Rust and is technically complete, including a dual-backend discovery layer (the Presence Plane) that solves peer discovery without centralized registries. It does not claim to "solve AI safety" or solve trust generally. It provides cryptographic primitives and governance constraints that make actions provable and refusable — shifting the terms of trust between participants, operators, and systems.
 
 ---
 
@@ -41,11 +41,9 @@ ZeroPoint is technically complete: 700+ tests across 22 crates, six delivered de
 7. Threat Model
 8. Transport Integrations
 9. The Presence Plane
-10. Implementation Status
-11. Adoption Paths
-12. Roadmap
-13. Ethics, Non-Goals, and Misuse Resistance
-14. Conclusion
+10. External Truth Anchoring
+11. Ethics, Non-Goals, and Misuse Resistance
+12. Conclusion
 
 Appendix A: Protocol Sketch
 Appendix B: Glossary
@@ -200,7 +198,7 @@ ZeroPoint's accountability architecture operates at three distinct layers, each 
 
 The three layers compose: the receipt chain provides the evidence substrate, the observation loop provides real-time boundary enforcement, and the trace layer provides computational forensics. Each layer catches failures the others miss. Output-level observation catches policy violations but cannot see degenerate reasoning that happens to produce acceptable outputs. Trace-level introspection catches degenerate reasoning but has no authority model — it doesn't know who authorized the computation or under what constraints. The receipt chain binds both to a signed, ordered, portable evidence structure.
 
-The receipt chain and observation loop are implemented today. The trace layer is a future research direction (see §12, item 9) whose prerequisites — a stable receipt schema, adversarial-tested audit chains, and mature sovereignty providers — are being hardened in the current phase. The architecture is designed to accommodate this extension without modifying the receipt or policy primitives.
+The receipt chain and observation loop are implemented today. The trace layer is a future research direction (see `docs/future-work/cognitive-accountability.md`) whose prerequisites — a stable receipt schema, adversarial-tested audit chains, and mature sovereignty providers — are being hardened in the current phase. The architecture is designed to accommodate this extension without modifying the receipt or policy primitives.
 
 ### Why This Matters for the Architecture
 
@@ -474,7 +472,7 @@ Key distribution is solved by `zp-keys`. Key *discovery* — how peers find each
 | **Unauthorized tool use** | Execute actions beyond intended scope | CapabilityGrant gating with 8-invariant delegation chain verification; PolicyEngine evaluates before every action | Bad policy design can still leave gaps; scoping is only as good as the grant definitions |
 | **Cross-operator trust failure** | One party can't trust another's agent outputs | Receipts provide independent verification; `zp-introduction` protocol verifies certificate chains; Presence Plane (§9) provides dual-backend discovery with reciprocity enforcement | Cross-genesis introductions require operator-configured policy; relay-based discovery requires internet connectivity |
 | **Passive scanning / surveillance** | Harvest peer identities without participating | Presence Plane reciprocity rule: agents must announce before receiving. Relay is structurally amnesic — no logs, no index, no persistence. Scanners become observable before they can observe | A scanner that announces gains access; reputation system detects consume-only behavior over time but cannot prevent initial observation |
-| **Sybil flooding** | Overwhelm discovery with cheap fake identities | Ed25519 keypair generation is computationally cheap; relay broadcasts all announces | Sybil resistance depends on reputation layer (§11) and external identity binding; not solved at discovery layer alone |
+| **Sybil flooding** | Overwhelm discovery with cheap fake identities | Ed25519 keypair generation is computationally cheap, but establishing a credible anchor history requires sustained ledger transactions with real economic cost. Reputation system weights trajectory depth: shallow or absent anchor histories receive less trust. Relay reciprocity enforcement makes passive Sybil scanning observable | Not a perfect solution — a well-funded attacker can maintain multiple anchored identities over time. But the attack is transformed from a computational problem (free keypairs) to an economic problem (costly sustained ledger activity per identity), which structurally favors defenders |
 | **"Security theater" governance** | Claim governance without real constraints | Constitutional rules are non-removable; explicit non-goals section; receipts are independently verifiable, not just logged | Some deployments may misuse branding while gutting constraints; MIT/Apache-2.0 allows this |
 | **Surveillance co-option** | Use receipts to track people rather than actions | Tenets + constitutional non-removability + explicit ethics stance; protocol frames accountability of *actions*, not tracking of *people* | MIT/Apache-2.0 cannot legally prevent misuse; community norms and reputation are the remaining defense |
 | **Replay attacks** | Resend messages or insert previously captured packets | MeshEnvelope sequence numbers (monotonic u64); 16-byte random nonces in link handshake; Ed25519 signatures over content hashes | Depends on peers tracking seen sequence numbers; long-offline nodes may have gaps |
@@ -601,122 +599,121 @@ This is autoregressive reputation in miniature: each connection's behavior updat
 | Threat | Attack | Mitigation | Residual Risk |
 |--------|--------|------------|---------------|
 | **Passive scanning** | Subscribe to firehose without announcing | Reciprocity rule: must announce before receiving; grace period + termination | A scanner that announces gains access; detection relies on behavioral reputation over time |
-| **Sybil flooding** | Generate thousands of keypairs, flood announces | Announce format requires valid Ed25519 signatures; relay broadcasts all | Keypair generation is computationally cheap; Sybil resistance depends on reputation layer, not discovery layer |
+| **Sybil flooding** | Generate thousands of keypairs, flood announces | Announce format requires valid Ed25519 signatures; relay broadcasts all. Anchor-based economic disincentive: credible identities require sustained ledger transactions (§10), transforming the cost from computational (free) to economic (significant per identity) | Keypair generation remains cheap at the discovery layer. Sybil defense is layered: discovery reciprocity detects passive scanning, reputation weights trajectory depth, and anchor history raises the economic cost of maintaining credible fake identities |
 | **Relay compromise** | Attacker gains access to relay infrastructure | Relay holds no data (structural amnesia); no payloads parsed, no state persisted | Compromised relay could selectively drop announces (censorship); relay receipt chain makes this detectable |
 | **Traffic analysis** | Observe connection timing and metadata | Relay does not log connections beyond a counter; no identity-to-IP mapping | Network-level observation by ISPs or co-located attackers is outside protocol scope |
 | **Eclipse attack** | Surround a target with attacker-controlled peers | Dual-backend architecture means discovery via Reticulum bypasses web relay entirely | If both backends are eclipsed, the target is isolated; out-of-band peer introduction mitigates |
 
-The Presence Plane does not claim to solve Sybil attacks at the discovery layer. Sybil resistance is a reputation-layer concern (§11). What the Presence Plane does provide is the architectural foundation — reciprocity, behavioral signals, structural amnesia — that makes reputation-based Sybil defense possible without surveillance infrastructure.
+The Presence Plane does not claim to solve Sybil attacks at the discovery layer. Sybil defense in ZeroPoint is layered: the Presence Plane provides the architectural foundation — reciprocity, behavioral signals, structural amnesia — that makes reputation-based filtering possible without surveillance infrastructure. The reputation system weights trajectory depth to distinguish shallow identities from established ones. And external truth anchoring (§10) transforms the Sybil problem from computational to economic: keypair generation is free, but establishing a credible anchor history requires sustained ledger transactions with real cost per identity. This does not make Sybil attacks impossible — a well-funded attacker can maintain multiple anchored identities over time — but it structurally disincentivizes the attack by making legitimate participation cheap and large-scale fabrication expensive.
 
 ---
 
-## 10. Implementation Status
+## 10. External Truth Anchoring
 
-ZeroPoint is implemented in Rust and is technically complete.
+### 10.1 Why External Witnessing Matters
 
-- **700+ tests** (all passing, zero warnings)
-- **22 crates** in a Cargo workspace (including dual-backend discovery in `zp-mesh`)
-- **6 development phases** delivered
-- **59 integration tests** covering multi-node and cross-transport scenarios
-- **Full documentation** for all crates
+The receipt chain is self-verifying: hash-linked, signed, replayable from Genesis to tip, auditable cold with no running server (§5). This is a strong guarantee — but it is a guarantee within a single deployment's boundary. The chain proves that *within this system*, the trajectory is intact. It does not prove when, in external time, the trajectory existed.
 
-### 10.1 Workspace Structure
+External truth anchoring extends the receipt chain's guarantee across organizational boundaries. By publishing the chain's current state — its head hash, sequence number, and operator signature — to an independent distributed ledger, ZeroPoint creates a timestamped witness that no single party controls. The chain was in *this* state at *this* time, attested by a public consensus mechanism that the operator cannot retroactively modify.
 
-| Crate | Purpose |
-|-------|---------|
-| `zp-core` | Core types: CapabilityGrant, DelegationChain, GovernanceEvent, receipt primitives, Blake3 hashing, Ed25519 signatures |
-| `zp-audit` | Hash-chained audit trail, chain verification, collective audit (AuditChallenge, AuditResponse, PeerAuditAttestation) |
-| `zp-policy` | PolicyEngine with constitutional rules (HarmPrincipleRule, SovereigntyRule), operational rules, WASM runtime with fuel limiting |
-| `zp-mesh` | Transport layer: MeshNode, MeshIdentity, pluggable interfaces (TCP, UDP, serial), HDLC framing, Reticulum-compatible link handshake, envelope types, CompactReceipt, consensus, reputation; Presence Plane: DiscoveryManager, DiscoveryBackend trait, WebDiscovery (pub/sub relay with reciprocity), ReticulumDiscovery (mesh broadcast), ConnectionBehavior |
-| `zp-pipeline` | GovernanceGate pipeline orchestration, MeshBridge (receipt/delegation/audit/reputation bridging), 14-step action flow |
-| `zp-trust` | Trust tier definitions (Tier 0/1/2), trust grade computation, verification utilities |
-| `zp-llm` | LLM provider abstraction (OpenAI, Anthropic, local), token counting, response parsing |
-| `zp-skills` | SkillRegistry and SkillMatcher — keyword-based capability discovery for agent tool selection |
-| `zp-learning` | Feedback collection and outcome tracking for governance policy refinement |
-| `zp-server` | HTTP server exposing governance pipeline as an API (Axum-based) |
-| `zp-cli` | Interactive terminal: chat, guard evaluation, mesh status, peer management, audit challenge, capability delegation, state persistence |
-| `zp-receipt` | Receipt building, signing, hashing, and verification |
-| `zp-keys` | Key hierarchy (Genesis → Operator → Agent), sovereignty providers, certificate chain verification, Ed25519/X25519 cryptography |
-| `zp-introduction` | Peer introduction protocol: certificate chain exchange, challenge-response, policy-gated trust establishment |
-| `zp-agent-bridge` | Agent framework integration bridge |
-| `zp-engine` | Core engine orchestration |
-| `zp-observation` | Observation and monitoring primitives |
-| `execution-engine` | Sandboxed command execution environment |
-| `trust-triangle` | Trust Triangle interactive demonstration |
-| `monte-carlo-engine` | Monte Carlo simulation engine for trust modeling |
-| `mle-star-engine` | Maximum likelihood estimation engine |
-| `course-examples` | SDK course example code |
+The key insight is that in the scenarios where external witnessing matters most, ledger infrastructure is already present. Cross-organizational transactions — supply chain coordination, multi-party service agreements, regulated exchanges — almost by definition involve a shared ledger or public record. The parties are already paying for consensus, timestamping, and immutable publication. Governance anchoring does not introduce new infrastructure; it piggybacks on infrastructure the transaction already requires. The marginal cost of anchoring a chain head hash to a ledger that is already in use for the underlying business transaction is effectively zero.
 
-### 10.2 Build Verification
+This reframes the value proposition. External anchoring is not an exotic capability that an operator might someday enable. It is the natural consequence of deploying governed agents in contexts where transactions cross organizational boundaries:
 
-```bash
-$ cargo test --workspace
-   # 699 tests pass, 0 failures, 0 warnings
+1. **Cross-mesh trust.** When two ZeroPoint deployments meet for the first time, neither has reason to trust the other's chain. But these deployments are meeting *because* their operators are transacting — and that transaction is already touching a shared ledger. Both parties are already publishing to, and verifying against, a common public record. Anchoring their governance chain heads to that same ledger costs nothing additional and establishes a verifiable trajectory of attestations that a newly fabricated chain cannot reproduce.
 
-$ cargo clippy --workspace -- -D warnings
-   # Clean
+2. **Dispute resolution.** If a governance action is disputed — an agent claims it had authority, an operator claims it didn't — the receipt chain resolves the question internally. But the *timing* of the chain state may be contested. In any transaction significant enough to produce a dispute, the parties almost certainly have a ledger trail for the transaction itself. An anchor receipt on that same ledger proves the governance chain was in a specific state at a specific externally-witnessed time, foreclosing the argument that the chain was rewritten after the fact. The evidence lives where the transaction already lives.
 
-$ cargo fmt --workspace --check
-   # Formatted
-```
+3. **Compliance and audit.** Regulatory contexts may require proof that governance records existed at a claimed time and have not been modified since. Self-signed timestamps are insufficient — they are assertions by the party being audited. But regulated transactions already produce ledger records: financial settlements, supply chain checkpoints, licensing transfers. Anchoring the governance chain to the same ledger the regulator is already examining puts the governance proof alongside the transaction proof — in a source the audited party does not control, using infrastructure the compliance process already mandates.
+
+### 10.2 Architecture: Optional Enrichment, Not Dependency
+
+Truth anchoring is a strict enrichment of the receipt chain. It adds external verifiability without changing the chain's internal properties. The design principles:
+
+**The chain does not need the anchor.** If no external ledger is configured, ZeroPoint operates exactly as described in §5: hash-linked, signed, self-verifying, auditable cold. Every property — tamper-evidence, ordering, replayability, sovereignty — holds without any external infrastructure. The anchor adds a layer; it does not replace the foundation.
+
+**The anchor does not weaken the chain.** An anchor receipt is stored *in* the chain as a regular receipt. It does not introduce external dependencies into the verification path. An auditor who verifies the chain cold (Test 7 in the Falsification Guide) will see the anchor receipts as chain entries and can optionally verify them against the external ledger — but chain verification does not require the ledger to be reachable.
+
+**DLT-agnostic.** The `TruthAnchor` trait defines three methods — `anchor()`, `verify()`, `query_range()` — that any distributed ledger backend can implement. The trait is intentionally minimal: publish a commitment, verify a commitment, query commitments by time range. Concrete implementations live in their own crates. The reference implementation targets Hedera Hashgraph's Consensus Service (HCS), chosen for its sub-second finality, low transaction cost, and public verifiability. But the architecture supports Ethereum L2 calldata, Bitcoin OpenTimestamps, Ceramic streams, or any system that can timestamp an opaque payload and make it publicly queryable.
+
+**Operator sovereignty over backend choice.** The operator selects their anchor backend at deployment time. Cross-mesh trust is established by exchanging anchor identifiers (e.g., HCS topic IDs), not by mandating a specific ledger. Two deployments using different ledgers can still verify each other — each queries the other's chosen ledger independently.
+
+### 10.3 What Gets Anchored
+
+An anchor commitment contains:
+
+| Field | Description |
+|-------|-------------|
+| Chain head hash | Blake3 hash of the current chain tip |
+| Chain sequence | Monotonically increasing position in the chain |
+| Previous anchor hash | Links anchor history (first anchor has none) |
+| Operator signature | Ed25519 signature over the commitment |
+| Chain type | Which chain (audit, observation, reflection) |
+| Trigger | Why this anchor was created (see §10.4) |
+
+The commitment is compact — a few hundred bytes — and carries no governance content. It is a hash and a signature, not a data export. The external ledger sees a cryptographic fingerprint, not the governed data.
+
+### 10.4 Event-Driven, Not Cadence-Based
+
+Truth anchoring is triggered by events, not timers. The chain does not get "more true" by being witnessed more often. The correct model is situational and opportunistic:
+
+**Situational triggers** — anchoring happens when there is a governance reason:
+
+- **Operator request.** The operator explicitly invokes anchoring via CLI, API, or UI.
+- **Cross-mesh introduction.** Two deployments exchanging trust each anchor their current chain head so the other can verify independently.
+- **Compliance checkpoint.** Before generating an audit export or entering a scheduled compliance review.
+- **Dispute evidence.** When a governance action is contested and external timestamping is needed to establish chain state at a specific point.
+- **Governance lifecycle event.** A significant state change — capability revocation, constitutional rule update, trust tier change — that warrants external witnessing.
+
+**Opportunistic triggers** — anchoring piggybacks on existing activity:
+
+- When the operator makes any blockchain transaction for any purpose — a supply chain settlement, a licensing transfer, a financial clearance — the current chain head hash can be embedded as transaction metadata. The anchor is a byproduct of the transaction the operator was already paying for. Zero marginal expense. And because cross-organizational transactions are precisely the context where governance witnessing matters most, the opportunistic trigger is often the most natural one: the business transaction and the governance attestation share the same ledger entry.
+
+This model reflects the actual trust relationship between the chain and the external ledger. The chain's integrity is self-contained. The ledger provides a public clock and an independent witness. Periodic reaffirmation adds cost without adding trust — the hash-linking already ensures that any modification to the chain is detectable. External witnessing is valuable precisely when something is at stake: a new relationship, a dispute, a regulatory checkpoint, or a transaction that is already touching a ledger anyway.
+
+### 10.5 Hedera Hashgraph: Reference Backend
+
+The reference anchor implementation targets Hedera Hashgraph's Consensus Service (HCS). The choice is deliberate:
+
+**Sub-second finality.** HCS messages reach consensus in 3–5 seconds with deterministic finality — no probabilistic confirmation windows. An anchor commitment is finalized before the next governance action completes.
+
+**Public verifiability.** HCS messages are publicly queryable via mirror nodes. Any party — auditor, counterparty, regulator — can independently verify that a specific commitment was published at a specific consensus timestamp without the operator's cooperation. This extends the "governance without runtime" property (§5.4, Falsification Guide Test 7) to the external witness: the anchor proof is as auditable cold as the chain itself.
+
+**Low cost.** HCS message submission costs a fraction of a cent. Even for deployments that anchor frequently (high-stakes governance environments), the annual cost is negligible. For opportunistic anchoring — embedding chain heads in existing Hedera transactions — the marginal cost is zero.
+
+**Council governance.** Hedera's governing council is a known set of global organizations, providing a governance model that aligns with ZeroPoint's transparency commitments. The ledger's own governance is public and accountable.
+
+Other backends — Ethereum L2, Bitcoin OpenTimestamps, Ceramic — are supported by the trait architecture and may be implemented based on deployment requirements. The reference implementation demonstrates the pattern; the trait ensures it is not a dependency.
+
+### 10.6 Cross-Mesh Trust via Shared Anchors
+
+The Introduction protocol (§4, P4) establishes trust between peers through certificate chain exchange and challenge-response. External anchoring adds a second, independent trust signal: shared external proof.
+
+When two ZeroPoint deployments meet:
+
+1. Each announces its anchor backend identifier (e.g., HCS topic ID).
+2. Each independently queries the other's anchor history on the external ledger.
+3. Each verifies that the other's chain head hashes match the anchor commitments.
+4. Each can walk the other's anchor history backward to verify consistency over time.
+
+This is not mutual cooperation — it is independent verification against a shared, immutable public record. A deployment that has been consistently anchoring its chain head for months provides a verifiable trajectory of external attestations that a newly fabricated chain cannot reproduce. The anchor history is itself a trajectory — ordered, timestamped, publicly verifiable — that reinforces the receipt chain's own trajectory properties.
+
+**Emergent Sybil disincentive.** Anchor history transforms the Sybil problem from computational to economic. Generating a keypair is free. Establishing a credible anchor history is not — it requires sustained ledger transactions with real cost per identity, over time. An attacker who generates ten thousand keypairs still has ten thousand identities with zero anchor depth. Wallet rotation doesn't help: a rotated wallet starts at zero, destroying the trajectory continuity that makes an identity credible. The reputation system already weights trajectory depth, so shallow or absent anchor histories receive proportionally less trust. This is not a perfect defense — a well-funded attacker can maintain multiple anchored identities indefinitely — but it structurally disincentivizes the attack by making legitimate participation cheap (the ledger is already there for the transaction) and large-scale fabrication expensive (each fake identity requires its own sustained ledger activity). The cost asymmetry favors defenders.
+
+### 10.7 What Anchoring Does Not Provide
+
+Honesty demands stating what external anchoring does *not* prove:
+
+- **It does not prove the chain content is true.** The anchor proves the chain was in a specific state at a specific time. It does not evaluate whether the governed actions were correct, ethical, or truthful. An externally anchored chain of bad decisions is still a chain of bad decisions — just one that is publicly timestamped.
+- **It does not prevent chain forking.** An operator could maintain two chains and anchor only the one they want audited. Detection requires the challenging party to have independent knowledge of the other chain — external anchoring constrains after-the-fact rewriting, not parallel fabrication.
+- **It does not replace internal integrity.** A chain with broken hash links is broken regardless of how many times it was anchored. The anchor timestamps snapshots of the chain state; if the underlying chain is corrupt, the anchors attest to a corrupt trajectory.
+- **It does not create a dependency.** If the external ledger goes down, the chain continues operating with full internal integrity. Anchor receipts simply stop being emitted until the ledger is reachable again. No governance action is blocked by anchor unavailability.
 
 ---
 
-## 11. Adoption Paths
+## 11. Ethics, Non-Goals, and Misuse Resistance
 
-This project will not win by marketing. It will win by being useful and trustworthy to the right early communities.
-
-### 11.1 First Adopters
-
-- **Multi-agent system builders** — teams orchestrating autonomous agents who need protocol-level trust between operators, not just application-level guardrails.
-- **Rust networking and security-oriented builders** — developers who understand why governance belongs in the substrate, not in the application.
-- **Decentralized infrastructure communities** — projects building sovereign, local-first systems where centralized governance is a contradiction. The Reticulum ecosystem is a natural fit here.
-- **Privacy-aligned agent tooling builders** — teams who need accountability without surveillance.
-- **Enterprise AI governance teams** — organizations looking for verifiable, auditable behavior — from agents and humans alike — that goes beyond compliance checklists.
-- **Accountable-process builders** — teams in journalism, supply chain, humanitarian operations, or organizational governance who need provable attribution and auditable decision chains, whether or not agents are involved.
-
-### 11.2 Integration Patterns
-
-**Pattern A: Governed Agent-to-Agent Exchange.**
-Agents exchange tasks and outputs only when receipts validate authorization. Each agent verifies the other's capability chain before accepting work or results.
-
-**Pattern B: Policy-Gated Tool Execution.**
-A tool runner requires receipts demonstrating valid capability grants before executing. The runner emits its own receipt attesting to acceptance or refusal, creating a bidirectional trust record.
-
-**Pattern C: Delegation Chains.**
-A human operator grants a root capability. The agent delegates subsets to specialist sub-agents, each with narrower scope. Every delegation is verified against the eight invariants. Authority flows down the chain; accountability flows up.
-
-**Pattern D: Human-Accountable Workflows.**
-A team uses ZeroPoint to make organizational decisions provable. Each team member holds a keypair. Decisions, approvals, and delegations produce receipts that chain into an auditable record. No agent is involved — the same governance primitives that constrain agents serve humans who want their actions to be verifiable and their authority traceable. Over a Reticulum mesh, these workflows operate without any cloud dependency, making them viable for field teams, humanitarian operations, or any context where sovereign infrastructure is a requirement rather than a preference.
-
-**Pattern E: Mixed Human-Agent Systems.**
-The most common real-world pattern. Humans and agents collaborate within the same governance substrate — a human approves a plan, an agent executes it, a second human reviews the output, and every step produces a receipt in a single chain. The protocol does not distinguish between human and agent participants at the cryptographic layer; trust tiers, capability grants, and receipts work identically. Reticulum's transport sovereignty means this collaboration can happen over any medium — from a corporate network to a LoRa mesh in a disaster zone — without depending on infrastructure the participants do not control.
-
-### 11.3 What Ships Next
-
-The [live playground](/playground.html) already demonstrates the core patterns: governed actions, receipt chains, refusal cases, and delegation — all running against real ZeroPoint primitives in the browser. Next: a multi-agent integration example where two or more independent agents discover each other via the Presence Plane, negotiate capabilities, execute governed work, and produce a verifiable end-to-end audit trail. That working demo — agents trusting each other without a central broker — is the proof point.
-
----
-
-## 12. Roadmap
-
-Open items, roughly in priority order.
-
-1. **crates.io registration** — Publish workspace crates for external consumption. Requires stabilizing public API surfaces and versioning strategy.
-2. **Transport integration test suite** — Documented cross-transport receipt exchange results, including Reticulum ecosystem interop (NomadNet, MeshChat) and HTTP/TCP integration tests.
-3. **Key revocation and multi-hop trust formalization** — Revocation propagation strategy for compromised keys; formal analysis of trust transitivity across delegation chains longer than two hops.
-4. **Reputation-weighted Sybil resistance** — The Presence Plane provides behavioral signals and reciprocity enforcement but defers Sybil resistance to the reputation system. Requires implementing reputation-weighted peer scoring in `zp-mesh`.
-5. **Quorum sovereignty** — Multi-device, multi-provider Genesis ceremonies. Shamir Secret Sharing or threshold cryptography to distribute the Genesis secret across multiple sovereignty providers (e.g., 2-of-3 Trezors, or 1 Trezor + 1 YubiKey). This extends the origin event from a single point to a distributed initial condition — the trust trajectory branches from multiple roots.
-6. **Chain accumulator** — A rolling cryptographic summary of the full chain history carried in each receipt, enabling O(1) trajectory verification without sacrificing history-dependence. This would make the autoregressive structure computationally efficient at arbitrary chain lengths.
-7. **Sustainability layer** — Consulting, hosted infrastructure, and enterprise feature scoping — without compromising the open-source core.
-8. **Edge Sovereignty and governed firmware** — OpenWrt governance fork with device keypairs, attested boot, and receipt-gated telemetry. Routers become governed participants — not silent data exporters. WiFi CSI sensing capabilities require explicit consent boundaries.
-9. **Cognitive accountability layer** — Trace commitments that anchor model-internal computational trajectories to the receipt chain. Combines LARQL-style FFN decomposition (queryable knowledge graphs extracted from transformer weights) with MEDS-style activation fingerprinting (detecting recurring error patterns via layer-wise logit clustering). The goal is three-layer accountability: receipts record what happened, observation loops enforce policy, and traces reveal the computational path that produced the decision. Prerequisites: stable receipt schema, adversarial-tested audit chain, mature sovereignty providers. See `docs/future-work/cognitive-accountability.md` for the full design sketch.
-
----
-
-## 13. Ethics, Non-Goals, and Misuse Resistance
-
-### 13.1 The Co-option Risk
+### 11.1 The Co-option Risk
 
 Accountability infrastructure can become surveillance infrastructure depending on how it is deployed. This is not a hypothetical concern — it is the central tension of the project.
 
@@ -726,7 +723,7 @@ ZeroPoint mitigates this through three mechanisms:
 2. **Public tenets** describing intent and boundaries. The Four Tenets are not buried in documentation — they are the first thing on the website and the first code that runs in the PolicyEngine.
 3. **Protocol-level framing.** ZeroPoint provides accountability of *actions*, not central control of *people*. The audit chain tracks what participants did — human or agent — not where anyone went or who they are beyond their keypair.
 
-### 13.2 The Ethics of Permanent History
+### 11.2 The Ethics of Permanent History
 
 The trajectory model of trust has an ethical dimension that demands honesty. If trust is trajectory-based — if each action is permanently hash-linked to every action that preceded it, ordered and replayable — then history cannot be erased. This is a feature for accountability but a tension for privacy.
 
@@ -736,13 +733,13 @@ This distinction matters. An accountability system that tracks actions (receipts
 
 The tension remains real. Any system that produces durable, verifiable records creates potential for those records to be used in ways their creators did not intend. The mitigation is not to avoid creating records — that would eliminate accountability along with surveillance — but to design the record structure so that it serves one purpose and resists the other. ZeroPoint's choices — pseudonymous keypairs, action-level receipts, no identity binding in protocol, structural amnesia in discovery — are deliberate decisions to lean toward accountability and away from surveillance.
 
-### 13.3 The Genesis Responsibility
+### 11.3 The Genesis Responsibility
 
 ZeroPoint's trajectory-based architecture implies that the Genesis ceremony is consequential in a way that simpler systems do not require. The choices made at Genesis — which sovereignty provider, which constitutional rules, which operator identity — propagate forward through every subsequent action. A Genesis ceremony conducted carelessly produces a trust trajectory that inherits that carelessness at every step.
 
 This is not a flaw. It is an honest representation of how trust actually works. The founding conditions of any institution — its charter, its constitution, its founding commitments — shape everything that follows. ZeroPoint makes this shaping explicit and verifiable rather than implicit and deniable.
 
-### 13.4 Non-Goals
+### 11.4 Non-Goals
 
 ZeroPoint does not aim to:
 
@@ -754,7 +751,7 @@ ZeroPoint does not aim to:
 
 ---
 
-## 14. Conclusion
+## 12. Conclusion
 
 ### What ZeroPoint Claims
 
@@ -765,8 +762,9 @@ ZeroPoint provides protocol-level primitives that make the following properties 
 3. **Authorization traceability**: Every capability grant traces back through a delegation chain to a human-held Genesis key. The chain is verified against eight invariants. Violation of any invariant rejects the chain.
 4. **Governance enforcement**: Constitutional rules (HarmPrincipleRule, SovereigntyRule) evaluate before every action and cannot be removed, overridden, or reordered. This is enforced in the PolicyEngine's evaluation order, not by policy.
 5. **Portability**: Identity is a keypair. Receipts are self-contained. Chains are independently verifiable. No platform, server, or central authority is required to verify trust. Any transport that can carry bytes can carry the governance primitives.
+6. **External verifiability**: The receipt chain's state can be anchored to independent distributed ledgers, creating publicly queryable timestamps that no single party controls. Anchoring is optional (the chain operates with full integrity without it), event-driven (triggered by governance events, not timers), and DLT-agnostic (any ledger that can timestamp an opaque payload). Cross-mesh trust is established through shared external proof, not mutual cooperation.
 
-These claims are testable against the codebase (700+ tests, 22 crates), verifiable by independent auditors (all chain verification is deterministic and offline-capable), and falsifiable (any violation of the eight delegation invariants or two constitutional rules can be demonstrated with a specific input that the system rejects).
+These claims are testable against the codebase, verifiable by independent auditors (all chain verification is deterministic and offline-capable), and falsifiable (any violation of the eight delegation invariants or two constitutional rules can be demonstrated with a specific input that the system rejects). See the Falsification Guide for procedures to test each claim.
 
 ### What ZeroPoint Does Not Claim
 
@@ -882,7 +880,7 @@ This glossary defines terms with precision. Three terms carry special discipline
 - **Snapshot**: A single-point-in-time check with no reference to ordered history. "Is this token valid right now?" is a snapshot query. "Is this token the product of an unbroken, hash-linked chain of authorized delegations from a human root?" is a trajectory query. ZeroPoint's architecture treats snapshots as insufficient for trust verification.
 - **Narrowing**: The property of delegation chains whereby each successive delegation can only constrain — never widen — the authority of the previous grant. Scope shrinks (child ⊆ parent), expiration inherits (child ≤ parent), depth increments (child = parent + 1), and trust tier can only increase. Narrowing is enforced by the eight delegation invariants and is structural, not policy-based.
 - **Invariant**: A property that is verified on every evaluation and whose violation causes rejection. ZeroPoint defines two kinds: (1) delegation invariants — eight rules verified by `DelegationChain::verify()`, any violation of which dissolves the entire chain; (2) constitutional invariants — `HarmPrincipleRule` and `SovereigntyRule`, which evaluate at every policy step and cannot be removed, overridden, or reordered.
-- **Trace Commitment**: A hash anchored in a receipt that commits to the computational trajectory the model traversed during inference. The trace itself — the sequence of (layer, feature index, gate activation, relation label) tuples — is stored in the agent's evidence store and is retrievable under audit. Trace commitments extend the receipt from recording *what* was decided to recording *how* it was computed. Future work; see §12, item 9.
+- **Trace Commitment**: A hash anchored in a receipt that commits to the computational trajectory the model traversed during inference. The trace itself — the sequence of (layer, feature index, gate activation, relation label) tuples — is stored in the agent's evidence store and is retrievable under audit. Trace commitments extend the receipt from recording *what* was decided to recording *how* it was computed. Future work; see `docs/future-work/cognitive-accountability.md`.
 - **Error Basin**: A dense region of activation space where a model repeatedly applies the same faulty reasoning circuit despite varying surface text (MEDS, 2025). Layer-wise logit fingerprints from the model's final-answer token are clustered; dense clusters indicate recurring error modes. In a ZP context, error basins are detectable drift signals: an agent whose reasoning fingerprints consistently land in dense clusters is exhibiting low cognitive diversity, even if its outputs appear acceptable.
 - **Confabulation Gap**: The measurable divergence between an agent's stated reasoning (what it says it did) and its actual computational trajectory (what the trace shows it computed). A confabulation gap of zero means the agent's explanation is consistent with its trace; a nonzero gap is a signal that the agent is rationalizing rather than reporting. Requires the trace layer to measure; conceptual until that layer is implemented.
 - **Capability Grant**: Cryptographically signed permission token granting an action scope, with constraints on time (`valid_from`, `valid_until`), cost ceiling, rate limit, delegation depth (`max_delegation_depth`), and trust tier. Grants are delegatable subject to the narrowing principle.
@@ -903,6 +901,10 @@ This glossary defines terms with precision. Three terms carry special discipline
 - **ConnectionBehavior**: Behavioral summary (counters only, no content) emitted when a relay connection closes. Fields: `announced`, `announces_published`, `duration`, `reciprocity_violation`. Maps to ReputationSignal in the PolicyCompliance category.
 - **MeshNode**: High-level transport primitive managing interfaces, peers, links, delegations, and reputation.
 - **Collective Audit**: Peer-to-peer chain verification. A challenger sends an `AuditChallenge`; the challenged peer responds with its full chain; the challenger verifies integrity and produces a signed `PeerAuditAttestation`. Broken chains generate negative reputation signals. No central auditor required.
+- **Truth Anchor**: External distributed ledger used to timestamp and independently witness the receipt chain's state. The anchor proves the chain existed in a specific state at a specific externally-attested time. DLT-agnostic: the `TruthAnchor` trait accepts any backend (Hedera HCS, Ethereum L2, Bitcoin OpenTimestamps, Ceramic). Optional enrichment — the chain operates with full integrity without any anchor configured.
+- **Anchor Commitment**: The data published to an external ledger: chain head hash (Blake3), chain sequence number, previous anchor hash (linking anchor history), operator signature (Ed25519), chain type (audit/observation/reflection), and trigger (why this anchor was created). Compact — a few hundred bytes. The ledger sees a cryptographic fingerprint, not the governed data.
+- **Anchor Receipt**: The external ledger's proof that a commitment was published: the ledger's transaction ID, consensus timestamp (from the ledger's clock, not the local clock), the original commitment, and opaque ledger-specific verification data. Stored in the receipt chain as a regular entry — auditable cold like any other receipt.
+- **Anchor Trigger**: The reason an anchoring operation was initiated. Six variants: operator-requested, cross-mesh introduction, compliance checkpoint, dispute evidence, opportunistic (piggyback on existing transaction), governance lifecycle event. Truth anchoring is event-driven, not cadence-based — the chain does not need periodic reaffirmation.
 
 ---
 

@@ -142,7 +142,70 @@ def _pre_tool_call(
         return None
 
 
+def _post_tool_call(
+    tool_name: str,
+    args: Optional[dict] = None,
+    result: Any = None,
+    task_id: str = "",
+    session_id: str = "",
+    tool_call_id: str = "",
+    **_unused: Any,
+) -> None:
+    """Observe memory-tool writes and fire a ZP observation receipt.
+
+    Stage 2 pass-through (per docs/design/zp-hermes-interfaces.md
+    Interface 1): every `memory` tool write auto-accepts; ZP records a
+    signed receipt with a content hash, so the audit chain witnesses
+    what the substrate committed. Hermes's actual memory file on disk
+    stays where it is — this is observation, not interception.
+
+    Only `memory` tool calls are forwarded; everything else already
+    flowed through the pre_tool_call gate for Stage 1 governance.
+
+    Fail-open: observation failure doesn't halt the agent. A degraded
+    substrate must not silently stop Hermes from writing to its own
+    memory. (Same posture as the gate — set ZP_GATE_FAIL_CLOSED=1 to
+    invert, though "hard-fail on memory observation" is a poor default
+    even for strict operators.)"""
+    if tool_name != "memory" or not isinstance(args, dict):
+        return
+    action = args.get("action")
+    if action not in ("add", "replace", "remove"):
+        return
+    target = args.get("target") or "MEMORY"
+    content = args.get("content")
+    content = content if isinstance(content, str) else None
+
+    url = _zp_url() + "/api/v1/memory/observe"
+    body = json.dumps({
+        "action": action,
+        "target": target,
+        "content": content,
+        "thread_id": session_id or None,
+        "run_id": task_id or None,
+        "tool_call_id": tool_call_id or None,
+        "agent": "hermes",
+    }).encode("utf-8")
+
+    headers = {"Content-Type": "application/json"}
+    token = _session_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=_timeout_seconds()) as resp:
+            resp.read()
+        log.debug("zp-governance: memory observed — action=%s target=%s", action, target)
+    except Exception as e:
+        log.warning("zp-governance: memory observation failed (%s) — continuing", e)
+
+
 def register(ctx) -> None:
-    """Hermes plugin entry point. Wire pre_tool_call to the ZP gate."""
+    """Hermes plugin entry point. Wires the ZP governance hooks."""
     ctx.register_hook("pre_tool_call", _pre_tool_call)
-    log.info("zp-governance plugin registered — pre_tool_call hook wired to %s", _zp_url())
+    ctx.register_hook("post_tool_call", _post_tool_call)
+    log.info(
+        "zp-governance plugin registered — pre_tool_call gate + post_tool_call memory observer wired to %s",
+        _zp_url(),
+    )

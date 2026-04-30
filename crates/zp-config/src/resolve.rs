@@ -108,6 +108,16 @@ impl ConfigResolver {
                     .override_with(rate, Source::EnvVar("ZP_AUTH_RATE_LIMIT_PER_MIN".into()));
             }
         }
+        if let Ok(v) = std::env::var("ZP_NODE_ROLE") {
+            self.config
+                .node_role
+                .override_with(v, Source::EnvVar("ZP_NODE_ROLE".into()));
+        }
+        if let Ok(v) = std::env::var("ZP_NODE_UPSTREAM") {
+            self.config
+                .node_upstream
+                .override_with(Some(v), Source::EnvVar("ZP_NODE_UPSTREAM".into()));
+        }
         self
     }
 
@@ -252,6 +262,15 @@ impl ConfigResolver {
         // Docker
         if let Some(v) = file.docker.enabled {
             self.config.docker_enabled.override_with(v, source.clone());
+        }
+        // Node topology
+        if let Some(v) = file.node.role {
+            self.config.node_role.override_with(v, source.clone());
+        }
+        if let Some(v) = file.node.upstream {
+            self.config
+                .node_upstream
+                .override_with(Some(v), source.clone());
         }
     }
 }
@@ -411,6 +430,21 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
                 }
             }
             file.dlt.network = Some(value.into());
+        }
+        "node.role" => {
+            match value {
+                "genesis" | "delegate" => {}
+                _ => {
+                    return Err(ConfigError::InvalidValue {
+                        key: key.into(),
+                        reason: "must be one of: genesis, delegate".into(),
+                    })
+                }
+            }
+            file.node.role = Some(value.into());
+        }
+        "node.upstream" => {
+            file.node.upstream = Some(value.into());
         }
         _ => {
             return Err(ConfigError::InvalidValue {

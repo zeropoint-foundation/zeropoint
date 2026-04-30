@@ -20,6 +20,7 @@
       --success:   #4ade80;
       --warn:      #fbbf24;
       --rail:      #3d4454;   /* abacus rod — visible, structural, not noise */
+      --mem:       #8b9dff;   /* memory wire — cool blue, distinct from accent and gate */
       --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
       --font-ui:   "Inter", system-ui, sans-serif;
     }
@@ -139,6 +140,8 @@
     .bead[data-wire="tool"]       { fill: var(--warn); }
     .bead[data-wire="gate"]       { fill: var(--success); }
     .bead[data-wire="gate"][data-approved="false"] { fill: var(--danger); }
+    .bead[data-wire="memory"]     { fill: var(--mem); }
+    .bead[data-wire="memory"][data-approved="false"] { fill: var(--danger); }
     .bead[data-wire="telemetry"]  { fill: var(--muted); opacity: 0.55; }
     .bead[data-wire="telemetry"]:hover { opacity: 1; }
     .bead[data-wire="other"]      { fill: var(--accent3); }
@@ -191,7 +194,7 @@
 <script>
 (() => {
   // ── Config ────────────────────────────────────────────────
-  const WIRES = ["lifecycle", "content", "tool", "gate", "telemetry", "other"];
+  const WIRES = ["lifecycle", "content", "tool", "gate", "memory", "telemetry", "other"];
   const ROW_H = 64;
   const BEAD_R = 5.5;                  // slightly larger so the overlap reads as a chip
   const BEAD_SPACING = 4;              // default: chips overlap 2/3 each (poker-chip stack)

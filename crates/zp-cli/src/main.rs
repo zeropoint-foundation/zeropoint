@@ -199,6 +199,12 @@ enum Commands {
         /// (epoch count, coverage %, mismatches).
         #[arg(long)]
         anchors: bool,
+
+        /// Verify against a specific server address (e.g., 192.168.1.199:17770).
+        /// Overrides the node.upstream config and localhost default.
+        /// Delegate nodes auto-resolve this from zeropoint.toml [node] upstream.
+        #[arg(long)]
+        server: Option<String>,
     },
 
     /// #176 — Force an immediate Merkle epoch seal.
@@ -1204,13 +1210,43 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Verify — run the catalog grammar verifier over the audit chain.
-    // Strategy: try the running server's API first (no DB lock contention),
-    // fall back to direct DB access if the server isn't reachable.
-    if let Some(Commands::Verify { audit_db, json, reconstitute, anchors }) = &args.command {
+    // Strategy: resolve the server address from topology, then try API first,
+    // fall back to direct DB access if no server is reachable.
+    //
+    // Topology resolution (priority order):
+    //   1. --server CLI flag           (explicit override)
+    //   2. [node] upstream from config (delegate nodes)
+    //   3. 127.0.0.1:<port>            (genesis default — local server)
+    if let Some(Commands::Verify { audit_db, json, reconstitute, anchors, server }) = &args.command {
+        // Resolve the target server address from topology config.
+        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let is_delegate = cfg.node_role.value == "delegate";
+        let server_addr: Option<String> = if let Some(s) = server {
+            // CLI flag takes precedence — always use it.
+            Some(s.clone())
+        } else if is_delegate {
+            // Delegate node: upstream is required.
+            match &cfg.node_upstream.value {
+                Some(u) => Some(u.clone()),
+                None => {
+                    eprintln!("\x1b[31m✗\x1b[0m  Node role is \"delegate\" but no upstream configured.");
+                    eprintln!("    Set [node] upstream in zeropoint.toml or ~/ZeroPoint/config.toml,");
+                    eprintln!("    or pass --server <host:port>.");
+                    std::process::exit(2);
+                }
+            }
+        } else {
+            // Genesis node: try local server first, fall back to direct DB.
+            Some(format!("127.0.0.1:{}", cfg.port.value))
+        };
+
         // Try server API first — works even while the server holds the DB lock.
-        // Uses reqwest (async, already in tokio runtime) instead of raw TCP.
-        let port: u16 = 17770;
         let server_ok: bool = 'server: {
+            let addr = match &server_addr {
+                Some(a) => a.clone(),
+                None => break 'server false,
+            };
+
             // Read session token from ~/ZeroPoint/session.json
             let token = match (|| -> Option<String> {
                 let home = std::env::var("HOME").ok()?;
@@ -1220,23 +1256,41 @@ async fn main() -> anyhow::Result<()> {
                 v["token"].as_str().map(|s| s.to_string())
             })() {
                 Some(t) => t,
-                None => break 'server false,
+                None => {
+                    if is_delegate {
+                        eprintln!("\x1b[31m✗\x1b[0m  No session token found at ~/ZeroPoint/session.json");
+                        eprintln!("    Delegate nodes require a session token to authenticate with upstream.");
+                        std::process::exit(2);
+                    }
+                    break 'server false;
+                },
             };
 
+            let timeout_secs = if is_delegate { 10 } else { 5 };
             let client = reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(2))
-                .timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(timeout_secs))
                 .build()
                 .unwrap();
 
-            let resp = match client
-                .get(format!("http://127.0.0.1:{}/api/v1/audit/verify", port))
-                .bearer_auth(&token)
-                .send()
-                .await
-            {
+            let url = format!("http://{}/api/v1/audit/verify", addr);
+            let resp = match client.get(&url).bearer_auth(&token).send().await {
                 Ok(r) if r.status().is_success() => r,
-                _ => break 'server false,
+                Ok(r) => {
+                    if is_delegate {
+                        eprintln!("\x1b[31m✗\x1b[0m  Upstream server at {} returned HTTP {}", addr, r.status());
+                        std::process::exit(2);
+                    }
+                    break 'server false;
+                }
+                Err(e) => {
+                    if is_delegate {
+                        eprintln!("\x1b[31m✗\x1b[0m  Cannot reach upstream server at {}: {}", addr, e);
+                        eprintln!("    Check that the upstream genesis server is running.");
+                        std::process::exit(2);
+                    }
+                    break 'server false;
+                }
             };
 
             let body = match resp.text().await {
@@ -1256,7 +1310,12 @@ async fn main() -> anyhow::Result<()> {
                 let chain_links = v["chain_links_valid"].as_u64().unwrap_or(0);
                 let issues = v["issues"].as_array();
 
-                println!("\x1b[1mzp verify — Chain Attestation (via server)\x1b[0m");
+                let source_label = if is_delegate {
+                    format!("via upstream {}", addr)
+                } else {
+                    "via server".to_string()
+                };
+                println!("\x1b[1mzp verify — Chain Attestation ({})\x1b[0m", source_label);
                 println!();
                 if valid {
                     println!("  \x1b[32m✓\x1b[0m Chain integrity: {} entries, {} chain links valid",
@@ -1281,6 +1340,13 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(0);
         }
 
+        // Delegate nodes MUST verify via upstream — no local fallback.
+        if is_delegate {
+            eprintln!("\x1b[31m✗\x1b[0m  Delegate node has no local chain to verify.");
+            eprintln!("    Verification requires a running upstream server.");
+            std::process::exit(2);
+        }
+
         // Fallback: direct DB access (server not running).
         // Resolve data_dir: prefer ~/ZeroPoint if it contains an audit.db,
         // otherwise use --data-dir (defaults to ./data/zeropoint).
@@ -1296,7 +1362,7 @@ async fn main() -> anyhow::Result<()> {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("Error opening audit store at {}: {}", db_path.display(), e);
-                eprintln!("Hint: if the server is running, check that port {} is correct", port);
+                eprintln!("Hint: if the server is running, check that port {} is correct", cfg.port.value);
                 std::process::exit(2);
             }
         };

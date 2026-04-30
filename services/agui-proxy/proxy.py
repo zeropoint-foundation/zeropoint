@@ -217,6 +217,8 @@ _WIRE_MAP: dict[str, str] = {
     "action.execute": "tool", "action.result": "tool",
     "state.snapshot": "tool", "state.mutation": "tool", "state.messages": "tool",
     "gate.tool_call.allowed": "gate", "gate.tool_call.blocked": "gate",
+    "memory.proposed": "memory", "memory.accepted": "memory",
+    "memory.denied": "memory", "memory.quarantined": "memory",
     "event.ping": "other", "event.unknown": "other", "event.raw": "other", "event.custom": "other",
     "activity.snapshot": "telemetry", "activity.delta": "telemetry",
     "reasoning.begin": "telemetry", "reasoning.seal": "telemetry",
@@ -232,6 +234,8 @@ def _wire_for(claim_type: str) -> str:
         return "telemetry"
     if claim_type.startswith("gate."):
         return "gate"
+    if claim_type.startswith("memory."):
+        return "memory"
     return "other"
 
 
@@ -295,7 +299,7 @@ async def journal(limit: int = 5000):
     return {
         "count": len(out),
         "events": out,
-        "wires": ["lifecycle", "content", "tool", "gate", "telemetry", "other"],
+        "wires": ["lifecycle", "content", "tool", "gate", "memory", "telemetry", "other"],
     }
 
 
@@ -318,7 +322,7 @@ async def journal_stream():
     async def gen():
         # 1. Initial snapshot
         snapshot = _load_journal_snapshot()
-        yield f"event: snapshot\ndata: {json.dumps({'events': snapshot, 'wires': ['lifecycle', 'content', 'tool', 'gate', 'telemetry', 'other']})}\n\n".encode()
+        yield f"event: snapshot\ndata: {json.dumps({'events': snapshot, 'wires': ['lifecycle', 'content', 'tool', 'gate', 'memory', 'telemetry', 'other']})}\n\n".encode()
 
         # 2. Track byte offsets per journal so we only re-read deltas.
         offsets: dict[Path, int] = {}

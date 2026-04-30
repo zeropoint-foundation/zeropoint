@@ -31,9 +31,8 @@ The autoregressive principle — stepwise unfolding conditioned on accumulated c
 - Governance Model (§5) — enriched with "constitutional memory" concept
 - Threat Model (§6) — unchanged
 - Transport (§7), Presence Plane (§8) — minor updates
-- Implementation Status (§9) — updated
-- Adoption Paths (§10) — unchanged
-- Ethics (§12) — expanded with autoregressive ethics considerations
+- External Truth Anchoring (§10) — unchanged
+- Conclusion (now §12) — rewritten to land the full arc
 
 ### What's new
 - **§0.5: "Why It Works — The Autoregressive Foundation"** — New section after the Portable Trust Thesis, before Problem Statement. This is where the theory lives. It doesn't lead the paper; it arrives after the reader already understands the *what* and deepens it into the *why*.
@@ -41,6 +40,9 @@ The autoregressive principle — stepwise unfolding conditioned on accumulated c
 - **Book-length treatment notes** embedded as comments for future expansion
 
 ### What's removed or compressed
+- Implementation Status (formerly §11) — removed from whitepaper; content archived in architecture and design documents
+- Adoption Paths (formerly §12) — removed from whitepaper; content archived in architecture and site
+- Roadmap (formerly §13) — removed from whitepaper; content archived in ARCHITECTURE.md and standalone roadmap documents
 - Some redundancy between §0 and §1 (the v1.1 overlap between "why this exists" and "problem statement")
 
 ---
@@ -150,23 +152,15 @@ One small addition to §8 (Presence Plane): reputation signals are explicitly au
 
 ---
 
-### §10. Adoption Paths
+### §10. External Truth Anchoring
 
-**Unchanged**. The existing patterns map naturally. No need to force theory here.
-
----
-
-### §11. Roadmap
-
-**Updated** with new items:
-- Autoregressive chain accumulator (rolling cryptographic summary of full chain history, not just prev_hash linkage)
-- Agent protocol for autoregressive trust evolution (agents evolve their trust state through sequential self-conditioning)
+**Unchanged from v1.1**. The mechanism for anchoring ZeroPoint's claims to external consensus systems (e.g., Hedera, blockchain settlement).
 
 ---
 
-### §12. Ethics
+### §11. Ethics, Non-Goals, and Misuse Resistance
 
-**Expanded**. The autoregressive framing has ethical implications worth naming:
+**Expanded** from v1.1 (formerly §14). The autoregressive framing has ethical implications worth naming:
 
 - **History cannot be erased**: An autoregressive chain resists retroactive rewriting. This is a feature for accountability but a tension for privacy (right to be forgotten). ZeroPoint's position: accountability of *actions* (which should persist) vs. tracking of *people* (which should not). The chain records what happened, not who you are beyond your keypair.
 
@@ -174,9 +168,9 @@ One small addition to §8 (Presence Plane): reputation signals are explicitly au
 
 ---
 
-### §13. Conclusion
+### §12. Conclusion
 
-**Rewritten** to land the full arc:
+**Rewritten from v1.1 (formerly §15)** to land the full arc:
 
 The v1.1 conclusion ended with "Trust is infrastructure." The v2.0 conclusion arrives at something deeper: Trust is not a state to be checked. It is a trajectory to be verified. ZeroPoint provides the infrastructure for that verification — receipts that chain into trajectories, governance that propagates forward from constitutional origins, and identity that derives from a Genesis event whose informational content persists in every subsequent action.
 

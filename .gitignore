@@ -108,3 +108,15 @@ security/pentest-*/
 audit.db.pre-*
 audit-*-forensic*
 *.pentest-notes.md
+
+# Cowork / Claude session artifacts
+.claude/
+.pnpm-store/
+.voice-digest.txt
+ARTEMIS-terminal.txt
+pen-test.txt
+tts-digest.sh
+generate-foundations-audio.sh
+
+# Relay bundles (binary, transferred out-of-band)
+zp-artemis-relay/

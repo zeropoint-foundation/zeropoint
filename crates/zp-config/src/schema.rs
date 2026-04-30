@@ -57,6 +57,15 @@ pub struct ZpConfig {
     // ── Filesystem monitoring ──
     pub fs_watch_enabled: Sourced<bool>,
     pub fs_watch_dirs: Sourced<Vec<String>>,
+
+    // ── Node topology ──
+    /// Node role: "genesis" (default) or "delegate".
+    /// Genesis nodes verify their own local chain.
+    /// Delegate nodes verify against their upstream authority.
+    pub node_role: Sourced<String>,
+    /// Upstream server address for delegate nodes (e.g., "192.168.1.199:17770").
+    /// Ignored when node_role is "genesis".
+    pub node_upstream: Sourced<Option<String>>,
 }
 
 impl Default for ZpConfig {
@@ -96,6 +105,9 @@ impl Default for ZpConfig {
 
             fs_watch_enabled: Sourced::default_value(false),
             fs_watch_dirs: Sourced::default_value(vec![]),
+
+            node_role: Sourced::default_value("genesis".into()),
+            node_upstream: Sourced::default_value(None),
         }
     }
 }
@@ -248,6 +260,19 @@ impl ZpConfig {
                 self.fs_watch_dirs.value, self.fs_watch_dirs.source
             ));
         }
+        lines.push(String::new());
+
+        lines.push("[node]".into());
+        lines.push(format!(
+            "  role = \"{}\"  # {}",
+            self.node_role.value, self.node_role.source
+        ));
+        if let Some(ref upstream) = self.node_upstream.value {
+            lines.push(format!(
+                "  upstream = \"{}\"  # {}",
+                upstream, self.node_upstream.source
+            ));
+        }
 
         lines.join("\n")
     }
@@ -288,6 +313,8 @@ pub struct ConfigFile {
     pub filesystem: FilesystemSection,
     #[serde(default)]
     pub docker: DockerSection,
+    #[serde(default)]
+    pub node: NodeSection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -359,6 +386,14 @@ pub struct DockerSection {
     pub enabled: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NodeSection {
+    /// Node role in the trust topology: "genesis" (default) or "delegate".
+    pub role: Option<String>,
+    /// Upstream authority address for delegate nodes (e.g., "192.168.1.199:17770").
+    pub upstream: Option<String>,
+}
+
 impl From<&ZpConfig> for ConfigFile {
     fn from(cfg: &ZpConfig) -> Self {
         Self {
@@ -414,6 +449,10 @@ impl From<&ZpConfig> for ConfigFile {
             },
             docker: DockerSection {
                 enabled: Some(cfg.docker_enabled.value),
+            },
+            node: NodeSection {
+                role: Some(cfg.node_role.value.clone()),
+                upstream: cfg.node_upstream.value.clone(),
             },
         }
     }

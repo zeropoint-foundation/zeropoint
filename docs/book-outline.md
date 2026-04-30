@@ -137,7 +137,7 @@ Sovereign transport and privacy-preserving discovery.
 
 ### Chapter 10: The Reputation
 
-*Whitepaper §9.5 + §11 (roadmap item 4) expanded to ~4,000 words*
+*Whitepaper §9.5 + content from the old roadmap (formerly whitepaper §13) expanded to ~4,000 words*
 
 How trust compounds through time.
 
@@ -153,7 +153,7 @@ How trust compounds through time.
 
 ### Chapter 11: The Human Root
 
-*Whitepaper §6.4 (Tenet IV) + §13.3 expanded to ~4,000 words*
+*Whitepaper §6.4 (Tenet IV) + §11 (Ethics section, subsection 3) expanded to ~4,000 words*
 
 What it means that every chain terminates at a human.
 
@@ -165,7 +165,7 @@ What it means that every chain terminates at a human.
 
 ### Chapter 12: The Ethics of Permanent History
 
-*Whitepaper §13.1 + §13.2 expanded to ~4,000 words*
+*Whitepaper §11 (Ethics, Non-Goals, and Misuse Resistance) expanded to ~4,000 words*
 
 Right to be forgotten vs. accountability chains.
 
@@ -178,7 +178,7 @@ Right to be forgotten vs. accountability chains.
 
 ### Chapter 13: What Comes Next
 
-*Whitepaper §12 (roadmap) expanded to ~5,000 words*
+*Roadmap and future directions (content formerly in whitepaper §13, now part of the Architecture doc and standalone documents) expanded to ~5,000 words*
 
 - Quorum sovereignty and threshold cryptography
 - Chain accumulators for O(1) trajectory verification
@@ -201,7 +201,7 @@ Right to be forgotten vs. accountability chains.
 
 ### Chapter 15: Integration Patterns
 
-*Whitepaper §11.2 + Appendix C expanded to ~5,000 words*
+*Integration patterns and practical SDK usage (content from architecture documentation and Appendix C) expanded to ~5,000 words*
 
 - Pattern A through E, with worked code examples
 - SDK usage for Rust, Python, TypeScript
