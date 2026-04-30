@@ -61,6 +61,8 @@ enum Commands {
         #[arg(long)]
         no_open: bool,
     },
+    /// Restart the running ZeroPoint server (kill → re-launch)
+    Restart,
     /// Interactive chat with the pipeline
     Chat,
     /// System health check
@@ -769,6 +771,61 @@ async fn main() -> anyhow::Result<()> {
                     );
                     std::process::exit(1);
                 }
+            }
+        }
+    }
+
+    // Restart — kill the running server and re-launch it.
+    // Uses the same config resolution as Serve so bind/port come from config.
+    if matches!(&args.command, Some(Commands::Restart)) {
+        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let port = cfg.port.value;
+        let git_hash = env!("ZP_GIT_HASH");
+
+        // Find and kill the running server
+        let pids = std::process::Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
+            .output()
+            .ok()
+            .and_then(|o| if o.status.success() { String::from_utf8(o.stdout).ok() } else { None })
+            .unwrap_or_default();
+
+        let mut killed = false;
+        for pid_str in pids.lines() {
+            if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                // Don't kill ourselves
+                let our_pid = std::process::id() as i32;
+                if pid != our_pid {
+                    let _ = std::process::Command::new("kill")
+                        .arg(pid_str.trim())
+                        .status();
+                    killed = true;
+                }
+            }
+        }
+
+        if killed {
+            println!("\x1b[33m↻\x1b[0m  Stopped server on port {}", port);
+            // Brief pause to let the port release
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        } else {
+            println!("\x1b[33m⚠\x1b[0m  No server found on port {}", port);
+        }
+
+        // Re-exec ourselves as `zp serve`
+        let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
+        println!("\x1b[32m▶\x1b[0m  Starting zp serve ({})...", git_hash);
+        let err = std::process::Command::new(&exe)
+            .arg("serve")
+            .spawn();
+        match err {
+            Ok(_) => {
+                println!("\x1b[32m✓\x1b[0m  Server restarted on port {}", port);
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m  Failed to restart: {}", e);
+                std::process::exit(1);
             }
         }
     }
@@ -1922,13 +1979,32 @@ async fn main() -> anyhow::Result<()> {
 
         let mut checks: Vec<Check> = Vec::new();
 
-        // 1. Binary version
+        // 1. Binary version (with git hash for staleness detection)
         let ver = env!("CARGO_PKG_VERSION");
+        let git_hash = env!("ZP_GIT_HASH");
+        let git_dirty = env!("ZP_GIT_DIRTY");
+        let binary_version = format!("zp {ver} ({git_hash}{git_dirty})");
+
+        // Check if the installed binary matches the repo HEAD
+        let head_hash = std::process::Command::new("git")
+            .args(["rev-parse", "--short", "HEAD"])
+            .output()
+            .ok()
+            .and_then(|o| if o.status.success() { String::from_utf8(o.stdout).ok() } else { None })
+            .unwrap_or_default();
+        let head_hash = head_hash.trim();
+
+        let (bin_status, bin_fix) = if !head_hash.is_empty() && git_hash != head_hash {
+            ("warn", format!("Binary is {git_hash} but repo HEAD is {head_hash}. Run: just deploy"))
+        } else {
+            ("pass", String::new())
+        };
+
         checks.push(Check {
             label: "Binary version".into(),
-            status: "pass",
-            detail: format!("zp {ver}"),
-            fix: String::new(),
+            status: bin_status,
+            detail: binary_version,
+            fix: bin_fix,
         });
 
         // 2. Genesis key (certificate on disk)
@@ -2632,6 +2708,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
+        Some(Commands::Restart) => unreachable!(),     // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
         Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Policy(_)) => unreachable!(),    // handled above
