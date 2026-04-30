@@ -214,12 +214,25 @@ impl DelegationPolicy for ZpDelegationPolicy {
         Ok(())
     }
 
-    async fn revoke(&self, _grant_id: &str) -> Result<(), DelegationError> {
-        // In a full implementation, this would:
-        // 1. Mark the grant as revoked in persistent storage
-        // 2. Cascade revocation to all child grants
-        // 3. Emit a governance event for the revocation
-        // For now, revocation is a no-op — grants expire naturally
+    async fn revoke(&self, grant_id: &str) -> Result<(), DelegationError> {
+        // P4 (#197): construct an in-memory zp_core::RevocationClaim so the
+        // bridge surface exercises the new type. The actual chain emission
+        // (sign + append + cascade walk) is handled by the `zp revoke` CLI
+        // path, which has the audit store, the operator signing key, and
+        // the index of child grants needed for cascade. The bridge has none
+        // of those, so this method records intent and returns.
+        let claim = zp_core::RevocationClaim::new(
+            grant_id,
+            "bridge-revoke".to_string(),
+            zp_core::AuthorityRef::genesis("revocation_authority"),
+            zp_core::CascadePolicy::SubtreeHalt,
+            zp_core::RevocationReason::OperatorRequested,
+        );
+        tracing::info!(
+            grant_id = %grant_id,
+            revocation_id = %claim.revocation_id,
+            "delegation_bridge: revoke requested — claim constructed; chain emission deferred to `zp revoke` CLI"
+        );
         Ok(())
     }
 }

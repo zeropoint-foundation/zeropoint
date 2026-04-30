@@ -13,7 +13,7 @@ struct ConfigureParams {
     scan_path: Option<String>,
 }
 fn default_proxy() -> bool { true }
-fn default_proxy_port() -> u16 { 3000 }
+fn default_proxy_port() -> u16 { 17770 }
 
 /// Configure discovered tools by invoking `zp configure auto`.
 ///

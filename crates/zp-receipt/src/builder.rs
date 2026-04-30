@@ -363,6 +363,7 @@ impl ReceiptBuilder {
             content_hash: String::new(), // Computed below
             signature: None,
             signer_public_key: None,
+            signatures: Vec::new(),
             trust_grade: self.trust_grade,
             created_at,
             executor,

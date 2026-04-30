@@ -50,6 +50,11 @@ type AuditRow = (
 /// with hash-chained verification for integrity.
 pub struct AuditStore {
     conn: Connection,
+    /// Optional post-commit notifier (P3 #176). Fires once per appended row so
+    /// the Merkle anchor pipeline can detect trigger events without the store
+    /// itself knowing about anchoring. Notifiers must be non-blocking — the
+    /// audit store's mutex is still held across the call.
+    notifier: Option<crate::notify::SharedNotifier>,
 }
 
 impl AuditStore {
@@ -57,9 +62,16 @@ impl AuditStore {
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let conn = Connection::open(path).map_err(StoreError::Database)?;
 
-        let store = AuditStore { conn };
+        let store = AuditStore { conn, notifier: None };
         store.init()?;
         Ok(store)
+    }
+
+    /// Register a post-commit notifier. Replaces any prior notifier.
+    /// The notifier fires once per successful `append` with the sealed entry
+    /// and its SQLite rowid (treated as the chain sequence number).
+    pub fn set_notifier(&mut self, notifier: crate::notify::SharedNotifier) {
+        self.notifier = Some(notifier);
     }
 
     /// Schema version of the canonical audit store. Stage 4 of the
@@ -240,9 +252,16 @@ impl AuditStore {
         )
         .map_err(StoreError::Database)?;
 
+        let sequence = tx.last_insert_rowid();
+
         tx.commit().map_err(StoreError::Database)?;
 
         debug!("Appended audit entry: {}", sealed.id.0);
+
+        if let Some(ref notifier) = self.notifier {
+            notifier.notify(&sealed, sequence);
+        }
+
         Ok(sealed)
     }
 
@@ -438,6 +457,56 @@ impl AuditStore {
         }
 
         Ok(result)
+    }
+
+    /// Export `(rowid, entry_hash)` pairs strictly after the given rowid,
+    /// in ascending rowid order. Used by the Merkle anchor pipeline to build
+    /// epochs from the entries appended since the last seal.
+    ///
+    /// `after_rowid = 0` means "from the beginning of the chain".
+    pub fn export_hashes_after(&self, after_rowid: i64) -> Result<Vec<(i64, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT rowid, entry_hash FROM audit_entries
+                 WHERE rowid > ?
+                 ORDER BY rowid ASC",
+            )
+            .map_err(StoreError::Database)?;
+
+        let rows = stmt
+            .query_map(params![after_rowid], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        Ok(rows)
+    }
+
+    /// Export `(rowid, entry_hash)` pairs in the inclusive rowid range
+    /// `[first, last]`, in ascending rowid order. Used by `zp verify --anchors`
+    /// to recompute Merkle roots over a sealed epoch's exact entry range.
+    pub fn export_hashes_in_range(&self, first: i64, last: i64) -> Result<Vec<(i64, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT rowid, entry_hash FROM audit_entries
+                 WHERE rowid BETWEEN ? AND ?
+                 ORDER BY rowid ASC",
+            )
+            .map_err(StoreError::Database)?;
+
+        let rows = stmt
+            .query_map(params![first, last], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        Ok(rows)
     }
 
     /// Export a chain segment for peer verification.

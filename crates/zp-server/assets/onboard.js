@@ -1947,7 +1947,7 @@
 
     // Delay sending so the user sees the shimmer animation start
     setTimeout(() => {
-      send('configure', { proxy, proxy_port: 3000 });
+      send('configure', { proxy, proxy_port: 17770 });
     }, cards.length * 400 + 300);
   };
 

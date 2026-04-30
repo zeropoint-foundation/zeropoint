@@ -7,6 +7,7 @@
 pub mod catalog_verify;
 pub mod chain;
 pub mod collective_audit;
+pub mod notify;
 pub mod reconstitute;
 pub mod recovery;
 pub mod revocation;
@@ -15,12 +16,14 @@ pub mod store;
 pub mod verifier;
 
 pub use chain::{genesis_hash, recompute_entry_hash, seal_entry, UnsealedEntry};
+pub use notify::{AppendNotifier, SharedNotifier};
 pub use collective_audit::{
     verify_peer_chain, AuditChallenge, AuditRange, AuditResponse, CompactAuditEntry,
     PeerAuditAttestation, MAX_ENTRIES_PER_RESPONSE,
 };
 pub use reconstitute::{
-    compute_blast_radius, BlastRadiusReport, ChainEntry, ReconstitutedState, ReconstitutionAnomaly,
+    compute_blast_radius, BlastRadiusReport, ReconstitutedState, ReconstitutionAnomaly,
+    ReconstitutionEntry,
     ReconstitutionConfig, ReconstitutionEngine,
 };
 pub use recovery::{

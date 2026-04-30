@@ -6,6 +6,7 @@
 //! that the deterministic core enforces.
 
 pub mod audit;
+pub mod authority_ref;
 pub mod capability;
 pub mod capability_grant;
 pub mod delegation_chain;
@@ -14,21 +15,26 @@ pub mod epistemic;
 pub mod error;
 pub mod governance;
 pub mod internal_token;
+pub mod lease;
 pub mod paths;
 pub mod policy;
 pub mod provider;
 pub mod receipt_emission;
+pub mod revocation;
 pub mod skill;
 pub mod types;
 
 // Re-export commonly used types at crate root
 pub use audit::{ActorId, AuditAction, AuditEntry, AuditId};
 pub use capability::{Capability, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
+pub use authority_ref::{AuthorityRef, AuthorityRefType};
 pub use capability_grant::{
     CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation, DelegationError,
-    GrantProvenance, GrantedCapability, IssuanceError,
+    GrantProvenance, GrantedCapability, IssuanceError, RedelegationPolicy, RenewalError,
 };
 pub use delegation_chain::{ChainError, DelegationChain};
+pub use lease::{LeaseFailureMode, LeasePolicy};
+pub use revocation::{CascadePolicy, RevocationClaim, RevocationReason};
 pub use episode::{Episode, EpisodeId, Feedback, FeedbackRating, Outcome, Pattern};
 pub use epistemic::{Epistemic, EpistemicError, EpistemicStatus, StatusTransition};
 pub use error::ZpError;

@@ -10,7 +10,7 @@ const DATA = {
   nodes: [
     // Core
     { id: "zeropoint", label: "ZeroPoint", type: "core", desc: "Cryptographic governance primitives for autonomous agent systems" },
-    { id: "zp-server", label: "ZP Server", type: "core", desc: "Governance API on localhost:3000 \u2014 routes: tools, codebase, analysis, system" },
+    { id: "zp-server", label: "ZP Server", type: "core", desc: "Governance API on localhost:17770 \u2014 routes: tools, codebase, analysis, system" },
     { id: "receipt-chain", label: "Receipt Chain", type: "core", desc: "Tamper-evident hash-linked audit chain \u2014 single source of truth" },
     { id: "audit-store", label: "Audit Store", type: "core", desc: "SQLite-backed chain storage. All state is derived, never stored directly" },
     // Engines

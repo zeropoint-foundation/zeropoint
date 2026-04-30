@@ -289,7 +289,7 @@ pub fn run(config: &InitConfig) -> i32 {
 
 [server]
 bind = "127.0.0.1"
-port = 3000
+port = 17770
 
 [identity]
 operator = "{}"

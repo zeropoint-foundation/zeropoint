@@ -1119,7 +1119,7 @@ fn display_confirmation(
     eprintln!("  Run {CYAN}zp status{NC} at any time to verify.");
     eprintln!("  Run {CYAN}zp secure --wizard{NC} to reconfigure.");
     eprintln!();
-    eprintln!("  Dashboard: {CYAN}http://localhost:3000{NC} (launching...)");
+    eprintln!("  Dashboard: {CYAN}http://localhost:17770{NC} (launching...)");
     eprintln!();
 }
 
@@ -1208,10 +1208,10 @@ pub fn run(config: &SecureConfig) -> i32 {
 
 /// Spawn `zp serve` as a detached background process so the dashboard is
 /// immediately available after `zp secure` completes.  If the server is
-/// already running on port 3000 we skip the spawn and just open the browser.
+/// already running on port 17770 we skip the spawn and just open the browser.
 fn launch_dashboard() {
-    // Check if something is already listening on 3000
-    let already_running = std::net::TcpStream::connect("127.0.0.1:3000").is_ok();
+    // Check if something is already listening on 17770
+    let already_running = std::net::TcpStream::connect("127.0.0.1:17770").is_ok();
 
     if !already_running {
         // Resolve our own binary path so we launch the same build
@@ -1263,13 +1263,13 @@ fn launch_dashboard() {
     #[cfg(target_os = "macos")]
     {
         let _ = std::process::Command::new("open")
-            .arg("http://localhost:3000")
+            .arg("http://localhost:17770")
             .spawn();
     }
     #[cfg(target_os = "linux")]
     {
         let _ = std::process::Command::new("xdg-open")
-            .arg("http://localhost:3000")
+            .arg("http://localhost:17770")
             .spawn();
     }
 }
@@ -1319,7 +1319,7 @@ fail_mode = "open"
 [advanced]
 data_dir = "~/ZeroPoint/data"
 log_level = "info"
-server_port = 3000
+server_port = 17770
 "#,
         shell_enabled = !shells.is_empty(),
         shells = shells_toml,

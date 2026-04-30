@@ -68,7 +68,7 @@ impl std::error::Error for ChainError {}
 
 /// A lightweight entry in the chain (for validation without full receipts).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainEntry {
+pub struct ReceiptChainEntry {
     pub sequence: u64,
     pub content_hash: String,
     pub prev_hash: String,
@@ -79,7 +79,7 @@ pub struct ChainEntry {
 #[derive(Debug, Clone)]
 pub struct ReceiptChain {
     chain_id: String,
-    entries: Vec<ChainEntry>,
+    entries: Vec<ReceiptChainEntry>,
     head_hash: String,
 }
 
@@ -114,7 +114,7 @@ impl ReceiptChain {
     }
 
     /// Get all entries.
-    pub fn entries(&self) -> &[ChainEntry] {
+    pub fn entries(&self) -> &[ReceiptChainEntry] {
         &self.entries
     }
 
@@ -139,7 +139,7 @@ impl ReceiptChain {
         // Compute the chain entry hash: blake3(prev_hash + content_hash)
         let entry_hash = compute_entry_hash(&prev_hash, &receipt.content_hash);
 
-        let entry = ChainEntry {
+        let entry = ReceiptChainEntry {
             sequence,
             content_hash: receipt.content_hash.clone(),
             prev_hash,

@@ -51,8 +51,8 @@ mod otel;
 
 // Re-export everything at crate root
 pub use builder::ReceiptBuilder;
-pub use chain::{ChainEntry, ChainError, ReceiptChain};
-pub use epoch::{Epoch, EpochCompactor, EpochError, MerkleProof};
+pub use chain::{ChainError, ReceiptChain, ReceiptChainEntry};
+pub use epoch::{compute_merkle_root, Direction, Epoch, EpochCompactor, EpochError, MerkleProof, ProofStep};
 pub use hasher::canonical_hash;
 pub use types::*;
 pub use validation::{validate_receipt_type, ValidationError, TypeRules, rules_for};

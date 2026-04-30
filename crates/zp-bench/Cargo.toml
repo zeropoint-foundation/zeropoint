@@ -1,0 +1,26 @@
+[package]
+name = "zp-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "F4 — performance falsifiers (Criterion benchmarks) for ZeroPoint's governance gate"
+
+[dependencies]
+# Empty: this crate exists only to host benchmarks.
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+zp-receipt = { path = "../zp-receipt" }
+zp-verify = { path = "../zp-verify" }
+zp-engine = { path = "../zp-engine" }
+ed25519-dalek = { workspace = true }
+blake3 = { workspace = true }
+chrono = { workspace = true }
+base64 = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+serde_json = { workspace = true }
+
+[[bench]]
+name = "governance_gate"
+harness = false

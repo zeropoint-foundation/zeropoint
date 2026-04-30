@@ -12,6 +12,7 @@
 //! - [`scan`] — Discover tools by looking for `.env.example` files
 //! - [`configure`] — Semantic sed: resolve `.env.example` → `.env` using vault
 //! - [`providers`] — Provider catalog, detection, and inference
+//! - [`tool_scan_security`] — F3 pre-canon falsifier for MCP tool content
 //! - [`validate`] — Live connection tests for provider API keys
 //! - [`vault`] — Thin convenience layer over `zp_trust::CredentialVault`
 
@@ -20,5 +21,6 @@ pub mod configure;
 pub mod discovery;
 pub mod providers;
 pub mod scan;
+pub mod tool_scan_security;
 pub mod validate;
 pub mod vault;

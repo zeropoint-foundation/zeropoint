@@ -221,17 +221,18 @@ impl Keyring {
             })
             .collect();
 
-        // Canon: Genesis lives in the OS credential store, full stop.
-        let has_genesis_secret = has_genesis_in_credential_store();
+        // Avoid probing the OS credential store here — each probe triggers
+        // a macOS Keychain permission dialog after a recompile.  The genesis
+        // secret presence is inferred from the certificate file (if the cert
+        // exists, we'll learn whether the secret is reachable when we
+        // actually load it).  Operator uses the encrypted-at-rest file.
+        let has_genesis_cert = self.base_dir.join("genesis.json").exists();
 
         KeyringStatus {
-            has_genesis: self.base_dir.join("genesis.json").exists(),
-            has_genesis_secret,
+            has_genesis: has_genesis_cert,
+            has_genesis_secret: has_genesis_cert, // deferred — actual check at load time
             has_operator: self.base_dir.join("operator.json").exists(),
-            // Canon: credential store preferred; encrypted-at-rest fallback
-            // only when the caller explicitly opted into a file mode.
-            has_operator_secret: has_operator_in_credential_store()
-                || self.base_dir.join("operator.secret.enc").exists(),
+            has_operator_secret: self.base_dir.join("operator.secret.enc").exists(),
             agent_count: agent_names.len(),
             agent_names,
         }
@@ -437,9 +438,14 @@ impl Keyring {
             serde_json::from_str(&json).map_err(|e| KeyError::Serialization(e.to_string()))?;
         let genesis_cert = self.load_genesis_certificate()?;
 
-        if let Ok(secret) = load_operator_from_credential_store() {
-            return OperatorKey::from_parts(secret, cert, genesis_cert);
-        }
+        // Skip credential store for operator — go straight to the encrypted
+        // file.  The operator secret is already encrypted on disk under the
+        // vault key (derived from the genesis secret).  Avoiding
+        // load_operator_from_credential_store() eliminates a separate macOS
+        // Keychain prompt, so the user only sees ONE prompt (genesis) per
+        // recompile instead of two+.
+        //
+        // The genesis load below is the single keychain touch point.
 
         let (genesis_secret, _) = self.load_genesis_secret()?;
         let enc_path = self.base_dir.join("operator.secret.enc");
@@ -511,11 +517,16 @@ impl Keyring {
 }
 
 // ── OS Credential Store helpers ──────────────────────────────────────
+//
+// Note: has_*_in_credential_store and load_operator_from_credential_store
+// are not called in the normal boot path (we use the genesis-first chain
+// instead) but are retained for future diagnostic / recovery tooling.
 
 /// Check if the Genesis secret exists AND is valid in the credential store.
 ///
 /// Validates that the stored value is well-formed (64 hex chars = 32 bytes)
 /// rather than just checking for existence. This catches corruption.
+#[allow(dead_code)]
 fn has_genesis_in_credential_store() -> bool {
     #[cfg(feature = "os-keychain")]
     {
@@ -557,7 +568,29 @@ pub(crate) fn save_genesis_to_credential_store(secret: &[u8; 32]) -> Result<(), 
 /// Load the Genesis secret from the OS credential store.
 /// For biometric mode on macOS, the OS automatically triggers the biometric prompt.
 /// For biometric mode on Linux, call `biometric::load_genesis_biometric()` instead.
+///
+/// The result is cached in a process-wide `OnceLock` so the keychain is only
+/// touched once per process lifetime — subsequent calls return the cached copy.
+/// This eliminates repeated macOS Keychain permission dialogs after recompiles.
 pub(crate) fn load_genesis_from_credential_store() -> Result<[u8; 32], KeyError> {
+    use std::sync::OnceLock;
+
+    // Cache: load from keychain exactly once, reuse for the rest of the process.
+    static CACHED: OnceLock<Result<[u8; 32], String>> = OnceLock::new();
+
+    let result = CACHED.get_or_init(|| {
+        load_genesis_from_credential_store_uncached().map_err(|e| format!("{}", e))
+    });
+
+    match result {
+        Ok(secret) => Ok(*secret),
+        Err(msg) => Err(KeyError::CredentialStore(msg.clone())),
+    }
+}
+
+/// Actual keychain access — called at most once via the `OnceLock` in the
+/// public wrapper above.
+fn load_genesis_from_credential_store_uncached() -> Result<[u8; 32], KeyError> {
     #[cfg(feature = "os-keychain")]
     {
         let entry = keyring::Entry::new(GENESIS_KEYCHAIN_SERVICE, GENESIS_KEYCHAIN_ACCOUNT)
@@ -588,6 +621,7 @@ pub(crate) fn load_genesis_from_credential_store() -> Result<[u8; 32], KeyError>
 }
 
 /// Check if the Operator secret exists and is well-formed in the credential store.
+#[allow(dead_code)]
 fn has_operator_in_credential_store() -> bool {
     #[cfg(feature = "os-keychain")]
     {
@@ -621,6 +655,7 @@ fn save_operator_to_credential_store(secret: &[u8; 32]) -> Result<(), KeyError> 
 }
 
 /// Load the Operator secret from the OS credential store.
+#[allow(dead_code)]
 fn load_operator_from_credential_store() -> Result<[u8; 32], KeyError> {
     #[cfg(feature = "os-keychain")]
     {

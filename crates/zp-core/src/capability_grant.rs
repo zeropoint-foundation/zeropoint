@@ -13,7 +13,9 @@ use ed25519_dalek::{Signer as DalekSigner, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+use crate::authority_ref::AuthorityRef;
 use crate::governance::EventProvenance;
+use crate::lease::LeasePolicy;
 use crate::policy::{ActionType, TrustTier};
 
 /// A signed, portable capability grant — the unit of authorization in ZeroPoint.
@@ -83,6 +85,65 @@ pub struct CapabilityGrant {
     /// rejected by the governance gate. This closes the SSRF self-grant vector.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issued_via: Option<EventProvenance>,
+
+    // --- P4 (#197): Standing delegation extensions -------------------------
+    // Every field below is optional/defaulted so a grant created before the
+    // standing-delegation work was wired in continues to behave exactly as
+    // it did. A grant with `lease_policy: None` is a "classic" capability
+    // grant: bounded by `expires_at`, no renewal cadence, no kill switch
+    // beyond plain expiry.
+    /// If set, this grant participates in lease-based renewal. `expires_at`
+    /// advances by `lease_policy.lease_duration` on each successful renewal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_policy: Option<LeasePolicy>,
+
+    /// Authorities permitted to renew this grant. Empty means no renewal —
+    /// the grant runs to its `expires_at` and dies.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renewal_authorities: Vec<AuthorityRef>,
+
+    /// Authorities permitted to revoke this grant. Empty means only the
+    /// issuer (matching the existing implicit behaviour pre-P4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub revocable_by: Vec<AuthorityRef>,
+
+    /// Whether this grant may be re-delegated, and how deep the subtree may
+    /// go. Defaults to `Forbidden` so legacy callers stay locked down.
+    #[serde(default)]
+    pub redelegation: RedelegationPolicy,
+
+    /// Optional anchor commitment id for revocation announcements.
+    /// Populated when the truth anchor backend is configured (HCS).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revocation_anchor: Option<String>,
+
+    /// When this grant was last renewed. None for grants that have never
+    /// been renewed, including non-leased grants.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_renewed_at: Option<DateTime<Utc>>,
+
+    /// How many successful renewals this grant has accumulated.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub renewal_count: u32,
+
+    /// Hex-encoded Ed25519 public key bound to this grant's *subject*
+    /// (the grantee node). When set, the lease renewal endpoint
+    /// authenticates incoming requests by verifying their Ed25519
+    /// signature against this key — no session cookie needed. This is the
+    /// primary fleet-node authentication primitive: a delegate proves
+    /// identity by signing with its key, not by holding a browser session.
+    ///
+    /// Optional for backward compatibility: pre-P4 grants had no subject
+    /// key, so the chain entries don't need migration. Issued grants
+    /// without a `subject_public_key` cannot be renewed via the heartbeat
+    /// path — they must instead authenticate with a session token (the
+    /// CLI / dashboard path).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_public_key: Option<String>,
+}
+
+fn is_zero_u32(n: &u32) -> bool {
+    *n == 0
 }
 
 /// How a capability grant was created.
@@ -114,6 +175,15 @@ pub enum GrantProvenance {
         /// Why the system generated this grant.
         reason: String,
     },
+
+    /// A long-lived standing delegation under lease renewal (#197). Behaves
+    /// like `OperatorIssued` for delegation/issuance checks but signals to
+    /// validators and the cockpit that this grant is alive only as long as
+    /// it is being renewed.
+    Standing {
+        /// Hex-encoded public key of the issuing operator.
+        operator_key: String,
+    },
 }
 
 impl Default for GrantProvenance {
@@ -133,6 +203,38 @@ impl GrantProvenance {
     /// Whether this grant expires after a single use.
     pub fn is_single_use(&self) -> bool {
         matches!(self, GrantProvenance::SystemGenerated { .. })
+    }
+
+    /// Whether this grant is a standing delegation under lease renewal.
+    pub fn is_standing(&self) -> bool {
+        matches!(self, GrantProvenance::Standing { .. })
+    }
+}
+
+/// Policy for re-delegating a grant downstream (#197).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum RedelegationPolicy {
+    /// Re-delegation is not permitted. The default — preserves pre-P4
+    /// behaviour where any grant could be re-delegated up to
+    /// `max_delegation_depth` but standing delegations stay locked unless
+    /// the issuer explicitly opts in.
+    Forbidden,
+
+    /// Re-delegation is permitted, with a per-subtree depth ceiling.
+    Allowed {
+        /// Maximum depth the subtree rooted at this grant may reach.
+        max_subtree_depth: u32,
+    },
+
+    /// Re-delegation is queued for issuer review. Not yet enforced — the
+    /// queueing surface lands with the cockpit Fleet Grants tile.
+    RequiresApproval,
+}
+
+impl Default for RedelegationPolicy {
+    fn default() -> Self {
+        RedelegationPolicy::Forbidden
     }
 }
 
@@ -184,6 +286,16 @@ impl CapabilityGrant {
             max_delegation_depth: 3,
             provenance,
             issued_via: None,
+            // P4 (#197): standing-delegation extensions default to absent so
+            // a freshly constructed grant behaves exactly as it did pre-P4.
+            lease_policy: None,
+            renewal_authorities: Vec::new(),
+            revocable_by: Vec::new(),
+            redelegation: RedelegationPolicy::Forbidden,
+            revocation_anchor: None,
+            last_renewed_at: None,
+            renewal_count: 0,
+            subject_public_key: None,
         }
     }
 
@@ -302,6 +414,148 @@ impl CapabilityGrant {
         self
     }
 
+    // --- P4 (#197): standing-delegation builder methods ------------------
+
+    /// Attach a lease policy. The grant becomes a standing delegation —
+    /// `expires_at` advances on each successful `renew()`. Caller usually
+    /// also sets `with_renewal_authorities` and `with_revocable_by`.
+    pub fn with_lease_policy(mut self, policy: LeasePolicy) -> Self {
+        // Initial expiry is the lease window from now. Caller can override
+        // with `with_expiration` afterwards.
+        let lease_secs = policy.lease_duration.as_secs() as i64;
+        self.expires_at = Some(self.created_at + chrono::Duration::seconds(lease_secs));
+        self.lease_policy = Some(policy);
+        self
+    }
+
+    /// Set the list of authorities permitted to renew this grant.
+    pub fn with_renewal_authorities(mut self, authorities: Vec<AuthorityRef>) -> Self {
+        self.renewal_authorities = authorities;
+        self
+    }
+
+    /// Set the list of authorities permitted to revoke this grant.
+    pub fn with_revocable_by(mut self, authorities: Vec<AuthorityRef>) -> Self {
+        self.revocable_by = authorities;
+        self
+    }
+
+    /// Set the re-delegation policy.
+    pub fn with_redelegation_policy(mut self, policy: RedelegationPolicy) -> Self {
+        self.redelegation = policy;
+        self
+    }
+
+    /// Promote this grant to a standing delegation. The operator's hex
+    /// public key is recorded for cockpit display and revocation routing.
+    pub fn as_standing(mut self, operator_key: impl Into<String>) -> Self {
+        self.provenance = GrantProvenance::Standing {
+            operator_key: operator_key.into(),
+        };
+        self
+    }
+
+    /// Bind the subject (grantee) public key onto this grant. The lease
+    /// renewal endpoint uses this key to authenticate heartbeat requests
+    /// — the subject signs each renewal request with its corresponding
+    /// secret key, no session cookie required.
+    pub fn with_subject_public_key(mut self, pubkey_hex: impl Into<String>) -> Self {
+        self.subject_public_key = Some(pubkey_hex.into());
+        self
+    }
+
+    /// Verify a hex-encoded Ed25519 signature over `payload` against this
+    /// grant's bound `subject_public_key`. Returns `false` if no key is
+    /// bound, the key is malformed, the signature is malformed, or the
+    /// signature does not verify.
+    ///
+    /// This is the primary authentication primitive for fleet operations:
+    /// a delegate node holds the private half of `subject_public_key` and
+    /// signs requests with it; the server verifies the signature here.
+    pub fn verify_subject_signature(&self, payload: &[u8], signature_hex: &str) -> bool {
+        let Some(pk_hex) = self.subject_public_key.as_deref() else {
+            return false;
+        };
+        let Ok(pk_bytes) = hex::decode(pk_hex) else {
+            return false;
+        };
+        if pk_bytes.len() != 32 {
+            return false;
+        }
+        let mut pk_arr = [0u8; 32];
+        pk_arr.copy_from_slice(&pk_bytes);
+        let Ok(verifying) = VerifyingKey::from_bytes(&pk_arr) else {
+            return false;
+        };
+
+        let Ok(sig_bytes) = hex::decode(signature_hex) else {
+            return false;
+        };
+        if sig_bytes.len() != 64 {
+            return false;
+        }
+        let mut sig_arr = [0u8; 64];
+        sig_arr.copy_from_slice(&sig_bytes);
+        let signature = ed25519_dalek::Signature::from_bytes(&sig_arr);
+
+        verifying.verify_strict(payload, &signature).is_ok()
+    }
+
+    /// Whether this grant has a lease attached.
+    pub fn has_lease(&self) -> bool {
+        self.lease_policy.is_some()
+    }
+
+    /// Whether this grant is currently inside its grace period — past the
+    /// `expires_at` boundary but still within `lease_policy.grace_period`.
+    pub fn is_in_grace_period(&self) -> bool {
+        match (&self.lease_policy, self.expires_at) {
+            (Some(policy), Some(expiry)) => {
+                let now = Utc::now();
+                if now <= expiry {
+                    return false;
+                }
+                let grace_secs = policy.grace_period.as_secs() as i64;
+                now <= expiry + chrono::Duration::seconds(grace_secs)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether this grant is expired AND past its grace period.
+    pub fn is_past_grace(&self) -> bool {
+        match (&self.lease_policy, self.expires_at) {
+            (Some(policy), Some(expiry)) => {
+                let grace_secs = policy.grace_period.as_secs() as i64;
+                Utc::now() > expiry + chrono::Duration::seconds(grace_secs)
+            }
+            // Lease policy attached but no expiry set yet: treat as alive.
+            (Some(_), None) => false,
+            // Without a lease policy, "past grace" is the classic expiry test.
+            (None, _) => self.is_expired(),
+        }
+    }
+
+    /// Renew this grant by extending `expires_at` by `lease_duration`.
+    /// Returns `Err` if the grant has no lease policy or is past its
+    /// grace period (unrenewable).
+    pub fn renew(&mut self) -> Result<DateTime<Utc>, RenewalError> {
+        let policy = self
+            .lease_policy
+            .as_ref()
+            .ok_or(RenewalError::NoLeasePolicy)?;
+        if self.is_past_grace() {
+            return Err(RenewalError::PastGrace);
+        }
+        let lease_secs = policy.lease_duration.as_secs() as i64;
+        let now = Utc::now();
+        let new_expiry = now + chrono::Duration::seconds(lease_secs);
+        self.expires_at = Some(new_expiry);
+        self.last_renewed_at = Some(now);
+        self.renewal_count += 1;
+        Ok(new_expiry)
+    }
+
     /// Delegate this grant to another agent, producing a child grant.
     ///
     /// The child grant:
@@ -322,6 +576,14 @@ impl CapabilityGrant {
         capability: GrantedCapability,
         receipt_id: String,
     ) -> Result<Self, DelegationError> {
+        // Tier 5 (Ceremony) is the substrate's cold floor — no running
+        // process may issue or re-delegate T5 authority. T5 is exercised
+        // only during a genesis ceremony with the operator key physically
+        // present. See `TrustTier::is_ceremony` for the enum invariant.
+        if self.trust_tier.is_ceremony() {
+            return Err(DelegationError::CeremonyTierNotDelegable);
+        }
+
         // Check depth limit
         let new_depth = self.delegation_depth + 1;
         if new_depth > self.max_delegation_depth {
@@ -329,6 +591,33 @@ impl CapabilityGrant {
                 current: self.delegation_depth,
                 max: self.max_delegation_depth,
             });
+        }
+
+        // P4 (#197): re-delegation policy gate. Standing-delegation grants
+        // can opt out of re-delegation entirely or constrain the subtree
+        // depth, separately from the legacy `max_delegation_depth` ceiling.
+        match &self.redelegation {
+            RedelegationPolicy::Forbidden => {
+                // Pre-P4 grants set this to default (Forbidden) but should
+                // continue to allow re-delegation up to `max_delegation_depth`
+                // — that is what the `max_delegation_depth` field was for.
+                // We only enforce Forbidden when the grant is a Standing
+                // delegation, where Forbidden is the explicit kill switch.
+                if matches!(self.provenance, GrantProvenance::Standing { .. }) {
+                    return Err(DelegationError::RedelegationForbidden);
+                }
+            }
+            RedelegationPolicy::Allowed { max_subtree_depth } => {
+                if new_depth as u32 > *max_subtree_depth {
+                    return Err(DelegationError::SubtreeDepthExceeded {
+                        depth: new_depth as u32,
+                        max: *max_subtree_depth,
+                    });
+                }
+            }
+            RedelegationPolicy::RequiresApproval => {
+                return Err(DelegationError::ApprovalRequired);
+            }
         }
 
         // Verify the requested capability is a subset of the parent's
@@ -363,6 +652,23 @@ impl CapabilityGrant {
 
         // Inherit expiration (child can never outlive parent)
         child.expires_at = self.expires_at;
+
+        // P4 (#197): propagate lease/renewal fields. The child cannot get
+        // softer terms than its parent — child lease_duration ≤ parent's,
+        // renewal_authorities ⊆ parent's, redelegation policy inherited.
+        child.lease_policy = self.lease_policy.clone();
+        child.renewal_authorities = self.renewal_authorities.clone();
+        child.revocable_by = self.revocable_by.clone();
+        child.redelegation = self.redelegation.clone();
+
+        // Standing provenance propagates so downstream validators know this
+        // subtree is alive only as long as the root keeps being renewed.
+        if matches!(self.provenance, GrantProvenance::Standing { .. }) {
+            child.provenance = GrantProvenance::Delegated {
+                parent_grant_id: self.id.clone(),
+                delegator_key: self.grantee.clone(),
+            };
+        }
 
         Ok(child)
     }
@@ -480,7 +786,9 @@ impl CapabilityGrant {
     /// always produces the same bytes, regardless of field order. This is essential for
     /// signature verification.
     pub fn canonical_bytes(&self) -> Vec<u8> {
-        // Create a version without signature for canonicalization
+        // Create a version without signature for canonicalization. P4 fields
+        // are passed through; their `skip_serializing_if` attributes keep
+        // pre-P4 grants byte-identical to their original canonical form.
         let canonical = CanonicalForm {
             id: self.id.clone(),
             capability: self.capability.clone(),
@@ -494,6 +802,14 @@ impl CapabilityGrant {
             parent_grant_id: self.parent_grant_id.clone(),
             delegation_depth: self.delegation_depth,
             max_delegation_depth: self.max_delegation_depth,
+            lease_policy: self.lease_policy.clone(),
+            renewal_authorities: self.renewal_authorities.clone(),
+            revocable_by: self.revocable_by.clone(),
+            redelegation: self.redelegation.clone(),
+            revocation_anchor: self.revocation_anchor.clone(),
+            last_renewed_at: self.last_renewed_at,
+            renewal_count: self.renewal_count,
+            subject_public_key: self.subject_public_key.clone(),
         };
 
         // Serialize to JSON with sorted keys
@@ -951,6 +1267,19 @@ pub enum DelegationError {
     ScopeNotSubset { parent: String, requested: String },
     /// Parent grant has expired.
     ParentExpired,
+    /// P4 (#197): the parent's RedelegationPolicy forbids further delegation.
+    RedelegationForbidden,
+    /// P4 (#197): the new depth would exceed the parent's per-subtree depth ceiling.
+    SubtreeDepthExceeded { depth: u32, max: u32 },
+    /// P4 (#197): the parent requires explicit issuer approval for re-delegation.
+    ApprovalRequired,
+    /// P4 (#197): the child's lease terms exceed the parent's (e.g., longer
+    /// lease_duration, broader renewal_authorities).
+    LeaseEscalation { reason: String },
+    /// The parent grant is at Tier 5 (Ceremony). T5 is the cold floor —
+    /// no running process may re-delegate it. T5 authority is exercised
+    /// only during a genesis ceremony.
+    CeremonyTierNotDelegable,
 }
 
 impl std::fmt::Display for DelegationError {
@@ -972,11 +1301,54 @@ impl std::fmt::Display for DelegationError {
                 )
             }
             DelegationError::ParentExpired => write!(f, "parent grant has expired"),
+            DelegationError::RedelegationForbidden => {
+                write!(f, "parent grant forbids re-delegation")
+            }
+            DelegationError::SubtreeDepthExceeded { depth, max } => {
+                write!(
+                    f,
+                    "subtree depth {} exceeds parent's max_subtree_depth {}",
+                    depth, max
+                )
+            }
+            DelegationError::ApprovalRequired => {
+                write!(f, "re-delegation requires explicit issuer approval")
+            }
+            DelegationError::LeaseEscalation { reason } => {
+                write!(f, "lease escalation: {}", reason)
+            }
+            DelegationError::CeremonyTierNotDelegable => {
+                write!(
+                    f,
+                    "tier 5 (ceremony) is non-delegable — exercised only during genesis ceremony"
+                )
+            }
         }
     }
 }
 
 impl std::error::Error for DelegationError {}
+
+/// Error type for lease-renewal failures (P4 / #197).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenewalError {
+    /// The grant has no `lease_policy` — it is not renewable.
+    NoLeasePolicy,
+    /// The grant is past `expires_at + grace_period` — silently renewing
+    /// after the grace window would violate the lease contract.
+    PastGrace,
+}
+
+impl std::fmt::Display for RenewalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenewalError::NoLeasePolicy => write!(f, "grant has no lease policy"),
+            RenewalError::PastGrace => write!(f, "grant is past its grace period"),
+        }
+    }
+}
+
+impl std::error::Error for RenewalError {}
 
 /// Error type for grant issuance validation failures (M4-3).
 #[derive(Debug, Clone)]
@@ -1014,6 +1386,12 @@ impl std::fmt::Display for IssuanceError {
 impl std::error::Error for IssuanceError {}
 
 /// Internal type for canonical serialization (excludes signature).
+///
+/// P4 (#197): standing-delegation fields use `skip_serializing_if` so an
+/// untouched legacy grant produces the exact same canonical bytes — and
+/// thus the same signature — as it did before P4 was wired in. New
+/// standing grants include the additional fields, and their signatures
+/// cover the lease policy and authority lists.
 #[derive(Debug, Serialize, Deserialize)]
 struct CanonicalForm {
     id: String,
@@ -1029,6 +1407,28 @@ struct CanonicalForm {
     parent_grant_id: Option<String>,
     delegation_depth: u8,
     max_delegation_depth: u8,
+
+    // ---- P4 standing delegation -----------------------------------------
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lease_policy: Option<LeasePolicy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    renewal_authorities: Vec<AuthorityRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    revocable_by: Vec<AuthorityRef>,
+    #[serde(default, skip_serializing_if = "is_default_redelegation")]
+    redelegation: RedelegationPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    revocation_anchor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_renewed_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    renewal_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subject_public_key: Option<String>,
+}
+
+fn is_default_redelegation(p: &RedelegationPolicy) -> bool {
+    matches!(p, RedelegationPolicy::Forbidden)
 }
 
 #[cfg(test)]
@@ -2068,5 +2468,370 @@ mod tests {
 
         assert!(restored.issued_via.is_some());
         assert!(restored.validate_issuance().is_ok());
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // P4 (#197) — standing delegation extension tests
+    // ────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn p4_legacy_grant_canonical_bytes_unchanged() {
+        // Backward-compat invariant: a grant created exactly the way pre-P4
+        // code did (no lease, no authorities, default redelegation) must
+        // produce the same canonical bytes as a hypothetical pre-P4 grant
+        // would have. We assert this structurally: the JSON must NOT contain
+        // any of the new field names when defaults are unset.
+        let grant = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["data/*".to_string()],
+            },
+            "rcpt".to_string(),
+        );
+        let canonical = String::from_utf8(grant.canonical_bytes()).unwrap();
+        assert!(
+            !canonical.contains("lease_policy"),
+            "default grant must not serialize lease_policy"
+        );
+        assert!(
+            !canonical.contains("renewal_authorities"),
+            "default grant must not serialize renewal_authorities"
+        );
+        assert!(
+            !canonical.contains("revocable_by"),
+            "default grant must not serialize revocable_by"
+        );
+        assert!(
+            !canonical.contains("redelegation"),
+            "default grant must not serialize redelegation when Forbidden"
+        );
+    }
+
+    #[test]
+    fn p4_standing_grant_round_trips() {
+        let grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "artemis".to_string(),
+            GrantedCapability::Custom {
+                name: "tool-execution".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_lease_policy(crate::lease::LeasePolicy::standard_8h())
+        .with_renewal_authorities(vec![crate::authority_ref::AuthorityRef::genesis(
+            "lease_renewal",
+        )])
+        .with_revocable_by(vec![crate::authority_ref::AuthorityRef::genesis(
+            "revocation_authority",
+        )])
+        .as_standing("operator-pubkey-hex");
+
+        let json = serde_json::to_string(&grant).unwrap();
+        let restored: CapabilityGrant = serde_json::from_str(&json).unwrap();
+        assert!(restored.has_lease());
+        assert_eq!(restored.renewal_authorities.len(), 1);
+        assert_eq!(restored.revocable_by.len(), 1);
+        assert!(matches!(
+            restored.provenance,
+            GrantProvenance::Standing { .. }
+        ));
+    }
+
+    #[test]
+    fn p4_renew_advances_expiry_and_increments_count() {
+        let mut grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "artemis".to_string(),
+            GrantedCapability::Custom {
+                name: "tool-execution".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_lease_policy(crate::lease::LeasePolicy::standard_8h());
+
+        let initial_expiry = grant.expires_at.unwrap();
+        let initial_count = grant.renewal_count;
+
+        // Sleep would be flaky — instead pull expires_at backwards by 1s
+        // so the renewal advances it from a known earlier point.
+        grant.expires_at = Some(initial_expiry - chrono::Duration::seconds(1));
+        let new_expiry = grant.renew().expect("renew must succeed");
+
+        assert!(new_expiry > initial_expiry - chrono::Duration::seconds(1));
+        assert_eq!(grant.renewal_count, initial_count + 1);
+        assert!(grant.last_renewed_at.is_some());
+    }
+
+    #[test]
+    fn p4_renew_rejects_no_lease_policy() {
+        let mut grant = CapabilityGrant::new(
+            "alice".to_string(),
+            "bob".to_string(),
+            GrantedCapability::Read {
+                scope: vec!["*".to_string()],
+            },
+            "rcpt".to_string(),
+        );
+        let err = grant.renew().unwrap_err();
+        assert_eq!(err, RenewalError::NoLeasePolicy);
+    }
+
+    #[test]
+    fn p4_renew_rejects_past_grace() {
+        let mut grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "artemis".to_string(),
+            GrantedCapability::Custom {
+                name: "tool-execution".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_lease_policy(crate::lease::LeasePolicy {
+            lease_duration: std::time::Duration::from_secs(60),
+            grace_period: std::time::Duration::from_secs(10),
+            renewal_interval: std::time::Duration::from_secs(30),
+            failure_mode: crate::lease::LeaseFailureMode::HaltOnExpiry,
+            max_consecutive_failures: 1,
+        });
+        // Push expiry far into the past so even with grace we're past it.
+        grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(3600));
+        let err = grant.renew().unwrap_err();
+        assert_eq!(err, RenewalError::PastGrace);
+    }
+
+    #[test]
+    fn p4_grace_period_logic() {
+        let mut grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "artemis".to_string(),
+            GrantedCapability::Custom {
+                name: "tool-execution".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_lease_policy(crate::lease::LeasePolicy {
+            lease_duration: std::time::Duration::from_secs(3600),
+            grace_period: std::time::Duration::from_secs(300),
+            renewal_interval: std::time::Duration::from_secs(900),
+            failure_mode: crate::lease::LeaseFailureMode::HaltOnExpiry,
+            max_consecutive_failures: 3,
+        });
+
+        // Alive: expiry far in the future.
+        assert!(!grant.is_in_grace_period());
+        assert!(!grant.is_past_grace());
+
+        // Grace: expiry just barely in the past, still inside grace window.
+        grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(60));
+        assert!(grant.is_in_grace_period());
+        assert!(!grant.is_past_grace());
+
+        // Past grace: expiry well past + grace window.
+        grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(900));
+        assert!(!grant.is_in_grace_period());
+        assert!(grant.is_past_grace());
+    }
+
+    #[test]
+    fn p4_redelegation_forbidden_blocks_standing_delegate() {
+        let parent = CapabilityGrant::new(
+            "genesis".to_string(),
+            "subject1".to_string(),
+            GrantedCapability::Custom {
+                name: "tool-execution".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_max_delegation_depth(5)
+        .with_lease_policy(crate::lease::LeasePolicy::standard_8h())
+        .as_standing("op-key");
+
+        // Standing + Forbidden (default) should reject re-delegation.
+        let err = parent
+            .delegate(
+                "subject2".to_string(),
+                GrantedCapability::Custom {
+                    name: "tool-execution".to_string(),
+                    parameters: serde_json::Value::Null,
+                },
+                "rcpt-child".to_string(),
+            )
+            .unwrap_err();
+        match err {
+            DelegationError::RedelegationForbidden => {}
+            other => panic!("expected RedelegationForbidden, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn p4_redelegation_allowed_propagates_lease() {
+        let parent = CapabilityGrant::new(
+            "genesis".to_string(),
+            "subject1".to_string(),
+            GrantedCapability::Custom {
+                name: "tool-execution".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_max_delegation_depth(3)
+        .with_lease_policy(crate::lease::LeasePolicy::standard_8h())
+        .with_renewal_authorities(vec![
+            crate::authority_ref::AuthorityRef::genesis("lease_renewal"),
+        ])
+        .with_redelegation_policy(RedelegationPolicy::Allowed {
+            max_subtree_depth: 2,
+        });
+
+        let child = parent
+            .delegate(
+                "subject2".to_string(),
+                GrantedCapability::Custom {
+                    name: "tool-execution".to_string(),
+                    parameters: serde_json::Value::Null,
+                },
+                "rcpt-child".to_string(),
+            )
+            .expect("re-delegation should be allowed");
+        assert!(child.has_lease(), "child must inherit lease policy");
+        assert_eq!(child.renewal_authorities.len(), 1);
+        assert_eq!(child.delegation_depth, 1);
+    }
+
+    #[test]
+    fn t5_ceremony_grant_cannot_be_delegated() {
+        let parent = CapabilityGrant::new(
+            "genesis".to_string(),
+            "council".to_string(),
+            GrantedCapability::Custom {
+                name: "council-authority".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_trust_tier(TrustTier::Tier5)
+        .with_max_delegation_depth(3);
+
+        let err = parent
+            .delegate(
+                "core".to_string(),
+                GrantedCapability::Custom {
+                    name: "council-authority".to_string(),
+                    parameters: serde_json::Value::Null,
+                },
+                "rcpt-child".to_string(),
+            )
+            .unwrap_err();
+        match err {
+            DelegationError::CeremonyTierNotDelegable => {}
+            other => panic!("expected CeremonyTierNotDelegable, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn t3_t4_grants_delegate_normally() {
+        // Tier 3 (Core) and Tier 4 (Council) are delegable like any other
+        // operational tier — only T5 is the cold floor.
+        for tier in [TrustTier::Tier3, TrustTier::Tier4] {
+            let parent = CapabilityGrant::new(
+                "genesis".to_string(),
+                "subject".to_string(),
+                GrantedCapability::Custom {
+                    name: "tool-execution".to_string(),
+                    parameters: serde_json::Value::Null,
+                },
+                "rcpt".to_string(),
+            )
+            .with_trust_tier(tier)
+            .with_max_delegation_depth(3);
+
+            let child = parent
+                .delegate(
+                    "child".to_string(),
+                    GrantedCapability::Custom {
+                        name: "tool-execution".to_string(),
+                        parameters: serde_json::Value::Null,
+                    },
+                    "rcpt-child".to_string(),
+                )
+                .expect("T3/T4 must delegate cleanly");
+            assert_eq!(child.trust_tier, tier, "child inherits parent tier");
+        }
+    }
+
+    #[test]
+    fn tier_ladder_ordering_is_monotonic() {
+        // PartialOrd derives lexically over variant order. The substrate
+        // relies on this for ceiling comparisons; pin the invariant.
+        assert!(TrustTier::Tier0 < TrustTier::Tier1);
+        assert!(TrustTier::Tier1 < TrustTier::Tier2);
+        assert!(TrustTier::Tier2 < TrustTier::Tier3);
+        assert!(TrustTier::Tier3 < TrustTier::Tier4);
+        assert!(TrustTier::Tier4 < TrustTier::Tier5);
+    }
+
+    #[test]
+    fn tier_from_u8_round_trips_in_range() {
+        for n in 0u8..=5u8 {
+            let tier = TrustTier::from_u8(n).expect("0..=5 must parse");
+            assert_eq!(tier.as_u8(), n);
+        }
+    }
+
+    #[test]
+    fn tier_from_u8_rejects_out_of_range() {
+        assert!(TrustTier::from_u8(6).is_none());
+        assert!(TrustTier::from_u8(7).is_none());
+        assert!(TrustTier::from_u8(255).is_none());
+    }
+
+    #[test]
+    fn is_ceremony_only_true_for_tier5() {
+        assert!(!TrustTier::Tier0.is_ceremony());
+        assert!(!TrustTier::Tier1.is_ceremony());
+        assert!(!TrustTier::Tier2.is_ceremony());
+        assert!(!TrustTier::Tier3.is_ceremony());
+        assert!(!TrustTier::Tier4.is_ceremony());
+        assert!(TrustTier::Tier5.is_ceremony());
+    }
+
+    #[test]
+    fn p4_redelegation_subtree_depth_enforced() {
+        let parent = CapabilityGrant::new(
+            "genesis".to_string(),
+            "subject1".to_string(),
+            GrantedCapability::Custom {
+                name: "x".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_max_delegation_depth(10) // not the limiter
+        .with_redelegation_policy(RedelegationPolicy::Allowed {
+            max_subtree_depth: 0, // limiter — no further delegation
+        });
+        let err = parent
+            .delegate(
+                "subject2".to_string(),
+                GrantedCapability::Custom {
+                    name: "x".to_string(),
+                    parameters: serde_json::Value::Null,
+                },
+                "rcpt-child".to_string(),
+            )
+            .unwrap_err();
+        match err {
+            DelegationError::SubtreeDepthExceeded { depth, max } => {
+                assert_eq!(depth, 1);
+                assert_eq!(max, 0);
+            }
+            other => panic!("expected SubtreeDepthExceeded, got {:?}", other),
+        }
     }
 }

@@ -14,7 +14,7 @@ use axum::Json as AxumJson;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use zp_audit::{ChainEntry, ReconstitutionConfig, ReconstitutionEngine};
+use zp_audit::{ReconstitutionConfig, ReconstitutionEngine, ReconstitutionEntry};
 use zp_keys::{BlastRadius, CompromiseResponse};
 use zp_memory::CompromiseReport as MemoryCompromiseReport;
 use zp_policy::{DowngradeError, PolicyVersion};
@@ -117,7 +117,7 @@ pub fn topology() -> NetworkTopology {
 
     // Default: localhost-only node (honest — we don't know the network)
     let bind = std::env::var("ZP_BIND").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = std::env::var("ZP_PORT").unwrap_or_else(|_| "3000".to_string());
+    let port = std::env::var("ZP_PORT").unwrap_or_else(|_| "17770".to_string());
 
     NetworkTopology {
         nodes: vec![TopologyNode {
@@ -815,7 +815,7 @@ pub async fn reconstitute_handler(
     let mut chain_integrity = true;
     let mut prev_hash = String::new();
     for entry in &chain {
-        let chain_entry = ChainEntry::from_audit_entry(entry);
+        let chain_entry = ReconstitutionEntry::from_audit_entry(entry);
         if !prev_hash.is_empty() && chain_entry.prev_hash != prev_hash {
             chain_integrity = false;
         }

@@ -28,6 +28,7 @@ zp-trust = { path = "../zp-trust" }
 zp-configure = { path = "../zp-configure" }
 zp-mesh = { path = "../zp-mesh" }
 zp-receipt = { path = "../zp-receipt" }
+zp-anchor = { path = "../zp-anchor" }
 mle-star-engine = { path = "../mle-star-engine" }
 monte-carlo-engine = { path = "../monte-carlo-engine" }
 

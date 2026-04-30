@@ -2,7 +2,7 @@
 //!
 //! This module bridges `zp_core::AuditEntry` (Bitcoin-style chain — each
 //! entry references the *hash* of its predecessor) into the catalog
-//! grammar via the [`zp_verify::ChainEntry`] trait, then exposes a
+//! grammar via the [`zp_verify::VerifiableEntry`] trait, then exposes a
 //! convenience method on [`AuditStore`] that loads the chain and runs
 //! every v0 catalog rule against it.
 //!
@@ -14,11 +14,11 @@
 
 use chrono::{DateTime, Utc};
 use zp_core::AuditEntry;
-use zp_verify::{ChainEntry, Verifier, VerifyReport};
+use zp_verify::{VerifiableEntry, Verifier, VerifyReport};
 
 use crate::store::{AuditStore, Result};
 
-/// Wrapper around an [`AuditEntry`] that implements [`ChainEntry`] using
+/// Wrapper around an [`AuditEntry`] that implements [`VerifiableEntry`] using
 /// the entry's `entry_hash` as the self link and `prev_hash` as the
 /// parent link.
 ///
@@ -26,7 +26,7 @@ use crate::store::{AuditStore, Result};
 /// rules don't bite us if `zp_core` later moves and so the link
 /// semantics are obvious to anyone tracing the rule output.
 #[derive(Debug, Clone)]
-pub struct AuditChainEntry<'a>(pub &'a AuditEntry);
+pub struct AuditVerifiableEntry<'a>(pub &'a AuditEntry);
 
 /// The blake3 hash of the empty byte string — the sentinel that
 /// `ChainBuilder::build_entry_from_genesis` writes into `prev_hash` to
@@ -38,7 +38,7 @@ fn genesis_sentinel() -> &'static str {
     SENTINEL.get_or_init(|| blake3::hash(b"").to_hex().to_string())
 }
 
-impl<'a> ChainEntry for AuditChainEntry<'a> {
+impl<'a> VerifiableEntry for AuditVerifiableEntry<'a> {
     fn entry_id(&self) -> &str {
         // AuditId stringifies via Display in core; we use the entry_hash
         // as the public id since it's also what other entries quote.
@@ -83,6 +83,49 @@ impl<'a> ChainEntry for AuditChainEntry<'a> {
     fn timestamp(&self) -> DateTime<Utc> {
         self.0.timestamp
     }
+
+    fn signature_b64(&self) -> Option<&str> {
+        // F8: this legacy accessor only fires when `signature_blocks`
+        // returns empty. Only return the value if the receipt has *no*
+        // F8 vec — otherwise the verifier prefers the vec.
+        let receipt = self.0.receipt.as_ref()?;
+        if !receipt.signatures.is_empty() {
+            return None;
+        }
+        receipt.signature.as_deref()
+    }
+
+    fn signer_public_key_hex(&self) -> Option<&str> {
+        let receipt = self.0.receipt.as_ref()?;
+        if !receipt.signatures.is_empty() {
+            return None;
+        }
+        receipt.signer_public_key.as_deref()
+    }
+
+    fn signed_payload(&self) -> Option<&[u8]> {
+        // Signatures in zp-receipt are computed over the receipt's
+        // content_hash bytes (see Signer::sign in zp-receipt/src/signer.rs).
+        Some(self.0.receipt.as_ref()?.content_hash.as_bytes())
+    }
+
+    fn signature_blocks(&self) -> Vec<zp_verify::SignatureBlockView<'_>> {
+        // F8: expose every block on the receipt to the verifier so it
+        // can iterate, count Ed25519 signatures, and warn-skip any
+        // experimental algorithms it doesn't recognize.
+        let Some(receipt) = self.0.receipt.as_ref() else {
+            return Vec::new();
+        };
+        receipt
+            .signatures
+            .iter()
+            .map(|b| zp_verify::SignatureBlockView {
+                algorithm: b.algorithm.as_str(),
+                key_id: b.key_id.as_str(),
+                signature_b64: b.signature_b64.as_str(),
+            })
+            .collect()
+    }
 }
 
 impl AuditStore {
@@ -97,7 +140,7 @@ impl AuditStore {
         // 64-bit targets. i64::MAX rows is effectively "no limit" for any
         // real audit chain.
         let entries = self.export_chain(i64::MAX as usize)?;
-        let wrapped: Vec<AuditChainEntry<'_>> = entries.iter().map(AuditChainEntry).collect();
+        let wrapped: Vec<AuditVerifiableEntry<'_>> = entries.iter().map(AuditVerifiableEntry).collect();
         Ok(Verifier::new().verify(&wrapped))
     }
 }

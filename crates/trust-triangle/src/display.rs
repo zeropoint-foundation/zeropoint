@@ -288,7 +288,7 @@ fn print_receipt_entry(num: usize, label: &str, receipt: &Receipt) {
     } else {
         &receipt.content_hash
     };
-    let sig_status = if receipt.signature.is_some() {
+    let sig_status = if receipt.is_signed() {
         format!("{GREEN}signed{NC}")
     } else {
         format!("{DIM}unsigned{NC}")
@@ -303,7 +303,7 @@ fn verify_receipt(receipt: &Receipt) -> (bool, String) {
     if !receipt.verify_hash() {
         return (false, "hash mismatch".into());
     }
-    if receipt.signature.is_none() {
+    if !receipt.is_signed() {
         return (false, "missing signature".into());
     }
     (true, "ok".into())

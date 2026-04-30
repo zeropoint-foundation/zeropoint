@@ -114,13 +114,11 @@ pub struct ToolResult {
     pub receipt: Option<Receipt>,
 }
 
-/// Re-export the portable receipt spec from zp-receipt.
+/// Re-export the Receipt type from zp-receipt.
 ///
-/// This is the protocol-level receipt type that can be independently
-/// verified by any service. Replaces the previous minimal 3-field struct.
-pub use zp_receipt::Receipt as PortableReceipt;
-
-/// Backward-compatible alias. Prefer `PortableReceipt` for new code.
+/// This is the protocol-level receipt type — a portable, cryptographically
+/// verifiable proof that an action was executed. Can be independently
+/// verified by any service.
 pub type Receipt = zp_receipt::Receipt;
 
 /// Re-export key receipt types for convenience.

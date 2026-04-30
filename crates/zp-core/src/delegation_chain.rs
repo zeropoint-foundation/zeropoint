@@ -58,6 +58,17 @@ pub enum ChainError {
     DepthExceeded { depth: u8, max: u8 },
     /// A delegation error from the grant itself.
     DelegationError(DelegationError),
+    /// P4 (#197): a child grant has a lease but the parent does not — a
+    /// child cannot opt INTO leasing if the parent did not.
+    LeaseAddedAtChild { index: usize },
+    /// P4 (#197): a child's lease is longer than the parent's.
+    LeaseDurationEscalation {
+        index: usize,
+        parent_secs: u64,
+        child_secs: u64,
+    },
+    /// P4 (#197): a child's renewal_authorities are not a subset of the parent's.
+    RenewalAuthoritiesNotSubset { index: usize },
 }
 
 impl std::fmt::Display for ChainError {
@@ -107,6 +118,27 @@ impl std::fmt::Display for ChainError {
                 write!(f, "depth {} exceeds maximum {}", depth, max)
             }
             ChainError::DelegationError(e) => write!(f, "delegation error: {}", e),
+            ChainError::LeaseAddedAtChild { index } => {
+                write!(
+                    f,
+                    "child grant at index {} has a lease but the parent does not",
+                    index
+                )
+            }
+            ChainError::LeaseDurationEscalation {
+                index,
+                parent_secs,
+                child_secs,
+            } => write!(
+                f,
+                "lease duration escalation at index {}: parent {}s, child {}s",
+                index, parent_secs, child_secs
+            ),
+            ChainError::RenewalAuthoritiesNotSubset { index } => write!(
+                f,
+                "child at index {} has renewal_authorities outside the parent's set",
+                index
+            ),
         }
     }
 }
@@ -194,6 +226,34 @@ impl DelegationChain {
                 return Err(ChainError::ScopeEscalation { index: i });
             }
 
+            // P4 (#197): lease invariant checks. Skip silently when neither
+            // parent nor child has a lease — that's the legacy path.
+            match (&parent.lease_policy, &child.lease_policy) {
+                (None, Some(_)) => {
+                    return Err(ChainError::LeaseAddedAtChild { index: i });
+                }
+                (Some(parent_lease), Some(child_lease)) => {
+                    let parent_secs = parent_lease.lease_duration.as_secs();
+                    let child_secs = child_lease.lease_duration.as_secs();
+                    if child_secs > parent_secs {
+                        return Err(ChainError::LeaseDurationEscalation {
+                            index: i,
+                            parent_secs,
+                            child_secs,
+                        });
+                    }
+                    // Renewal authorities ⊆ parent's. Membership compares by
+                    // (ref_type, grant_id, capability_required.name) so we
+                    // don't punish unrelated authority lists from being
+                    // re-ordered.
+                    if !is_authority_subset(&child.renewal_authorities, &parent.renewal_authorities)
+                    {
+                        return Err(ChainError::RenewalAuthoritiesNotSubset { index: i });
+                    }
+                }
+                _ => {}
+            }
+
             // Verify signature if requested
             if verify_signatures && child.signature.is_some() && !child.verify_signature() {
                 return Err(ChainError::InvalidSignature { index: i });
@@ -242,6 +302,23 @@ impl DelegationChain {
     pub fn can_extend(&self) -> bool {
         self.leaf().can_delegate()
     }
+}
+
+/// True iff every authority reference in `child` has a matching entry in
+/// `parent`. References match on `(ref_type, grant_id, capability name)` —
+/// re-ordering or trivial restatements of the same authority do not count
+/// as escalation.
+fn is_authority_subset(
+    child: &[crate::authority_ref::AuthorityRef],
+    parent: &[crate::authority_ref::AuthorityRef],
+) -> bool {
+    child.iter().all(|c| {
+        parent.iter().any(|p| {
+            p.ref_type == c.ref_type
+                && p.grant_id == c.grant_id
+                && p.capability_required.name() == c.capability_required.name()
+        })
+    })
 }
 
 #[cfg(test)]

@@ -63,7 +63,7 @@ impl Default for ZpConfig {
     fn default() -> Self {
         let home = zp_home();
         Self {
-            port: Sourced::default_value(3000),
+            port: Sourced::default_value(17770),
             bind: Sourced::default_value("127.0.0.1".into()),
             open_dashboard: Sourced::default_value(true),
 

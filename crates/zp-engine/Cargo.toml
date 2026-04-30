@@ -26,3 +26,8 @@ tokio = { workspace = true }
 
 # Filesystem
 dirs = "5"
+
+[dev-dependencies]
+# #194 — reversibility-escalation tests need a tempdir to write a
+# fixture .zp-configure.toml that scan_tool_with_context can read.
+tempfile = "3"

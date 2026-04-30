@@ -66,6 +66,7 @@ mod tests {
             content_hash: String::new(),
             signature: None,
             signer_public_key: None,
+            signatures: Vec::new(),
             trust_grade: TrustGrade::D,
             created_at: Utc::now(),
             executor: None,

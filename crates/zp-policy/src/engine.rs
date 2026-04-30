@@ -195,8 +195,17 @@ impl PolicyEngine {
                     source_skill: None,
                 });
             }
-            zp_core::policy::TrustTier::Tier2 => {
-                // Tier 2: full capabilities including system operations
+            zp_core::policy::TrustTier::Tier2
+            | zp_core::policy::TrustTier::Tier3
+            | zp_core::policy::TrustTier::Tier4
+            | zp_core::policy::TrustTier::Tier5 => {
+                // Tier 2+ : full capabilities including system operations.
+                // Tiers 3 (Core), 4 (Council), 5 (Ceremony) all inherit
+                // Tier 2's capability surface here — capability *grant
+                // issuance* (not the policy-engine's runtime capability
+                // resolution) is where the higher tiers gain authority.
+                // T5 also doesn't actually reach this match in practice:
+                // the delegate() guard rejects T5 grants on running nodes.
                 capabilities.push(Capability {
                     name: "write_files".to_string(),
                     tools: vec![],

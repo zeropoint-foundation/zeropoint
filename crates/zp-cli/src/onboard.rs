@@ -79,7 +79,7 @@ pub struct OnboardConfig {
     pub depth: usize,
     /// Whether to offer proxy mode
     pub offer_proxy: bool,
-    /// Proxy port (default 3000)
+    /// Proxy port (default 17770)
     pub proxy_port: u16,
 }
 

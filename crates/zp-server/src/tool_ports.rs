@@ -1,7 +1,7 @@
 //! Tool Port Allocator — deterministic port assignment for governed tools.
 //!
 //! ZeroPoint assigns each registered tool a port from a reserved range
-//! (default 9100–9199) so tools that share default ports (3000, 8080, etc.)
+//! (default 9100–9199) so tools that share default ports (8080, etc.)
 //! don't collide.  Assignments are persisted to `{data_dir}/tool-ports.json`
 //! and remain stable across restarts.
 //!
@@ -9,7 +9,7 @@
 //!   1. **Launch**: Before spawning a tool, ZP writes `.env.zp` with the
 //!      assigned port.  The launch command sources this file so the tool
 //!      binds to the ZP-managed port instead of its default.
-//!   2. **Proxy**: The subdomain proxy at `{name}.localhost:3000` forwards to
+//!   2. **Proxy**: The subdomain proxy at `{name}.localhost:17770` forwards to
 //!      `127.0.0.1:{assigned_port}`.
 
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,28 @@ pub struct PortAssignment {
     /// HTTP_PORT).  Each gets its own ZP-assigned port so nothing collides.
     #[serde(default)]
     pub extra_ports: HashMap<String, u16>,
+    /// Discovered proxy port — the port that actually serves a web UI.
+    ///
+    /// After launch, ZP probes all assigned ports (primary + extras) with
+    /// a GET / request.  The first port that responds with HTTP 200 is
+    /// stored here.  The subdomain proxy uses this port instead of
+    /// `port`, so multi-port tools (webhook + gateway, API + dashboard)
+    /// route correctly without any tool-side configuration.
+    ///
+    /// `None` means probing hasn't run yet or no port responded — the
+    /// proxy falls back to `port`.
+    #[serde(default)]
+    pub proxy_port: Option<u16>,
+}
+
+impl PortAssignment {
+    /// Return the port the subdomain proxy should forward to.
+    ///
+    /// Prefers the discovered `proxy_port` (from post-launch probing),
+    /// falling back to the statically-assigned primary `port`.
+    pub fn proxy_target(&self) -> u16 {
+        self.proxy_port.unwrap_or(self.port)
+    }
 }
 
 /// Generate a cryptographically random auth token.
@@ -207,6 +229,7 @@ impl PortAllocator {
             port_var: primary_var.to_string(),
             auth_token: generate_auth_token(),
             extra_ports,
+            proxy_port: None,
         };
         info!("Port allocator: {} → :{} ({})", tool_name, primary_port, primary_var);
         map.insert(tool_name.to_string(), assignment.clone());
@@ -243,6 +266,154 @@ impl PortAllocator {
             Err(e) => warn!("Failed to serialize port assignments: {}", e),
         }
     }
+
+    /// Update the discovered proxy port for a tool and persist.
+    ///
+    /// Called after post-launch probing identifies which port serves
+    /// the web UI.
+    pub fn set_proxy_port(&self, tool_name: &str, proxy_port: u16) {
+        let mut map = self.assignments.lock().unwrap();
+        if let Some(assignment) = map.get_mut(tool_name) {
+            if assignment.proxy_port != Some(proxy_port) {
+                info!(
+                    "Port allocator: {} proxy_port discovered → :{}",
+                    tool_name, proxy_port
+                );
+                assignment.proxy_port = Some(proxy_port);
+                drop(map);
+                self.persist();
+            }
+        }
+    }
+
+    /// Clear a previously discovered proxy port so re-discovery can run
+    /// fresh after a tool relaunch (prevents stale routing).
+    pub fn clear_proxy_port(&self, tool_name: &str) {
+        let mut map = self.assignments.lock().unwrap();
+        if let Some(assignment) = map.get_mut(tool_name) {
+            if assignment.proxy_port.is_some() {
+                debug!(
+                    "Port allocator: {} proxy_port cleared for re-discovery",
+                    tool_name
+                );
+                assignment.proxy_port = None;
+                drop(map);
+                self.persist();
+            }
+        }
+    }
+}
+
+// ── Post-launch proxy port discovery ──────────────────────────────────
+
+/// Probe all assigned ports for a tool and return the first one that
+/// responds to `GET /` with HTTP 200.
+///
+/// This discovers which port actually serves a web UI, so the subdomain
+/// proxy routes to the right place regardless of how the tool names its
+/// port variables.  Probes are sent with a short timeout and the tool's
+/// auth token, mirroring what the proxy itself would send.
+///
+/// Returns `None` if no port responds within the deadline.
+pub async fn discover_proxy_port(assignment: &PortAssignment) -> Option<u16> {
+    let mut candidates: Vec<u16> = vec![assignment.port];
+    // Add extra ports — these might be the actual web UI
+    candidates.extend(assignment.extra_ports.values());
+
+    // Single-port tools don't need probing — the only port is the proxy target.
+    if candidates.len() <= 1 {
+        return None;
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    // Two-pass probe: first look for HTML (definitive web UI signal),
+    // then fall back to any 200 response.  This handles tools where
+    // both ports return 200 — an API returns application/json while
+    // a web UI returns text/html.
+    let mut first_200: Option<u16> = None;
+
+    for &port in &candidates {
+        let url = format!("http://127.0.0.1:{}/", port);
+        let result = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", assignment.auth_token))
+            .send()
+            .await;
+        match result {
+            Ok(resp) if resp.status().as_u16() == 200 => {
+                let content_type = resp
+                    .headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_lowercase();
+
+                if content_type.contains("text/html") {
+                    debug!("Proxy port probe: :{} → 200 text/html (selected)", port);
+                    return Some(port);
+                }
+
+                debug!(
+                    "Proxy port probe: :{} → 200 {} (candidate, not html)",
+                    port, content_type
+                );
+                if first_200.is_none() {
+                    first_200 = Some(port);
+                }
+            }
+            Ok(resp) => {
+                debug!(
+                    "Proxy port probe: :{} → {} (skipped)",
+                    port,
+                    resp.status().as_u16()
+                );
+            }
+            Err(e) => {
+                debug!("Proxy port probe: :{} → error: {} (skipped)", port, e);
+            }
+        }
+    }
+
+    // No HTML port found — fall back to first 200, or None.
+    if let Some(port) = first_200 {
+        debug!(
+            "Proxy port probe: no text/html port, using first 200 → :{}",
+            port
+        );
+    } else {
+        warn!("Proxy port probe: no port returned 200, falling back to primary");
+    }
+    first_200
+}
+
+/// Probe ports with retries, waiting for the tool to finish starting.
+///
+/// Tools need time to bind their ports after launch.  This retries the
+/// probe up to `max_attempts` times with `interval` between attempts.
+/// Used by the launch flow to discover the proxy port asynchronously
+/// without blocking the launch response.
+pub async fn discover_proxy_port_with_retry(
+    assignment: &PortAssignment,
+    max_attempts: u32,
+    interval: std::time::Duration,
+) -> Option<u16> {
+    for attempt in 1..=max_attempts {
+        if let Some(port) = discover_proxy_port(assignment).await {
+            return Some(port);
+        }
+        if attempt < max_attempts {
+            debug!(
+                "Proxy port probe attempt {}/{} — retrying in {:?}",
+                attempt, max_attempts, interval
+            );
+            tokio::time::sleep(interval).await;
+        }
+    }
+    None
 }
 
 // ── .env.zp sidecar ────────────────────────────────────────────────────
@@ -263,10 +434,10 @@ pub fn write_env_zp(
     // Detect which env var the tool uses for auth tokens
     let auth_var = detect_auth_var(tool_path);
 
-    // With subdomain proxy routing (name.localhost:3000), tools serve
+    // With subdomain proxy routing (name.localhost:17770), tools serve
     // at their own root (/) — no base path override needed.
     let proxy_comment = format!(
-        "# Subdomain proxy: {}.localhost:3000 -> 127.0.0.1:{}",
+        "# Subdomain proxy: {}.localhost:17770 -> 127.0.0.1:{}",
         tool_name, assignment.port,
     );
     let mut content = format!(
@@ -391,11 +562,16 @@ fn detect_auth_var(tool_path: &Path) -> String {
 ///   2. `.env`          — operator overrides
 ///   3. `.env.zp`       — ZP port assignment + auth token (always wins)
 ///
+/// Each file is optional — a missing `.env` must not prevent `.env.zp`
+/// from being sourced. We use semicolons between file blocks so each
+/// `[ -f X ] && . ./X` is an independent statement whose exit code
+/// doesn't short-circuit the rest of the preamble.
+///
 /// `set -a` exports all variables so child processes inherit them.
 /// Vault-injected env vars are set directly on the Command and always
 /// override everything (they bypass the shell entirely).
 pub fn env_zp_preamble() -> &'static str {
-    "set -a && [ -f .env.example ] && . ./.env.example && [ -f .env ] && . ./.env && [ -f .env.zp ] && . ./.env.zp && set +a && "
+    "set -a; [ -f .env.example ] && . ./.env.example; [ -f .env ] && . ./.env; [ -f .env.zp ] && . ./.env.zp; set +a && "
 }
 
 // ── Port variable detection ────────────────────────────────────────────
@@ -410,13 +586,13 @@ pub fn env_zp_preamble() -> &'static str {
 /// generic ports next, webhook/internal ports last.
 const PORT_VAR_PRIORITY: &[&str] = &[
     "PORT",
-    "GATEWAY_PORT",
+    "HTTP_PORT",
+    "WEBUI_PORT",
     "APP_PORT",
     "SERVER_PORT",
-    "API_PORT",
-    "WEBUI_PORT",
     "LISTEN_PORT",
-    "HTTP_PORT",
+    "API_PORT",
+    "GATEWAY_PORT",
 ];
 
 pub fn detect_port_var(tool_path: &Path) -> String {
@@ -454,4 +630,120 @@ pub fn detect_all_port_vars(tool_path: &Path) -> Vec<String> {
 
     found.sort_by_key(|(p, _)| *p);
     found.into_iter().map(|(_, v)| v).collect()
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preamble_uses_semicolons_not_and_chains() {
+        let preamble = env_zp_preamble();
+        // Each file block should be separated by semicolons so missing
+        // files don't short-circuit the chain.
+        assert!(
+            preamble.contains("; [ -f .env ] && . ./.env;"),
+            "Preamble should use semicolons between file blocks, got: {}",
+            preamble,
+        );
+        // .env.zp must always be sourced last (highest priority)
+        assert!(
+            preamble.contains("; [ -f .env.zp ] && . ./.env.zp;"),
+            "Preamble should source .env.zp with semicolons, got: {}",
+            preamble,
+        );
+        // Must NOT contain the fragile `&& [ -f .env ]` pattern
+        assert!(
+            !preamble.contains("&& [ -f .env ]"),
+            "Preamble must not chain file tests with &&, got: {}",
+            preamble,
+        );
+    }
+
+    #[test]
+    fn proxy_target_prefers_proxy_port() {
+        let assignment = PortAssignment {
+            port: 9100,
+            port_var: "HTTP_PORT".to_string(),
+            auth_token: "zp-test".to_string(),
+            extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 9101)]),
+            proxy_port: Some(9101),
+        };
+        assert_eq!(assignment.proxy_target(), 9101);
+    }
+
+    #[test]
+    fn proxy_target_falls_back_to_primary() {
+        let assignment = PortAssignment {
+            port: 9100,
+            port_var: "HTTP_PORT".to_string(),
+            auth_token: "zp-test".to_string(),
+            extra_ports: HashMap::new(),
+            proxy_port: None,
+        };
+        assert_eq!(assignment.proxy_target(), 9100);
+    }
+
+    #[test]
+    fn proxy_port_serde_default_is_none() {
+        // Existing persisted assignments (pre-proxy_port) should
+        // deserialize with proxy_port: None thanks to #[serde(default)].
+        let json = r#"{
+            "port": 9100,
+            "port_var": "HTTP_PORT",
+            "auth_token": "zp-test",
+            "extra_ports": {}
+        }"#;
+        let assignment: PortAssignment = serde_json::from_str(json).unwrap();
+        assert_eq!(assignment.proxy_port, None);
+        assert_eq!(assignment.proxy_target(), 9100);
+    }
+
+    #[test]
+    fn proxy_port_serde_round_trip() {
+        let assignment = PortAssignment {
+            port: 9100,
+            port_var: "HTTP_PORT".to_string(),
+            auth_token: "zp-test".to_string(),
+            extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 9101)]),
+            proxy_port: Some(9101),
+        };
+        let json = serde_json::to_string(&assignment).unwrap();
+        let deserialized: PortAssignment = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.proxy_port, Some(9101));
+        assert_eq!(deserialized.proxy_target(), 9101);
+    }
+
+    #[test]
+    fn detect_port_vars_from_env_example() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join(".env.example"),
+            "HTTP_PORT=8080\nGATEWAY_PORT=3000\n",
+        )
+        .unwrap();
+
+        let vars = detect_all_port_vars(dir.path());
+        assert_eq!(vars, vec!["HTTP_PORT", "GATEWAY_PORT"]);
+
+        // Primary is first in priority order
+        let primary = detect_port_var(dir.path());
+        assert_eq!(primary, "HTTP_PORT");
+    }
+
+    #[tokio::test]
+    async fn discover_skips_single_port_tools() {
+        // Single-port tools shouldn't waste time probing
+        let assignment = PortAssignment {
+            port: 9100,
+            port_var: "PORT".to_string(),
+            auth_token: "zp-test".to_string(),
+            extra_ports: HashMap::new(),
+            proxy_port: None,
+        };
+        let result = discover_proxy_port(&assignment).await;
+        assert_eq!(result, None);
+    }
 }

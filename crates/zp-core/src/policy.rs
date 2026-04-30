@@ -8,17 +8,81 @@ use std::time::Duration;
 
 use crate::types::{Channel, ConversationId};
 
-/// Trust tier configuration.
-/// The runtime enforces whatever tier is configured — the LLM never knows.
+/// Trust tier configuration. The runtime enforces whatever tier is
+/// configured — the LLM never knows.
+///
+/// The tier ladder is structural, not just a label: each rung carries an
+/// invariant that the rest of the substrate enforces. The variant order
+/// matters — `PartialOrd`/`Ord` on this enum derives the
+/// "ceiling-comparison" used by the gate, the delegation chain, and the
+/// blast-radius tracker.
+///
+/// **The Ceremony invariant.** Tier 5 is the ZeroPoint "cold floor": a
+/// running node can hold a Tier ≤ 4 grant under lease, but no live
+/// process is ever permitted to issue or hold a Tier 5 capability.
+/// `CapabilityGrant::delegate()` rejects re-delegation of T5; T5
+/// authority is exercised only during a genesis ceremony with the
+/// hardware-secured operator key offline. This is what keeps the very
+/// top of the substrate from being reachable by code paths.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum TrustTier {
-    /// No signing. Modules load from local filesystem. Trust = you control the machine.
+    /// **Sandbox.** No signing. Modules load from local filesystem. Trust =
+    /// you control the machine. Default.
     #[default]
     Tier0,
-    /// Local key signs modules. Tamper detection via hash verification.
+    /// **Verified.** Local key signs modules. Tamper detection via hash
+    /// verification.
     Tier1,
-    /// Genesis root key, delegation chain, all modules signed. Full provenance.
+    /// **Operational.** Genesis root key, delegation chain, all modules
+    /// signed. Full provenance.
     Tier2,
+    /// **Core.** High-privilege operational authority — can manage tools,
+    /// renew leases, reach the network. The "team-lead" rung; granted to
+    /// trusted automation like Sentinel.
+    Tier3,
+    /// **Council.** Governance authority. Can issue and revoke standing
+    /// delegations across the fleet. Genesis-rooted.
+    Tier4,
+    /// **Ceremony.** Cold storage / hardware-secured / never online.
+    /// Structural invariant: no running node can hold or issue a Tier 5
+    /// capability — the delegate() path rejects it. T5 is exercised only
+    /// during a genesis ceremony with the operator key physically present.
+    Tier5,
+}
+
+impl TrustTier {
+    /// Map a 0–5 numeric tier to the enum. Returns `None` for 6+.
+    /// Used by CLI / config parsers to surface "tier_ceiling out of range"
+    /// errors rather than silently capping.
+    pub fn from_u8(n: u8) -> Option<Self> {
+        match n {
+            0 => Some(TrustTier::Tier0),
+            1 => Some(TrustTier::Tier1),
+            2 => Some(TrustTier::Tier2),
+            3 => Some(TrustTier::Tier3),
+            4 => Some(TrustTier::Tier4),
+            5 => Some(TrustTier::Tier5),
+            _ => None,
+        }
+    }
+
+    /// Numeric rung. Inverse of `from_u8` for valid tiers.
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            TrustTier::Tier0 => 0,
+            TrustTier::Tier1 => 1,
+            TrustTier::Tier2 => 2,
+            TrustTier::Tier3 => 3,
+            TrustTier::Tier4 => 4,
+            TrustTier::Tier5 => 5,
+        }
+    }
+
+    /// `true` iff this tier is the Ceremony rung that no running node may
+    /// issue or hold. `delegate()` rejects when this is true.
+    pub fn is_ceremony(&self) -> bool {
+        matches!(self, TrustTier::Tier5)
+    }
 }
 
 /// The context provided to a WASM policy module for evaluation.

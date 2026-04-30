@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tracing::info;
 
-use crate::reconstitute::ChainEntry;
+use crate::reconstitute::ReconstitutionEntry;
 
 // ============================================================================
 // Checkpoint
@@ -242,7 +242,7 @@ impl RecoveryEngine {
     /// Replay a chain entry, updating the recovered state.
     ///
     /// Call this for each entry from the checkpoint to the chain tip.
-    pub fn replay_entry(&mut self, entry: &ChainEntry) {
+    pub fn replay_entry(&mut self, entry: &ReconstitutionEntry) {
         self.state.entries_replayed += 1;
 
         if let Some(ref extensions) = entry.receipt_extensions {
@@ -443,7 +443,7 @@ impl RecoveryEngine {
 mod tests {
     use super::*;
 
-    fn make_entry(id: &str, extensions: Option<serde_json::Value>) -> ChainEntry {
+    fn make_entry(id: &str, extensions: Option<serde_json::Value>) -> ReconstitutionEntry {
         let ext_map = extensions.map(|v| {
             v.as_object()
                 .unwrap()
@@ -452,7 +452,7 @@ mod tests {
                 .collect()
         });
 
-        ChainEntry {
+        ReconstitutionEntry {
             id: id.to_string(),
             timestamp: Utc::now(),
             prev_hash: "prev".to_string(),
@@ -466,7 +466,7 @@ mod tests {
         id: &str,
         timestamp: DateTime<Utc>,
         extensions: Option<serde_json::Value>,
-    ) -> ChainEntry {
+    ) -> ReconstitutionEntry {
         let mut entry = make_entry(id, extensions);
         entry.timestamp = timestamp;
         entry

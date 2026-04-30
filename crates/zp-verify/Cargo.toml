@@ -11,3 +11,6 @@ chrono = { workspace = true }
 serde = { workspace = true }
 zp-receipt = { path = "../zp-receipt" }
 tracing = { workspace = true }
+ed25519-dalek = { workspace = true }
+base64 = { workspace = true }
+hex = { workspace = true }

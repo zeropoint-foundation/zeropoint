@@ -106,7 +106,17 @@ impl CompactReceipt {
             pr: receipt.parent_receipt_id.clone(),
             pd,
             ra,
-            sg: receipt.signature.clone(),
+            // F8: prefer the typed `signatures` vec (post-F8). Fall back
+            // to the legacy single field for receipts that haven't been
+            // re-signed under the new format. The mesh wire format
+            // currently carries only one base64 signature; we forward
+            // the first Ed25519 block we find.
+            sg: receipt
+                .signatures
+                .iter()
+                .find(|b| b.algorithm == zp_receipt::SignatureAlgorithm::Ed25519)
+                .map(|b| b.signature_b64.clone())
+                .or_else(|| receipt.signature.clone()),
             ex: receipt.extensions.as_ref().map(|e| serde_json::json!(e)),
         }
     }
@@ -258,11 +268,7 @@ impl CompactDelegation {
             ),
         };
 
-        let tt = match grant.trust_tier {
-            zp_core::policy::TrustTier::Tier0 => 0,
-            zp_core::policy::TrustTier::Tier1 => 1,
-            zp_core::policy::TrustTier::Tier2 => 2,
-        };
+        let tt = grant.trust_tier.as_u8();
 
         Self {
             id: grant.id.clone(),
@@ -322,11 +328,12 @@ impl CompactDelegation {
             },
         };
 
-        let trust_tier = match self.tt {
-            0 => zp_core::policy::TrustTier::Tier0,
-            1 => zp_core::policy::TrustTier::Tier1,
-            _ => zp_core::policy::TrustTier::Tier2,
-        };
+        // Wire format clamps unknown tier bytes to Tier2 (the highest tier
+        // a pre-T3 peer would have understood). T5 cannot legitimately
+        // reach the wire — running nodes never hold it.
+        let trust_tier = zp_core::policy::TrustTier::from_u8(self.tt)
+            .filter(|t| !t.is_ceremony())
+            .unwrap_or(zp_core::policy::TrustTier::Tier2);
 
         let created_at = DateTime::<Utc>::from_timestamp(self.ts, 0).unwrap_or_else(Utc::now);
 
@@ -351,6 +358,17 @@ impl CompactDelegation {
             max_delegation_depth: self.md,
             provenance: zp_core::GrantProvenance::default(),
             issued_via: None,
+            // P4 (#197): mesh envelopes do not carry standing-delegation
+            // metadata yet — peers exchange these as classic point-in-time
+            // grants. The wire format may extend in P5 to carry lease info.
+            lease_policy: None,
+            renewal_authorities: Vec::new(),
+            revocable_by: Vec::new(),
+            redelegation: zp_core::RedelegationPolicy::Forbidden,
+            revocation_anchor: None,
+            last_renewed_at: None,
+            renewal_count: 0,
+            subject_public_key: None,
         }
     }
 

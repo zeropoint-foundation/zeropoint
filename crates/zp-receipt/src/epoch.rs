@@ -18,7 +18,7 @@
 //! - The hash of the previous epoch (forming an epoch chain)
 //! - A timestamp for when compaction occurred
 
-use crate::chain::ChainEntry;
+use crate::chain::ReceiptChainEntry;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -343,7 +343,7 @@ impl EpochCompactor {
     pub fn compact(
         &self,
         chain_id: &str,
-        entries: &[ChainEntry],
+        entries: &[ReceiptChainEntry],
         prev_epoch: Option<&Epoch>,
     ) -> Result<Epoch, EpochError> {
         // Check sufficient entries
@@ -395,7 +395,7 @@ impl EpochCompactor {
     }
 
     /// Verify that an epoch's Merkle root matches the given entries.
-    pub fn verify_epoch(&self, epoch: &Epoch, entries: &[ChainEntry]) -> Result<(), EpochError> {
+    pub fn verify_epoch(&self, epoch: &Epoch, entries: &[ReceiptChainEntry]) -> Result<(), EpochError> {
         // Check that entries match the epoch's sequence range
         if entries.is_empty() {
             return Err(EpochError::NonContiguousEntries);
@@ -486,8 +486,8 @@ pub fn compute_merkle_root(hashes: &[String]) -> String {
 mod tests {
     use super::*;
 
-    fn make_chain_entry(sequence: u64, content_hash: &str) -> ChainEntry {
-        ChainEntry {
+    fn make_chain_entry(sequence: u64, content_hash: &str) -> ReceiptChainEntry {
+        ReceiptChainEntry {
             sequence,
             content_hash: content_hash.to_string(),
             prev_hash: format!("prev_{}", sequence),
@@ -639,7 +639,7 @@ mod tests {
     #[test]
     fn test_compact_100_entries() {
         let compactor = EpochCompactor::new(100);
-        let entries: Vec<ChainEntry> = (0..100)
+        let entries: Vec<ReceiptChainEntry> = (0..100)
             .map(|i| make_chain_entry(i, &format!("hash_{}", i)))
             .collect();
 

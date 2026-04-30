@@ -257,17 +257,37 @@ impl ReceiptVerifier {
     }
 
     /// Full verification: hash + signature.
+    ///
+    /// **F8.** When the receipt carries a populated `signatures` vec,
+    /// the first Ed25519 block is selected for verification. Otherwise
+    /// the legacy single-signature fields are used (pre-F8 chain).
+    /// Experimental algorithms inside the vec are ignored here — the
+    /// chain-level verifier in `zp-verify` is responsible for warning
+    /// about them. Single-receipt verification just needs to confirm
+    /// at least one Ed25519 signature is well-formed.
     #[cfg(feature = "signing")]
     pub fn verify(receipt: &Receipt) -> Result<VerificationResult, VerificationError> {
         let mut result = Self::verify_hash(receipt)?;
 
-        // Signature verification
-        if let Some(ref _sig) = receipt.signature {
-            let pk_hex = receipt.signer_public_key.as_ref().ok_or_else(|| {
+        // F8: prefer the typed vec; fall back to legacy single field.
+        let ed25519_pk_hex: Option<String> = receipt
+            .signatures
+            .iter()
+            .find(|b| b.algorithm == crate::SignatureAlgorithm::Ed25519)
+            .map(|b| b.key_id.clone())
+            .or_else(|| receipt.signer_public_key.clone());
+
+        let has_signature =
+            !receipt.signatures.is_empty() || receipt.signature.is_some();
+
+        if has_signature {
+            let pk_hex = ed25519_pk_hex.ok_or_else(|| {
                 VerificationError::SignatureError(
                     "Receipt has signature but no signer_public_key".to_string(),
                 )
             })?;
+            // Bind to the moved name used downstream.
+            let pk_hex = &pk_hex;
 
             let pk_bytes = hex_decode(pk_hex).map_err(VerificationError::InvalidPublicKey)?;
 
@@ -391,9 +411,18 @@ mod tests {
             .status(Status::Success)
             .finalize();
 
-        // Sign with one key, but set the public key of another
+        // Sign with one key, then claim the signature came from another.
+        // F8: the key_id lives on the SignatureBlock; flip both that and
+        // the legacy field so the verifier can't fall back to the real
+        // pubkey hex on either path.
         signer.sign(&mut receipt);
-        receipt.signer_public_key = Some(forger.public_key_hex());
+        let forged_pk_hex = forger.public_key_hex();
+        receipt.signer_public_key = Some(forged_pk_hex.clone());
+        for block in &mut receipt.signatures {
+            if block.algorithm == crate::SignatureAlgorithm::Ed25519 {
+                block.key_id = forged_pk_hex.clone();
+            }
+        }
 
         let result = ReceiptVerifier::verify(&receipt).unwrap();
         assert!(!result.is_valid());

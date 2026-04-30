@@ -221,6 +221,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::Revocation { .. } => "Revocation",
         ClaimMetadata::Configuration { .. } => "Configuration",
         ClaimMetadata::Canonicalization { .. } => "Canonicalization",
+        ClaimMetadata::Lifecycle { .. } => "Lifecycle",
     }
 }
 
@@ -241,6 +242,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::ReflectionClaim, ClaimMetadata::Reflection { .. })
             | (ReceiptType::ConfigurationClaim, ClaimMetadata::Configuration { .. })
             | (ReceiptType::CanonicalizedClaim, ClaimMetadata::Canonicalization { .. })
+            | (ReceiptType::Execution, ClaimMetadata::Lifecycle { .. })
     )
 }
 

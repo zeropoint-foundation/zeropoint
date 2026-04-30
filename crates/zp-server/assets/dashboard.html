@@ -116,6 +116,27 @@
     .tile-badge.governed { background: rgba(0,200,150,0.1); color: #00C896; }
     .tile-badge.unanchored { background: rgba(255,176,32,0.1); color: #FFB020; }
     .tile-badge.pending { background: rgba(136,136,160,0.1); color: #555; }
+    .tile-badge.running {
+      background: rgba(126,184,218,0.18);
+      color: #7eb8da;
+    }
+
+    /* V7 — running tile state: subtle accent border, persistent gateway link */
+    .cockpit-tile.running { border-color: rgba(126,184,218,0.35); }
+    .cockpit-tile.running:hover { border-color: #7eb8da; }
+    .tile-link {
+      display: block;
+      margin-top: 8px;
+      font-size: 10px;
+      color: #7eb8da;
+      text-decoration: none;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.02em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tile-link:hover { text-decoration: underline; }
 
     /* ZP system tile — accent tint */
     .cockpit-tile.zp-core { border-color: rgba(126,184,218,0.2); }

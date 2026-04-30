@@ -3728,6 +3728,7 @@ LLM_MODEL=gpt-4
             provider_overrides: overrides,
             verification: None,
             configurable: vec![],
+            capabilities: Default::default(),
         }
     }
 

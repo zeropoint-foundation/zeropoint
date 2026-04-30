@@ -539,6 +539,17 @@ fn is_exempt(path: &str) -> bool {
             | "/readyz"
             | "/onboard"
             | "/api/onboard/ws"
+            // P4 (#197) — lease renewal endpoint. Authenticates by Ed25519
+            // signature against the grant's bound subject_public_key (NOT
+            // a session cookie). The handler enforces signature verification
+            // strictly and rejects any request without a valid sig with 401.
+            // Web-browser session cookies are the wrong primitive for fleet
+            // node identity; Ed25519 keys are.
+            | "/api/v1/lease/renew"
+            // Fleet heartbeat — fleet nodes register/refresh without session
+            // cookies. The heartbeat itself is low-privilege (presence only),
+            // and will gain Ed25519 authentication in the Rust Sentinel rewrite.
+            | "/api/v1/fleet/heartbeat"
     )
     // Prefix matches for static assets (served by ServeDir, but just in case)
     || path.starts_with("/assets/")
@@ -657,16 +668,22 @@ pub async fn require_auth(
             // cookie at all" so the dashboard can show "Session expired —
             // reload to reconnect" instead of the misleading "No Genesis
             // established" UX (ARTEMIS result 035 issue 3).
+            //
+            // Phase 0 fix: Do NOT record_failure for stale cookies. The
+            // dashboard polls 8 endpoints simultaneously every 12 seconds;
+            // treating each stale-cookie hit as a brute-force attempt
+            // exhausts the rate-limit budget in seconds, locking the
+            // operator out with 429s before they can complete onboarding.
+            // Stale cookies are the dashboard's own artifact, not an
+            // attack vector. Clear the cookie in the response so
+            // subsequent requests take the benign "missing" path.
             warn!("Auth rejected: stale/invalid token for {}", path);
-            if let Err(retry) = rate_limiter.record_failure(client_ip) {
-                warn!(
-                    "Auth rate limit tripped: {} for {}s",
-                    client_ip,
-                    retry.as_secs()
-                );
-                return Err(StatusCode::TOO_MANY_REQUESTS);
+            let mut resp = build_auth_response(StatusCode::UNAUTHORIZED, "stale");
+            // Expire the stale cookie so the next request arrives clean.
+            if let Ok(hv) = "zp_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict".parse() {
+                resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
             }
-            Ok(build_auth_response(StatusCode::UNAUTHORIZED, "stale"))
+            Ok(resp)
         }
         None => {
             // For dashboard and page loads, redirect to root (which is exempt)

@@ -359,6 +359,92 @@ pub struct ToolManifest {
     /// parameter, recording the value applied (default or override).
     #[serde(default)]
     pub configurable: Vec<ConfigurableParam>,
+
+    /// F5: capability envelope — declarations the gate consults during evaluation.
+    /// Missing section parses as `CapabilityEnvelope::default()` (all `Unknown`),
+    /// which the gate treats conservatively (same as `Irreversible`).
+    #[serde(default)]
+    pub capabilities: CapabilityEnvelope,
+}
+
+/// F5 capability envelope — properties of a tool's actions that the
+/// governance gate uses as additional inputs to its existing evaluation.
+///
+/// Currently carries only `reversibility`. Future envelope fields (data
+/// egress, rate limits, side-effect domain) belong here.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CapabilityEnvelope {
+    /// Whether the tool's actions can be undone after the fact.
+    /// Treated conservatively when absent — see `Reversibility::Unknown`.
+    #[serde(default)]
+    pub reversibility: Reversibility,
+}
+
+/// F5 reversibility classification for a tool's actions.
+///
+/// The substrate uses this as an additional input to the existing trust-tier
+/// gate, not as a new gate of its own. Irreversible actions require a higher
+/// tier than reversible ones for the same operator to invoke them.
+///
+/// Vocabulary note: this describes a *property* of the action (whether it
+/// can be undone), not a verdict on whether the action is well-formed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Reversibility {
+    /// Effects can be cleanly undone (e.g., a search, a read, an in-memory
+    /// cache write). Allowed from any trust tier.
+    Reversible,
+    /// Some effects are reversible, some not. Treated as `Irreversible` by
+    /// the gate — conservative is the only safe default for partial.
+    Partial,
+    /// Effects cannot be undone (e.g., sending a payment, deleting a row,
+    /// publishing a message). Requires trust tier ≥ 1.
+    Irreversible,
+    /// The manifest didn't declare a value, or it predates F5. Treated as
+    /// `Irreversible` — silence is conservative, not permissive.
+    #[default]
+    Unknown,
+}
+
+impl Reversibility {
+    /// Effective classification used by the gate. `Partial` and `Unknown`
+    /// both fold to `Irreversible` because that's the safe-by-default
+    /// reading: only an explicit `Reversible` declaration unlocks the
+    /// permissive path.
+    pub fn effective(self) -> Reversibility {
+        match self {
+            Reversibility::Reversible => Reversibility::Reversible,
+            _ => Reversibility::Irreversible,
+        }
+    }
+
+    /// Stable string form used in receipt claims and CLI output.
+    /// `Reversible` ↔ `"reversible"`, etc.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Reversibility::Reversible => "reversible",
+            Reversibility::Partial => "partial",
+            Reversibility::Irreversible => "irreversible",
+            Reversibility::Unknown => "unknown",
+        }
+    }
+
+    /// Inverse of `as_str`. Unknown values (and any unrecognized string)
+    /// return `Unknown` rather than erroring — chains older than F5 use it.
+    pub fn from_str(s: &str) -> Reversibility {
+        match s {
+            "reversible" => Reversibility::Reversible,
+            "partial" => Reversibility::Partial,
+            "irreversible" => Reversibility::Irreversible,
+            _ => Reversibility::Unknown,
+        }
+    }
+
+    /// True iff the action requires the operator to be trust tier ≥ 1.
+    /// Equivalent to `effective() != Reversible`.
+    pub fn requires_elevated_tier(self) -> bool {
+        !matches!(self.effective(), Reversibility::Reversible)
+    }
 }
 
 /// A configurable parameter declared in the tool manifest.
@@ -603,6 +689,22 @@ pub fn load_manifest(path: &Path) -> Result<ToolManifest, ManifestError> {
     let content =
         std::fs::read_to_string(path).map_err(|e| ManifestError::Io(path.to_path_buf(), e))?;
     toml::from_str(&content).map_err(|e| ManifestError::Parse(path.to_path_buf(), e))
+}
+
+/// F5: read just the reversibility declaration from a tool directory.
+///
+/// Looks for `.zp-configure.toml` under `tool_dir`. Returns `Unknown` if
+/// the manifest is missing or unparseable — F5 is additive and must not
+/// fail tools that haven't yet declared a capability envelope.
+pub fn reversibility_for_tool_dir(tool_dir: &Path) -> Reversibility {
+    let manifest_path = tool_dir.join(".zp-configure.toml");
+    if !manifest_path.exists() {
+        return Reversibility::Unknown;
+    }
+    match load_manifest(&manifest_path) {
+        Ok(m) => m.capabilities.reversibility,
+        Err(_) => Reversibility::Unknown,
+    }
 }
 
 /// Errors from manifest loading.
@@ -1164,5 +1266,99 @@ mod tests {
     fn generate_secret_produces_correct_length() {
         let s = generate_secret(16);
         assert_eq!(s.len(), 32); // 16 bytes = 32 hex chars
+    }
+
+    // ── F5: reversibility parsing ────────────────────────────────────
+
+    fn parse_with_capabilities(value: &str) -> ToolManifest {
+        let toml_str = format!(
+            r#"
+                [tool]
+                name = "rev-test"
+                version = "0.1.0"
+                description = "x"
+
+                [capabilities]
+                reversibility = "{}"
+            "#,
+            value
+        );
+        toml::from_str(&toml_str).expect("manifest with capabilities parses")
+    }
+
+    #[test]
+    fn reversibility_parses_all_four_values() {
+        assert_eq!(
+            parse_with_capabilities("reversible").capabilities.reversibility,
+            Reversibility::Reversible
+        );
+        assert_eq!(
+            parse_with_capabilities("partial").capabilities.reversibility,
+            Reversibility::Partial
+        );
+        assert_eq!(
+            parse_with_capabilities("irreversible")
+                .capabilities
+                .reversibility,
+            Reversibility::Irreversible
+        );
+        assert_eq!(
+            parse_with_capabilities("unknown").capabilities.reversibility,
+            Reversibility::Unknown
+        );
+    }
+
+    #[test]
+    fn reversibility_defaults_to_unknown_when_section_absent() {
+        let toml_str = r#"
+            [tool]
+            name = "no-caps"
+            version = "0.1.0"
+            description = "x"
+        "#;
+        let m: ToolManifest = toml::from_str(toml_str).unwrap();
+        assert_eq!(m.capabilities.reversibility, Reversibility::Unknown);
+    }
+
+    #[test]
+    fn reversibility_defaults_to_unknown_when_field_absent() {
+        let toml_str = r#"
+            [tool]
+            name = "no-rev"
+            version = "0.1.0"
+            description = "x"
+
+            [capabilities]
+        "#;
+        let m: ToolManifest = toml::from_str(toml_str).unwrap();
+        assert_eq!(m.capabilities.reversibility, Reversibility::Unknown);
+    }
+
+    #[test]
+    fn unknown_and_partial_fold_to_irreversible_for_gate() {
+        assert_eq!(
+            Reversibility::Unknown.effective(),
+            Reversibility::Irreversible
+        );
+        assert_eq!(
+            Reversibility::Partial.effective(),
+            Reversibility::Irreversible
+        );
+        assert_eq!(
+            Reversibility::Irreversible.effective(),
+            Reversibility::Irreversible
+        );
+        assert_eq!(
+            Reversibility::Reversible.effective(),
+            Reversibility::Reversible
+        );
+    }
+
+    #[test]
+    fn requires_elevated_tier_only_for_non_reversible() {
+        assert!(!Reversibility::Reversible.requires_elevated_tier());
+        assert!(Reversibility::Partial.requires_elevated_tier());
+        assert!(Reversibility::Irreversible.requires_elevated_tier());
+        assert!(Reversibility::Unknown.requires_elevated_tier());
     }
 }

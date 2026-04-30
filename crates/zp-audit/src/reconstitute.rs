@@ -29,7 +29,7 @@ use tracing::info;
 /// engine can be tested independently. In production, construct these from
 /// `AuditStore::export_chain()` results.
 #[derive(Debug, Clone)]
-pub struct ChainEntry {
+pub struct ReconstitutionEntry {
     /// Entry ID (string form).
     pub id: String,
     /// Entry timestamp.
@@ -45,7 +45,7 @@ pub struct ChainEntry {
     pub receipt_extensions: Option<HashMap<String, serde_json::Value>>,
 }
 
-impl ChainEntry {
+impl ReconstitutionEntry {
     /// Convert from a full `AuditEntry` (from zp-core / AuditStore).
     ///
     /// Extracts receipt extensions (metadata key-value pairs) into the
@@ -300,7 +300,7 @@ impl ReconstitutionEngine {
     ///
     /// Entries must be fed in chain order (oldest first). The engine
     /// automatically verifies hash linkage and timestamp ordering.
-    pub fn process_entry(&mut self, entry: &ChainEntry) {
+    pub fn process_entry(&mut self, entry: &ReconstitutionEntry) {
         self.state.entries_processed += 1;
 
         // Verify chain linkage.
@@ -645,8 +645,8 @@ pub fn compute_blast_radius(
 mod tests {
     use super::*;
 
-    fn make_entry(id: &str, prev_hash: &str, entry_hash: &str) -> ChainEntry {
-        ChainEntry {
+    fn make_entry(id: &str, prev_hash: &str, entry_hash: &str) -> ReconstitutionEntry {
+        ReconstitutionEntry {
             id: id.to_string(),
             timestamp: Utc::now(),
             prev_hash: prev_hash.to_string(),
@@ -661,7 +661,7 @@ mod tests {
         prev_hash: &str,
         entry_hash: &str,
         extensions: serde_json::Value,
-    ) -> ChainEntry {
+    ) -> ReconstitutionEntry {
         let ext_map: HashMap<String, serde_json::Value> = extensions
             .as_object()
             .unwrap()
@@ -669,7 +669,7 @@ mod tests {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
 
-        ChainEntry {
+        ReconstitutionEntry {
             id: id.to_string(),
             timestamp: Utc::now(),
             prev_hash: prev_hash.to_string(),

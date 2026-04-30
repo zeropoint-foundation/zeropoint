@@ -37,13 +37,34 @@ pub struct Receipt {
     /// Blake3 hash of the canonical JSON body (all fields except signature)
     pub content_hash: String,
 
-    /// Ed25519 signature over content_hash (base64)
+    /// **Legacy single-signature field.** Pre-F8 receipts carry a
+    /// single Ed25519 signature here as base64. Post-F8 receipts leave
+    /// this `None` and use [`Receipt::signatures`] instead. Kept on the
+    /// wire for round-trip identity with the existing chain — see
+    /// [`Receipt::is_signed`] and [`Receipt::signature_blocks`] for
+    /// version-agnostic accessors.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
 
-    /// Public key of the signer (hex)
+    /// **Legacy companion to [`Receipt::signature`].** Pre-F8 receipts
+    /// carry the Ed25519 signer's public key (hex) here. Post-F8
+    /// receipts use [`SignatureBlock::key_id`] inside
+    /// [`Receipt::signatures`] instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signer_public_key: Option<String>,
+
+    /// **F8 algorithm-agile signatures.** Zero or more
+    /// [`SignatureBlock`]s, one per algorithm + signer pair. The
+    /// canonical form is sorted by `(algorithm_name, key_id)` so the
+    /// serialized JSON is deterministic regardless of insertion order
+    /// — required for the chain entry hash to be stable.
+    ///
+    /// Empty on pre-F8 receipts; in that case [`Receipt::signature`]
+    /// carries the lone Ed25519 signature instead. Post-F8 receipts
+    /// produced by [`crate::Signer::sign`] populate this field and
+    /// leave the legacy fields at `None`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signatures: Vec<SignatureBlock>,
 
     /// Assurance level
     pub trust_grade: TrustGrade,
@@ -269,6 +290,176 @@ impl Receipt {
     /// Check if the action succeeded.
     pub fn is_success(&self) -> bool {
         self.status == Status::Success
+    }
+
+    // ── F8 algorithm-agile signature accessors ─────────────────────────
+
+    /// Whether this receipt carries any signature, F8-style or legacy.
+    ///
+    /// Use this in preference to `receipt.signature.is_some()` — that
+    /// only checks the legacy field and reports `false` on F8 receipts.
+    pub fn is_signed(&self) -> bool {
+        !self.signatures.is_empty() || self.signature.is_some()
+    }
+
+    /// Return a synthetic vec of [`SignatureBlock`]s covering this
+    /// receipt regardless of which format it was produced in.
+    ///
+    /// * F8 receipt → returns the populated [`Receipt::signatures`] vec.
+    /// * Pre-F8 receipt → synthesizes a one-entry vec by promoting the
+    ///   legacy [`Receipt::signature`] / [`Receipt::signer_public_key`]
+    ///   pair into an [`SignatureAlgorithm::Ed25519`] block.
+    /// * Unsigned receipt → returns an empty vec.
+    ///
+    /// The returned vec is owned (clone), so callers can mutate it
+    /// without affecting the receipt.
+    pub fn signature_blocks(&self) -> Vec<SignatureBlock> {
+        if !self.signatures.is_empty() {
+            return self.signatures.clone();
+        }
+        match (&self.signature, &self.signer_public_key) {
+            (Some(sig_b64), Some(pk_hex)) => vec![SignatureBlock {
+                algorithm: SignatureAlgorithm::Ed25519,
+                key_id: pk_hex.clone(),
+                signature_b64: sig_b64.clone(),
+            }],
+            (Some(sig_b64), None) => vec![SignatureBlock {
+                algorithm: SignatureAlgorithm::Ed25519,
+                // Pre-F8 receipts that signed without recording a public
+                // key are exotic but possible; preserve the signature
+                // and let verifiers discover the missing key separately.
+                key_id: String::new(),
+                signature_b64: sig_b64.clone(),
+            }],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Distinct algorithm names present in this receipt's signatures,
+    /// sorted alphabetically. Includes the implicit `"ed25519"` entry
+    /// when only the legacy [`Receipt::signature`] field is set.
+    ///
+    /// Stable string form so callers can compare against e.g.
+    /// `"ed25519"` or `"ML-DSA-65"` without importing the enum.
+    pub fn algorithm_ids(&self) -> Vec<String> {
+        let blocks = self.signature_blocks();
+        let mut ids: Vec<String> = blocks
+            .iter()
+            .map(|b| b.algorithm.as_str().to_string())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    /// Whether this receipt carries a signature using `alg`.
+    pub fn has_algorithm(&self, alg: &SignatureAlgorithm) -> bool {
+        self.signature_blocks()
+            .iter()
+            .any(|b| b.algorithm == *alg)
+    }
+}
+
+// ============================================================================
+// F8 algorithm-agile signature types
+// ============================================================================
+
+/// A single signature on a receipt, identified by algorithm and key.
+///
+/// Pre-F8 the receipt held one Ed25519 signature in the legacy
+/// `signature` field. Post-F8 the receipt holds zero or more of these,
+/// allowing hybrid signing (e.g. Ed25519 + ML-DSA-65) to slot in
+/// without a chain-format migration. The chain entry hash already
+/// covers the `signatures` array via JSON serialization, so tampering
+/// with any block breaks chain continuity.
+///
+/// Canonical ordering: callers MUST keep [`Receipt::signatures`] sorted
+/// by `(algorithm.as_str(), key_id)` ascending so the JSON form (and
+/// therefore the entry hash) is deterministic. [`crate::Signer::sign`]
+/// preserves this invariant.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignatureBlock {
+    /// The signature algorithm. The named [`SignatureAlgorithm::Ed25519`]
+    /// variant is the only one ZP currently produces; everything else
+    /// is carried as [`SignatureAlgorithm::Experimental`] so older
+    /// verifiers can still parse the block.
+    pub algorithm: SignatureAlgorithm,
+
+    /// Stable identifier for the signing key. For Ed25519 this is the
+    /// hex-encoded 32-byte public key (the same string that lived in
+    /// the legacy `signer_public_key` field). For Experimental
+    /// algorithms, the format is algorithm-defined — the SDK only
+    /// requires it be a non-empty UTF-8 string.
+    pub key_id: String,
+
+    /// The raw signature bytes encoded as base64 (standard alphabet,
+    /// padded). Base64 keeps the on-wire format JSON-clean and the
+    /// `String` type matches the legacy `signature` field — useful
+    /// for tools that round-trip via plain text.
+    #[serde(rename = "signature")]
+    pub signature_b64: String,
+}
+
+impl SignatureBlock {
+    /// Convenience: build an Ed25519 block from a hex-encoded public
+    /// key and a base64-encoded signature, the formats produced by the
+    /// existing [`crate::Signer`].
+    pub fn ed25519(public_key_hex: &str, signature_b64: &str) -> Self {
+        Self {
+            algorithm: SignatureAlgorithm::Ed25519,
+            key_id: public_key_hex.to_string(),
+            signature_b64: signature_b64.to_string(),
+        }
+    }
+
+    /// The cmp key used for canonical ordering: `(alg_name, key_id)`.
+    /// Exposed as a method so call sites that need to sort an external
+    /// Vec stay in lock-step with [`Receipt::signatures`].
+    pub fn canonical_sort_key(&self) -> (&str, &str) {
+        (self.algorithm.as_str(), self.key_id.as_str())
+    }
+}
+
+/// Signature algorithm identifier.
+///
+/// `Ed25519` is the only named variant for now — everything else
+/// (ML-DSA-65, SLH-DSA-SHA2-128s, future PQ candidates) is carried
+/// as `Experimental(String)`. This keeps older verifiers forward-
+/// compatible: they parse the block, recognize the algorithm as
+/// unknown, and skip verification with a warning rather than failing.
+///
+/// The wire form is a tagged enum:
+///   `{"type": "ed25519"}`
+///   `{"type": "experimental", "name": "ML-DSA-65"}`
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SignatureAlgorithm {
+    /// Classical Ed25519 (RFC 8032). The format ZP currently signs with.
+    Ed25519,
+
+    /// A future algorithm not yet recognized by this version of the
+    /// SDK. The string is the algorithm's stable identifier (e.g.
+    /// `"ML-DSA-65"`, `"SLH-DSA-SHA2-128s"`).
+    Experimental {
+        /// Algorithm identifier as published by the producing signer.
+        name: String,
+    },
+}
+
+impl SignatureAlgorithm {
+    /// Stable string form used in canonical sort keys, receipt claims,
+    /// and verifier output. `Ed25519` ↔ `"ed25519"`, `Experimental`
+    /// returns the carried `name` verbatim.
+    pub fn as_str(&self) -> &str {
+        match self {
+            SignatureAlgorithm::Ed25519 => "ed25519",
+            SignatureAlgorithm::Experimental { name } => name.as_str(),
+        }
+    }
+
+    /// Convenience constructor for an experimental algorithm.
+    pub fn experimental(name: impl Into<String>) -> Self {
+        SignatureAlgorithm::Experimental { name: name.into() }
     }
 }
 
@@ -523,12 +714,24 @@ pub enum Decision {
 }
 
 /// Trust tier for policy evaluation.
+///
+/// **Sync note.** This enum mirrors `zp_core::policy::TrustTier`. The two
+/// definitions are kept in lockstep by hand because `zp-core` already
+/// depends on `zp-receipt`, so a clean re-export would require breaking
+/// that dep first (extracting the tier type into its own crate). When
+/// extending: extend BOTH and keep variant order identical so the derived
+/// `Ord` lines up. Wire-format note: this enum uses `lowercase` rename
+/// while zp-core's uses default (`Tier0`) — they intentionally serialize
+/// differently because they appear in different JSON schemas.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TrustTier {
     Tier0,
     Tier1,
     Tier2,
+    Tier3,
+    Tier4,
+    Tier5,
 }
 
 /// Type of redaction.
@@ -889,6 +1092,38 @@ pub enum ClaimMetadata {
         initial_state: serde_json::Value,
         /// Who triggered the canonicalization
         canonicalized_by: String,
+        /// F3 pre-canon content scanner verdict ("clean" | "flagged" | "blocked").
+        /// Absent on legacy or system/provider canonicalizations that didn't
+        /// pass through the scanner.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scan_verdict: Option<String>,
+        /// Number of findings recorded by the F3 scanner.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scan_findings_count: Option<u32>,
+        /// RFC3339 timestamp at which the F3 scan ran.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scan_timestamp: Option<String>,
+        /// F5 reversibility declared by the tool's manifest at canonicalization time.
+        /// One of "reversible" | "partial" | "irreversible" | "unknown". Absent on
+        /// pre-F5 chains and on system/provider canonicalizations.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reversibility: Option<String>,
+    },
+
+    /// Metadata for a tool lifecycle state transition (beads after bead zero).
+    /// Each variant maps to a distinct event on a tool's abacus wire:
+    /// configured, preflight passed/failed, launched, setup complete,
+    /// providers resolved, capability verified/degraded/failed.
+    Lifecycle {
+        /// The tool this lifecycle event belongs to
+        tool_id: String,
+        /// The lifecycle event type (e.g., "configured", "preflight:passed",
+        /// "launched", "setup:complete", "providers:resolved",
+        /// "capability:verified", "capability:degraded", "capability:failed")
+        event_type: String,
+        /// Optional detail (e.g., capability name, failure reason)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
     },
 }
 

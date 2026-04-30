@@ -1,7 +1,7 @@
 //! Tool Reverse Proxy — subdomain-based routing for governed tools.
 //!
 //! ZeroPoint acts as the single entry point for all governed tools.
-//! Each tool is accessed via `{name}.localhost:3000`, and ZP proxies
+//! Each tool is accessed via `{name}.localhost:17770`, and ZP proxies
 //! to the tool's ZP-assigned port on loopback.
 //!
 //! **Why subdomains?**  Modern frameworks (Next.js, Vite, Django, etc.)
@@ -99,10 +99,10 @@ fn sampler() -> &'static HealthSampler {
 ///
 /// Valid patterns:
 ///   - `ember.localhost`         → Some("ember")
-///   - `ember.localhost:3000`    → Some("ember")
-///   - `my-tool.localhost:3000`  → Some("my-tool")
-///   - `localhost:3000`          → None (bare host, not a tool)
-///   - `127.0.0.1:3000`         → None
+///   - `ember.localhost:17770`    → Some("ember")
+///   - `my-tool.localhost:17770`  → Some("my-tool")
+///   - `localhost:17770`          → None (bare host, not a tool)
+///   - `127.0.0.1:17770`        → None
 ///
 /// Only the first subdomain label is used.  `a.b.localhost` → "a".
 pub fn extract_subdomain(host: &str) -> Option<String> {
@@ -134,7 +134,7 @@ pub fn extract_subdomain(host: &str) -> Option<String> {
 
 // ── Proxy handler ───────────────────────────────────────────────────────
 
-/// Subdomain proxy — the main handler for `{tool}.localhost:3000/*`.
+/// Subdomain proxy — the main handler for `{tool}.localhost:17770/*`.
 ///
 /// Extracts the tool name from the Host header, looks up its port,
 /// and forwards the entire request unchanged.  No path rewriting,
@@ -175,12 +175,15 @@ pub(crate) async fn proxy_inner(
 
     // Build target URL, preserving query string.
     // The tool sees the original path — no prefix stripping needed.
+    // Use proxy_target() which prefers the discovered web-UI port
+    // over the statically-assigned primary port.
+    let target_port = assignment.proxy_target();
     let query = req
         .uri()
         .query()
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
-    let target_url = format!("http://127.0.0.1:{}/{}{}", assignment.port, path, query);
+    let target_url = format!("http://127.0.0.1:{}/{}{}", target_port, path, query);
 
     debug!("Proxy: {} → {}", tool_name, target_url);
 
@@ -462,22 +465,22 @@ mod tests {
     #[test]
     fn test_extract_subdomain() {
         assert_eq!(
-            extract_subdomain("ember.localhost:3000"),
+            extract_subdomain("ember.localhost:17770"),
             Some("ember".into())
         );
         assert_eq!(extract_subdomain("ember.localhost"), Some("ember".into()));
         assert_eq!(
-            extract_subdomain("my-tool.localhost:3000"),
+            extract_subdomain("my-tool.localhost:17770"),
             Some("my-tool".into())
         );
         assert_eq!(
-            extract_subdomain("EMBER.localhost:3000"),
+            extract_subdomain("EMBER.localhost:17770"),
             Some("EMBER".into())
         );
-        assert_eq!(extract_subdomain("localhost:3000"), None);
+        assert_eq!(extract_subdomain("localhost:17770"), None);
         assert_eq!(extract_subdomain("localhost"), None);
-        assert_eq!(extract_subdomain("127.0.0.1:3000"), None);
-        assert_eq!(extract_subdomain("a.b.localhost:3000"), Some("a".into()));
+        assert_eq!(extract_subdomain("127.0.0.1:17770"), None);
+        assert_eq!(extract_subdomain("a.b.localhost:17770"), Some("a".into()));
         assert_eq!(extract_subdomain(".localhost"), None);
     }
 }

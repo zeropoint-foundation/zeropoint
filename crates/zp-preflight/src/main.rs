@@ -30,7 +30,7 @@ struct Cli {
     #[arg(long)]
     binary: bool,
 
-    /// Custom port to check instead of default (3000)
+    /// Custom port to check instead of default (17770)
     #[arg(long)]
     port: Option<u16>,
 

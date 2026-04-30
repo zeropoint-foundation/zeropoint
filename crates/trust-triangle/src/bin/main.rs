@@ -35,7 +35,7 @@ struct Args {
     role: String,
 
     /// HTTP port to listen on
-    #[arg(long, default_value = "3000")]
+    #[arg(long, default_value = "17770")]
     port: u16,
 
     /// Clinic endpoint (patient role only)

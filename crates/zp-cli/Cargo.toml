@@ -32,6 +32,7 @@ zp-pipeline = { path = "../zp-pipeline" }
 zp-trust = { path = "../zp-trust" }
 zp-configure = { path = "../zp-configure" }
 zp-receipt = { path = "../zp-receipt" }
+zp-anchor = { path = "../zp-anchor" }
 zp-policy = { path = "../zp-policy" }
 zp-audit = { path = "../zp-audit" }
 zp-verify = { path = "../zp-verify" }
@@ -50,6 +51,7 @@ reqwest.workspace = true
 
 # Additional dependencies
 ed25519-dalek.workspace = true
+rand.workspace = true
 anyhow.workspace = true
 blake3.workspace = true
 hex.workspace = true

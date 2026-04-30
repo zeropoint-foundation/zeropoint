@@ -156,6 +156,40 @@
       return false;
     }
 
+    // V7 — wait for a launched tool's port to start listening, polling a
+    // same-origin server endpoint that proxies the TCP probe.
+    //
+    // The dashboard origin is http://localhost:17010. The CSP allows
+    // `connect-src 'self' …` only — meaning fetches to *.localhost:*
+    // (the subdomain proxy) and 127.0.0.1:<assigned-port> (the direct
+    // port) are silently blocked at the browser, so the older
+    // waitForPort(openUrl) loop never resolves regardless of whether
+    // the tool is actually listening. /api/v1/tools/:name/probe runs
+    // the TCP connect server-side, returns {listening, port, gateway_url},
+    // and is 'self' for CSP purposes.
+    //
+    // Returns the parsed probe payload on ready, `null` on timeout.
+    // Callers should use `payload.gateway_url` (extracted from the
+    // tool's launch log when present) for the user-facing tab/link;
+    // fall back to the subdomain proxy URL when null.
+    async function waitForToolReady(toolName, maxWaitMs = 30000, intervalMs = 1000) {
+      const deadline = Date.now() + maxWaitMs;
+      const url = `/api/v1/tools/${encodeURIComponent(toolName)}/probe`;
+      while (Date.now() < deadline) {
+        try {
+          const resp = await zpFetch(url);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data && data.listening === true) return data;
+          }
+        } catch (_) {
+          // Network blip — keep polling.
+        }
+        await new Promise(r => setTimeout(r, intervalMs));
+      }
+      return null;
+    }
+
     // ── Diagnostic panel — graduated disclosure ────────────────
     let _diagRetryTool = null;
     let _diagTerm = null;       // xterm.js instance
@@ -776,17 +810,35 @@
       }
 
       // ── Already running? Just open it via the ZP proxy. ───
+      //
+      // V7 — the "already running" probe must NOT fetch the subdomain
+      // proxy URL directly; CSP `connect-src 'self'` would block it
+      // (different origin). Use the same-origin /api/v1/tools/:name/probe
+      // endpoint that runs the TCP probe server-side.
       const proxyUrl = `http://${tool.name}.localhost:${window.location.port || 17770}/`;
       if (launch.url || launch.kind === 'web' || launch.kind === 'native') {
         // Open tab synchronously (user gesture) before any async check
         const earlyTab = window.open('about:blank', '_blank');
         showToast(`Checking <strong>${escapeHtml(tool.name)}</strong>...`);
-        if (await isPortOpen(proxyUrl)) {
+        let probeData = null;
+        try {
+          const probe = await zpFetch(`/api/v1/tools/${encodeURIComponent(tool.name)}/probe`);
+          if (probe.ok) {
+            const data = await probe.json();
+            if (data && data.listening === true) probeData = data;
+          }
+        } catch (_) {
+          // Probe fault → fall through to launch path; harmless.
+        }
+        if (probeData) {
+          // V7 — prefer gateway_url from the launch log when present.
+          const targetUrl = (probeData.gateway_url) || proxyUrl;
           showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
+          setTileRunning(tool.name, targetUrl);
           if (earlyTab && !earlyTab.closed) {
-            earlyTab.location.href = proxyUrl;
+            earlyTab.location.href = targetUrl;
           } else {
-            window.open(proxyUrl, '_blank');
+            window.open(targetUrl, '_blank');
           }
           return;
         }
@@ -877,7 +929,14 @@
         // result.url = subdomain URL (http://name.localhost:port/) — null for headless tools
         // result.port = ZP-assigned port — null for headless tools
         const openUrl = result.url || (result.port ? `http://${tool.name}.localhost:${window.location.port || 17770}/` : null);
-        const pollUrl = openUrl;  // poll the subdomain proxy — returns 502 until tool is up
+        // V7 — `pollUrl` retained for the legacy waitForPort fallback path
+        // (used by tests / synthetic launches). The actual launch flow
+        // below now uses waitForToolReady(tool.name) which hits a
+        // same-origin /api/v1/tools/:name/probe endpoint. Browser CSP
+        // (`connect-src 'self'`) blocks direct fetches to *.localhost:*
+        // and 127.0.0.1:<port>, so any client-side TCP probe must round-
+        // trip through zp-server.
+        const pollUrl = openUrl;
         if (openUrl && result.port) {
           const isNative = result.kind === 'native';
           const isDocker = result.kind === 'docker';
@@ -912,16 +971,24 @@
             });
             execInTerminal('tail -f ' + (result.log_path || '/tmp/zp-no-log'), toolPath);
 
-            const ready = await waitForPort(pollUrl, maxWait, pollInterval);
+            const probe = await waitForToolReady(tool.name, maxWait, pollInterval);
             // Kill the tail -f stream
             if (_diagExecWs) { _diagExecWs.close(); _diagExecWs = null; }
-            if (ready) {
+            if (probe) {
               dismissDiag();
+              // V7 — prefer the gateway URL the tool printed in its
+              // banner (parsed server-side from the launch log) over
+              // the cockpit subdomain. The subdomain routes to the
+              // tool's *primary* port, which for IronClaw is the
+              // webhook (404 on /); the gateway_url points at the
+              // actual user-facing UI with its bearer token.
+              const targetUrl = (probe.gateway_url) || openUrl;
+              setTileRunning(tool.name, targetUrl);
               showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
               if (pendingTab && !pendingTab.closed) {
-                pendingTab.location.href = openUrl;
+                pendingTab.location.href = targetUrl;
               } else {
-                window.open(openUrl, '_blank');
+                window.open(targetUrl, '_blank');
               }
             } else {
               if (pendingTab) pendingTab.close();
@@ -948,13 +1015,15 @@
             }
           } else {
             showToast(`<strong>${escapeHtml(tool.name)}</strong> launching...`, maxWait);
-            const ready = await waitForPort(pollUrl, maxWait, pollInterval);
-            if (ready) {
+            const probe = await waitForToolReady(tool.name, maxWait, pollInterval);
+            if (probe) {
+              const targetUrl = (probe.gateway_url) || openUrl;
+              setTileRunning(tool.name, targetUrl);  // V7 — persistent tile state + link
               showToast(`Opening <strong>${escapeHtml(tool.name)}</strong>`);
               if (pendingTab && !pendingTab.closed) {
-                pendingTab.location.href = openUrl;
+                pendingTab.location.href = targetUrl;
               } else {
-                window.open(openUrl, '_blank');
+                window.open(targetUrl, '_blank');
               }
             } else {
               if (pendingTab) pendingTab.close();
@@ -1025,6 +1094,39 @@
         tile.style.borderColor = '';
         tile.style.animation = '';
       }
+    }
+
+    // V7 — Transition tile to "running" state with persistent gateway link.
+    // Called when waitForPort confirms the assigned port is listening.
+    // Replaces the launching pulse with a steady "running" badge + a
+    // clickable URL the operator can use without spawning another tab.
+    function setTileRunning(name, gatewayUrl) {
+      const tile = document.querySelector(`.cockpit-tile[data-tool-name="${name}"]`);
+      if (!tile) return;
+      tile.classList.remove('not-ready');
+      tile.classList.add('running');
+      tile.style.borderColor = '';
+      tile.style.animation = '';
+      const badgeEl = tile.querySelector('.tile-badge');
+      if (badgeEl) {
+        badgeEl.className = 'tile-badge running';
+        badgeEl.textContent = '● running';
+      }
+      const statusEl = tile.querySelector('.tile-status');
+      if (statusEl) statusEl.textContent = 'live · governed';
+      // Append (or replace) a persistent gateway link on the tile.
+      let linkEl = tile.querySelector('.tile-link');
+      if (!linkEl) {
+        linkEl = document.createElement('a');
+        linkEl.className = 'tile-link';
+        linkEl.target = '_blank';
+        linkEl.rel = 'noopener';
+        // Stop the click from bubbling up to the tile's launch handler.
+        linkEl.addEventListener('click', (e) => e.stopPropagation());
+        tile.appendChild(linkEl);
+      }
+      linkEl.href = gatewayUrl;
+      linkEl.textContent = gatewayUrl;
     }
 
     // ── Add Tool Dialog ───────────────────────────────────

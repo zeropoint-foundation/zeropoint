@@ -28,3 +28,9 @@ opentelemetry = { version = "0.21", optional = true }
 default = ["signing"]
 signing = ["dep:ed25519-dalek", "dep:base64", "dep:rand"]
 otel = ["dep:opentelemetry"]
+
+[dev-dependencies]
+# F8 integration tests verify the algorithm-agile signature format
+# end-to-end through the chain verifier.
+zp-verify = { path = "../zp-verify" }
+base64 = "0.22"
