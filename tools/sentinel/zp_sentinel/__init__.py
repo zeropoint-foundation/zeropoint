@@ -13,7 +13,7 @@ Core Concepts (mapped from Rust ZeroPoint primitives):
 - Guard: Rate limiting and blocklist enforcement
 - GovernanceGate: Orchestrates the decision pipeline
 
-License: ZeroPoint Foundation
+License: ZeroPoint Open Foundation
 Author: ZeroPoint Labs
 """
 

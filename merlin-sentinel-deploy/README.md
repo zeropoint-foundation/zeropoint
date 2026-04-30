@@ -154,4 +154,4 @@ You install it for the network visibility. ZeroPoint's trust infrastructure come
 
 ## License
 
-ZeroPoint Foundation · [zeropoint.global](https://zeropoint.global)
+ZeroPoint Open Foundation · [zeropoint.global](https://zeropoint.global)

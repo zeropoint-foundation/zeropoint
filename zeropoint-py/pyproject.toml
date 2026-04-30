@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "zeropoint"
+version = "0.1.0"
+description = "Pure-Python HTTP client for ZeroPoint's governance gate. Lets Python agent frameworks participate in ZeroPoint governance without writing Rust."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "ZeroPoint Open Foundation", email = "team@zeropoint.foundation" },
+]
+keywords = ["zeropoint", "governance", "agents", "audit", "receipts"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+]
+
+[project.urls]
+Homepage = "https://zeropoint.global"
+Repository = "https://github.com/zeropoint-foundation/zeropoint"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zeropoint"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests requiring a running zp-server (deselect with '-k \"not integration\"')",
+]
+asyncio_mode = "auto"
