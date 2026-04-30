@@ -1207,36 +1207,60 @@ async fn main() -> anyhow::Result<()> {
     // Strategy: try the running server's API first (no DB lock contention),
     // fall back to direct DB access if the server isn't reachable.
     if let Some(Commands::Verify { audit_db, json, reconstitute, anchors }) = &args.command {
-        // Try server API first — works even while the server holds the DB lock
-        let port: u16 = 17770; // ZeroPoint default server port
-        let server_ok = (|| -> Option<()> {
-            use std::io::{Read as _, Write as _};
-            let mut conn = std::net::TcpStream::connect_timeout(
-                &format!("127.0.0.1:{}", port).parse().ok()?,
-                std::time::Duration::from_secs(2),
-            ).ok()?;
-            conn.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok()?;
-            write!(conn, "GET /api/v1/audit/verify HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n", port).ok()?;
-            let mut buf = Vec::new();
-            conn.read_to_end(&mut buf).ok()?;
-            let raw = String::from_utf8_lossy(&buf);
-            // Extract JSON body after \r\n\r\n
-            let body = raw.split("\r\n\r\n").nth(1)?;
+        // Try server API first — works even while the server holds the DB lock.
+        // Uses reqwest (async, already in tokio runtime) instead of raw TCP.
+        let port: u16 = 17770;
+        let server_ok: bool = 'server: {
+            // Read session token from ~/ZeroPoint/session.json
+            let token = match (|| -> Option<String> {
+                let home = std::env::var("HOME").ok()?;
+                let path = std::path::Path::new(&home).join("ZeroPoint/session.json");
+                let data = std::fs::read_to_string(path).ok()?;
+                let v: serde_json::Value = serde_json::from_str(&data).ok()?;
+                v["token"].as_str().map(|s| s.to_string())
+            })() {
+                Some(t) => t,
+                None => break 'server false,
+            };
+
+            let client = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(2))
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .unwrap();
+
+            let resp = match client
+                .get(format!("http://127.0.0.1:{}/api/v1/audit/verify", port))
+                .bearer_auth(&token)
+                .send()
+                .await
+            {
+                Ok(r) if r.status().is_success() => r,
+                _ => break 'server false,
+            };
+
+            let body = match resp.text().await {
+                Ok(b) => b,
+                Err(_) => break 'server false,
+            };
+
             if *json {
                 println!("{}", body);
             } else {
-                let v: serde_json::Value = serde_json::from_str(body).ok()?;
+                let v: serde_json::Value = match serde_json::from_str(&body) {
+                    Ok(v) => v,
+                    Err(_) => break 'server false,
+                };
                 let valid = v["valid"].as_bool().unwrap_or(false);
                 let entries = v["entries_examined"].as_u64().unwrap_or(0);
-                let sigs_total = v["signatures_checked"].as_u64().unwrap_or(0);
-                let sigs_pass = v["signatures_valid"].as_u64().unwrap_or(0);
+                let chain_links = v["chain_links_valid"].as_u64().unwrap_or(0);
                 let issues = v["issues"].as_array();
 
                 println!("\x1b[1mzp verify — Chain Attestation (via server)\x1b[0m");
                 println!();
                 if valid {
-                    println!("  \x1b[32m✓\x1b[0m Chain integrity: {} entries, {}/{} signatures pass, hash-link intact",
-                        entries, sigs_pass, sigs_total);
+                    println!("  \x1b[32m✓\x1b[0m Chain integrity: {} entries, {} chain links valid",
+                        entries, chain_links);
                 } else {
                     println!("  \x1b[31m✗\x1b[0m Chain integrity: FAILED ({} entries examined)", entries);
                 }
@@ -1250,17 +1274,24 @@ async fn main() -> anyhow::Result<()> {
                 }
                 println!();
             }
-            Some(())
-        })();
+            true
+        };
 
-        if server_ok.is_some() {
+        if server_ok {
             std::process::exit(0);
         }
 
-        // Fallback: direct DB access (server not running)
-        let db_path = audit_db
-            .clone()
-            .unwrap_or_else(|| args.data_dir.join("audit.db"));
+        // Fallback: direct DB access (server not running).
+        // Resolve data_dir: prefer ~/ZeroPoint if it contains an audit.db,
+        // otherwise use --data-dir (defaults to ./data/zeropoint).
+        let db_path = audit_db.clone().unwrap_or_else(|| {
+            let home_zp = dirs_fallback_audit_db();
+            if home_zp.exists() {
+                home_zp
+            } else {
+                args.data_dir.join("audit.db")
+            }
+        });
         let store = match zp_audit::AuditStore::open(&db_path) {
             Ok(s) => s,
             Err(e) => {
@@ -1269,6 +1300,15 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(2);
             }
         };
+        // Guard: an empty chain is not ACCEPT — it means we're reading the wrong file.
+        if let Ok(entries) = store.export_chain(1) {
+            if entries.is_empty() {
+                eprintln!("\x1b[33m⚠\x1b[0m  Audit store at {} is empty — no chain to verify.", db_path.display());
+                eprintln!("    This usually means --data-dir points to the wrong location.");
+                eprintln!("    Hint: try --data-dir ~/ZeroPoint/data/zeropoint");
+                std::process::exit(2);
+            }
+        }
         let report = match store.verify_with_catalog() {
             Ok(r) => r,
             Err(e) => {
@@ -2892,6 +2932,13 @@ struct AnchorReport {
     entries_covered: usize,
     coverage_pct: f64,
     mismatches: Vec<AnchorMismatch>,
+}
+
+/// Default audit DB path: ~/ZeroPoint/data/audit.db
+/// Used as smart fallback when the server is down and no --data-dir given.
+fn dirs_fallback_audit_db() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home).join("ZeroPoint/data/audit.db")
 }
 
 /// Truncate a hash for display.
