@@ -49,13 +49,13 @@ struct Args {
 enum Commands {
     /// Start the ZeroPoint server with verification surface
     Serve {
-        /// Bind address (default: 127.0.0.1)
-        #[arg(long, default_value = "127.0.0.1")]
-        bind: String,
+        /// Bind address (overrides config; default from config or 127.0.0.1)
+        #[arg(long)]
+        bind: Option<String>,
 
-        /// Port (default: 17770)
-        #[arg(long, default_value = "17770")]
-        port: u16,
+        /// Port (overrides config; default from config or 17770)
+        #[arg(long)]
+        port: Option<u16>,
 
         /// Don't open the dashboard in browser
         #[arg(long)]
@@ -721,12 +721,27 @@ async fn main() -> anyhow::Result<()> {
         no_open,
     }) = &args.command
     {
+        // Resolve config: defaults → system → project → env → CLI flags
+        let mut cfg = zp_config::ConfigResolver::resolve_standard();
+        if let Some(b) = bind {
+            cfg.bind = zp_config::Sourced::new(b.clone(), zp_config::Source::CliFlag("bind".into()));
+        }
+        if let Some(p) = port {
+            cfg.port = zp_config::Sourced::new(*p, zp_config::Source::CliFlag("port".into()));
+        }
+        if *no_open {
+            cfg.open_dashboard = zp_config::Sourced::new(false, zp_config::Source::CliFlag("no-open".into()));
+        }
+        let resolved_bind = cfg.bind.value.clone();
+        let resolved_port = cfg.port.value;
+        let resolved_open = cfg.open_dashboard.value;
+
         #[cfg(feature = "embedded-server")]
         {
             let config = zp_server::ServerConfig {
-                bind_addr: bind.clone(),
-                port: *port,
-                open_dashboard: !no_open,
+                bind_addr: resolved_bind,
+                port: resolved_port,
+                open_dashboard: resolved_open,
                 ..zp_server::ServerConfig::default()
             };
             if let Err(e) = zp_server::run_server(config).await {
@@ -739,9 +754,9 @@ async fn main() -> anyhow::Result<()> {
         {
             // Without the embedded-server feature, launch zp-server as a subprocess
             let mut cmd = std::process::Command::new("zp-server");
-            cmd.env("ZP_BIND", bind);
-            cmd.env("ZP_PORT", port.to_string());
-            if *no_open {
+            cmd.env("ZP_BIND", &resolved_bind);
+            cmd.env("ZP_PORT", resolved_port.to_string());
+            if !resolved_open {
                 cmd.env("ZP_NO_OPEN", "1");
             }
             match cmd.status() {
