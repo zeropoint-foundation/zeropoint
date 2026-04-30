@@ -1,14 +1,24 @@
 # ZeroPoint Content Strategy — Building in Public
 
 **Author:** Ken Romero, with synthesis assistance from Claude.
-**Date:** 2026-04-21.
-**Status:** v1. Living document. Revise after 30 days based on what's working.
+**Date:** 2026-04-21 (updated 2026-04-29).
+**Status:** v2. Living document. Revise after 30 days based on what's working.
 
 ---
 
 ## The Thesis in One Paragraph
 
-Ken Romero is building ZeroPoint — the first autorecursive trust substrate for autonomous AI agents — largely alone, in real time, with full transparency about the thinking, the breakthroughs, and the evolution. The story is not "here is a product." The story is "here is a mind working on a problem that matters, and the problem is shaping the mind as much as the mind is shaping the solution." That recursive quality — the builder being changed by the build — is the narrative engine. It is also, not coincidentally, the thesis of the project itself: autorecursion all the way down.
+AI agents are making real decisions across trust boundaries, and every agent harness tracks what happened differently — but none of them can prove it. ZeroPoint is the open trust substrate beneath all of them: signed receipts, tamper-evident chains, cryptographic identity, capability delegation — the same governance primitives regardless of which harness produced the action. Ken Romero is building this largely alone, in real time, with full transparency about the thinking, the breakthroughs, and the evolution. The story is not "here is a product." The story is "here is a mind working on a problem that matters, and the problem is shaping the mind as much as the mind is shaping the solution." That recursive quality — the builder being changed by the build — is the narrative engine.
+
+## The Positioning (see also: docs/POSITIONING.md)
+
+**One-liner:** Open-source trust infrastructure for the agentic age.
+
+**Tagline:** Trust shouldn't be a feature. It should be the substrate.
+
+**The structural analogy:** JetBrains provides code intelligence as the substrate beneath any AI model. ZeroPoint provides trust infrastructure as the substrate beneath any agent harness.
+
+**The anti-pattern:** We don't compete with agent harnesses. We don't lock anyone in. We don't ask you to bet your governance story on one vendor. We make every harness trustworthy — and when you switch (you will switch), the audit chain is continuous.
 
 ---
 
@@ -24,13 +34,19 @@ The work is already deep enough to be compelling. 22 Rust crates, 700+ tests, a 
 
 Technical depth with philosophical reach. The register sits somewhere between a senior architect's design doc and a builder's journal. It doesn't talk down. It doesn't hype. It shows the actual thinking — including the parts where the thinking changed direction.
 
-Three qualities to maintain:
+**The JetBrains model.** In 2024, JetBrains tried to be your sole AI provider — their models, their subscription, their backend. It didn't work. The AI space moved too fast. Their recovery: reposition the IDE as an open platform, reject vendor lock-in, and be transparent about the misstep. The positioning landed because it didn't feel like selling. It felt like an engineer being honest. That's our tone.
+
+Five qualities to maintain:
 
 - **Precision over polish.** Say what you mean. Use the real vocabulary (autorecursive, constitutional invariant, grammar reframe). The audience worth having will rise to meet the language. The audience that needs buzzwords is not the audience that builds category-defining projects.
 
 - **Honesty about uncertainty.** The calibrated-uncertainty section of the architecture doc is the model. "I'd take this bet at 4:1" is more compelling than "we are confident." Show the error bars. Show what would change your mind.
 
+- **Honesty about what's built vs. what's roadmap.** Lead with what's working (fleet heartbeat, lease renewal, signed receipts, audit chain). Be clear about what's next (harness integrations, Hedera anchoring). Never oversell. The running code speaks first.
+
 - **The personal stake.** You're not a corporation. You're a person who sees something others don't yet, building it because no one else will. That's not weakness — it's the thing that makes the story worth following.
+
+- **The JetBrains-direct close.** End with an invitation, not a pitch. "Here's what we believe. Tell us if we're wrong." This is not a rhetorical move — it's a genuine request. If the primitives are wrong, we'd rather know now.
 
 ---
 
@@ -116,18 +132,33 @@ Start with Substack. Migrate to owned infrastructure once the habit is establish
 - Target: enterprise security, compliance, CISO community
 - Cadence: 1-2 posts per week
 
-### Tertiary: Video / Audio (Phase 2 — start after 60 days)
+### Co-Primary: YouTube
 
-Don't start here. Start writing. But plan for:
+YouTube is now a launch-alongside channel, not a Phase 2 afterthought. The format fits Ken's strengths: technical depth, honest narration, showing the actual system running. The JetBrains strategy video that influenced our positioning is proof of the format — honest, engineer-to-engineer, no hype, and it landed.
 
-- **Demo walkthroughs:** Screen recordings of ZeroPoint in action — the genesis ceremony, the canonicalization framework, the dashboard. Show the running system.
-- **Podcast guest appearances:** AI governance, Rust, indie hacker, startup podcasts. You have a unique story. Podcast hosts love guests who've actually built the thing.
-- **YouTube deep-dives:** 15-20 minute videos walking through an architecture decision. "Why ZeroPoint uses a grammar, not a state machine." These become evergreen discovery content.
+**Content tiers:**
 
-### Community (Phase 2-3)
+- **Deep-dives (15-25 min):** Architecture decisions, the substrate thesis, live fleet demos, harness integration walkthroughs. "Why trust shouldn't be a feature." "How we govern agents without modifying the harness." These are evergreen discovery content — they compound.
+- **Build-in-public updates (5-10 min):** What shipped this week, what broke, what changed. Screen recordings of the real system. Terminal output. Dashboard. The unpolished version — that's the point.
+- **Short-form clips (60-90 sec):** Pull the sharpest insight from each long video. Distribute on YouTube Shorts, X, LinkedIn. The storefront for the deep-dives.
 
-- **Discord or GitHub Discussions:** A place for people who find the writing and want to go deeper. Don't launch this until there are at least 50-100 engaged readers. A ghost town is worse than no community.
-- **Office hours:** Monthly or biweekly open call where anyone can ask about ZeroPoint, agent governance, or the architecture. Low effort, high signal.
+**First five videos (aligned with the release):**
+
+1. "Trust Shouldn't Be a Feature" — the substrate thesis in 15 minutes. Adapted from the blog post (R7). The manifesto video.
+2. "The Fleet Is Live" — screen recording of Sentinel heartbeat, lease renewal, cockpit dashboard. Show the running system. No slides — just the terminal and the dashboard.
+3. "How ZeroPoint Works with Claude Code" — trace layer walkthrough. Install the MCP server, run a task, show the receipts. Concrete, hands-on.
+4. "Building Alone: What It's Actually Like" — the personal piece. Food poisoning while deploying fleet delegation. Selling your car to keep going. The honest version.
+5. "Why I Left the Walled Garden" — the JetBrains-inspired piece. Why open substrate beats vendor lock-in. Why agents kill the walled garden model. Why ZeroPoint bets on protocols, not platforms.
+
+**Revenue potential:** YouTube Partner Program (1,000 subscribers + 4,000 watch hours), sponsorships from dev tool companies, GitHub Sponsors integration. Not the primary revenue path, but every dollar helps while grants and partnerships materialize.
+
+**Cadence:** 1 deep-dive every 2 weeks, 1 build update weekly, short-form clips cut from both. Start with the release push — the first two videos can ship alongside the release.
+
+### Tertiary: Podcast + Community
+
+- **Podcast guest appearances:** AI governance, Rust, indie hacker, startup podcasts. You have a unique story. Podcast hosts love guests who've actually built the thing. Pursue actively once the first 3-5 YouTube videos establish the talking points.
+- **Discord or GitHub Discussions:** A place for people who find the content and want to go deeper. Don't launch this until there are at least 50-100 engaged viewers/readers. A ghost town is worse than no community.
+- **Office hours:** Monthly open call where anyone can ask about ZeroPoint, agent governance, or the architecture. Low effort, high signal. Start after the YouTube channel has traction.
 
 ---
 
@@ -135,8 +166,8 @@ Don't start here. Start writing. But plan for:
 
 These are ordered to build the narrative arc: start with the thesis, establish the lineage, show the work, reveal the journey, then point forward. Each title is a working draft.
 
-### 1. "Trust Is Infrastructure"
-The manifesto. What ZeroPoint is, why it exists, why governance-as-protocol is different from governance-as-policy. Not a product announcement — a statement of belief. Draw the line between "guardrails" and "grammar." End with: this is what I'm building, and I'm building it in the open.
+### 1. "Trust Shouldn't Be a Feature"
+The manifesto. Why trust infrastructure can't be owned by one harness vendor. Why the receipt chain survives switching agents. Why "developer accountability" needs cryptographic backing. Not a product announcement — a statement of belief. Draw the line between proprietary observability and cryptographic provenance: LangSmith tells you what happened, ZeroPoint proves what happened. End with the JetBrains-direct close: here's what we believe, tell us if we're wrong. *Also the script for YouTube video #1.*
 
 ### 2. "Where This Comes From"
 The intellectual constellation piece. The Navy crypto-linguist background (woven in naturally, not leading). The influences — Qvist, Barenholtz, Faggin, Baird, Blume, Lee, Jones. How the threads converge on three pillars. This post establishes that ZeroPoint has roots, that it draws from a genuine intellectual lineage, and that the architecture reflects decades of cross-disciplinary thinking — not a weekend hackathon.
@@ -188,11 +219,14 @@ Time budget: ~4-6 hours per post cycle (including short-form extraction). At biw
 ## Metrics That Matter (and Ones That Don't)
 
 **Track:**
-- Subscriber count (Substack) — the core leading indicator
-- Email open rate — are people actually reading?
+- Subscriber count (Substack + YouTube) — the core leading indicators
+- YouTube watch hours and retention — are people staying for the depth?
+- Email open rate — are readers actually reading?
 - Replies and thoughtful comments — signal of depth of engagement
-- Inbound messages (DMs, emails from people who found you through the writing)
-- GitHub stars / traffic correlated with post timing
+- Inbound messages (DMs, emails from people who found you through the content)
+- GitHub stars / traffic correlated with content timing
+- Donation/sponsorship revenue (GitHub Sponsors, Open Collective, YouTube)
+- Grant application status and pipeline
 
 **Ignore (for now):**
 - Total impressions / views — vanity at this stage
@@ -201,8 +235,13 @@ Time budget: ~4-6 hours per post cycle (including short-form extraction). At biw
 
 **6-month targets (calibrated, not aspirational):**
 - 500+ Substack subscribers
+- 1,000+ YouTube subscribers (Partner Program threshold)
+- 4,000+ YouTube watch hours (Partner Program threshold)
+- Hedera grant submitted and in review
+- 1+ additional grant applications submitted (AI safety, open-source infrastructure)
+- Donation infrastructure live and generating any amount of recurring revenue
 - 3-5 podcast guest appearances
-- 1-2 inbound conversations with potential strategic partners or investors
+- 1-2 inbound conversations with potential strategic partners or design partnership clients
 - A recognizable name in the AI governance / trust infrastructure conversation
 - GitHub stars tracking upward in correlation with content
 

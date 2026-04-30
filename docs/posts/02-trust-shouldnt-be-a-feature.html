@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="Trust Shouldn't Be a Feature — ZeroPoint">
+<meta property="og:description" content="Why trust infrastructure can't be owned by one agent harness. Why the audit chain must survive switching tools. Why we need a substrate, not a feature.">
+<title>Trust Shouldn't Be a Feature — ZeroPoint</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;600&family=Jura:wght@300;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --slate: #181a20;
+    --slate-mid: #1e2028;
+    --slate-light: #2a2d38;
+    --teal: #2dd4bf;
+    --teal-dim: #1e8c7e;
+    --amber: #f5b43c;
+    --amber-dim: #a07323;
+    --white: #e8e6e3;
+    --white-dim: #8c8984;
+    --gray: #504e4a;
+  }
+
+  body {
+    background: var(--slate);
+    color: var(--white);
+    font-family: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 19px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .content {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 80px 24px 120px;
+  }
+
+  .meta {
+    font-family: 'Jura', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--teal-dim);
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-size: 2.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle {
+    font-size: 1.1rem;
+    color: var(--white-dim);
+    margin-bottom: 48px;
+    line-height: 1.7;
+  }
+
+  h2 {
+    font-size: 1.35rem;
+    font-weight: 500;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    color: var(--teal);
+    letter-spacing: -0.01em;
+  }
+
+  p { margin-bottom: 20px; }
+
+  em { color: var(--teal); font-style: italic; }
+
+  strong { font-weight: 500; }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    color: var(--amber);
+    background: var(--slate-mid);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  blockquote {
+    border-left: 3px solid var(--teal-dim);
+    padding: 8px 0 8px 20px;
+    margin: 28px 0;
+    color: var(--white-dim);
+    font-style: italic;
+  }
+
+  .separator {
+    text-align: center;
+    color: var(--gray);
+    margin: 48px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    letter-spacing: 0.3em;
+  }
+
+  .cta-block {
+    background: var(--slate-mid);
+    border: 1px solid var(--slate-light);
+    border-radius: 8px;
+    padding: 28px 32px;
+    margin: 48px 0;
+    text-align: center;
+  }
+
+  .cta-block p {
+    margin-bottom: 16px;
+    color: var(--white-dim);
+    font-size: 0.95rem;
+  }
+
+  .cta-block a {
+    display: inline-block;
+    color: var(--teal);
+    text-decoration: none;
+    font-weight: 500;
+    padding: 8px 20px;
+    border: 1px solid var(--teal-dim);
+    border-radius: 6px;
+    margin: 4px 8px;
+    transition: all 0.2s;
+  }
+
+  .cta-block a:hover {
+    background: rgba(45, 212, 191, 0.1);
+    border-color: var(--teal);
+  }
+
+  .footer-note {
+    margin-top: 64px;
+    padding-top: 32px;
+    border-top: 1px solid var(--slate-light);
+    font-size: 0.85rem;
+    color: var(--gray);
+  }
+
+  .footer-note a {
+    color: var(--teal-dim);
+    text-decoration: none;
+  }
+
+  .footer-note a:hover { color: var(--teal); }
+
+  @media (max-width: 600px) {
+    h1 { font-size: 1.6rem; }
+    .content { padding: 60px 20px 80px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="content">
+  <div class="meta">ZeroPoint &middot; April 2026</div>
+  <h1>Trust Shouldn't Be a Feature</h1>
+  <p class="subtitle">Why agent governance needs a substrate, not another vendor feature. Why the audit chain must survive switching tools. And why we'd rather be wrong in public than right in private.</p>
+
+  <h2>The Problem Everyone Faces</h2>
+
+  <p>AI agents are making real decisions. Not toy demos — real decisions that affect real systems. They're writing code that ships to production, calling APIs that move data across organizational boundaries, executing workflows that touch billing systems and customer records. Every major tech company is shipping agent capabilities as fast as they can build them.</p>
+
+  <p>And every single one of them has a different way of tracking what happened.</p>
+
+  <p>Claude Code has its hooks. Codex has its event system. Google ADK has its tracing. Microsoft's Agent Framework has its middleware. Each one gives you observability inside their own ecosystem. But none of them can <em>prove</em> what happened in a way that survives leaving that ecosystem. The audit trails are proprietary, non-portable, and break the moment you switch tools.</p>
+
+  <p>And you will switch tools. The best agent today won't be the best agent in six months. Anyone who's been in this space for even a year knows that. The landscape moves too fast for loyalty.</p>
+
+  <h2>What Doesn't Work</h2>
+
+  <p>Building governance into one harness. It locks you in. It doesn't survive the switch. And it asks the harness vendor to solve a problem that isn't theirs — trust is orthogonal to orchestration.</p>
+
+  <p>Your agent vendor's job is to make agents that are capable, fast, and useful. Your governance infrastructure's job is to make those agents accountable, auditable, and policy-bound. These are different jobs. Conflating them creates a conflict of interest: the vendor who profits from agent adoption is the same vendor controlling the guardrails on agent behavior. That's not a governance model. That's a marketing decision.</p>
+
+  <p>Microsoft recently open-sourced their Agent Governance Toolkit. Google launched an Enterprise Agent Platform. OWASP shipped the Agentic Top 10. Singapore published the first national Agentic AI Governance Framework. The category is validating. But every implementation I've studied shares the same structural limitation: the governance story dies when you leave the platform. Your audit trail is only as portable as the vendor allows it to be.</p>
+
+  <blockquote>"Developer accountability" is a claim. Without cryptographic backing, it's just words.</blockquote>
+
+  <h2>What We Believe</h2>
+
+  <p>Trust should be a substrate, not a feature. Cryptographic identity, capability delegation, provenance receipts, and audit chains should work the same way regardless of which agent produced them. The governance layer should be as agent-agnostic as the network layer is application-agnostic.</p>
+
+  <p>That's the structural insight behind ZeroPoint. Every action produces a signed receipt. Every receipt chains into a tamper-evident ledger. Every participant — human, agent, service, or device — holds an Ed25519 keypair, not an account. The governance layer doesn't care which harness produced the action. The audit chain is continuous regardless of which agent framework you're running today or will switch to tomorrow.</p>
+
+  <p>The receipt chain is a file. It carries its own proof. An auditor with the chain and a standalone verifier can confirm every decision, every identity, every policy constraint — no server, no API, no credentials, no cooperation required. Governance survives the system.</p>
+
+  <p>This is the property that distinguishes substrate-level governance from feature-level governance. Features depend on the platform. Substrates persist independently.</p>
+
+  <h2>What That Means Practically</h2>
+
+  <p>ZeroPoint integrates with agent harnesses as a two-layer extension — no forking, no modifications to the harness core.</p>
+
+  <p>The <strong>trace layer</strong> is universal, passive, and append-only. It hooks into any harness's event lifecycle to write provenance receipts on every tool call. Non-blocking, no agent cooperation needed. Works via MCP, the emerging standard that every major agent framework supports. A few hundred lines per adapter. This is the adoption wedge — it works everywhere with minimal friction because it's essentially a structured logger with Ed25519 signing.</p>
+
+  <p>The <strong>guard layer</strong> is harness-specific and active. It checks capability grants before trust-boundary actions. It can block unauthorized tool calls. This requires the harness to opt into being governed, not just observed. Deeper integration, but this is where the real governance value lives.</p>
+
+  <p>A single <code>zp-mcp-server</code> gives trace-layer coverage to any MCP-capable harness automatically. pi, Claude Code, Codex, Google ADK — one implementation, universal coverage. Per-harness work is only needed for the guard layer.</p>
+
+  <p>The cockpit dashboard reads the receipt chain — agent provenance is harness-agnostic at the data layer. You see one unified trust surface across your entire agent fleet, regardless of which harnesses produced the receipts.</p>
+
+  <div class="separator">&middot; &middot; &middot;</div>
+
+  <h2>What's Running Today</h2>
+
+  <p>This is not a whitepaper. The fleet is live.</p>
+
+  <p>ZP Core runs on a workstation — governance gate, receipt chain, fleet registry, SSE event stream, cockpit dashboard. A Python Sentinel runs on an ASUS RT-AX58U router — DNS monitoring, device tracking, anomaly detection, Ed25519 mesh identity. Fleet heartbeat pulses every 30 seconds between Sentinel and Core. Standing delegation with automated lease renewal renews every 2 hours, Ed25519-signed.</p>
+
+  <p>22 Rust crates, 700+ tests, all passing. 16 microseconds per signed receipt. 47,000 entries per second for chain verification. The performance numbers are published and independently reproducible.</p>
+
+  <p>It's one developer. One workstation. One router. And it works.</p>
+
+  <h2>Tell Us If We're Wrong</h2>
+
+  <p>We're not asking you to trust us. We're asking you to verify. The code is open source — MIT and Apache-2.0. The receipt chain is downloadable. The verifier is standalone. The falsification guide pairs every claim with the test that would disprove it.</p>
+
+  <p>If the primitives are right, governance composes naturally across any harness. If they're wrong, we'd rather know now. Use the trace layer. Break the assumptions. File an issue. Tell us what fails.</p>
+
+  <p>We don't compete with agent harnesses. We make them trustworthy.</p>
+
+  <div class="cta-block">
+    <p>ZeroPoint is open source. The code, the docs, the chain, the verifier.</p>
+    <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+    <a href="https://zeropoint.global/whitepaper.html">Whitepaper</a>
+    <a href="https://zeropoint.global/playground.html">Playground</a>
+    <a href="https://github.com/sponsors/zeropoint-foundation">Support</a>
+  </div>
+
+  <div class="footer-note">
+    <p>Written by <a href="https://thinkstreamlabs.ai">Ken Romero</a>, founder of ThinkStream Labs and sole developer of ZeroPoint. This post also serves as the script for <a href="#">YouTube video #1</a> in the ZeroPoint series.</p>
+    <p style="margin-top: 12px;"><a href="/posts/">&larr; All posts</a> &middot; <a href="https://zeropoint.global">zeropoint.global</a></p>
+  </div>
+</div>
+
+</body>
+</html>

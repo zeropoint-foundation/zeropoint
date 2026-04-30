@@ -163,7 +163,7 @@ Environment variables are loaded in this precedence:
 
 | Env Var | Default | Type | Purpose |
 |---------|---------|------|---------|
-| `ZP_PORT` | `3000` | u16 | Server listen port |
+| `ZP_PORT` | `17770` | u16 | Server listen port |
 | `ZP_OPERATOR_NAME` | `"ZeroPoint"` | String | Operator identity |
 | `ZP_OPERATOR_PROMPT` | (long default) | String | Base system prompt |
 | `ZP_TRUST_TIER` | `"tier0"` | String | Trust tier: tier0/tier1/tier2 |

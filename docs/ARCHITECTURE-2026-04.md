@@ -11,6 +11,7 @@
 - `security/pentest-2026-04-06/REMEDIATION-NOTES.md` — working notes, decisions, deferred questions
 - `docs/design/governed-agent-runtime.md` — the Governed Agent Runtime (GAR) architecture specification (Phase 4)
 - `docs/future-work/cognitive-accountability.md` — the cognitive accountability layer (Layer 3 trace vision, parked until foundation hardening completes)
+- `docs/design/sentinel-rf-sovereignty-design.md` — WiFi sensing defense network: firmware integrity, 802.11bf detection, active countermeasures, fleet correlation, sovereign hardware selection
 
 This document sits *above* all four. The whitepaper is the thesis; the pentest is the evidence; the catalog is the grammar; the notes are the workshop. This document is the operating spec — the thing that says what ZeroPoint actually is now, what it is supposed to become, and how the work between those two states is sequenced.
 
@@ -150,6 +151,35 @@ There is a fourth commitment that is implicit in everything above and that needs
 X3 has no implementation in v0. Candidate mechanisms include WASM rules with bounded lookback, reputation accumulators that emit refusals on sequence patterns, and constitutional rules that maintain rolling state. v1 of the catalog must propose at least one concrete mechanism. v2 must implement and test it.
 
 Naming X3 as Commitment D makes it impossible to forget. It is the thing that justifies everything else.
+
+### 9a. The fifth commitment: external truth anchoring
+
+**Commitment E — The receipt chain's state is externally witnessable via distributed ledger anchoring, and this is an enrichment, not a dependency.**
+
+The chain is self-verifying (M3, M12). External truth anchoring extends the guarantee across organizational boundaries by publishing the chain's head hash, sequence number, and operator signature to an independent distributed ledger — creating a timestamped witness that no single party controls. In the deployment scenarios where this matters — cross-organizational transactions, regulated exchanges, multi-party trust — ledger infrastructure is already present as part of the transaction itself. Governance anchoring piggybacks on that existing infrastructure at effectively zero marginal cost. External witnessing is not an exotic add-on; it is the natural consequence of deploying governed agents in contexts where transactions already touch a shared ledger.
+
+**Architecture.** The `zp-anchor` crate defines the `TruthAnchor` trait — three methods (`anchor()`, `verify()`, `query_range()`) that any DLT backend implements. The `AnchorCommitment` carries the chain's cryptographic fingerprint; the `AnchorReceipt` carries the ledger's proof of publication. Both are compact (hundreds of bytes) and carry no governance content — the ledger sees a hash and a signature, not the governed data.
+
+**Event-driven model.** Anchoring is triggered by `AnchorTrigger` — six variants representing actual reasons to anchor:
+
+| Trigger | When |
+|---------|------|
+| `OperatorRequested` | Explicit operator invocation (CLI, API, UI) |
+| `CrossMeshIntroduction` | Two meshes exchanging trust each anchor for the other to verify |
+| `ComplianceCheckpoint` | Before audit export or scheduled compliance review |
+| `DisputeEvidence` | Governance action contested, external timestamping needed |
+| `Opportunistic` | Existing blockchain transaction — embed chain head as metadata at zero marginal cost |
+| `GovernanceEvent` | Significant state change (revocation, constitutional update, trust tier change) |
+
+There are no timers. No receipt-count triggers. The chain's internal integrity is self-contained via hash-linking. External witnessing is valuable when something is at stake, not on a schedule.
+
+**Reference backend: Hedera Hashgraph HCS.** Chosen for sub-second deterministic finality, low cost (fraction of a cent per message), public queryability via mirror nodes, and council governance aligned with transparency commitments. The trait architecture ensures Hedera is a choice, not a dependency — Ethereum L2, Bitcoin OpenTimestamps, Ceramic, or any timestamping authority can be substituted.
+
+**Cross-mesh trust.** When two deployments meet, each announces its anchor backend identifier (e.g., HCS topic ID). Each independently queries the other's anchor history. Trust between strangers is established through shared external proof, not mutual assertion. A deployment with months of consistent anchoring provides a verifiable trajectory of external attestations that a newly fabricated chain cannot reproduce.
+
+**What anchoring does not provide.** It does not prove chain content is true — only that the chain was in a specific state at a specific externally-witnessed time. It does not prevent parallel fabrication (maintaining two chains and anchoring only one). It does not replace internal integrity — a corrupt chain remains corrupt regardless of anchoring. It does not create a runtime dependency — if the ledger is unreachable, the chain continues with full internal integrity.
+
+**Current status.** The `zp-anchor` crate (313 lines) defines all types and traits. The `NoOpAnchor` implementation provides the no-backend-configured fallback. The trait is not yet wired into the runtime's receipt emission pipeline. This is tracked as a deferred obligation in the Invariant Catalog v1, §8.
 
 ---
 
@@ -518,4 +548,46 @@ Start there. The rest follows.
 
 ---
 
-*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Phase 4 (Governed Agent Runtime) added April 21, 2026 following the Hermes Agent integration analysis. Part V½ (Design Philosophy) added April 22, 2026 following the Zen of Reticulum alignment pass — inspired by Mark Qvist's articulation of uncentralizable networking principles, mapped to ZeroPoint's trust layer. Elevated to Canonical Architecture Record on April 22, 2026 — wired into CLAUDE.md as binding constraint for all sessions. Next revision expected after Phase 1 exit.*
+## Part VII — Competitive Landscape Adaptations
+
+**Added:** 2026-04-25, following comparative analysis of Microsoft's Agent Governance Toolkit (AGT, released 2026-04-02, MIT license). Full analysis in `docs/design/AGT-COMPARATIVE-ANALYSIS.md`.
+
+**Context.** Microsoft released an open-source, seven-package governance toolkit covering all 10 OWASP Agentic AI risks. Ed25519 signatures, DID-based identity, execution rings, dynamic trust scoring (0–1000), policy engines in YAML/OPA/Cedar, adapters for 20+ frameworks. Multi-language: Python, Rust, TypeScript, Go, .NET. This validates the market ZeroPoint is building in and sets the industry baseline.
+
+**The permanent differentiation.** AGT is governance-as-software. Its policy engine, trust scoring, and compliance grading all require a running process. The governance exists in the toolkit, not in the data. ZeroPoint's governance is governance-as-data — the receipt chain carries its own proof, survives the governed system, and is cold-auditable. This is an architectural commitment, not a feature gap. AGT cannot add chain integrity without redesigning from append-only logs to hash-linked, signed, self-verifying chains.
+
+Additionally: AGT's trust is not portable. Trust scores live in-process and reset on restart. ZP's trust is the chain — it travels with the entity. AGT has no canonicalization (entities are assumed to pre-exist governance). AGT has no formal grammar (no equivalent of "well-formed" or "ungrammatical"). AGT is not autorecursive (the governance toolkit's own decisions are not subject to its own governance).
+
+### Adaptations — what to learn from AGT
+
+Eight capabilities observed in AGT that ZeroPoint should adapt. Ordered by priority. Each is restated in ZeroPoint's vocabulary and architecture.
+
+**F1 — Chain verification CLI (`zp verify`).** AGT ships `agt verify` — a single command that runs OWASP compliance checks and produces a signed attestation. ZeroPoint already has the Falsification Guide (9 tests), the Invariant Catalog (13 invariants, 6 productions, 4 cross-layer rules), and `zp-verify` (the chain-walking crate). What's missing is the single-command UX that ties them together. `zp verify` walks the chain, checks all invariants, and outputs a trajectory attestation: "Chain intact. N receipts. 0 invariant violations. Well-formed since genesis on [date]." This is a CLI wrapper around existing machinery, not new governance logic. **Affected crate:** `zp-verify`, new `zp-cli` subcommand. **Effort:** Low.
+
+**F2 — Uncanonicalized entity discovery.** AGT's `agent-discovery` scans processes, configs, and repos for unregistered agents. In ZP terms, this is a scanner that reports entities executing without a canon — violations of the canonicalization invariant (M11). "These 3 processes are running but have no canonicalization receipt. They do not exist in the governance domain." The invariant says nothing executes without a canon; this tool detects when the invariant is violated in the surrounding environment. **Affected crate:** New `zp-discover` crate or CLI subcommand. **Effort:** Medium.
+
+**F3 — MCP tool content scanner (pre-canonicalization security gate).** AGT's MCP Security Scanner detects tool poisoning, typosquatting, and hidden instructions in MCP tool definitions. ZP's tool canonicalization establishes that a tool exists and who authorized it, but does not inspect the tool's definition for malicious payloads. A pre-canonicalization scanner makes canonicalization a security gate, not just an identity gate. The scan result is a receipt claim (`tool:scanned:clean` or `tool:scanned:flagged`) — chain-linked and auditable. This is a constitutional-rule-level check: the tool must pass content safety verification as a precondition for being constituted. **Affected crates:** `zp-governance` (gate evaluation), new scanner module. **Effort:** Medium.
+
+**F4 — Published performance benchmarks.** AGT publishes specific numbers: 0.012ms p50 for single-rule eval, 35K ops/sec under 50-agent concurrency. ZeroPoint publishes nothing. The governance gate, receipt emission (Ed25519 signing + Blake3 hashing), and chain verification have measurable costs. Benchmark them. Publish the numbers with honest caveats about what's measured. **Affected crates:** Benchmark suite across `zp-governance`, `zp-receipt`, `zp-verify`. **Effort:** Low.
+
+**F5 — Reversibility annotations on tool capabilities.** AGT's Agent Hypervisor verifies execution plan reversibility before actions execute. In ZP terms, reversibility is a property of the tool's canonicalization record — part of its capability envelope. When a tool is canonicalized, its manifest declares `reversible: true|false`. The governance gate applies stricter policy to irreversible actions (higher trust tier required, operator approval, mandatory cooldown). The annotation is a receipt claim: `tool:capability:irreversible`. **Affected crates:** `zp-receipt` (capability metadata), `zp-governance` (gate policy). **Effort:** Low.
+
+**F6 — Health check CLI (`zp doctor`).** AGT ships `agt doctor` for initialization verification. ZP equivalent: `zp doctor` checks genesis sealed, chain intact (quick hash-link walk), all entities canonicalized, vault accessible, signing key available, verifier operational. Reports what's healthy and what needs attention. **Affected crate:** `zp-cli`. **Effort:** Low.
+
+**F7 — Python SDK.** AGT ships SDKs in 5 languages. Most tenant frameworks (Cline, CrewAI, OpenHands, LangGraph) are Python. ZP's MCP interface provides language-agnostic governance, but a native Python SDK (`zeropoint-py`) would lower integration friction for tenant development. Start with receipt creation, chain verification, and governance gate client. **Affected:** New `zeropoint-py` package wrapping MCP or FFI to Rust core. **Effort:** High.
+
+**F8 — Post-quantum algorithm agility.** AGT implements hybrid Ed25519 + ML-DSA-65 (FIPS 204). Not urgent for ZP, but the receipt format should accommodate algorithm agility — a receipt signed with Ed25519 today should be co-signable with a post-quantum algorithm tomorrow without breaking the chain. This is a format design decision, not a cryptography implementation. **Affected crate:** `zp-receipt` (signature algorithm field in receipt format). **Effort:** Low (design), deferred (implementation).
+
+### What NOT to adapt
+
+**Dynamic trust scoring (0–1000).** AGT's trust score erases the trajectory. ZP's trust IS the trajectory. A derived trust score — computed from the chain as a projection (Primitive 4) — may be useful as a UX convenience, but must never replace the chain as the source of trust.
+
+**Execution rings.** ZP's containment levels (1–5) serve the same function. Different metaphor (physical containment vs. CPU privilege), equivalent capability.
+
+**SRE patterns (SLOs, error budgets, circuit breakers).** Operational concerns, not governance concerns. Belong in the deployment infrastructure, not in the governance substrate.
+
+**20+ framework adapters.** Premature. MCP provides framework-agnostic integration. Build native adapters when specific tenant integrations demand them.
+
+---
+
+*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Phase 4 (Governed Agent Runtime) added April 21, 2026 following the Hermes Agent integration analysis. Part V½ (Design Philosophy) added April 22, 2026 following the Zen of Reticulum alignment pass — inspired by Mark Qvist's articulation of uncentralizable networking principles, mapped to ZeroPoint's trust layer. Elevated to Canonical Architecture Record on April 22, 2026 — wired into CLAUDE.md as binding constraint for all sessions. Part VII (Competitive Landscape Adaptations) added April 25, 2026 following Microsoft AGT comparative analysis. Next revision expected after Phase 1 exit.*

@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPoint — Track 2: Builder Course</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-toml.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0c;
+    --bg-surface: #111114;
+    --bg-elevated: #18181c;
+    --bg-hover: #1e1e24;
+    --border: #2a2a32;
+    --border-subtle: #1e1e26;
+    --text: #e4e4e8;
+    --text-dim: #8e8e9a;
+    --text-muted: #5a5a66;
+    --accent: #7eb8da;
+    --accent-dim: #5a8da8;
+    --accent-glow: rgba(126,184,218,0.12);
+    --green: #6ec47e;
+    --green-dim: rgba(110,196,126,0.15);
+    --yellow: #d4a846;
+    --yellow-dim: rgba(212,168,70,0.15);
+    --red: #c46e6e;
+    --red-dim: rgba(196,110,110,0.15);
+    --sidebar-w: 300px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 15px; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* Layout */
+  .app { display: flex; height: 100vh; }
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+  }
+
+  /* Sidebar header */
+  .sidebar-header {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .sidebar-logo {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .sidebar-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .sidebar-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Progress bar */
+  .progress-section { padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+  .progress-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .progress-bar {
+    height: 3px;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  /* Module list */
+  .module-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .module-list::-webkit-scrollbar { width: 4px; }
+  .module-list::-webkit-scrollbar-track { background: transparent; }
+  .module-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .module-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .module-item:hover { background: var(--bg-hover); }
+  .module-item.active {
+    background: var(--accent-glow);
+    border-left-color: var(--accent);
+  }
+  .module-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    min-width: 20px;
+    padding-top: 2px;
+  }
+  .module-item.active .module-num { color: var(--accent); }
+  .module-info { flex: 1; min-width: 0; }
+  .module-name {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .module-item.active .module-name { color: var(--text); }
+  .module-status {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+  .module-check {
+    font-size: 0.85rem;
+    padding-top: 1px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .check-done { color: var(--green); }
+  .check-active { color: var(--accent); }
+  .check-pending { color: var(--text-muted); opacity: 0.3; }
+
+  /* Intro module item */
+  .module-item.intro { opacity: 0.85; }
+
+  /* Main content area */
+  .content-wrapper {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 48px 48px 120px;
+  }
+
+  /* Hero for intro */
+  .hero {
+    text-align: center;
+    padding: 60px 0 48px;
+  }
+  .hero-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+  .hero p {
+    font-size: 1rem;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .hero-meta {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 28px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .hero-meta span { display: flex; align-items: center; gap: 6px; }
+  .hero-meta .val { color: var(--text-dim); font-weight: 500; }
+
+  /* Module header */
+  .module-header {
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .module-header-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .module-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  /* Section tabs */
+  .section-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-tab {
+    padding: 10px 24px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-family: inherit;
+  }
+  .section-tab:hover { color: var(--text-dim); }
+  .section-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Section content */
+  .section-content h1, .section-content h2, .section-content h3 {
+    color: var(--text);
+    margin: 28px 0 12px;
+    line-height: 1.3;
+  }
+  .section-content h1 { font-size: 1.5rem; }
+  .section-content h2 { font-size: 1.2rem; }
+  .section-content h3 { font-size: 1rem; }
+  .section-content p {
+    margin-bottom: 16px;
+    color: var(--text-dim);
+  }
+  .section-content strong { color: var(--text); font-weight: 600; }
+  .section-content em { color: var(--accent-dim); font-style: italic; }
+  .section-content ul, .section-content ol {
+    margin: 12px 0 16px 20px;
+    color: var(--text-dim);
+  }
+  .section-content li { margin-bottom: 6px; }
+  .section-content code:not([class*="language-"]) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    background: var(--bg-hover);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  /* Code blocks */
+  .code-block {
+    position: relative;
+    margin: 16px 0 24px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .code-lang {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .copy-btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .copy-btn.copied {
+    color: var(--green);
+    border-color: var(--green);
+  }
+  .code-block pre {
+    margin: 0 !important;
+    padding: 16px !important;
+    background: var(--bg) !important;
+    border-radius: 0 !important;
+    font-size: 0.82rem !important;
+    line-height: 1.6 !important;
+    overflow-x: auto;
+  }
+  .code-block pre code {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.82rem !important;
+  }
+
+  /* Navigation buttons */
+  .nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    color: var(--text-dim);
+  }
+  .nav-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .nav-btn.primary {
+    background: var(--accent-glow);
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+  .nav-btn.primary:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* Complete button */
+  .complete-section {
+    display: flex;
+    justify-content: center;
+    margin-top: 32px;
+  }
+  .complete-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 28px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid var(--green);
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .complete-btn:hover {
+    background: var(--green);
+    color: var(--bg);
+  }
+  .complete-btn.completed {
+    background: var(--green);
+    color: var(--bg);
+    cursor: default;
+  }
+
+  /* Intro sections */
+  .intro-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+  .intro-card {
+    padding: 20px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .intro-card h3 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .intro-card p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .philosophy-text {
+    padding: 24px;
+    background: var(--bg-surface);
+    border-left: 3px solid var(--accent-dim);
+    border-radius: 0 8px 8px 0;
+    margin: 24px 0;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+  }
+  .philosophy-text p { margin-bottom: 12px; }
+  .philosophy-text p:last-child { margin-bottom: 0; }
+
+  /* Scrollbar */
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Hamburger button */
+  .hamburger {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 200;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    cursor: pointer;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  .hamburger span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: var(--text-dim);
+    border-radius: 1px;
+    transition: all 0.25s;
+  }
+  .hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(2.5px, 2.5px); }
+  .hamburger.open span:nth-child(2) { opacity: 0; }
+  .hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(2.5px, -2.5px); }
+
+  /* Overlay backdrop */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 90;
+    backdrop-filter: blur(4px);
+  }
+  .sidebar-overlay.visible { display: block; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .sidebar { width: 260px; min-width: 260px; }
+    .content-wrapper { padding: 32px 24px 100px; }
+    .intro-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .hamburger { display: flex; }
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 100;
+      width: 300px;
+      min-width: 300px;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+      box-shadow: none;
+    }
+    .sidebar.open {
+      transform: translateX(0);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+    }
+    .main { width: 100%; }
+    .content-wrapper { padding: 60px 20px 100px; }
+    .module-header { margin-top: 0; }
+    .hero { padding-top: 20px; }
+  }
+  @media (max-width: 480px) {
+    .sidebar { width: 280px; min-width: 280px; }
+    .content-wrapper { padding: 56px 16px 80px; }
+    .hero-meta { flex-direction: column; gap: 8px; }
+    .intro-grid { grid-template-columns: 1fr; }
+    .nav-buttons { flex-direction: column; gap: 12px; }
+    .nav-btn { width: 100%; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script id="course-data" type="application/json">
+{
+  "title": "Track 2: Builder",
+  "subtitle": "ZeroPoint Developer Course",
+  "tagline": "From Zero to Governed Agent Fleet",
+  "prereqs": "Rust toolchain (rustup, cargo), basic Rust literacy (ownership, traits, Result), a terminal, and git.",
+  "duration": "~20 hours self-paced",
+  "outcome": "You deploy a governed multi-agent system with key hierarchies, capability grants, Guard-Policy-Audit governance, receipt chains, epoch compaction, dual-backend mesh discovery (the Presence Plane), reciprocity-enforced relay, reputation gating, and consensus.",
+  "modules": [
+    {
+      "id": 0,
+      "title": "Environment Setup",
+      "concept": "Before writing any ZeroPoint code, you need the source and a working Rust toolchain. ZeroPoint is a workspace of crates \u2014 you'll reference them as path dependencies from a lab project that lives alongside the checkout.\n\nThis module gets your environment running and verifies that all crates compile.",
+      "lab": "**Step 1: Install Rust** (skip if you already have it):\n\n```bash\ncurl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh\nsource $HOME/.cargo/env\nrustup default stable\n```\n\nVerify:\n\n```bash\ncargo --version\nrustc --version\n```\n\nYou need Rust 1.75 or later.\n\n**Step 2: Clone ZeroPoint:**\n\n```bash\ncd ~\ngit clone https://github.com/zeropoint-foundation/zeropoint.git\ncd zeropoint\n```\n\n**Step 3: Verify the workspace compiles:**\n\n```bash\ncargo check\n```\n\nThis downloads dependencies and type-checks all crates. It should complete with no errors. Warnings are fine.\n\n**Step 4: Create your lab project** (sibling to the ZeroPoint checkout):\n\n```bash\ncd ~\ncargo new zp-lab\ncd zp-lab\n```\n\nYour directory structure should look like:\n\n```text\n~/\n\u251c\u2500\u2500 zeropoint/       # the ZeroPoint source\n\u2514\u2500\u2500 zp-lab/          # your lab project\n    \u251c\u2500\u2500 Cargo.toml\n    \u2514\u2500\u2500 src/\n        \u2514\u2500\u2500 main.rs\n```\n\n**Step 5: Add base dependencies to `zp-lab/Cargo.toml`:**\n\n```toml\n[dependencies]\nzp-keys  = { path = \"../zeropoint/crates/zp-keys\" }\nzp-trust = { path = \"../zeropoint/crates/zp-trust\" }\nzp-core  = { path = \"../zeropoint/crates/zp-core\" }\nchrono   = { version = \"0.4\", features = [\"serde\"] }\nhex      = \"0.4\"\nrand     = \"0.8\"\n```\n\n(We'll add more crate dependencies in later modules.)\n\n**Step 6: Verify the lab project builds:**\n\n```bash\ncargo check\n```\n\nIf this succeeds, you're ready for Module 1.",
+      "checkpoint": "Run `cargo check` in your zp-lab project. If it compiles with no errors, your environment is ready. Run `cargo doc --open` in the zeropoint directory to browse the API documentation \u2014 this is your reference for the entire course."
+    },
+    {
+      "id": 1,
+      "title": "Your First Key",
+      "concept": "Everything in ZeroPoint flows from a key. Identity is a key pair. Authentication is a signature. Authority originates from a genesis key held by a human and flows downward through a signed hierarchy: Genesis \u2192 Operator \u2192 Agent.\n\nThis module creates that hierarchy from scratch.",
+      "lab": "Write `src/main.rs`:\n\n```rust\nuse zp_keys::{GenesisKey, OperatorKey, AgentKey, KeyRole};\nuse chrono::{Utc, Duration};\n\nfn main() {\n    // Step 1: Generate the genesis key\n    let genesis = GenesisKey::generate(\"alice\");\n    println!(\"Genesis public key: {}\", hex::encode(genesis.public_key()));\n    println!(\"Genesis role: {:?}\", genesis.certificate().body.role);\n\n    // Step 2: Issue an operator key (expires in 365 days)\n    let operator = OperatorKey::generate(\n        \"operator-alpha\",\n        &genesis,\n        Some(Utc::now() + Duration::days(365)),\n    );\n    println!(\"\\nOperator public key: {}\", hex::encode(operator.public_key()));\n    println!(\"Operator issuer: {}\", operator.certificate().body.issuer_public_key);\n\n    // Step 3: Issue an agent key (expires in 30 days)\n    let agent = AgentKey::generate(\n        \"agent-001\",\n        &operator,\n        Some(Utc::now() + Duration::days(30)),\n    );\n    println!(\"\\nAgent public key: {}\", hex::encode(agent.public_key()));\n    println!(\"Agent depth: {}\", agent.certificate().body.depth);\n\n    // Step 4: Verify the chain\n    // Each certificate stores its issuer's public key internally.\n    // verify_signature() checks the Ed25519 signature against that issuer.\n    assert_eq!(\n        agent.certificate().body.issuer_public_key,\n        hex::encode(operator.public_key()),\n        \"Agent's issuer must be the operator\"\n    );\n    assert_eq!(\n        operator.certificate().body.issuer_public_key,\n        hex::encode(genesis.public_key()),\n        \"Operator's issuer must be genesis\"\n    );\n\n    assert!(\n        agent.certificate().verify_signature()\n            .expect(\"Signature verification should not error\"),\n        \"Agent certificate signature must verify\"\n    );\n    assert!(\n        operator.certificate().verify_signature()\n            .expect(\"Signature verification should not error\"),\n        \"Operator certificate signature must verify\"\n    );\n\n    println!(\"\\n\\u2713 Full chain verified: Genesis \\u2192 Operator \\u2192 Agent\");\n    println!(\"  Depths: 0 \\u2192 1 \\u2192 2\");\n    println!(\"  Every signature verifies.\");\n}\n```\n\nRun it:\n\n```bash\ncargo run\n```\n\nYou should see the full key hierarchy printed, with verification passing.",
+      "checkpoint": "**Without looking at the lab code**, write a program that:\n\n1. Generates a genesis key for a subject named \"my-org\"\n2. Issues two operator keys: \"ops-east\" and \"ops-west\"\n3. Issues three agent keys under \"ops-east\" and two under \"ops-west\"\n4. Calls `verify_signature()` on every certificate in every chain\n5. Prints the full hierarchy as a tree\n\nIf every assertion passes, you understand key hierarchies."
+    },
+    {
+      "id": 2,
+      "title": "Trust Hierarchy and Signing",
+      "concept": "A key pair is useless until it signs something. Ed25519 signatures are the cryptographic primitive that makes receipts verifiable, audit entries attributable, and capability grants authentic. This module merges the concepts of signing and hierarchy restoration: how to build fluency with signing/verification, and how to restore a Signer from its secret key for persistence.",
+      "lab": "```rust\nuse zp_trust::Signer;\n\nfn main() {\n    // Generate a signer (Ed25519 key pair)\n    let signer = Signer::generate();\n    println!(\"Public key: {}\", hex::encode(signer.public_key()));\n\n    // Sign arbitrary data\n    let message = b\"This agent is authorized to read /data/reports/*\";\n    let signature = signer.sign(message);\n    println!(\"Signature: {}...{}\", &signature[..16], &signature[signature.len()-16..]);\n\n    // Verify \u2014 anyone with the public key can do this\n    let valid = Signer::verify(&signer.public_key(), message, &signature)\n        .expect(\"Verification should not error\");\n    assert!(valid, \"Signature must verify\");\n    println!(\"\\u2713 Signature verified\");\n\n    // Tamper with the message \u2014 verification must fail\n    let tampered = b\"This agent is authorized to read /data/secrets/*\";\n    let still_valid = Signer::verify(&signer.public_key(), tampered, &signature)\n        .expect(\"Verification should not error\");\n    assert!(!still_valid, \"Tampered message must not verify\");\n    println!(\"\\u2713 Tampered message correctly rejected\");\n\n    // Tamper with the signature \u2014 verification must fail\n    let mut bad_sig = signature.clone();\n    let bytes: Vec<u8> = hex::decode(&bad_sig).unwrap();\n    let mut flipped = bytes;\n    flipped[0] ^= 0xFF;\n    bad_sig = hex::encode(flipped);\n\n    let still_valid = Signer::verify(&signer.public_key(), message, &bad_sig)\n        .unwrap_or(false);\n    assert!(!still_valid, \"Tampered signature must not verify\");\n    println!(\"\\u2713 Tampered signature correctly rejected\");\n\n    // Restore signer from secret key (persistence)\n    let secret = signer.secret_key();\n    let restored = Signer::from_secret(&secret)\n        .expect(\"Should restore from secret\");\n    assert_eq!(signer.public_key(), restored.public_key());\n    println!(\"\\u2713 Signer restored from secret key\");\n    \n    // Cross-verification: different signers cannot verify each other's signatures\n    let signer2 = Signer::generate();\n    let sig_from_signer2 = signer2.sign(message);\n    let cross_verify = Signer::verify(&signer.public_key(), message, &sig_from_signer2)\n        .unwrap_or(false);\n    assert!(!cross_verify, \"Different signer's signature must not verify\");\n    println!(\"\\u2713 Cross-verification correctly rejected\");\n}\n```",
+      "checkpoint": "Write a function `sign_and_verify(data: &[u8]) -> bool` that generates a fresh signer, signs the data, and verifies the signature. Then write a function `cross_verify_fails(data: &[u8]) -> bool` that generates *two* signers, signs with one, and attempts to verify with the other's public key. The first should return true, the second false."
+    },
+    {
+      "id": 3,
+      "title": "Capability Grants",
+      "concept": "A capability grant is a signed, portable authorization token. It specifies what an agent can do, what constraints apply, and who issued it. This module builds grants with real constraints and explores how they compose.",
+      "lab": "```rust\nuse zp_core::capability_grant::{CapabilityGrant, GrantedCapability, Constraint};\nuse zp_core::policy::TrustTier;\nuse chrono::{Utc, Duration};\n\nfn main() {\n    let grantor = \"operator-alpha-hash\";\n    let grantee = \"agent-001-hash\";\n\n    // Build a grant with multiple constraints\n    let grant = CapabilityGrant::new(\n        grantor.to_string(),\n        grantee.to_string(),\n        GrantedCapability::Read { scope: vec![\"data/reports/*\".into()] },\n        \"receipt-001\".to_string(),\n    )\n    .with_constraint(Constraint::MaxCost(0.50))\n    .with_constraint(Constraint::RateLimit {\n        max_actions: 100,\n        window_secs: 3600,\n    })\n    .with_constraint(Constraint::TimeWindow {\n        start_hour: 9,\n        end_hour: 17,\n    })\n    .with_constraint(Constraint::RequireReceipt)\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(30))\n    .with_max_delegation_depth(2);\n\n    println!(\"Grant ID: {}\", grant.id);\n    println!(\"Capability: {:?}\", grant.capability);\n    println!(\"Constraints: {}\", grant.constraints.len());\n    for c in &grant.constraints {\n        println!(\"  - {:?}\", c);\n    }\n    println!(\"Trust tier: {:?}\", grant.trust_tier);\n    println!(\"Max delegation depth: {:?}\", grant.max_delegation_depth);\n    println!(\"Expires: {:?}\", grant.expires_at);\n\n    // Now build an ApiCall grant with scope restriction\n    let api_grant = CapabilityGrant::new(\n        grantor.to_string(),\n        grantee.to_string(),\n        GrantedCapability::ApiCall {\n            endpoints: vec![\"api.weather.com/**\".into()],\n        },\n        \"receipt-002\".to_string(),\n    )\n    .with_constraint(Constraint::MaxCost(0.01))\n    .with_constraint(Constraint::RateLimit {\n        max_actions: 10,\n        window_secs: 60,\n    })\n    .with_constraint(Constraint::ScopeRestriction {\n        allowed: vec![\"api.weather.com/v2/**\".into()],\n        denied: vec![\"api.weather.com/v2/admin/**\".into()],\n    });\n\n    println!(\"\\nAPI Grant scope restriction:\");\n    for c in &api_grant.constraints {\n        if let Constraint::ScopeRestriction { allowed, denied } = c {\n            println!(\"  Allowed: {:?}\", allowed);\n            println!(\"  Denied: {:?}\", denied);\n        }\n    }\n    println!(\"\\u2713 Both grants constructed with constraints\");\n}\n```",
+      "checkpoint": "Build grants for all eight capability types (Read, Write, Execute, CredentialAccess, ApiCall, ConfigChange, MeshSend, Custom). Each grant should have at least two constraints. Print a summary table showing capability type, constraint count, and expiration for each."
+    },
+    {
+      "id": 4,
+      "title": "Delegation Chains",
+      "concept": "Authority flows downward through signed grants. Each link narrows the scope, tightens the constraints, and shortens the expiration. Eight invariants are enforced in code. This module builds a three-level delegation chain and verifies it.",
+      "lab": "```rust\nuse zp_core::capability_grant::{CapabilityGrant, GrantedCapability, Constraint};\nuse zp_core::delegation_chain::DelegationChain;\nuse zp_core::policy::TrustTier;\nuse chrono::{Utc, Duration};\n\nfn main() {\n    // Root grant: human \\u2192 operator\n    let root = CapabilityGrant::new(\n        \"genesis-hash\".to_string(),\n        \"operator-hash\".to_string(),\n        GrantedCapability::Read { scope: vec![\"data/**\".into()] },\n        \"receipt-root\".to_string(),\n    )\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(365))\n    .with_max_delegation_depth(3);\n\n    // Level 1: operator \\u2192 agent (narrower scope, tighter constraints)\n    let level1 = CapabilityGrant::new(\n        \"operator-hash\".to_string(),\n        \"agent-hash\".to_string(),\n        GrantedCapability::Read { scope: vec![\"data/reports/**\".into()] },\n        \"receipt-level1\".to_string(),\n    )\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(90))\n    .with_constraint(Constraint::RateLimit { max_actions: 100, window_secs: 3600 })\n    .with_constraint(Constraint::RequireReceipt);\n\n    // Level 2: agent \\u2192 sub-agent (narrowest scope, tightest constraints)\n    let level2 = CapabilityGrant::new(\n        \"agent-hash\".to_string(),\n        \"sub-agent-hash\".to_string(),\n        GrantedCapability::Read { scope: vec![\"data/reports/billing/*\".into()] },\n        \"receipt-level2\".to_string(),\n    )\n    .with_trust_tier(TrustTier::Tier2)\n    .with_expiration(Utc::now() + Duration::days(7))\n    .with_constraint(Constraint::RateLimit { max_actions: 20, window_secs: 3600 })\n    .with_constraint(Constraint::RequireReceipt)\n    .with_constraint(Constraint::TimeWindow { start_hour: 9, end_hour: 17 });\n\n    // Verify the chain\n    match DelegationChain::verify(vec![root, level1, level2], true) {\n        Ok(chain) => {\n            println!(\"\\u2713 Delegation chain verified ({} grants)\", chain.grants().len());\n            for (i, grant) in chain.grants().iter().enumerate() {\n                println!(\"  Level {}: {} \\u2192 {}\", i, grant.grantor, grant.grantee);\n                println!(\"    Scope: {:?}\", grant.capability);\n                println!(\"    Constraints: {}\", grant.constraints.len());\n            }\n        }\n        Err(e) => {\n            println!(\"\\u2717 Chain verification failed: {:?}\", e);\n        }\n    }\n}\n```",
+      "checkpoint": "Build a chain that **violates** each of the eight invariants, one at a time. For each violation, verify that `DelegationChain::verify()` returns the appropriate error. Document which invariant each test case violates and what the error message says. This is the most important checkpoint in the course \u2014 understanding how the invariants fail teaches you what they protect."
+    },
+    {
+      "id": 5,
+      "title": "The Policy Engine",
+      "concept": "The policy engine evaluates actions against rules and returns graduated decisions. Constitutional rules (HarmPrinciple, Sovereignty) are immovable. Operational rules compose on top. The most restrictive decision wins. This module builds a policy engine, fires actions through it, and observes graduated decisions.",
+      "lab": "Add `zp-policy` to your `Cargo.toml`:\n\n```toml\nzp-policy = { path = \"../zeropoint/crates/zp-policy\" }\n```\n\nThen write:\n\n```rust\nuse zp_policy::{PolicyEngine, GovernanceGate, GateResult};\nuse zp_core::policy::{ActionType, PolicyContext, PolicyDecision, TrustTier};\nuse zp_core::audit::ActorId;\nuse chrono::Utc;\n\nfn main() {\n    // Create engine with default rules\n    let engine = PolicyEngine::new();\n\n    // Low-risk action: Chat\n    let chat_context = PolicyContext {\n        action: ActionType::Chat,\n        trust_tier: TrustTier::Tier1,\n        ..Default::default()\n    };\n    let decision = engine.evaluate(&chat_context);\n    println!(\"Chat decision: {:?}\", decision);\n\n    // High-risk action: Execute\n    let exec_context = PolicyContext {\n        action: ActionType::Execute { language: \"python\".into() },\n        trust_tier: TrustTier::Tier1,\n        ..Default::default()\n    };\n    let decision = engine.evaluate(&exec_context);\n    println!(\"Execute decision: {:?}\", decision);\n\n    // Critical action: CredentialAccess at Tier0\n    let cred_context = PolicyContext {\n        action: ActionType::CredentialAccess {\n            credential_ref: \"db-production\".into(),\n        },\n        trust_tier: TrustTier::Tier0,\n        ..Default::default()\n    };\n    let decision = engine.evaluate(&cred_context);\n    println!(\"CredentialAccess at Tier0: {:?}\", decision);\n\n    // Use the GovernanceGate for full pipeline\n    let gate = GovernanceGate::new(\"lab-gate\");\n    let result = gate.evaluate(&chat_context, ActorId::User(\"alice\".into()));\n\n    println!(\"\\nGovernanceGate result:\");\n    println!(\"  Decision: {:?}\", result.decision);\n    println!(\"  Risk level: {:?}\", result.risk_level);\n    println!(\"  Trust tier: {:?}\", result.trust_tier);\n    println!(\"  Applied rules: {:?}\", result.applied_rules);\n    println!(\"  is_allowed: {}\", result.is_allowed());\n    println!(\"  is_blocked: {}\", result.is_blocked());\n    println!(\"  needs_interaction: {}\", result.needs_interaction());\n}\n```",
+      "checkpoint": "Write a program that evaluates all 11 ActionType variants through the GovernanceGate at each of the three trust tiers (Tier0, Tier1, Tier2). Print a matrix: action type \\u00d7 trust tier \\u2192 decision. Identify which combinations produce Block, which produce Warn, and which produce Allow. This matrix is your deployment's security profile."
+    },
+    {
+      "id": 6,
+      "title": "The Governance Gate",
+      "concept": "Now that Guard is separated as a discrete stage, the GovernanceGate pipeline is Guard \\u2192 Policy \\u2192 Audit (three stages). Guard filters by blocklist and rate limiting before policy is even evaluated. This module demonstrates the full three-stage pipeline: creating a Guard with blocklist and rate limiting, creating a GovernanceGate, showing how blocklisted actors are stopped at Guard stage, how rate limits work, and how the full audit trail is produced.",
+      "lab": "Add `zp-policy` to your `Cargo.toml` if not already present.\n\n```rust\nuse zp_policy::{GovernanceGate, Guard, GuardConfig, RateLimit};\nuse zp_core::policy::{ActionType, PolicyContext, TrustTier};\nuse zp_core::audit::ActorId;\n\nfn main() {\n    // Create a Guard with blocklist and rate limiting\n    let mut config = GuardConfig::default();\n    config.blocklist = vec![\"malicious-actor\".into(), \"blocked-agent\".into()];\n    config.rate_limit = Some(RateLimit {\n        max_actions: 5,\n        window_secs: 60,\n    });\n    let guard = Guard::new(config);\n\n    // Create a GovernanceGate\n    let gate = GovernanceGate::new(\"lab-gate\");\n\n    println!(\"Gate Pipeline: Guard \\u2192 Policy \\u2192 Audit\\n\");\n    println!(\"Testing Guard stage:\\n\");\n\n    // Test 1: Blocklisted actor\n    let blocked_result = gate.evaluate_with_guard(\n        &PolicyContext {\n            action: ActionType::Chat,\n            trust_tier: TrustTier::Tier1,\n            ..Default::default()\n        },\n        ActorId::User(\"malicious-actor\".into()),\n        &guard,\n    );\n    println!(\"Blocklisted actor 'malicious-actor': {:?}\", blocked_result.decision);\n    assert!(blocked_result.is_blocked(), \"Blocklisted actor must be blocked at Guard stage\");\n    println!(\"\\u2713 Guard blocked actor before policy evaluation\");\n\n    // Test 2: Normal actor passes Guard\n    let allowed_result = gate.evaluate_with_guard(\n        &PolicyContext {\n            action: ActionType::Chat,\n            trust_tier: TrustTier::Tier1,\n            ..Default::default()\n        },\n        ActorId::User(\"alice\".into()),\n        &guard,\n    );\n    println!(\"\\nNormal actor 'alice': {:?}\", allowed_result.decision);\n    println!(\"\\u2713 Guard allowed actor to proceed to Policy\");\n\n    // Test 3: Rate limiting (simulate multiple calls)\n    println!(\"\\nTesting Rate Limiting (max 5 actions/min):\");\n    let mut allowed_count = 0;\n    for i in 0..8 {\n        let result = gate.evaluate_with_guard(\n            &PolicyContext {\n                action: ActionType::Chat,\n                trust_tier: TrustTier::Tier1,\n                ..Default::default()\n            },\n            ActorId::User(\"rate-test\".into()),\n            &guard,\n        );\n        if result.is_allowed() {\n            allowed_count += 1;\n        }\n        println!(\"  Action {}: {:?}\", i + 1, if result.is_allowed() { \"Allow\" } else { \"Warn/Block\" });\n    }\n    println!(\"\\n\\u2713 Rate limiting active: {} allowed (limit was 5)\", allowed_count);\n    println!(\"\\u2713 Full pipeline (Guard \\u2192 Policy \\u2192 Audit) operational\");\n}\n```",
+      "checkpoint": "Create a complete Guard with both blocklist and rate limiting. Evaluate 10 actions through a GovernanceGate with this Guard, using different actors. Verify that: (1) blocklisted actors are always blocked at Guard stage, (2) rate limits are enforced, (3) audit entries are produced for all decisions. Print an audit summary showing which decisions came from Guard vs Policy."
+    },
+    {
+      "id": 7,
+      "title": "Receipts and Receipt Chains",
+      "concept": "The receipt is the atomic unit of accountability. Every governed action produces one, signed by the actor, hash-chained to the previous. This module creates receipts, chains them, and verifies the chain's integrity.",
+      "lab": "Add `zp-receipt` to your `Cargo.toml`:\n\n```toml\nzp-receipt = { path = \"../zeropoint/crates/zp-receipt\" }\n```\n\nThen write:\n\n```rust\nuse zp_receipt::{Receipt, ReceiptChain, Status, Action, TrustGrade};\nuse zp_trust::Signer;\n\nfn main() {\n    let signer = Signer::generate();\n\n    // Create an Intent receipt (root of provenance chain)\n    let mut intent = Receipt::intent(\"user-alice\")\n        .status(Status::Success)\n        .trust_grade(TrustGrade::B)\n        .finalize();\n    println!(\"Intent receipt: {}\", intent.id);\n    assert!(intent.verify_hash(), \"Hash must verify\");\n\n    // Create an Execution receipt linked to the intent\n    let mut execution = Receipt::execution(\"agent-001\")\n        .parent(&intent.id)\n        .status(Status::Success)\n        .action(Action::code_execution(\"python\", 0))\n        .trust_grade(TrustGrade::B)\n        .finalize();\n    println!(\"Execution receipt: {}\", execution.id);\n    assert!(execution.verify_hash(), \"Hash must verify\");\n\n    // Chain them\n    let mut chain = ReceiptChain::new(\"lab-chain\");\n    chain.append(&mut intent).expect(\"Should add root\");\n    chain.append(&mut execution).expect(\"Should add child\");\n\n    // Verify the chain\n    chain.verify_integrity().expect(\"Chain should verify\");\n    println!(\"\\n\\u2713 Receipt chain verified ({} entries)\", chain.entries().len());\n\n    // Print chain structure\n    for entry in chain.entries() {\n        println!(\"  seq={} hash={}...{}\",\n            entry.sequence,\n            &entry.content_hash[..8],\n            &entry.content_hash[entry.content_hash.len()-8..],\n        );\n    }\n}\n```",
+      "checkpoint": "Build a provenance chain with all six receipt types: Intent \\u2192 Design \\u2192 Approval \\u2192 Execution \\u2192 Payment \\u2192 Access. Each receipt should reference its parent via `.parent()`. Use `chain.append(&mut receipt)` for each. Verify the full chain with `chain.verify_integrity()`. Then tamper with one receipt (modify a field after appending) and confirm that `verify_integrity()` fails. Identify which entry the failure points to."
+    },
+    {
+      "id": 8,
+      "title": "The Audit Trail",
+      "concept": "The audit trail records every governance decision in a hash-chained, persisted sequence. It is the evidence that makes everything else verifiable after the fact. This module creates an audit store, appends entries, and verifies the chain.",
+      "lab": "Add `zp-audit` to your `Cargo.toml`:\n\n```toml\nzp-audit = { path = \"../zeropoint/crates/zp-audit\" }\n```\n\nThen write:\n\n```rust\nuse zp_audit::{AuditStore, ChainBuilder, ChainVerifier};\nuse zp_core::audit::{ActorId, AuditAction};\nuse zp_core::policy::PolicyDecision;\nuse zp_core::types::ConversationId;\n\nfn main() {\n    let store = AuditStore::open(\"./lab-audit.db\")\n        .expect(\"Should open audit store\");\n    let conv_id = ConversationId::new();\n\n    // Build genesis entry (first in chain)\n    let entry1 = ChainBuilder::build_entry_from_genesis(\n        ActorId::User(\"alice\".into()),\n        AuditAction::MessageReceived {\n            content_hash: \"abc123\".into(),\n        },\n        conv_id.clone(),\n        PolicyDecision::Allow { conditions: vec![] },\n        \"default-allow\".into(),\n        None, None,\n    );\n    println!(\"Entry 1: {} (genesis)\", entry1.id);\n    store.append(entry1.clone()).expect(\"Should append\");\n\n    // Build second entry (chained to first)\n    let entry2 = ChainBuilder::build_entry(\n        entry1.entry_hash.clone(),\n        ActorId::Operator,\n        AuditAction::ResponseGenerated {\n            model: \"claude-3\".into(),\n            content_hash: \"def456\".into(),\n        },\n        conv_id.clone(),\n        PolicyDecision::Allow { conditions: vec![] },\n        \"default-allow\".into(),\n        None, None,\n    );\n    println!(\"Entry 2: {} (prev={}...)\", entry2.id, &entry2.prev_hash[..8]);\n    store.append(entry2.clone()).expect(\"Should append\");\n\n    // Build third entry\n    let entry3 = ChainBuilder::build_entry(\n        entry2.entry_hash.clone(),\n        ActorId::Skill(\"code-executor\".into()),\n        AuditAction::ToolInvoked {\n            tool_name: \"python\".into(),\n            arguments_hash: \"ghi789\".into(),\n        },\n        conv_id.clone(),\n        PolicyDecision::Warn {\n            message: \"High-risk execution\".into(),\n            require_ack: true,\n        },\n        \"catastrophic-action-rule\".into(),\n        None, None,\n    );\n    store.append(entry3).expect(\"Should append\");\n\n    // Retrieve and verify\n    let entries = store.get_entries(&conv_id, 100)\n        .expect(\"Should retrieve\");\n    println!(\"\\nRetrieved {} entries\", entries.len());\n\n    let verifier = ChainVerifier::new();\n    let report = verifier.verify(&entries, None);\n    println!(\"Chain valid: {}\", report.chain_valid);\n    println!(\"\\u2713 Audit chain verified\");\n}\n```",
+      "checkpoint": "Create 20 audit entries across 3 different conversations. Retrieve each conversation's entries with `store.get_entries(&conv_id, 100)`. Verify each chain independently with `ChainVerifier::new().verify(&entries, None)` and check `report.chain_valid`. How does cross-conversation verification differ from within-conversation verification?"
+    },
+    {
+      "id": 9,
+      "title": "Discovery",
+      "concept": "Discovery is how agents find each other in the mesh. Every node announces its capabilities to the mesh. The MeshRuntime's event loop parses inbound announces, verifies the Ed25519 signature, extracts the combined public key and capabilities, and auto-registers the peer. Once registered, the node can establish an encrypted link. This module teaches the announce \\u2192 register_peer \\u2192 establish_link flow.",
+      "lab": "Add `zp-mesh` and `tokio` to your `Cargo.toml`:\n\n```toml\nzp-mesh = { path = \"../zeropoint/crates/zp-mesh\" }\ntokio = { version = \"1\", features = [\"full\"] }\n```\n\nThen write:\n\n```rust\nuse zp_mesh::{MeshIdentity, MeshNode, MeshRuntime, RuntimeConfig, AgentCapabilities};\nuse zp_mesh::interface::LoopbackInterface;\nuse zp_mesh::{CapabilityPolicy, CapabilityRequest};\nuse zp_trust::Signer;\nuse zp_core::policy::TrustTier;\nuse std::sync::Arc;\nuse std::time::Duration;\n\n#[tokio::main]\nasync fn main() {\n    // Create two nodes\n    let signer_a = Signer::generate();\n    let signer_b = Signer::generate();\n\n    let node_a = Arc::new(MeshNode::from_signer(&signer_a).unwrap());\n    let node_b = Arc::new(MeshNode::from_signer(&signer_b).unwrap());\n\n    // Attach loopback interfaces (shared, so announces from A arrive at B)\n    let lo = Arc::new(LoopbackInterface::new());\n    node_a.attach_interface(lo.clone()).await;\n    node_b.attach_interface(lo.clone()).await;\n\n    // Start B's runtime to process inbound announces\n    let mut runtime_b = MeshRuntime::start(node_b.clone(), RuntimeConfig {\n        poll_interval: Duration::from_millis(10),\n        ..Default::default()\n    });\n    let _inbound = runtime_b.take_inbound_rx();\n\n    // A announces itself\n    let caps = AgentCapabilities {\n        name: \"agent-alpha\".into(),\n        version: \"1.0.0\".into(),\n        receipt_types: vec![\"execution\".into(), \"intent\".into()],\n        skills: vec![\"python\".into(), \"shell\".into()],\n        actor_type: \"agent\".into(),\n        trust_tier: \"tier1\".into(),\n    };\n    node_a.announce(&caps).await.unwrap();\n\n    // Wait for B's runtime to process the announce\n    tokio::time::sleep(Duration::from_millis(200)).await;\n\n    // Check stats\n    let stats = runtime_b.stats().await;\n    println!(\"Announces seen: {}\", stats.announces_seen);\n    println!(\"Peers discovered: {}\", stats.peers_discovered);\n\n    // B should now know about A\n    let peers = node_b.known_peers().await;\n    println!(\"Known peers: {}\", peers.len());\n    for peer in &peers {\n        println!(\"  {} \\u2014 {:?}\", peer.address, peer.capabilities.as_ref().map(|c| &c.name));\n    }\n\n    runtime_b.shutdown();\n    println!(\"\\n\\u2713 Discovery complete: A announced \\u2192 B auto-registered A as peer\");\n}\n```",
+      "checkpoint": "Set up two nodes with loopback interfaces. Have Node A announce its capabilities. Verify that Node B's MeshRuntime auto-discovers and registers Node A as a peer. Print the peer list from Node B and confirm it contains Node A with correct capabilities. Establish an encrypted link between them and exchange a test message."
+    },
+    {
+      "id": 10,
+      "title": "The Presence Plane",
+      "concept": "The Presence Plane is how agents make themselves findable without sacrificing sovereignty. ZeroPoint splits mesh networking into two planes: the **Presence Plane** (how agents find each other) and the **Governance Plane** (what agents do together). Same Ed25519 identity anchors both.\n\nDiscovery runs on a `DiscoveryBackend` trait \u2014 a simple four-method interface that any transport can implement. Two production backends ship today:\n\n1. **Web** \u2014 A privacy-preserving pub/sub relay over WebSocket. The relay is structurally amnesic: it forwards announce blobs without parsing them, maintains no index, no query interface, and no persistent state. Restart = clean slate.\n\n2. **Reticulum** \u2014 Broadcast announces over mesh interfaces (LoRa, WiFi, serial). Fully decentralized \u2014 no server, no internet dependency.\n\nBoth backends share the same announce wire format: `[combined_key(64)] + [capabilities_json] + [ed25519_signature(64)]`. A peer discovered via web and a peer discovered via Reticulum end up in the same peer table with the same destination hash. The `DiscoveryManager` fans out our announce to all backends, polls all backends for discoveries, validates signatures, deduplicates peers, and prunes expired entries.",
+      "lab": "This lab builds the full dual-backend presence plane. You'll set up a `DiscoveryManager` with both a `WebDiscovery` and `ReticulumDiscovery` backend, announce an identity, and observe discovery from both sources.\n\n```rust\nuse zp_mesh::discovery::{\n    DiscoveryManager, DiscoverySource, DiscoveryConfig,\n};\nuse zp_mesh::web_discovery::{WebDiscovery, WebDiscoveryConfig};\nuse zp_mesh::reticulum_discovery::ReticulumDiscovery;\nuse zp_mesh::identity::MeshIdentity;\nuse zp_mesh::transport::AgentCapabilities;\nuse zp_mesh::interface::LoopbackInterface;\nuse std::sync::Arc;\nuse std::time::Duration;\n\n#[tokio::main]\nasync fn main() {\n    // --- Identity ---\n    // Every agent has one identity that anchors both planes.\n    let identity = MeshIdentity::generate();\n    println!(\"Agent address: {}\", identity.address());\n\n    let caps = AgentCapabilities {\n        name: \"presence-lab-agent\".into(),\n        version: \"1.0.0\".into(),\n        receipt_types: vec![\"execution\".into()],\n        skills: vec![\"data-processing\".into()],\n        actor_type: \"agent\".into(),\n        trust_tier: \"tier1\".into(),\n    };\n\n    // --- Build the announce payload ---\n    // Same format for BOTH backends:\n    // [combined_key(64)] + [capabilities_json] + [ed25519_signature(64)]\n    let payload = DiscoveryManager::build_announce_payload(&identity, &caps)\n        .expect(\"Should build announce payload\");\n    println!(\"Announce payload: {} bytes\", payload.len());\n    println!(\"  Combined key: 64 bytes\");\n    println!(\"  Capabilities JSON: {} bytes\", payload.len() - 128);\n    println!(\"  Ed25519 signature: 64 bytes\");\n\n    // --- Set up the DiscoveryManager ---\n    let manager = DiscoveryManager::new(Duration::from_secs(900));\n\n    // Backend 1: Web (pub/sub relay)\n    let web = WebDiscovery::with_relay(\"wss://relay.zeropoint.global/discover\");\n    web.start().await.unwrap();\n    manager.add_backend(Box::new(web)).await;\n\n    // Backend 2: Reticulum (mesh broadcast)\n    let ret = ReticulumDiscovery::new();\n    let lo = Arc::new(LoopbackInterface::new());\n    ret.add_interface(lo.clone()).await;\n    manager.add_backend(Box::new(ret)).await;\n\n    println!(\"\\nBackends: {:?}\", manager.active_backends().await);\n\n    // --- Announce on all backends ---\n    // One call fans out to both web and Reticulum.\n    manager.announce_all(&identity, &caps).await.unwrap();\n    println!(\"\\u2713 Announced on all backends\");\n\n    // --- Simulate inbound discoveries ---\n    // In production, the relay and mesh interfaces deliver these.\n    // Here we simulate by building a second identity's announce.\n    let peer_identity = MeshIdentity::generate();\n    let peer_caps = AgentCapabilities {\n        name: \"peer-agent\".into(),\n        version: \"1.0.0\".into(),\n        receipt_types: vec![\"intent\".into()],\n        skills: vec![\"negotiation\".into()],\n        actor_type: \"agent\".into(),\n        trust_tier: \"tier2\".into(),\n    };\n    let peer_payload = DiscoveryManager::build_announce_payload(\n        &peer_identity, &peer_caps\n    ).unwrap();\n\n    // Inject via web backend (simulating relay delivery)\n    // In production this arrives over the WebSocket.\n    // The DiscoveryManager validates signature + deduplicates.\n    println!(\"\\nPeer payload built: {} bytes\", peer_payload.len());\n    println!(\"Peer address: {}\", peer_identity.address());\n\n    // --- Poll and validate ---\n    let validated = manager.poll_all().await;\n    println!(\"\\nValidated discoveries: {}\", validated.len());\n    println!(\"Known peers: {}\", manager.peer_count().await);\n\n    // --- Prune expired entries ---\n    let pruned = manager.prune_expired().await;\n    println!(\"Pruned: {} (none expected \u2014 all fresh)\", pruned);\n\n    // --- Shutdown ---\n    manager.shutdown().await;\n    println!(\"\\n\\u2713 Presence Plane: dual-backend discovery with unified peer table\");\n}\n```",
+      "checkpoint": "Build a DiscoveryManager with both web and Reticulum backends. Create two identities and build announce payloads for each. Verify that: (1) `build_announce_payload` produces bytes of length 64 + JSON + 64, (2) the same identity discovered via both backends produces one peer record (deduplication), (3) `announce_all` fans out to both backends, (4) `prune_expired` removes entries older than the TTL. Print the unified peer table showing source information for each peer."
+    },
+    {
+      "id": 11,
+      "title": "Presence Plane \u2014 Adversarial Model",
+      "concept": "Discovery is an attack surface. Any system that lets agents find each other can be subverted for surveillance, scanning, or Sybil flooding. ZeroPoint's Presence Plane defends against these with architectural constraints, not policy promises.\n\n**Reciprocity enforcement**: The web relay requires every client to announce before receiving. A passive scanner must expose its own signed identity to every legitimate agent on the network before it can observe anyone else. Scanners become observable before they can observe.\n\n**Grace period + termination**: New connections get a short grace period (default 30 seconds) to announce. After that, `try_receive()` returns a reciprocity violation error. The connection should be terminated.\n\n**ConnectionBehavior for reputation**: When a connection closes, the relay emits a behavioral summary \u2014 no content, no identity, just counters: `announced`, `announces_published`, `duration`, `reciprocity_violation`. These map to `ReputationSignal` in the `PolicyCompliance` category. Over time, the reputation system naturally separates participants from parasites.\n\n**Structural amnesia**: The relay never parses announce payloads, never indexes peers by capability, never maintains query logs. There is nothing to subpoena, nothing to compromise, nothing to hand over. Privacy is a property of the architecture, not a policy that can be revoked.",
+      "lab": "This lab demonstrates the adversarial defenses of the relay. You'll connect a scanner, observe the reciprocity gate, and examine the behavioral signals.\n\n```rust\nuse zp_mesh::web_discovery::{\n    WebRelayServer, ConnectionBehavior,\n    frame_message, parse_frame, MSG_ANNOUNCE, MSG_PEER_ANNOUNCE,\n};\nuse zp_mesh::reputation::{\n    PeerReputation, ReputationSignal, ReputationWeights,\n    SignalCategory, SignalPolarity,\n};\nuse std::time::Duration;\nuse chrono::Utc;\n\nfn main() {\n    // --- Set up the relay with a 1-second grace period (short for demo) ---\n    let relay = WebRelayServer::with_grace_period(64, Duration::from_secs(1));\n\n    // --- Legitimate agent: announces, then receives ---\n    let mut legit = relay.connect();\n    assert!(!legit.has_announced(), \"Should not have announced yet\");\n\n    // Before announcing, try_receive is blocked\n    let result = legit.try_receive();\n    assert!(result.is_err(), \"Should be blocked before announcing\");\n    println!(\"\\u2713 Reciprocity gate: receive blocked before announce\");\n\n    // Announce (passing the gate)\n    let payload = vec![0xAA; 200]; // Simulated signed announce blob\n    legit.publish_announce(&relay, payload).unwrap();\n    assert!(legit.has_announced(), \"Should have announced\");\n    println!(\"\\u2713 Agent announced: reciprocity gate passed\");\n\n    // Now try_receive works (returns no-data, not an error)\n    // In production, peer announces would arrive here.\n    println!(\"Announces published by legit: {}\", legit.announces_published());\n\n    // --- Scanner: connects but never announces ---\n    let mut scanner = relay.connect();\n\n    // Scanner tries to receive immediately \u2014 blocked\n    let result = scanner.try_receive();\n    assert!(result.is_err());\n    println!(\"\\n\\u2713 Scanner blocked: must announce first\");\n\n    // Wait for grace period to expire\n    std::thread::sleep(Duration::from_secs(2));\n\n    // After grace period, the scanner gets a violation error\n    assert!(scanner.grace_period_expired(), \"Grace period should be expired\");\n    let result = scanner.try_receive();\n    assert!(result.is_err());\n    println!(\"\\u2713 Scanner grace period expired: connection should be terminated\");\n\n    // --- Behavioral signals ---\n    // On disconnect, the relay emits a behavioral summary.\n    let legit_behavior = relay.disconnect_with_behavior(&legit);\n    let scanner_behavior = relay.disconnect_with_behavior(&scanner);\n\n    println!(\"\\nLegitimate agent behavior:\");\n    println!(\"  Announced: {}\", legit_behavior.announced);\n    println!(\"  Announces published: {}\", legit_behavior.announces_published);\n    println!(\"  Duration: {:?}\", legit_behavior.duration);\n    println!(\"  Reciprocity violation: {}\", legit_behavior.reciprocity_violation);\n\n    println!(\"\\nScanner behavior:\");\n    println!(\"  Announced: {}\", scanner_behavior.announced);\n    println!(\"  Announces published: {}\", scanner_behavior.announces_published);\n    println!(\"  Duration: {:?}\", scanner_behavior.duration);\n    println!(\"  Reciprocity violation: {}\", scanner_behavior.reciprocity_violation);\n\n    // --- Map to reputation signals ---\n    let mut rep = PeerReputation::new();\n\n    // Legitimate agent gets a positive PolicyCompliance signal\n    rep.record(ReputationSignal {\n        category: SignalCategory::PolicyCompliance,\n        polarity: SignalPolarity::Positive,\n        timestamp: Utc::now(),\n        evidence_id: \"relay-session-001\".into(),\n        detail: Some(format!(\n            \"announced={}, published={}, duration={:?}\",\n            legit_behavior.announced,\n            legit_behavior.announces_published,\n            legit_behavior.duration\n        )),\n    });\n\n    // Scanner gets a negative PolicyCompliance signal\n    rep.record(ReputationSignal {\n        category: SignalCategory::PolicyCompliance,\n        polarity: SignalPolarity::Negative,\n        timestamp: Utc::now(),\n        evidence_id: \"relay-session-002\".into(),\n        detail: Some(format!(\n            \"reciprocity_violation={}, announced={}, duration={:?}\",\n            scanner_behavior.reciprocity_violation,\n            scanner_behavior.announced,\n            scanner_behavior.duration\n        )),\n    });\n\n    let weights = ReputationWeights::default();\n    let score = rep.compute_score(\"relay-participants\", &weights, Utc::now());\n    println!(\"\\nRelay reputation impact:\");\n    println!(\"  Score: {:.2} (grade: {})\", score.score, score.grade);\n    println!(\"  Positive: {}, Negative: {}\", score.positive_signals, score.negative_signals);\n\n    // --- Relay stats ---\n    println!(\"\\nRelay stats:\");\n    println!(\"  Announces relayed: {}\", relay.announces_relayed());\n    println!(\"  Reciprocity rejections: {}\", relay.reciprocity_rejections());\n\n    relay.shutdown();\n    println!(\"\\n\\u2713 Adversarial model: reciprocity gate + behavioral signals + reputation\");\n}\n```",
+      "checkpoint": "Set up a relay with a short grace period. Connect three clients: (1) a legitimate agent that announces immediately, (2) a slow agent that announces just before the grace period expires, (3) a scanner that never announces. Verify: (a) the legitimate agent can receive after announcing, (b) the slow agent passes the gate in time, (c) the scanner is blocked and eventually flagged with `grace_period_expired()`. Disconnect all three and examine their `ConnectionBehavior`. Map each behavior to a `ReputationSignal` and compute scores showing that scanners accumulate negative PolicyCompliance signals."
+    },
+    {
+      "id": 12,
+      "title": "Reputation and Trust Tiers",
+      "concept": "Trust must be earned, not assumed. ZP's reputation system accumulates evidence-based signals in four categories: AuditAttestation, DelegationChain, PolicyCompliance, ReceiptExchange. Each signal has a polarity (positive/negative) and undergoes time decay. Scores map to grades (Excellent/Good/Fair/Poor/Unknown). The ReputationGateRule integrates with the policy engine to gate mesh actions based on peer reputation.",
+      "lab": "Add `zp-mesh` to `Cargo.toml` if not already present.\n\n```rust\nuse zp_mesh::reputation::{\n    PeerReputation, ReputationSignal, ReputationWeights,\n    SignalCategory, SignalPolarity,\n};\nuse chrono::Utc;\n\nfn main() {\n    // Create a reputation ledger (no per-peer state \u2014 signals are the evidence)\n    let mut rep = PeerReputation::new();\n\n    // Record positive signals across three categories.\n    // Each signal needs: category, polarity, timestamp, evidence_id, detail.\n    // There is NO weight field \u2014 weights are applied at scoring time.\n    rep.record(ReputationSignal {\n        category: SignalCategory::AuditAttestation,\n        polarity: SignalPolarity::Positive,\n        timestamp: Utc::now(),\n        evidence_id: \"att-001\".into(),\n        detail: Some(\"chain verified, 5 entries\".into()),\n    });\n    rep.record(ReputationSignal {\n        category: SignalCategory::ReceiptExchange,\n        polarity: SignalPolarity::Positive,\n        timestamp: Utc::now(),\n        evidence_id: \"rcpt-001\".into(),\n        detail: None,\n    });\n    rep.record(ReputationSignal {\n        category: SignalCategory::PolicyCompliance,\n        polarity: SignalPolarity::Positive,\n        timestamp: Utc::now(),\n        evidence_id: \"policy-pass-001\".into(),\n        detail: Some(\"honoured data-sharing agreement\".into()),\n    });\n\n    // Compute the score. Weights determine how much each category matters.\n    // Default weights: audit 0.35, delegation 0.20, compliance 0.25, exchange 0.20.\n    let weights = ReputationWeights::default();\n    let score = rep.compute_score(\"peer-abc\", &weights, Utc::now());\n\n    println!(\"Peer: {}\", score.peer);\n    println!(\"Score: {:.2} (grade: {})\", score.score, score.grade);\n    println!(\"Positive signals: {}\", score.positive_signals);\n    println!(\"Negative signals: {}\", score.negative_signals);\n\n    // Show per-category breakdown\n    for cat in &score.breakdown {\n        println!(\n            \"  {:?}: {:.2} (weight {:.2}, weighted {:.2}, {} signals)\",\n            cat.category, cat.score, cat.weight, cat.weighted_score, cat.signal_count\n        );\n    }\n\n    // Now record a negative signal and recompute\n    rep.record(ReputationSignal {\n        category: SignalCategory::PolicyCompliance,\n        polarity: SignalPolarity::Negative,\n        timestamp: Utc::now(),\n        evidence_id: \"policy-fail-001\".into(),\n        detail: Some(\"violated rate limit agreement\".into()),\n    });\n\n    let updated = rep.compute_score(\"peer-abc\", &weights, Utc::now());\n    println!(\"\\nAfter negative signal:\");\n    println!(\"Score: {:.2} (grade: {})\", updated.score, updated.grade);\n    assert!(updated.score < score.score, \"Negative signal should lower score\");\n\n    println!(\"\\n\\u2713 Reputation: signals \\u2192 time-decayed scores \\u2192 grades\");\n}\n```",
+      "checkpoint": "Create PeerReputation instances for three different peers. Record mixed positive/negative signals for each, using all four SignalCategory variants. Compute scores with default weights and verify: (1) positive-only peers score higher than mixed-signal peers, (2) a peer with only negative signals gets grade Poor, (3) the per-category breakdown shows correct signal counts. Experiment with custom ReputationWeights to see how shifting weight between categories changes grades."
+    },
+    {
+      "id": 13,
+      "title": "Consensus",
+      "concept": "When multiple agents need to agree on an action, ZP provides receipt-based consensus. A Proposal carries a receipt hash, required voters, and a threshold (Unanimous, Majority, or k-of-n). Peers vote Accept or Reject. The ConsensusCoordinator manages concurrent rounds.",
+      "lab": "Add `zp-mesh` to `Cargo.toml` if not already present.\n\n```rust\nuse zp_mesh::consensus::{\n    ConsensusCoordinator, ConsensusOutcome, Proposal, Vote,\n};\nuse zp_core::governance::ConsensusThreshold;\n\nfn main() {\n    let mut coordinator = ConsensusCoordinator::new();\n\n    // Create a proposal requiring unanimous agreement.\n    // Proposal::new(receipt_hash, proposer, description, threshold, voters, timeout_secs)\n    // The ID is auto-generated (UUID v7). timeout_secs: None = no deadline.\n    let proposal = Proposal::new(\n        \"rcpt-hash-abc\".into(),\n        \"agent-alpha\".into(),\n        \"Approve capability grant for data-processing\".into(),\n        ConsensusThreshold::Unanimous,\n        vec![\"agent-beta\".into(), \"agent-gamma\".into()],\n        Some(3600), // 1 hour timeout\n    );\n    let prop_id = coordinator.propose(proposal);\n    println!(\"Proposal created: {}\", prop_id);\n\n    // Vote::accept(proposal_id, voter) / Vote::reject(proposal_id, voter, reason)\n    // The vote carries its own proposal_id, so coordinator.vote() takes just the Vote.\n    coordinator.vote(Vote::accept(&prop_id, \"agent-beta\"));\n\n    let round = coordinator.round(&prop_id).unwrap();\n    println!(\"After 1 vote: {:?} ({} accepts, {} rejects)\",\n        round.outcome, round.accepts(), round.rejects());\n\n    coordinator.vote(Vote::accept(&prop_id, \"agent-gamma\"));\n\n    let round = coordinator.round(&prop_id).unwrap();\n    println!(\"After 2 votes: {:?}\", round.outcome);\n    assert!(matches!(round.outcome, ConsensusOutcome::Accepted));\n\n    // Now try majority threshold with a rejection.\n    // Majority = (n/2) + 1, so 2 of 3 accepts is enough.\n    let proposal2 = Proposal::new(\n        \"rcpt-hash-def\".into(),\n        \"agent-alpha\".into(),\n        \"Approve cross-fleet audit exchange\".into(),\n        ConsensusThreshold::Majority,\n        vec![\"agent-beta\".into(), \"agent-gamma\".into(), \"agent-delta\".into()],\n        None, // no deadline\n    );\n    let prop2_id = coordinator.propose(proposal2);\n\n    coordinator.vote(Vote::accept(&prop2_id, \"agent-beta\"));\n    coordinator.vote(Vote::reject(&prop2_id, \"agent-gamma\", \"Insufficient evidence\"));\n    coordinator.vote(Vote::accept(&prop2_id, \"agent-delta\"));\n\n    let round2 = coordinator.round(&prop2_id).unwrap();\n    println!(\"Majority vote: {:?} ({} accepts, {} rejects)\",\n        round2.outcome, round2.accepts(), round2.rejects());\n    assert!(matches!(round2.outcome, ConsensusOutcome::Accepted));\n\n    // k-of-n threshold: require exactly 3 of 4\n    let proposal3 = Proposal::new(\n        \"rcpt-hash-ghi\".into(),\n        \"agent-alpha\".into(),\n        \"Critical governance change\".into(),\n        ConsensusThreshold::Threshold { required: 3, total: 4 },\n        vec![\"a\".into(), \"b\".into(), \"c\".into(), \"d\".into()],\n        None,\n    );\n    let prop3_id = coordinator.propose(proposal3);\n\n    coordinator.vote(Vote::accept(&prop3_id, \"a\"));\n    coordinator.vote(Vote::reject(&prop3_id, \"b\", \"Disagree with scope\"));\n    coordinator.vote(Vote::reject(&prop3_id, \"c\", \"Too risky\"));\n\n    let round3 = coordinator.round(&prop3_id).unwrap();\n    println!(\"k-of-n vote: {:?}\", round3.outcome);\n    // With 2 rejects out of 4, we can never reach 3 accepts \u2192 Rejected\n    assert!(matches!(round3.outcome, ConsensusOutcome::Rejected));\n\n    println!(\"\\n\\u2713 Consensus: proposals, votes, thresholds (unanimous + majority + k-of-n)\");\n}\n```",
+      "checkpoint": "Create 3 proposals with different thresholds: (1) Unanimous with 2 voters, (2) Majority with 5 voters, (3) Threshold { required: 3, total: 4 }. For each, simulate voting that results in Accepted for (1) and (2), and Rejected for (3). Verify threshold logic by checking `round.outcome`, `round.accepts()`, and `round.rejects()` after each vote."
+    },
+    {
+      "id": 14,
+      "title": "Epoch Compaction",
+      "concept": "Receipt chains grow without bound. Epoch compaction seals ranges of entries into Merkle trees, producing a single root hash that proves the integrity of all entries in that range. After compaction, individual entries can be pruned while the epoch root remains as proof. A chain of epochs forms its own chain, with each epoch's prev_epoch_hash referencing the previous.",
+      "lab": "Add `zp-receipt` to `Cargo.toml` if not already present.\n\n```rust\nuse zp_receipt::{Receipt, ReceiptChain, Status, TrustGrade, EpochCompactor, Epoch, MerkleProof};\n\nfn main() {\n    let mut chain = ReceiptChain::new(\"compaction-lab\");\n    let compactor = EpochCompactor::new(50); // 50 entries per epoch\n\n    // Build a chain of 200 receipts\n    for i in 0..200 {\n        let mut receipt = Receipt::execution(&format!(\"executor-{}\", i % 5))\n            .status(Status::Success)\n            .trust_grade(TrustGrade::B)\n            .finalize();\n        chain.append(&mut receipt).unwrap();\n    }\n    println!(\"Chain length: {} entries\", chain.len());\n    chain.verify_integrity().unwrap();\n    println!(\"\\u2713 Chain integrity verified\");\n\n    // Compact into epochs\n    let mut epochs: Vec<Epoch> = Vec::new();\n    let entries = chain.entries();\n\n    for epoch_num in 0..4 {\n        let start = epoch_num * 50;\n        let end = start + 50;\n        let epoch_entries = &entries[start..end];\n\n        let prev = if epochs.is_empty() { None } else { Some(epochs.last().unwrap()) };\n        let epoch = compactor.compact(\"compaction-lab\", epoch_entries, prev).unwrap();\n\n        println!(\"Epoch {}: merkle_root={}...{}, entries={}\",\n            epoch.epoch_number,\n            &epoch.merkle_root[..8],\n            &epoch.merkle_root[epoch.merkle_root.len()-8..],\n            epoch.entry_count);\n\n        epochs.push(epoch);\n    }\n\n    // Verify epoch chain\n    compactor.verify_epoch_chain(&epochs).unwrap();\n    println!(\"\\n\\u2713 Epoch chain verified ({} epochs)\", epochs.len());\n\n    // Verify a specific epoch against its entries\n    let epoch_2_entries = &entries[100..150];\n    compactor.verify_epoch(&epochs[2], epoch_2_entries).unwrap();\n    println!(\"\\u2713 Epoch 2 verified against its entries\");\n\n    println!(\"\\n200 receipts \\u2192 4 sealed epochs \\u2192 prunable with proof\");\n}\n```",
+      "checkpoint": "Build a receipt chain of 300 entries, compact into epochs of 75 entries each (4 epochs), verify the epoch chain, then verify individual epochs against their original entries. Prove that the epoch root hash is deterministic and tamper-proof by attempting to modify an entry and re-computing its epoch hash."
+    },
+    {
+      "id": 15,
+      "title": "WASM Policy Modules",
+      "concept": "The policy engine supports WebAssembly modules \u2014 sandboxed, portable policy rules that can be shared between peers. This module loads a WASM policy module, evaluates it alongside native rules, and observes the most-restrictive-wins composition.",
+      "lab": "First, create a simple WASM policy module (a Rust crate compiled to wasm32-wasi):\n\n```rust\n// wasm-policy/src/lib.rs\n// Compile with: cargo build --target wasm32-wasi --release\n\n#[no_mangle]\npub extern \"C\" fn evaluate(action_type: i32, trust_tier: i32) -> i32 {\n    // Block Execute actions at Tier0\n    if action_type == 4 && trust_tier == 0 {\n        return 5; // Block\n    }\n    // Warn on Write at Tier1\n    if action_type == 2 && trust_tier == 1 {\n        return 3; // Warn\n    }\n    1 // Allow\n}\n```\n\nThen load it in the policy engine:\n\n```rust\nuse zp_policy::{PolicyEngine, PolicyModuleRegistry};\n\nfn main() {\n    let wasm_bytes = std::fs::read(\"./wasm-policy/target/wasm32-wasi/release/policy.wasm\")\n        .expect(\"Should read WASM file\");\n\n    let mut registry = PolicyModuleRegistry::new()\n        .expect(\"Should create WASM runtime\");\n    let metadata = registry.load(&wasm_bytes)\n        .expect(\"Should load module\");\n    println!(\"Loaded WASM module: {}\", metadata.content_hash);\n\n    // Create engine with WASM\n    let engine = PolicyEngine::with_wasm(registry);\n\n    // Evaluate \u2014 WASM module participates alongside native rules\n    // ... (use same evaluation pattern as Module 6)\n}\n```",
+      "checkpoint": "Create two different WASM policy modules with different rules. Load both into the same engine. Evaluate an action that triggers rules from both modules and from native rules. Verify that the most restrictive decision from all three sources wins. This demonstrates the composition model across native and WASM boundaries."
+    },
+    {
+      "id": 16,
+      "title": "Capstone \u2014 Portable Trust",
+      "concept": "This is the integration exercise. You build a complete governed agent system with key hierarchy, capability grants, delegation chains, GovernanceGate (Guard \\u2192 Policy \\u2192 Audit), receipt chains, audit trail, epoch compaction, dual-backend Presence Plane discovery, reciprocity enforcement, reputation, and consensus. This exercise ties together all 16 preceding modules into a single governed multi-agent fleet.",
+      "lab": "Build a system that:\n\n1. Creates a key hierarchy: genesis \\u2192 2 operators \\u2192 5 agents + 1 sub-agent\n2. Issues capability grants with constraints for each agent\n3. Delegates from one agent to sub-agent, verified\n4. Sets up a GovernanceGate with Guard (blocklist + rate limiting) and Policy\n5. Runs 20 actions through the gate\n6. Produces a receipt for each action\n7. Persists audit trail to SQLite\n8. Verifies audit chain integrity\n9. Compacts the receipt chain into epochs\n10. Sets up two mesh nodes with loopback\n11. Node A announces, Node B auto-discovers\n12. Sets up DiscoveryManager with both web and Reticulum backends\n13. Verifies dual-backend discovery produces unified peer table\n14. Spins up a WebRelayServer and tests reciprocity enforcement\n15. Records reputation signals (including relay ConnectionBehavior) and scores peers\n16. Runs a consensus proposal that requires agreement\n17. Generates peer audit attestations\n\nOutput:\n\n```\nFLEET SUMMARY\n\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\nGenesis: fleet-command\nOperators: 2\nAgents: 5 (+ 1 sub-agent)\nDelegation chains: 6 verified \\u2713\n\nGOVERNANCE\n\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\nGuard: active (blocklist + rate limiting)\nActions evaluated: 20\n  Allowed: 14  Warned: 4  Blocked: 2\nReceipts: 20 (chain verified \\u2713)\n\nAUDIT\n\\u2500\\u2500\\u2500\\u2500\\u2500\nEntries: 20\nChain integrity: verified \\u2713\nSQLite store: ./capstone-audit.db\n\nCOMPACTION\n\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\nEpochs sealed: 1 (entries 0-19)\nMerkle root: verified \\u2713\n\nPRESENCE PLANE\n\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\\u2500\nBackends: web + reticulum\nDiscovery: Node B auto-discovered Node A \\u2713\nRelay reciprocity: enforced \\u2713\nScanner blocked: grace period expired \\u2713\n\nMESH\n\\u2500\\u2500\\u2500\\u2500\nNodes: 2\nReputation: Node A scored 0.85 (Good) \\u2713\nConsensus: Proposal accepted (2/2 unanimous) \\u2713\nPeer attestations: 2 (both valid \\u2713)\n\nAll systems operational. You are a ZeroPoint Builder.\n```",
+      "checkpoint": "If your output matches the structure above (numbers may vary), you have built a governed agent fleet from scratch. You understand key hierarchies, capability grants, delegation chains, Guard-Policy-Audit gateways, receipts, audit trails, epoch compaction, dual-backend Presence Plane discovery, reciprocity enforcement, reputation gating, and consensus. You are ready to deploy ZeroPoint in production."
+    }
+  ]
+}
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+// Parse course data
+const courseData = JSON.parse(document.getElementById('course-data').textContent);
+
+// Custom markdown renderer with Prism highlighting
+function renderMarkdown(md) {
+  if (!md) return '';
+
+  // Process code blocks first
+  const codeBlocks = [];
+  let processed = md.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({ lang: lang || 'text', code: code.trimEnd() });
+    return `%%CODEBLOCK_${idx}%%`;
+  });
+
+  // Basic markdown to HTML
+  processed = processed
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+
+  // Wrap in paragraphs
+  if (!processed.startsWith('<')) processed = '<p>' + processed + '</p>';
+
+  // Restore code blocks as placeholders (we'll render them as React components)
+  processed = processed.replace(/%%CODEBLOCK_(\d+)%%/g, (_, idx) => {
+    const block = codeBlocks[parseInt(idx)];
+    let highlighted;
+    try {
+      const grammar = Prism.languages[block.lang] || Prism.languages.clike;
+      highlighted = Prism.highlight(block.code, grammar, block.lang);
+    } catch (e) {
+      highlighted = block.code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    return `<div class="code-block" data-lang="${block.lang}" data-code="${encodeURIComponent(block.code)}"><div class="code-block-header"><span class="code-lang">${block.lang}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div><pre class="language-${block.lang}"><code class="language-${block.lang}">${highlighted}</code></pre></div>`;
+  });
+
+  return processed;
+}
+
+// Global copy function
+window.copyCode = function(btn) {
+  const block = btn.closest('.code-block');
+  const code = decodeURIComponent(block.dataset.code);
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+};
+
+// Components
+function IntroPage({ onStart }) {
+  return (
+    <div className="content-wrapper">
+      <div className="hero">
+        <div className="hero-badge">ZeroPoint Academy</div>
+        <h1>Track 2: Builder</h1>
+        <p>{courseData.tagline}</p>
+        <div className="hero-meta">
+          <span><span className="val">{courseData.duration}</span></span>
+          <span><span className="val">{courseData.modules.length} Modules</span></span>
+          <span><span className="val">Rust</span></span>
+        </div>
+      </div>
+
+      <div className="intro-grid">
+        <div className="intro-card">
+          <h3>Concept</h3>
+          <p>What you're building and why it matters, drawn from the book.</p>
+        </div>
+        <div className="intro-card">
+          <h3>Lab</h3>
+          <p>Hands-on code you write and run against a real ZeroPoint instance.</p>
+        </div>
+        <div className="intro-card">
+          <h3>Checkpoint</h3>
+          <p>A verification exercise that proves you understood the module.</p>
+        </div>
+      </div>
+
+      <div className="philosophy-text">
+        <p>You should type the code, not copy it. The muscle memory matters. When a lab says "verify that X," it means run the code and confirm the output matches expectations.</p>
+        <p>The modules are sequential. Each builds on the previous. Do not skip ahead.</p>
+      </div>
+
+      <div style={{ marginTop: '24px' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginBottom: '8px' }}><strong>Prerequisites:</strong> {courseData.prereqs}</p>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}><strong>Outcome:</strong> {courseData.outcome}</p>
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: '40px' }}>
+        <button className="nav-btn primary" onClick={onStart} style={{ padding: '12px 32px', fontSize: '0.9rem' }}>
+          Begin Module 1 &rarr;
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ModulePage({ module, completed, onComplete, onPrev, onNext, hasPrev, hasNext }) {
+  const [activeTab, setActiveTab] = useState('concept');
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    setActiveTab('concept');
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [module.id]);
+
+  const sections = {
+    concept: module.concept,
+    lab: module.lab,
+    checkpoint: module.checkpoint,
+  };
+
+  const html = useMemo(() => renderMarkdown(sections[activeTab]), [module.id, activeTab]);
+
+  return (
+    <div className="content-wrapper" ref={contentRef}>
+      <div className="module-header">
+        <div className="module-header-num">Module {module.id} of {courseData.modules.length - 1}</div>
+        <h1>{module.title}</h1>
+      </div>
+
+      <div className="section-tabs">
+        {['concept', 'lab', 'checkpoint'].map(tab => (
+          <button
+            key={tab}
+            className={`section-tab ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <div className="section-content" dangerouslySetInnerHTML={{ __html: html }} />
+
+      {activeTab === 'checkpoint' && (
+        <div className="complete-section">
+          <button
+            className={`complete-btn ${completed ? 'completed' : ''}`}
+            onClick={() => !completed && onComplete(module.id)}
+          >
+            {completed ? '\u2713 Module Completed' : 'Mark as Complete'}
+          </button>
+        </div>
+      )}
+
+      <div className="nav-buttons">
+        <button className="nav-btn" onClick={onPrev} disabled={!hasPrev}>
+          &larr; Previous
+        </button>
+        {hasNext ? (
+          <button className="nav-btn primary" onClick={onNext}>
+            Next Module &rarr;
+          </button>
+        ) : (
+          <span style={{ fontSize: '0.85rem', color: 'var(--green)', fontWeight: 500 }}>
+            {completed ? '\u2713 Course Complete' : 'Final Module'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// API Configuration
+// ============================================================================
+// The course app talks to the ZeroPoint server (zp-server on Hetzner) for two
+// purposes:
+//   1. Anonymous analytics — module start/complete events with no identity
+//   2. Attestation issuance — when all 14 modules are complete, the builder
+//      enters their name and receives a signed, hash-chained attestation
+//
+// The API_BASE should point to the zp-server instance. In production this is
+// proxied through Cloudflare at zeropoint.global. For local dev, point it at
+// localhost:3000.
+// ============================================================================
+const API_BASE = 'https://api.zeropoint.global';
+const TRACK_ID = 'track-2-builder';
+
+// Generate a random session ID for anonymous analytics.
+// This groups events within a single learning session but cannot identify
+// a person. It's regenerated each time the page loads.
+const SESSION_ID = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+
+// Fire an anonymous analytics event to the server.
+// Failures are silently ignored — analytics should never block learning.
+function sendAnalyticsEvent(moduleId, event, durationSecs) {
+  fetch(`${API_BASE}/api/v1/analytics/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: SESSION_ID,
+      track: TRACK_ID,
+      module_id: moduleId,
+      event: event,
+      duration_secs: durationSecs || null,
+    }),
+  }).catch(() => {}); // Silent — never block the learner
+}
+
+// Request an attestation from the server when all modules are complete.
+// Returns the attestation object (id, hash, signature) or null on failure.
+async function requestAttestation(name, completions) {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/attestations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        track: TRACK_ID,
+        completions: completions,
+      }),
+    });
+    if (res.ok) return await res.json();
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function App() {
+  const [currentModule, setCurrentModule] = useState(0); // 0 = intro
+  const [completedModules, setCompletedModules] = useState(new Set());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Track when each module was started (for duration calculation)
+  const moduleStartTimes = useRef({});
+  // Track when each module was completed (for attestation payload)
+  const completionTimestamps = useRef({});
+  // Attestation state
+  const [showAttestationModal, setShowAttestationModal] = useState(false);
+  const [attestation, setAttestation] = useState(null);
+  const [attestationLoading, setAttestationLoading] = useState(false);
+  const mainRef = useRef(null);
+
+  const goTo = useCallback((idx) => {
+    setCurrentModule(idx);
+    setSidebarOpen(false); // Close sidebar on mobile after selection
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+
+    // Fire "started" analytics event when entering a module
+    if (idx > 0) {
+      moduleStartTimes.current[idx] = Date.now();
+      sendAnalyticsEvent(idx, 'started');
+    }
+  }, []);
+
+  const handleComplete = useCallback((id) => {
+    // Calculate time spent on this module (seconds)
+    const startTime = moduleStartTimes.current[id];
+    const durationSecs = startTime ? Math.round((Date.now() - startTime) / 1000) : null;
+
+    // Record completion timestamp for the attestation payload
+    completionTimestamps.current[id] = new Date().toISOString();
+
+    // Fire "completed" analytics event with duration
+    sendAnalyticsEvent(id, 'completed', durationSecs);
+
+    setCompletedModules(prev => {
+      const next = new Set(prev);
+      next.add(id);
+
+      // If all 14 modules are now complete, show the attestation modal
+      if (next.size === courseData.modules.length) {
+        setTimeout(() => setShowAttestationModal(true), 600);
+      }
+
+      return next;
+    });
+  }, []);
+
+  // Handle attestation request when the builder submits their name
+  const handleAttestationRequest = useCallback(async (name) => {
+    setAttestationLoading(true);
+    const completions = courseData.modules.map(mod => ({
+      module_id: mod.id,
+      module_name: mod.title,
+      completed_at: completionTimestamps.current[mod.id] || new Date().toISOString(),
+    }));
+    const result = await requestAttestation(name, completions);
+    setAttestation(result);
+    setAttestationLoading(false);
+  }, []);
+
+  const progress = (completedModules.size / courseData.modules.length) * 100;
+
+  return (
+    <div className="app">
+      <button
+        className={`hamburger ${sidebarOpen ? 'open' : ''}`}
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label="Toggle navigation"
+      >
+        <span /><span /><span />
+      </button>
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-logo">ZeroPoint</div>
+          <div className="sidebar-title">Track 2: Builder</div>
+          <div className="sidebar-subtitle">Developer Course</div>
+        </div>
+
+        <div className="progress-section">
+          <div className="progress-label">
+            <span>Progress</span>
+            <span>{completedModules.size}/{courseData.modules.length}</span>
+          </div>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        <div className="module-list">
+          <div
+            className={`module-item intro ${currentModule === 0 ? 'active' : ''}`}
+            onClick={() => goTo(0)}
+          >
+            <div className="module-num" style={{ fontWeight: 500 }}>&bull;</div>
+            <div className="module-info">
+              <div className="module-name">Introduction</div>
+            </div>
+          </div>
+
+          {courseData.modules.map((mod, idx) => {
+            const isDone = completedModules.has(mod.id);
+            const isActive = currentModule === mod.id;
+            return (
+              <div
+                key={mod.id}
+                className={`module-item ${isActive ? 'active' : ''}`}
+                onClick={() => goTo(mod.id)}
+              >
+                <div className="module-num">{String(mod.id).padStart(2, '0')}</div>
+                <div className="module-info">
+                  <div className="module-name">{mod.title}</div>
+                </div>
+                <div className="module-check">
+                  {isDone ? (
+                    <span className="check-done">{'\u2713'}</span>
+                  ) : isActive ? (
+                    <span className="check-active">{'\u25CB'}</span>
+                  ) : (
+                    <span className="check-pending">{'\u25CB'}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="main" ref={mainRef}>
+        {currentModule === 0 ? (
+          <IntroPage onStart={() => goTo(1)} />
+        ) : (
+          <ModulePage
+            module={courseData.modules[currentModule - 1]}
+            completed={completedModules.has(currentModule)}
+            onComplete={handleComplete}
+            onPrev={() => goTo(currentModule - 1)}
+            onNext={() => goTo(currentModule + 1)}
+            hasPrev={currentModule > 0}
+            hasNext={currentModule < courseData.modules.length}
+          />
+        )}
+      </div>
+
+      {/* ================================================================
+          Attestation Modal
+          Shown when all 14 modules are marked complete. The builder enters
+          their name, the app calls POST /api/v1/attestations, and on
+          success displays the attestation ID with a link to the visual
+          verification page.
+          ================================================================ */}
+      {showAttestationModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 100,
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            borderRadius: '8px', padding: '40px', width: '440px', textAlign: 'center',
+          }}>
+            {!attestation ? (
+              <>
+                <div style={{
+                  fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.15em',
+                  textTransform: 'uppercase', color: 'var(--green)', marginBottom: '12px',
+                }}>
+                  {'\u2713'} All Modules Complete
+                </div>
+                <h2 style={{
+                  fontFamily: "'Inter', sans-serif", fontSize: '1.4rem',
+                  fontWeight: 600, color: 'var(--text)', marginBottom: '8px',
+                }}>
+                  You are a ZeroPoint Builder.
+                </h2>
+                <p style={{
+                  fontSize: '0.85rem', color: 'var(--text-dim)',
+                  marginBottom: '28px', lineHeight: 1.6,
+                }}>
+                  Enter your name to issue a signed attestation of completion,
+                  hash-chained to the ZeroPoint attestation ledger.
+                </p>
+                <input
+                  type="text"
+                  id="attestation-name"
+                  placeholder="Your full name"
+                  style={{
+                    width: '100%', padding: '10px 14px', background: 'var(--bg)',
+                    border: '1px solid var(--border)', borderRadius: '4px',
+                    color: 'var(--text)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '15px', outline: 'none', marginBottom: '16px',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
+                />
+                <button
+                  onClick={() => {
+                    const name = document.getElementById('attestation-name').value.trim();
+                    if (name) handleAttestationRequest(name);
+                  }}
+                  disabled={attestationLoading}
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: '4px',
+                    border: '1px solid rgba(126,184,218,0.3)',
+                    background: attestationLoading ? 'var(--bg-hover)' : 'var(--accent-glow)',
+                    color: attestationLoading ? 'var(--text-muted)' : 'var(--accent)',
+                    fontFamily: "'Inter', sans-serif", fontSize: '14px',
+                    fontWeight: 500, cursor: attestationLoading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {attestationLoading ? 'Sealing attestation...' : 'Issue Attestation'}
+                </button>
+                <button
+                  onClick={() => setShowAttestationModal(false)}
+                  style={{
+                    width: '100%', padding: '8px', marginTop: '8px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--text-muted)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  Skip for now
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  border: '2px solid var(--green)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 16px', fontSize: '24px', color: 'var(--green)',
+                }}>
+                  {'\u2713'}
+                </div>
+                <h2 style={{
+                  fontFamily: "'Inter', sans-serif", fontSize: '1.3rem',
+                  fontWeight: 600, color: 'var(--text)', marginBottom: '8px',
+                }}>
+                  Attestation Sealed
+                </h2>
+                <div style={{
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: '0.85rem',
+                  color: 'var(--accent)', marginBottom: '16px',
+                  padding: '8px 16px', background: 'var(--accent-dim)',
+                  borderRadius: '4px', display: 'inline-block',
+                }}>
+                  {attestation.id}
+                </div>
+                <p style={{
+                  fontSize: '0.8rem', color: 'var(--text-dim)',
+                  marginBottom: '8px', lineHeight: 1.5,
+                }}>
+                  Signed by the ZeroPoint server, hash-chained to the attestation ledger.
+                </p>
+                <div style={{
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem',
+                  color: 'var(--text-muted)', marginBottom: '20px', wordBreak: 'break-all',
+                }}>
+                  {attestation.attestation_hash}
+                </div>
+                <a
+                  href={`https://zeropoint.global/verify.html?id=${attestation.id}`}
+                  target="_blank"
+                  rel="noopener"
+                  style={{
+                    display: 'inline-block', padding: '10px 28px', borderRadius: '4px',
+                    border: '1px solid rgba(126,184,218,0.3)',
+                    background: 'var(--accent-glow)', color: 'var(--accent)',
+                    fontFamily: "'Inter', sans-serif", fontSize: '14px',
+                    fontWeight: 500, textDecoration: 'none',
+                  }}
+                >
+                  View Attestation
+                </a>
+                <button
+                  onClick={() => setShowAttestationModal(false)}
+                  style={{
+                    display: 'block', width: '100%', padding: '8px', marginTop: '12px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--text-muted)', fontFamily: "'Inter', sans-serif",
+                    fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
