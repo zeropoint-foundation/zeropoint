@@ -92,6 +92,9 @@ m0_homepage_copy.md
 mindmap-prompt.md
 DATABASE_*.txt
 
+# Internal / confidential documents (never pushed to public repo)
+internal/
+
 # Personal / draft content (never commit)
 *-draft.md
 *-comparative-analysis.md
