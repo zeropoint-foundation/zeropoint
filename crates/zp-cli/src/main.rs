@@ -1293,9 +1293,13 @@ async fn main() -> anyhow::Result<()> {
         // Resolve the target server address from topology config.
         let cfg = zp_config::ConfigResolver::resolve_standard();
 
-        // Derive node role from chain state (genesis.json or delegation receipt).
-        // Config role is a hint only — chain is authoritative.
-        let derived_role = zp_config::derive_node_role(&cfg.home_dir.value);
+        // Derive node role from chain state + config hint.
+        // Config hint disambiguates delegate (holding upstream cert) from genesis.
+        let derived_role = zp_config::derive_node_role_with_hint(
+            &cfg.home_dir.value,
+            Some(cfg.node_role.value.as_str()),
+            cfg.node_upstream.value.as_deref(),
+        );
         let config_hint_role = zp_config::config_hint_role(&cfg.node_role.value);
 
         // Log mismatch if config disagrees with chain
@@ -2038,7 +2042,11 @@ async fn main() -> anyhow::Result<()> {
         }
 
         // 2a. Node role coherence check (T1: Chain-Derived Role)
-        let derived_role = zp_config::derive_node_role(home);
+        let derived_role = zp_config::derive_node_role_with_hint(
+            home,
+            Some(cfg.node_role.value.as_str()),
+            cfg.node_upstream.value.as_deref(),
+        );
         let config_hint_role = zp_config::config_hint_role(&cfg.node_role.value);
 
         if derived_role.same_variant(&config_hint_role) {
@@ -2179,31 +2187,51 @@ async fn main() -> anyhow::Result<()> {
         });
 
         // 2f. Genesis secret (credential store)
-        let keys_dir = home.join("keys");
-        let genesis_secret_ok = zp_keys::Keyring::open(&keys_dir)
-            .map(|kr| kr.status().has_genesis_secret)
-            .unwrap_or(false);
-        if genesis_secret_ok {
-            checks.push(Check {
-                label: "Genesis secret".into(),
-                status: "pass",
-                detail: "present in credential store".into(),
-                fix: String::new(),
-            });
-        } else if genesis_path.exists() {
-            checks.push(Check {
-                label: "Genesis secret".into(),
-                status: "fail",
-                detail: "certificate exists but secret missing from credential store".into(),
-                fix: "Run: zp recover (with your 24-word mnemonic)".into(),
-            });
+        // Delegates hold the upstream's genesis.json for verification — they
+        // do NOT need the genesis secret (that's the upstream's private key).
+        if matches!(&derived_role, zp_config::NodeRole::Delegate { .. }) {
+            if genesis_path.exists() {
+                checks.push(Check {
+                    label: "Upstream certificate".into(),
+                    status: "pass",
+                    detail: "upstream genesis.json present (for verification)".into(),
+                    fix: String::new(),
+                });
+            } else {
+                checks.push(Check {
+                    label: "Upstream certificate".into(),
+                    status: "fail",
+                    detail: "upstream genesis.json missing — cannot verify upstream identity".into(),
+                    fix: "Copy genesis.json from your upstream genesis node.".into(),
+                });
+            }
         } else {
-            checks.push(Check {
-                label: "Genesis secret".into(),
-                status: "fail",
-                detail: "not initialized".into(),
-                fix: "Run: zp init".into(),
-            });
+            let keys_dir = home.join("keys");
+            let genesis_secret_ok = zp_keys::Keyring::open(&keys_dir)
+                .map(|kr| kr.status().has_genesis_secret)
+                .unwrap_or(false);
+            if genesis_secret_ok {
+                checks.push(Check {
+                    label: "Genesis secret".into(),
+                    status: "pass",
+                    detail: "present in credential store".into(),
+                    fix: String::new(),
+                });
+            } else if genesis_path.exists() {
+                checks.push(Check {
+                    label: "Genesis secret".into(),
+                    status: "fail",
+                    detail: "certificate exists but secret missing from credential store".into(),
+                    fix: "Run: zp recover (with your 24-word mnemonic)".into(),
+                });
+            } else {
+                checks.push(Check {
+                    label: "Genesis secret".into(),
+                    status: "fail",
+                    detail: "not initialized".into(),
+                    fix: "Run: zp init".into(),
+                });
+            }
         }
 
         // 3. Config file

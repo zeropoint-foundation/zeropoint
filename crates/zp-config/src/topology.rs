@@ -17,27 +17,68 @@ pub struct TransitionInfo {
     pub trigger: String,
 }
 
-/// Derive the node's role from chain state (genesis.json).
+/// Derive the node's role from chain state and config hint.
 ///
-/// This is the basic version that checks only for genesis.json.
-/// A more complete version that also checks the audit chain for delegation
-/// receipts would live in zp-cli where both zp-config and zp-receipt are available.
+/// The config hint is used to disambiguate between a genesis node (which
+/// created genesis.json) and a delegate node (which holds a copy of its
+/// upstream's genesis.json for verification).
 ///
 /// Priority:
-///   1. If genesis.json exists with valid transcript → Genesis
-///   2. Otherwise → Standalone
+///   1. If genesis.json exists AND config says "delegate" with an upstream
+///      → Delegate (holding upstream's certificate for verification)
+///   2. If genesis.json exists AND config says "genesis" or is absent
+///      → Genesis (this node performed the ceremony)
+///   3. No genesis.json → Standalone
 ///
-/// Note: Delegation receipt checking will be added in a later step when the
-/// receipt types are defined and a full delegation handshake is implemented.
+/// A future pass will also check the audit chain for delegation receipts,
+/// which would make the config hint unnecessary for delegates that have
+/// completed the attestation ceremony.
 pub fn derive_node_role(home: &Path) -> NodeRole {
-    // Check for genesis ceremony evidence
+    derive_node_role_with_hint(home, None, None)
+}
+
+/// Derive node role using the config hint to disambiguate delegate vs genesis.
+///
+/// When a delegate node holds a copy of its upstream's genesis.json, the
+/// config hint (role = "delegate", upstream = "addr:port") tells us this
+/// node is a delegate, not a second genesis.
+pub fn derive_node_role_with_hint(
+    home: &Path,
+    config_role_hint: Option<&str>,
+    config_upstream: Option<&str>,
+) -> NodeRole {
     let genesis_path = home.join("genesis.json");
+
     if genesis_path.exists() {
-        // TODO: Optionally verify the signed transcript here (T1 phase 2)
+        // Config says "delegate" with an upstream address → this node holds
+        // its upstream's genesis certificate, not its own.
+        if config_role_hint == Some("delegate") {
+            let upstream_addr = config_upstream.unwrap_or("").to_string();
+            // Extract the genesis pubkey from the certificate for binding verification
+            let upstream_genesis_pubkey = extract_genesis_pubkey(&genesis_path)
+                .unwrap_or_default();
+            return NodeRole::Delegate {
+                upstream_addr,
+                upstream_genesis_pubkey,
+            };
+        }
         return NodeRole::Genesis;
     }
 
+    // Config says delegate but no genesis.json yet — standalone until
+    // the upstream's certificate is received.
     NodeRole::Standalone
+}
+
+/// Extract the genesis public key from a genesis.json certificate.
+fn extract_genesis_pubkey(genesis_path: &Path) -> Option<String> {
+    let data = std::fs::read_to_string(genesis_path).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&data).ok()?;
+    parsed["genesis_pubkey"]
+        .as_str()
+        .or_else(|| parsed["public_key"].as_str())
+        .or_else(|| parsed["pubkey"].as_str())
+        .map(|s| s.to_string())
 }
 
 /// Convert a config string hint to a NodeRole.

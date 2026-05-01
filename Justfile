@@ -13,6 +13,8 @@ artemis_host := "zp-pentest@192.168.1.199"
 artemis_ssh := "ssh -i ~/.ssh/apollo-artemis-key"
 artemis_scp := "scp -i ~/.ssh/apollo-artemis-key"
 playground_host := "root@89.167.86.60"
+playground_ssh := "ssh -i ~/.ssh/hetzner_zp"
+playground_scp := "scp -i ~/.ssh/hetzner_zp"
 
 # ── Local operations ──────────────────────────────────────
 
@@ -68,10 +70,10 @@ deploy-playground:
     @echo ""
     @echo "── Deploying to Playground ──"
     @echo "  → Pushing node config..."
-    ssh {{playground_host}} 'mkdir -p ~/ZeroPoint'
-    scp fleet/playground-config.toml {{playground_host}}:~/ZeroPoint/config.toml
+    {{playground_ssh}} {{playground_host}} 'mkdir -p ~/ZeroPoint'
+    {{playground_scp}} fleet/playground-config.toml {{playground_host}}:~/ZeroPoint/config.toml
     @echo "  → Building and installing..."
-    ssh {{playground_host}} 'cd /root/zeropoint && git pull && cargo build --release && cp target/release/zp /usr/local/bin/zp && (zp restart 2>/dev/null || true)'
+    {{playground_ssh}} {{playground_host}} 'source ~/.cargo/env && cd /root/zeropoint && git pull && cargo build --release && cp target/release/zp /usr/local/bin/zp && (zp restart 2>/dev/null || true)'
     @echo "✓  Playground deployed"
 
 # ── Fleet verification ────────────────────────────────────
@@ -85,7 +87,7 @@ verify-fleet:
     {{artemis_ssh}} {{artemis_host}} 'zp verify'
     @echo ""
     @echo "── Playground ──"
-    ssh {{playground_host}} 'zp verify'
+    {{playground_ssh}} {{playground_host}} 'zp verify'
 
 # Health check all fleet nodes (T1–T4 wiring)
 doctor-fleet:
@@ -96,13 +98,13 @@ doctor-fleet:
     {{artemis_ssh}} {{artemis_host}} 'zp doctor'
     @echo ""
     @echo "── Playground ──"
-    ssh {{playground_host}} 'zp doctor'
+    {{playground_ssh}} {{playground_host}} 'zp doctor'
 
 # Check binary versions across fleet
 versions:
     @echo "APOLLO:     $(zp --version 2>/dev/null || echo 'not installed')"
     @echo "ARTEMIS:    $({{artemis_ssh}} {{artemis_host}} 'zp --version 2>/dev/null || echo "not installed"')"
-    @echo "Playground: $(ssh {{playground_host}} 'zp --version 2>/dev/null || echo "not installed"')"
+    @echo "Playground: $({{playground_ssh}} {{playground_host}} 'zp --version 2>/dev/null || echo "not installed"')"
 
 # ── T6: Fleet architecture deployment ─────────────────────
 # After deploying binaries (just deploy-fleet), run these to
@@ -128,7 +130,7 @@ t6-verify-delegates:
     {{artemis_ssh}} {{artemis_host}} 'zp doctor'
     @echo ""
     @echo "── T6: Verifying Playground delegate state ──"
-    ssh {{playground_host}} 'zp doctor'
+    {{playground_ssh}} {{playground_host}} 'zp doctor'
     @echo ""
     @echo "✓  Delegate state verified"
 
