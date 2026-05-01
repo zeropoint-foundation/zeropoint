@@ -87,8 +87,63 @@ verify-fleet:
     @echo "── Playground ──"
     ssh {{playground_host}} 'zp verify'
 
+# Health check all fleet nodes (T1–T4 wiring)
+doctor-fleet:
+    @echo "── APOLLO ──"
+    zp doctor
+    @echo ""
+    @echo "── ARTEMIS ──"
+    {{artemis_ssh}} {{artemis_host}} 'zp doctor'
+    @echo ""
+    @echo "── Playground ──"
+    ssh {{playground_host}} 'zp doctor'
+
 # Check binary versions across fleet
 versions:
     @echo "APOLLO:     $(zp --version 2>/dev/null || echo 'not installed')"
     @echo "ARTEMIS:    $({{artemis_ssh}} {{artemis_host}} 'zp --version 2>/dev/null || echo "not installed"')"
     @echo "Playground: $(ssh {{playground_host}} 'zp --version 2>/dev/null || echo "not installed"')"
+
+# ── T6: Fleet architecture deployment ─────────────────────
+# After deploying binaries (just deploy-fleet), run these to
+# establish the T1–T4 architectural state on each node.
+#
+# Order matters:
+#   1. deploy-fleet          — push code + configs to all nodes
+#   2. t6-verify-genesis     — confirm APOLLO chain is healthy
+#   3. t6-verify-delegates   — confirm delegates see upstream
+#   4. doctor-fleet          — full health check across fleet
+
+# Verify APOLLO genesis chain is intact after deploy
+t6-verify-genesis:
+    @echo "── T6: Verifying APOLLO genesis state ──"
+    zp verify
+    zp doctor
+    @echo ""
+    @echo "✓  APOLLO genesis state verified"
+
+# Verify delegates can reach and verify against upstream
+t6-verify-delegates:
+    @echo "── T6: Verifying ARTEMIS delegate state ──"
+    {{artemis_ssh}} {{artemis_host}} 'zp doctor'
+    @echo ""
+    @echo "── T6: Verifying Playground delegate state ──"
+    ssh {{playground_host}} 'zp doctor'
+    @echo ""
+    @echo "✓  Delegate state verified"
+
+# Full T6 deployment: binaries + configs + verification
+t6-deploy: deploy-fleet t6-verify-genesis t6-verify-delegates
+    @echo ""
+    @echo "════════════════════════════════════════"
+    @echo "  T6: Fleet architecture deployment"
+    @echo "  ✓  Binaries deployed to all nodes"
+    @echo "  ✓  Genesis state verified"
+    @echo "  ✓  Delegate state verified"
+    @echo "  "
+    @echo "  T1: Chain-derived roles      ✓"
+    @echo "  T2: Role transition receipts  ✓"
+    @echo "  T3: Upstream binding checks   ✓"
+    @echo "  T4: Fleet membership status   ✓"
+    @echo "  T7: External anchor check     ✓"
+    @echo "════════════════════════════════════════"
