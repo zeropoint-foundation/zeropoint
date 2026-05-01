@@ -19,10 +19,12 @@ pub mod error;
 pub mod provenance;
 pub mod resolve;
 pub mod schema;
+pub mod topology;
 pub mod validate;
 
 pub use error::ConfigError;
 pub use provenance::{Source, Sourced};
 pub use resolve::ConfigResolver;
-pub use schema::ZpConfig;
+pub use schema::{ZpConfig, NodeRole};
+pub use topology::{derive_node_role, config_hint_role};
 pub use validate::validate;

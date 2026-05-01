@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ZeroPoint — Portable Trust for the Post-Platform Internet</title>
-<meta name="description" content="Portable proof infrastructure — cryptographic governance primitives that produce proof actions are authorized, auditable, and policy-bound. No platform required. No central authority. Your keys, your chain, your proof.">
+<title>ZeroPoint — Open-Source Trust Infrastructure for the Agentic Age</title>
+<meta name="description" content="Open-source trust infrastructure for the agentic age. Every action produces a signed receipt. Every receipt chains into a tamper-evident ledger. We don't compete with agent harnesses — we make them trustworthy.">
 <link rel="canonical" href="https://zeropoint.global/">
 <script type="application/ld+json">
 {
@@ -25,7 +25,7 @@
       "@id": "https://zeropoint.global/#software",
       "name": "ZeroPoint",
       "alternateName": "ZeroPoint Governance",
-      "description": "Portable proof infrastructure — cryptographic governance primitives for autonomous agent systems. Produce Ed25519-signed receipts as cryptographic proof of every action, building tamper-evident Blake3 hash-chained audit trails.",
+      "description": "Open-source trust infrastructure for the agentic age. The governance substrate beneath any agent harness — signed receipts, tamper-evident ledgers, and constitutional constraints that make AI agent actions provable, auditable, and policy-bound.",
       "url": "https://zeropoint.global",
       "applicationCategory": "SecurityApplication",
       "operatingSystem": "Cross-platform",
@@ -39,13 +39,14 @@
         "priceCurrency": "USD"
       },
       "featureList": [
+        "Harness-agnostic — works across pi, Claude Code, Codex, and any MCP-capable agent",
         "Governance gate — policy evaluation before every agent action",
         "Ed25519-signed receipts with Blake3 content hashes",
         "Tamper-evident hash-chained audit trail",
-        "Capability delegation chains with depth controls",
-        "Trust tiers — graduated autonomy (Tier 0 → Tier 1 → Tier 2)",
+        "Capability delegation chains with standing delegation and lease renewal",
+        "Trust tiers — graduated autonomy (Tier 0 through Tier 5)",
         "WASM-extensible policy modules",
-        "MCP server integration for Claude Code",
+        "Live fleet deployment with 30s heartbeat and 2h lease renewal cycle",
         "Reticulum-compatible encrypted mesh networking"
       ]
     },
@@ -582,6 +583,83 @@ footer {
   .flow-steps { grid-template-columns: 1fr; }
 }
 
+/* --- Support --- */
+
+.support-section {
+  padding: 5rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.support-section .section-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-dim);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.support-section h2 {
+  font-size: 1.5rem;
+  font-weight: 500;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.support-section .support-desc {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.8;
+  max-width: 600px;
+  margin: 0 auto 2.5rem;
+  text-align: center;
+}
+
+.support-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.support-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.support-btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.support-btn-primary:hover {
+  background: #8ec5e4;
+  color: var(--bg);
+}
+
+.support-btn-secondary {
+  border: 1px solid var(--rule);
+  color: var(--text-muted);
+}
+
+.support-btn-secondary:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.support-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* --- Closing Quote --- */
 
 .closing {
@@ -681,10 +759,10 @@ footer {
 <!-- Hero -->
 <section class="hero">
   <div class="container">
-    <div class="hero-eyebrow">Portable Trust Infrastructure</div>
-    <h1><strong>Portable trust</strong> for the<br>post-platform internet</h1>
+    <div class="hero-eyebrow">Open-Source Trust Infrastructure</div>
+    <h1><strong>Trust infrastructure</strong> for the<br>agentic age</h1>
     <p class="hero-sub">
-      Cryptographic governance primitives that produce proof — of every action, every authority, every constraint — so trust becomes portable and exit becomes real.
+      AI agents are making real decisions &mdash; writing code, calling APIs, moving data across trust boundaries. Every agent harness tracks what happened differently, but none of them can prove it. ZeroPoint is the trust layer that works across all of them.
     </p>
     <div class="hero-cta">
       <a href="/trust-triangle.html" class="btn btn-primary">Watch the Trust Triangle &rarr;</a>
@@ -692,12 +770,12 @@ footer {
       <a href="/whitepaper.html" class="btn btn-secondary">Read the Whitepaper</a>
     </div>
     <p style="color: var(--text-dim); font-family: var(--font-mono); font-size: 0.8rem; margin-top: 1.25rem; letter-spacing: 0.02em;">
-      Three autonomous agents. Three independent trust domains. No shared database. No central authority.
+      We don't compete with agent harnesses. We make them trustworthy.
     </p>
 
     <div class="definition-block">
-      <div class="def-label">What "portable trust" means</div>
-      <p>Any third party can verify what happened using receipts alone — without trusting your servers, your platform, or your claims. The proof travels with the work, not with a vendor.</p>
+      <div class="def-label">The substrate beneath agent harnesses</div>
+      <p>Every action produces a signed receipt. Every receipt chains into a tamper-evident ledger. Every participant holds a cryptographic identity, not an account. The governance layer works the same way regardless of which agent harness produced the action.</p>
     </div>
   </div>
 </section>
@@ -708,7 +786,7 @@ footer {
     <div class="section-label">How It Works</div>
     <h2>One Flow, Portable Proof</h2>
     <p style="color: var(--text-muted); font-size: 0.95rem; max-width: 680px; margin-bottom: 0.5rem;">
-      An agent delegates a task. A receipt is produced. A third party verifies the chain. The network can disappear — the proof remains.
+      Any agent harness &mdash; pi, Claude Code, Codex, or yours &mdash; connects to ZeroPoint via MCP, hooks, or callbacks. Every action produces a receipt. Every receipt joins the chain. The proof survives switching harnesses.
     </p>
 
     <div class="flow-steps">
@@ -1002,11 +1080,29 @@ open http://localhost:3000
   </div>
 </section>
 
+<!-- Support -->
+<section class="support-section" id="support">
+  <div class="container">
+    <div class="section-eyebrow">Support</div>
+    <h2>Help build the trust substrate</h2>
+    <p class="support-desc">ZeroPoint is open source, built by one developer, and funded by the community. Sponsorship keeps development independent and the code free for everyone.</p>
+    <div class="support-actions">
+      <a href="https://github.com/sponsors/zeropoint-foundation" class="support-btn support-btn-primary">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.25 2.5c-1.336 0-2.75 1.164-2.75 3 0 2.15 1.58 4.144 3.365 5.682A20.6 20.6 0 0 0 8 13.393a20.6 20.6 0 0 0 3.135-2.211C12.92 9.644 14.5 7.65 14.5 5.5c0-1.836-1.414-3-2.75-3-1.373 0-2.609.986-3.029 2.456a.75.75 0 0 1-1.442 0C6.859 3.486 5.623 2.5 4.25 2.5Z"/></svg>
+        Sponsor on GitHub
+      </a>
+      <a href="https://opencollective.com/zeropoint" class="support-btn support-btn-secondary">
+        Open Collective
+      </a>
+    </div>
+  </div>
+</section>
+
 <!-- Closing -->
 <section class="closing">
   <div class="container">
     <blockquote>
-      Proof produces trust. Trust is infrastructure.
+      Trust shouldn't be a feature. It should be the substrate.
     </blockquote>
   </div>
 </section>
@@ -1024,9 +1120,10 @@ open http://localhost:3000
       <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
       <a href="/sentinel/">Sentinel</a>
       <a href="https://zeropointfoundation.substack.com">Blog</a>
+      <a href="#support">Support</a>
     </div>
     <div class="footer-org">
-      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+      Built by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0 · Trust shouldn't be a feature. It should be the substrate.
     </div>
   </div>
 </footer>

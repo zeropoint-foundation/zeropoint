@@ -1383,6 +1383,16 @@ pub fn status() -> i32 {
         dim("Config: not secured yet (run: zp secure)");
     }
 
+    // Node role (derived from chain state)
+    let derived_role = zp_config::derive_node_role(&zp_home);
+    match &derived_role {
+        zp_config::NodeRole::Genesis => ok("Node role: Genesis"),
+        zp_config::NodeRole::Delegate { upstream_addr, .. } => {
+            eprintln!("  {YELLOW}●{NC} Node role: Delegate (upstream: {})", upstream_addr);
+        }
+        zp_config::NodeRole::Standalone => ok("Node role: Standalone"),
+    }
+
     // Guard
     let guard_bin = zp_home.join("bin/zp");
     if guard_bin.exists() {

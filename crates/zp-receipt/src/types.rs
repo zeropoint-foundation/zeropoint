@@ -515,6 +515,14 @@ pub enum ReceiptType {
     /// Emitted once per domain entity (provider, tool, node) to establish
     /// the canonical starting point from which all subsequent state is derived.
     CanonicalizedClaim,
+
+    // --- T1: Chain-Derived Role ---
+    /// Delegate node records its acceptance of the delegation relationship.
+    /// This is the cryptographic proof that the node is a delegate.
+    NodeDelegationAccepted,
+    /// Genesis node records that it has granted delegation to a downstream node.
+    /// This is the complement to node:delegation:accepted.
+    NodeDelegationGranted,
 }
 
 impl ReceiptType {
@@ -537,6 +545,8 @@ impl ReceiptType {
             ReceiptType::ReflectionClaim => "rflt",
             ReceiptType::ConfigurationClaim => "cfgr",
             ReceiptType::CanonicalizedClaim => "cano",
+            ReceiptType::NodeDelegationAccepted => "ndac",
+            ReceiptType::NodeDelegationGranted => "ndgr",
         }
     }
 
@@ -565,6 +575,9 @@ impl ReceiptType {
             ReceiptType::ReflectionClaim => None,
             ReceiptType::ConfigurationClaim => None,
             ReceiptType::CanonicalizedClaim => None,
+            // Node delegation receipts are root claims (no fixed parent)
+            ReceiptType::NodeDelegationAccepted => None,
+            ReceiptType::NodeDelegationGranted => None,
         }
     }
 
@@ -578,6 +591,10 @@ impl ReceiptType {
             // Memory promotion and narrative synthesis persist indefinitely
             ReceiptType::MemoryPromotionClaim => None,
             ReceiptType::NarrativeSynthesisClaim => None,
+            // Node delegation receipts persist indefinitely
+            // (revocation is a separate receipt type)
+            ReceiptType::NodeDelegationAccepted => None,
+            ReceiptType::NodeDelegationGranted => None,
             // Everything else: no default expiry
             _ => None,
         }
@@ -621,6 +638,8 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::ReflectionClaim => write!(f, "reflection_claim"),
             ReceiptType::ConfigurationClaim => write!(f, "configuration_claim"),
             ReceiptType::CanonicalizedClaim => write!(f, "canonicalized_claim"),
+            ReceiptType::NodeDelegationAccepted => write!(f, "node_delegation_accepted"),
+            ReceiptType::NodeDelegationGranted => write!(f, "node_delegation_granted"),
         }
     }
 }
@@ -1124,6 +1143,38 @@ pub enum ClaimMetadata {
         /// Optional detail (e.g., capability name, failure reason)
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
+    },
+
+    /// Metadata for node:delegation:accepted — delegate records its acceptance.
+    /// This is the cryptographic proof that the node is a delegate (T1).
+    NodeDelegationAccepted {
+        /// The upstream genesis server address (e.g., "192.168.1.152:17770")
+        upstream_addr: String,
+        /// The upstream node's genesis public key (ed25519:...)
+        upstream_genesis_pubkey: String,
+        /// The upstream node's ID for reference
+        #[serde(skip_serializing_if = "Option::is_none")]
+        upstream_node_id: Option<String>,
+        /// When the delegation was accepted
+        accepted_at: String,
+        /// The config hint role at acceptance time (for audit trail)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        config_hint_role: Option<String>,
+    },
+
+    /// Metadata for node:delegation:granted — genesis records the grant.
+    /// This is the complement to node:delegation:accepted (T1).
+    NodeDelegationGranted {
+        /// The delegate node's ID
+        delegate_node_id: String,
+        /// The delegate node's public key for future verification
+        #[serde(skip_serializing_if = "Option::is_none")]
+        delegate_pubkey: Option<String>,
+        /// The delegate node's address (e.g., "192.168.1.199:17770")
+        #[serde(skip_serializing_if = "Option::is_none")]
+        delegate_addr: Option<String>,
+        /// When the delegation was granted
+        granted_at: String,
     },
 }
 

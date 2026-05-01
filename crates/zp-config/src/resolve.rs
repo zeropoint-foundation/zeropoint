@@ -108,10 +108,12 @@ impl ConfigResolver {
                     .override_with(rate, Source::EnvVar("ZP_AUTH_RATE_LIMIT_PER_MIN".into()));
             }
         }
-        if let Ok(v) = std::env::var("ZP_NODE_ROLE") {
-            self.config
-                .node_role
-                .override_with(v, Source::EnvVar("ZP_NODE_ROLE".into()));
+        // ZP_NODE_ROLE is NO LONGER HONORED — node role is derived from chain state (genesis.json
+        // or delegation receipt), not from config or env vars. This is a critical security fix.
+        // If someone sets ZP_NODE_ROLE, it is silently ignored. To override role in testing,
+        // use --unsafe-allow-role-override on the CLI (future feature, T1 phase 2).
+        if let Ok(_v) = std::env::var("ZP_NODE_ROLE") {
+            tracing::warn!("ZP_NODE_ROLE environment variable is set but ignored. Node role is derived from chain state (genesis.json or delegation receipt). See T1 design spec.");
         }
         if let Ok(v) = std::env::var("ZP_NODE_UPSTREAM") {
             self.config

@@ -1292,7 +1292,19 @@ async fn main() -> anyhow::Result<()> {
     if let Some(Commands::Verify { audit_db, json, reconstitute, anchors, server }) = &args.command {
         // Resolve the target server address from topology config.
         let cfg = zp_config::ConfigResolver::resolve_standard();
-        let is_delegate = cfg.node_role.value == "delegate";
+
+        // Derive node role from chain state (genesis.json or delegation receipt).
+        // Config role is a hint only — chain is authoritative.
+        let derived_role = zp_config::derive_node_role(&cfg.home_dir.value);
+        let config_hint_role = zp_config::config_hint_role(&cfg.node_role.value);
+
+        // Log mismatch if config disagrees with chain
+        if derived_role != config_hint_role {
+            eprintln!("\x1b[33m⚠\x1b[0m  Config says role=\"{}\" but chain says {:?}. Using chain-derived role.",
+                &cfg.node_role.value, derived_role);
+        }
+
+        let is_delegate = matches!(&derived_role, zp_config::NodeRole::Delegate { .. });
         let server_addr: Option<String> = if let Some(s) = server {
             // CLI flag takes precedence — always use it.
             Some(s.clone())
@@ -2022,6 +2034,44 @@ async fn main() -> anyhow::Result<()> {
                 status: "fail",
                 detail: "genesis.json not found".into(),
                 fix: "Run: zp init".into(),
+            });
+        }
+
+        // 2a. Node role coherence check (T1: Chain-Derived Role)
+        let derived_role = zp_config::derive_node_role(home);
+        let config_hint_role = zp_config::config_hint_role(&cfg.node_role.value);
+
+        if derived_role == config_hint_role {
+            let role_str = match &derived_role {
+                zp_config::NodeRole::Genesis => "Genesis",
+                zp_config::NodeRole::Delegate { .. } => "Delegate",
+                zp_config::NodeRole::Standalone => "Standalone",
+            };
+            checks.push(Check {
+                label: "Node role (derived)".into(),
+                status: "pass",
+                detail: format!("{} (matches config)", role_str),
+                fix: String::new(),
+            });
+        } else {
+            let derived_str = match &derived_role {
+                zp_config::NodeRole::Genesis => "Genesis (genesis.json present)",
+                zp_config::NodeRole::Delegate { upstream_addr, .. } => &format!("Delegate (upstream: {})", upstream_addr),
+                zp_config::NodeRole::Standalone => "Standalone (no genesis.json, no delegation receipt)",
+            };
+            let config_str = &cfg.node_role.value;
+            let (status, fix) = if matches!(derived_role, zp_config::NodeRole::Genesis) {
+                ("warn", format!("Config says \"{}\" but chain says Genesis. Update config if you converted this node.", config_str))
+            } else if matches!(derived_role, zp_config::NodeRole::Delegate { .. }) {
+                ("warn", "Config hint does not match chain state (delegation receipt present). Update config or run 'zp serve' to finalize delegation.".to_string())
+            } else {
+                ("info", "Config says delegate but chain is Standalone. Run 'zp serve' to initiate delegation handshake.".to_string())
+            };
+            checks.push(Check {
+                label: "Node role (derived)".into(),
+                status,
+                detail: format!("{} | config says \"{}\"", derived_str, config_str),
+                fix,
             });
         }
 

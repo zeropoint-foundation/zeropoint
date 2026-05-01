@@ -7,6 +7,35 @@ use crate::provenance::Sourced;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// ─── Node Role (derived from chain state) ────────────────────
+
+/// The node's role in the trust topology, derived from chain state.
+///
+/// This is the authoritative role determination — it is NOT derived from
+/// config.toml, which is treated as a "bootstrap hint" only.
+///
+/// Priority:
+///   1. If a delegation receipt exists → Delegate (with upstream binding)
+///   2. If genesis.json exists with valid transcript → Genesis
+///   3. Otherwise → Standalone
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NodeRole {
+    /// This node performed the genesis ceremony and holds the root signing key.
+    /// Evidence: genesis.json with valid signed transcript.
+    Genesis,
+
+    /// This node verifies against an upstream genesis authority.
+    /// Evidence: a delegation receipt in the local chain binding this node
+    /// to an upstream genesis public key.
+    Delegate {
+        upstream_addr: String,
+        upstream_genesis_pubkey: String,
+    },
+
+    /// No genesis ceremony, no delegation receipt. Pre-init or standalone.
+    Standalone,
+}
+
 // ─── Unified Config ──────────────────────────────────────────
 
 /// The complete, resolved ZeroPoint configuration.
