@@ -9,7 +9,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # ── Configuration ──────────────────────────────────────────
 install_path := "/usr/local/bin/zp"
-artemis_host := "zp-pentest@ARTEMIS"
+artemis_host := "zp-pentest@192.168.1.199"
+artemis_ssh := "ssh -i ~/.ssh/apollo-artemis-key"
+artemis_scp := "scp -i ~/.ssh/apollo-artemis-key"
 playground_host := "root@89.167.86.60"
 
 # ── Local operations ──────────────────────────────────────
@@ -50,17 +52,25 @@ deploy-fleet: deploy deploy-artemis deploy-playground
     @echo ""
     @echo "✓  Fleet deployment complete"
 
-# Deploy to ARTEMIS (pull, build, install, restart)
+# Deploy to ARTEMIS (config, pull, build, install, restart)
 deploy-artemis:
     @echo ""
     @echo "── Deploying to ARTEMIS ──"
-    ssh {{artemis_host}} 'cd ~/projects/zeropoint && git pull && cargo build --release && sudo cp target/release/zp /usr/local/bin/zp && (zp restart 2>/dev/null || true)'
+    @echo "  → Pushing node config..."
+    {{artemis_ssh}} {{artemis_host}} 'mkdir -p ~/ZeroPoint'
+    {{artemis_scp}} fleet/artemis-config.toml {{artemis_host}}:~/ZeroPoint/config.toml
+    @echo "  → Building and installing..."
+    {{artemis_ssh}} {{artemis_host}} 'cd ~/projects/zeropoint && git pull && cargo build --release && sudo cp target/release/zp /usr/local/bin/zp && (zp restart 2>/dev/null || true)'
     @echo "✓  ARTEMIS deployed"
 
-# Deploy to ZP Playground (pull, build, install, restart)
+# Deploy to ZP Playground (config, pull, build, install, restart)
 deploy-playground:
     @echo ""
     @echo "── Deploying to Playground ──"
+    @echo "  → Pushing node config..."
+    ssh {{playground_host}} 'mkdir -p ~/ZeroPoint'
+    scp fleet/playground-config.toml {{playground_host}}:~/ZeroPoint/config.toml
+    @echo "  → Building and installing..."
     ssh {{playground_host}} 'cd /root/zeropoint && git pull && cargo build --release && cp target/release/zp /usr/local/bin/zp && (zp restart 2>/dev/null || true)'
     @echo "✓  Playground deployed"
 
@@ -72,7 +82,7 @@ verify-fleet:
     zp verify
     @echo ""
     @echo "── ARTEMIS ──"
-    ssh {{artemis_host}} 'zp verify'
+    {{artemis_ssh}} {{artemis_host}} 'zp verify'
     @echo ""
     @echo "── Playground ──"
     ssh {{playground_host}} 'zp verify'
@@ -80,5 +90,5 @@ verify-fleet:
 # Check binary versions across fleet
 versions:
     @echo "APOLLO:     $(zp --version 2>/dev/null || echo 'not installed')"
-    @echo "ARTEMIS:    $(ssh {{artemis_host}} 'zp --version 2>/dev/null || echo "not installed"')"
+    @echo "ARTEMIS:    $({{artemis_ssh}} {{artemis_host}} 'zp --version 2>/dev/null || echo "not installed"')"
     @echo "Playground: $(ssh {{playground_host}} 'zp --version 2>/dev/null || echo "not installed"')"
