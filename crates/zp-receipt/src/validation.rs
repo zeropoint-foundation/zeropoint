@@ -217,6 +217,14 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+
+        // --- T7: External Anchoring ---
+        ReceiptType::ExternalAnchor => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None, // anchors are permanent evidence
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -263,6 +271,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::NodeRoleTransition { .. } => "NodeRoleTransition",
         ClaimMetadata::FleetMembershipGranted { .. } => "FleetMembershipGranted",
         ClaimMetadata::FleetMembershipAccepted { .. } => "FleetMembershipAccepted",
+        ClaimMetadata::ExternalAnchor { .. } => "ExternalAnchor",
     }
 }
 
@@ -289,6 +298,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::NodeRoleTransition, ClaimMetadata::NodeRoleTransition { .. })
             | (ReceiptType::FleetMembershipGranted, ClaimMetadata::FleetMembershipGranted { .. })
             | (ReceiptType::FleetMembershipAccepted, ClaimMetadata::FleetMembershipAccepted { .. })
+            | (ReceiptType::ExternalAnchor, ClaimMetadata::ExternalAnchor { .. })
     )
 }
 

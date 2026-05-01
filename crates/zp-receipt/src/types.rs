@@ -537,6 +537,13 @@ pub enum ReceiptType {
     /// Joining node records its acceptance of fleet membership.
     /// Complements FleetMembershipGranted on the member's chain.
     FleetMembershipAccepted,
+
+    // --- T7: External Anchoring ---
+    /// Records that the local chain state was anchored to an external
+    /// settlement layer (e.g., Hedera Consensus Service). Creates an
+    /// externally verifiable timestamp proving the chain existed in its
+    /// current state at a specific time.
+    ExternalAnchor,
 }
 
 impl ReceiptType {
@@ -564,6 +571,7 @@ impl ReceiptType {
             ReceiptType::NodeRoleTransition => "nrtr",
             ReceiptType::FleetMembershipGranted => "fmgr",
             ReceiptType::FleetMembershipAccepted => "fmac",
+            ReceiptType::ExternalAnchor => "xanc",
         }
     }
 
@@ -600,6 +608,8 @@ impl ReceiptType {
             // Fleet membership receipts are root claims (no fixed parent)
             ReceiptType::FleetMembershipGranted => None,
             ReceiptType::FleetMembershipAccepted => None,
+            // External anchors reference the chain head they anchor
+            ReceiptType::ExternalAnchor => None,
         }
     }
 
@@ -622,6 +632,8 @@ impl ReceiptType {
             // Fleet membership receipts persist indefinitely (revocation is separate)
             ReceiptType::FleetMembershipGranted => None,
             ReceiptType::FleetMembershipAccepted => None,
+            // External anchors persist indefinitely (they are evidence)
+            ReceiptType::ExternalAnchor => None,
             // Everything else: no default expiry
             _ => None,
         }
@@ -670,6 +682,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::NodeRoleTransition => write!(f, "node_role_transition"),
             ReceiptType::FleetMembershipGranted => write!(f, "fleet_membership_granted"),
             ReceiptType::FleetMembershipAccepted => write!(f, "fleet_membership_accepted"),
+            ReceiptType::ExternalAnchor => write!(f, "external_anchor"),
         }
     }
 }
@@ -1256,6 +1269,34 @@ pub enum ClaimMetadata {
         grant_receipt_id: String,
         /// When the membership was accepted
         accepted_at: String,
+    },
+
+    /// Metadata for an external anchor (T7).
+    /// Records that the local chain state was anchored to an external
+    /// settlement layer, creating an externally verifiable timestamp.
+    ExternalAnchor {
+        /// The settlement layer used (e.g., "hedera_hcs", "ethereum", "bitcoin")
+        settlement_layer: String,
+        /// Blake3 hash of the local chain head at anchor time
+        chain_head_hash: String,
+        /// Number of receipts in the local chain at anchor time
+        chain_length: u64,
+        /// What triggered the anchor (e.g., "role_transition", "delegation",
+        /// "settlement", "heartbeat", "fleet_membership")
+        anchor_trigger: String,
+        /// External reference — settlement-layer-specific identifier
+        /// (e.g., HCS topic ID + sequence number, Ethereum tx hash)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        external_ref: Option<String>,
+        /// Consensus timestamp from the settlement layer (if available)
+        /// This is the externally attested timestamp, not the local clock.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        consensus_timestamp: Option<String>,
+        /// Reference to the previous anchor receipt (local chain linkage)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        previous_anchor_id: Option<String>,
+        /// When the anchor was submitted
+        anchored_at: String,
     },
 }
 

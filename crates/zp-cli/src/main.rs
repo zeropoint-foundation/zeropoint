@@ -2148,7 +2148,27 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        // 2d. Genesis secret (credential store)
+        // 2d. External anchoring (T7)
+        // TODO: Check chain for most recent ExternalAnchor receipt
+        // For now, report anchoring status based on configuration
+        let anchor_configured = false; // Will be wired to config when HCS client exists
+        if anchor_configured {
+            checks.push(Check {
+                label: "External anchoring".into(),
+                status: "pass",
+                detail: "Configured (settlement layer connected)".into(),
+                fix: String::new(),
+            });
+        } else {
+            checks.push(Check {
+                label: "External anchoring".into(),
+                status: "info",
+                detail: "Not configured — chain is locally verifiable but not externally anchored".into(),
+                fix: "Configure a settlement layer (e.g., Hedera HCS) for external timestamping.".into(),
+            });
+        }
+
+        // 2e. Genesis secret (credential store)
         let keys_dir = home.join("keys");
         let genesis_secret_ok = zp_keys::Keyring::open(&keys_dir)
             .map(|kr| kr.status().has_genesis_secret)
