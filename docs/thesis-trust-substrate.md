@@ -11,7 +11,7 @@
 
 ZeroPoint is a userspace process. It runs on an operating system it does not own, cannot fully inspect, and cannot prevent from being compromised. This is not a bug. It is the foundational design constraint, and getting it right determines whether ZeroPoint is credible infrastructure or security theater.
 
-The tension surfaces immediately in fleet deployment. A genesis node — APOLLO — claims to be the root of trust for its fleet. But APOLLO is a Linux box on a LAN. Anyone with root access can edit its config, swap its binary, rewrite its audit chain, or change its node role from genesis to delegate with a single environment variable. The operating system has more authority over the machine than ZeroPoint does. ZeroPoint is a guest in someone else's house, claiming to be the notary.
+The tension surfaces immediately in fleet deployment. A genesis node claims to be the root of trust for its fleet. But it is a Linux box on a LAN. Anyone with root access can edit its config, swap its binary, rewrite its audit chain, or change its node role from genesis to delegate with a single environment variable. The operating system has more authority over the machine than ZeroPoint does. ZeroPoint is a guest in someone else's house, claiming to be the notary.
 
 This is uncomfortable. It is also honest. And honesty about the boundary is what makes the architecture defensible.
 
@@ -47,13 +47,13 @@ Self-checks catch accidents, drift, and unsophisticated attacks. They cannot cat
 
 A single compromised node can lie about itself. A fleet of nodes cannot all lie consistently without coordination. This is the value of collective audit.
 
-When ARTEMIS verifies against APOLLO, it is not just checking APOLLO's chain — it is checking that APOLLO's chain is consistent with what ARTEMIS has observed. If APOLLO's chain suddenly has a gap, or if receipts that ARTEMIS received from APOLLO are missing from APOLLO's chain, the discrepancy is detectable. The more nodes in the fleet, the harder it becomes to forge a consistent history across all of them.
+When a delegate node verifies against its genesis, it is not just checking the genesis chain — it is checking that the genesis chain is consistent with what the delegate has independently observed. If the genesis chain suddenly has a gap, or if receipts that the delegate received from genesis are missing from the genesis chain, the discrepancy is detectable. The more nodes in the fleet, the harder it becomes to forge a consistent history across all of them.
 
 Fleet cross-reference catches compromised individual nodes. It cannot catch a compromise of the entire fleet — but compromising an entire fleet requires compromising every node simultaneously, which is a categorically harder attack than compromising one.
 
 ### Layer 3: External Anchors
 
-Periodic chain hashes anchored to an external, append-only system — Hedera, a public blockchain, a Certificate Transparency log, or even a newspaper — create checkpoints that no fleet-level compromise can rewrite. If APOLLO's chain hash was anchored to Hedera at block N, and an attacker later rewrites APOLLO's chain, the Hedera anchor proves the rewrite.
+Periodic chain hashes anchored to an external, append-only system — Hedera, a public blockchain, a Certificate Transparency log, or even a newspaper — create checkpoints that no fleet-level compromise can rewrite. If a genesis node's chain hash was anchored to Hedera at block N, and an attacker later rewrites that chain, the Hedera anchor proves the rewrite.
 
 External anchors catch fleet-wide compromise. They do not prevent it — they make it provable after the fact. This is the evidence posture at its strongest: you cannot stop the crime, but you can guarantee that the crime is discoverable, and that the discovery is itself tamper-proof.
 
