@@ -2075,7 +2075,55 @@ async fn main() -> anyhow::Result<()> {
             });
         }
 
-        // 2b. Genesis secret (credential store)
+        // 2b. Upstream binding (delegate nodes only)
+        let upstream_status = zp_config::verify_upstream_binding_local(&derived_role);
+        match &upstream_status {
+            zp_config::UpstreamBindingStatus::Verified { .. } => {
+                checks.push(Check {
+                    label: "Upstream binding".into(),
+                    status: "pass",
+                    detail: upstream_status.summary(),
+                    fix: String::new(),
+                });
+            }
+            zp_config::UpstreamBindingStatus::NotDelegate => {
+                // Not a delegate — skip this check silently
+            }
+            zp_config::UpstreamBindingStatus::Unbound { .. } => {
+                checks.push(Check {
+                    label: "Upstream binding".into(),
+                    status: "warn",
+                    detail: upstream_status.summary(),
+                    fix: "Re-delegate to record the upstream's genesis pubkey in the delegation receipt.".into(),
+                });
+            }
+            zp_config::UpstreamBindingStatus::MalformedPubkey { .. } => {
+                checks.push(Check {
+                    label: "Upstream binding".into(),
+                    status: "fail",
+                    detail: upstream_status.summary(),
+                    fix: "The delegation receipt contains a malformed pubkey. Re-delegate from the upstream node.".into(),
+                });
+            }
+            zp_config::UpstreamBindingStatus::PubkeyMismatch { .. } => {
+                checks.push(Check {
+                    label: "Upstream binding".into(),
+                    status: "fail",
+                    detail: upstream_status.summary(),
+                    fix: "SECURITY: Upstream identity changed. Verify with your operator and re-delegate if legitimate.".into(),
+                });
+            }
+            zp_config::UpstreamBindingStatus::UpstreamUnreachable { .. } => {
+                checks.push(Check {
+                    label: "Upstream binding".into(),
+                    status: "warn",
+                    detail: upstream_status.summary(),
+                    fix: "Upstream node is not reachable. Check network connectivity.".into(),
+                });
+            }
+        }
+
+        // 2c. Genesis secret (credential store)
         let keys_dir = home.join("keys");
         let genesis_secret_ok = zp_keys::Keyring::open(&keys_dir)
             .map(|kr| kr.status().has_genesis_secret)

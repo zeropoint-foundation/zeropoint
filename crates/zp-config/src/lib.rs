@@ -20,6 +20,7 @@ pub mod provenance;
 pub mod resolve;
 pub mod schema;
 pub mod topology;
+pub mod upstream;
 pub mod validate;
 
 pub use error::ConfigError;
@@ -27,4 +28,5 @@ pub use provenance::{Source, Sourced};
 pub use resolve::ConfigResolver;
 pub use schema::{ZpConfig, NodeRole};
 pub use topology::{derive_node_role, config_hint_role, TransitionInfo, detect_role_transition};
+pub use upstream::{UpstreamBindingStatus, verify_upstream_binding_local, verify_upstream_pubkey_match};
 pub use validate::validate;
