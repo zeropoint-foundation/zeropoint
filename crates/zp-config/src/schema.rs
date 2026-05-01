@@ -36,6 +36,18 @@ pub enum NodeRole {
     Standalone,
 }
 
+impl NodeRole {
+    /// Compare roles by variant only, ignoring field values.
+    ///
+    /// This is needed because `config_hint_role()` returns a `Delegate` with
+    /// placeholder empty strings, while `derive_node_role()` returns a `Delegate`
+    /// with actual upstream values from the delegation receipt. Standard `PartialEq`
+    /// would say these differ; `same_variant` says they agree on the role itself.
+    pub fn same_variant(&self, other: &NodeRole) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
+}
+
 // ─── Unified Config ──────────────────────────────────────────
 
 /// The complete, resolved ZeroPoint configuration.

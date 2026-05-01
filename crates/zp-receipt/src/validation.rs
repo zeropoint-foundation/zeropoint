@@ -181,6 +181,20 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+
+        // --- Node topology (T1: Chain-Derived Role) ---
+        ReceiptType::NodeDelegationAccepted => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None, // delegation persists until revoked
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::NodeDelegationGranted => TypeRules {
+            required_semantics: ClaimSemantics::AuthorizationGrant,
+            max_ttl_hours: None, // grant persists until revoked
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -222,6 +236,8 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::Configuration { .. } => "Configuration",
         ClaimMetadata::Canonicalization { .. } => "Canonicalization",
         ClaimMetadata::Lifecycle { .. } => "Lifecycle",
+        ClaimMetadata::NodeDelegationAccepted { .. } => "NodeDelegationAccepted",
+        ClaimMetadata::NodeDelegationGranted { .. } => "NodeDelegationGranted",
     }
 }
 
@@ -243,6 +259,8 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::ConfigurationClaim, ClaimMetadata::Configuration { .. })
             | (ReceiptType::CanonicalizedClaim, ClaimMetadata::Canonicalization { .. })
             | (ReceiptType::Execution, ClaimMetadata::Lifecycle { .. })
+            | (ReceiptType::NodeDelegationAccepted, ClaimMetadata::NodeDelegationAccepted { .. })
+            | (ReceiptType::NodeDelegationGranted, ClaimMetadata::NodeDelegationGranted { .. })
     )
 }
 

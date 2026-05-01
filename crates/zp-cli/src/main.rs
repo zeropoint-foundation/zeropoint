@@ -1299,7 +1299,7 @@ async fn main() -> anyhow::Result<()> {
         let config_hint_role = zp_config::config_hint_role(&cfg.node_role.value);
 
         // Log mismatch if config disagrees with chain
-        if derived_role != config_hint_role {
+        if !derived_role.same_variant(&config_hint_role) {
             eprintln!("\x1b[33m⚠\x1b[0m  Config says role=\"{}\" but chain says {:?}. Using chain-derived role.",
                 &cfg.node_role.value, derived_role);
         }
@@ -2041,7 +2041,7 @@ async fn main() -> anyhow::Result<()> {
         let derived_role = zp_config::derive_node_role(home);
         let config_hint_role = zp_config::config_hint_role(&cfg.node_role.value);
 
-        if derived_role == config_hint_role {
+        if derived_role.same_variant(&config_hint_role) {
             let role_str = match &derived_role {
                 zp_config::NodeRole::Genesis => "Genesis",
                 zp_config::NodeRole::Delegate { .. } => "Delegate",
@@ -2055,9 +2055,9 @@ async fn main() -> anyhow::Result<()> {
             });
         } else {
             let derived_str = match &derived_role {
-                zp_config::NodeRole::Genesis => "Genesis (genesis.json present)",
-                zp_config::NodeRole::Delegate { upstream_addr, .. } => &format!("Delegate (upstream: {})", upstream_addr),
-                zp_config::NodeRole::Standalone => "Standalone (no genesis.json, no delegation receipt)",
+                zp_config::NodeRole::Genesis => "Genesis (genesis.json present)".to_string(),
+                zp_config::NodeRole::Delegate { upstream_addr, .. } => format!("Delegate (upstream: {})", upstream_addr),
+                zp_config::NodeRole::Standalone => "Standalone (no genesis.json, no delegation receipt)".to_string(),
             };
             let config_str = &cfg.node_role.value;
             let (status, fix) = if matches!(derived_role, zp_config::NodeRole::Genesis) {
