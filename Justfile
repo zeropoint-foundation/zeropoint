@@ -24,10 +24,11 @@ build:
     @echo ""
     @echo "✓  Built target/release/zp ($(git rev-parse --short HEAD))"
 
-# Install the built binary to system path
+# Install the built binary to system path (symlink to avoid macOS codesign issues)
 install: build
-    sudo cp target/release/zp {{install_path}}
-    @echo "✓  Installed to {{install_path}}"
+    sudo rm -f {{install_path}}
+    sudo ln -sf $(pwd)/target/release/zp {{install_path}}
+    @echo "✓  Installed to {{install_path}} (symlink)"
 
 # Build, install, and restart the server — the one command you need
 deploy: install
