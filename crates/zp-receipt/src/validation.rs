@@ -218,6 +218,14 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_claim_metadata: true,
         },
 
+        // --- T7 Phase 2: Financial Capability ---
+        ReceiptType::FinancialCapabilityGrant => TypeRules {
+            required_semantics: ClaimSemantics::AuthorizationGrant,
+            max_ttl_hours: None, // persists until revoked or delegation expires
+            requires_human_review: true, // financial authority requires human approval
+            requires_claim_metadata: true,
+        },
+
         // --- T7: External Anchoring ---
         ReceiptType::ExternalAnchor => TypeRules {
             required_semantics: ClaimSemantics::IntegrityAttestation,
@@ -271,6 +279,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::NodeRoleTransition { .. } => "NodeRoleTransition",
         ClaimMetadata::FleetMembershipGranted { .. } => "FleetMembershipGranted",
         ClaimMetadata::FleetMembershipAccepted { .. } => "FleetMembershipAccepted",
+        ClaimMetadata::FinancialCapability { .. } => "FinancialCapability",
         ClaimMetadata::ExternalAnchor { .. } => "ExternalAnchor",
     }
 }
@@ -298,6 +307,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::NodeRoleTransition, ClaimMetadata::NodeRoleTransition { .. })
             | (ReceiptType::FleetMembershipGranted, ClaimMetadata::FleetMembershipGranted { .. })
             | (ReceiptType::FleetMembershipAccepted, ClaimMetadata::FleetMembershipAccepted { .. })
+            | (ReceiptType::FinancialCapabilityGrant, ClaimMetadata::FinancialCapability { .. })
             | (ReceiptType::ExternalAnchor, ClaimMetadata::ExternalAnchor { .. })
     )
 }

@@ -544,6 +544,15 @@ pub enum ReceiptType {
     /// externally verifiable timestamp proving the chain existed in its
     /// current state at a specific time.
     ExternalAnchor,
+
+    // --- T7 Phase 2: Financial Capability ---
+    /// Records a financial capability grant — the binding between a
+    /// delegation chain and financial constraints. When a human grants
+    /// an agent authority to operate with money, this receipt type carries
+    /// the settlement-layer-consumable constraints: spending ceilings,
+    /// asset types, counterparty restrictions, approval thresholds, and
+    /// escrow requirements.
+    FinancialCapabilityGrant,
 }
 
 impl ReceiptType {
@@ -572,6 +581,7 @@ impl ReceiptType {
             ReceiptType::FleetMembershipGranted => "fmgr",
             ReceiptType::FleetMembershipAccepted => "fmac",
             ReceiptType::ExternalAnchor => "xanc",
+            ReceiptType::FinancialCapabilityGrant => "fcap",
         }
     }
 
@@ -610,6 +620,8 @@ impl ReceiptType {
             ReceiptType::FleetMembershipAccepted => None,
             // External anchors reference the chain head they anchor
             ReceiptType::ExternalAnchor => None,
+            // Financial capability grants reference a delegation receipt
+            ReceiptType::FinancialCapabilityGrant => None,
         }
     }
 
@@ -634,6 +646,8 @@ impl ReceiptType {
             ReceiptType::FleetMembershipAccepted => None,
             // External anchors persist indefinitely (they are evidence)
             ReceiptType::ExternalAnchor => None,
+            // Financial capability grants persist until revoked or delegation expires
+            ReceiptType::FinancialCapabilityGrant => None,
             // Everything else: no default expiry
             _ => None,
         }
@@ -683,6 +697,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::FleetMembershipGranted => write!(f, "fleet_membership_granted"),
             ReceiptType::FleetMembershipAccepted => write!(f, "fleet_membership_accepted"),
             ReceiptType::ExternalAnchor => write!(f, "external_anchor"),
+            ReceiptType::FinancialCapabilityGrant => write!(f, "financial_capability_grant"),
         }
     }
 }
@@ -1269,6 +1284,43 @@ pub enum ClaimMetadata {
         grant_receipt_id: String,
         /// When the membership was accepted
         accepted_at: String,
+    },
+
+    /// Metadata for a financial capability grant (T7 Phase 2).
+    /// Binds financial constraints to a delegation chain so that
+    /// settlement layers can consume and enforce spending limits.
+    /// This is the bridge between ZeroPoint's trust substrate and
+    /// the financial settlement layer.
+    FinancialCapability {
+        /// The delegation receipt this enriches (links to the capability grant)
+        delegation_receipt_id: String,
+        /// The agent receiving financial authority
+        agent_id: String,
+        /// The human principal granting authority
+        principal_id: String,
+        /// Maximum spend amount per period
+        ceiling_amount: f64,
+        /// Currency of the spending ceiling (e.g., "USD", "HBAR")
+        ceiling_currency: String,
+        /// Period over which the ceiling applies: "daily", "weekly", "monthly", "total"
+        ceiling_period: String,
+        /// Asset types the agent may spend (empty = ceiling currency only)
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        asset_types: Vec<String>,
+        /// Counterparties the agent may pay (empty = unrestricted)
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        counterparty_allowlist: Vec<String>,
+        /// Counterparties the agent may NOT pay (empty = no denylist)
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        counterparty_denylist: Vec<String>,
+        /// Amount above which human confirmation is required (None = no threshold)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        approval_threshold: Option<f64>,
+        /// Whether funds must be pre-committed to escrow before the agent can spend
+        #[serde(default)]
+        escrow_required: bool,
+        /// When this financial capability was granted
+        granted_at: String,
     },
 
     /// Metadata for an external anchor (T7).

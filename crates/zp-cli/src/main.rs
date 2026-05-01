@@ -2168,7 +2168,17 @@ async fn main() -> anyhow::Result<()> {
             });
         }
 
-        // 2e. Genesis secret (credential store)
+        // 2e. Financial capability grants (T7 Phase 2)
+        // TODO: Scan chain for active FinancialCapabilityGrant receipts
+        // For now, report as info — no financial grants exist yet
+        checks.push(Check {
+            label: "Financial capabilities".into(),
+            status: "info",
+            detail: "No active financial capability grants — agents have no spending authority".into(),
+            fix: "Issue a FinancialCapabilityGrant receipt to bind financial constraints to a delegation.".into(),
+        });
+
+        // 2f. Genesis secret (credential store)
         let keys_dir = home.join("keys");
         let genesis_secret_ok = zp_keys::Keyring::open(&keys_dir)
             .map(|kr| kr.status().has_genesis_secret)
