@@ -102,7 +102,7 @@ pub use reputation::{
     CompactReputationSummary, PeerReputation, ReputationGrade, ReputationScore, ReputationSignal,
     ReputationWeights, SignalCategory, SignalPolarity,
 };
-pub use node_registry::{FleetNode, FleetSummary, NodeHeartbeat, NodeRegistry, NodeStatus};
+pub use node_registry::{FleetNode, FleetSummary, MembershipStatus, NodeHeartbeat, NodeRegistry, NodeStatus};
 pub use policy_distributor::{PolicyDistributor, PolicyRollout, RolloutSummary};
 pub use runtime::{InboundEnvelope, MeshRuntime, RuntimeConfig, RuntimeStats};
 pub use store::MeshStore;

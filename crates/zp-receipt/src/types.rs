@@ -529,6 +529,14 @@ pub enum ReceiptType {
     /// Records the before/after state, the reason for change, and cryptographic
     /// boundary information (chain seal hash for genesis→delegate transitions).
     NodeRoleTransition,
+
+    // --- T4: Fleet Membership Attestation ---
+    /// Genesis node records that it has admitted a node to the fleet.
+    /// This is the cryptographic proof of fleet membership.
+    FleetMembershipGranted,
+    /// Joining node records its acceptance of fleet membership.
+    /// Complements FleetMembershipGranted on the member's chain.
+    FleetMembershipAccepted,
 }
 
 impl ReceiptType {
@@ -554,6 +562,8 @@ impl ReceiptType {
             ReceiptType::NodeDelegationAccepted => "ndac",
             ReceiptType::NodeDelegationGranted => "ndgr",
             ReceiptType::NodeRoleTransition => "nrtr",
+            ReceiptType::FleetMembershipGranted => "fmgr",
+            ReceiptType::FleetMembershipAccepted => "fmac",
         }
     }
 
@@ -587,6 +597,9 @@ impl ReceiptType {
             ReceiptType::NodeDelegationGranted => None,
             // Node role transition is a root claim (no fixed parent)
             ReceiptType::NodeRoleTransition => None,
+            // Fleet membership receipts are root claims (no fixed parent)
+            ReceiptType::FleetMembershipGranted => None,
+            ReceiptType::FleetMembershipAccepted => None,
         }
     }
 
@@ -606,6 +619,9 @@ impl ReceiptType {
             ReceiptType::NodeDelegationGranted => None,
             // Node role transitions persist indefinitely
             ReceiptType::NodeRoleTransition => None,
+            // Fleet membership receipts persist indefinitely (revocation is separate)
+            ReceiptType::FleetMembershipGranted => None,
+            ReceiptType::FleetMembershipAccepted => None,
             // Everything else: no default expiry
             _ => None,
         }
@@ -652,6 +668,8 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::NodeDelegationAccepted => write!(f, "node_delegation_accepted"),
             ReceiptType::NodeDelegationGranted => write!(f, "node_delegation_granted"),
             ReceiptType::NodeRoleTransition => write!(f, "node_role_transition"),
+            ReceiptType::FleetMembershipGranted => write!(f, "fleet_membership_granted"),
+            ReceiptType::FleetMembershipAccepted => write!(f, "fleet_membership_accepted"),
         }
     }
 }
@@ -1209,6 +1227,35 @@ pub enum ClaimMetadata {
         superseded_receipt_id: Option<String>,
         /// When the transition occurred
         transition_at: String,
+    },
+
+    /// Metadata for fleet:membership:granted — genesis admits a node to the fleet (T4).
+    FleetMembershipGranted {
+        /// The admitted node's ID
+        member_node_id: String,
+        /// The admitted node's public key (for future verification)
+        member_pubkey: String,
+        /// The admitted node's network endpoint
+        member_endpoint: String,
+        /// Trust tier assigned at admission
+        assigned_trust_tier: u8,
+        /// Capabilities granted to this member
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        capabilities: Vec<String>,
+        /// When the membership was granted
+        granted_at: String,
+    },
+
+    /// Metadata for fleet:membership:accepted — joining node records acceptance (T4).
+    FleetMembershipAccepted {
+        /// The genesis node's ID (fleet authority)
+        fleet_authority_id: String,
+        /// The genesis node's public key
+        fleet_authority_pubkey: String,
+        /// Receipt ID of the FleetMembershipGranted receipt
+        grant_receipt_id: String,
+        /// When the membership was accepted
+        accepted_at: String,
     },
 }
 

@@ -2123,7 +2123,32 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        // 2c. Genesis secret (credential store)
+        // 2c. Fleet membership attestation (T4)
+        match &derived_role {
+            zp_config::NodeRole::Genesis => {
+                checks.push(Check {
+                    label: "Fleet membership".into(),
+                    status: "pass",
+                    detail: "Fleet authority (genesis node)".into(),
+                    fix: String::new(),
+                });
+            }
+            zp_config::NodeRole::Delegate { upstream_addr, .. } => {
+                // TODO: Check chain for FleetMembershipAccepted receipt
+                // For now, report that membership attestation is pending
+                checks.push(Check {
+                    label: "Fleet membership".into(),
+                    status: "warn",
+                    detail: format!("Delegate of {} — membership receipt not yet attested (T4 pending)", upstream_addr),
+                    fix: "Fleet membership attestation will be issued during delegation handshake.".into(),
+                });
+            }
+            zp_config::NodeRole::Standalone => {
+                // Standalone nodes are not fleet members — skip silently
+            }
+        }
+
+        // 2d. Genesis secret (credential store)
         let keys_dir = home.join("keys");
         let genesis_secret_ok = zp_keys::Keyring::open(&keys_dir)
             .map(|kr| kr.status().has_genesis_secret)

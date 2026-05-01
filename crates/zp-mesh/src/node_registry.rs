@@ -61,6 +61,71 @@ impl std::fmt::Display for NodeStatus {
     }
 }
 
+/// Fleet membership attestation status (T4).
+///
+/// Tracks whether a node's membership is backed by a chain-attested
+/// `FleetMembershipGranted` receipt, or whether it's an unattested
+/// legacy node that registered via heartbeat alone.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "membership_type")]
+pub enum MembershipStatus {
+    /// Node has a valid FleetMembershipGranted receipt on the genesis chain.
+    Attested {
+        /// Receipt ID of the FleetMembershipGranted receipt.
+        receipt_id: String,
+    },
+    /// Node is heartbeating but has no membership receipt (legacy/pre-T4).
+    Unattested,
+    /// Membership receipt was revoked — node should be ejected from trusted operations.
+    Revoked {
+        /// Receipt ID of the revoked FleetMembershipGranted receipt.
+        receipt_id: String,
+        /// When the membership was revoked.
+        revoked_at: String,
+    },
+}
+
+impl MembershipStatus {
+    /// Whether this status represents a trusted membership.
+    pub fn is_trusted(&self) -> bool {
+        matches!(self, Self::Attested { .. })
+    }
+
+    /// Whether this status represents a security concern.
+    pub fn is_revoked(&self) -> bool {
+        matches!(self, Self::Revoked { .. })
+    }
+
+    /// Human-readable summary for `zp doctor` and `zp fleet status` output.
+    pub fn summary(&self) -> String {
+        match self {
+            Self::Attested { receipt_id } => {
+                let short_id = if receipt_id.len() > 12 {
+                    format!("{}...", &receipt_id[..12])
+                } else {
+                    receipt_id.clone()
+                };
+                format!("Attested ({})", short_id)
+            }
+            Self::Unattested => "Unattested (no membership receipt)".into(),
+            Self::Revoked { receipt_id, revoked_at } => {
+                let short_id = if receipt_id.len() > 12 {
+                    format!("{}...", &receipt_id[..12])
+                } else {
+                    receipt_id.clone()
+                };
+                format!("REVOKED ({}, at {})", short_id, revoked_at)
+            }
+        }
+    }
+}
+
+impl Default for MembershipStatus {
+    fn default() -> Self {
+        Self::Unattested
+    }
+}
+
 /// A node in the fleet.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FleetNode {
@@ -84,6 +149,9 @@ pub struct FleetNode {
     pub last_heartbeat: DateTime<Utc>,
     /// Number of heartbeats received since registration.
     pub heartbeat_count: u64,
+    /// Fleet membership attestation status (T4).
+    #[serde(default)]
+    pub membership_status: MembershipStatus,
 }
 
 /// Heartbeat payload sent by fleet nodes to register or refresh.
@@ -190,6 +258,7 @@ impl NodeRegistry {
                 registered_at: now,
                 last_heartbeat: now,
                 heartbeat_count: 1,
+                membership_status: MembershipStatus::Unattested,
             };
             info!(node_id = %node.node_id, name = %node.name, "new fleet node registered");
             nodes.insert(node.node_id.clone(), node);
@@ -406,5 +475,44 @@ mod tests {
         let v3_nodes = registry.nodes_with_policy("v3.0.0-abc123").await;
         assert_eq!(v3_nodes.len(), 1);
         assert_eq!(v3_nodes[0].node_id, "n1");
+    }
+
+    #[test]
+    fn membership_status_defaults_to_unattested() {
+        let status = MembershipStatus::default();
+        assert!(matches!(status, MembershipStatus::Unattested));
+        assert!(!status.is_trusted());
+        assert!(!status.is_revoked());
+    }
+
+    #[test]
+    fn membership_status_attested() {
+        let status = MembershipStatus::Attested {
+            receipt_id: "fmgr-abc123def456".into(),
+        };
+        assert!(status.is_trusted());
+        assert!(!status.is_revoked());
+        assert!(status.summary().contains("Attested"));
+        assert!(status.summary().contains("fmgr-abc123d"));
+    }
+
+    #[test]
+    fn membership_status_revoked() {
+        let status = MembershipStatus::Revoked {
+            receipt_id: "fmgr-abc123def456".into(),
+            revoked_at: "2026-05-01T00:00:00Z".into(),
+        };
+        assert!(!status.is_trusted());
+        assert!(status.is_revoked());
+        assert!(status.summary().contains("REVOKED"));
+    }
+
+    #[tokio::test]
+    async fn new_node_is_unattested() {
+        let registry = NodeRegistry::new();
+        registry.heartbeat(test_heartbeat("node-1", "Alpha")).await;
+
+        let node = registry.get_node("node-1").await.unwrap();
+        assert!(matches!(node.membership_status, MembershipStatus::Unattested));
     }
 }

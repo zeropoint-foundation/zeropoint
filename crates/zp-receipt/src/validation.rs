@@ -203,6 +203,20 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+
+        // --- T4: Fleet Membership Attestation ---
+        ReceiptType::FleetMembershipGranted => TypeRules {
+            required_semantics: ClaimSemantics::AuthorizationGrant,
+            max_ttl_hours: None, // membership persists until revoked
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::FleetMembershipAccepted => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None, // acceptance persists until revoked
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -247,6 +261,8 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::NodeDelegationAccepted { .. } => "NodeDelegationAccepted",
         ClaimMetadata::NodeDelegationGranted { .. } => "NodeDelegationGranted",
         ClaimMetadata::NodeRoleTransition { .. } => "NodeRoleTransition",
+        ClaimMetadata::FleetMembershipGranted { .. } => "FleetMembershipGranted",
+        ClaimMetadata::FleetMembershipAccepted { .. } => "FleetMembershipAccepted",
     }
 }
 
@@ -271,6 +287,8 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::NodeDelegationAccepted, ClaimMetadata::NodeDelegationAccepted { .. })
             | (ReceiptType::NodeDelegationGranted, ClaimMetadata::NodeDelegationGranted { .. })
             | (ReceiptType::NodeRoleTransition, ClaimMetadata::NodeRoleTransition { .. })
+            | (ReceiptType::FleetMembershipGranted, ClaimMetadata::FleetMembershipGranted { .. })
+            | (ReceiptType::FleetMembershipAccepted, ClaimMetadata::FleetMembershipAccepted { .. })
     )
 }
 
