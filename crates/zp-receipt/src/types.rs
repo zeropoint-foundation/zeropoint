@@ -523,6 +523,12 @@ pub enum ReceiptType {
     /// Genesis node records that it has granted delegation to a downstream node.
     /// This is the complement to node:delegation:accepted.
     NodeDelegationGranted,
+
+    // --- T2: Role Transitions ---
+    /// Node role transition receipt — emitted when the node's derived role changes.
+    /// Records the before/after state, the reason for change, and cryptographic
+    /// boundary information (chain seal hash for genesis→delegate transitions).
+    NodeRoleTransition,
 }
 
 impl ReceiptType {
@@ -547,6 +553,7 @@ impl ReceiptType {
             ReceiptType::CanonicalizedClaim => "cano",
             ReceiptType::NodeDelegationAccepted => "ndac",
             ReceiptType::NodeDelegationGranted => "ndgr",
+            ReceiptType::NodeRoleTransition => "nrtr",
         }
     }
 
@@ -578,6 +585,8 @@ impl ReceiptType {
             // Node delegation receipts are root claims (no fixed parent)
             ReceiptType::NodeDelegationAccepted => None,
             ReceiptType::NodeDelegationGranted => None,
+            // Node role transition is a root claim (no fixed parent)
+            ReceiptType::NodeRoleTransition => None,
         }
     }
 
@@ -595,6 +604,8 @@ impl ReceiptType {
             // (revocation is a separate receipt type)
             ReceiptType::NodeDelegationAccepted => None,
             ReceiptType::NodeDelegationGranted => None,
+            // Node role transitions persist indefinitely
+            ReceiptType::NodeRoleTransition => None,
             // Everything else: no default expiry
             _ => None,
         }
@@ -640,6 +651,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::CanonicalizedClaim => write!(f, "canonicalized_claim"),
             ReceiptType::NodeDelegationAccepted => write!(f, "node_delegation_accepted"),
             ReceiptType::NodeDelegationGranted => write!(f, "node_delegation_granted"),
+            ReceiptType::NodeRoleTransition => write!(f, "node_role_transition"),
         }
     }
 }
@@ -1175,6 +1187,28 @@ pub enum ClaimMetadata {
         delegate_addr: Option<String>,
         /// When the delegation was granted
         granted_at: String,
+    },
+
+    /// Metadata for a node role transition (T2).
+    /// Emitted when the node's derived role changes (e.g., Genesis→Delegate,
+    /// Delegate→Standalone, or Delegate with different upstream).
+    NodeRoleTransition {
+        /// What the node was before (e.g., "Genesis", "Delegate(192.168.1.152:17770)", "Standalone")
+        previous_role: String,
+        /// What the node is now
+        new_role: String,
+        /// Why the transition happened
+        /// Standard values: "delegation_accepted", "delegation_revoked", "redelegation", "genesis_performed", "operator_initiated"
+        trigger: String,
+        /// Hash of the chain at transition time — cryptographic boundary between eras.
+        /// Present when the transition requires sealing (genesis→delegate).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sealed_chain_hash: Option<String>,
+        /// The receipt ID being superseded (e.g., old ndac being replaced)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        superseded_receipt_id: Option<String>,
+        /// When the transition occurred
+        transition_at: String,
     },
 }
 

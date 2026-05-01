@@ -195,6 +195,14 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+
+        // --- T2: Role Transitions ---
+        ReceiptType::NodeRoleTransition => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None, // transitions persist forever
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -238,6 +246,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::Lifecycle { .. } => "Lifecycle",
         ClaimMetadata::NodeDelegationAccepted { .. } => "NodeDelegationAccepted",
         ClaimMetadata::NodeDelegationGranted { .. } => "NodeDelegationGranted",
+        ClaimMetadata::NodeRoleTransition { .. } => "NodeRoleTransition",
     }
 }
 
@@ -261,6 +270,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::Execution, ClaimMetadata::Lifecycle { .. })
             | (ReceiptType::NodeDelegationAccepted, ClaimMetadata::NodeDelegationAccepted { .. })
             | (ReceiptType::NodeDelegationGranted, ClaimMetadata::NodeDelegationGranted { .. })
+            | (ReceiptType::NodeRoleTransition, ClaimMetadata::NodeRoleTransition { .. })
     )
 }
 

@@ -26,5 +26,5 @@ pub use error::ConfigError;
 pub use provenance::{Source, Sourced};
 pub use resolve::ConfigResolver;
 pub use schema::{ZpConfig, NodeRole};
-pub use topology::{derive_node_role, config_hint_role};
+pub use topology::{derive_node_role, config_hint_role, TransitionInfo, detect_role_transition};
 pub use validate::validate;
