@@ -21,12 +21,16 @@ ed25519-dalek = { version = "2", features = ["rand_core"], optional = true }
 base64 = { version = "0.22", optional = true }
 rand = { version = "0.8", optional = true }
 
+# Optional: Post-quantum ML-DSA-65 signing (FIPS 204)
+ml-dsa = { version = "0.1.0-rc", default-features = false, optional = true }
+
 # Optional: OTEL span export
 opentelemetry = { version = "0.21", optional = true }
 
 [features]
 default = ["signing"]
 signing = ["dep:ed25519-dalek", "dep:base64", "dep:rand"]
+pq-signing = ["signing", "dep:ml-dsa"]
 otel = ["dep:opentelemetry"]
 
 [dev-dependencies]

@@ -412,6 +412,18 @@ impl SignatureBlock {
         }
     }
 
+    /// Convenience: build an ML-DSA-65 block. Uses the `Experimental`
+    /// algorithm variant so older verifiers skip it gracefully. The
+    /// `key_id` is the hex-encoded 1952-byte verifying key; `signature_b64`
+    /// is the base64-encoded 3309-byte signature.
+    pub fn ml_dsa_65(verifying_key_hex: &str, signature_b64: &str) -> Self {
+        Self {
+            algorithm: SignatureAlgorithm::experimental("ML-DSA-65"),
+            key_id: verifying_key_hex.to_string(),
+            signature_b64: signature_b64.to_string(),
+        }
+    }
+
     /// The cmp key used for canonical ordering: `(alg_name, key_id)`.
     /// Exposed as a method so call sites that need to sort an external
     /// Vec stay in lock-step with [`Receipt::signatures`].
@@ -460,6 +472,11 @@ impl SignatureAlgorithm {
     /// Convenience constructor for an experimental algorithm.
     pub fn experimental(name: impl Into<String>) -> Self {
         SignatureAlgorithm::Experimental { name: name.into() }
+    }
+
+    /// Returns `true` if this is the ML-DSA-65 post-quantum algorithm.
+    pub fn is_ml_dsa_65(&self) -> bool {
+        matches!(self, SignatureAlgorithm::Experimental { name } if name == "ML-DSA-65")
     }
 }
 

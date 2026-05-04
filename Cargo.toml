@@ -60,6 +60,9 @@ blake3 = { version = "1.5", features = ["serde"] }
 rand = "0.8"
 chacha20poly1305 = "0.10"
 zeroize = { version = "1.7", features = ["derive"] }
+# Post-quantum: ML-DSA-65 (FIPS 204, Dilithium). Used for hybrid signing.
+# RUSTSEC-2025-0144 timing side-channel patched in >=0.1.0-rc.3.
+ml-dsa = { version = "0.1.0-rc", default-features = false }
 
 # Database
 rusqlite = { version = "0.32", features = ["bundled"] }

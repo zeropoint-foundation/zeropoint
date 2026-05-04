@@ -46,6 +46,12 @@ mod verifier;
 #[cfg(feature = "signing")]
 mod signer;
 
+#[cfg(feature = "pq-signing")]
+mod pq_signer;
+
+#[cfg(feature = "pq-signing")]
+mod hybrid_signer;
+
 #[cfg(feature = "otel")]
 mod otel;
 
@@ -61,6 +67,12 @@ pub use verifier::{ReceiptVerifier, VerificationError, VerificationResult};
 
 #[cfg(feature = "signing")]
 pub use signer::Signer;
+
+#[cfg(feature = "pq-signing")]
+pub use pq_signer::PqSigner;
+
+#[cfg(feature = "pq-signing")]
+pub use hybrid_signer::HybridSigner;
 
 #[cfg(feature = "otel")]
 pub use otel::ReceiptSpanExporter;

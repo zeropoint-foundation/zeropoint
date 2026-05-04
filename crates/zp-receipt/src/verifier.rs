@@ -315,6 +315,10 @@ impl ReceiptVerifier {
             });
 
             result.signature_valid = Some(sig_valid);
+
+            // PQ: if an ML-DSA-65 block is present, verify it too (advisory,
+            // does not gate overall validity in Phase 1).
+            Self::check_pq_signature(receipt, &mut result);
         } else {
             result.checks.push(VerificationCheck {
                 name: "signature".to_string(),
@@ -324,6 +328,62 @@ impl ReceiptVerifier {
         }
 
         Ok(result)
+    }
+
+    /// Check for an ML-DSA-65 post-quantum signature (Phase 1: advisory only).
+    ///
+    /// If the receipt carries an `Experimental("ML-DSA-65")` signature block,
+    /// this method verifies it and adds a check result. The check is
+    /// informational — it does NOT affect `signature_valid` or `is_valid()`.
+    /// In Phase 4 this will become a gating check.
+    fn check_pq_signature(receipt: &Receipt, result: &mut VerificationResult) {
+        let pq_block = receipt
+            .signatures
+            .iter()
+            .find(|b| b.algorithm.is_ml_dsa_65());
+
+        if let Some(block) = pq_block {
+            #[cfg(feature = "pq-signing")]
+            {
+                let pq_valid = crate::PqSigner::verify_receipt(receipt, &block.key_id);
+                match pq_valid {
+                    Ok(true) => {
+                        result.checks.push(VerificationCheck {
+                            name: "pq_signature".to_string(),
+                            passed: true,
+                            detail: format!(
+                                "Valid ML-DSA-65 signature from {}…",
+                                &block.key_id[..32.min(block.key_id.len())]
+                            ),
+                        });
+                    }
+                    Ok(false) => {
+                        result.checks.push(VerificationCheck {
+                            name: "pq_signature".to_string(),
+                            passed: false,
+                            detail: "ML-DSA-65 signature does NOT match content".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        result.checks.push(VerificationCheck {
+                            name: "pq_signature".to_string(),
+                            passed: false,
+                            detail: format!("ML-DSA-65 verification error: {}", e),
+                        });
+                    }
+                }
+            }
+
+            #[cfg(not(feature = "pq-signing"))]
+            {
+                let _ = block; // suppress unused warning
+                result.checks.push(VerificationCheck {
+                    name: "pq_signature".to_string(),
+                    passed: true, // Can't verify without pq-signing, don't fail
+                    detail: "ML-DSA-65 signature present but pq-signing feature not enabled — skipped".to_string(),
+                });
+            }
+        }
     }
 
     /// Verify without the signing feature — hash only.
