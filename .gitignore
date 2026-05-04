@@ -115,6 +115,9 @@ audit.db.pre-*
 audit-*-forensic*
 *.pentest-notes.md
 
+# Local tools (not submodules)
+tools/ember
+
 # Cowork / Claude session artifacts
 .claude/
 .pnpm-store/
