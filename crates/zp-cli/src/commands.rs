@@ -1010,6 +1010,540 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     exit_code
 }
 
+// ── Operator lifecycle commands ───────────────────────────────────
+
+/// Capability presets matching the Cloudflare Worker's DEFAULT_CAPABILITIES.
+fn capabilities_for_role(role: &str, mailbox: Option<&str>) -> Vec<String> {
+    match role {
+        "founder" => vec!["workspace:admin".into()],
+        "successor" => vec!["workspace:admin".into(), "succession:invoke".into()],
+        "officer" => {
+            let mb = mailbox.unwrap_or("staff");
+            vec![
+                format!("mail:read:{}", mb),
+                format!("mail:send:{}", mb),
+                format!("mail:manage:{}", mb),
+                "mail:read:info".into(),
+                "mail:send:info".into(),
+                "docs:read:*".into(),
+                "docs:write:*".into(),
+                "secure:channel:general".into(),
+                "secure:channel:decisions".into(),
+                "succession:co-sign".into(),
+            ]
+        }
+        _ => vec![],
+    }
+}
+
+/// Create a new workspace operator keypair.
+///
+/// Generates an OperatorKey certified by the genesis key and saves it
+/// in ~/ZeroPoint/keys/operators/<name>.json alongside its metadata.
+pub fn operator_create(
+    name: &str,
+    email: &str,
+    role: &str,
+    mailbox: Option<&str>,
+    expires_days: Option<u64>,
+) -> i32 {
+    // Validate role
+    if !["founder", "successor", "officer"].contains(&role) {
+        eprintln!("  Invalid role '{}'. Must be: founder, successor, or officer.", role);
+        return 1;
+    }
+
+    // Officer requires a mailbox
+    if role == "officer" && mailbox.is_none() {
+        eprintln!("  Officer role requires --mailbox (e.g., --mailbox lorrie)");
+        return 1;
+    }
+
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            eprintln!("  Run `zp init` first to bootstrap your environment.");
+            return 1;
+        }
+    };
+
+    // Load genesis key (needed to sign operator certificate)
+    let genesis = match keyring.load_genesis() {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("  No genesis key found: {}", e);
+            eprintln!("  Only the genesis holder can create operator keys.");
+            return 1;
+        }
+    };
+
+    eprintln!();
+    eprintln!("  \x1b[1mCreating Workspace Operator\x1b[0m");
+    eprintln!("  \x1b[2m──────────────────────────\x1b[0m");
+    eprintln!("  Name:     {}", name);
+    eprintln!("  Email:    {}", email);
+    eprintln!("  Role:     {}", role);
+    if let Some(mb) = mailbox {
+        eprintln!("  Mailbox:  {}@zeropoint.global", mb);
+    }
+
+    // Compute expiration
+    let expires_at = match expires_days {
+        Some(days) => Some(chrono::Utc::now() + chrono::Duration::days(days as i64)),
+        None => match role {
+            "officer" => Some(chrono::Utc::now() + chrono::Duration::days(365)),
+            _ => None, // founder and successor: no expiration
+        },
+    };
+
+    // Generate operator key (signed by genesis)
+    eprint!("  Generating operator key...           ");
+    let subject = format!("{}@zeropoint.global", name);
+    let operator = OperatorKey::generate(&subject, &genesis, expires_at);
+    eprintln!("\x1b[32m✓\x1b[0m Ed25519");
+
+    // Save to ~/ZeroPoint/keys/operators/<name>.json
+    let operators_dir = keyring.path().join("operators");
+    if let Err(e) = std::fs::create_dir_all(&operators_dir) {
+        eprintln!("  Failed to create operators directory: {}", e);
+        return 1;
+    }
+
+    let pub_hex = hex::encode(operator.public_key());
+    let secret_hex = hex::encode(operator.secret_key());
+    let capabilities = capabilities_for_role(role, mailbox);
+
+    // Build operator metadata file (public key + certificate for registration)
+    let metadata = serde_json::json!({
+        "name": name,
+        "email": email,
+        "role": role,
+        "mailbox": mailbox,
+        "public_key_hex": pub_hex,
+        "capabilities": capabilities,
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "expires_at": expires_at.map(|t| t.to_rfc3339()),
+        "certificate": {
+            "subject": operator.certificate().body.subject,
+            "role": operator.certificate().body.role.to_string(),
+            "issued_at": operator.certificate().body.issued_at.to_rfc3339(),
+        },
+    });
+
+    let meta_path = operators_dir.join(format!("{}.json", name));
+    eprint!("  Writing operator metadata...         ");
+    match serde_json::to_string_pretty(&metadata) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&meta_path, &json) {
+                eprintln!("\x1b[31m✗\x1b[0m");
+                eprintln!("  Failed to write {}: {}", meta_path.display(), e);
+                return 1;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o600));
+            }
+        }
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m serialization error: {}", e);
+            return 1;
+        }
+    }
+    eprintln!("\x1b[32m✓\x1b[0m operators/{}.json", name);
+
+    // Print the operator's secret key hex for secure transfer to their machine.
+    // This is shown once — the operator needs it to initialize their own keyring.
+    eprint!("  Operator secret key generated...     ");
+    eprintln!("\x1b[32m✓\x1b[0m Ed25519 (shown once below)");
+
+    eprintln!();
+    eprintln!("  \x1b[32m✓ Operator '{}' created.\x1b[0m", name);
+    eprintln!();
+    eprintln!("  Public key:   \x1b[36m{}...\x1b[0m", &pub_hex[..16]);
+    eprintln!("  Capabilities: {}", capabilities.join(", "));
+    if let Some(exp) = expires_at {
+        eprintln!("  Expires:      {}", exp.format("%Y-%m-%d"));
+    } else {
+        eprintln!("  Expires:      never");
+    }
+    eprintln!();
+    eprintln!("  Delegation chain: genesis → \x1b[1m{}\x1b[0m ({})", name, role);
+    eprintln!();
+    eprintln!();
+    eprintln!("  \x1b[33mOPERATOR SECRET — TRANSFER SECURELY TO {}\x1b[0m", name.to_uppercase());
+    eprintln!("  \x1b[2m{}\x1b[0m", secret_hex);
+    eprintln!("  \x1b[31mShown once. Hand-deliver or use a secure channel.\x1b[0m");
+    eprintln!();
+    eprintln!("  \x1b[33mNext:\x1b[0m Register with the workspace API:");
+    eprintln!("    zp operator register --name {} --token <admin-token>", name);
+    eprintln!();
+
+    0
+}
+
+/// Register an operator with the Cloudflare Worker API.
+pub async fn operator_register(name: &str, api_url: &str, token: &str) -> i32 {
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            return 1;
+        }
+    };
+
+    // Load operator metadata
+    let meta_path = keyring.path().join("operators").join(format!("{}.json", name));
+    let metadata: serde_json::Value = match std::fs::read_to_string(&meta_path) {
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("  Invalid operator metadata: {}", e);
+                return 1;
+            }
+        },
+        Err(_) => {
+            eprintln!("  Operator '{}' not found. Run `zp operator create` first.", name);
+            return 1;
+        }
+    };
+
+    let public_key_hex = metadata["public_key_hex"].as_str().unwrap_or("");
+    let email = metadata["email"].as_str().unwrap_or("");
+    let role = metadata["role"].as_str().unwrap_or("staff");
+    let capabilities = metadata["capabilities"].as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    eprintln!();
+    eprintln!("  \x1b[1mRegistering Operator\x1b[0m");
+    eprintln!("  \x1b[2m────────────────────\x1b[0m");
+    eprintln!("  Name:       {}", name);
+    eprintln!("  Email:      {}", email);
+    eprintln!("  Role:       {}", role);
+    eprintln!("  Public key: {}...", &public_key_hex[..16.min(public_key_hex.len())]);
+    eprintln!("  API:        {}", api_url);
+
+    let payload = serde_json::json!({
+        "id": name,
+        "name": name,
+        "email": email,
+        "public_key_hex": public_key_hex,
+        "capabilities": capabilities,
+        "role": role,
+    });
+
+    eprint!("  Sending registration...              ");
+
+    let client = reqwest::Client::new();
+    match client
+        .post(format!("{}/api/operators", api_url))
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                eprintln!("\x1b[32m✓\x1b[0m");
+                eprintln!();
+                eprintln!("  \x1b[32m✓ Operator '{}' registered with workspace.\x1b[0m", name);
+                eprintln!();
+                0
+            } else {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                eprintln!("\x1b[31m✗\x1b[0m");
+                eprintln!("  Registration failed: {} {}", status, body);
+                1
+            }
+        }
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m");
+            eprintln!("  HTTP error: {}", e);
+            1
+        }
+    }
+}
+
+/// List all operator keys in the keyring.
+pub fn operator_list() -> i32 {
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            return 1;
+        }
+    };
+
+    let operators_dir = keyring.path().join("operators");
+
+    eprintln!();
+    eprintln!("  \x1b[1mWorkspace Operators\x1b[0m");
+    eprintln!("  \x1b[2m───────────────────\x1b[0m");
+
+    if !operators_dir.exists() {
+        eprintln!();
+        eprintln!("  \x1b[2mNo operators created yet.\x1b[0m");
+        eprintln!("  Run `zp operator create` to add workspace staff.");
+        eprintln!();
+        return 0;
+    }
+
+    let mut count = 0;
+    if let Ok(entries) = std::fs::read_dir(&operators_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "json").unwrap_or(false) {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                        let name = meta["name"].as_str().unwrap_or("?");
+                        let role = meta["role"].as_str().unwrap_or("?");
+                        let email = meta["email"].as_str().unwrap_or("?");
+                        let pub_key = meta["public_key_hex"].as_str().unwrap_or("");
+                        let short_key = if pub_key.len() >= 16 {
+                            &pub_key[..16]
+                        } else {
+                            pub_key
+                        };
+
+                        let role_icon = match role {
+                            "founder" => "◆",
+                            "successor" => "◇",
+                            "officer" => "○",
+                            _ => "·",
+                        };
+
+                        let role_color = match role {
+                            "founder" => "\x1b[33m",    // yellow
+                            "successor" => "\x1b[35m",  // magenta
+                            "officer" => "\x1b[36m",    // cyan
+                            _ => "\x1b[2m",
+                        };
+
+                        eprintln!(
+                            "  {} {}{:<12}\x1b[0m {:<30} \x1b[36m{}...\x1b[0m",
+                            role_icon, role_color, role, email, short_key
+                        );
+                        eprintln!(
+                            "    \x1b[2m{}\x1b[0m",
+                            name
+                        );
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if count == 0 {
+        eprintln!();
+        eprintln!("  \x1b[2mNo operators created yet.\x1b[0m");
+    }
+
+    eprintln!();
+    eprintln!("  {} operator(s)", count);
+    eprintln!();
+
+    0
+}
+
+/// Deactivate an operator via the workspace API.
+pub async fn operator_deactivate(name: &str, api_url: &str, token: &str) -> i32 {
+    eprintln!();
+    eprintln!("  \x1b[1mDeactivating Operator\x1b[0m");
+    eprintln!("  \x1b[2m─────────────────────\x1b[0m");
+    eprintln!("  Operator: {}", name);
+
+    eprint!("  Sending deactivation...              ");
+
+    let client = reqwest::Client::new();
+    match client
+        .delete(format!("{}/api/operators/{}", api_url, name))
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                eprintln!("\x1b[32m✓\x1b[0m");
+                eprintln!();
+                eprintln!("  \x1b[33m⊘\x1b[0m Operator '{}' deactivated.", name);
+                eprintln!("  Their key material remains in the keyring for audit.");
+                eprintln!();
+                0
+            } else {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                eprintln!("\x1b[31m✗\x1b[0m");
+                eprintln!("  Deactivation failed: {} {}", status, body);
+                1
+            }
+        }
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m");
+            eprintln!("  HTTP error: {}", e);
+            1
+        }
+    }
+}
+
+/// Succession ceremony — generate successor authority with genesis recovery mnemonic.
+pub fn operator_succession(name: &str, email: &str) -> i32 {
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            return 1;
+        }
+    };
+
+    let genesis = match keyring.load_genesis() {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("  No genesis key found: {}", e);
+            eprintln!("  Only the genesis holder can perform a succession ceremony.");
+            return 1;
+        }
+    };
+
+    eprintln!();
+    eprintln!("  ╔══════════════════════════════════════════════╗");
+    eprintln!("  ║     \x1b[1mZEROPOINT SUCCESSION CEREMONY\x1b[0m          ║");
+    eprintln!("  ╚══════════════════════════════════════════════╝");
+    eprintln!();
+    eprintln!("  Successor:  {}", name);
+    eprintln!("  Email:      {}", email);
+    eprintln!("  Authority:  workspace:admin + succession:invoke");
+    eprintln!();
+    eprintln!("  \x1b[33m⚠  This ceremony will:\x1b[0m");
+    eprintln!("     1. Generate {}'s operator key (signed by genesis)", name);
+    eprintln!("     2. Grant full workspace:admin + succession:invoke");
+    eprintln!("     3. Output the genesis recovery mnemonic (24 words)");
+    eprintln!("     4. The mnemonic must be stored securely offline");
+    eprintln!();
+
+    eprint!("  Proceed with succession ceremony? [y/N] ");
+    let _ = io::stdout().flush();
+    let mut answer = String::new();
+    if io::stdin().lock().read_line(&mut answer).is_err()
+        || !answer.trim().eq_ignore_ascii_case("y")
+    {
+        eprintln!("  Aborted.");
+        return 0;
+    }
+
+    // Step 1: Generate successor operator key
+    eprintln!();
+    eprint!("  Generating successor key...          ");
+    let subject = format!("{}@zeropoint.global", name);
+    let operator = OperatorKey::generate(&subject, &genesis, None);
+    let pub_hex = hex::encode(operator.public_key());
+    eprintln!("\x1b[32m✓\x1b[0m Ed25519");
+
+    // Step 2: Save operator metadata
+    let operators_dir = keyring.path().join("operators");
+    let _ = std::fs::create_dir_all(&operators_dir);
+
+    let capabilities = capabilities_for_role("successor", None);
+    let metadata = serde_json::json!({
+        "name": name,
+        "email": email,
+        "role": "successor",
+        "public_key_hex": pub_hex,
+        "capabilities": capabilities,
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "expires_at": serde_json::Value::Null,
+        "succession": true,
+        "certificate": {
+            "subject": operator.certificate().body.subject,
+            "role": operator.certificate().body.role.to_string(),
+            "issued_at": operator.certificate().body.issued_at.to_rfc3339(),
+        },
+    });
+
+    let meta_path = operators_dir.join(format!("{}.json", name));
+    eprint!("  Writing successor metadata...        ");
+    match serde_json::to_string_pretty(&metadata) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&meta_path, &json) {
+                eprintln!("\x1b[31m✗\x1b[0m write error: {}", e);
+                return 1;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o600));
+            }
+        }
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m {}", e);
+            return 1;
+        }
+    }
+    eprintln!("\x1b[32m✓\x1b[0m operators/{}.json", name);
+
+    // Step 3: Generate genesis recovery mnemonic for the successor
+    let genesis_secret = genesis.secret_key();
+    eprint!("  Encoding recovery mnemonic...        ");
+    let mnemonic = match zp_keys::encode_mnemonic(&genesis_secret) {
+        Ok(words) => {
+            eprintln!("\x1b[32m✓\x1b[0m 24 words (BIP-39)");
+            words
+        }
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m {}", e);
+            return 1;
+        }
+    };
+
+    let successor_secret_hex = hex::encode(operator.secret_key());
+
+    // Display results
+    eprintln!();
+    eprintln!("  \x1b[32m✓ Succession ceremony complete.\x1b[0m");
+    eprintln!();
+    eprintln!("  Successor:    \x1b[1m{}\x1b[0m", name);
+    eprintln!("  Public key:   \x1b[36m{}...\x1b[0m", &pub_hex[..16]);
+    eprintln!("  Authority:    workspace:admin, succession:invoke");
+    eprintln!();
+    eprintln!("  \x1b[33mSUCCESSOR OPERATOR SECRET — TRANSFER SECURELY\x1b[0m");
+    eprintln!("  \x1b[2m{}\x1b[0m", successor_secret_hex);
+    eprintln!();
+    eprintln!("  ╔══════════════════════════════════════════════╗");
+    eprintln!("  ║  \x1b[1;33mGENESIS RECOVERY MNEMONIC — STORE SECURELY\x1b[0m  ║");
+    eprintln!("  ╠══════════════════════════════════════════════╣");
+    eprintln!("  ║                                              ║");
+    for (i, word) in mnemonic.iter().enumerate() {
+        let num = i + 1;
+        if num <= 12 {
+            // Print words 1-12 and 13-24 side by side
+            let right_num = num + 12;
+            let right_word = &mnemonic[right_num - 1];
+            eprintln!(
+                "  ║  {:>2}. {:<16}   {:>2}. {:<16} ║",
+                num, word, right_num, right_word
+            );
+        }
+    }
+    eprintln!("  ║                                              ║");
+    eprintln!("  ╠══════════════════════════════════════════════╣");
+    eprintln!("  ║  \x1b[31mWrite these words down. Store offline.\x1b[0m       ║");
+    eprintln!("  ║  \x1b[31mThis is shown ONCE.\x1b[0m                         ║");
+    eprintln!("  ╚══════════════════════════════════════════════╝");
+    eprintln!();
+    eprintln!("  \x1b[33mSuccessor onboarding steps:\x1b[0m");
+    eprintln!("    1. Register {} with the workspace API:", name);
+    eprintln!("       zp operator register --name {} --token <admin-token>", name);
+    eprintln!("    2. Give {} the recovery mnemonic (in person, offline)", name);
+    eprintln!("    3. {} runs `zp recover` on their machine to restore genesis", name);
+    eprintln!();
+
+    0
+}
+
 /// List installed gates (constitutional + custom).
 pub fn gate_list() -> i32 {
     eprintln!();

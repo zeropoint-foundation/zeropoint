@@ -45,6 +45,9 @@ certs/
 
 # === Excluded from public release ===
 
+# Foundation — legal docs, workspace infra, onboarding (local only)
+foundation/
+
 # Website (keep private to prevent impersonation)
 zeropoint.global/
 

@@ -2,16 +2,16 @@
 
 ## Cryptographic Governance Primitives for Accountable Systems
 
-**Whitepaper v2.1 — April 2026**
+**Whitepaper v2.2 — May 2026**
 **Ken Romero, Founder, ThinkStream Labs**
 
 Status: Public Technical Overview
 License: CC BY 4.0 (text); Code remains MIT/Apache-2.0
 Canonical URL: https://zeropoint.global/whitepaper
-PDF SHA-256: *(to be filled on publish)*
+PDF: [zeropoint-whitepaper-v2.2.pdf](https://zeropoint.global/zeropoint-whitepaper-v2.2.pdf)
 
 **How to cite:**
-> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream Labs, Whitepaper v2.1, April 2026. https://zeropoint.global/whitepaper
+> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream Labs, Whitepaper v2.2, May 2026. https://zeropoint.global/whitepaper
 
 ---
 
@@ -198,7 +198,7 @@ ZeroPoint's accountability architecture operates at three distinct layers, each 
 
 The three layers compose: the receipt chain provides the evidence substrate, the observation loop provides real-time boundary enforcement, and the trace layer provides computational forensics. Each layer catches failures the others miss. Output-level observation catches policy violations but cannot see degenerate reasoning that happens to produce acceptable outputs. Trace-level introspection catches degenerate reasoning but has no authority model — it doesn't know who authorized the computation or under what constraints. The receipt chain binds both to a signed, ordered, portable evidence structure.
 
-The receipt chain and observation loop are implemented today. The trace layer is a future research direction (see `docs/future-work/cognitive-accountability.md`) whose prerequisites — a stable receipt schema, adversarial-tested audit chains, and mature sovereignty providers — are being hardened in the current phase. The architecture is designed to accommodate this extension without modifying the receipt or policy primitives.
+The receipt chain and observation loop are implemented today. The trace layer is a future research direction. The architecture is designed to accommodate this extension without modifying the receipt or policy primitives.
 
 ### Why This Matters for the Architecture
 
@@ -239,7 +239,7 @@ This combination — agents intensifying an existing trust deficit, sovereignty 
 
 Many governance efforts exist today as checklists, dashboards, or top-down frameworks. They describe what should be done, but they do not provide low-level mechanisms that make trust enforceable by default. ZeroPoint's position is intentionally infrastructural:
 
-> Not a governance framework you comply with — a governance protocol you build on.
+> Infrastructure you build on — not a framework you comply with.
 
 ---
 
@@ -478,16 +478,16 @@ Key distribution is solved by `zp-keys`. Key *discovery* — how peers find each
 | **Replay attacks** | Resend messages or insert previously captured packets | MeshEnvelope sequence numbers (monotonic u64); 16-byte random nonces in link handshake; Ed25519 signatures over content hashes | Depends on peers tracking seen sequence numbers; long-offline nodes may have gaps |
 | **Injection attacks** | Insert forged packets into mesh transport | HDLC framing with CRC verification; Ed25519 signature verification on all envelopes; link-level X25519 ECDH key agreement | Transport-level encryption depends on successful link establishment; unlinked broadcast packets are not encrypted |
 | **WASM policy escape** | Malicious policy module attempts to break sandbox | Wasmtime runtime with fuel limiting (configurable execution budget); hash verification of module contents before loading | Fuel exhaustion causes denial-of-service at worst; WASM sandbox escape would require a wasmtime vulnerability |
-| **Identity misbinding** | Misattribute a key to a human | Trust tiers: Tier 0 (unsigned), Tier 1 (self-signed Ed25519), Tier 2 (chain-signed with genesis root); Tier 2 requires verified delegation from a human-held key | Identity binding to physical persons remains deployment-dependent; not solved purely in protocol |
+| **Identity misbinding** | Misattribute a key to a human | Six trust tiers (T0–T5): from unsigned (T0) through self-signed (T1), chain-signed (T2), anchored (T3), attested (T4), to sovereign (T5). T2+ requires verified delegation from a human-held key | Identity binding to physical persons remains deployment-dependent; not solved purely in protocol |
 
 ### 7.2 What ZeroPoint Intentionally Does Not Solve
 
 Being explicit prevents credibility collapse later:
 
-- **It does not prevent a determined actor from building harmful systems.** The MIT/Apache-2.0 license is permissive. Constitutional rules constrain the framework's own behavior; they cannot constrain a fork.
+- **It does not prevent a determined actor from building harmful systems.** Constitutional rules constrain the framework's own behavior. Beyond the protocol boundary, misuse resistance depends on community norms, ecosystem reputation, and economic incentives.
 - **It does not make intelligence tools impossible.** Receipt infrastructure could be repurposed for surveillance. The Tenets and constitutional rules resist this, but they are a friction, not a wall.
-- **It does not provide universal truth verification.** Receipts prove that a statement was signed, not that the statement is true.
-- **Key discovery is now addressed but not fully hardened.** The Presence Plane (§9) provides dual-backend discovery with reciprocity enforcement and structural amnesia. It is not yet resistant to sophisticated Sybil attacks without the reputation layer; see §9 for the full threat analysis.
+- **It does not provide truth verification.** Receipts prove provenance, not veracity (§5.2).
+- **Sybil resistance is economic, not absolute.** The Presence Plane (§9) solves discovery with reciprocity enforcement and structural amnesia, and the reputation layer raises the cost of maintaining fake identities through trajectory-depth scoring and time-decayed evidence. A sufficiently funded attacker can still sustain multiple anchored identities — the defense transforms a computational problem into an economic one, which structurally favors defenders but does not eliminate the attack.
 
 Instead:
 
@@ -521,7 +521,7 @@ The mesh integration implements:
 - **500-byte default MTU** with a 465-byte data payload — compatible with Reticulum's packet constraints and suitable for LoRa links.
 - **3-packet link handshake** (LinkRequest → LinkProof → LinkAccept) with 16-byte random nonces for replay protection.
 
-Interoperability testing with Reticulum ecosystem tools (MeshChat, NomadNet) is underway. The mesh transport is one option among several — chosen when sovereignty, resilience, or operation without cloud infrastructure are priorities.
+The mesh transport is one option among several — chosen when sovereignty, resilience, or operation without cloud infrastructure are priorities.
 
 ### 8.4 Extending to Other Transports
 
@@ -711,47 +711,109 @@ Honesty demands stating what external anchoring does *not* prove:
 
 ---
 
-## 11. Ethics, Non-Goals, and Misuse Resistance
+## 11. Fleet Topology: From Single Node to Governed Network
 
-### 11.1 The Co-option Risk
+The preceding sections describe ZeroPoint's governance primitives as if operating on a single node — one Genesis ceremony, one receipt chain, one PolicyEngine. This section describes how those same primitives compose across multiple nodes to form a governed fleet, where every node's role, authority, and membership is derived from the chain rather than asserted by configuration.
+
+The transition from single-node to fleet is not a separate system bolted on top of the governance layer. It is the governance layer applied to its own infrastructure. Nodes join, change role, and maintain membership through the same receipt grammar that governs agent behavior. The fleet is not administered — it is governed.
+
+### 11.1 Chain-Derived Roles
+
+A node's role in the fleet — Genesis, Delegate, or Standalone — is derived from cryptographic evidence in its receipt chain, not from a configuration file. The config file provides a *bootstrap hint*: a human-readable suggestion that disambiguates initial state before the chain has recorded the node's actual role. Once the chain contains a delegation receipt, the config hint is advisory. The chain is authoritative.
+
+This distinction matters because configuration can be edited. A chain entry cannot — not without invalidating every subsequent hash. When a node reports its role, the claim is verifiable: walk the chain, find the delegation receipt, confirm the cryptographic binding. Role is not what the operator typed into `config.toml`. Role is what the chain says.
+
+Three roles exist in the current topology:
+
+- **Genesis**: The node that performed the Genesis ceremony and holds the root Ed25519 keypair. It is the origin of all delegation chains in its fleet. There is exactly one Genesis node per fleet.
+- **Delegate**: A node that holds a valid delegation receipt from an upstream Genesis node. Its authority is bounded by the delegation chain's narrowing invariants — scope can only shrink, trust tier can only increase, expiration can only shorten.
+- **Standalone**: A node with no chain evidence of either Genesis ceremony or delegation. It operates independently, without fleet authority. A delegate whose delegation is revoked returns to Standalone.
+
+The derivation function checks two things: whether a `genesis.json` certificate exists on disk, and what the chain records about the node's delegation status. A delegate holding a copy of its upstream's genesis certificate (for verification) is distinguished from a genesis node (which created its own certificate) by the chain evidence, not by file presence alone.
+
+### 11.2 Role Transition Receipts
+
+When a node's role changes — from Standalone to Delegate, from Delegate back to Standalone on revocation, or from one upstream to another on re-delegation — the transition is sealed with a receipt. The old role's final state is committed; the new role's initial state is recorded. The transition receipt creates a boundary in the chain that is visible to any auditor: before this receipt, the node operated as X; after this receipt, the node operates as Y; the trigger (delegation accepted, delegation revoked, re-delegation) is recorded in the receipt metadata.
+
+Role transitions are not administrative events that happen outside the chain and are later noted in a log. They *are* chain events. The receipt grammar does not distinguish between "the agent performed an action" and "the node changed role" — both are signed, hash-linked, ordered entries in the same chain. This means the fleet's topology history is auditable with the same tools used to audit any other governed behavior.
+
+Transition detection compares the currently derived role against the previously recorded role. If they differ, a `TransitionInfo` record captures the previous role, the new role, and the trigger. The trigger vocabulary is constrained: `delegation_accepted`, `delegation_revoked`, `redelegation`, `genesis_performed`. There is no `role_changed` catch-all — every transition has a named cause.
+
+### 11.3 Cryptographic Upstream Binding
+
+A delegate node does not merely *claim* to serve a particular Genesis node. It *proves* it, by carrying the upstream Genesis node's Ed25519 public key in its delegation receipt. This binding is verifiable in two phases:
+
+**Local verification** (offline, no network required): The delegate checks that its delegation receipt contains a well-formed Ed25519 public key of the correct length (32 bytes). A missing or malformed pubkey indicates a pre-binding delegation or a corrupt receipt — either way, the binding status is `Unbound` or `MalformedPubkey`, and the delegate knows it cannot prove its upstream relationship.
+
+**Online verification** (requires upstream reachability): The delegate challenges its upstream to prove it holds the key recorded in the delegation receipt. If the upstream's actual genesis pubkey does not match the receipt's stored pubkey, the binding status is `PubkeyMismatch` — a security signal indicating the upstream may have changed identity since the delegation was issued. This is not a transient error. It is a potential trust redirect that requires operator attention.
+
+The upstream binding turns delegation from a claim into a cryptographic proof. A node cannot forge a delegation receipt without the upstream's signing key. And a node cannot silently swap upstreams without the pubkey mismatch being detectable by any peer that checks.
+
+### 11.4 Fleet Membership and Liveness
+
+Membership in a fleet is not asserted by adding a hostname to a configuration file. It is attested through continuous cryptographic interaction. Each delegate node maintains a lease — a bounded lifetime on its `CapabilityGrant` that must be renewed at a configured cadence by presenting a valid Ed25519 signature to one of the grant's designated renewal authorities.
+
+The lease introduces a liveness requirement that static delegation lacks. A delegation receipt proves that authority *was* granted. A lease proves that authority *is still* granted — that the renewal authority has not revoked the grant, that the delegate is still reachable, and that the cryptographic binding is still valid. If renewal fails for a configurable number of consecutive attempts, the grant enters a grace period. If the grace period elapses without renewal, the grant's failure mode activates: halt (fail closed), degrade (drop to read-only), or continue-with-flag (for air-gapped scenarios where the renewal authority is unreachable by design).
+
+This creates a fleet topology that is self-healing and self-pruning. A node that goes offline stops renewing its lease. After the grace period, its authority dissolves — not because an administrator removed it from a list, but because the cryptographic proof of continued authorization expired. The fleet's membership is the set of nodes with active, renewed leases. No registry is authoritative. The chain is.
+
+### 11.5 Fleet Topology as Governance Evidence
+
+The fleet primitives described above — chain-derived roles, transition receipts, upstream binding, lease-based membership — are not operational conveniences layered on top of the governance system. They *are* governance, applied reflexively. The same receipt grammar that tracks "agent X called tool Y with capability grant Z" also tracks "node A accepted delegation from node B with upstream binding C." The same chain verification that catches a tampered action receipt also catches a fabricated delegation receipt. The same narrowing invariants that prevent an agent from escalating its privileges also prevent a delegate from widening its scope beyond what its upstream granted.
+
+This reflexivity has a consequence that extends beyond fleet management. If every operational relationship in a network — role assignment, authority delegation, membership attestation, liveness verification — is expressed as a receipt on a chain, then the network's entire governance topology is independently auditable, historically ordered, and tamper-evident. The chain does not just record what agents *did*. It records what the network *is* — and how it became that way.
+
+### 11.6 Toward Settlement
+
+The same receipt grammar that governs agent behavior and fleet topology extends naturally to one more domain: economic settlement. Every financial action — a spending authorization, a budget ceiling, a payment release — can be expressed as another receipt on the same chain, subject to the same narrowing invariants, the same delegation verification, the same constitutional constraints.
+
+This is not a speculative extrapolation. The primitives are already in place: capability grants with cost ceilings, delegation chains with scope constraints, lease-based authority with automatic expiration, and external truth anchoring that timestamps chain state against independent ledgers. A settlement layer built on these primitives would inherit their properties — attribution, ordering, narrowing, tamper-evidence — without requiring a separate trust model.
+
+The details of that settlement architecture — escrow mechanics, state channel design, fiduciary mapping between protocol primitives and legal concepts — are active research. What is stated here is the structural observation: the receipt chain is general enough to carry financial semantics alongside behavioral and topological semantics, and the governance invariants are strong enough to constrain financial actions with the same rigor they apply to any other governed behavior.
+
+---
+
+## 12. Ethics, Non-Goals, and Misuse Resistance
+
+### 12.1 The Co-option Risk
 
 Accountability infrastructure can become surveillance infrastructure depending on how it is deployed. This is not a hypothetical concern — it is the central tension of the project.
 
 ZeroPoint mitigates this through three mechanisms:
 
-1. **Constitutional constraints** that are engineered to be non-removable. The `HarmPrincipleRule` blocks weaponization, surveillance, and deception. The `SovereigntyRule` blocks attempts to remove these constraints.
-2. **Public tenets** describing intent and boundaries. The Four Tenets are not buried in documentation — they are the first thing on the website and the first code that runs in the PolicyEngine.
-3. **Protocol-level framing.** ZeroPoint provides accountability of *actions*, not central control of *people*. The audit chain tracks what participants did — human or agent — not where anyone went or who they are beyond their keypair.
+1. **Constitutional constraints** (§6.3) that evaluate before every action and cannot be removed or overridden at runtime.
+2. **Public tenets** describing intent and boundaries — the first thing on the website and the first code that runs in the PolicyEngine.
+3. **Protocol-level framing.** The audit chain tracks what participants *did*, not where anyone went or who they are beyond their keypair. Accountability of actions, not surveillance of people.
 
-### 11.2 The Ethics of Permanent History
+### 12.2 The Ethics of Permanent History
 
 The trajectory model of trust has an ethical dimension that demands honesty. If trust is trajectory-based — if each action is permanently hash-linked to every action that preceded it, ordered and replayable — then history cannot be erased. This is a feature for accountability but a tension for privacy.
 
-ZeroPoint's position: the chain records *what happened*, not *who you are*. A receipt proves that a specific key signed a specific statement — it does not prove that the key belongs to a specific person. Identity binding is deployment-dependent and explicitly outside the protocol scope. The chain is pseudonymous: a keypair's trajectory is visible, but the mapping from keypair to human identity is not embedded in the protocol.
+ZeroPoint's position: the chain records *what happened*, not *who you are*. The chain is pseudonymous — a keypair's trajectory is visible, but the mapping from keypair to human identity is not embedded in the protocol. How (or whether) keys are bound to persons is a deployment decision, deliberately outside protocol scope (§5.2).
 
 This distinction matters. An accountability system that tracks actions (receipts) is fundamentally different from a surveillance system that tracks people (identity). ZeroPoint builds the former and resists the latter — through constitutional rules, structural amnesia in the Presence Plane, and explicit protocol design choices that avoid creating the data structures that surveillance requires.
 
 The tension remains real. Any system that produces durable, verifiable records creates potential for those records to be used in ways their creators did not intend. The mitigation is not to avoid creating records — that would eliminate accountability along with surveillance — but to design the record structure so that it serves one purpose and resists the other. ZeroPoint's choices — pseudonymous keypairs, action-level receipts, no identity binding in protocol, structural amnesia in discovery — are deliberate decisions to lean toward accountability and away from surveillance.
 
-### 11.3 The Genesis Responsibility
+### 12.3 The Genesis Responsibility
 
 ZeroPoint's trajectory-based architecture implies that the Genesis ceremony is consequential in a way that simpler systems do not require. The choices made at Genesis — which sovereignty provider, which constitutional rules, which operator identity — propagate forward through every subsequent action. A Genesis ceremony conducted carelessly produces a trust trajectory that inherits that carelessness at every step.
 
 This is not a flaw. It is an honest representation of how trust actually works. The founding conditions of any institution — its charter, its constitution, its founding commitments — shape everything that follows. ZeroPoint makes this shaping explicit and verifiable rather than implicit and deniable.
 
-### 11.4 Non-Goals
+### 12.4 Non-Goals
 
 ZeroPoint does not aim to:
 
 - Become a compliance product. Compliance is a checklist someone else writes. ZeroPoint is infrastructure you build on.
 - Become a centralized authority. There is no ZeroPoint server, no ZeroPoint cloud, no ZeroPoint corporation deciding who gets to use it.
-- "Prevent all misuse." The MIT/Apache-2.0 license is deliberately permissive. Constitutional rules constrain the framework; they cannot constrain a fork.
+- Guarantee that every deployment honors the Tenets. Constitutional rules make misuse structurally difficult within the protocol — but governance is a property of the deployment, not a universal law.
 - Depend on any single transport or network. ZeroPoint's governance works over HTTP, TCP, mesh, or anything else. No transport is privileged.
 - Be agent-only infrastructure. The protocol is participant-agnostic by design. Narrowing it to agents alone would abandon the humans and systems that face the same accountability gap.
 
 ---
 
-## 12. Conclusion
+## 13. Conclusion
 
 ### What ZeroPoint Claims
 
@@ -771,11 +833,11 @@ These claims are testable against the codebase, verifiable by independent audito
 Being explicit about boundaries is as important as stating claims:
 
 - **It does not prove truth.** A receipt proves that a statement was signed, not that the statement is true. Governance constrains actions; it does not evaluate their content.
-- **It does not prevent all misuse.** Constitutional rules constrain the framework's own behavior. The MIT/Apache-2.0 license is permissive. A fork can remove the rules.
-- **It does not bind keys to persons.** A receipt proves that a specific key signed an action — not that the key belongs to a specific human. Identity binding to physical persons is deployment-dependent and outside the protocol scope.
+- **It does not prevent all misuse.** Constitutional rules make misuse structurally difficult within ZeroPoint deployments. Governance beyond the protocol boundary depends on community norms, reputation, and the economic incentives of the ecosystem.
+- **It does not bind keys to persons.** The protocol is pseudonymous by design. How identities map to physical persons is a deployment decision (§5.2).
 - **It does not guarantee runtime integrity.** A compromised host can sign whatever it wants. ZeroPoint makes the signing verifiable but cannot prevent a compromised machine from producing fraudulent signatures.
 - **It does not solve AI safety.** It solves a more specific problem: making actions provable, authority traceable, and governance enforceable at the protocol layer.
-- **The trace layer is a research direction, not a shipped capability.** The three-layer accountability architecture — receipts, observation, traces — is the target. Receipts and observation are implemented and tested. The trace layer (LARQL-style decomposition, MEDS-style fingerprinting, trace commitments) is a future extension whose design is documented but whose implementation depends on foundation hardening. Claims about cognitive accountability are architectural intent, not current capability.
+- **The trace layer is a research direction, not a shipped capability.** The three-layer accountability architecture — receipts, observation, traces — is the target. Receipts and observation are implemented and tested. The trace layer is a future extension whose design is documented. Claims about cognitive accountability are architectural intent, not current capability.
 - **The cross-domain parallels are analogies, not proofs.** The correspondences between ZeroPoint's architecture and autoregressive patterns in language modeling, cognition, and physics are structural analogies that help explain why the architecture works. They are not claims about language, cognition, or physics. The architecture stands on its own testable properties.
 
 ### The Argument
@@ -845,18 +907,7 @@ The mesh transport's outer wrapper adds (other transports use their own framing)
 
 ### A.4 Chain Verification Rules
 
-DelegationChain verification enforces eight invariants:
-
-1. Each grant references the previous one as `parent_grant_id`.
-2. Delegation depths increment monotonically (0, 1, 2, ...).
-3. Each child's scope is a subset of (or equal to) its parent's scope.
-4. Each child's trust tier is ≥ its parent's trust tier.
-5. No child outlives its parent — expiration dates are inherited and cannot be extended.
-6. The chain does not exceed the `max_delegation_depth` set by the root grant.
-7. Each grant's grantor matches the previous grant's grantee (the delegator).
-8. All Ed25519 signatures verify against their respective signing keys.
-
-Failure of any single invariant rejects the entire chain. Authority dissolves.
+DelegationChain verification enforces the eight invariants defined in §6.2: parent linkage, monotonic depth, scope subsetting, tier non-decreasing, expiration inheritance, max depth, grantor-grantee matching, and signature verification. Failure of any single invariant rejects the entire chain.
 
 ---
 
@@ -891,7 +942,7 @@ This glossary defines terms with precision. Three terms carry special discipline
 - **GovernanceGate**: The pipeline through which every action must pass: Guard → Policy → Execute → Audit. Each phase is conditioned on the output of the prior phase. Nothing executes without passing through the gate; nothing passes through the gate without joining the audit chain.
 - **Genesis**: The origin event of a ZeroPoint deployment. The ceremony that generates the root Ed25519 keypair, seals constitutional rules, and establishes the initial conditions from which all subsequent trust trajectories unfold. Genesis is sequential (each step requires the prior step's success), irreversible (the genesis record is written once and never modified), and consequential (its choices propagate through every subsequent action).
 - **Sovereignty Provider**: The mechanism that stores and protects the Genesis secret. Options include biometric (Touch ID, fingerprint), hardware wallet (Trezor, YubiKey), OS keychain (macOS Keychain, Linux Secret Service), and file-based (fallback). The choice of provider is made at Genesis and recorded in the immutable genesis record.
-- **Trust Tier**: Graduated trust levels. Tier 0: unsigned, no cryptographic identity. Tier 1: self-signed Ed25519, the participant controls a keypair but has no chain authority. Tier 2: chain-signed with Genesis root, the participant holds a valid delegation chain terminating at a human-held key. Capability grants specify a minimum trust tier; delegation cannot lower it.
+- **Trust Tier**: Six graduated trust levels. Tier 0: unsigned, no cryptographic identity. Tier 1: self-signed Ed25519, the participant controls a keypair but has no chain authority. Tier 2: chain-signed with Genesis root, the participant holds a valid delegation chain terminating at a human-held key. Tier 3: anchored — chain-signed with external truth anchoring. Tier 4: attested — anchored with fleet membership attestation via lease renewal. Tier 5: sovereign — full trust with constitutional governance, active reputation, and verified upstream binding. Capability grants specify a minimum trust tier; delegation cannot lower it.
 - **Reticulum-compatible**: One of several transport integrations — wire-interoperable with Reticulum's HDLC framing, 128-bit destination hashing, Ed25519/X25519 cryptography, and 500-byte MTU.
 - **CompactReceipt**: MessagePack-encoded receipt using short field names, optimized for single-packet mesh transmission (≤ 380 bytes including MeshEnvelope overhead).
 - **Presence Plane**: The discovery layer — how agents find each other. Dual-backend (web relay + Reticulum mesh), structurally amnesic, with reciprocity enforcement. Complements the Governance Plane (how agents act together).

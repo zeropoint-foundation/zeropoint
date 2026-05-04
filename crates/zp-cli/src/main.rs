@@ -171,6 +171,10 @@ enum Commands {
     #[command(subcommand)]
     Keys(KeysCmd),
 
+    /// Workspace operator management — create, register, and manage staff
+    #[command(subcommand)]
+    Operator(OperatorCmd),
+
     /// Restore genesis identity from 24-word recovery mnemonic
     ///
     /// Use this when the OS credential store has been lost (Keychain wiped,
@@ -704,6 +708,93 @@ enum CfgCmd {
         /// Output as JSON
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum OperatorCmd {
+    /// Create a new operator keypair for a workspace member
+    ///
+    /// Generates an Ed25519 keypair certified by the genesis key,
+    /// stores it in ~/ZeroPoint/keys/operators/<name>.json,
+    /// and prints the public key hex for registration.
+    ///
+    /// Roles:
+    ///   founder    — Genesis holder, full workspace:admin
+    ///   successor  — Full admin + succession:invoke + genesis recovery
+    ///   officer    — Own mailbox + docs + secure channels + succession:co-sign
+    Create {
+        /// Operator name (e.g., "ken", "kalyn", "lorrie", "katie")
+        #[arg(long)]
+        name: String,
+
+        /// Operator email (e.g., "ken@zeropoint.global")
+        #[arg(long)]
+        email: String,
+
+        /// Role: founder, successor, or officer
+        #[arg(long)]
+        role: String,
+
+        /// Mailbox name for officer role (e.g., "lorrie", "katie")
+        /// Required when role is "officer"
+        #[arg(long)]
+        mailbox: Option<String>,
+
+        /// Expiration in days (default: no expiration for founder/successor, 365 for officer)
+        #[arg(long)]
+        expires_days: Option<u64>,
+    },
+
+    /// Register an operator's public key with the Cloudflare Worker
+    ///
+    /// Sends the operator's public key, capabilities, and role to the
+    /// workspace API (POST /api/operators) for D1 storage.
+    Register {
+        /// Operator name (must match a key in ~/ZeroPoint/keys/operators/)
+        #[arg(long)]
+        name: String,
+
+        /// Workspace API base URL
+        #[arg(long, default_value = "https://zeropoint.global")]
+        api_url: String,
+
+        /// Admin auth token for the API
+        #[arg(long, env = "ZP_ADMIN_TOKEN")]
+        token: String,
+    },
+
+    /// List all operator keys in the keyring
+    List,
+
+    /// Deactivate an operator (revoke access without deleting keys)
+    Deactivate {
+        /// Operator name to deactivate
+        #[arg(long)]
+        name: String,
+
+        /// Workspace API base URL
+        #[arg(long, default_value = "https://zeropoint.global")]
+        api_url: String,
+
+        /// Admin auth token for the API
+        #[arg(long, env = "ZP_ADMIN_TOKEN")]
+        token: String,
+    },
+
+    /// Succession ceremony — prepare Kalyn's full authority transfer
+    ///
+    /// Generates the successor's operator key with workspace:admin +
+    /// succession:invoke capabilities, and outputs the genesis recovery
+    /// mnemonic for secure offline storage.
+    Succession {
+        /// Successor name (default: "kalyn")
+        #[arg(long, default_value = "kalyn")]
+        name: String,
+
+        /// Successor email
+        #[arg(long)]
+        email: String,
     },
 }
 
@@ -1251,6 +1342,34 @@ async fn main() -> anyhow::Result<()> {
             KeysCmd::Revoke { name } => commands::keys_revoke(name),
             KeysCmd::Rotate { target, reason } => {
                 commands::keys_rotate(target, reason.as_deref())
+            }
+        };
+        std::process::exit(exit_code);
+    }
+
+    // Operator — workspace staff management, no pipeline needed
+    if let Some(Commands::Operator(cmd)) = &args.command {
+        let exit_code = match cmd {
+            OperatorCmd::Create {
+                name,
+                email,
+                role,
+                mailbox,
+                expires_days,
+            } => commands::operator_create(name, email, role, mailbox.as_deref(), *expires_days),
+            OperatorCmd::Register {
+                name,
+                api_url,
+                token,
+            } => commands::operator_register(name, api_url, token).await,
+            OperatorCmd::List => commands::operator_list(),
+            OperatorCmd::Deactivate {
+                name,
+                api_url,
+                token,
+            } => commands::operator_deactivate(name, api_url, token).await,
+            OperatorCmd::Succession { name, email } => {
+                commands::operator_succession(name, email)
             }
         };
         std::process::exit(exit_code);
