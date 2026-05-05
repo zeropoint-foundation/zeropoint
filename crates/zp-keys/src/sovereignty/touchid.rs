@@ -617,7 +617,7 @@ mod secure_keychain {
                         .into(),
                 )),
                 // -25293 = errSecAuthFailed
-                s if s == -25293 => Err(KeyError::CredentialStore(
+                -25293 => Err(KeyError::CredentialStore(
                     "Biometric authentication failed — touch your sensor \
                      and try again"
                         .into(),

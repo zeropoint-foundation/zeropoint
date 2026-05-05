@@ -475,7 +475,7 @@ pub fn analyze_tool(tool_name: &str, tool_path: &Path) -> DeepScanResult {
         }
 
         // Also check for DATABASE_URL when sqlx/diesel is present but no URL declared
-        if env_vars.get("DATABASE_URL").is_none()
+        if !env_vars.contains_key("DATABASE_URL")
             && (cargo_deps.contains(&"sqlx".to_string())
                 || cargo_deps.contains(&"diesel".to_string()))
         {

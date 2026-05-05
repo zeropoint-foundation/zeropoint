@@ -66,7 +66,7 @@ impl std::fmt::Display for NodeStatus {
 /// Tracks whether a node's membership is backed by a chain-attested
 /// `FleetMembershipGranted` receipt, or whether it's an unattested
 /// legacy node that registered via heartbeat alone.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(tag = "membership_type")]
 pub enum MembershipStatus {
     /// Node has a valid FleetMembershipGranted receipt on the genesis chain.
@@ -75,6 +75,7 @@ pub enum MembershipStatus {
         receipt_id: String,
     },
     /// Node is heartbeating but has no membership receipt (legacy/pre-T4).
+    #[default]
     Unattested,
     /// Membership receipt was revoked — node should be ejected from trusted operations.
     Revoked {
@@ -120,11 +121,6 @@ impl MembershipStatus {
     }
 }
 
-impl Default for MembershipStatus {
-    fn default() -> Self {
-        Self::Unattested
-    }
-}
 
 /// A node in the fleet.
 #[derive(Debug, Clone, Serialize, Deserialize)]

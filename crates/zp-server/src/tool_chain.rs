@@ -668,6 +668,7 @@ pub enum ScannedCanonicalization {
 ///
 /// `reversibility` is the F5 declaration from the tool's manifest. Pass
 /// `None` for system/provider canonicalizations or pre-F5 callers.
+#[allow(clippy::too_many_arguments)]
 pub fn emit_canonicalization_receipt_with_scan(
     audit_store: &Arc<Mutex<AuditStore>>,
     domain: &str,
@@ -1188,7 +1189,7 @@ pub fn query_bead_zeros(
                         CanonicalDomain::Node => "node",
                     };
                     let key = format!("{}:{}", domain_str, entity_id);
-                    if !anchors.contains_key(&key) {
+                    anchors.entry(key).or_insert_with(|| {
                         let detail = serde_json::json!({
                             "domain": domain_str,
                             "entity_id": entity_id,
@@ -1198,8 +1199,8 @@ pub fn query_bead_zeros(
                             "receipt_id": receipt.id,
                             "signed": receipt.is_signed(),
                         });
-                        anchors.insert(key, (entry.timestamp.to_rfc3339(), Some(detail)));
-                    }
+                        (entry.timestamp.to_rfc3339(), Some(detail))
+                    });
                     continue;
                 }
             }
@@ -1210,14 +1211,14 @@ pub fn query_bead_zeros(
             let parts: Vec<&str> = event.splitn(3, ':').collect();
             if parts.len() == 3 && parts[1] == "canonicalized" {
                 let key = format!("{}:{}", parts[0], parts[2]);
-                if !anchors.contains_key(&key) {
+                anchors.entry(key).or_insert_with(|| {
                     let detail = if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
                         conditions.first().and_then(|s| serde_json::from_str(s).ok())
                     } else {
                         None
                     };
-                    anchors.insert(key, (entry.timestamp.to_rfc3339(), detail));
-                }
+                    (entry.timestamp.to_rfc3339(), detail)
+                });
             }
         }
     }

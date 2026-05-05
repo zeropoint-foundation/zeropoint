@@ -59,7 +59,7 @@ pub struct RevocationClaim {
 }
 
 /// What happens to grants delegated from a revoked grant.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CascadePolicy {
     /// Only the named grant is revoked. Children remain valid until their
@@ -69,18 +69,13 @@ pub enum CascadePolicy {
 
     /// The grant and every grant in its subtree are revoked simultaneously.
     /// Default — the conservative choice.
+    #[default]
     SubtreeHalt,
 
     /// The grant is revoked but children are re-rooted under the issuer
     /// (i.e., the revoker becomes their new parent). Reserved for orderly
     /// device hand-off; not yet implemented in the validator.
     SubtreeReroot,
-}
-
-impl Default for CascadePolicy {
-    fn default() -> Self {
-        CascadePolicy::SubtreeHalt
-    }
 }
 
 /// Why a grant is being revoked. Surfaced in receipts for operator review

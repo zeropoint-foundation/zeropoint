@@ -84,11 +84,9 @@ impl OnboardState {
             // Falls back to keychain only if no cache was provided.
             if let Some(key) = cached_vault_key {
                 state.vault_key = Some(*key);
-            } else {
-                if let Ok(keyring) = zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default()) {
-                    if let Ok(resolved) = zp_keys::resolve_vault_key(&keyring) {
-                        state.vault_key = Some(*resolved.key);
-                    }
+            } else if let Ok(keyring) = zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default()) {
+                if let Ok(resolved) = zp_keys::resolve_vault_key(&keyring) {
+                    state.vault_key = Some(*resolved.key);
                 }
             }
         }

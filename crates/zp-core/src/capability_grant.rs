@@ -212,13 +212,14 @@ impl GrantProvenance {
 }
 
 /// Policy for re-delegating a grant downstream (#197).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RedelegationPolicy {
     /// Re-delegation is not permitted. The default — preserves pre-P4
     /// behaviour where any grant could be re-delegated up to
     /// `max_delegation_depth` but standing delegations stay locked unless
     /// the issuer explicitly opts in.
+    #[default]
     Forbidden,
 
     /// Re-delegation is permitted, with a per-subtree depth ceiling.
@@ -232,11 +233,6 @@ pub enum RedelegationPolicy {
     RequiresApproval,
 }
 
-impl Default for RedelegationPolicy {
-    fn default() -> Self {
-        RedelegationPolicy::Forbidden
-    }
-}
 
 fn default_max_delegation_depth() -> u8 {
     3

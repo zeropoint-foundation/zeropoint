@@ -243,6 +243,15 @@ impl ConfigEngine {
         }
     }
 
+}
+
+impl Default for ConfigEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ConfigEngine {
     /// Create a ConfigEngine with proxy mode enabled.
     ///
     /// When proxy mode is on, URL-type patterns resolve to the ZP proxy

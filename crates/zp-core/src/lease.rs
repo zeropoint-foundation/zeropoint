@@ -39,10 +39,11 @@ pub struct LeasePolicy {
 }
 
 /// What the subject node does when its lease cannot be renewed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LeaseFailureMode {
     /// Stop processing immediately. The default — fails closed.
+    #[default]
     HaltOnExpiry,
 
     /// Drop to Tier 0 (read-only) but keep serving read requests. Useful
@@ -56,11 +57,6 @@ pub enum LeaseFailureMode {
     ContinueWithFlag,
 }
 
-impl Default for LeaseFailureMode {
-    fn default() -> Self {
-        LeaseFailureMode::HaltOnExpiry
-    }
-}
 
 impl LeasePolicy {
     /// Construct a sensible default lease: 8h duration, 30min grace,

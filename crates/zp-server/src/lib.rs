@@ -3503,7 +3503,7 @@ async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse>
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("projects");
 
-    let has_genesis = zp_paths::home().ok().and_then(|h| Some(h.join("genesis.json").exists())).unwrap_or(false);
+    let has_genesis = zp_paths::home().ok().map(|h| h.join("genesis.json").exists()).unwrap_or(false);
 
     // Load vault — this is the PRIMARY source of truth for governed tools
     let vault_for_status: Option<zp_trust::CredentialVault> = state
@@ -6574,7 +6574,7 @@ async fn onboard_page_handler(
     let review_mode = query.review.as_deref() == Some("true");
     let genesis_path = zp_paths::home()
         .ok()
-        .and_then(|h| Some(h.join("genesis.json")))
+        .map(|h| h.join("genesis.json"))
         .unwrap_or_default();
     if genesis_path.exists() && !review_mode {
         return axum::response::Redirect::to("/dashboard").into_response();

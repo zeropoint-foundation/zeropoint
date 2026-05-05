@@ -431,6 +431,7 @@ impl Reversibility {
 
     /// Inverse of `as_str`. Unknown values (and any unrecognized string)
     /// return `Unknown` rather than erroring — chains older than F5 use it.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Reversibility {
         match s {
             "reversible" => Reversibility::Reversible,
