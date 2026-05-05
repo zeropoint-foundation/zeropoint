@@ -97,6 +97,8 @@ DATABASE_*.txt
 
 # Internal / confidential documents (never pushed to public repo)
 internal/
+docs/design/HEDERA-GRANT-APPLICATION.md
+docs/design/HEDERA-PARTNERSHIP-STRATEGY.md
 
 # Personal / draft content (never commit)
 *-draft.md
