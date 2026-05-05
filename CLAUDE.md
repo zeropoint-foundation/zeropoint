@@ -6,45 +6,31 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 ## Infrastructure
 | Resource | Details |
 |----------|---------|
-| **Hetzner** | `ssh -i ~/.ssh/hetzner_zp root@89.167.86.60` — "zp-playground" CX23, Helsinki |
 | **Domain** | zeropoint.global — Cloudflare Workers |
 | **Domain** | thinkstreamlabs.ai — Cloudflare Workers |
 | **GitHub** | zeropoint-foundation/zeropoint |
-| **Substack** | @kenrom369 |
 
 ## Terms
 | Term | Meaning |
 |------|---------|
 | ZP | ZeroPoint |
-| zp-playground | Hetzner server running ZeroPoint server |
+| zp-playground | Remote server running ZeroPoint server |
 | Playground | zeropoint.global/playground — interactive governance demo |
-| Barn | Elevated structure between main house and studio — central hub for network router |
-| APOLLO | M4 Mac Mini at 192.168.1.152 — Ken's primary machine. Both dev environment and ZP runtime. |
-| ARTEMIS | M4 MacBook Pro — traveling system, also used as clean environment for installation and workflow testing |
+| APOLLO | Ken's primary dev machine. Both dev environment and ZP runtime. |
+| ARTEMIS | Portable system, also used as clean environment for installation and workflow testing |
 
 ## Machines
-| Name | Hardware | Role |
-|------|----------|------|
-| **APOLLO** | M4 Mac Mini @ 192.168.1.152 | Ken's primary machine. Source at `/Users/kenrom/projects/zeropoint`, runtime at `~/ZeroPoint/`. Both dev and ZP runtime. |
-| **ARTEMIS** | M4 MacBook Pro (portable) | Travel system + clean install testing. Has Touch ID for biometric sovereignty testing |
-| **zp-playground** | Hetzner CX23, Helsinki | Remote ZP server |
+| Name | Role |
+|------|------|
+| **APOLLO** | Ken's primary machine. Source at `~/projects/zeropoint`, runtime at `~/ZeroPoint/`. Both dev and ZP runtime. |
+| **ARTEMIS** | Travel system + clean install testing. Has Touch ID for biometric sovereignty testing |
+| **zp-playground** | Remote ZP server |
 
 ## Hardware for Testing
 | Device | Purpose |
 |--------|---------|
 | **Trezor** | Hardware wallet with existing Genesis keys — test Trezor sovereignty provider |
 | **ARTEMIS Touch ID** | Test Touch ID sovereignty provider from clean install |
-
-## Local Network
-| Component | Details |
-|-----------|---------|
-| **Gateway** | AT&T BGW210-700 @ 192.168.1.254 — will be set to IP Passthrough (dumb modem) |
-| **Router** | ASUS RT-AX58U (v1) w/ Merlin firmware — arriving 2026-03-13, located in the Barn |
-| **Topology** | Main House (BGW210) → ethernet → Barn (ASUS primary router) → Studio (AT&T extender for now) |
-| **DNS** | Cloudflare 1.1.1.1 / 1.0.0.1 — set globally on ASUS. Sentinel handles DNS filtering + Steven Black blocklist |
-| **Sentinel** | ZP Network Sentinel on ASUS Merlin — DNS filtering, device monitoring, anomaly detection, mesh peer via AgentAnnounce |
-| **Block list** | MACs to block (managed by Sentinel): 38:a5:c9:20:4a:a5 (Tuya), b4:61:e9:e2:16:0b (AI-Link), b4:61:e9:e2:3a:8c (AI-Link) |
-| **Monitor** | dns-monitor.py — ZP-themed traffic dashboard, not yet deployed |
 
 ## Projects
 | Name | What |
@@ -56,7 +42,7 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 ## Key Paths (APOLLO)
 | Path | What |
 |------|------|
-| `/Users/kenrom/projects/zeropoint` | Source code (Cargo workspace root) |
+| `~/projects/zeropoint` | Source code (Cargo workspace root) |
 | `~/ZeroPoint/` | Runtime home — vault.json, genesis.json, session.json |
 | `~/ZeroPoint/data/audit.db` | Audit chain (SQLite) |
 | `~/ZeroPoint/keys/` | Signing keys |
@@ -79,12 +65,11 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 ## TTS / Voice
 | Component | Details |
 |-----------|---------|
-| **Piper binary** | `/Users/kenrom/anaconda3/bin/piper` |
-| **Models** | `~/projects/zeropoint/models/piper/` — Kusal (primary), Amy (secondary) |
-| **TTS server** | `python3 voice-tuner-server.py` → `localhost:8473` — HTTP wrapper around Piper |
-| **Voice Tuner** | `voice-tuner.html` — standalone page for voice param tuning |
-| **Speak page** | `localhost:3000/speak` — paste text, hear it via Piper. Auto-reads clipboard on focus. |
-| **CLI speak** | `./zp-speak.sh` — pipe text or reads clipboard, plays via `afplay` |
+| **Engine** | Piper TTS (local) |
+| **Models** | Kusal (primary), Amy (secondary) — stored in `models/piper/` |
+| **TTS server** | `voice-tuner-server.py` → `localhost:8473` — HTTP wrapper around Piper |
+| **Speak page** | `localhost:3000/speak` — paste text, hear it via Piper |
+| **CLI speak** | `./zp-speak.sh` — pipe text or reads clipboard |
 | **Narration voices** | Kusal (even steps + recovery), Amy (odd steps). Params: length_scale 0.7692, noise_scale 0.360, noise_w 0.930, sentence_silence 0.30 |
 | **Narration output** | `~/ZeroPoint/assets/narration/onboard/` — permanent, never compiled in |
 | **Narration source** | `generate-narration-onboard.py` → `generate-audio-onboard.sh` |

@@ -7,8 +7,9 @@
 # ─────────────────────────────────────────────────────────
 set -euo pipefail
 
-REMOTE="root@89.167.86.60"
-SSH_KEY="$HOME/.ssh/hetzner_zp"
+# Configure these for your deployment target
+REMOTE="${ZP_NOMADNET_HOST:-root@your-server-ip}"
+SSH_KEY="${ZP_NOMADNET_KEY:-$HOME/.ssh/your-key}"
 SSH="ssh -i $SSH_KEY $REMOTE"
 SCP="scp -i $SSH_KEY"
 
@@ -57,8 +58,8 @@ echo ""
 echo "═══════════════════════════════════════════════"
 echo "  Node deployed. Getting identity..."
 echo "═══════════════════════════════════════════════"
-$SSH "rnstatus 2>/dev/null | head -20 || echo 'Run: ssh -i ~/.ssh/hetzner_zp root@89.167.86.60 rnstatus'"
+$SSH "rnstatus 2>/dev/null | head -20 || echo 'Run: ssh -i \$SSH_KEY \$REMOTE rnstatus'"
 echo ""
-echo "To check logs:  ssh -i \$HOME/.ssh/hetzner_zp root@89.167.86.60 journalctl -u nomadnet -f"
+echo "To check logs:  ssh -i \$SSH_KEY \$REMOTE journalctl -u nomadnet -f"
 echo "To browse node: Open NomadNet locally and navigate to your destination hash"
 echo ""

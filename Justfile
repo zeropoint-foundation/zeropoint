@@ -8,13 +8,15 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # ── Configuration ──────────────────────────────────────────
+# IMPORTANT: Copy Justfile.local.example → Justfile.local and fill in real values.
+# These are placeholder defaults — override them in your local env or Justfile.local.
 install_path := "/usr/local/bin/zp"
-artemis_host := "zp-pentest@192.168.1.199"
-artemis_ssh := "ssh -i ~/.ssh/apollo-artemis-key"
-artemis_scp := "scp -i ~/.ssh/apollo-artemis-key"
-playground_host := "root@89.167.86.60"
-playground_ssh := "ssh -i ~/.ssh/hetzner_zp"
-playground_scp := "scp -i ~/.ssh/hetzner_zp"
+artemis_host := env_var_or_default("ZP_ARTEMIS_HOST", "user@artemis-host")
+artemis_ssh := env_var_or_default("ZP_ARTEMIS_SSH", "ssh")
+artemis_scp := env_var_or_default("ZP_ARTEMIS_SCP", "scp")
+playground_host := env_var_or_default("ZP_PLAYGROUND_HOST", "user@playground-host")
+playground_ssh := env_var_or_default("ZP_PLAYGROUND_SSH", "ssh")
+playground_scp := env_var_or_default("ZP_PLAYGROUND_SCP", "scp")
 
 # ── Local operations ──────────────────────────────────────
 

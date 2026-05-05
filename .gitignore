@@ -97,8 +97,24 @@ DATABASE_*.txt
 
 # Internal / confidential documents (never pushed to public repo)
 internal/
+SECURITY-ROTATION-CHECKLIST.md
 docs/design/HEDERA-GRANT-APPLICATION.md
 docs/design/HEDERA-PARTNERSHIP-STRATEGY.md
+
+# ── Infrastructure & operational secrets — NEVER commit
+# These contain real IPs, SSH paths, network topology, device inventory.
+dns-monitor.py
+memory/context/infrastructure.md
+assets/topology-default.toml
+fleet/apollo-config.toml
+fleet/artemis-config.toml
+fleet/playground-config.toml
+fleet/INSTALL-PITFALLS.md
+fleet/T6-DEPLOYMENT.md
+fleet/INSTALL-DESIGN.md
+
+# Backup files
+*.bak
 
 # Personal / draft content (never commit)
 *-draft.md

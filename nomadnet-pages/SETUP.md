@@ -131,13 +131,13 @@ established. Be patient — this is mesh networking.
 For a persistent node, deploy on the Hetzner server:
 
 ```bash
-ssh -i ~/.ssh/hetzner_zp root@89.167.86.60
+ssh -i ~/.ssh/<your-key> root@<server-ip>
 
 # Install on server
 pip install nomadnet rns
 
 # Copy pages
-scp -i ~/.ssh/hetzner_zp pages/*.mu root@89.167.86.60:~/.nomadnetwork/storage/pages/
+scp -i ~/.ssh/<your-key> pages/*.mu root@<server-ip>:~/.nomadnetwork/storage/pages/
 
 # Run in background
 tmux new -s nomadnet
