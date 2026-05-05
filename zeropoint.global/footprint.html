@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ZeroPoint — AI Security Landscape Footprint</title>
-<meta name="description" content="ZeroPoint's coverage across 59 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, MITRE ATLAS, and ZeroPoint Edge Sovereignty.">
+<meta name="description" content="ZeroPoint's coverage across 91 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, OWASP MCP Top 10, MITRE ATLAS, and ZeroPoint governance domains — including the Sovereign Viewport, which structurally eliminates seven client-side attack classes through pixel streaming.">
 <style>
 :root {
   --bg: #0a0a0c;
@@ -103,6 +103,71 @@ footer {
   position: absolute; top: 1rem; right: 1.5rem;
   background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;
 }
+
+/* --- Unified Nav --- */
+.nav-dropdown { position: relative; }
+.nav-dropdown-btn {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem;
+  padding: 0; transition: color 0.2s;
+}
+.nav-dropdown-btn:hover { color: var(--accent); }
+.nav-dropdown-btn svg { transition: transform 0.2s; }
+.nav-dropdown:hover .nav-dropdown-btn svg { transform: rotate(180deg); }
+.nav-dropdown-menu {
+  display: none; position: absolute; top: calc(100% + 0.5rem); right: 0;
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 0.5rem 0; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 300;
+}
+.nav-dropdown:hover .nav-dropdown-menu { display: block; }
+.nav-dropdown-menu a {
+  display: block; padding: 0.5rem 1.25rem; font-size: 0.85rem;
+  color: var(--text-muted); text-decoration: none; transition: all 0.15s;
+}
+.nav-dropdown-menu a:hover { color: var(--accent); background: var(--bg-subtle); }
+
+/* --- Mobile Menu Groups --- */
+.mobile-menu-group { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.mobile-menu-label {
+  font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.25rem;
+}
+.mobile-github {
+  margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--rule);
+}
+
+/* --- Footer Grid --- */
+.footer-container { max-width: 1080px; margin: 0 auto; padding: 3rem 2rem 2rem; }
+.footer-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem;
+  padding-bottom: 2rem; border-bottom: 1px solid var(--rule);
+}
+.footer-col { display: flex; flex-direction: column; gap: 0.5rem; }
+.footer-col-title {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-dim);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.25rem;
+}
+.footer-col a { font-size: 0.85rem; color: var(--text-muted); text-decoration: none; }
+.footer-col a:hover { color: var(--accent); }
+.footer-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 1.5rem; flex-wrap: wrap; gap: 0.5rem;
+}
+.footer-org { font-size: 0.75rem; color: var(--text-dim); }
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+.footer-tagline {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);
+  letter-spacing: 0.05em; font-style: italic;
+}
+@media (max-width: 768px) {
+  .footer-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr; }
+  .footer-bottom { flex-direction: column; text-align: center; }
+}
 </style>
 </head>
 <body>
@@ -111,13 +176,25 @@ footer {
   <nav>
     <a href="/" class="nav-logo"><span>zero</span>point</a>
     <div class="nav-links">
-      <a href="/#tenets" class="hide-mobile">Tenets</a>
-      <a href="/#architecture">Architecture</a>
-      <a href="/footprint.html" class="active">Footprint</a>
-      <a href="/playground.html">Playground</a>
-      <a href="/for-agents.html">Governing Agents</a>
-      <a href="/constraints.html">Constraints</a>
-      <a href="/whitepaper.html" class="hide-mobile">Whitepaper</a>
+      <a href="/theory.html">Theory</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/for-agents.html">Agents</a>
+      <a href="/lab/">Lab</a>
+      <a href="/integrate.html">Integrate</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-btn">More <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M1 1l4 4 4-4"/></svg></button>
+        <div class="nav-dropdown-menu">
+          <a href="/architecture.html">Architecture</a>
+          <a href="/constraints.html">Constraints</a>
+          <a href="/footprint.html">Security Footprint</a>
+          <a href="/trust-triangle.html">Trust Triangle</a>
+          <a href="/learn.html">Learn</a>
+          <a href="/setup.html">Setup</a>
+          <a href="/letter.html">Letter</a>
+          <a href="/exhibits.html">Exhibits</a>
+          <a href="/sentinel/">Sentinel</a>
+        </div>
+      </div>
       <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
@@ -131,19 +208,34 @@ footer {
 
 <div id="mobile-menu" class="mobile-menu">
   <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
-  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
-  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
-  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
-  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
-  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
-  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
-  <a href="/constraints.html" onclick="this.parentElement.classList.remove('open')">Constraints</a>
-  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
-  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
-  <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
-  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Understand</div>
+    <a href="/theory.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Theory</a>
+    <a href="/whitepaper.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Whitepaper</a>
+    <a href="/letter.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Letter</a>
+  </div>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Explore</div>
+    <a href="/lab/" onclick="this.closest('.mobile-menu').classList.remove('open')">Lab</a>
+    <a href="/trust-triangle.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Trust Triangle</a>
+    <a href="/exhibits.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Exhibits</a>
+  </div>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Build</div>
+    <a href="/for-agents.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Governing Agents</a>
+    <a href="/integrate.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Integrate</a>
+    <a href="/setup.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Setup</a>
+    <a href="/learn.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Learn</a>
+  </div>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Reference</div>
+    <a href="/architecture.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Architecture</a>
+    <a href="/constraints.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Constraints</a>
+    <a href="/footprint.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Security Footprint</a>
+    <a href="/sentinel/" onclick="this.closest('.mobile-menu').classList.remove('open')">Sentinel</a>
+  </div>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.closest('.mobile-menu').classList.remove('open')" class="mobile-github">GitHub</a>
 </div>
-
 <div id="footprint-root"></div>
 
 <noscript>
@@ -156,8 +248,7 @@ footer {
   ZeroPoint's approach is to make authority <span style="color: #e8e6e3;">explicit</span>, <span style="color: #e8e6e3;">enforceable at the point of action</span>, <span style="color: #e8e6e3;">observable by default</span>, and <span style="color: #e8e6e3;">terminable by design</span>.
 </p>
 <p style="color: #5a5a5e; margin-bottom: 2rem; font-size: 0.9rem;">
-  ZeroPoint's coverage across 59 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, MITRE ATLAS, and ZeroPoint Edge Sovereignty.
-  Overall weighted coverage: approximately 69%.
+  ZeroPoint's coverage across 91 capabilities from NIST AI RMF, OWASP LLM Top 10, OWASP Agentic Top 10, OWASP MCP Top 10, MITRE ATLAS, and ZeroPoint governance domains — including the Sovereign Viewport, which structurally eliminates seven client-side attack classes.
   Green = directly addressed, Yellow = partially addressed, Red = outside scope.
 </p>
 
@@ -205,6 +296,10 @@ footer {
   <li><strong style="color: #34d399;">Passive Scanning</strong> — Presence Plane reciprocity enforcement; peers must announce before they can observe</li>
   <li><strong style="color: #fb923c;">Cascading Hallucinations</strong> — Receipt chain traces provenance across chains</li>
   <li><strong style="color: #34d399;">Excessive Agency</strong> — Scoped capabilities + delegation depth limits</li>
+  <li><strong style="color: #fb923c;">Identity &amp; Privilege Abuse</strong> — Scoped capabilities + delegation depth; cross-chain identity federation in design (ASI03)</li>
+  <li><strong style="color: #fb923c;">Unexpected Code Execution</strong> — zp-skills sandboxed execution; dynamic code generation screening planned (ASI05)</li>
+  <li><strong style="color: #fb923c;">Memory Poisoning</strong> — Receipt chain provides provenance; persistent context integrity checks in design (ASI06)</li>
+  <li><strong style="color: #34d399;">Human-Agent Trust Exploitation</strong> — Sovereign Viewport prevents agent from manipulating local UI elements. Agent cannot inject client-side code, modify DOM, or persist deceptive state. SovereigntyRule + kill switch enforce the trust boundary architecturally</li>
 </ul>
 
 <h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">LLM Threats <span style="color: #8a8a8e; font-weight: 400;">(OWASP LLM Top 10, 2025)</span></h2>
@@ -216,7 +311,7 @@ footer {
   <li><strong style="color: #fb923c;">Supply Chain Vulns</strong> — Rust memory safety; plugin verification in registry</li>
   <li><strong style="color: #f87171;">Data Poisoning</strong> — Training-time concern; outside runtime governance</li>
   <li><strong style="color: #f87171;">Model Theft</strong> — Model security; outside governance scope</li>
-  <li><strong style="color: #fb923c;">Prompt Leakage</strong> — Policy rules can enforce output screening</li>
+  <li><strong style="color: #34d399;">Prompt Leakage</strong> — Sovereign Viewport renders prompt text server-side. Even if the model leaks its system prompt, the user sees pixels — not parseable, not scrapeable. Programmatic extraction structurally prevented</li>
   <li><strong style="color: #34d399;">Unbounded Consumption</strong> — Capability grants with rate/scope limits</li>
 </ul>
 
@@ -238,7 +333,7 @@ footer {
 <ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
   <li><strong style="color: #34d399;">Encryption at Rest</strong> — CredentialVault: ChaCha20-Poly1305</li>
   <li><strong style="color: #34d399;">Access Controls</strong> — Capability grants govern who reads/writes what</li>
-  <li><strong style="color: #fb923c;">Data Loss Prevention</strong> — GovernanceGate enforces content policies</li>
+  <li><strong style="color: #34d399;">Data Loss Prevention</strong> — Structural DLP: data cannot leak from clients because it is never there. Render node is the only system that materializes data, under sovereign control. GovernanceGate enforces content policies at the action layer</li>
   <li><strong style="color: #f87171;">Training Data Security</strong> — Training-time concern</li>
   <li><strong style="color: #34d399;">Privacy Preservation</strong> — Structural amnesia: relay retains no logs, state, or index (subpoena-proof by design). Scoped access + audit enables compliance</li>
 </ul>
@@ -247,9 +342,15 @@ footer {
 <p style="color: #8a8a8e; font-size: 0.9rem;">Network, endpoint, and deployment infrastructure</p>
 <ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
   <li><strong style="color: #f87171;">Network Segmentation</strong> — Network infrastructure concern</li>
-  <li><strong style="color: #fb923c;">TLS / Transport</strong> — Dual-backend transport (WebSocket relay + Reticulum mesh); TLS on web path, end-to-end encryption on both</li>
+  <li><strong style="color: #34d399;">TLS / Transport</strong> — DTLS-SRTP (WebRTC) + dual-backend transport. Rendered content never exists as parseable plaintext on the wire — pixel streaming carries encoded video, not structured data</li>
   <li><strong style="color: #f87171;">Firewalls &amp; IDPS</strong> — Network layer</li>
-  <li><strong style="color: #f87171;">Endpoint Protection</strong> — OS / infrastructure concern</li>
+  <li><strong style="color: #34d399;">Cross-Site Scripting (XSS)</strong> — Structurally eliminated. No DOM exists on the client — there is nothing to inject into</li>
+  <li><strong style="color: #34d399;">Cross-Site Request Forgery</strong> — Structurally eliminated. No session tokens or authenticated state on the client</li>
+  <li><strong style="color: #34d399;">Clickjacking</strong> — Structurally eliminated. No iframes, overlays, or DOM elements to redress</li>
+  <li><strong style="color: #34d399;">Browser Extension Scraping</strong> — Structurally eliminated. Extensions cannot read data — only decoded video frames</li>
+  <li><strong style="color: #34d399;">Client Cache Poisoning</strong> — Structurally eliminated. No application data cached on the client</li>
+  <li><strong style="color: #34d399;">Clipboard Exfiltration</strong> — Structurally eliminated. No application data reaches the endpoint</li>
+  <li><strong style="color: #34d399;">Man-in-the-Browser</strong> — Structurally eliminated. Browser processes only a video stream, not structured content</li>
   <li><strong style="color: #f87171;">Runtime Model Protection</strong> — Model hosting concern</li>
   <li><strong style="color: #f87171;">Canary Deployments</strong> — Deployment infrastructure concern</li>
 </ul>
@@ -263,6 +364,48 @@ footer {
   <li><strong style="color: #fb923c;">Telemetry Accountability</strong> — Receipt-gated telemetry export; no silent data exfiltration from edge devices</li>
   <li><strong style="color: #fb923c;">Physical Presence Consent</strong> — Structural requirement: occupants must consent before spatial sensing activates</li>
   <li><strong style="color: #fb923c;">Open Firmware Mandate</strong> — Policy rule requiring auditable firmware; non-compliant devices flagged in governance chain</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">MCP Protocol Security <span style="color: #8a8a8e; font-weight: 400;">(OWASP MCP Top 10, 2025 beta)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Threats targeting Model Context Protocol tool interfaces — the transport layer ZeroPoint speaks natively</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #fb923c;">Tool Poisoning</strong> — zp-skills registry validates tool definitions; runtime input sanitization in progress</li>
+  <li><strong style="color: #fb923c;">Rug Pull</strong> — Capability revocation + SovereigntyRule; tool version pinning planned</li>
+  <li><strong style="color: #f87171;">Server-Side Request Forgery</strong> — MCP server infrastructure concern — outside governance scope</li>
+  <li><strong style="color: #fb923c;">Credential Theft via MCP</strong> — CredentialVault isolates secrets from tool context; MCP-specific access scoping in design</li>
+  <li><strong style="color: #fb923c;">Supply Chain Compromise</strong> — Plugin registry verification; MCP-specific tool signing planned</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Fleet &amp; Settlement <span style="color: #8a8a8e; font-weight: 400;">(ZeroPoint · GOVERN + SETTLE)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Threats arising from multi-agent orchestration, delegation chains, and financial settlement finality</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #fb923c;">Confused Deputy</strong> — Delegation depth limits + scoped capabilities; cross-chain deputy validation in design</li>
+  <li><strong style="color: #fb923c;">Cascading Orchestration Failure</strong> — Kill switch + blast radius minimization; circuit breaker patterns planned</li>
+  <li><strong style="color: #fb923c;">Settlement Anchor Integrity</strong> — Hash-chained receipts; external anchor verification in design</li>
+  <li><strong style="color: #fb923c;">Finality Disputes</strong> — Arbitration surface defined in theory; dispute resolution protocol in design</li>
+  <li><strong style="color: #fb923c;">Delegation Chain Verification</strong> — Receipt chain traces delegation hops; real-time chain monitoring planned</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Cryptographic Resilience <span style="color: #8a8a8e; font-weight: 400;">(NIST PQC · CNSA 2.0)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Post-quantum readiness and crypto agility — ensuring the trust layer survives the transition from classical to quantum-resistant primitives</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #f87171;">Signature Migration</strong> — Ed25519 is quantum-vulnerable (Shor's algorithm). Candidate replacement: ML-DSA (Dilithium) — FIPS 204, lattice-based, NIST-finalized 2024</li>
+  <li><strong style="color: #f87171;">Key Encapsulation</strong> — Not yet applicable to core protocol. Candidate: ML-KEM (Kyber) — FIPS 203, lattice-based, for future encrypted transport channels</li>
+  <li><strong style="color: #fb923c;">Hash-Based Fallback</strong> — Receipt chain already uses SHA-256 hashing (quantum-safe under Grover). Candidate backup signer: SLH-DSA (SPHINCS+) — FIPS 205, stateless hash-based</li>
+  <li><strong style="color: #fb923c;">Harvest-Now-Decrypt-Later Defense</strong> — Wire-level HNDL structurally reduced: pixel streaming means captured traffic yields video, not structured data. ML-DSA hybrid signing (Phase 1 complete) protects receipt provenance post-quantum</li>
+  <li><strong style="color: #34d399;">Symmetric Posture</strong> — ChaCha20-Poly1305 (256-bit) — Grover reduces to 128-bit equivalent, well beyond brute-force. No migration needed</li>
+  <li><strong style="color: #fb923c;">Crypto Agility</strong> — Protocol design separates signing algorithm from identity semantics; algorithm field in receipts planned to enable non-breaking primitive swaps</li>
+</ul>
+
+<h2 style="font-size: 1.2rem; font-weight: 500; border-bottom: 1px solid #222228; padding-bottom: 0.5rem;">Sovereign Viewport <span style="color: #8a8a8e; font-weight: 400;">(ZeroPoint · Pixel Streaming)</span></h2>
+<p style="color: #8a8a8e; font-size: 0.9rem;">Threats targeting server-side rendering and pixel streaming transport — the trust boundary between sovereign data and untrusted endpoints</p>
+<ul style="color: #8a8a8e; font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 2rem;">
+  <li><strong style="color: #34d399;">Render Node Isolation</strong> — Single-tenant headless browser per session. Process isolation via Puppeteer page contexts. No shared state between user sessions</li>
+  <li><strong style="color: #fb923c;">Session Recording</strong> — WebRTC/WebSocket stream can be recorded if transport is compromised. DTLS-SRTP encrypts the channel. Render node runs on sovereign infrastructure</li>
+  <li><strong style="color: #fb923c;">Input Injection</strong> — Injected WebSocket messages could simulate mouse clicks and keystrokes. Authenticated WebSocket with session tokens; per-message signing planned</li>
+  <li><strong style="color: #fb923c;">Frame Analysis / OCR</strong> — Captured video frames can be OCR'd. Significantly harder than parsing JSON but not impossible. Data is pixelized, not destroyed</li>
+  <li><strong style="color: #f87171;">Render Node Compromise</strong> — The render node is the single point of trust. A compromised render node yields everything. Sovereign infrastructure, minimal attack surface, process isolation. One node to protect instead of N endpoints</li>
+  <li><strong style="color: #fb923c;">Latency Side-Channel</strong> — Frame delivery timing could theoretically leak information about content type or activity patterns. Low practical risk</li>
 </ul>
 
 <div style="margin-top: 2rem; padding: 1.25rem 1.5rem; background-color: #111114; border: 1px solid #222228; border-radius: 8px;">
@@ -284,19 +427,44 @@ footer {
 </noscript>
 
 <footer>
-  <div style="max-width: 1080px; margin: 0 auto; padding: 0 2rem;">
-    <div class="footer-links">
-      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
-      <a href="/whitepaper.html">Whitepaper</a>
-      <a href="/playground.html">Playground</a>
-      <a href="/for-agents.html">Governing Agents</a>
-      <a href="/demo-chain.html">Chain Demo</a>
-      <a href="/footprint.html">Footprint</a>
-      <a href="/setup.html">Setup</a>
-      <a href="/letter.html">Letter</a>
+  <div class="footer-container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div class="footer-col-title">Understand</div>
+        <a href="/theory.html">Theory</a>
+        <a href="/whitepaper.html">Whitepaper</a>
+        <a href="/letter.html">Letter from the Founder</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Explore</div>
+        <a href="/lab/">Lab</a>
+        <a href="/trust-triangle.html">Trust Triangle</a>
+        <a href="/exhibits.html">Technical Exhibits</a>
+        <a href="/demo-chain.html">Chain Visualizer</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Build</div>
+        <a href="/for-agents.html">Governing Agents</a>
+        <a href="/integrate.html">Integration Guide</a>
+        <a href="/setup.html">Setup &amp; Deploy</a>
+        <a href="/learn.html">Courses</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Reference</div>
+        <a href="/architecture.html">Architecture Map</a>
+        <a href="/constraints.html">Constraint Architecture</a>
+        <a href="/footprint.html">Security Footprint</a>
+        <a href="/sentinel/">Sentinel</a>
+      </div>
     </div>
-    <div class="footer-org">
-      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+    <div class="footer-bottom">
+      <div class="footer-org">
+        Built by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> &middot;
+        <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a> &middot;
+        <a href="https://zeropointfoundation.substack.com">Blog</a> &middot;
+        MIT / Apache-2.0
+      </div>
+      <div class="footer-tagline">Trust is infrastructure. Trust unfolds.</div>
     </div>
   </div>
 </footer>
@@ -306,7 +474,7 @@ footer {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 
 <script type="text/babel">
-const { useState, useRef, useEffect } = React;
+const { useState, useRef, useEffect, useMemo } = React;
 
 // ═══════════════════════════════════════════════════════════════
 // ZeroPoint AI Security Landscape — Radial Footprint Diagram
@@ -378,6 +546,10 @@ const landscape = [
       { name: "Passive Scanning", c: "green", zp: "Presence Plane reciprocity enforcement — peers must announce before they can observe" },
       { name: "Cascading Hallucinations", c: "yellow", zp: "Receipt chain traces provenance across chains" },
       { name: "Excessive Agency", c: "green", zp: "Scoped capabilities + delegation depth limits" },
+      { name: "Identity & Privilege Abuse", c: "yellow", zp: "Scoped capabilities + delegation depth; cross-chain identity federation in design (ASI03)" },
+      { name: "Unexpected Code Execution", c: "yellow", zp: "zp-skills sandboxed execution; dynamic code generation screening planned (ASI05)" },
+      { name: "Memory Poisoning", c: "yellow", zp: "Receipt chain provides provenance; persistent context integrity checks in design (ASI06)" },
+      { name: "Human-Agent Trust Exploitation", c: "green", zp: "Sovereign Viewport prevents agent from manipulating local UI elements — there are none. Agent cannot inject client-side code, modify DOM, or persist deceptive state locally. SovereigntyRule + kill switch enforce the trust boundary architecturally, not by convention" },
     ],
   },
   {
@@ -390,7 +562,7 @@ const landscape = [
       { name: "Supply Chain Vulns", c: "yellow", zp: "Rust memory safety; plugin verification in registry" },
       { name: "Data Poisoning", c: "red", zp: "Training-time concern — outside runtime governance" },
       { name: "Model Theft", c: "red", zp: "Model security — outside governance scope" },
-      { name: "Prompt Leakage", c: "yellow", zp: "Policy rules can enforce output screening" },
+      { name: "Prompt Leakage", c: "green", zp: "Sovereign Viewport renders prompt text server-side. Even if the model leaks its system prompt in output, the user sees pixels of text — not parseable, not copy-pasteable, not scrapeable. Programmatic extraction structurally prevented" },
       { name: "Unbounded Consumption", c: "green", zp: "Capability grants with rate/scope limits" },
     ],
   },
@@ -414,7 +586,7 @@ const landscape = [
     items: [
       { name: "Encryption at Rest", c: "green", zp: "CredentialVault: ChaCha20-Poly1305" },
       { name: "Access Controls", c: "green", zp: "Capability grants govern who reads/writes what" },
-      { name: "Data Loss Prevention", c: "yellow", zp: "GovernanceGate enforces content policies" },
+      { name: "Data Loss Prevention", c: "green", zp: "Structural DLP — data cannot leak from clients because it is never there. The render node is the only system that materializes data, under sovereign control with no public API. GovernanceGate enforces content policies at the action layer" },
       { name: "Training Data Security", c: "red", zp: "Training-time concern" },
       { name: "Privacy Preservation", c: "green", zp: "Structural amnesia — relay retains no logs, state, or index; subpoena-proof by design. Scoped access + audit enables compliance" },
     ],
@@ -424,9 +596,15 @@ const landscape = [
     desc: "Network, endpoint, and deployment infrastructure",
     items: [
       { name: "Network Segmentation", c: "red", zp: "Network infrastructure concern" },
-      { name: "TLS / Transport", c: "yellow", zp: "Dual-backend transport (WebSocket relay + Reticulum mesh); TLS on web path, end-to-end encryption on both" },
+      { name: "TLS / Transport", c: "green", zp: "DTLS-SRTP (WebRTC) + dual-backend transport (WebSocket relay + Reticulum mesh). Rendered content never exists as parseable plaintext on the wire — pixel streaming means the transport carries encoded video, not structured data" },
       { name: "Firewalls & IDPS", c: "red", zp: "Network layer" },
-      { name: "Endpoint Protection", c: "red", zp: "OS / infrastructure concern" },
+      { name: "Cross-Site Scripting (XSS)", c: "green", zp: "Structurally eliminated. No DOM exists on the client — there is nothing to inject into. The endpoint renders pixels, not markup" },
+      { name: "Cross-Site Request Forgery", c: "green", zp: "Structurally eliminated. The client holds no session tokens or authenticated state — it streams video. There are no requests to forge" },
+      { name: "Clickjacking", c: "green", zp: "Structurally eliminated. No iframes, no overlays, no DOM elements to redress. The rendered workspace is a video feed, not a page" },
+      { name: "Browser Extension Scraping", c: "green", zp: "Structurally eliminated. Extensions cannot read data from the page because there is no data on the page — only decoded video frames" },
+      { name: "Client Cache Poisoning", c: "green", zp: "Structurally eliminated. No application data is cached on the client. The video stream is ephemeral — nothing persists between sessions" },
+      { name: "Clipboard Exfiltration", c: "green", zp: "Structurally eliminated. The clipboard contains no application data because no application data reaches the endpoint. Copy operations are mediated by the render node" },
+      { name: "Man-in-the-Browser", c: "green", zp: "Structurally eliminated. Browser-resident malware cannot modify or intercept application data because the browser processes only a video stream, not structured content" },
       { name: "Runtime Model Protection", c: "red", zp: "Model hosting concern" },
       { name: "Canary Deployments", c: "red", zp: "Deployment infrastructure concern" },
     ],
@@ -443,7 +621,79 @@ const landscape = [
       { name: "Open Firmware Mandate", c: "yellow", zp: "Policy rule requiring auditable firmware; non-compliant devices flagged in governance chain" },
     ],
   },
+  {
+    id: "mcp", name: "MCP Protocol Security", source: "OWASP MCP Top 10 (2025 beta)",
+    desc: "Threats targeting Model Context Protocol tool interfaces — the transport layer ZeroPoint speaks natively",
+    items: [
+      { name: "Tool Poisoning", c: "yellow", zp: "zp-skills registry validates tool definitions; runtime input sanitization in progress" },
+      { name: "Rug Pull", c: "yellow", zp: "Capability revocation + SovereigntyRule; tool version pinning planned" },
+      { name: "Server-Side Request Forgery", c: "red", zp: "MCP server infrastructure concern — outside governance scope" },
+      { name: "Credential Theft via MCP", c: "yellow", zp: "CredentialVault isolates secrets from tool context; MCP-specific access scoping in design" },
+      { name: "Supply Chain Compromise", c: "yellow", zp: "Plugin registry verification; MCP-specific tool signing planned" },
+    ],
+  },
+  {
+    id: "fleet", name: "Fleet & Settlement", source: "ZeroPoint · GOVERN + SETTLE",
+    desc: "Threats arising from multi-agent orchestration, delegation chains, and financial settlement finality",
+    items: [
+      { name: "Confused Deputy", c: "yellow", zp: "Delegation depth limits + scoped capabilities; cross-chain deputy validation in design" },
+      { name: "Cascading Orchestration Failure", c: "yellow", zp: "Kill switch + blast radius minimization; circuit breaker patterns planned" },
+      { name: "Settlement Anchor Integrity", c: "yellow", zp: "Hash-chained receipts; external anchor verification in design" },
+      { name: "Finality Disputes", c: "yellow", zp: "Arbitration surface defined in theory; dispute resolution protocol in design" },
+      { name: "Delegation Chain Verification", c: "yellow", zp: "Receipt chain traces delegation hops; real-time chain monitoring planned" },
+    ],
+  },
+  {
+    id: "pqc", name: "Cryptographic Resilience", source: "NIST PQC · CNSA 2.0",
+    desc: "Post-quantum readiness and crypto agility — ensuring the trust layer survives the transition from classical to quantum-resistant primitives",
+    items: [
+      { name: "Signature Migration", c: "red", zp: "Ed25519 is quantum-vulnerable (Shor's algorithm). Candidate replacement: ML-DSA (Dilithium) — FIPS 204, lattice-based, NIST-finalized 2024" },
+      { name: "Key Encapsulation", c: "red", zp: "Not yet applicable to core protocol. Candidate: ML-KEM (Kyber) — FIPS 203, lattice-based, for future encrypted transport channels" },
+      { name: "Hash-Based Fallback", c: "yellow", zp: "Receipt chain already uses SHA-256 hashing (quantum-safe under Grover). Candidate backup signer: SLH-DSA (SPHINCS+) — FIPS 205, stateless hash-based" },
+      { name: "Harvest-Now-Decrypt-Later Defense", c: "yellow", zp: "Wire-level HNDL threat structurally reduced — pixel streaming means captured traffic yields encoded video, not structured data. ML-DSA hybrid signing (Phase 1 complete) protects receipt provenance post-quantum. Remaining gap: ML-KEM key encapsulation for transport" },
+      { name: "Symmetric Posture", c: "green", zp: "ChaCha20-Poly1305 (256-bit) — Grover reduces to 128-bit equivalent, well beyond brute-force. No migration needed" },
+      { name: "Crypto Agility", c: "yellow", zp: "Protocol design separates signing algorithm from identity semantics; algorithm field in receipts planned to enable non-breaking primitive swaps" },
+    ],
+  },
+  {
+    id: "viewport", name: "Sovereign Viewport", source: "ZeroPoint · Pixel Streaming",
+    desc: "Threats targeting server-side rendering and pixel streaming transport — the trust boundary between sovereign data and untrusted endpoints. A new security primitive: the workspace renders inside a headless browser on a sovereign render node; client devices receive only encoded video",
+    items: [
+      { name: "Render Node Isolation", c: "green", zp: "Single-tenant headless browser per session. Process isolation via Puppeteer page contexts. No shared state between user sessions" },
+      { name: "Session Recording", c: "yellow", zp: "WebRTC/WebSocket stream can be recorded if transport is compromised. DTLS-SRTP encrypts the channel, but a compromised render node or signaling server enables server-side recording. Mitigation: render node runs on sovereign infrastructure under operator control" },
+      { name: "Input Injection", c: "yellow", zp: "Injected WebSocket messages could simulate mouse clicks and keystrokes in the headless browser. Mitigation: authenticated WebSocket with session tokens; per-message signing planned" },
+      { name: "Frame Analysis / OCR", c: "yellow", zp: "Captured video frames can be OCR'd to extract text from rendered content. Significantly harder than parsing JSON but not impossible for a motivated attacker. Data is pixelized, not destroyed — the inherent tradeoff for human-viewable content" },
+      { name: "Render Node Compromise", c: "red", zp: "The render node is the single point of trust — it materializes all data. A compromised render node yields everything. Mitigation: sovereign infrastructure, minimal attack surface (no public API), process isolation. One node to protect instead of N endpoints" },
+      { name: "Latency Side-Channel", c: "yellow", zp: "Frame delivery timing could theoretically leak information about content type or user activity patterns. Low practical risk but architecturally inherent to streaming" },
+    ],
+  },
 ];
+
+// ─── Viewport Toggle: items that change when Sovereign Viewport is not deployed ───
+const VIEWPORT_OVERRIDES = {
+  "infra": {
+    "Cross-Site Scripting (XSS)": { c: "red", zp: "Standard client-side threat — requires traditional mitigation (CSP headers, input sanitization, output encoding). Outside governance scope" },
+    "Cross-Site Request Forgery": { c: "red", zp: "Standard client-side threat — requires traditional mitigation (CSRF tokens, SameSite cookies). Outside governance scope" },
+    "Clickjacking": { c: "red", zp: "Standard client-side threat — requires traditional mitigation (X-Frame-Options, CSP frame-ancestors). Outside governance scope" },
+    "Browser Extension Scraping": { c: "red", zp: "Standard client-side threat — no reliable mitigation exists for malicious extensions with DOM access. Outside governance scope" },
+    "Client Cache Poisoning": { c: "red", zp: "Standard client-side threat — requires traditional mitigation (cache-control headers, integrity checks). Outside governance scope" },
+    "Clipboard Exfiltration": { c: "red", zp: "Standard client-side threat — clipboard API is accessible to page scripts and extensions. Outside governance scope" },
+    "Man-in-the-Browser": { c: "red", zp: "Standard client-side threat — browser-resident malware can intercept and modify page content. Outside governance scope" },
+    "TLS / Transport": { c: "green", zp: "Dual-backend transport (WebSocket relay + Reticulum mesh) with TLS on the web path and end-to-end encryption on both. Standard encrypted transport — no pixel streaming layer" },
+  },
+  "data": {
+    "Data Loss Prevention": { c: "yellow", zp: "GovernanceGate enforces content policies at the action layer, catching sensitive data before it leaves the perimeter. Without Sovereign Viewport, data reaches client devices" },
+  },
+  "llm": {
+    "Prompt Leakage": { c: "yellow", zp: "GovernanceGate screens output against policy rules. Without Sovereign Viewport, leaked prompt text is parseable in the client — programmatic extraction is not structurally prevented" },
+  },
+  "agentic": {
+    "Human-Agent Trust Exploitation": { c: "yellow", zp: "SovereigntyRule + kill switch enforce trust boundary; GovernanceGate screens for deceptive output patterns. Without Sovereign Viewport, client-side UI manipulation is possible" },
+  },
+  "pqc": {
+    "Harvest-Now-Decrypt-Later Defense": { c: "yellow", zp: "ML-DSA hybrid signing (Phase 1 complete) protects receipt provenance post-quantum. Without Sovereign Viewport, captured traffic contains structured data — HNDL threat mitigated by transport encryption only. Remaining gap: ML-KEM key encapsulation for transport" },
+  },
+};
 
 function counts(items) {
   const g = items.filter(i => i.c === "green").length;
@@ -451,6 +701,21 @@ function counts(items) {
   const r = items.filter(i => i.c === "red").length;
   const t = g + y + r;
   return { g, y, r, t, pct: t > 0 ? Math.round(((g + y * 0.5) / t) * 100) : 0 };
+}
+
+function applyViewportToggle(data, deployed) {
+  if (deployed) return data;
+  return data.map(domain => {
+    const overrides = VIEWPORT_OVERRIDES[domain.id];
+    if (!overrides) return domain;
+    return {
+      ...domain,
+      items: domain.items.map(item => {
+        const ov = overrides[item.name];
+        return ov ? { ...item, ...ov } : item;
+      }),
+    };
+  });
 }
 
 const allItems = landscape.flatMap(d => d.items);
@@ -535,7 +800,7 @@ function FrameworkBadge({ tag, tip }) {
 
 // ─── Radial SVG Mindmap ───
 
-function RadialMap({ selected, onSelect, dims, narrating }) {
+function RadialMap({ selected, onSelect, dims, narrating, data }) {
   const [hovered, setHovered] = useState(null);
   const svgRef = useRef(null);
   const viewBoxRef = useRef(null);
@@ -550,7 +815,7 @@ function RadialMap({ selected, onSelect, dims, narrating }) {
   const R1 = dims * 0.24;
   const R2 = dims * 0.42;
 
-  const branches = landscape.map((b, i) => {
+  const branches = (data || landscape).map((b, i) => {
     const angle = (i / landscape.length) * Math.PI * 2 - Math.PI / 2;
     return { ...b, angle, bx: cx + Math.cos(angle) * R1, by: cy + Math.sin(angle) * R1 };
   });
@@ -812,8 +1077,15 @@ function ZeroPointFootprint() {
   const containerRef = useRef(null);
   const [svgSize, setSvgSize] = useState(800);
   const [pulsing, setPulsing] = useState(true);
+  const [viewportDeployed, setViewportDeployed] = useState(true);
   const narrator = useNarrator();
-  const branch = landscape.find(b => b.id === selected);
+
+  const activeLandscape = useMemo(() => applyViewportToggle(landscape, viewportDeployed), [viewportDeployed]);
+  const activeItems = useMemo(() => activeLandscape.flatMap(d => d.items), [activeLandscape]);
+  const activeTotals = useMemo(() => counts(activeItems), [activeItems]);
+  const baselineTotals = totals; // viewport-on baseline for delta display
+
+  const branch = activeLandscape.find(b => b.id === selected);
 
   useEffect(() => {
     const t = setTimeout(() => setPulsing(false), 4000);
@@ -821,10 +1093,10 @@ function ZeroPointFootprint() {
   }, []);
 
   const advanceNarration = (finishedId) => {
-    const idx = landscape.findIndex(b => b.id === finishedId);
+    const idx = activeLandscape.findIndex(b => b.id === finishedId);
     const nextIdx = idx + 1;
-    if (nextIdx < landscape.length) {
-      const nextId = landscape[nextIdx].id;
+    if (nextIdx < activeLandscape.length) {
+      const nextId = activeLandscape[nextIdx].id;
       setSelected(nextId);
       narrator.play(nextId, true, advanceNarration);
     } else {
@@ -906,10 +1178,14 @@ function ZeroPointFootprint() {
           <em style={{ color: THEME.text, fontStyle: "normal" }}>enforceable at the point of action</em>,{" "}
           <em style={{ color: THEME.text, fontStyle: "normal" }}>observable by default</em>, and{" "}
           <em style={{ color: THEME.text, fontStyle: "normal" }}>terminable by design</em>.
+          The Sovereign Viewport adds a fifth property:{" "}
+          <em style={{ color: THEME.text, fontStyle: "normal" }}>structurally isolated from untrusted endpoints</em> — no
+          data crosses the trust boundary, only pixels.
         </div>
         <div style={{ fontSize: 13, color: THEME.textMuted, marginTop: 8, lineHeight: 1.7, maxWidth: 720 }}>
-          This map shows where ZeroPoint sits across {totals.t} capabilities drawn from four
-          authoritative AI security frameworks — plus ZeroPoint's own Edge Sovereignty domain.
+          This map shows where ZeroPoint sits across {activeTotals.t} capabilities drawn from five
+          authoritative AI security frameworks — plus ZeroPoint's own governance domains,
+          including the Sovereign Viewport which structurally eliminates entire client-side attack classes.
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
           {[
@@ -917,17 +1193,125 @@ function ZeroPointFootprint() {
             { tag: "OWASP LLM Top 10", tip: "Open Worldwide Application Security Project — Top 10 risks for Large Language Model applications" },
             { tag: "OWASP Agentic Top 10", tip: "Open Worldwide Application Security Project — Top 10 risks for autonomous AI agents" },
             { tag: "MITRE ATLAS", tip: "MITRE Adversarial Threat Landscape for AI Systems — tactics & techniques targeting ML" },
+            { tag: "OWASP MCP Top 10", tip: "Open Worldwide Application Security Project — Top 10 risks for Model Context Protocol interfaces (2025 beta)" },
             { tag: "ZP GOVERN", tip: "ZeroPoint Edge Sovereignty — router and network-edge device governance" },
+            { tag: "ZP SETTLE", tip: "ZeroPoint Fleet & Settlement — multi-agent orchestration and financial settlement threats" },
+            { tag: "NIST PQC / CNSA 2.0", tip: "NIST Post-Quantum Cryptography standards (FIPS 203/204/205) + NSA CNSA 2.0 transition timeline" },
+            { tag: "ZP VIEWPORT", tip: "ZeroPoint Sovereign Viewport — pixel streaming eliminates client-side attack surface entirely" },
           ].map(f => <FrameworkBadge key={f.tag} tag={f.tag} tip={f.tip} />)}
         </div>
       </div>
 
+      {/* ─── Deployment Toggle ─── */}
+      {(() => {
+        const domainDeltas = !viewportDeployed ? activeLandscape
+          .map(d => {
+            const base = landscape.find(b => b.id === d.id);
+            const basePct = counts(base.items).pct;
+            const activePct = counts(d.items).pct;
+            return { name: d.name, id: d.id, from: basePct, to: activePct, delta: activePct - basePct };
+          })
+          .filter(d => d.delta !== 0)
+          .sort((a, b) => a.delta - b.delta) : [];
+
+        return (
+          <div style={{
+            marginBottom: 16, padding: "10px 16px",
+            backgroundColor: viewportDeployed ? "rgba(126,184,218,0.06)" : "rgba(248,113,113,0.06)",
+            border: `1px solid ${viewportDeployed ? "rgba(126,184,218,0.2)" : "rgba(248,113,113,0.2)"}`,
+            borderRadius: 8, transition: "all 0.3s",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }}>
+                <div
+                  onClick={() => setViewportDeployed(v => !v)}
+                  style={{
+                    width: 40, height: 22, borderRadius: 11, position: "relative",
+                    backgroundColor: viewportDeployed ? THEME.accent : "#444",
+                    transition: "background-color 0.2s", cursor: "pointer", flexShrink: 0,
+                  }}
+                >
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 9,
+                    backgroundColor: "#fff", position: "absolute", top: 2,
+                    left: viewportDeployed ? 20 : 2, transition: "left 0.2s",
+                  }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: THEME.text }}>
+                    Sovereign Viewport
+                    <span style={{
+                      marginLeft: 8, fontSize: 11, fontWeight: 500,
+                      color: viewportDeployed ? THEME.green : THEME.textMuted,
+                    }}>
+                      {viewportDeployed ? "deployed" : "not deployed"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.textMuted, marginTop: 2 }}>
+                    {viewportDeployed
+                      ? "Pixel streaming active — endpoints receive only encoded video"
+                      : "Standard deployment — data reaches client devices"}
+                  </div>
+                </div>
+              </label>
+              {!viewportDeployed && (
+                <div style={{
+                  fontSize: 12, color: THEME.red, fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+                  whiteSpace: "nowrap",
+                }}>
+                  {activeTotals.pct - baselineTotals.pct}% overall
+                </div>
+              )}
+            </div>
+            {!viewportDeployed && domainDeltas.length > 0 && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid rgba(248,113,113,0.15)` }}>
+                <div style={{ fontSize: 11, color: THEME.textDim, marginBottom: 8, lineHeight: 1.4 }}>
+                  Without the Sovereign Viewport, data reaches client devices — re-exposing endpoint attack surfaces, weakening data-loss prevention, and reducing coverage across {domainDeltas.length} domains.
+                </div>
+                <div style={{
+                  display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "6px 20px",
+                }}>
+                {domainDeltas.map(d => (
+                  <div key={d.id}
+                    onClick={() => { setSelected(d.id); }}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      fontSize: 12, cursor: "pointer", padding: "3px 0",
+                    }}
+                  >
+                    <span style={{ color: THEME.textDim }}>{d.name}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+                        fontSize: 11, color: THEME.textDim,
+                      }}>
+                        {d.from}% → {d.to}%
+                      </span>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+                        fontWeight: 700, fontSize: 12,
+                        color: THEME.red,
+                        letterSpacing: "-0.5px",
+                      }}>
+                        {d.delta > 0 ? "+" : "−"}{Math.abs(d.delta)}%
+                      </span>
+                    </span>
+                  </div>
+                ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         {[
-          { n: `${totals.pct}%`, l: "overall coverage", col: THEME.accent },
-          { n: totals.g, l: "built-in", col: THEME.green },
-          { n: totals.y, l: "partial", col: THEME.yellow },
-          { n: totals.r, l: "outside scope", col: THEME.red },
+          { n: `${activeTotals.pct}%`, l: "overall coverage", col: THEME.accent },
+          { n: activeTotals.g, l: "built-in", col: THEME.green },
+          { n: activeTotals.y, l: "partial", col: THEME.yellow },
+          { n: activeTotals.r, l: "outside scope", col: THEME.red },
         ].map((s, i) => (
           <div key={i} className="stat-card" style={{
             flex: "1 1 120px", padding: "14px 16px",
@@ -939,10 +1323,10 @@ function ZeroPointFootprint() {
         ))}
       </div>
 
-      <div style={{ display: "flex", height: 4, borderRadius: 2, overflow: "hidden", marginBottom: 24, backgroundColor: THEME.surface }}>
-        <div style={{ width: `${(totals.g / totals.t) * 100}%`, backgroundColor: THEME.green }} />
-        <div style={{ width: `${(totals.y / totals.t) * 100}%`, backgroundColor: THEME.yellow }} />
-        <div style={{ width: `${(totals.r / totals.t) * 100}%`, backgroundColor: THEME.red }} />
+      <div style={{ display: "flex", height: 4, borderRadius: 2, overflow: "hidden", marginBottom: 24, backgroundColor: THEME.surface, transition: "all 0.3s" }}>
+        <div style={{ width: `${(activeTotals.g / activeTotals.t) * 100}%`, backgroundColor: THEME.green, transition: "width 0.3s" }} />
+        <div style={{ width: `${(activeTotals.y / activeTotals.t) * 100}%`, backgroundColor: THEME.yellow, transition: "width 0.3s" }} />
+        <div style={{ width: `${(activeTotals.r / activeTotals.t) * 100}%`, backgroundColor: THEME.red, transition: "width 0.3s" }} />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -964,7 +1348,7 @@ function ZeroPointFootprint() {
             const next = !narrator.enabled;
             narrator.setEnabled(next);
             if (next) {
-              const startId = selected || landscape[0].id;
+              const startId = selected || activeLandscape[0].id;
               setSelected(startId);
               narrator.play(startId, true, advanceNarration);
             } else {
@@ -996,7 +1380,7 @@ function ZeroPointFootprint() {
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "1.5 1 500px", display: "flex", justifyContent: "center" }}>
-          <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} narrating={narrator.enabled} />
+          <RadialMap selected={selected} onSelect={handleSelect} dims={svgSize} narrating={narrator.enabled} data={activeLandscape} />
         </div>
         <div className="detail-panel" style={{
           flex: "1 1 340px", minWidth: 300, maxHeight: 700, overflowY: "auto",

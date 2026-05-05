@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab — ZeroPoint</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --bg-elevated: #111116;
+            --bg-subtle: #18181f;
+            --text: #e8e6e3;
+            --text-muted: #8a8a8e;
+            --text-dim: #5a5a5e;
+            --accent: #7eb8da;
+            --accent-dim: #4a7a96;
+            --rule: #222228;
+            --allow: #4ade80;
+            --block: #f87171;
+            --warn: #fbbf24;
+            --review: #c084fc;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font-body);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ===== HEADER & NAV ===== */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background-color: rgba(10, 10, 12, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--rule);
+        }
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            height: 60px;
+        }
+
+        .nav-logo {
+            font-size: 18px;
+            font-weight: 700;
+            text-decoration: none;
+            color: var(--text);
+            letter-spacing: -0.5px;
+        }
+
+        .nav-logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        .nav-links a.nav-active {
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 2px;
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid var(--rule);
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .github-link:hover {
+            border-color: var(--text-muted);
+            color: var(--text) !important;
+        }
+
+        /* Nav Dropdown */
+        .nav-dropdown {
+            position: relative;
+        }
+
+        .nav-dropdown-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-family: var(--font-body);
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.2s;
+        }
+
+        .nav-dropdown-btn:hover {
+            color: var(--text);
+        }
+
+        .nav-dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            padding: 8px 0;
+            min-width: 160px;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: all 0.2s;
+            margin-top: 8px;
+        }
+
+        .nav-dropdown:hover .nav-dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .nav-dropdown-menu a {
+            display: block;
+            padding: 8px 16px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.2s;
+        }
+
+        .nav-dropdown-menu a:hover {
+            color: var(--accent);
+        }
+
+        /* Hamburger */
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            background: none;
+            border: none;
+            cursor: pointer;
+            gap: 6px;
+        }
+
+        .hamburger span {
+            width: 24px;
+            height: 2px;
+            background-color: var(--text);
+            border-radius: 2px;
+            transition: all 0.3s;
+        }
+
+        #mobile-menu {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 999;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #mobile-menu.open {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        #mobile-menu .close-btn {
+            align-self: flex-end;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 28px;
+            cursor: pointer;
+        }
+
+        .mobile-menu-group {
+            border-bottom: 1px solid var(--rule);
+            padding-bottom: 16px;
+        }
+
+        .mobile-menu-group-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .mobile-menu-group a {
+            display: block;
+            padding: 10px 0;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .mobile-menu-group a:hover {
+            color: var(--accent);
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hamburger {
+                display: flex;
+            }
+        }
+
+        /* ===== HERO SECTION ===== */
+        .hero {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 100px 20px 60px;
+            text-align: center;
+        }
+
+        .hero-label {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            display: inline-block;
+            padding: 6px 12px;
+            border: 1px solid var(--rule);
+            border-radius: 3px;
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 768px) {
+            .hero {
+                padding: 60px 20px 40px;
+            }
+
+            .hero h1 {
+                font-size: 32px;
+            }
+
+            .hero p {
+                font-size: 16px;
+            }
+        }
+
+        /* ===== DEMO GALLERY ===== */
+        .gallery {
+            max-width: 1200px;
+            margin: 80px auto;
+            padding: 0 20px;
+        }
+
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 24px;
+            margin-top: 40px;
+        }
+
+        .demo-card {
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            padding: 32px 24px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .demo-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(126, 184, 218, 0.1);
+        }
+
+        .demo-card-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 24px;
+            opacity: 0.8;
+        }
+
+        .demo-card h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+
+        .demo-card p {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+
+        .demo-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px solid var(--rule);
+            padding-top: 16px;
+        }
+
+        .demo-card-tag {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background-color: var(--bg-subtle);
+            padding: 4px 8px;
+            border-radius: 3px;
+        }
+
+        .demo-card-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: gap 0.2s;
+        }
+
+        .demo-card-link:hover {
+            gap: 10px;
+        }
+
+        /* ===== API EXPLORER ===== */
+        .api-section {
+            max-width: 1200px;
+            margin: 100px auto;
+            padding: 0 20px;
+        }
+
+        .section-header {
+            margin-bottom: 12px;
+        }
+
+        .section-label {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            display: inline-block;
+            padding: 6px 12px;
+            border: 1px solid var(--rule);
+            border-radius: 3px;
+            margin-bottom: 16px;
+        }
+
+        .section-header h2 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 32px;
+        }
+
+        .api-explorer {
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .api-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--rule);
+            background-color: var(--bg-subtle);
+            overflow-x: auto;
+        }
+
+        .api-tab {
+            flex: 1;
+            min-width: 160px;
+            padding: 16px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+
+        .api-tab:hover {
+            color: var(--text);
+        }
+
+        .api-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .api-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            min-height: 400px;
+        }
+
+        .api-panel {
+            padding: 32px;
+            border-right: 1px solid var(--rule);
+            display: none;
+            flex-direction: column;
+        }
+
+        .api-panel.active {
+            display: flex;
+        }
+
+        .api-panel:last-child {
+            border-right: none;
+        }
+
+        .api-panel h4 {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+
+        .method-badge {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            padding: 4px 8px;
+            border-radius: 3px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .method-badge.get {
+            background-color: rgba(74, 222, 128, 0.15);
+            color: var(--allow);
+        }
+
+        .method-badge.post {
+            background-color: rgba(126, 184, 218, 0.15);
+            color: var(--accent);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text);
+            margin-bottom: 16px;
+            word-break: break-all;
+        }
+
+        .api-code {
+            flex: 1;
+            background-color: var(--bg);
+            border: 1px solid var(--rule);
+            border-radius: 4px;
+            padding: 16px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text);
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-bottom: 16px;
+        }
+
+        .api-code.response {
+            min-height: 200px;
+        }
+
+        .api-button-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .send-btn {
+            background-color: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-family: var(--font-body);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background-color: var(--accent-dim);
+            transform: translateY(-1px);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .cursor-blink {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background-color: var(--accent);
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @media (max-width: 768px) {
+            .api-content {
+                grid-template-columns: 1fr;
+                min-height: auto;
+            }
+
+            .api-panel {
+                border-right: none;
+                border-bottom: 1px solid var(--rule);
+            }
+
+            .api-panel:last-child {
+                border-bottom: none;
+            }
+
+            .section-header h2 {
+                font-size: 24px;
+            }
+        }
+
+        /* ===== FOOTER ===== */
+        footer {
+            background-color: var(--bg-elevated);
+            border-top: 1px solid var(--rule);
+            margin-top: 120px;
+        }
+        .footer-container { max-width: 1080px; margin: 0 auto; padding: 3rem 2rem 2rem; }
+        .footer-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem;
+            padding-bottom: 2rem; border-bottom: 1px solid var(--rule);
+        }
+        .footer-col { display: flex; flex-direction: column; gap: 0.5rem; }
+        .footer-col-title {
+            font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-dim);
+            letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.25rem;
+        }
+        .footer-col a { font-size: 0.85rem; color: var(--text-muted); text-decoration: none; }
+        .footer-col a:hover { color: var(--accent); }
+        .footer-bottom {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-top: 1.5rem; flex-wrap: wrap; gap: 0.5rem;
+        }
+        .footer-org { font-size: 0.75rem; color: var(--text-dim); }
+        .footer-org a { color: var(--text-dim); }
+        .footer-org a:hover { color: var(--accent-dim); }
+        .footer-tagline {
+            font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);
+            letter-spacing: 0.05em; font-style: italic;
+        }
+        @media (max-width: 768px) {
+            .footer-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 480px) {
+            .footer-grid { grid-template-columns: 1fr; }
+            .footer-bottom { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <!-- HEADER & NAV -->
+    <header>
+        <nav>
+            <a href="/" class="nav-logo"><span>zero</span>point</a>
+            <div class="nav-links">
+                <a href="/theory.html">Theory</a>
+                <a href="/whitepaper.html">Whitepaper</a>
+                <a href="/for-agents.html">Agents</a>
+                <a href="/lab/" class="nav-active">Lab</a>
+                <a href="/integrate.html">Integrate</a>
+                <div class="nav-dropdown">
+                    <button class="nav-dropdown-btn">More <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M1 1l4 4 4-4"/></svg></button>
+                    <div class="nav-dropdown-menu">
+                        <a href="/architecture.html">Architecture</a>
+                        <a href="/constraints.html">Constraints</a>
+                        <a href="/footprint.html">Security Footprint</a>
+                        <a href="/trust-triangle.html">Trust Triangle</a>
+                        <a href="/learn.html">Learn</a>
+                        <a href="/setup.html">Setup</a>
+                        <a href="/letter.html">Letter</a>
+                        <a href="/exhibits.html">Exhibits</a>
+                        <a href="/sentinel/">Sentinel</a>
+                    </div>
+                </div>
+                <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    GitHub
+                </a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+                <span></span><span></span><span></span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- MOBILE MENU -->
+    <div id="mobile-menu">
+        <button class="close-btn" onclick="document.getElementById('mobile-menu').classList.remove('open')">&times;</button>
+
+        <div class="mobile-menu-group">
+            <div class="mobile-menu-group-title">Understand</div>
+            <a href="/theory.html">Theory</a>
+            <a href="/whitepaper.html">Whitepaper</a>
+            <a href="/letter.html">Letter</a>
+        </div>
+
+        <div class="mobile-menu-group">
+            <div class="mobile-menu-group-title">Explore</div>
+            <a href="/for-agents.html">Agents</a>
+            <a href="/lab/">Lab</a>
+            <a href="/learn.html">Learn</a>
+            <a href="/exhibits.html">Exhibits</a>
+        </div>
+
+        <div class="mobile-menu-group">
+            <div class="mobile-menu-group-title">Build</div>
+            <a href="/integrate.html">Integrate</a>
+            <a href="/setup.html">Setup</a>
+            <a href="/architecture.html">Architecture</a>
+        </div>
+
+        <div class="mobile-menu-group">
+            <div class="mobile-menu-group-title">Reference</div>
+            <a href="/constraints.html">Constraints</a>
+            <a href="/footprint.html">Security Footprint</a>
+            <a href="/trust-triangle.html">Trust Triangle</a>
+            <a href="/sentinel/">Sentinel</a>
+        </div>
+
+        <div class="mobile-menu-group" style="border: none;">
+            <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+        </div>
+    </div>
+
+    <!-- HERO SECTION -->
+    <section class="hero">
+        <div class="hero-label">LAB</div>
+        <h1>Test the Protocol</h1>
+        <p>Run the simulations. Inspect the chains. Query the API. Everything here is verifiable — that's the point.</p>
+    </section>
+
+    <!-- DEMO GALLERY -->
+    <section class="gallery">
+        <div class="gallery-grid">
+            <!-- Card 1: Agent Society Simulation -->
+            <div class="demo-card">
+                <svg class="demo-card-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="18" cy="18" r="2" fill="currentColor"/>
+                    <circle cx="30" cy="18" r="2" fill="currentColor"/>
+                    <circle cx="24" cy="30" r="2" fill="currentColor"/>
+                    <path d="M18 18L30 18M30 18L24 30M24 30L18 18" stroke="currentColor" stroke-width="1"/>
+                </svg>
+                <h3>SIM-01 · San Francisco</h3>
+                <p>A living network of AI agents governing a city's rideshare fleet. Watch policy enforcement, receipt chains, and trust tiers operate in real time on a 3D globe.</p>
+                <div class="demo-card-footer">
+                    <span class="demo-card-tag">Full-screen simulation</span>
+                    <a href="/lab/sim01.html" class="demo-card-link">Launch →</a>
+                </div>
+            </div>
+
+            <!-- Card 2: Receipt Chain Visualizer -->
+            <div class="demo-card">
+                <svg class="demo-card-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="8" y="8" width="12" height="12" stroke="currentColor" stroke-width="1.5" rx="2"/>
+                    <rect x="24" y="8" width="12" height="12" stroke="currentColor" stroke-width="1.5" rx="2"/>
+                    <rect x="8" y="28" width="12" height="12" stroke="currentColor" stroke-width="1.5" rx="2"/>
+                    <path d="M20 14H24M20 34H24M30 14V28" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+                </svg>
+                <h3>Receipt Chain Visualizer</h3>
+                <p>Step through how cryptographic receipts form an immutable decision trail. See how each action — allow, block, escalate — links to the one before it.</p>
+                <div class="demo-card-footer">
+                    <span class="demo-card-tag">Interactive walkthrough</span>
+                    <a href="/demo-chain.html" class="demo-card-link">Launch →</a>
+                </div>
+            </div>
+
+            <!-- Card 3: Trust Triangle Animation -->
+            <div class="demo-card">
+                <svg class="demo-card-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M24 6L40 40H8L24 6Z" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="24" cy="12" r="2" fill="currentColor"/>
+                    <circle cx="38" cy="38" r="2" fill="currentColor"/>
+                    <circle cx="10" cy="38" r="2" fill="currentColor"/>
+                    <path d="M24 12L38 38M24 12L10 38" stroke="currentColor" stroke-width="0.8" opacity="0.5"/>
+                </svg>
+                <h3>Trust Triangle Animation</h3>
+                <p>A cinematic sequence showing how three parties — clinic, pharmacy, patient — establish trust through ZeroPoint's receipt protocol without a central authority.</p>
+                <div class="demo-card-footer">
+                    <span class="demo-card-tag">Animated sequence</span>
+                    <a href="/trust-triangle-player.html" class="demo-card-link">Launch →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- API EXPLORER SECTION -->
+    <section class="api-section">
+        <div class="section-header">
+            <span class="section-label">TRY THE PROTOCOL</span>
+            <h2>API Explorer</h2>
+        </div>
+
+        <div class="api-explorer">
+            <!-- Tabs -->
+            <div class="api-tabs">
+                <button class="api-tab active" onclick="switchTab(0)">Guard Evaluate</button>
+                <button class="api-tab" onclick="switchTab(1)">Verify Chain</button>
+                <button class="api-tab" onclick="switchTab(2)">Fleet Status</button>
+                <button class="api-tab" onclick="switchTab(3)">Generate Receipt</button>
+            </div>
+
+            <!-- Tab 0: Guard Evaluate -->
+            <div class="api-tab-content active">
+                <div class="api-panel active">
+                    <h4>Request</h4>
+                    <div>
+                        <span class="method-badge post">POST</span>
+                    </div>
+                    <div class="api-url">/api/v1/guard/evaluate</div>
+                    <div class="api-code" id="request-0">{
+  "agent_id": "agent-clinic-rx",
+  "action": "prescribe",
+  "resource": "medication/amoxicillin",
+  "context": {
+    "patient_id": "p-2847",
+    "trust_tier": 3
+  }
+}</div>
+                    <div class="api-button-group">
+                        <button class="send-btn" onclick="sendRequest(0)">Send Request</button>
+                    </div>
+                </div>
+                <div class="api-panel active">
+                    <h4>Response</h4>
+                    <div class="api-code response" id="response-0"></div>
+                </div>
+            </div>
+
+            <!-- Tab 1: Verify Chain -->
+            <div class="api-tab-content">
+                <div class="api-panel">
+                    <h4>Request</h4>
+                    <div>
+                        <span class="method-badge get">GET</span>
+                    </div>
+                    <div class="api-url">/api/v1/audit/verify</div>
+                    <div class="api-code" style="flex: 0; margin-bottom: 16px;">No request body</div>
+                    <div class="api-button-group">
+                        <button class="send-btn" onclick="sendRequest(1)">Send Request</button>
+                    </div>
+                </div>
+                <div class="api-panel">
+                    <h4>Response</h4>
+                    <div class="api-code response" id="response-1"></div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Fleet Status -->
+            <div class="api-tab-content">
+                <div class="api-panel">
+                    <h4>Request</h4>
+                    <div>
+                        <span class="method-badge get">GET</span>
+                    </div>
+                    <div class="api-url">/api/v1/fleet/summary</div>
+                    <div class="api-code" style="flex: 0; margin-bottom: 16px;">No request body</div>
+                    <div class="api-button-group">
+                        <button class="send-btn" onclick="sendRequest(2)">Send Request</button>
+                    </div>
+                </div>
+                <div class="api-panel">
+                    <h4>Response</h4>
+                    <div class="api-code response" id="response-2"></div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Generate Receipt -->
+            <div class="api-tab-content">
+                <div class="api-panel">
+                    <h4>Request</h4>
+                    <div>
+                        <span class="method-badge post">POST</span>
+                    </div>
+                    <div class="api-url">/api/v1/receipts/generate</div>
+                    <div class="api-code" id="request-3">{
+  "claim_type": "tool:capability:evaluated",
+  "subject": "agent-clinic-rx",
+  "action": "prescribe",
+  "decision": "allow",
+  "signer_key": "ed25519:pk_7f3a..."
+}</div>
+                    <div class="api-button-group">
+                        <button class="send-btn" onclick="sendRequest(3)">Send Request</button>
+                    </div>
+                </div>
+                <div class="api-panel">
+                    <h4>Response</h4>
+                    <div class="api-code response" id="response-3"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+  <div class="footer-container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div class="footer-col-title">Understand</div>
+        <a href="/theory.html">Theory</a>
+        <a href="/whitepaper.html">Whitepaper</a>
+        <a href="/letter.html">Letter from the Founder</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Explore</div>
+        <a href="/lab/">Lab</a>
+        <a href="/trust-triangle.html">Trust Triangle</a>
+        <a href="/exhibits.html">Technical Exhibits</a>
+        <a href="/demo-chain.html">Chain Visualizer</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Build</div>
+        <a href="/for-agents.html">Governing Agents</a>
+        <a href="/integrate.html">Integration Guide</a>
+        <a href="/setup.html">Setup &amp; Deploy</a>
+        <a href="/learn.html">Courses</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Reference</div>
+        <a href="/architecture.html">Architecture Map</a>
+        <a href="/constraints.html">Constraint Architecture</a>
+        <a href="/footprint.html">Security Footprint</a>
+        <a href="/sentinel/">Sentinel</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-org">
+        Built by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> &middot;
+        <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a> &middot;
+        <a href="https://zeropointfoundation.substack.com">Blog</a> &middot;
+        MIT / Apache-2.0
+      </div>
+      <div class="footer-tagline">Trust is infrastructure. Trust unfolds.</div>
+    </div>
+  </div>
+</footer>
+
+    <script>
+        // Mock responses for the API Explorer
+        const mockResponses = {
+            0: {
+                decision: "allow",
+                receipt_id: "rcpt_7f3a9b2e",
+                policy_version: "v2.2.1",
+                constraints_evaluated: 4,
+                trust_tier: 3,
+                chain_position: 1847,
+                receipt_hash: "sha256:9c1e...a4f7"
+            },
+            1: {
+                chain_valid: true,
+                entries_verified: 1847,
+                head_hash: "sha256:9c1e...a4f7",
+                genesis_hash: "sha256:0000...beef",
+                broken_links: 0,
+                verification_time_ms: 42
+            },
+            2: {
+                total_nodes: 4,
+                online: 3,
+                degraded: 1,
+                offline: 0,
+                nodes: [
+                    { id: "genesis-prime", role: "genesis", status: "online", uptime: "14d 7h", receipts: 12847 },
+                    { id: "delegate-east", role: "delegate", status: "online", uptime: "14d 7h", receipts: 8291 },
+                    { id: "delegate-west", role: "delegate", status: "degraded", uptime: "2d 3h", receipts: 4102 },
+                    { id: "sentinel-watch", role: "standalone", status: "online", uptime: "14d 7h", receipts: 1053 }
+                ]
+            },
+            3: {
+                receipt_id: "rcpt_8d4b1c3f",
+                hash: "sha256:b2e1...c8d3",
+                parent_hash: "sha256:9c1e...a4f7",
+                timestamp: "2026-05-01T14:23:07Z",
+                signature: "ed25519:sig_a9f2...",
+                chain_position: 1848
+            }
+        };
+
+        function switchTab(index) {
+            // Hide all tab contents
+            const contents = document.querySelectorAll('.api-tab-content');
+            contents.forEach(c => {
+                c.querySelectorAll('.api-panel').forEach(p => p.classList.remove('active'));
+            });
+            contents.forEach(c => c.style.display = 'none');
+
+            // Hide all tabs
+            document.querySelectorAll('.api-tab').forEach(t => t.classList.remove('active'));
+
+            // Show selected tab
+            document.querySelectorAll('.api-tab')[index].classList.add('active');
+            const selected = document.querySelectorAll('.api-tab-content')[index];
+            selected.style.display = 'grid';
+            selected.querySelectorAll('.api-panel').forEach(p => p.classList.add('active'));
+
+            // Reset response
+            const responseId = `response-${index}`;
+            const responseEl = document.getElementById(responseId);
+            if (responseEl) {
+                responseEl.textContent = '';
+            }
+        }
+
+        function sendRequest(tabIndex) {
+            const button = event.target;
+            const responseId = `response-${tabIndex}`;
+            const responseEl = document.getElementById(responseId);
+
+            if (!responseEl) return;
+
+            // Disable button
+            button.disabled = true;
+            button.textContent = 'Sending...';
+
+            // Clear response
+            responseEl.textContent = '';
+
+            // Show cursor animation for ~800ms
+            setTimeout(() => {
+                // Type the response
+                const mockData = mockResponses[tabIndex];
+                const jsonString = JSON.stringify(mockData, null, 2);
+
+                responseEl.style.opacity = '0';
+                responseEl.textContent = jsonString;
+
+                // Fade in the response
+                setTimeout(() => {
+                    responseEl.style.transition = 'opacity 0.3s ease';
+                    responseEl.style.opacity = '1';
+                }, 50);
+
+                // Re-enable button
+                button.disabled = false;
+                button.textContent = 'Send Request';
+            }, 800);
+        }
+    </script>
+</body>
+</html>

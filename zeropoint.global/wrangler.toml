@@ -1,8 +1,21 @@
 name = "zeropoint-global"
-main = "_worker.js"
+main = "src/worker.js"
 compatibility_date = "2025-04-01"
 
-# Static assets served from the current directory
+# Static assets served from the project root
 [assets]
 directory = "."
 binding = "ASSETS"
+
+# ── Workspace bindings (enable when sovereign workspace is ready) ──
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "zpmail"
+# database_id = "placeholder-create-via-wrangler-d1-create"
+#
+# [[r2_buckets]]
+# binding = "STORAGE"
+# bucket_name = "zp-storage"
+#
+# [vars]
+# EMAIL_PROVIDER = "resend"

@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learn ZeroPoint — From Concepts to Code</title>
+    <meta name="description" content="Master ZeroPoint through structured learning paths. Choose between protocol internals or SDK integration, with courses built for architects, researchers, and developers.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --bg-elevated: #111116;
+            --bg-subtle: #18181f;
+            --text: #e0ded9;
+            --text-muted: #9a9a9e;
+            --text-dim: #5a5a5e;
+            --accent: #7eb8da;
+            --accent-dim: #4a7a96;
+            --rule: #222228;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            font-size: 16px;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        a:hover {
+            color: #a8d4ee;
+        }
+
+        /* --- Header & Nav --- */
+
+        header {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 100;
+            background: var(--bg);
+            border-bottom: 1px solid var(--rule);
+        }
+
+        nav {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-logo {
+            font-family: var(--font-mono);
+            font-weight: 500;
+            font-size: 1rem;
+            color: var(--text);
+            letter-spacing: 0.05em;
+        }
+
+        .nav-logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: none;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .nav-links a {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        /* --- Nav Dropdown --- */
+
+        .nav-dropdown {
+            position: relative;
+        }
+
+        .nav-dropdown-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .nav-dropdown-btn:hover {
+            color: var(--accent);
+        }
+
+        .nav-dropdown-btn svg {
+            transition: transform 0.2s;
+            width: 10px;
+            height: 6px;
+        }
+
+        .nav-dropdown:hover .nav-dropdown-btn svg {
+            transform: rotate(180deg);
+        }
+
+        .nav-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            right: 0;
+            background: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            padding: 0.5rem 0;
+            min-width: 180px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            z-index: 300;
+        }
+
+        .nav-dropdown:hover .nav-dropdown-menu {
+            display: block;
+        }
+
+        .nav-dropdown-menu a {
+            display: block;
+            padding: 0.5rem 1.25rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+
+        .nav-dropdown-menu a:hover {
+            color: var(--accent);
+            background: var(--bg-subtle);
+        }
+
+        /* --- Hamburger --- */
+
+        .hamburger {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .hamburger span {
+            width: 20px;
+            height: 2px;
+            background: var(--text-muted);
+            border-radius: 1px;
+            transition: all 0.3s;
+        }
+
+        /* --- Mobile Menu --- */
+
+        #mobile-menu {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100vh;
+            background: var(--bg);
+            z-index: 99;
+            transition: left 0.3s;
+            overflow-y: auto;
+        }
+
+        #mobile-menu.open {
+            left: 0;
+        }
+
+        .mobile-menu-close {
+            position: absolute;
+            top: 1rem;
+            right: 2rem;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .mobile-menu-content {
+            padding: 6rem 2rem 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .mobile-menu-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .mobile-menu-label {
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            color: var(--accent-dim);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .mobile-menu-group a {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        @media (min-width: 769px) {
+            .nav-links {
+                display: flex;
+            }
+
+            .hamburger {
+                display: none;
+            }
+
+            #mobile-menu {
+                display: none !important;
+            }
+        }
+
+        /* --- GitHub Link --- */
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        /* --- Layout --- */
+
+        .container {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* --- Hero --- */
+
+        .hero {
+            padding: 10rem 0 6rem;
+            text-align: center;
+            margin-top: 80px;
+        }
+
+        .hero-eyebrow {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--accent-dim);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 300;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        h1 strong {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .hero-sub {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.7;
+        }
+
+        /* --- Sections --- */
+
+        section {
+            padding: 5rem 0;
+        }
+
+        .section-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent-dim);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 300;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.01em;
+        }
+
+        h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        /* --- Learning Tracks Cards --- */
+
+        .tracks-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .track-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            padding: 2.5rem 2rem;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .track-card:hover {
+            border-color: var(--accent-dim);
+            box-shadow: 0 8px 32px rgba(126, 184, 218, 0.08);
+        }
+
+        .track-card h3 {
+            color: var(--accent);
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+        }
+
+        .track-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.8;
+            margin-bottom: 2rem;
+            flex-grow: 1;
+        }
+
+        .track-card a {
+            display: inline-block;
+            padding: 0.75rem 1.75rem;
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            align-self: flex-start;
+        }
+
+        .track-card a:hover {
+            background: var(--bg-subtle);
+            border-color: var(--accent-dim);
+            color: #a8d4ee;
+        }
+
+        @media (max-width: 768px) {
+            .tracks-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* --- Quick Reference Cards --- */
+
+        .reference-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+
+        .reference-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            padding: 2rem 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .reference-card:hover {
+            border-color: var(--accent-dim);
+            box-shadow: 0 8px 32px rgba(126, 184, 218, 0.08);
+        }
+
+        .reference-card h4 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+        }
+
+        .reference-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+
+        .reference-card a {
+            display: inline-block;
+            padding: 0.5rem 1.25rem;
+            border: 1px solid var(--rule);
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .reference-card a:hover {
+            background: var(--bg-subtle);
+            border-color: var(--accent-dim);
+            color: #a8d4ee;
+        }
+
+        @media (max-width: 768px) {
+            .reference-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .reference-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* --- Prerequisites Callout --- */
+
+        .callout {
+            background: var(--bg-elevated);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 8px 8px 0;
+            padding: 2rem;
+            margin: 3rem 0;
+        }
+
+        .callout h3 {
+            color: var(--text);
+            margin-bottom: 0.75rem;
+        }
+
+        .callout p {
+            color: var(--text-muted);
+            margin-bottom: 0;
+            line-height: 1.8;
+        }
+
+        .callout code {
+            font-family: var(--font-mono);
+            background: var(--bg-subtle);
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            color: var(--accent);
+            font-size: 0.85em;
+        }
+
+        /* --- Footer --- */
+
+        footer {
+            border-top: 1px solid var(--rule);
+        }
+
+        .footer-container {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 3rem 2rem 2rem;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        .footer-col {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .footer-col-title {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--accent-dim);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .footer-col a {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-decoration: none;
+        }
+
+        .footer-col a:hover {
+            color: var(--accent);
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 1.5rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .footer-org {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .footer-org a {
+            color: var(--text-dim);
+        }
+
+        .footer-org a:hover {
+            color: var(--accent-dim);
+        }
+
+        .footer-tagline {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 0.05em;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .footer-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .tracks-grid {
+                gap: 1.5rem;
+            }
+
+            section {
+                padding: 3rem 0;
+            }
+        }
+
+        /* --- Responsive Adjustments --- */
+
+        @media (max-width: 768px) {
+            header {
+                padding: 1rem 0;
+            }
+
+            nav {
+                padding: 1rem;
+            }
+
+            .nav-links {
+                display: none !important;
+            }
+
+            .hamburger {
+                display: flex;
+            }
+
+            .hero {
+                padding: 6rem 0 4rem;
+                margin-top: 60px;
+            }
+
+            h2 {
+                font-size: 1.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="/" class="nav-logo"><span>zero</span>point</a>
+            <div class="nav-links">
+                <a href="/theory.html">Theory</a>
+                <a href="/whitepaper.html">Whitepaper</a>
+                <a href="/for-agents.html">Agents</a>
+                <a href="/lab/">Lab</a>
+                <a href="/integrate.html">Integrate</a>
+                <div class="nav-dropdown">
+                    <button class="nav-dropdown-btn">
+                        More
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor">
+                            <path d="M1 1l4 4 4-4"/>
+                        </svg>
+                    </button>
+                    <div class="nav-dropdown-menu">
+                        <a href="/architecture.html">Architecture</a>
+                        <a href="/constraints.html">Constraints</a>
+                        <a href="/footprint.html">Security Footprint</a>
+                        <a href="/trust-triangle.html">Trust Triangle</a>
+                        <a href="/learn.html">Learn</a>
+                        <a href="/setup.html">Setup</a>
+                        <a href="/letter.html">Letter</a>
+                        <a href="/exhibits.html">Exhibits</a>
+                        <a href="/sentinel/">Sentinel</a>
+                    </div>
+                </div>
+                <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    GitHub
+                </a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+                <span></span><span></span><span></span>
+            </button>
+        </nav>
+    </header>
+
+    <div id="mobile-menu">
+        <button class="mobile-menu-close" onclick="document.getElementById('mobile-menu').classList.remove('open')">×</button>
+        <div class="mobile-menu-content">
+            <div class="mobile-menu-group">
+                <div class="mobile-menu-label">Resources</div>
+                <a href="/theory.html">Theory</a>
+                <a href="/whitepaper.html">Whitepaper</a>
+                <a href="/for-agents.html">Agents</a>
+                <a href="/lab/">Lab</a>
+                <a href="/integrate.html">Integrate</a>
+            </div>
+            <div class="mobile-menu-group">
+                <div class="mobile-menu-label">More</div>
+                <a href="/architecture.html">Architecture</a>
+                <a href="/constraints.html">Constraints</a>
+                <a href="/footprint.html">Security Footprint</a>
+                <a href="/trust-triangle.html">Trust Triangle</a>
+                <a href="/setup.html">Setup</a>
+                <a href="/letter.html">Letter</a>
+                <a href="/exhibits.html">Exhibits</a>
+                <a href="/sentinel/">Sentinel</a>
+            </div>
+            <div class="mobile-menu-group mobile-github">
+                <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
+            </div>
+        </div>
+    </div>
+
+    <main class="container">
+        <section class="hero">
+            <div class="hero-eyebrow">Learning Hub</div>
+            <h1>Learn <strong>ZeroPoint</strong></h1>
+            <p class="hero-sub">From concepts to code. Choose your path.</p>
+        </section>
+
+        <section>
+            <div class="section-label">Learning Tracks</div>
+            <h2>Master ZeroPoint Through Structured Courses</h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Two comprehensive learning paths designed for different roles. Start with the fundamentals or dive into implementation.</p>
+
+            <div class="tracks-grid">
+                <div class="track-card">
+                    <h3>Protocol Internals</h3>
+                    <p>Understand how ZeroPoint works under the hood. Deep dives into receipt chains, delegation invariants, governance gates, and constitutional constraints. For architects, security researchers, and anyone building on top of ZeroPoint's foundations.</p>
+                    <a href="/course.html">Start Track 3 Course →</a>
+                </div>
+
+                <div class="track-card">
+                    <h3>SDK & Integration</h3>
+                    <p>Build with ZeroPoint. Learn guard evaluation, receipt generation, capability delegation, and audit chain queries. Curl, Python, TypeScript, and Rust examples included. For developers integrating ZeroPoint into agents and applications.</p>
+                    <a href="/course-sdk.html">Start SDK Course →</a>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-label">Quick Reference</div>
+            <h2>Essential Resources</h2>
+
+            <div class="reference-grid">
+                <div class="reference-card">
+                    <h4>Theory</h4>
+                    <p>The trust-as-trajectory thesis in plain language. Understand the philosophical and technical foundations behind ZeroPoint.</p>
+                    <a href="/theory.html">Read Theory</a>
+                </div>
+
+                <div class="reference-card">
+                    <h4>Whitepaper</h4>
+                    <p>The full technical specification (v2.2). Complete formal documentation of the protocol, cryptographic design, and governance model.</p>
+                    <a href="/whitepaper.html">Read Whitepaper</a>
+                </div>
+
+                <div class="reference-card">
+                    <h4>Exhibits</h4>
+                    <p>Interactive deep dives into cryptographic primitives. Visualizations and walkthroughs of Blake3 hashing, Ed25519 signing, and receipt chaining.</p>
+                    <a href="/exhibits.html">Explore Exhibits</a>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <div class="callout">
+                <h3>Getting Started</h3>
+                <p><strong>ZeroPoint is open-source.</strong> You don't need permission to start. Clone the repo, run <code>cargo build</code>, and follow any track. Both courses are self-contained and work with a local instance or against any ZeroPoint server endpoint.</p>
+                <p style="margin-top: 1rem; margin-bottom: 0;">
+                    <strong>Prerequisites:</strong> Basic familiarity with concepts like hashing, digital signatures, and API design helps but isn't required. The courses build up from first principles.
+                </p>
+            </div>
+        </section>
+
+        <section>
+            <h2>Learning Path Comparison</h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Choose the path that matches your goals and background.</p>
+
+            <div style="background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; padding: 2rem; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--rule);">
+                            <th style="text-align: left; padding: 1rem; color: var(--accent); font-weight: 600;">Aspect</th>
+                            <th style="text-align: left; padding: 1rem; color: var(--accent); font-weight: 600;">Protocol Internals</th>
+                            <th style="text-align: left; padding: 1rem; color: var(--accent); font-weight: 600;">SDK & Integration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid var(--rule);">
+                            <td style="padding: 1rem; color: var(--text-muted);">Best For</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">Architects, Security Researchers</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">Developers, Integration Engineers</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--rule);">
+                            <td style="padding: 1rem; color: var(--text-muted);">Focus</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">How ZeroPoint works</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">How to use ZeroPoint</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--rule);">
+                            <td style="padding: 1rem; color: var(--text-muted);">Topics</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">Receipt chains, delegation invariants, cryptography, governance gates</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">Guard evaluation, receipt generation, capability APIs, audit queries</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--rule);">
+                            <td style="padding: 1rem; color: var(--text-muted);">Code Examples</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">Rust protocol implementation</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">Curl, Python, TypeScript, Rust</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 1rem; color: var(--text-muted);">Time Commitment</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">6-8 hours</td>
+                            <td style="padding: 1rem; color: var(--text-muted);">4-6 hours</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section>
+            <h2>Beyond the Courses</h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">After completing a course, deepen your knowledge with these resources:</p>
+
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                <div style="background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; padding: 1.5rem;">
+                    <h3 style="color: var(--accent); font-size: 1rem; margin-bottom: 0.5rem;">Live Lab</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Experiment with guard evaluation, receipt generation, and delegation chains in an interactive environment.</p>
+                    <a href="/lab/" style="font-size: 0.85rem;">Open Lab →</a>
+                </div>
+
+                <div style="background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; padding: 1.5rem;">
+                    <h3 style="color: var(--accent); font-size: 1rem; margin-bottom: 0.5rem;">Architecture Map</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Visual overview of all subsystems, their relationships, and implementation status.</p>
+                    <a href="/architecture.html" style="font-size: 0.85rem;">View Architecture →</a>
+                </div>
+
+                <div style="background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; padding: 1.5rem;">
+                    <h3 style="color: var(--accent); font-size: 1rem; margin-bottom: 0.5rem;">Trust Triangle</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Interactive visualization of the three trust pillars and how they work together.</p>
+                    <a href="/trust-triangle.html" style="font-size: 0.85rem;">Explore Trust Triangle →</a>
+                </div>
+
+                <div style="background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; padding: 1.5rem;">
+                    <h3 style="color: var(--accent); font-size: 1rem; margin-bottom: 0.5rem;">Setup & Deploy</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Step-by-step instructions for running ZeroPoint locally or in production.</p>
+                    <a href="/setup.html" style="font-size: 0.85rem;">Setup Guide →</a>
+                </div>
+            </div>
+        </section>
+
+        <section style="border-top: 1px solid var(--rule); padding-top: 5rem;">
+            <h2>Questions?</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Both courses are designed to be self-contained and progressive. Start with the one that matches your role, work through at your own pace, and refer back to the Theory and Whitepaper sections as needed.</p>
+            <p style="color: var(--text-muted);">For deeper questions about implementation, cryptography, or governance design, check the <a href="https://github.com/zeropoint-foundation/zeropoint" style="color: var(--accent);">GitHub repository</a> and documentation.</p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-container">
+            <div class="footer-grid">
+                <div class="footer-col">
+                    <div class="footer-col-title">Understand</div>
+                    <a href="/theory.html">Theory</a>
+                    <a href="/whitepaper.html">Whitepaper</a>
+                    <a href="/letter.html">Letter from the Founder</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-col-title">Explore</div>
+                    <a href="/lab/">Lab</a>
+                    <a href="/trust-triangle.html">Trust Triangle</a>
+                    <a href="/exhibits.html">Technical Exhibits</a>
+                    <a href="/demo-chain.html">Chain Visualizer</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-col-title">Build</div>
+                    <a href="/for-agents.html">Governing Agents</a>
+                    <a href="/integrate.html">Integration Guide</a>
+                    <a href="/setup.html">Setup &amp; Deploy</a>
+                    <a href="/learn.html">Courses</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-col-title">Reference</div>
+                    <a href="/architecture.html">Architecture Map</a>
+                    <a href="/constraints.html">Constraint Architecture</a>
+                    <a href="/footprint.html">Security Footprint</a>
+                    <a href="/sentinel/">Sentinel</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div class="footer-org">
+                    Built by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> &middot;
+                    <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a> &middot;
+                    <a href="https://zeropointfoundation.substack.com">Blog</a> &middot;
+                    MIT / Apache-2.0
+                </div>
+                <div class="footer-tagline">Trust is infrastructure. Trust unfolds.</div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

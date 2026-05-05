@@ -142,6 +142,71 @@ footer {
   .letter { padding: 8rem 0 3rem; }
   .letter p { font-size: 1rem; }
 }
+
+/* --- Unified Nav --- */
+.nav-dropdown { position: relative; }
+.nav-dropdown-btn {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem;
+  padding: 0; transition: color 0.2s;
+}
+.nav-dropdown-btn:hover { color: var(--accent); }
+.nav-dropdown-btn svg { transition: transform 0.2s; }
+.nav-dropdown:hover .nav-dropdown-btn svg { transform: rotate(180deg); }
+.nav-dropdown-menu {
+  display: none; position: absolute; top: calc(100% + 0.5rem); right: 0;
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 0.5rem 0; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 300;
+}
+.nav-dropdown:hover .nav-dropdown-menu { display: block; }
+.nav-dropdown-menu a {
+  display: block; padding: 0.5rem 1.25rem; font-size: 0.85rem;
+  color: var(--text-muted); text-decoration: none; transition: all 0.15s;
+}
+.nav-dropdown-menu a:hover { color: var(--accent); background: var(--bg-subtle); }
+
+/* --- Mobile Menu Groups --- */
+.mobile-menu-group { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.mobile-menu-label {
+  font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.25rem;
+}
+.mobile-github {
+  margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--rule);
+}
+
+/* --- Footer Grid --- */
+.footer-container { max-width: 1080px; margin: 0 auto; padding: 3rem 2rem 2rem; }
+.footer-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem;
+  padding-bottom: 2rem; border-bottom: 1px solid var(--rule);
+}
+.footer-col { display: flex; flex-direction: column; gap: 0.5rem; }
+.footer-col-title {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-dim);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.25rem;
+}
+.footer-col a { font-size: 0.85rem; color: var(--text-muted); text-decoration: none; }
+.footer-col a:hover { color: var(--accent); }
+.footer-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 1.5rem; flex-wrap: wrap; gap: 0.5rem;
+}
+.footer-org { font-size: 0.75rem; color: var(--text-dim); }
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+.footer-tagline {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);
+  letter-spacing: 0.05em; font-style: italic;
+}
+@media (max-width: 768px) {
+  .footer-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr; }
+  .footer-bottom { flex-direction: column; text-align: center; }
+}
 </style>
 </head>
 <body>
@@ -150,15 +215,29 @@ footer {
   <nav>
     <a href="/" class="nav-logo"><span>zero</span>point</a>
     <div class="nav-links">
-      <a href="/#tenets">Tenets</a>
-      <a href="/#architecture">Architecture</a>
-      <a href="/footprint.html">Footprint</a>
-      <a href="/playground.html">Playground</a>
-      <a href="/for-agents.html">Governing Agents</a>
-      <a href="/constraints.html">Constraints</a>
+      <a href="/theory.html">Theory</a>
       <a href="/whitepaper.html">Whitepaper</a>
-      <a href="/setup.html">Setup</a>
-      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">GitHub</a>
+      <a href="/for-agents.html">Agents</a>
+      <a href="/lab/">Lab</a>
+      <a href="/integrate.html">Integrate</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-btn">More <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M1 1l4 4 4-4"/></svg></button>
+        <div class="nav-dropdown-menu">
+          <a href="/architecture.html">Architecture</a>
+          <a href="/constraints.html">Constraints</a>
+          <a href="/footprint.html">Security Footprint</a>
+          <a href="/trust-triangle.html">Trust Triangle</a>
+          <a href="/learn.html">Learn</a>
+          <a href="/setup.html">Setup</a>
+          <a href="/letter.html">Letter</a>
+          <a href="/exhibits.html">Exhibits</a>
+          <a href="/sentinel/">Sentinel</a>
+        </div>
+      </div>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
     </div>
     <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
       <span></span><span></span><span></span>
@@ -168,45 +247,68 @@ footer {
 
 <div id="mobile-menu" class="mobile-menu">
   <button class="close-btn" onclick="this.parentElement.classList.remove('open')">&times;</button>
-  <a href="/" onclick="this.parentElement.classList.remove('open')">Home</a>
-  <a href="/#tenets" onclick="this.parentElement.classList.remove('open')">Tenets</a>
-  <a href="/#architecture" onclick="this.parentElement.classList.remove('open')">Architecture</a>
-  <a href="/footprint.html" onclick="this.parentElement.classList.remove('open')">Footprint</a>
-  <a href="/playground.html" onclick="this.parentElement.classList.remove('open')">Playground</a>
-  <a href="/for-agents.html" onclick="this.parentElement.classList.remove('open')">Governing Agents</a>
-  <a href="/constraints.html" onclick="this.parentElement.classList.remove('open')">Constraints</a>
-  <a href="/whitepaper.html" onclick="this.parentElement.classList.remove('open')">Whitepaper</a>
-  <a href="/setup.html" onclick="this.parentElement.classList.remove('open')">Setup</a>
-  <a href="/letter.html" onclick="this.parentElement.classList.remove('open')">Letter</a>
-  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.parentElement.classList.remove('open')">GitHub</a>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Understand</div>
+    <a href="/theory.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Theory</a>
+    <a href="/whitepaper.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Whitepaper</a>
+    <a href="/letter.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Letter</a>
+  </div>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Explore</div>
+    <a href="/lab/" onclick="this.closest('.mobile-menu').classList.remove('open')">Lab</a>
+    <a href="/trust-triangle.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Trust Triangle</a>
+    <a href="/exhibits.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Exhibits</a>
+  </div>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Build</div>
+    <a href="/for-agents.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Governing Agents</a>
+    <a href="/integrate.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Integrate</a>
+    <a href="/setup.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Setup</a>
+    <a href="/learn.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Learn</a>
+  </div>
+  <div class="mobile-menu-group">
+    <div class="mobile-menu-label">Reference</div>
+    <a href="/architecture.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Architecture</a>
+    <a href="/constraints.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Constraints</a>
+    <a href="/footprint.html" onclick="this.closest('.mobile-menu').classList.remove('open')">Security Footprint</a>
+    <a href="/sentinel/" onclick="this.closest('.mobile-menu').classList.remove('open')">Sentinel</a>
+  </div>
+  <a href="https://github.com/zeropoint-foundation/zeropoint" onclick="this.closest('.mobile-menu').classList.remove('open')" class="mobile-github">GitHub</a>
 </div>
-
 <section class="letter">
   <div class="container">
     <div class="letter-eyebrow">From the Author</div>
 
     <p>
-      More than nine months ago, I set out to build the SSL/TLS we were going to need for the Agentic Age.
+      More than a year ago, I set out to build the SSL/TLS we were going to need for the Agentic Age.
     </p>
 
     <p>
-      Not because someone asked me to. Because I could see we were starting to lose trust in a lot of what we used to rely on. In institutions, in platforms, in the systems we'd built to hold things together. And without portable, cryptographic trust — trust that belongs to the people using it, not the platforms hosting it — we weren't going to get very far. The agents were coming. The autonomy was coming. And the infrastructure to make that autonomy <em>accountable</em> was nowhere.
+      Not because someone asked me to. Because I could see we were starting to lose trust in a lot of what we used to rely on. In institutions, in platforms, in the systems we'd built to hold things together. And I could see what was coming next — the agents, the autonomy, the delegation of real decisions to systems that wouldn't be able to explain themselves. Trust was already fraying. <em>Autonomy without accountability</em> was going to finish the job.
     </p>
 
     <p>
-      I knew that if we didn't start building alternatives to the failure modes we can already see, there just wouldn't be any.
+      I knew that if we didn't start building alternatives to the <em>enshittification</em> we can already see, there just wouldn't be any. Not because I had it all figured out or was even sure I could affect the calculus of capture — but because <em>doing nothing was not an option I could live with</em>.
     </p>
 
     <p>
-      So I built ZeroPoint. With love, and with the felt weight of the world sometimes upon my shoulders. Not because I'm certain it's enough — but because doing nothing was not an option I could live with. Because the tools we build today decide the civilization we get tomorrow. And because I believe — stubbornly and without apology — that we can still choose better.
+      So I built ZeroPoint. With love and intention, and sometimes with the felt weight of the world upon my shoulders. I knew trust needed to be portable. I knew receipts needed to chain. I knew authority needed to narrow as it delegated. And I had the cryptography and the design instinct to start building. What I didn't have was the language for <em>why</em> these patterns felt necessary rather than merely useful.
     </p>
 
     <p>
-      ZeroPoint is open source because trust infrastructure has to be. It's built in Rust because this kind of work demands precision. It's designed around four tenets — not because rules are fun, but because <em>sovereignty, transparency, accountability, and portability</em> are the minimum conditions for a world where humans and agents can coexist with dignity.
+      The language came from an unexpected direction. Researchers studying language models, cognition, and even physics are converging on the same computational pattern: the present carries the full weight of the past, and coherent futures emerge from locally conditioned steps. They call it autoregression. I call it <strong>trust as trajectory</strong>.
     </p>
 
     <p>
-      This isn't a product pitch. It's a bet on us — as a species. On the idea that we still have time to lay the right foundations — and that enough people care to help.
+      ZeroPoint didn't adopt this theory. It converged on it independently — because this is how trust actually works. Not as a score to be checked, but as a path to be walked and verified. The architecture came first. Then came the language to understand why it matters. And with that understanding came something I hadn't expected: the conviction that this wasn't just useful engineering. It was a structural requirement. Trust that doesn't unfold — that can't be traced, can't be verified, can't be revoked — isn't trust at all. It's <em>hope dressed up as infrastructure</em>.
+    </p>
+
+    <p>
+      That conviction is what carries the work forward now. ZeroPoint is a foundation — literally, as of this year — because <em>the tools we build today decide the civilization we get tomorrow</em>. And because I believe, stubbornly and without apology, that we can still choose better.
+    </p>
+
+    <p>
+      This isn't a product pitch. It's a bet on us — as a species. On the idea that the right infrastructure, built early enough, changes what's possible — and that <em>we're still early enough</em>.
     </p>
 
     <hr class="letter-rule">
@@ -225,7 +327,7 @@ footer {
       </svg>
       <div class="name">Ken Romero</div>
       <div class="role">Founder, ThinkStream Labs</div>
-      <div class="date">February 2026</div>
+      <div class="date">May 2026</div>
     </div>
   </div>
 </section>
@@ -242,19 +344,44 @@ footer {
 
 <!-- Footer -->
 <footer>
-  <div class="container">
-    <div class="footer-links">
-      <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a>
-      <a href="/whitepaper.html">Whitepaper</a>
-      <a href="/playground.html">Playground</a>
-      <a href="/footprint.html">Footprint</a>
-      <a href="/demo-chain.html">Chain Demo</a>
-      <a href="/for-agents.html">Governing Agents</a>
-      <a href="/setup.html">Setup</a>
-      <a href="/letter.html">Letter</a>
+  <div class="footer-container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div class="footer-col-title">Understand</div>
+        <a href="/theory.html">Theory</a>
+        <a href="/whitepaper.html">Whitepaper</a>
+        <a href="/letter.html">Letter from the Founder</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Explore</div>
+        <a href="/lab/">Lab</a>
+        <a href="/trust-triangle.html">Trust Triangle</a>
+        <a href="/exhibits.html">Technical Exhibits</a>
+        <a href="/demo-chain.html">Chain Visualizer</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Build</div>
+        <a href="/for-agents.html">Governing Agents</a>
+        <a href="/integrate.html">Integration Guide</a>
+        <a href="/setup.html">Setup &amp; Deploy</a>
+        <a href="/learn.html">Courses</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Reference</div>
+        <a href="/architecture.html">Architecture Map</a>
+        <a href="/constraints.html">Constraint Architecture</a>
+        <a href="/footprint.html">Security Footprint</a>
+        <a href="/sentinel/">Sentinel</a>
+      </div>
     </div>
-    <div class="footer-org">
-      Maintained by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> · MIT / Apache-2.0
+    <div class="footer-bottom">
+      <div class="footer-org">
+        Built by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> &middot;
+        <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a> &middot;
+        <a href="https://zeropointfoundation.substack.com">Blog</a> &middot;
+        MIT / Apache-2.0
+      </div>
+      <div class="footer-tagline">Trust is infrastructure. Trust unfolds.</div>
     </div>
   </div>
 </footer>

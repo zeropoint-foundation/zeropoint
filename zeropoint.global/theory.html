@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust as Trajectory — The Theory Behind ZeroPoint</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --bg-elevated: #111116;
+            --bg-subtle: #18181f;
+            --text: #e0ded9;
+            --text-muted: #9a9a9e;
+            --text-dim: #5a5a5e;
+            --accent: #7eb8da;
+            --accent-dim: #4a7a96;
+            --rule: #222228;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        header {
+            border-bottom: 1px solid var(--rule);
+            padding: 2rem 1rem;
+            background-color: var(--bg-elevated);
+        }
+
+        .header-inner {
+            max-width: 760px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        .logo-dot {
+            color: var(--accent);
+        }
+
+        nav {
+            display: flex;
+            gap: 2rem;
+            font-size: 14px;
+        }
+
+        nav a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+            border-bottom: 1px solid transparent;
+        }
+
+        nav a:hover {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        nav a.current {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        main {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 3rem 1rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: var(--text-muted);
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        section {
+            margin-bottom: 3rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        p {
+            margin-bottom: 1.2rem;
+            color: var(--text);
+        }
+
+        p + p {
+            margin-top: 1.2rem;
+        }
+
+        em {
+            color: var(--accent);
+            font-style: italic;
+        }
+
+        strong {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .cta-link {
+            display: inline-block;
+            margin-top: 2rem;
+            padding: 0.75rem 1.5rem;
+            background-color: var(--bg-subtle);
+            color: var(--accent);
+            text-decoration: none;
+            border: 1px solid var(--accent-dim);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .cta-link:hover {
+            background-color: var(--accent-dim);
+            color: var(--bg);
+        }
+
+        footer {
+            border-top: 1px solid var(--rule);
+            padding: 2rem 1rem;
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 14px;
+            margin-top: 4rem;
+        }
+
+        footer a {
+            color: var(--text-muted);
+            text-decoration: none;
+            border-bottom: 1px solid var(--rule);
+            transition: color 0.2s;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        @media (max-width: 640px) {
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            h2 {
+                font-size: 1.25rem;
+            }
+
+            nav {
+                gap: 1rem;
+                font-size: 13px;
+            }
+
+            main {
+                padding: 2rem 1rem;
+            }
+        }
+    
+/* --- Unified Nav --- */
+.nav-dropdown { position: relative; }
+.nav-dropdown-btn {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem;
+  padding: 0; transition: color 0.2s;
+}
+.nav-dropdown-btn:hover { color: var(--accent); }
+.nav-dropdown-btn svg { transition: transform 0.2s; }
+.nav-dropdown:hover .nav-dropdown-btn svg { transform: rotate(180deg); }
+.nav-dropdown-menu {
+  display: none; position: absolute; top: calc(100% + 0.5rem); right: 0;
+  background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 0.5rem 0; min-width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 300;
+}
+.nav-dropdown:hover .nav-dropdown-menu { display: block; }
+.nav-dropdown-menu a {
+  display: block; padding: 0.5rem 1.25rem; font-size: 0.85rem;
+  color: var(--text-muted); text-decoration: none; transition: all 0.15s;
+}
+.nav-dropdown-menu a:hover { color: var(--accent); background: var(--bg-subtle); }
+
+/* --- Mobile Menu Groups --- */
+.mobile-menu-group { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.mobile-menu-label {
+  font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent-dim);
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.25rem;
+}
+.mobile-github {
+  margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--rule);
+}
+
+/* --- Footer Grid --- */
+.footer-container { max-width: 1080px; margin: 0 auto; padding: 3rem 2rem 2rem; }
+.footer-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem;
+  padding-bottom: 2rem; border-bottom: 1px solid var(--rule);
+}
+.footer-col { display: flex; flex-direction: column; gap: 0.5rem; }
+.footer-col-title {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-dim);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.25rem;
+}
+.footer-col a { font-size: 0.85rem; color: var(--text-muted); text-decoration: none; }
+.footer-col a:hover { color: var(--accent); }
+.footer-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 1.5rem; flex-wrap: wrap; gap: 0.5rem;
+}
+.footer-org { font-size: 0.75rem; color: var(--text-dim); }
+.footer-org a { color: var(--text-dim); }
+.footer-org a:hover { color: var(--accent-dim); }
+.footer-tagline {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim);
+  letter-spacing: 0.05em; font-style: italic;
+}
+@media (max-width: 768px) {
+  .footer-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr; }
+  .footer-bottom { flex-direction: column; text-align: center; }
+}
+</style>
+</head>
+<body>
+    <header>
+  <nav>
+    <a href="/" class="nav-logo"><span>zero</span>point</a>
+    <div class="nav-links">
+      <a href="/theory.html">Theory</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/for-agents.html">Agents</a>
+      <a href="/lab/">Lab</a>
+      <a href="/integrate.html">Integrate</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-btn">More <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M1 1l4 4 4-4"/></svg></button>
+        <div class="nav-dropdown-menu">
+          <a href="/architecture.html">Architecture</a>
+          <a href="/constraints.html">Constraints</a>
+          <a href="/footprint.html">Security Footprint</a>
+          <a href="/trust-triangle.html">Trust Triangle</a>
+          <a href="/learn.html">Learn</a>
+          <a href="/setup.html">Setup</a>
+          <a href="/letter.html">Letter</a>
+          <a href="/exhibits.html">Exhibits</a>
+          <a href="/sentinel/">Sentinel</a>
+        </div>
+      </div>
+      <a href="https://github.com/zeropoint-foundation/zeropoint" class="github-link">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+    <main>
+        <h1>Trust as Trajectory</h1>
+        <p class="subtitle">The Theory Behind ZeroPoint</p>
+
+        <section>
+            <h2>The Snapshot Problem</h2>
+            <p>Every trust system we use today checks a snapshot. Your bank verifies your account balance at one moment. Your identity provider confirms you are who you claim to be right now. A platform checks whether you have a verified email, a minimum reputation score, a clean report. These snapshots feel reliable. But they're brittle.</p>
+            <p>Remove the history and the snapshot loses meaning. If you woke up tomorrow with a perfect credit score but no record of how you built it, would you be trustworthy? If a platform suddenly claimed you were verified but offered no evidence of verification happening, would you believe it? A snapshot without a trajectory is just a claim. And a claim without history is indistinguishable from a lie.</p>
+        </section>
+
+        <section>
+            <h2>Trust as Trajectory</h2>
+            <p>Real trust accumulates through time. It unfolds. Every interaction you have leaves a trace: the conversation you had, the commitment you made, the follow-through you delivered. These traces form a chain. Break a link in that chain—delete a record, falsify a step, rewrite the history—and the whole thing collapses. The chain isn't evidence of trust. <em>The chain is the trust.</em></p>
+            <p>This is why relationships matter more than credentials. You trust a friend not because they have a badge or a score, but because you have a history with them. You can point to specific moments: when they were honest with you, when they kept their word, when they showed up. That history is portable in your mind. You carry it with you. It doesn't depend on a platform to keep it safe.</p>
+            <p>Portable, history-aware trust is what ZeroPoint builds. Instead of checking whether you are trustworthy now, it asks: what is your trajectory? What is the sequence of interactions that brought you here? Can anyone verify that sequence? If the history is genuine, tamper-proof, and visible, then trust becomes transferable. You can use it anywhere, because anyone can see how you got it.</p>
+        </section>
+
+        <section>
+            <h2>The Pattern Appears Everywhere</h2>
+            <p>This structure—where the history itself is the thing of value—shows up across domains that seem unrelated. In language, the words that matter most are not individual letters but sequences: a word only means something because of the order. Remove the sequence, scramble the letters, and the meaning vanishes. The order is the information.</p>
+            <p>In how we think, memories matter because they are ordered. Your life is not a collection of isolated moments; it is a narrative. Your sense of self depends on being able to trace your own story. Cognitive scientists have long known that when that continuity breaks—through amnesia, trauma, or illness—identity becomes fragile. The sequence, again, is fundamental.</p>
+            <p>Even in physics, this principle emerges. The arrow of time itself is defined by sequences: cause precedes effect, entropy increases, history unfolds in only one direction. We can never know a particle in isolation; we can only know it through its trajectory. The pattern is not borrowed credibility. It is the structure of how the world actually works.</p>
+        </section>
+
+        <section>
+            <h2>How ZeroPoint Builds It</h2>
+            <p>ZeroPoint starts with a genesis: a founding event that creates a chain. This chain is made of interactions, each one verified and linked to the last. The chain is immutable; you cannot change the past without breaking the link to the present. Every new interaction adds a new block, extending the trajectory forward.</p>
+            <p>When you delegate authority to someone—when you say "I trust them to act on my behalf"—that delegation is recorded in the chain. The scope of that delegation is explicit and narrow: you can see exactly what they can do and for how long. If they misuse it, the violation is recorded. The history shows what happened. Trust narrows as it spreads; wider delegation requires longer history to back it up.</p>
+            <p>Reputation accumulates in the same way. Every successful interaction, every honored commitment, every resolved dispute adds depth to your trajectory. Bad actors can still join the network, but they start from zero. To gain broad trust, they must build a long, clean chain. They cannot buy their way in, because history cannot be fabricated. They must earn it, step by step, moment by moment.</p>
+        </section>
+
+        <section>
+            <h2>Why This Matters</h2>
+            <p>Platform capture happens because trust is owned by the platform. Your reputation lives in their servers. Your identity depends on their verification. Your history is private to them. If they change the rules, if they lock you out, if they decide your history doesn't count, you lose everything. You have no recourse, because you have no portable claim on the trust you built.</p>
+            <p>When trust is a trajectory—when it is publicly verifiable and tamper-proof—it becomes yours. No platform can take it from you. You can move it elsewhere, build on it differently, prove it to new communities. The history unfolds in front of whoever needs to see it. Trust stops being something that a company grants you and starts being something you own, carry with you, and build continuously. That changes everything.</p>
+        </section>
+
+        <p style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--rule);">For a deeper dive into the technical architecture, see the <a href="whitepaper.html" style="color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent);">whitepaper</a>.</p>
+    </main>
+
+    <footer>
+  <div class="footer-container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div class="footer-col-title">Understand</div>
+        <a href="/theory.html">Theory</a>
+        <a href="/whitepaper.html">Whitepaper</a>
+        <a href="/letter.html">Letter from the Founder</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Explore</div>
+        <a href="/lab/">Lab</a>
+        <a href="/trust-triangle.html">Trust Triangle</a>
+        <a href="/exhibits.html">Technical Exhibits</a>
+        <a href="/demo-chain.html">Chain Visualizer</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Build</div>
+        <a href="/for-agents.html">Governing Agents</a>
+        <a href="/integrate.html">Integration Guide</a>
+        <a href="/setup.html">Setup &amp; Deploy</a>
+        <a href="/learn.html">Courses</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Reference</div>
+        <a href="/architecture.html">Architecture Map</a>
+        <a href="/constraints.html">Constraint Architecture</a>
+        <a href="/footprint.html">Security Footprint</a>
+        <a href="/sentinel/">Sentinel</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-org">
+        Built by <a href="https://thinkstreamlabs.ai">ThinkStream Labs</a> &middot;
+        <a href="https://github.com/zeropoint-foundation/zeropoint">GitHub</a> &middot;
+        <a href="https://zeropointfoundation.substack.com">Blog</a> &middot;
+        MIT / Apache-2.0
+      </div>
+      <div class="footer-tagline">Trust is infrastructure. Trust unfolds.</div>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
