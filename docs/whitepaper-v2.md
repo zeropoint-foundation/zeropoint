@@ -450,7 +450,7 @@ These constitutional rules are what might be called *trajectory invariants* — 
 
 The constitutional rules implement ZeroPoint's Four Tenets, which are embedded in the protocol, expressed in the documentation, and enforced in the code:
 
-**I. Do No Harm.** ZeroPoint shall not operate in systems designed to harm humans. The `HarmPrincipleRule` is a non-removable rule in the PolicyEngine. It exists because architecture shapes outcomes, and we choose to make trust portable. This tenet is a forward-propagating constraint — once established at Genesis, it conditions every future action in the system's trajectory.
+**I. Do No Harm.** ZeroPoint shall not operate in systems designed to harm humans. The `HarmPrincipleRule` is a non-removable rule in the PolicyEngine. It exists because architecture shapes outcomes, and outcomes that harm humans are outcomes we refuse to enable. This tenet is a forward-propagating constraint — once established at Genesis, it conditions every future action in the system's trajectory.
 
 **II. Sovereignty Is Sacred.** Every participant has the right to refuse any action. Every human has the right to disconnect any agent. No agent may acquire capabilities it was not granted. Coercion is architecturally impossible — the Guard enforces this locally, before every action, without consulting any external authority. Each participant evaluates its own chain and grants (its accumulated evidence) before accepting any input from the outside.
 
