@@ -3,6 +3,7 @@
 mod chat;
 mod commands;
 use zp_configure as configure;
+mod emit;
 mod guard;
 mod init;
 mod mesh_commands;
@@ -388,6 +389,48 @@ enum Commands {
         audit_db: Option<PathBuf>,
 
         /// Emit JSON instead of human text.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Emit a signed receipt from a shell script or external process.
+    ///
+    /// Creates an ObservationClaim receipt with the given label and metadata,
+    /// signs it with the operator key, and appends it to the audit chain.
+    /// Designed for orchestration hooks (Symphony, CI, custom systems).
+    ///
+    /// Examples:
+    ///   zp emit orchestrator:workspace:created --issue PROJ-347 --agent agent-12
+    ///   zp emit orchestrator:run:sealed --issue PROJ-347 --meta exit_code=0
+    Emit {
+        /// Event label (e.g., orchestrator:workspace:created, agent:turn:3)
+        label: String,
+
+        /// Issue or task identifier (groups receipts into a logical chain)
+        #[arg(long)]
+        issue: Option<String>,
+
+        /// Agent identifier
+        #[arg(long)]
+        agent: Option<String>,
+
+        /// Parent receipt ID (for chain sequencing)
+        #[arg(long)]
+        parent: Option<String>,
+
+        /// Upstream genesis reference (for new chain roots)
+        #[arg(long)]
+        upstream: Option<String>,
+
+        /// Key=value metadata pairs (repeatable)
+        #[arg(long = "meta", value_parser = parse_key_val)]
+        meta: Vec<(String, String)>,
+
+        /// Path to audit store (default: <data-dir>/audit.db)
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
+
+        /// Emit JSON output instead of just the receipt ID
         #[arg(long)]
         json: bool,
     },
@@ -796,6 +839,14 @@ enum OperatorCmd {
         #[arg(long)]
         email: String,
     },
+}
+
+/// Parse a key=value pair for the --meta flag.
+fn parse_key_val(s: &str) -> Result<(String, String), String> {
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=VALUE: no `=` found in `{s}`"))?;
+    Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
 #[tokio::main]
@@ -1665,7 +1716,7 @@ async fn main() -> anyhow::Result<()> {
                     let sig_note = if signed == total {
                         format!("(all {} signed — tier ≥ 1)", signed)
                     } else if signed == 0 {
-                        format!("(\x1b[31mnone signed\x1b[0m — possible tier-0 violation)")
+                        "(\x1b[31mnone signed\x1b[0m — possible tier-0 violation)".to_string()
                     } else {
                         format!(
                             "(\x1b[33m{} of {} signed\x1b[0m — review tier provenance)",
@@ -1894,6 +1945,26 @@ async fn main() -> anyhow::Result<()> {
     if let Some(Commands::Adapt { tool, path, audit_db, json }) = &args.command {
         let exit_code = run_adapt(tool, path.clone(), audit_db.clone(), &args.data_dir, *json);
         std::process::exit(exit_code);
+    }
+
+    if let Some(Commands::Emit { label, issue, agent, parent, upstream, meta, audit_db, json }) = &args.command {
+        match emit::run_emit(
+            label,
+            issue.as_deref(),
+            agent.as_deref(),
+            parent.as_deref(),
+            upstream.as_deref(),
+            meta,
+            audit_db.as_deref(),
+            &args.data_dir,
+            *json,
+        ) {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m emit failed: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 
     if let Some(Commands::Scan { path, json, audit_db }) = &args.command {
@@ -3029,6 +3100,8 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Discover { .. }) => unreachable!(), // handled above
         Some(Commands::Adapt { .. }) => unreachable!(),    // handled above
         Some(Commands::Scan { .. }) => unreachable!(),     // handled above
+        Some(Commands::Operator(_)) => unreachable!(),    // handled above
+        Some(Commands::Emit { .. }) => unreachable!(),    // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,
@@ -4319,8 +4392,8 @@ fn run_grants(
             return 0;
         }
         println!(
-            "{:<20} {:<14} {:<18} {:<6} {:<8} {:<6} {}",
-            "subject", "grant_id", "capability", "tier", "lease", "renew", "status"
+            "{:<20} {:<14} {:<18} {:<6} {:<8} {:<6} status",
+            "subject", "grant_id", "capability", "tier", "lease", "renew"
         );
         for snap in &snaps {
             let id_short = if snap.grant.id.len() > 14 {
