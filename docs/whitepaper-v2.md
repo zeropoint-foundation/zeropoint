@@ -2,16 +2,16 @@
 
 ## Cryptographic Governance Primitives for Accountable Systems
 
-**Whitepaper v2.2 — May 2026**
+**Whitepaper v2.3 — May 2026**
 **Ken Romero, Founder, ThinkStream Labs**
 
 Status: Public Technical Overview
 License: CC BY 4.0 (text); Code remains MIT/Apache-2.0
 Canonical URL: https://zeropoint.global/whitepaper
-PDF: [zeropoint-whitepaper-v2.2.pdf](https://zeropoint.global/zeropoint-whitepaper-v2.2.pdf)
+PDF: [zeropoint-whitepaper-v2.3.pdf](https://zeropoint.global/zeropoint-whitepaper-v2.3.pdf)
 
 **How to cite:**
-> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream Labs, Whitepaper v2.2, May 2026. https://zeropoint.global/whitepaper
+> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream Labs, Whitepaper v2.3, May 2026. https://zeropoint.global/whitepaper
 
 ---
 
@@ -36,7 +36,7 @@ ZeroPoint is implemented in Rust and is technically complete, including a dual-b
 2. Problem Statement
 3. Design Goals
 4. System Overview
-5. Receipts and Chains
+5. Receipts and Chains (including §5.5 Epochs, Compaction, and Bounded Growth)
 6. Governance Model
 7. Threat Model
 8. Transport Integrations
@@ -367,6 +367,24 @@ History-dependence is the defense. When each entry's hash incorporates the hash 
 The engineering cost is real: chain verification is O(n) in the chain length, not O(1). But this cost is justified by what it buys — a trust model where the trajectory is the evidence, not just the endpoint. And in practice, chains can be verified incrementally: a peer that has already verified entries 1 through 1000 only needs to verify entry 1001 against the known-good hash of entry 1000.
 
 History-dependence is not overhead. It is the architecture.
+
+### 5.5 Chains at Scale — Epochs, Compaction, and Bounded Growth
+
+The previous section argued that history-dependence is essential. This section addresses the obvious follow-up: what happens when history gets long?
+
+An agent performing 1,000 actions per day produces 365,000 receipts per year. A fleet of 100 agents produces 36.5 million. If every verification requires walking the full chain from genesis, the architecture that guarantees integrity becomes the architecture that prevents operation. Append-only systems that ignore this reality are not honest engineering — they are deferred failure.
+
+ZeroPoint addresses chain growth through epoch-based compaction. The chain is divided into fixed-size segments called epochs. When an epoch fills (8,192 entries or 7 days, whichever comes first), a Merkle tree is computed over its entries and summarized in a signed EpochSeal. The seal is itself a receipt — it joins the chain like any other entry, preserving the hash linkage. The sealed epoch's individual entries can then be archived and removed from active storage.
+
+The Merkle tree is the key mechanism. Each leaf is the hash of one chain entry. Leaves are paired and hashed bottom-up until a single root remains. That root — a 32-byte Blake3 hash — cryptographically commits to every entry in the epoch. Change any entry and the root changes. The EpochSeal records this root, the entry count, the sequence range, and is signed by the same key that signs all other receipts. Seals form their own verifiable chain via back-references, creating a lightweight chain-of-chains.
+
+This changes verification from a linear walk to a structured protocol with four modes. For recent activity (the current unsealed epoch), verification is the same full walk as before — but bounded to at most 8,192 entries. For historical integrity, a verifier walks the seal chain: dozens of seals instead of hundreds of thousands of entries. For spot-checking a specific entry in a sealed epoch, a Merkle inclusion proof — the sibling hashes along the path from leaf to root — proves membership in 13 hashes (416 bytes, one mesh packet). For forensic investigation, all entries in an archived epoch can be retrieved and the Merkle tree reconstructed from scratch.
+
+The result is that active memory is bounded regardless of total history. The working set is one epoch of entries (roughly 4 MB) plus the most recent seal. An agent that has been running for five years holds the same 4 MB in active memory as one that started yesterday. The seal chain — the complete verifiable summary of all prior history — grows by approximately one entry per week, roughly 500 bytes each. Five years of history compresses to about 111 KB of seals. The archived epoch data (compressed with zstd at roughly 5:1) grows linearly but can be offloaded to external storage per the deployment operator's retention policy.
+
+Three things this does not do, and the whitepaper would be dishonest to omit them. First, compaction does not solve disaster recovery. If archived entries are lost and no peer holds copies, the seal proves they existed with a specific Merkle root but cannot reconstruct their content. Durability requires replication, which is a deployment decision — ZeroPoint does not mandate infrastructure because mandating infrastructure contradicts sovereignty. Second, compaction does not prevent fabrication. A compromised node can produce a valid seal over fabricated entries. The seal proves internal consistency, not truthfulness. The defense is peer attestation: peers spot-check entries against their own records of interactions, making fabrication detectable. Third, retention is the operator's tradeoff, not a protocol decision. When local archives expire and external copies are unavailable, individual actions in those epochs cannot be examined — only the seal chain's structural summary (entry counts, time ranges, Merkle roots) survives. Storage cost versus audit depth is the deployment operator's call.
+
+The compaction architecture is specified in detail in the Epoch-Based Chain Compaction specification and implemented in `zp-receipt::epoch`. It was designed after the integrity guarantees were proven (699 tests at the time of design), following ZeroPoint's general principle: correctness first, optimization second, and always honest about what the optimization trades away.
 
 ---
 
