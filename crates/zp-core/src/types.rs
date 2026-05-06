@@ -124,8 +124,8 @@ pub type Receipt = zp_receipt::Receipt;
 /// Re-export key receipt types for convenience.
 pub use zp_receipt::{
     Action as ReceiptAction, ActionType, Executor as ReceiptExecutor, ReceiptChain, ReceiptType,
-    ReceiptVerifier, Signer as ReceiptSigner, Status as ReceiptStatus, TrustGrade,
-    VerificationResult,
+    ReceiptVerifier, SignatureAlgorithm, SignatureBlock, Signer as ReceiptSigner,
+    Status as ReceiptStatus, TrustGrade, VerificationResult,
 };
 
 /// A message in conversation history.

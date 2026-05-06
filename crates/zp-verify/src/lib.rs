@@ -382,7 +382,7 @@ fn verify_one_ed25519<E: VerifiableEntry>(
     report: &mut VerifyReport,
 ) {
     use base64::Engine;
-    use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
+    use ed25519_dalek::{Signature, VerifyingKey};
 
     report.signature_checks += 1;
 
@@ -464,7 +464,12 @@ fn verify_one_ed25519<E: VerifiableEntry>(
         }
     };
 
-    if verifying_key.verify(payload, &signature).is_err() {
+    // Phase 1.C: verify_strict (not the malleable verify) — the chain is
+    // the substrate's source of truth, and signature malleability would
+    // give an attacker two distinct receipts for the same entry hash.
+    // Closes the second half of CRIT-4 from the 2026-04 security audit
+    // (zp-audit's ChainVerifier was already strict; zp-verify is now too).
+    if verifying_key.verify_strict(payload, &signature).is_err() {
         report.signature_failures += 1;
         report.findings.push(VerifyFinding {
             rule: "S1".to_string(),

@@ -18,6 +18,7 @@
 //! but the mechanism itself is unconditional. This prevents circular dependencies
 //! between key distribution and policy evaluation.
 
+pub mod audit_signer;
 pub mod biometric;
 pub mod blast_radius;
 pub mod certificate;
@@ -28,20 +29,39 @@ pub mod keyring;
 pub mod recovery;
 pub mod revocation;
 pub mod rotation;
+pub mod secret_file;
 pub mod sovereignty;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_helpers;
 pub mod vault_key;
 
 #[cfg(test)]
 pub(crate) mod test_sync {
     //! Shared lock to serialize tests that touch process-global state —
-    //! the OS credential store entries (`zeropoint-genesis` /
-    //! `zeropoint-operator`) and the `ZP_VAULT_KEY` env var. Without this,
-    //! parallel tests clobber each other on macOS Keychain.
+    //! the OS credential store entries and the `ZP_VAULT_KEY` env var.
+    //!
+    //! # Auto-installs the mock keyring backend
+    //!
+    //! `serial_guard()` calls
+    //! [`crate::test_helpers::install_mock_keyring`] on first invocation
+    //! (idempotent via `Once`). The hand-rolled in-memory builder lives
+    //! in this crate, gives deterministic round-trip semantics, and
+    //! removes the OS-Keychain-ACL-on-rebuilt-binary fragility that
+    //! caused the May 2026 test-flake debugging session. Tests that
+    //! touch `keyring::Entry` always go through the mock; the real OS
+    //! Keychain is not touched during `cargo test -p zp-keys`.
     use std::sync::{Mutex, MutexGuard};
 
     static LOCK: Mutex<()> = Mutex::new(());
 
     pub fn serial_guard() -> MutexGuard<'static, ()> {
+        // Install the in-memory mock keyring before any test reaches
+        // `keyring::Entry`. Idempotent. The mock is shared across all
+        // entries the builder creates, so set/get round-trips work
+        // deterministically across `Entry::new(...)` calls with the
+        // same identity triple.
+        crate::test_helpers::install_mock_keyring();
+
         match LOCK.lock() {
             Ok(g) => g,
             // If a previous test panicked while holding the lock,
@@ -79,4 +99,6 @@ pub use revocation::{
     RevocationStore,
 };
 pub use rotation::{RotationCertificate, RotationChain};
+pub use audit_signer::derive_audit_signer_seed;
+pub use secret_file::write_atomic as write_secret_file;
 pub use vault_key::{derive_vault_key, resolve_vault_key, ResolvedVaultKey, VaultKeySource};

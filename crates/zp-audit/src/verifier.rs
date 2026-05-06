@@ -29,7 +29,7 @@
 //! - Returns a detailed report, not just pass/fail
 
 use serde::{Deserialize, Serialize};
-use zp_core::AuditEntry;
+use zp_core::{AuditEntry, SignatureAlgorithm};
 
 /// Result of verifying a single audit entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,10 +187,25 @@ impl ChainVerifier {
                     .push(format!("Entry {} has invalid entry_hash", ev.entry_id));
             }
 
-            // 3. Verify signature (if present)
-            if let Some(sig_hex) = &entry.signature {
+            // 3. Verify signatures (if any present).
+            //
+            // Phase 1.A: an entry's `signatures` is a Vec<SignatureBlock>. Per-
+            // entry semantics are preserved: we count an entry as "signature
+            // present" iff it carries at least one Ed25519 block, and "signature
+            // valid" iff at least one Ed25519 block verifies against a known key.
+            // Experimental algorithm blocks (e.g. ML-DSA-65) are skipped here —
+            // chain verification in zp-verify is the right place to surface them.
+            let ed25519_blocks: Vec<&zp_core::SignatureBlock> = entry
+                .signatures
+                .iter()
+                .filter(|b| matches!(b.algorithm, SignatureAlgorithm::Ed25519))
+                .collect();
+
+            if !ed25519_blocks.is_empty() {
                 report.signatures_present += 1;
-                let sig_valid = self.verify_signature(entry, sig_hex);
+                let sig_valid = ed25519_blocks
+                    .iter()
+                    .any(|b| self.verify_block(entry, b));
                 ev.signature_valid = Some(sig_valid);
                 if sig_valid {
                     report.signatures_valid += 1;
@@ -207,11 +222,21 @@ impl ChainVerifier {
         report
     }
 
-    /// Verify a signature on an entry against known keys.
-    fn verify_signature(&self, entry: &AuditEntry, sig_hex: &str) -> bool {
+    /// Verify a single Ed25519 [`SignatureBlock`] on an entry against the
+    /// verifier's known-keys list.
+    ///
+    /// `verify_strict` is used (not the malleable `verify`) — the chain is
+    /// the substrate's source of truth, and signature malleability would
+    /// give an attacker two distinct receipts for the same entry hash.
+    fn verify_block(&self, entry: &AuditEntry, block: &zp_core::SignatureBlock) -> bool {
+        use base64::Engine;
         use ed25519_dalek::VerifyingKey;
 
-        let sig_bytes = match hex::decode(sig_hex) {
+        // Decode the block's base64 signature. Any malformed encoding fails
+        // closed — a block is either a valid signature or it isn't.
+        let sig_bytes = match base64::engine::general_purpose::STANDARD
+            .decode(&block.signature_b64)
+        {
             Ok(b) if b.len() == 64 => b,
             _ => return false,
         };
@@ -220,10 +245,12 @@ impl ChainVerifier {
         sig_array.copy_from_slice(&sig_bytes);
         let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
 
-        // The signed material is the entry_hash
+        // The signed material is the entry_hash (a hex string).
         let message = entry.entry_hash.as_bytes();
 
-        // Try each known key
+        // Try each known key. We could optimize by matching block.key_id
+        // against a known-keys index, but the linear scan is fine for
+        // chain sizes the verifier handles in practice.
         for (key_bytes, _label) in &self.known_keys {
             if let Ok(verifying_key) = VerifyingKey::from_bytes(key_bytes) {
                 if verifying_key.verify_strict(message, &signature).is_ok() {
@@ -475,15 +502,21 @@ mod tests {
 
     #[test]
     fn test_verify_signed_entries() {
+        use base64::Engine;
         let signing_key = SigningKey::generate(&mut rand::thread_rng());
         let verifying_key = signing_key.verifying_key();
 
         let mut chain = make_chain(2);
 
-        // Sign each entry: signature = sign(entry_hash)
+        // Sign each entry: signature = sign(entry_hash). Phase 1.A wraps
+        // the raw Ed25519 signature in a SignatureBlock (b64-encoded).
         for entry in &mut chain {
             let sig = signing_key.sign(entry.entry_hash.as_bytes());
-            entry.signature = Some(hex::encode(sig.to_bytes()));
+            let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+            entry.signatures = vec![zp_core::SignatureBlock::ed25519(
+                &hex::encode(verifying_key.to_bytes()),
+                &sig_b64,
+            )];
         }
 
         let verifier = ChainVerifier::new()
@@ -498,13 +531,18 @@ mod tests {
 
     #[test]
     fn test_verify_rejects_wrong_signature() {
+        use base64::Engine;
         let signing_key = SigningKey::generate(&mut rand::thread_rng());
         let wrong_key = SigningKey::generate(&mut rand::thread_rng());
 
         let mut chain = make_chain(1);
         // Sign with one key
         let sig = signing_key.sign(chain[0].entry_hash.as_bytes());
-        chain[0].signature = Some(hex::encode(sig.to_bytes()));
+        let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+        chain[0].signatures = vec![zp_core::SignatureBlock::ed25519(
+            &hex::encode(signing_key.verifying_key().to_bytes()),
+            &sig_b64,
+        )];
 
         // Verify with different key
         let verifier = ChainVerifier::new()
@@ -520,13 +558,18 @@ mod tests {
 
     #[test]
     fn test_verify_rejects_tampered_signature() {
+        use base64::Engine;
         let signing_key = SigningKey::generate(&mut rand::thread_rng());
 
         let mut chain = make_chain(1);
         let sig = signing_key.sign(chain[0].entry_hash.as_bytes());
         let mut sig_bytes = sig.to_bytes();
         sig_bytes[0] ^= 0xFF; // Tamper
-        chain[0].signature = Some(hex::encode(sig_bytes));
+        let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig_bytes);
+        chain[0].signatures = vec![zp_core::SignatureBlock::ed25519(
+            &hex::encode(signing_key.verifying_key().to_bytes()),
+            &sig_b64,
+        )];
 
         let verifier = ChainVerifier::new()
             .with_signing_key(signing_key.verifying_key().to_bytes(), "signer".to_string());
@@ -575,12 +618,17 @@ mod tests {
 
     #[test]
     fn test_mixed_signed_and_unsigned() {
+        use base64::Engine;
         let signing_key = SigningKey::generate(&mut rand::thread_rng());
         let mut chain = make_chain(3);
 
         // Only sign the middle entry
         let sig = signing_key.sign(chain[1].entry_hash.as_bytes());
-        chain[1].signature = Some(hex::encode(sig.to_bytes()));
+        let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+        chain[1].signatures = vec![zp_core::SignatureBlock::ed25519(
+            &hex::encode(signing_key.verifying_key().to_bytes()),
+            &sig_b64,
+        )];
 
         let verifier = ChainVerifier::new().with_signing_key(
             signing_key.verifying_key().to_bytes(),

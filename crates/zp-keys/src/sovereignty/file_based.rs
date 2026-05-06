@@ -33,16 +33,11 @@ impl SovereigntyProvider for FileProvider {
             .unwrap_or_else(|_| std::path::PathBuf::from("ZeroPoint/keys"));
         std::fs::create_dir_all(&keys_dir)?;
 
+        // CRIT-8: atomic write via tmpfile + rename, mode 0600 from
+        // creation. Eliminates the chmod-after-write race the audit
+        // flagged in the original write-then-set_permissions sequence.
         let path = keys_dir.join("genesis.secret");
-        std::fs::write(&path, secret)?;
-
-        // Restrict permissions on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(&path, perms)?;
-        }
+        crate::secret_file::write_atomic(&path, secret)?;
 
         tracing::info!("Genesis secret written to disk (file-based sovereignty)");
         Ok(())

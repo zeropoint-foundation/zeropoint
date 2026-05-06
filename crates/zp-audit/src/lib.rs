@@ -12,6 +12,7 @@ pub mod reconstitute;
 pub mod recovery;
 pub mod revocation;
 pub mod scrub;
+pub mod signer;
 pub mod store;
 pub mod verifier;
 
@@ -30,5 +31,6 @@ pub use recovery::{
     Checkpoint, RecoveredState, RecoveryConfig, RecoveryEngine, RecoveryReceipt, ShutdownMarker,
 };
 pub use revocation::RevocationIndex;
+pub use signer::AuditSigner;
 pub use store::{AuditStore, Result, StoreError};
 pub use verifier::{verify_linkage, verify_linkage_report, ChainVerifier, VerificationReport};

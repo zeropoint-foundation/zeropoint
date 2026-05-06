@@ -5695,6 +5695,7 @@ dependencies = [
 name = "zp-audit"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "blake3",
  "chrono",
  "ed25519-dalek",
@@ -5814,6 +5815,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-discipline"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "regex",
+ "walkdir",
+]
+
+[[package]]
 name = "zp-engine"
 version = "0.1.0"
 dependencies = [
@@ -5846,6 +5856,7 @@ dependencies = [
  "tower 0.4.13",
  "tower-http 0.5.2",
  "zp-config",
+ "zp-keys",
  "zp-server",
 ]
 

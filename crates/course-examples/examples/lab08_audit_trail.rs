@@ -14,7 +14,7 @@ use zp_core::policy::PolicyDecision;
 use zp_core::types::ConversationId;
 
 fn main() {
-    let mut store = AuditStore::open("./lab-audit.db").expect("Should open audit store");
+    let mut store = AuditStore::open_unsigned("./lab-audit.db").expect("Should open audit store");
     let conv_id = ConversationId::new();
 
     // Genesis entry (first in chain)

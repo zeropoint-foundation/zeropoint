@@ -107,7 +107,7 @@ fn verify_attestation_signature(
     signature_hex: &str,
     signer_public_key_hex: &str,
 ) -> bool {
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    use ed25519_dalek::{Signature, VerifyingKey};
 
     // Decode public key
     let pk_bytes = match hex::decode(signer_public_key_hex) {
@@ -134,9 +134,12 @@ fn verify_attestation_signature(
     };
     let signature = Signature::from_bytes(&sig_array);
 
-    // Verify: signature is over the hash bytes (hex-encoded hash string)
+    // Verify: signature is over the hash bytes (hex-encoded hash string).
+    // Phase 1.C: verify_strict — non-strict verify is signature-malleable
+    // and would let an attacker present two distinct signatures for the
+    // same attestation hash.
     let hash_bytes = attestation_hash.as_bytes();
-    verifying_key.verify(hash_bytes, &signature).is_ok()
+    verifying_key.verify_strict(hash_bytes, &signature).is_ok()
 }
 
 // ============================================================================

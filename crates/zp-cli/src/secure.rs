@@ -1409,7 +1409,7 @@ pub fn status() -> i32 {
     // ── Audit Chain: wire/bead positions ────────────────────────────
     let audit_db = zp_home.join("audit.db");
     if audit_db.exists() {
-        if let Ok(store) = zp_audit::AuditStore::open(&audit_db) {
+        if let Ok(store) = zp_audit::AuditStore::open_readonly(&audit_db) {
             let store_arc = std::sync::Arc::new(std::sync::Mutex::new(store));
 
             // Query canonicalization anchors

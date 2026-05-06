@@ -33,6 +33,7 @@ members = [
     "crates/zp-memory",
     "crates/zp-configure",
     "crates/zp-bench",
+    "crates/zp-discipline",
 ]
 
 [workspace.package]

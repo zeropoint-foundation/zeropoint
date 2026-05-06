@@ -39,12 +39,27 @@ use serde_json::json;
 use uuid::Uuid;
 
 use zp_core::{ActorId, AuditAction, AuditEntry, AuditId, ConversationId, PolicyDecision, Receipt};
+// SignatureBlock is unused in this module after the chain-signing refactor —
+// hash-time `signatures` is always `[]` (signing happens in AuditStore::append),
+// and read-side construction is via Vec::<SignatureBlock>::new() inferred from
+// the AuditEntry field type.
 
 /// An audit entry that has not yet been linked into the chain.
 ///
 /// Construct one of these and pass it to [`crate::AuditStore::append`]. The
-/// store assigns `id`, `timestamp`, `prev_hash`, and `entry_hash` atomically
-/// inside a transaction; callers must NOT compute these themselves.
+/// store assigns `id`, `timestamp`, `prev_hash`, `entry_hash`, **and the
+/// signature(s)** atomically inside a transaction; callers must NOT compute
+/// or supply any of these themselves.
+///
+/// # Why no signature field
+///
+/// Pre-Phase-1, this struct carried `signature: Option<String>` and a
+/// `with_signature(...)` builder. Both are gone. The store owns signing —
+/// callers describe *intent* (actor, action, policy decision, optional
+/// receipt) and the store crystallizes it into a sealed, signed record.
+/// This closes Seam 1 of the principle "signing is gravity": there is no
+/// path by which an entry reaches storage unsigned, because callers no
+/// longer have a knob to leave it off.
 ///
 /// This is the only sanctioned way to add entries to the audit chain. The
 /// pre-AUDIT-03 `ChainBuilder::build_entry` API is gone because it allowed
@@ -58,11 +73,10 @@ pub struct UnsealedEntry {
     pub policy_decision: PolicyDecision,
     pub policy_module: String,
     pub receipt: Option<Receipt>,
-    pub signature: Option<String>,
 }
 
 impl UnsealedEntry {
-    /// Convenience constructor for the common case (no receipt, no signature).
+    /// Convenience constructor for the common case (no receipt).
     pub fn new(
         actor: ActorId,
         action: AuditAction,
@@ -77,19 +91,12 @@ impl UnsealedEntry {
             policy_decision,
             policy_module: policy_module.into(),
             receipt: None,
-            signature: None,
         }
     }
 
     /// Attach a receipt to this unsealed entry.
     pub fn with_receipt(mut self, receipt: Receipt) -> Self {
         self.receipt = Some(receipt);
-        self
-    }
-
-    /// Attach a signature to this unsealed entry.
-    pub fn with_signature(mut self, signature: impl Into<String>) -> Self {
-        self.signature = Some(signature.into());
         self
     }
 }
@@ -125,7 +132,10 @@ pub fn seal_entry(
         policy_decision: unsealed.policy_decision.clone(),
         policy_module: unsealed.policy_module.clone(),
         receipt: unsealed.receipt.clone(),
-        signature: unsealed.signature.clone(),
+        // Always empty at seal time. AuditStore::append signs the sealed
+        // entry_hash and populates this vec before INSERT. Hash-then-sign
+        // discipline: the hash must be defined before any signature exists.
+        signatures: Vec::new(),
     }
 }
 
@@ -137,13 +147,14 @@ pub fn seal_entry(
 /// `serde_json::to_value` so the same bytes are reproducible from a database
 /// round-trip — the AUDIT-02 fix.
 ///
-/// **The signature field is hashed as `null`**, never as the actual signature.
-/// Signatures are computed *over* the entry_hash, so the hash must be
-/// well-defined before any signature exists. The pre-AUDIT-03 ChainBuilder
-/// included `signature` in the hash, which was inconsistent with the verifier
-/// (verifier always set it to null). Every caller in the tree passed
-/// `signature: None` so the inconsistency was latent. The new path is
-/// internally consistent: hash never depends on signature.
+/// **The `signatures` field is hashed as `[]`**, never as the actual
+/// signature blocks. Signatures are computed *over* the entry_hash, so the
+/// hash must be well-defined before any signature exists. The pre-AUDIT-03
+/// ChainBuilder included `signature` in the hash, which was inconsistent
+/// with the verifier (verifier always set it to null). The Phase-1 form
+/// makes the convention explicit: hash always sees the empty array, so
+/// `compute_entry_hash` is a pure function of the entry's *intent*, not
+/// of its attestation.
 fn compute_entry_hash(
     unsealed: &UnsealedEntry,
     prev_hash: &str,
@@ -160,10 +171,13 @@ fn compute_entry_hash(
         "policy_decision": serde_json::to_value(&unsealed.policy_decision).unwrap_or(json!(null)),
         "policy_module": unsealed.policy_module,
         "receipt": unsealed.receipt.as_ref().map(|r| serde_json::to_value(r).unwrap_or(json!(null))),
-        "signature": Option::<String>::None,
+        "signatures": json!([]),
     });
-    let entry_bytes = serde_json::to_vec(&entry_data).unwrap_or_default();
-    blake3::hash(&entry_bytes).to_hex().to_string()
+    // Seam 17: every preimage that produces a hash for signing routes
+    // through the canonical helper. Pre-Seam-17 this site was open-coded
+    // (`to_vec(...).unwrap_or_default()` + `blake3::hash`) — byte-equivalent
+    // by accident of serde_json's BTreeMap-backed Map, but not by design.
+    zp_core::canonical_hash(&entry_data)
 }
 
 /// Recompute the `entry_hash` for an existing [`AuditEntry`].
@@ -183,7 +197,8 @@ pub fn recompute_entry_hash(entry: &AuditEntry) -> String {
         policy_decision: entry.policy_decision.clone(),
         policy_module: entry.policy_module.clone(),
         receipt: entry.receipt.clone(),
-        signature: entry.signature.clone(),
+        // `signatures` is intentionally not part of the hashed payload —
+        // see compute_entry_hash. We don't reconstruct it on this path.
     };
     compute_entry_hash(&unsealed, &entry.prev_hash, &entry.id, &entry.timestamp)
 }

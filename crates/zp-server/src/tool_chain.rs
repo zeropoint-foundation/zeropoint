@@ -1851,7 +1851,7 @@ mod f5_tests {
 
     fn fresh_store() -> (TempDir, Arc<Mutex<AuditStore>>) {
         let dir = TempDir::new().expect("tempdir");
-        let store = AuditStore::open(dir.path().join("audit.db")).expect("open");
+        let store = AuditStore::open_unsigned(dir.path().join("audit.db")).expect("open");
         (dir, Arc::new(Mutex::new(store)))
     }
 

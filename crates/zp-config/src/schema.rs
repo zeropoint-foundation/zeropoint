@@ -508,7 +508,13 @@ fn dirs_home() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("/tmp"))
 }
 
-/// Resolve the ZeroPoint home directory (mirrors zp_core::paths::home logic).
+/// Resolve the ZeroPoint home directory.
+///
+/// **Mirror of [`zp_core::paths::home`]** (Seam 19) — kept local instead
+/// of depending on `zp-core` because `zp-config` is a bootstrap-layer
+/// crate that needs to stay light on dependencies. If the resolution
+/// rule in `zp_core::paths::home` ever changes, this function MUST be
+/// updated to match. The two stay in sync by hand.
 fn zp_home() -> PathBuf {
     if let Ok(h) = std::env::var("ZP_HOME") {
         return PathBuf::from(h);

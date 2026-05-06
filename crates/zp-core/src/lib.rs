@@ -24,8 +24,33 @@ pub mod revocation;
 pub mod skill;
 pub mod types;
 
+// Seams 17, 20, 5 live in zp-receipt (because zp-core depends on
+// zp-receipt — putting the modules in zp-core would create a cycle).
+// Re-export at zp-core's root so downstream callers see one canonical
+// public surface: `zp_core::canonical_bytes`, `zp_core::Signable`,
+// `zp_core::verify_signature`.
+pub mod canonical {
+    pub use zp_receipt::canonical::*;
+}
+pub mod signable {
+    pub use zp_receipt::signable::*;
+}
+// `verify` requires zp-receipt's `signing` feature (which is enabled by
+// default). If a downstream crate disables zp-receipt's default features,
+// the `zp_receipt::verify` module won't exist — but that's not the typical
+// case in this workspace, where signing is always on.
+pub mod verify {
+    pub use zp_receipt::verify::*;
+}
+
 // Re-export commonly used types at crate root
 pub use audit::{ActorId, AuditAction, AuditEntry, AuditId};
+pub use zp_receipt::canonical::{
+    canonical_bytes, canonical_bytes_of, canonical_hash, canonical_hash_bytes,
+    canonical_hash_bytes_of, canonical_hash_of, canonical_string,
+};
+pub use zp_receipt::signable::{signable_from_serialize, Signable};
+pub use zp_receipt::verify::{verify_signature, verify_signed, VerifyError};
 pub use capability::{Capability, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
 pub use authority_ref::{AuthorityRef, AuthorityRefType};
 pub use capability_grant::{

@@ -1108,7 +1108,9 @@ impl AgentTransport for MeshNode {
     }
 
     async fn announce(&self, capabilities: &AgentCapabilities) -> MeshResult<()> {
-        let announce_data = serde_json::to_vec(capabilities)
+        // Seam 17: announce payload is signed; preimage routes through
+        // the canonical helper for deterministic round-trip with verifiers.
+        let announce_data = zp_core::canonical_bytes_of(capabilities)
             .map_err(|e| MeshError::Serialization(e.to_string()))?;
 
         // Build announce: combined public key + capabilities + signature

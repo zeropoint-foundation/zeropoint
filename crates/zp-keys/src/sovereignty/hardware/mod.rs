@@ -39,10 +39,29 @@ const SOVEREIGNTY_DIR: &str = "sovereignty";
 // and dispatches to the right decryption path.
 //
 // Version history:
-//   0x01 — ChaCha20-Poly1305, deterministic BLAKE3 nonce (current)
+//   0x00 — pre-version blob, exactly 48 bytes (legacy fixed-length detection).
+//   0x01 — ChaCha20-Poly1305, deterministic BLAKE3 nonce. **Read-only**:
+//          rejected by encrypt path. Re-running Genesis on the same device
+//          would reuse (key, nonce) → keystream reuse → both plaintexts
+//          recoverable. Phase 2 closes this by writing v2 only.
+//   0x02 — ChaCha20-Poly1305, fresh random 12-byte OsRng nonce embedded
+//          in the blob. Format: [0x02 | nonce_12 | ciphertext | tag].
+//          Re-encryption is safe: every call gets a unique (key, nonce).
+//
+// Current encrypt path always emits v2. Decrypt accepts v0/v1 (legacy) and
+// v2 (current) so existing on-disk enrollments still work.
 
-/// Current ciphertext version. Prefixed to every new encrypted blob.
-const CIPHERTEXT_VERSION: u8 = 0x01;
+/// Pre-Phase-2 (deterministic-nonce) ciphertext version. Read-only —
+/// kept so existing enrolled hardware-wallet blobs still decrypt.
+const CIPHERTEXT_VERSION_V1: u8 = 0x01;
+
+/// Current ciphertext version (Phase 2): random nonce embedded in blob.
+/// Every fresh encryption is prefixed with this byte followed by 12 bytes
+/// of random nonce.
+const CIPHERTEXT_VERSION_V2: u8 = 0x02;
+
+/// Length of the ChaCha20-Poly1305 nonce in bytes.
+const NONCE_LEN: usize = 12;
 
 // ---------------------------------------------------------------------------
 // Timestamped key derivation salt
@@ -116,43 +135,74 @@ impl DerivationSalt {
 
 /// Encrypt the Genesis secret with a device-derived wrapping key.
 ///
-/// Uses ChaCha20-Poly1305 (same as the vault). The nonce is derived
-/// deterministically from BLAKE3(wrapping_key || "zp-hw-wrap-nonce-v1")
-/// truncated to 12 bytes.
+/// **Phase 2 (v2 format).** Uses ChaCha20-Poly1305 with a fresh random
+/// 12-byte nonce drawn from `OsRng` for every call. The nonce is
+/// embedded in the blob so decrypt can recover it.
 ///
-/// The output is: `[version_byte || ciphertext || poly1305_tag]`
-/// where version_byte is `CIPHERTEXT_VERSION` (currently 0x01).
+/// Output layout (40 + 32 = 72 bytes total when secret is 32 bytes):
+/// ```text
+/// [0x02 | nonce_12 | ciphertext_32 | poly1305_tag_16]
+///   1B    12B        32B             16B
+/// ```
+///
+/// # Why v2 replaced v1
+///
+/// v1 derived the nonce deterministically from the wrapping key:
+/// `BLAKE3(wrapping_key, "zp-hw-wrap-nonce-v1")[..12]`. The assumption
+/// was "the wrapping key is unique per device and we only encrypt one
+/// message with it." That's false in practice — re-running Genesis on
+/// the same device produces the same wrapping key (deterministic device
+/// derivation) and a new plaintext. ChaCha20 keystream reuse under
+/// (k, n) lets an attacker XOR the two ciphertexts and recover both
+/// plaintexts. v2 generates a fresh nonce per encryption, removing the
+/// reuse surface entirely.
+///
+/// # Compatibility
+///
+/// `decrypt_secret` still accepts v0 (pre-version, exactly 48 bytes)
+/// and v1 (deterministic-nonce) blobs so existing enrollments don't
+/// require re-enrollment. New enrollments and rewraps emit v2.
 pub(crate) fn encrypt_secret(
     secret: &[u8; 32],
     wrapping_key: &[u8; 32],
 ) -> Result<Vec<u8>, KeyError> {
     use chacha20poly1305::{aead::Aead, ChaCha20Poly1305, KeyInit, Nonce};
+    use rand::RngCore;
 
     let cipher = ChaCha20Poly1305::new(wrapping_key.into());
 
-    // Deterministic nonce from wrapping key — safe because wrapping key
-    // is unique per device and we only encrypt one message with it.
-    let nonce_material = blake3::keyed_hash(wrapping_key, b"zp-hw-wrap-nonce-v1");
-    let nonce_bytes: [u8; 12] = nonce_material.as_bytes()[..12].try_into().unwrap();
+    // Fresh per-call nonce. OsRng draws from the OS CSPRNG; collision
+    // probability over the lifetime of a key is negligible (<2^-64 even
+    // after 2^32 encryptions, well beyond any realistic re-Genesis count).
+    let mut nonce_bytes = [0u8; NONCE_LEN];
+    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
         .encrypt(&nonce, secret.as_ref())
         .map_err(|e| KeyError::CredentialStore(format!("Encryption failed: {}", e)))?;
 
-    // Prepend version byte so future crypto migrations can dispatch correctly
-    let mut versioned = Vec::with_capacity(1 + ciphertext.len());
-    versioned.push(CIPHERTEXT_VERSION);
-    versioned.extend_from_slice(&ciphertext);
+    // [version | nonce | ct | tag]. The cipher.encrypt output already
+    // includes the 16-byte poly1305 tag appended to the ciphertext.
+    let mut blob = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
+    blob.push(CIPHERTEXT_VERSION_V2);
+    blob.extend_from_slice(&nonce_bytes);
+    blob.extend_from_slice(&ciphertext);
 
-    Ok(versioned)
+    Ok(blob)
 }
 
 /// Decrypt the Genesis secret with a device-derived wrapping key.
 ///
 /// Reads the version prefix byte and dispatches to the correct decryption
-/// implementation. Blobs without a version prefix (pre-0.3 format) are
-/// handled as legacy v0 — raw ChaCha20-Poly1305 with 48-byte length.
+/// implementation:
+///
+/// - `0x02` (current) — random nonce embedded in blob.
+/// - `0x01` (legacy) — deterministic BLAKE3 nonce. Read-only path; the
+///   encrypt side never produces v1 anymore (Phase 2). Existing on-disk
+///   v1 enrollments still decrypt cleanly.
+/// - No version byte (legacy) — pre-versioned blobs were exactly 48
+///   bytes. Treated as v0 with the same deterministic nonce as v1.
 pub(crate) fn decrypt_secret(blob: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8; 32], KeyError> {
     if blob.is_empty() {
         return Err(KeyError::EnrollmentCorrupted(
@@ -160,34 +210,55 @@ pub(crate) fn decrypt_secret(blob: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8
         ));
     }
 
-    // Detect version: if first byte is a known version tag, use it.
-    // Otherwise, treat the entire blob as legacy (pre-version) format.
-    let (version, ciphertext) = match blob[0] {
-        CIPHERTEXT_VERSION => (CIPHERTEXT_VERSION, &blob[1..]),
-        // Legacy detection: pre-version blobs are exactly 48 bytes
-        // (32 encrypted + 16 poly1305 tag). If the blob is 48 bytes and
-        // the first byte isn't a known version, it's legacy.
+    match blob[0] {
+        CIPHERTEXT_VERSION_V2 => decrypt_v2(&blob[1..], wrapping_key),
+        CIPHERTEXT_VERSION_V1 => decrypt_v1_legacy(&blob[1..], wrapping_key),
+        // Pre-version blobs were exactly 48 bytes (32 encrypted + 16 tag).
+        // If the leading byte happens to collide with v1/v2 those branches
+        // win above; here we catch the no-prefix path.
         _ if blob.len() == 48 => {
             tracing::debug!("Decrypting legacy (pre-version) ciphertext blob");
-            (0x00, blob)
+            decrypt_v1_legacy(blob, wrapping_key)
         }
-        unknown => {
-            return Err(KeyError::EnrollmentCorrupted(format!(
-                "Unknown ciphertext version: 0x{:02x}. \
-                 This may require a newer version of ZeroPoint.",
-                unknown
-            )));
-        }
-    };
-
-    // Both v0 (legacy) and v1 use the same ChaCha20-Poly1305 scheme
-    let _ = version; // reserved for future dispatch
-    decrypt_chacha20poly1305(ciphertext, wrapping_key)
+        unknown => Err(KeyError::EnrollmentCorrupted(format!(
+            "Unknown ciphertext version: 0x{:02x}. \
+             This may require a newer version of ZeroPoint.",
+            unknown
+        ))),
+    }
 }
 
-/// ChaCha20-Poly1305 decryption with deterministic BLAKE3 nonce.
-/// Shared by v0 (legacy) and v1 ciphertext formats.
-fn decrypt_chacha20poly1305(
+/// v2 decrypt: random nonce embedded in the leading 12 bytes of the blob.
+fn decrypt_v2(blob_after_version: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8; 32], KeyError> {
+    use chacha20poly1305::{aead::Aead, ChaCha20Poly1305, KeyInit, Nonce};
+
+    if blob_after_version.len() < NONCE_LEN {
+        return Err(KeyError::EnrollmentCorrupted(format!(
+            "v2 ciphertext blob too short: {} bytes (need at least {} for nonce)",
+            blob_after_version.len(),
+            NONCE_LEN
+        )));
+    }
+
+    let nonce_bytes: [u8; NONCE_LEN] = blob_after_version[..NONCE_LEN]
+        .try_into()
+        .expect("slice length checked above");
+    let ciphertext = &blob_after_version[NONCE_LEN..];
+
+    let cipher = ChaCha20Poly1305::new(wrapping_key.into());
+    let nonce = Nonce::from(nonce_bytes);
+
+    let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| {
+        KeyError::CredentialStore("Decryption failed — wrong device or corrupted data".into())
+    })?;
+
+    coerce_secret(plaintext)
+}
+
+/// Legacy v0/v1 decrypt: deterministic BLAKE3-derived nonce.
+///
+/// Read-only path — never used for new encryptions after Phase 2.
+fn decrypt_v1_legacy(
     ciphertext: &[u8],
     wrapping_key: &[u8; 32],
 ) -> Result<[u8; 32], KeyError> {
@@ -196,20 +267,27 @@ fn decrypt_chacha20poly1305(
     let cipher = ChaCha20Poly1305::new(wrapping_key.into());
 
     let nonce_material = blake3::keyed_hash(wrapping_key, b"zp-hw-wrap-nonce-v1");
-    let nonce_bytes: [u8; 12] = nonce_material.as_bytes()[..12].try_into().unwrap();
+    let nonce_bytes: [u8; NONCE_LEN] = nonce_material.as_bytes()[..NONCE_LEN]
+        .try_into()
+        .expect("BLAKE3 hash is 32 bytes; first 12 always available");
     let nonce = Nonce::from(nonce_bytes);
 
     let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| {
         KeyError::CredentialStore("Decryption failed — wrong device or corrupted data".into())
     })?;
 
+    coerce_secret(plaintext)
+}
+
+/// Validate that the decrypted plaintext is exactly 32 bytes (an Ed25519
+/// seed) and copy it into a fixed-size array.
+fn coerce_secret(plaintext: Vec<u8>) -> Result<[u8; 32], KeyError> {
     if plaintext.len() != 32 {
         return Err(KeyError::InvalidKeyMaterial(format!(
             "Decrypted secret has wrong length: {} (expected 32)",
             plaintext.len()
         )));
     }
-
     let mut secret = [0u8; 32];
     secret.copy_from_slice(&plaintext);
     Ok(secret)
@@ -295,12 +373,15 @@ pub struct QuorumThreshold {
 }
 
 /// Save enrollment metadata for a hardware wallet provider.
+///
+/// CRIT-8: atomic mode-0600 write. Enrollment metadata reveals the
+/// device identifier and BIP-32/credential path; kept owner-readable.
 pub(crate) fn save_enrollment(metadata: &EnrollmentMetadata) -> Result<(), KeyError> {
     let dir = sovereignty_dir()?;
     let filename = format!("{}_enrollment.json", metadata.mode);
     let json = serde_json::to_string_pretty(metadata)
         .map_err(|e| KeyError::Serialization(e.to_string()))?;
-    std::fs::write(dir.join(&filename), json)?;
+    crate::secret_file::write_atomic(&dir.join(&filename), json.as_bytes())?;
     Ok(())
 }
 
@@ -327,12 +408,17 @@ pub(crate) fn load_enrollment(mode: &str) -> Result<EnrollmentMetadata, KeyError
 
 /// Save an encrypted Genesis secret blob for a hardware wallet provider.
 ///
-/// The ciphertext is the output of `encrypt_secret()` — ChaCha20-Poly1305
-/// authenticated ciphertext (48 bytes: 32 encrypted + 16 tag).
+/// The ciphertext is the output of [`encrypt_secret`] — Phase 2 v2
+/// format `[0x02 | nonce_12 | ct | tag]`, total 61 bytes for a 32-byte
+/// secret.
+///
+/// CRIT-8: atomic mode-0600 write. The file holds device-encrypted
+/// Genesis material; even though decryption requires the device, the
+/// blob is kept owner-readable to bound the attack surface.
 pub(crate) fn save_encrypted_secret(mode: &str, ciphertext: &[u8]) -> Result<(), KeyError> {
     let dir = sovereignty_dir()?;
     let filename = format!("{}_genesis.encrypted", mode);
-    std::fs::write(dir.join(&filename), ciphertext)?;
+    crate::secret_file::write_atomic(&dir.join(&filename), ciphertext)?;
     Ok(())
 }
 
@@ -385,14 +471,15 @@ pub fn rewrap_secret(
     // Re-encrypt with new key (includes version prefix)
     let new_blob = encrypt_secret(&secret, new_wrapping_key)?;
 
-    // Atomic-ish write: write to .tmp, then rename
+    // CRIT-8: atomic write via [`crate::secret_file::write_atomic`] does
+    // tmpfile + fsync + rename internally and creates the file at mode
+    // 0600 from the start — replacing the open-coded "atomic-ish" path
+    // which had two problems: a chmod-after-write race window, and
+    // missing fsync before rename.
     let dir = sovereignty_dir()?;
     let filename = format!("{}_genesis.encrypted", mode);
-    let tmp_path = dir.join(format!("{}.tmp", filename));
     let final_path = dir.join(&filename);
-
-    std::fs::write(&tmp_path, &new_blob)?;
-    std::fs::rename(&tmp_path, &final_path)?;
+    crate::secret_file::write_atomic(&final_path, &new_blob)?;
 
     tracing::info!(
         mode = %mode,
@@ -445,17 +532,16 @@ mod tests {
     }
 
     #[test]
-    fn encrypt_produces_versioned_blob() {
+    fn encrypt_produces_v2_versioned_blob() {
         let secret = test_secret();
         let key = test_wrapping_key(0x02);
 
         let blob = encrypt_secret(&secret, &key).unwrap();
 
-        // First byte is version prefix
-        assert_eq!(blob[0], CIPHERTEXT_VERSION);
-        // ChaCha20-Poly1305: 32 plaintext → 32 ciphertext + 16 tag = 48
-        // Plus 1 version byte = 49
-        assert_eq!(blob.len(), 49);
+        // Phase 2: encrypt always emits v2.
+        assert_eq!(blob[0], CIPHERTEXT_VERSION_V2);
+        // [version | nonce_12 | ct_32 | tag_16] = 1 + 12 + 32 + 16 = 61
+        assert_eq!(blob.len(), 61);
     }
 
     #[test]
@@ -502,35 +588,103 @@ mod tests {
         );
     }
 
+    /// Helper for the legacy-decode tests: produce a v1-format blob the
+    /// way pre-Phase-2 code would have. encrypt_secret no longer emits
+    /// v1, so we build it manually here.
+    fn make_v1_blob(secret: &[u8; 32], wrapping_key: &[u8; 32]) -> Vec<u8> {
+        use chacha20poly1305::{aead::Aead, ChaCha20Poly1305, KeyInit, Nonce};
+
+        let cipher = ChaCha20Poly1305::new(wrapping_key.into());
+        let nonce_material = blake3::keyed_hash(wrapping_key, b"zp-hw-wrap-nonce-v1");
+        let nonce_bytes: [u8; NONCE_LEN] =
+            nonce_material.as_bytes()[..NONCE_LEN].try_into().unwrap();
+        let nonce = Nonce::from(nonce_bytes);
+        let ct = cipher.encrypt(&nonce, secret.as_ref()).unwrap();
+
+        let mut blob = Vec::with_capacity(1 + ct.len());
+        blob.push(CIPHERTEXT_VERSION_V1);
+        blob.extend_from_slice(&ct);
+        blob
+    }
+
     #[test]
     fn decrypt_handles_legacy_48_byte_blob() {
         // Legacy (pre-version) format: raw 48-byte ChaCha20-Poly1305 output
-        // with no version prefix. We construct one manually.
+        // with no version prefix. The decrypt path detects the no-prefix
+        // case by length and uses the deterministic v1 nonce.
         let secret = test_secret();
         let key = test_wrapping_key(0x03);
 
-        // Build a legacy blob by encrypting and stripping the version byte
-        let versioned = encrypt_secret(&secret, &key).unwrap();
-        let legacy = &versioned[1..]; // strip version byte
+        let v1_blob = make_v1_blob(&secret, &key);
+        // Strip the v1 version byte to simulate pre-version (48 bytes).
+        let legacy = &v1_blob[1..];
         assert_eq!(legacy.len(), 48);
 
-        // decrypt_secret should detect legacy format (48 bytes, first byte != known version)
         let recovered = decrypt_secret(legacy, &key).unwrap();
         assert_eq!(secret, recovered);
     }
 
-    // ── Deterministic nonce ─────────────────────────────────────────
+    #[test]
+    fn decrypt_handles_legacy_v1_blob() {
+        // Existing on-disk enrollments from before Phase 2 carry the v1
+        // (deterministic-nonce) format. They must still decrypt cleanly
+        // even though the encrypt path no longer produces v1.
+        let secret = test_secret();
+        let key = test_wrapping_key(0x0E);
+
+        let v1_blob = make_v1_blob(&secret, &key);
+        assert_eq!(v1_blob[0], CIPHERTEXT_VERSION_V1);
+
+        let recovered = decrypt_secret(&v1_blob, &key).unwrap();
+        assert_eq!(secret, recovered);
+    }
+
+    // ── Random per-encryption nonce (Phase 2, v2) ───────────────────
 
     #[test]
-    fn encrypt_is_deterministic_for_same_key() {
+    fn encrypt_two_calls_produce_different_ciphertexts() {
+        // Phase 2 (CRIT-3): encrypting the same plaintext twice with the
+        // same wrapping key MUST produce different ciphertexts. The v1
+        // assumption "we only encrypt one message per wrapping key" was
+        // false — re-running Genesis on the same device reuses the key
+        // with new plaintext. Random per-encryption nonce removes the
+        // keystream-reuse surface.
         let secret = test_secret();
         let key = test_wrapping_key(0x04);
 
         let blob_a = encrypt_secret(&secret, &key).unwrap();
         let blob_b = encrypt_secret(&secret, &key).unwrap();
 
-        // Same key + same secret → same ciphertext (deterministic nonce)
-        assert_eq!(blob_a, blob_b);
+        assert_ne!(
+            blob_a, blob_b,
+            "v2 encrypt must use a fresh nonce per call (CRIT-3 fix)"
+        );
+
+        // Both must still decrypt to the original secret.
+        assert_eq!(decrypt_secret(&blob_a, &key).unwrap(), secret);
+        assert_eq!(decrypt_secret(&blob_b, &key).unwrap(), secret);
+
+        // The 12-byte nonce slice (bytes 1..13) must differ between the
+        // two blobs — that's the proof that the randomness reached the
+        // wire format, not just the ciphertext bytes.
+        assert_ne!(
+            &blob_a[1..1 + NONCE_LEN],
+            &blob_b[1..1 + NONCE_LEN],
+            "embedded nonces must differ between successive encryptions"
+        );
+    }
+
+    #[test]
+    fn v2_blob_layout_matches_spec() {
+        // Pin the on-disk byte layout: [version | nonce_12 | ct_32 | tag_16].
+        // If this ever needs to change, bump to v3 with parallel decrypt
+        // support — never silently change v2 semantics.
+        let secret = test_secret();
+        let key = test_wrapping_key(0x0F);
+        let blob = encrypt_secret(&secret, &key).unwrap();
+
+        assert_eq!(blob[0], CIPHERTEXT_VERSION_V2);
+        assert_eq!(blob.len(), 1 + NONCE_LEN + 32 + 16);
     }
 
     #[test]

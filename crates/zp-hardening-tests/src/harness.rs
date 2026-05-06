@@ -30,6 +30,14 @@ impl TestApp {
     /// - Dashboard open disabled
     /// - Bind to 127.0.0.1
     pub async fn new() -> Self {
+        // Seam 11 + follow-up: install the in-memory mock keyring
+        // BEFORE any zp-keys code runs. Idempotent. Sets
+        // ZP_KEYCHAIN_TEST_NAMESPACE=1 internally as defense in depth.
+        // Eliminates the macOS Keychain prompt that fires on every
+        // cargo rebuild and the silent-replacement-failure pattern
+        // where the kernel rejects writes from a re-signed test binary.
+        zp_keys::test_helpers::install_mock_keyring();
+
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
         let data_dir = temp_dir.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("failed to create data dir");
@@ -167,6 +175,14 @@ pub struct TestServer {
 impl TestServer {
     /// Boot a real server on a random port. Returns once the listener is ready.
     pub async fn new() -> Self {
+        // Seam 11 + follow-up: install the in-memory mock keyring
+        // BEFORE any zp-keys code runs. Idempotent. Sets
+        // ZP_KEYCHAIN_TEST_NAMESPACE=1 internally as defense in depth.
+        // Eliminates the macOS Keychain prompt that fires on every
+        // cargo rebuild and the silent-replacement-failure pattern
+        // where the kernel rejects writes from a re-signed test binary.
+        zp_keys::test_helpers::install_mock_keyring();
+
         let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
         let data_dir = temp_dir.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("failed to create data dir");

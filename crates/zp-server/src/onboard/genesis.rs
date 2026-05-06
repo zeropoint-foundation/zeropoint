@@ -386,10 +386,11 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
         "biometric_evidence": biometric_evidence_json,
     });
 
-    // Sign over BLAKE3(canonical transcript bytes). serde_json's Map is
-    // BTreeMap-backed (no `preserve_order` feature), so `to_vec` emits
-    // keys in alphabetical order — deterministic across sign/verify.
-    let transcript_bytes = serde_json::to_vec(&transcript).unwrap_or_default();
+    // Seam 17: route through the canonical helper. Pre-Seam-17 this site
+    // depended on the latent BTreeMap-backed property of serde_json::Map;
+    // now the discipline is structural — every preimage in the workspace
+    // goes through the same function.
+    let transcript_bytes = zp_core::canonical_bytes(&transcript);
     let transcript_hash = blake3::hash(&transcript_bytes);
     let transcript_sig_bytes = {
         use ed25519_dalek::{Signer, SigningKey};
@@ -764,7 +765,7 @@ pub async fn handle_sovereignty_upgrade(
         "software_version": env!("CARGO_PKG_VERSION"),
     });
 
-    let upgrade_bytes = serde_json::to_vec(&upgrade_record).unwrap_or_default();
+    let upgrade_bytes = zp_core::canonical_bytes(&upgrade_record);
     let upgrade_hash = blake3::hash(&upgrade_bytes);
 
     // Append to the transcript as an "upgrades" array

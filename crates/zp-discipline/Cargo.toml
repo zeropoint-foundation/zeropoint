@@ -1,0 +1,25 @@
+[package]
+name = "zp-discipline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Discipline-pin tests: structural conventions enforced as build-failing tests"
+publish = false
+
+# This crate exists solely for its tests. The library is a small set of
+# helpers; the actual value is in `tests/*.rs` which scans the workspace
+# for architectural-convention violations and fails the build when one
+# is found. See docs/TEST-DISCIPLINE-2026-05.md for the framework.
+
+[lib]
+name = "zp_discipline"
+path = "src/lib.rs"
+
+[dependencies]
+regex = { workspace = true }
+walkdir = "2"
+
+[dev-dependencies]
+# Used by the self-test to construct a pattern that's guaranteed not to
+# appear in source — see `impossible_pattern_passes` in src/lib.rs.
+blake3 = { workspace = true }

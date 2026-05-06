@@ -140,7 +140,9 @@ impl RevocationClaim {
             issued_at: self.issued_at,
             anchor_commitment: self.anchor_commitment.clone(),
         };
-        serde_json::to_vec(&canonical).unwrap_or_default()
+        // Seam 17: route through the canonical helper (lives in zp-receipt
+        // because zp-core depends on zp-receipt; re-exported by zp-core).
+        zp_receipt::canonical::canonical_bytes_of(&canonical).unwrap_or_default()
     }
 
     /// Sign this revocation claim with `signing_key`. The hex-encoded
@@ -155,34 +157,28 @@ impl RevocationClaim {
     /// at construction). Returns `false` if no signature is present, the
     /// public key is malformed, or the signature does not verify.
     pub fn verify_signature(&self) -> bool {
-        let Some(sig_hex) = &self.signature else {
-            return false;
-        };
-        let Ok(pubkey_bytes) = hex::decode(&self.issued_by) else {
-            return false;
-        };
-        if pubkey_bytes.len() != 32 {
-            return false;
-        }
-        let mut key_arr = [0u8; 32];
-        key_arr.copy_from_slice(&pubkey_bytes);
-        let Ok(verifying) = ed25519_dalek::VerifyingKey::from_bytes(&key_arr) else {
-            return false;
-        };
+        // Seam 5: routes through the canonical verify primitive.
+        let Some(sig_hex) = &self.signature else { return false };
+        let Ok(pubkey_bytes) = hex::decode(&self.issued_by) else { return false };
+        if pubkey_bytes.len() != 32 { return false }
+        let mut pk = [0u8; 32];
+        pk.copy_from_slice(&pubkey_bytes);
 
-        let Ok(sig_bytes) = hex::decode(sig_hex) else {
-            return false;
-        };
-        if sig_bytes.len() != 64 {
-            return false;
-        }
-        let mut sig_arr = [0u8; 64];
-        sig_arr.copy_from_slice(&sig_bytes);
-        let signature = ed25519_dalek::Signature::from_bytes(&sig_arr);
+        let Ok(sig_bytes) = hex::decode(sig_hex) else { return false };
+        if sig_bytes.len() != 64 { return false }
+        let mut sig = [0u8; 64];
+        sig.copy_from_slice(&sig_bytes);
 
-        verifying
-            .verify_strict(&self.canonical_bytes(), &signature)
-            .is_ok()
+        zp_receipt::verify::verify_signature(&pk, &self.canonical_bytes(), &sig).is_ok()
+    }
+}
+
+// Seam 20: hash-then-sign discipline via the canonical [`zp_receipt::Signable`]
+// trait. The preimage delegates to `canonical_bytes`, which already excludes
+// the signature field via the `CanonicalForm` view below.
+impl zp_receipt::Signable for RevocationClaim {
+    fn canonical_preimage(&self) -> Vec<u8> {
+        self.canonical_bytes()
     }
 }
 

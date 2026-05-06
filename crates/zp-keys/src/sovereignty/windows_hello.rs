@@ -247,8 +247,8 @@ fn save_windows_hello_secret(secret: &[u8; 32]) -> Result<(), KeyError> {
     })?;
 
     let entry = keyring::Entry::new(
-        crate::keyring::GENESIS_KEYCHAIN_SERVICE,
-        crate::keyring::GENESIS_KEYCHAIN_ACCOUNT,
+        crate::keyring::genesis_keychain_service(),
+        crate::keyring::genesis_keychain_account(),
     )
     .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
 

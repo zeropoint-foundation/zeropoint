@@ -288,6 +288,42 @@ fn load_operator_via_sovereignty_provider(
     result
 }
 
+/// Load the Genesis secret from the configured sovereignty provider.
+/// Used during audit signer initialization (post-Genesis).
+///
+/// We deliberately do NOT take a `Keyring` here — the credential-store
+/// fast path doesn't have the Genesis secret on hardware-wallet sovereignty
+/// modes, so the only correct route is the sovereignty provider itself.
+/// Reading `genesis.json` tells us which provider to invoke.
+fn load_genesis_secret_from_provider(
+    genesis_record_path: &std::path::Path,
+) -> Result<[u8; 32], String> {
+    if !genesis_record_path.exists() {
+        return Err("genesis.json not found".to_string());
+    }
+
+    let raw = std::fs::read_to_string(genesis_record_path)
+        .map_err(|e| format!("failed to read genesis.json: {}", e))?;
+    let record: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("failed to parse genesis.json: {}", e))?;
+    let mode_str = record
+        .get("sovereignty_mode")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "genesis.json missing sovereignty_mode".to_string())?;
+    let mode = zp_keys::SovereigntyMode::from_onboard_str(mode_str).resolve();
+
+    let provider = zp_keys::provider_for(mode);
+    let genesis_secret = provider.load_secret().map_err(|e| {
+        format!(
+            "{} provider could not unlock Genesis: {}",
+            mode.display_name(),
+            e
+        )
+    })?;
+
+    Ok(genesis_secret)
+}
+
 fn load_or_create_identity(config: &ServerConfig) -> (ServerIdentity, bool) {
     use sha2::{Digest, Sha256};
     if let Err(msg) = enforce_canon_permissions(&config.home_dir) {
@@ -366,15 +402,11 @@ fn load_or_create_identity(config: &ServerConfig) -> (ServerIdentity, bool) {
     std::fs::create_dir_all(&config.home_dir).expect("Failed to create ~/ZeroPoint");
     let key = SigningKey::generate(&mut rand::rngs::OsRng);
 
-    // Write bootstrap key with restrictive permissions.
+    // CRIT-8: atomic mode-0600 write for the bootstrap signing key.
     // This is temporary — the onboarding flow creates the full hierarchy
-    // (Genesis→Operator) and the next server start will use Path 1.
-    std::fs::write(&identity_path, key.to_bytes()).expect("Failed to write identity key");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&identity_path, std::fs::Permissions::from_mode(0o600)).ok();
-    }
+    // (Genesis→Operator) and the next server start uses Path 1.
+    zp_keys::write_secret_file(&identity_path, &key.to_bytes())
+        .expect("Failed to write identity key");
 
     let verifying_key = key.verifying_key();
     let public_key_hex = hex::encode(verifying_key.as_bytes());
@@ -545,7 +577,28 @@ impl AppState {
         // Audit store
         std::fs::create_dir_all(&config.data_dir).ok();
         let audit_path = std::path::Path::new(&config.data_dir).join("audit.db");
-        let audit_store_inner = AuditStore::open(&audit_path).expect("Failed to open audit store");
+
+        // Derive audit signer if Genesis is complete, otherwise use read-only mode.
+        // During the genesis ceremony there is no secret to derive from, so the
+        // store is read-only until onboarding finishes. Post-Genesis we go
+        // through the sovereignty provider — never the OS credential store
+        // fast path, which doesn't hold the secret on hardware-wallet modes.
+        let audit_store_inner = if is_genesis {
+            AuditStore::open_readonly(&audit_path)
+                .expect("Failed to open audit store (readonly)")
+        } else {
+            let genesis_record_path = config.home_dir.join("genesis.json");
+            let genesis_secret = load_genesis_secret_from_provider(&genesis_record_path)
+                .unwrap_or_else(|e| {
+                    error!("Failed to load Genesis secret for audit signer: {}", e);
+                    panic!("audit signer derivation failed: {}", e);
+                });
+
+            let seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+            let audit_signer = zp_audit::AuditSigner::from_seed(&seed);
+            AuditStore::open_signed(&audit_path, audit_signer)
+                .expect("Failed to open audit store (signed)")
+        };
         let audit_store = Arc::new(std::sync::Mutex::new(audit_store_inner));
 
         // Governance gate — with optional WASM policy runtime (P6-4)
@@ -6733,7 +6786,7 @@ mod p4_phase2_tests {
     fn make_store() -> (tempfile::TempDir, Arc<Mutex<AuditStore>>) {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let store = AuditStore::open(&path).unwrap();
+        let store = AuditStore::open_unsigned(&path).unwrap();
         (dir, Arc::new(Mutex::new(store)))
     }
 

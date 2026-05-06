@@ -1911,7 +1911,7 @@ async fn test_e2e_pipeline_init_mesh_from_config() {
     let mesh_config = config.mesh.clone().unwrap();
     std::fs::create_dir_all(&config.data_dir).ok();
     let audit_store = Arc::new(std::sync::Mutex::new(
-        zp_audit::AuditStore::open(&config.data_dir.join("audit.db")).unwrap(),
+        zp_audit::AuditStore::open_unsigned(&config.data_dir.join("audit.db")).unwrap(),
     ));
     let mut pipeline = Pipeline::new(config, audit_store).expect("pipeline init");
     pipeline.init_mesh(&mesh_config).await.expect("mesh init");
@@ -2133,7 +2133,7 @@ async fn test_e2e_pipeline_mesh_store_lifecycle() {
         };
         std::fs::create_dir_all(&config.data_dir).ok();
         let audit_store = Arc::new(std::sync::Mutex::new(
-            zp_audit::AuditStore::open(&config.data_dir.join("audit.db")).unwrap(),
+            zp_audit::AuditStore::open_unsigned(&config.data_dir.join("audit.db")).unwrap(),
         ));
         let mut pipeline = zp_pipeline::Pipeline::new(config, audit_store).unwrap();
 
@@ -2781,7 +2781,7 @@ async fn test_stage3_shared_audit_store_no_forks_under_load() {
     // sides below clone this Arc — exactly what AppState::init and
     // Pipeline::new do after Stage 3.
     let shared: Arc<std::sync::Mutex<AuditStore>> = Arc::new(std::sync::Mutex::new(
-        AuditStore::open(&audit_path).unwrap(),
+        AuditStore::open_unsigned(&audit_path).unwrap(),
     ));
 
     // Two "halves" of the system, both clones of the same Arc. Any
@@ -2862,7 +2862,7 @@ async fn test_sweep4_full_construction_end_to_end_coherence() {
     // Step 1-2: open the single canonical store, exactly as AppState::init does.
     let audit_path = data_dir.join("audit.db");
     let audit_store: Arc<std::sync::Mutex<AuditStore>> = Arc::new(std::sync::Mutex::new(
-        AuditStore::open(&audit_path).expect("open canonical audit store"),
+        AuditStore::open_unsigned(&audit_path).expect("open canonical audit store"),
     ));
 
     // Step 3: construct a real Pipeline with the shared Arc.

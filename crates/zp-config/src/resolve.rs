@@ -324,6 +324,10 @@ fn expand_tilde(path: &str) -> PathBuf {
 
 /// Set a single key-value pair in ~/ZeroPoint/config.toml.
 /// Reads the existing file, updates the value, and writes it back.
+///
+/// Path resolution mirrors [`zp_core::paths::home`] (Seam 19); see the
+/// comment on `zp_home` in `schema.rs` for why `zp-config` keeps a
+/// local copy instead of depending on `zp-core`.
 pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
     let zp_home = if let Ok(h) = std::env::var("ZP_HOME") {
         PathBuf::from(h)

@@ -29,6 +29,7 @@ hex = { workspace = true }
 tempfile = "3"
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
+zp-audit = { path = "../zp-audit", features = ["test-support"] }
 
 [features]
 default = []

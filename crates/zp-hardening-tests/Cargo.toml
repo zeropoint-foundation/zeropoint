@@ -16,6 +16,11 @@ path = "src/lib.rs"
 # Server under test — we call build_app() directly
 zp-server = { path = "../zp-server" }
 zp-config = { path = "../zp-config" }
+# Seam 11 follow-up: pull in the test-support feature so the harness
+# can install the in-memory mock credential builder before any zp-keys
+# code touches the OS Keychain. Eliminates rebuild-induced ACL
+# fragility and the prompt churn.
+zp-keys = { path = "../zp-keys", features = ["test-support"] }
 
 # Axum / Tower for in-process HTTP testing
 axum = { workspace = true }

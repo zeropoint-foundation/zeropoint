@@ -410,16 +410,23 @@ mod secure_keychain {
 
     /// Keychain service label for biometric-gated items.
     /// Distinct from the v0.1 label so both can coexist during migration.
-    const SERVICE: &str = if cfg!(test) {
-        "zeropoint-genesis-bio-test"
-    } else {
-        "zeropoint-genesis-bio"
-    };
-    const ACCOUNT: &str = if cfg!(test) {
-        "genesis-secret-bio-test"
-    } else {
-        "genesis-secret-bio"
-    };
+    /// Uses the same test-namespace guard as the rest of zp-keys
+    /// (see [`crate::keyring::genesis_keychain_service`]) — `cfg!(test)`
+    /// alone isn't enough for external test crates.
+    fn service() -> &'static str {
+        if cfg!(test) || std::env::var_os("ZP_KEYCHAIN_TEST_NAMESPACE").is_some() {
+            "zeropoint-genesis-bio-test"
+        } else {
+            "zeropoint-genesis-bio"
+        }
+    }
+    fn account() -> &'static str {
+        if cfg!(test) || std::env::var_os("ZP_KEYCHAIN_TEST_NAMESPACE").is_some() {
+            "genesis-secret-bio-test"
+        } else {
+            "genesis-secret-bio"
+        }
+    }
 
     /// Build a CFDictionary from parallel key/value slices.
     ///
@@ -486,8 +493,8 @@ mod secure_keychain {
             }
 
             // Wrap values that need to stay alive for the dictionary
-            let service_cf = CFString::new(SERVICE);
-            let account_cf = CFString::new(ACCOUNT);
+            let service_cf = CFString::new(service());
+            let account_cf = CFString::new(account());
             let data_cf = CFData::from_buffer(secret_hex.as_bytes());
 
             let keys: Vec<*const c_void> = vec![
@@ -549,8 +556,8 @@ mod secure_keychain {
     /// at the kernel level. No application-layer check needed.
     pub fn load() -> Result<[u8; 32], KeyError> {
         unsafe {
-            let service_cf = CFString::new(SERVICE);
-            let account_cf = CFString::new(ACCOUNT);
+            let service_cf = CFString::new(service());
+            let account_cf = CFString::new(account());
             let true_val = core_foundation::boolean::CFBoolean::true_value();
 
             let keys: Vec<*const c_void> = vec![
@@ -634,8 +641,8 @@ mod secure_keychain {
     /// Delete the existing biometric-gated keychain item.
     fn delete_existing() -> Result<(), KeyError> {
         unsafe {
-            let service_cf = CFString::new(SERVICE);
-            let account_cf = CFString::new(ACCOUNT);
+            let service_cf = CFString::new(service());
+            let account_cf = CFString::new(account());
 
             let keys: Vec<*const c_void> = vec![
                 kSecClass as *const c_void,
@@ -732,8 +739,8 @@ fn save_touchid_secret_v2(secret: &[u8; 32]) -> Result<(), KeyError> {
     #[cfg(feature = "os-keychain")]
     {
         let entry = keyring::Entry::new(
-            crate::keyring::GENESIS_KEYCHAIN_SERVICE,
-            crate::keyring::GENESIS_KEYCHAIN_ACCOUNT,
+            crate::keyring::genesis_keychain_service(),
+            crate::keyring::genesis_keychain_account(),
         )
         .map_err(|e| KeyError::CredentialStore(format!("Keychain entry error: {}", e)))?;
 
@@ -792,8 +799,8 @@ fn save_touchid_secret_v1(secret: &[u8; 32]) -> Result<(), KeyError> {
     })?;
 
     let entry = keyring::Entry::new(
-        crate::keyring::GENESIS_KEYCHAIN_SERVICE,
-        crate::keyring::GENESIS_KEYCHAIN_ACCOUNT,
+        crate::keyring::genesis_keychain_service(),
+        crate::keyring::genesis_keychain_account(),
     )
     .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
 

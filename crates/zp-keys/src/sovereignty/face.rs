@@ -523,9 +523,11 @@ fn enroll_face() -> Result<EnrollmentResult, KeyError> {
     // Build template based on available features
     let (template_bytes, summary) = build_face_template(&face_rois)?;
 
-    // Persist template
+    // Persist template. CRIT-8: atomic mode-0600 write so the face
+    // template (a biometric-derived enrollment artifact) is never
+    // briefly readable by other local users.
     let home = crate::sovereignty::hardware::sovereignty_dir()?;
-    std::fs::write(home.join("face_template.bin"), &template_bytes)?;
+    crate::secret_file::write_atomic(&home.join("face_template.bin"), &template_bytes)?;
 
     tracing::info!("{}", summary);
 

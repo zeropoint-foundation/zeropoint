@@ -118,7 +118,7 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
         return Ok(());
     }
 
-    let store = AuditStore::open(&db_path)
+    let store = AuditStore::open_readonly(&db_path)
         .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
 
     let entries = store
@@ -190,7 +190,7 @@ pub async fn audit_verify(_pipeline: &Pipeline) -> Result<()> {
         return Ok(());
     }
 
-    let store = AuditStore::open(&db_path)
+    let store = AuditStore::open_readonly(&db_path)
         .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
 
     let report = store
@@ -800,15 +800,12 @@ fn save_rotation_cert(
     let json = serde_json::to_string_pretty(&certs)
         .map_err(|e| format!("serialization error: {}", e))?;
 
-    std::fs::write(path, json).map_err(|e| format!("write error: {}", e))?;
-
-    // Set restrictive permissions (0600) on the rotation chain file
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = std::fs::Permissions::from_mode(0o600);
-        let _ = std::fs::set_permissions(path, perms);
-    }
+    // CRIT-8: atomic mode-0600 write via the canonical helper. Closes
+    // the chmod-after-write race that existed when this called
+    // `fs::write` then `set_permissions`. The helper does tmpfile +
+    // fsync + rename with mode 0600 from creation.
+    zp_keys::write_secret_file(path, json.as_bytes())
+        .map_err(|e| format!("write error: {}", e))?;
 
     Ok(())
 }
@@ -924,7 +921,7 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     if let Some(parent) = db_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let store = AuditStore::open(&db_path).ok();
+    let store = AuditStore::open_readonly(&db_path).ok();
 
     // Create the real governance gate (default PolicyEngine with 6 rules).
     // The gate no longer maintains its own chain head — chain position is
@@ -1135,15 +1132,11 @@ pub fn operator_create(
     eprint!("  Writing operator metadata...         ");
     match serde_json::to_string_pretty(&metadata) {
         Ok(json) => {
-            if let Err(e) = std::fs::write(&meta_path, &json) {
+            // CRIT-8: atomic mode-0600 write — no chmod-after-write race.
+            if let Err(e) = zp_keys::write_secret_file(&meta_path, json.as_bytes()) {
                 eprintln!("\x1b[31m✗\x1b[0m");
                 eprintln!("  Failed to write {}: {}", meta_path.display(), e);
                 return 1;
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o600));
             }
         }
         Err(e) => {
@@ -1468,14 +1461,10 @@ pub fn operator_succession(name: &str, email: &str) -> i32 {
     eprint!("  Writing successor metadata...        ");
     match serde_json::to_string_pretty(&metadata) {
         Ok(json) => {
-            if let Err(e) = std::fs::write(&meta_path, &json) {
+            // CRIT-8: atomic mode-0600 write — no chmod-after-write race.
+            if let Err(e) = zp_keys::write_secret_file(&meta_path, json.as_bytes()) {
                 eprintln!("\x1b[31m✗\x1b[0m write error: {}", e);
                 return 1;
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o600));
             }
         }
         Err(e) => {

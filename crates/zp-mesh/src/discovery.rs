@@ -245,7 +245,9 @@ impl DiscoveryManager {
         identity: &MeshIdentity,
         capabilities: &AgentCapabilities,
     ) -> MeshResult<Vec<u8>> {
-        let caps_json = serde_json::to_vec(capabilities)
+        // Seam 17: announce payload is signed; preimage must match the
+        // canonical form so verifiers can recompute the bytes deterministically.
+        let caps_json = zp_core::canonical_bytes_of(capabilities)
             .map_err(|e| MeshError::Serialization(e.to_string()))?;
 
         let combined_key = identity.combined_public_key();
@@ -538,7 +540,7 @@ pub struct ValidatedDiscovery {
 ///
 /// Used by both the DiscoveryManager and the runtime's direct announce handler.
 pub fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u8; 64]) -> bool {
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    use ed25519_dalek::{Signature, VerifyingKey};
 
     let Ok(key_array): Result<[u8; 32], _> = signing_key.try_into() else {
         return false;
@@ -549,7 +551,8 @@ pub fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u
     };
 
     let sig = Signature::from_bytes(signature);
-    verifying_key.verify(data, &sig).is_ok()
+    // Phase 1.C: verify_strict for non-malleable announce signatures.
+    verifying_key.verify_strict(data, &sig).is_ok()
 }
 
 // ─────────────────────────────────────────────────────────────

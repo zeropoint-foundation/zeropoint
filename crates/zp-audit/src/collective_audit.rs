@@ -122,7 +122,9 @@ impl CompactAuditEntry {
             at,
             pd,
             pm: entry.policy_module.clone(),
-            sg: entry.signature.clone(),
+            sg: entry.signatures.iter()
+                .find(|b| matches!(b.algorithm, zp_core::SignatureAlgorithm::Ed25519))
+                .map(|b| b.signature_b64.clone()),
         }
     }
 }
@@ -304,7 +306,7 @@ mod tests {
             policy_decision: PolicyDecision::Allow { conditions: vec![] },
             policy_module: "default-gate".to_string(),
             receipt: None,
-            signature: None,
+            signatures: vec![],
         }
     }
 
@@ -516,7 +518,10 @@ mod tests {
     #[test]
     fn test_attestation_with_signatures() {
         let mut entry = make_test_entry("prev", 0);
-        entry.signature = Some("deadbeef".to_string());
+        entry.signatures = vec![zp_core::SignatureBlock::ed25519(
+            "00".repeat(32).as_str(),
+            "deadbeef",
+        )];
         let compact = CompactAuditEntry::from_entry(&entry);
         assert_eq!(compact.sg, Some("deadbeef".to_string()));
 

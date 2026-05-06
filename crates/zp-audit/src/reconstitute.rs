@@ -74,7 +74,9 @@ impl ReconstitutionEntry {
             timestamp: entry.timestamp,
             prev_hash: entry.prev_hash.clone(),
             entry_hash: entry.entry_hash.clone(),
-            signature: entry.signature.clone(),
+            signature: entry.signatures.iter()
+                .find(|b| matches!(b.algorithm, zp_core::SignatureAlgorithm::Ed25519))
+                .map(|b| b.signature_b64.clone()),
             receipt_extensions,
         }
     }

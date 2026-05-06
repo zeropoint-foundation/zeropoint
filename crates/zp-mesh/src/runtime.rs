@@ -415,7 +415,7 @@ async fn handle_announce_packet(
 
 /// Verify an Ed25519 signature over announce data.
 fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u8; 64]) -> bool {
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    use ed25519_dalek::{Signature, VerifyingKey};
 
     let Ok(key_array): Result<[u8; 32], _> = signing_key.try_into() else {
         return false;
@@ -426,7 +426,8 @@ fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u8; 6
     };
 
     let sig = Signature::from_bytes(signature);
-    verifying_key.verify(data, &sig).is_ok()
+    // Phase 1.C: verify_strict for non-malleable mesh signatures.
+    verifying_key.verify_strict(data, &sig).is_ok()
 }
 
 /// Dispatch a single envelope to the appropriate handler.
@@ -941,7 +942,10 @@ mod tests {
     ) {
         use crate::packet::PacketType;
 
-        let announce_data = serde_json::to_vec(capabilities).unwrap();
+        // Seam 17: must match the production canonical form (see
+        // discovery.rs and transport.rs) so the verifier in this test
+        // accepts the same byte sequence production would produce.
+        let announce_data = zp_core::canonical_bytes_of(capabilities).unwrap();
 
         // Build announce: combined public key + capabilities + signature
         let combined_key = sender_id.combined_public_key();

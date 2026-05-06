@@ -115,9 +115,12 @@ impl Signer {
         let verifying_key = VerifyingKey::from_bytes(public_key)
             .map_err(|e| format!("Invalid public key: {}", e))?;
 
-        use ed25519_dalek::Verifier;
+        // Phase 1.C: verify_strict, never the malleable verify. The pairing
+        // with `Signer::sign` always produces canonical signatures, so any
+        // input that would verify but not verify_strict is structurally
+        // invalid and should be rejected.
         Ok(verifying_key
-            .verify(receipt.content_hash.as_bytes(), &signature)
+            .verify_strict(receipt.content_hash.as_bytes(), &signature)
             .is_ok())
     }
 }

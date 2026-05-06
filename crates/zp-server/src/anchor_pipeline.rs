@@ -465,7 +465,7 @@ mod tests {
             policy_decision: PolicyDecision::Allow { conditions: vec![] },
             policy_module: "test".to_string(),
             receipt: None,
-            signature: None,
+            signatures: vec![],
         };
         assert!(AnchorPipeline::classify(&entry).is_none());
     }
@@ -485,7 +485,7 @@ mod tests {
             policy_decision: PolicyDecision::Allow { conditions: vec![] },
             policy_module: "test".to_string(),
             receipt: None,
-            signature: None,
+            signatures: vec![],
         };
         match AnchorPipeline::classify(&entry) {
             Some(AnchorTrigger::GovernanceEvent { event_type }) => {
@@ -509,7 +509,7 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let store = AuditStore::open(&path).unwrap();
+        let store = AuditStore::open_unsigned(&path).unwrap();
         let store = Arc::new(StdMutex::new(store));
 
         let pipeline = Arc::new(AnchorPipeline::new(

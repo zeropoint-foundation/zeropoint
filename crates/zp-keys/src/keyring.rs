@@ -25,42 +25,66 @@ use crate::certificate::Certificate;
 use crate::error::KeyError;
 use crate::hierarchy::{AgentKey, GenesisKey, OperatorKey};
 
+/// Should we use the test-scoped keychain namespace?
+///
+/// True when:
+/// - this crate is being compiled as a test (`cfg!(test)`), OR
+/// - the `ZP_KEYCHAIN_TEST_NAMESPACE` environment variable is set at
+///   runtime.
+///
+/// The env-var path matters because `cfg!(test)` is per-crate at compile
+/// time. When `zp-hardening-tests` (or any external crate) runs its tests,
+/// `zp-keys` is compiled as a regular dependency — `cfg!(test)` is false
+/// inside `zp-keys` — so without the env var the test would reach the
+/// production `zeropoint-genesis` keychain entry.
+///
+/// External test harnesses MUST set `ZP_KEYCHAIN_TEST_NAMESPACE=1` before
+/// any test that touches the credential store.
+#[inline]
+fn is_test_namespace() -> bool {
+    cfg!(test) || std::env::var_os("ZP_KEYCHAIN_TEST_NAMESPACE").is_some()
+}
+
 /// Service name for Genesis secret in the OS credential store.
 /// Public so biometric.rs can use the same identifiers.
-///
-/// In test builds (`#[cfg(test)]`), these resolve to a test-scoped suffix
-/// so `cargo test` never wipes the production keychain entry.
 #[allow(dead_code)]
-pub(crate) const GENESIS_KEYCHAIN_SERVICE: &str = if cfg!(test) {
-    "zeropoint-genesis-test"
-} else {
-    "zeropoint-genesis"
-};
+pub(crate) fn genesis_keychain_service() -> &'static str {
+    if is_test_namespace() {
+        "zeropoint-genesis-test"
+    } else {
+        "zeropoint-genesis"
+    }
+}
 
 /// Account name for the Genesis secret in the OS credential store.
-/// Public so biometric.rs can use the same identifiers.
 #[allow(dead_code)]
-pub(crate) const GENESIS_KEYCHAIN_ACCOUNT: &str = if cfg!(test) {
-    "genesis-secret-test"
-} else {
-    "genesis-secret"
-};
+pub(crate) fn genesis_keychain_account() -> &'static str {
+    if is_test_namespace() {
+        "genesis-secret-test"
+    } else {
+        "genesis-secret"
+    }
+}
 
 /// Service name for the Operator secret in the OS credential store.
 #[allow(dead_code)]
-const OPERATOR_KEYCHAIN_SERVICE: &str = if cfg!(test) {
-    "zeropoint-operator-test"
-} else {
-    "zeropoint-operator"
-};
+fn operator_keychain_service() -> &'static str {
+    if is_test_namespace() {
+        "zeropoint-operator-test"
+    } else {
+        "zeropoint-operator"
+    }
+}
 
 /// Account name for the Operator secret in the OS credential store.
 #[allow(dead_code)]
-const OPERATOR_KEYCHAIN_ACCOUNT: &str = if cfg!(test) {
-    "operator-secret-test"
-} else {
-    "operator-secret"
-};
+fn operator_keychain_account() -> &'static str {
+    if is_test_namespace() {
+        "operator-secret-test"
+    } else {
+        "operator-secret"
+    }
+}
 
 /// Version byte for the on-disk encrypted operator secret blob.
 /// Format: [0x01][12-byte nonce][ChaCha20-Poly1305 ciphertext+tag].
@@ -88,11 +112,11 @@ fn chmod_600(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Write a file and immediately chmod 600. Fails loudly if either step fails.
+/// Atomically write a secret file with mode 0600. Delegates to
+/// [`crate::secret_file::write_atomic`] which closes the chmod-after-write
+/// race documented as CRIT-8 in the 2026-04 audit.
 fn write_secret_file(path: &Path, data: &[u8]) -> Result<(), KeyError> {
-    std::fs::write(path, data)?;
-    chmod_600(path)?;
-    Ok(())
+    crate::secret_file::write_atomic(path, data).map_err(KeyError::from)
 }
 
 /// Encrypt an operator-class secret under a vault key derived from Genesis.
@@ -254,7 +278,11 @@ impl Keyring {
     pub fn save_genesis(&self, genesis: &GenesisKey, save_secret: bool) -> Result<bool, KeyError> {
         let cert_json = serde_json::to_string_pretty(genesis.certificate())
             .map_err(|e| KeyError::Serialization(e.to_string()))?;
-        std::fs::write(self.base_dir.join("genesis.json"), cert_json)?;
+        // CRIT-8: certificate metadata at mode 0600 atomically. Even though
+        // the file holds only the public key + signatures (no private
+        // material), it reveals trust-hierarchy structure and is kept
+        // owner-readable to match the rest of ~/ZeroPoint/keys/.
+        write_secret_file(&self.base_dir.join("genesis.json"), cert_json.as_bytes())?;
 
         if save_secret {
             save_genesis_to_credential_store(&genesis.secret_key()).map_err(|e| {
@@ -347,7 +375,7 @@ impl Keyring {
     ) -> Result<(), KeyError> {
         let cert_json = serde_json::to_string_pretty(operator.certificate())
             .map_err(|e| KeyError::Serialization(e.to_string()))?;
-        std::fs::write(self.base_dir.join("operator.json"), cert_json)?;
+        write_secret_file(&self.base_dir.join("operator.json"), cert_json.as_bytes())?;
 
         let secret = operator.secret_key();
         let vault_key = derive_vault_key_local(genesis_secret);
@@ -370,25 +398,32 @@ impl Keyring {
     pub fn save_operator(&self, operator: &OperatorKey) -> Result<(), KeyError> {
         let cert_json = serde_json::to_string_pretty(operator.certificate())
             .map_err(|e| KeyError::Serialization(e.to_string()))?;
-        std::fs::write(self.base_dir.join("operator.json"), cert_json)?;
+        write_secret_file(&self.base_dir.join("operator.json"), cert_json.as_bytes())?;
 
         let secret = operator.secret_key();
 
-        // 1. Credential store fast path.
-        if save_operator_to_credential_store(&secret).is_ok() {
-            let enc = self.base_dir.join("operator.secret.enc");
-            if enc.exists() {
-                let _ = std::fs::remove_file(&enc);
-            }
-            return Ok(());
-        }
-
-        // 2. Encrypted-at-rest fallback — needs the Genesis secret from
-        //    the credential store (only reachable if Genesis is there).
+        // Always write the encrypted-at-rest blob.
+        //
+        // Symmetry with [`Self::load_operator`] requires this. `load_operator`
+        // deliberately skips the credential store ("eliminates a separate
+        // macOS Keychain prompt, so the user only sees ONE prompt (genesis)
+        // per recompile") and reads only `operator.secret.enc`. If `save`
+        // were to write only to the credential store and skip the blob,
+        // `load` would fail. Pre-fix: that disagreement was the bug behind
+        // the May 2026 `test_keyring_roundtrip_credential_store` failure.
+        //
+        // The credential-store write below is best-effort — it caches the
+        // operator secret for any future caller that explicitly chooses the
+        // credential-store path, but the blob is the source of truth.
         let (genesis_secret, _) = self.load_genesis_secret()?;
         let vault_key = derive_vault_key_local(&genesis_secret);
         let blob = encrypt_with_vault_key(&secret, &vault_key)?;
         write_secret_file(&self.base_dir.join("operator.secret.enc"), &blob)?;
+
+        // Best-effort credential-store cache. Failure here is not fatal —
+        // the blob is the canonical store.
+        let _ = save_operator_to_credential_store(&secret);
+
         Ok(())
     }
 
@@ -471,10 +506,14 @@ impl Keyring {
             .map_err(|e| KeyError::Serialization(e.to_string()))?;
 
         let agents_dir = self.base_dir.join("agents");
-        std::fs::write(agents_dir.join(format!("{}.json", name)), chain_json)?;
-        std::fs::write(
-            agents_dir.join(format!("{}.secret", name)),
-            agent.secret_key(),
+        // CRIT-8: both files written at mode 0600 atomically. The .secret
+        // file is the raw Ed25519 seed (32 bytes, Tier-3 sovereignty
+        // material); the chain.json reveals the operator hierarchy and
+        // capability metadata, also kept owner-readable only.
+        write_secret_file(&agents_dir.join(format!("{}.json", name)), chain_json.as_bytes())?;
+        write_secret_file(
+            &agents_dir.join(format!("{}.secret", name)),
+            &agent.secret_key(),
         )?;
         Ok(())
     }
@@ -546,7 +585,7 @@ fn has_genesis_in_credential_store() -> bool {
 pub(crate) fn save_genesis_to_credential_store(secret: &[u8; 32]) -> Result<(), KeyError> {
     #[cfg(feature = "os-keychain")]
     {
-        let entry = keyring::Entry::new(GENESIS_KEYCHAIN_SERVICE, GENESIS_KEYCHAIN_ACCOUNT)
+        let entry = keyring::Entry::new(genesis_keychain_service(), genesis_keychain_account())
             .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
         entry
             .set_password(&hex::encode(secret))
@@ -569,9 +608,17 @@ pub(crate) fn save_genesis_to_credential_store(secret: &[u8; 32]) -> Result<(), 
 /// For biometric mode on macOS, the OS automatically triggers the biometric prompt.
 /// For biometric mode on Linux, call `biometric::load_genesis_biometric()` instead.
 ///
-/// The result is cached in a process-wide `OnceLock` so the keychain is only
-/// touched once per process lifetime — subsequent calls return the cached copy.
-/// This eliminates repeated macOS Keychain permission dialogs after recompiles.
+/// In production builds, the result is cached in a process-wide `OnceLock`
+/// so the keychain is only touched once per process lifetime — subsequent
+/// calls return the cached copy. This eliminates repeated macOS Keychain
+/// permission dialogs after recompiles.
+///
+/// **In test builds (`cfg(test)`), the cache is skipped.** A process-wide
+/// `OnceLock` would freeze the first test's loaded secret for the entire
+/// run, breaking subsequent tests that save+load fresh secrets. Tests
+/// install the in-memory mock keyring (Seam 11), which is fast and
+/// deterministic — no caching needed for prompt suppression.
+#[cfg(not(test))]
 pub(crate) fn load_genesis_from_credential_store() -> Result<[u8; 32], KeyError> {
     use std::sync::OnceLock;
 
@@ -588,12 +635,19 @@ pub(crate) fn load_genesis_from_credential_store() -> Result<[u8; 32], KeyError>
     }
 }
 
+/// Test-build version: no cache. Each call hits the (mock) credential store
+/// directly, so save→load round-trips work correctly across test cases.
+#[cfg(test)]
+pub(crate) fn load_genesis_from_credential_store() -> Result<[u8; 32], KeyError> {
+    load_genesis_from_credential_store_uncached()
+}
+
 /// Actual keychain access — called at most once via the `OnceLock` in the
 /// public wrapper above.
 fn load_genesis_from_credential_store_uncached() -> Result<[u8; 32], KeyError> {
     #[cfg(feature = "os-keychain")]
     {
-        let entry = keyring::Entry::new(GENESIS_KEYCHAIN_SERVICE, GENESIS_KEYCHAIN_ACCOUNT)
+        let entry = keyring::Entry::new(genesis_keychain_service(), genesis_keychain_account())
             .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
         let hex_secret = entry
             .get_password()
@@ -637,7 +691,7 @@ fn has_operator_in_credential_store() -> bool {
 fn save_operator_to_credential_store(secret: &[u8; 32]) -> Result<(), KeyError> {
     #[cfg(feature = "os-keychain")]
     {
-        let entry = keyring::Entry::new(OPERATOR_KEYCHAIN_SERVICE, OPERATOR_KEYCHAIN_ACCOUNT)
+        let entry = keyring::Entry::new(operator_keychain_service(), operator_keychain_account())
             .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
         entry
             .set_password(&hex::encode(secret))
@@ -659,7 +713,7 @@ fn save_operator_to_credential_store(secret: &[u8; 32]) -> Result<(), KeyError> 
 fn load_operator_from_credential_store() -> Result<[u8; 32], KeyError> {
     #[cfg(feature = "os-keychain")]
     {
-        let entry = keyring::Entry::new(OPERATOR_KEYCHAIN_SERVICE, OPERATOR_KEYCHAIN_ACCOUNT)
+        let entry = keyring::Entry::new(operator_keychain_service(), operator_keychain_account())
             .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
         let hex_secret = entry
             .get_password()
@@ -690,7 +744,7 @@ fn load_operator_from_credential_store() -> Result<[u8; 32], KeyError> {
 fn clear_genesis_from_credential_store() -> Result<(), KeyError> {
     #[cfg(feature = "os-keychain")]
     {
-        let entry = keyring::Entry::new(GENESIS_KEYCHAIN_SERVICE, GENESIS_KEYCHAIN_ACCOUNT)
+        let entry = keyring::Entry::new(genesis_keychain_service(), genesis_keychain_account())
             .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
         match entry.delete_credential() {
             Ok(()) => Ok(()),

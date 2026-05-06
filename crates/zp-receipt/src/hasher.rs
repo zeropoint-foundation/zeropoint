@@ -7,11 +7,20 @@
 
 use crate::Receipt;
 
-/// Compute the Blake3 canonical hash of a receipt.
+/// Build the canonical preimage of a receipt — bytes-to-be-signed.
 ///
-/// Excludes `content_hash`, `signature`, and `signer_public_key` from the
-/// hash input (these are computed/set after the body is finalized).
-pub fn canonical_hash(receipt: &Receipt) -> String {
+/// Excludes `content_hash`, `signature`, `signer_public_key`, and
+/// `signatures` from the preimage — those are set *after* the body
+/// is finalized, and hash-then-sign discipline requires the preimage
+/// to be well-defined before any signature exists.
+///
+/// Goes through [`zp_core::canonical_bytes`] (Seam 17) so the byte form
+/// is identical to every other canonical-form site in the workspace.
+///
+/// This function is the source of truth for "what gets signed when a
+/// Receipt is signed." Both [`canonical_hash`] (the hex-string form) and
+/// the [`zp_core::Signable`] impl on [`Receipt`] go through this.
+pub fn canonical_preimage(receipt: &Receipt) -> Vec<u8> {
     let hash_input = serde_json::json!({
         "id": receipt.id,
         "version": receipt.version,
@@ -39,9 +48,19 @@ pub fn canonical_hash(receipt: &Receipt) -> String {
         "superseded_by": receipt.superseded_by,
         "revoked_at": receipt.revoked_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
     });
+    crate::canonical::canonical_bytes(&hash_input)
+}
 
-    let canonical = serde_json::to_string(&hash_input).unwrap_or_default();
-    blake3::hash(canonical.as_bytes()).to_hex().to_string()
+/// Compute the Blake3 canonical hash (hex) of a receipt. Wraps
+/// [`canonical_preimage`] with BLAKE3.
+pub fn canonical_hash(receipt: &Receipt) -> String {
+    blake3::hash(&canonical_preimage(receipt)).to_hex().to_string()
+}
+
+impl crate::Signable for Receipt {
+    fn canonical_preimage(&self) -> Vec<u8> {
+        canonical_preimage(self)
+    }
 }
 
 /// Hash arbitrary bytes with Blake3.

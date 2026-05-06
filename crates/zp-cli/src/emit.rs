@@ -112,8 +112,14 @@ pub fn run_emit(
     signer.sign(&mut receipt);
     let receipt_id = receipt.id.clone();
 
+    // Derive the audit signer from the Genesis secret
+    let (genesis_secret, _) = keyring.load_genesis_secret()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+
     // Open audit store and append
-    let mut store = AuditStore::open(&db_path)
+    let mut store = AuditStore::open_signed(&db_path, audit_signer)
         .context("Failed to open audit store")?;
 
     // Create a deterministic conversation ID from the issue ID so all receipts

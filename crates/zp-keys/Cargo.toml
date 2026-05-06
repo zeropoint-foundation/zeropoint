@@ -10,7 +10,11 @@ description = "ZeroPoint key hierarchy — genesis → operator → agent key de
 
 [features]
 default = ["os-keychain"]
-os-keychain = ["keyring"]
+os-keychain = ["dep:keyring"]
+# Test-support: exposes test_helpers (install_mock_keyring + the in-memory
+# CredentialBuilderApi). NEVER enable in production builds. See Seam 11
+# in docs/STRUCTURAL-AUDIT-2026-05.md for why this exists.
+test-support = ["dep:keyring"]
 # macOS biometric-gated Keychain via Security.framework (v0.2)
 # When enabled, Keychain items get kSecAccessControlBiometryCurrentSet —
 # the OS refuses to release the secret without a live biometric match.

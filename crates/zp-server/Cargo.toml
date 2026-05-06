@@ -10,8 +10,10 @@ os-keychain = ["zp-keys/os-keychain"]
 biometric-keychain = ["zp-keys/biometric-keychain"]
 hw-trezor = ["zp-keys/hw-trezor"]
 ## Development-only features — NEVER enable in production builds.
-## Exposes audit tamper/restore/clear endpoints for testing.
-dev-tools = []
+## Exposes the audit_clear endpoint for testing. Pulls in zp-audit's
+## test-support feature so AuditStore::clear() is available; this is
+## the only sanctioned way for a dev-tools binary to drop the chain.
+dev-tools = ["zp-audit/test-support"]
 full = ["policy-wasm", "os-keychain", "hw-trezor"]
 
 [dependencies]

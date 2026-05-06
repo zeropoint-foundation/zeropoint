@@ -2,9 +2,18 @@ use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use thiserror::Error;
 use tracing::{debug, info, warn};
 
-use zp_core::{AuditEntry, AuditId, ConversationId};
+use zp_core::{AuditEntry, AuditId, ConversationId, SignatureBlock};
 
 use crate::chain::{genesis_hash, new_audit_id, seal_entry, UnsealedEntry};
+use crate::signer::AuditSigner;
+
+/// Decode the on-disk `signatures` column (a JSON array of [`SignatureBlock`])
+/// into the typed vec used by [`AuditEntry`]. Storage may legitimately hold
+/// either an empty array (`[]`, the schema default for unsigned entries) or
+/// a populated one (post-Phase-1.B); both round-trip correctly here.
+fn decode_signatures(json: &str) -> Vec<SignatureBlock> {
+    serde_json::from_str(json).unwrap_or_default()
+}
 
 /// Errors that can occur in the audit store.
 #[derive(Error, Debug)]
@@ -27,11 +36,26 @@ pub enum StoreError {
          forensic evidence, then delete `audit.db` and let the server recreate it"
     )]
     SchemaMismatch { found: i32, expected: i32 },
+
+    /// `append` was called on a store opened via [`AuditStore::open_readonly`].
+    /// Read-only stores deliberately reject writes so inspection commands
+    /// (`zp audit list`, etc.) can run without a sovereignty unlock.
+    #[error("audit store is read-only; use AuditStore::open_signed to write")]
+    ReadOnly,
 }
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
 /// Type alias for audit row data from database queries.
+///
+/// Column order matches the SELECT clause used by the query helpers:
+/// `(id, timestamp, prev_hash, entry_hash, actor, action, conversation_id,
+///  policy_decision, policy_module, receipt, signatures)`.
+///
+/// Column 10 (`signatures`) is `String`, not `Option<String>`: schema v=3
+/// makes the column NOT NULL with default `'[]'` so an unsigned entry
+/// stores a literal empty JSON array. Decoding to `Vec<SignatureBlock>`
+/// happens in [`decode_signatures`].
 type AuditRow = (
     String,
     String,
@@ -43,13 +67,39 @@ type AuditRow = (
     String,
     String,
     Option<String>,
-    Option<String>,
+    String,
 );
 
 /// The audit store manages an append-only SQLite database of audit entries
 /// with hash-chained verification for integrity.
+///
+/// # Construction
+///
+/// As of Phase 1.B (Seam 1), `AuditStore::open` no longer exists. Three
+/// typed constructors split read vs write vs test:
+///
+/// | Constructor                      | Path        | Holds signer | Append |
+/// |----------------------------------|-------------|--------------|--------|
+/// | [`AuditStore::open_signed`]      | production  | yes          | signs  |
+/// | [`AuditStore::open_readonly`]    | production  | no           | errors |
+/// | [`AuditStore::open_unsigned`]    | test-only   | no           | empty  |
+///
+/// The hard cutover is intentional: there is no path by which a production
+/// writer can construct an unsigned store. `open_unsigned` is `cfg(test)`
+/// inside this crate; external test consumers must enable the `test-support`
+/// feature explicitly.
 pub struct AuditStore {
     conn: Connection,
+    /// Per-store signer. `Some` for stores opened via [`AuditStore::open_signed`];
+    /// `None` for the read-only and test-support paths. When `Some`,
+    /// [`Self::append`] signs the sealed entry hash and pushes the resulting
+    /// [`SignatureBlock`] into the entry's `signatures` vec before INSERT.
+    signer: Option<AuditSigner>,
+    /// Read-only mode. Set by [`Self::open_readonly`] and rejected by
+    /// [`Self::append`] with [`StoreError::ReadOnly`]. Distinct from
+    /// `signer.is_none()` because the test-support path also has no signer
+    /// but is allowed to write (with empty signatures).
+    read_only: bool,
     /// Optional post-commit notifier (P3 #176). Fires once per appended row so
     /// the Merkle anchor pipeline can detect trigger events without the store
     /// itself knowing about anchoring. Notifiers must be non-blocking — the
@@ -58,11 +108,72 @@ pub struct AuditStore {
 }
 
 impl AuditStore {
-    /// Opens or creates an audit store at the given path.
-    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
+    /// Open or create an audit store with read+write access and a held signer.
+    ///
+    /// This is the **only production write entry point**. The signer is held
+    /// for the lifetime of the store; every subsequent [`Self::append`] uses
+    /// it to sign the sealed entry hash and populate the entry's `signatures`
+    /// vec. The Phase-1.B invariant: no entry reaches storage unsigned.
+    ///
+    /// The signer should come from
+    /// [`zp_keys::derive_audit_signer_seed`] applied to the in-memory
+    /// Genesis seed (sovereignty unlock at startup, not on disk).
+    pub fn open_signed(
+        path: impl AsRef<std::path::Path>,
+        signer: AuditSigner,
+    ) -> Result<Self> {
         let conn = Connection::open(path).map_err(StoreError::Database)?;
+        let store = AuditStore {
+            conn,
+            signer: Some(signer),
+            read_only: false,
+            notifier: None,
+        };
+        store.init()?;
+        Ok(store)
+    }
 
-        let store = AuditStore { conn, notifier: None };
+    /// Open an audit store for **read-only** access. Production-safe; does
+    /// not require a sovereignty unlock.
+    ///
+    /// Use this for inspection commands (`zp audit list`, `zp audit verify`,
+    /// dashboard queries) that must work without the operator unlocking
+    /// Genesis. [`Self::append`] returns [`StoreError::ReadOnly`] on a
+    /// read-only store, so every write path is statically forced through
+    /// [`Self::open_signed`].
+    pub fn open_readonly(path: impl AsRef<std::path::Path>) -> Result<Self> {
+        let conn = Connection::open(path).map_err(StoreError::Database)?;
+        let store = AuditStore {
+            conn,
+            signer: None,
+            read_only: true,
+            notifier: None,
+        };
+        store.init()?;
+        Ok(store)
+    }
+
+    /// Open an audit store **without a signer**, allowing writes. Test-only.
+    ///
+    /// Inside `zp-audit`, callable from tests directly. External crates must
+    /// enable the `test-support` feature to access this constructor.
+    /// Production code MUST NOT enable that feature.
+    ///
+    /// Entries appended via this store carry `signatures: []`. Verifiers
+    /// will report `signatures_present = 0` for them; the chain-integrity
+    /// fast path still works (entry hashes still link), but the chain has
+    /// no per-entry attestation. This is correct for test fixtures and
+    /// reconstitution-pipeline unit tests that don't need a sovereignty
+    /// unlock to run.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn open_unsigned(path: impl AsRef<std::path::Path>) -> Result<Self> {
+        let conn = Connection::open(path).map_err(StoreError::Database)?;
+        let store = AuditStore {
+            conn,
+            signer: None,
+            read_only: false,
+            notifier: None,
+        };
         store.init()?;
         Ok(store)
     }
@@ -79,7 +190,14 @@ impl AuditStore {
     /// is rejected at `open` time — callers must drop and recreate the DB
     /// (preserving forensic evidence separately; see
     /// `security/pentest-2026-04-06/forensic-dump-audit-03.sh`).
-    const SCHEMA_VERSION: i32 = 2;
+    ///
+    /// **v=3 (Phase 1, Seam 1):** the `signature TEXT` column is replaced by
+    /// `signatures TEXT NOT NULL DEFAULT '[]'`, holding a JSON array of
+    /// [`SignatureBlock`]s. The hash function in [`crate::chain::compute_entry_hash`]
+    /// changed accordingly (`"signature": null` → `"signatures": []`), so
+    /// pre-v=3 entries cannot be rehashed by the v=3 verifier. The rejection
+    /// + drop-and-recreate policy from AUDIT-03 covers the upgrade.
+    const SCHEMA_VERSION: i32 = 3;
 
     /// Initializes the audit_entries table and enforces the canonical
     /// schema. This is the single place that defines the audit store's
@@ -138,7 +256,7 @@ impl AuditStore {
                     policy_decision TEXT NOT NULL,
                     policy_module TEXT NOT NULL,
                     receipt TEXT,
-                    signature TEXT
+                    signatures TEXT NOT NULL DEFAULT '[]'
                 );
                 CREATE INDEX IF NOT EXISTS idx_conversation_id
                     ON audit_entries(conversation_id);
@@ -147,6 +265,24 @@ impl AuditStore {
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_prev_hash
                     ON audit_entries(prev_hash)
                     WHERE prev_hash != '{genesis}';
+
+                -- Phase 1.C (Seam 1): make audit_entries append-only at the
+                -- storage layer. UPDATE/DELETE attempts are rejected by the
+                -- engine itself, not by application code. Closes the surface
+                -- where any process with FS access could mutate the chain via
+                -- raw sqlite. The triggers are CREATE IF NOT EXISTS so existing
+                -- v=3 databases gain the protection on next open without
+                -- requiring a schema-version bump (the row format is unchanged).
+                --
+                -- The `pentest-demo` integrity demo no longer uses UPDATE; it
+                -- works on in-memory clones via AuditStore::corrupt_clone_for_demo
+                -- (see store.rs).
+                CREATE TRIGGER IF NOT EXISTS no_update_audit_entries
+                    BEFORE UPDATE ON audit_entries
+                    BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS no_delete_audit_entries
+                    BEFORE DELETE ON audit_entries
+                    BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END;
                 "
             ))
             .map_err(StoreError::Database)?;
@@ -186,6 +322,13 @@ impl AuditStore {
     /// All identity and policy fields are serialized via `serde_json`, fixing
     /// AUDIT-02 (the silent Debug-format round-trip data loss).
     pub fn append(&mut self, unsealed: UnsealedEntry) -> Result<AuditEntry> {
+        // Phase 1.B: a read-only store rejects writes structurally. Inspection
+        // commands that opened via [`Self::open_readonly`] cannot accidentally
+        // write — they hit this guard before any I/O.
+        if self.read_only {
+            return Err(StoreError::ReadOnly);
+        }
+
         // AUDIT-04: redact bearer tokens, API keys, and other secret-shaped
         // substrings from free-text fields before the entry is sealed. The
         // scrubber is always on — there is no opt-out — because the audit
@@ -214,7 +357,19 @@ impl AuditStore {
         let id = new_audit_id();
         let timestamp = chrono::Utc::now();
 
-        let sealed = seal_entry(&unsealed, &prev_hash, id, timestamp);
+        let mut sealed = seal_entry(&unsealed, &prev_hash, id, timestamp);
+
+        // Hash-then-sign discipline (Phase 1.B). `seal_entry` produced a
+        // sealed `entry_hash` over `signatures: []`. If we hold a signer,
+        // sign that hash now and push the resulting block into the entry's
+        // `signatures` vec **and** the on-disk JSON column. The hash itself
+        // is unchanged — it was computed before the signature existed, so
+        // adding the signature can never invalidate the chain link.
+        if let Some(signer) = self.signer.as_ref() {
+            sealed
+                .signatures
+                .push(signer.sign_entry(&sealed.entry_hash));
+        }
 
         // Serialize fields with proper JSON (AUDIT-02 fix). conversation_id
         // and id use Display (Uuid hyphenated form) so the read path can
@@ -231,10 +386,16 @@ impl AuditStore {
             .map(serde_json::to_string)
             .transpose()?;
 
+        // `signatures` carries either the signed block (production via
+        // open_signed) or the empty array (test-only via open_unsigned).
+        // The schema column is NOT NULL with default '[]' so both paths
+        // round-trip cleanly.
+        let signatures_json = serde_json::to_string(&sealed.signatures)?;
+
         tx.execute(
             "INSERT INTO audit_entries
              (id, timestamp, prev_hash, entry_hash, actor, action, conversation_id,
-              policy_decision, policy_module, receipt, signature)
+              policy_decision, policy_module, receipt, signatures)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 id_str,
@@ -247,7 +408,7 @@ impl AuditStore {
                 policy_decision_json,
                 sealed.policy_module,
                 receipt_json,
-                sealed.signature,
+                signatures_json,
             ],
         )
         .map_err(StoreError::Database)?;
@@ -265,55 +426,96 @@ impl AuditStore {
         Ok(sealed)
     }
 
-    /// Overwrite an entry's `entry_hash`. **Demo/pentest only.**
+    /// Return an in-memory **clone** of an entry with its `entry_hash`
+    /// corrupted so the verifier will reject it. The on-disk row is NOT
+    /// modified — the `audit_entries` table remains append-only via the
+    /// triggers added in Phase 1.C.
     ///
-    /// This is the single, narrow back door that replaces the old
-    /// `execute_raw` SQL-injection surface. It is only compiled when the
-    /// `pentest-demo` feature is enabled, takes the entry id and new hash
-    /// as parameterized values (no SQL string formatting), and exists
-    /// solely so the integrity-demo endpoints can corrupt and then
-    /// recover a single row. See docs/audit-invariant.md §Back doors.
+    /// This replaces the old `tamper_entry_hash` / `restore_entry_hash`
+    /// pair, which mutated the DB and depended on a back-door UPDATE
+    /// surface. The integrity demo at `zeropoint.global/playground` uses
+    /// this to exhibit chain-verification failure without ever creating
+    /// a tampered row on disk: load the chain, swap one entry for the
+    /// corrupted clone, run the verifier on the spliced chain, watch it
+    /// fail. Real DB stays clean.
+    ///
+    /// Available under the `pentest-demo` feature only — it's a demo
+    /// helper, not a production primitive.
     #[cfg(feature = "pentest-demo")]
-    pub fn tamper_entry_hash(&self, id: &str, new_hash: &str) -> Result<()> {
-        warn!(entry_id = id, "pentest-demo: tampering entry_hash");
-        let affected = self
-            .conn
-            .execute(
-                "UPDATE audit_entries SET entry_hash = ?1 WHERE id = ?2",
-                params![new_hash, id],
-            )
-            .map_err(StoreError::Database)?;
-        if affected == 0 {
-            return Err(StoreError::NoEntries);
-        }
-        Ok(())
+    pub fn corrupt_clone_for_demo(&self, id: &str) -> Result<AuditEntry> {
+        warn!(entry_id = id, "pentest-demo: returning corrupted clone");
+        // Load the entry by id. Reuse the existing column list so the
+        // signatures column round-trips correctly.
+        let entry = self.conn.query_row(
+            "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                    conversation_id, policy_decision, policy_module, receipt, signatures
+             FROM audit_entries WHERE id = ?1",
+            params![id],
+            |row| {
+                let id_str: String = row.get(0)?;
+                let timestamp_str: String = row.get(1)?;
+                let prev_hash: String = row.get(2)?;
+                let entry_hash: String = row.get(3)?;
+                let actor_json: String = row.get(4)?;
+                let action_json: String = row.get(5)?;
+                let conv_id_str: String = row.get(6)?;
+                let policy_decision_json: String = row.get(7)?;
+                let policy_module: String = row.get(8)?;
+                let receipt_json: Option<String> = row.get(9)?;
+                let signatures_json: String = row.get(10)?;
+                Ok((
+                    id_str,
+                    timestamp_str,
+                    prev_hash,
+                    entry_hash,
+                    actor_json,
+                    action_json,
+                    conv_id_str,
+                    policy_decision_json,
+                    policy_module,
+                    receipt_json,
+                    signatures_json,
+                ))
+            },
+        )
+        .optional()
+        .map_err(StoreError::Database)?
+        .ok_or(StoreError::NoEntries)?;
+
+        let mut hydrated = self.hydrate_entries(vec![entry])?;
+        let mut tampered = hydrated.pop().ok_or(StoreError::NoEntries)?;
+        // Replace the entry_hash with a visibly-bogus value. The verifier
+        // will recompute the canonical hash and find the mismatch.
+        tampered.entry_hash = "f".repeat(64);
+        Ok(tampered)
     }
 
-    /// Restore an entry's `entry_hash` to a known-good value.
-    /// Companion to [`Self::tamper_entry_hash`]; same demo-only contract.
-    #[cfg(feature = "pentest-demo")]
-    pub fn restore_entry_hash(&self, id: &str, original_hash: &str) -> Result<()> {
-        warn!(entry_id = id, "pentest-demo: restoring entry_hash");
-        let affected = self
-            .conn
-            .execute(
-                "UPDATE audit_entries SET entry_hash = ?1 WHERE id = ?2",
-                params![original_hash, id],
-            )
-            .map_err(StoreError::Database)?;
-        if affected == 0 {
-            return Err(StoreError::NoEntries);
-        }
-        Ok(())
-    }
-
-    /// Clear all audit entries (reset the chain). Returns the number of entries deleted.
+    /// Drop and recreate the `audit_entries` table. Test/dev-tools only.
+    ///
+    /// Gated behind `cfg(any(test, feature = "test-support"))` because the
+    /// audit chain is supposed to be append-only — production resets are
+    /// done by deleting the audit DB file and letting the server recreate
+    /// it. Tests that need a clean store between cases call this directly;
+    /// the dev-tools `audit_clear_handler` reaches it via the
+    /// `dev-tools = ["zp-audit/test-support"]` feature pass-through.
+    ///
+    /// Implementation note: the BEFORE DELETE trigger (Phase 1.C) blocks
+    /// row-by-row deletion, so we DROP the table and let `init()` rebuild
+    /// it (along with its triggers) on the next call. This is structurally
+    /// correct: a "clear" that destroys the table-as-such isn't pretending
+    /// the chain is mutable, it's resetting the substrate.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn clear(&self) -> Result<usize> {
-        let count = self
+        let count: usize = self
             .conn
-            .execute("DELETE FROM audit_entries", [])
+            .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
             .map_err(StoreError::Database)?;
-        info!("Cleared {} audit entries", count);
+        self.conn
+            .execute_batch("DROP TABLE audit_entries;")
+            .map_err(StoreError::Database)?;
+        // Re-create the table + indexes + triggers via the canonical init().
+        self.init()?;
+        info!("Cleared {} audit entries (table dropped and recreated)", count);
         Ok(count)
     }
 
@@ -358,7 +560,7 @@ impl AuditStore {
             .conn
             .prepare(
                 "SELECT id, timestamp, prev_hash, entry_hash, actor, action, 
-                        conversation_id, policy_decision, policy_module, receipt, signature
+                        conversation_id, policy_decision, policy_module, receipt, signatures
                  FROM audit_entries
                  WHERE conversation_id = ?
                  ORDER BY timestamp DESC
@@ -378,7 +580,7 @@ impl AuditStore {
                 let policy_decision_json: String = row.get(7)?;
                 let policy_module: String = row.get(8)?;
                 let receipt_json: Option<String> = row.get(9)?;
-                let signature: Option<String> = row.get(10)?;
+                let signatures_json: String = row.get(10)?;
 
                 Ok((
                     id_str,
@@ -391,7 +593,7 @@ impl AuditStore {
                     policy_decision_json,
                     policy_module,
                     receipt_json,
-                    signature,
+                    signatures_json,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -410,7 +612,7 @@ impl AuditStore {
             policy_decision_json,
             policy_module,
             receipt_json,
-            signature,
+            signatures_json,
         ) in entries
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
@@ -452,7 +654,7 @@ impl AuditStore {
                 policy_decision,
                 policy_module,
                 receipt,
-                signature,
+                signatures: decode_signatures(&signatures_json),
             });
         }
 
@@ -518,7 +720,7 @@ impl AuditStore {
             .conn
             .prepare(
                 "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
-                        conversation_id, policy_decision, policy_module, receipt, signature
+                        conversation_id, policy_decision, policy_module, receipt, signatures
                  FROM audit_entries
                  ORDER BY rowid ASC
                  LIMIT ?",
@@ -537,7 +739,7 @@ impl AuditStore {
                 let policy_decision_json: String = row.get(7)?;
                 let policy_module: String = row.get(8)?;
                 let receipt_json: Option<String> = row.get(9)?;
-                let signature: Option<String> = row.get(10)?;
+                let signatures_json: String = row.get(10)?;
 
                 Ok((
                     id_str,
@@ -550,7 +752,7 @@ impl AuditStore {
                     policy_decision_json,
                     policy_module,
                     receipt_json,
-                    signature,
+                    signatures_json,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -569,7 +771,7 @@ impl AuditStore {
             policy_decision_json,
             policy_module,
             receipt_json,
-            signature,
+            signatures_json,
         ) in entries
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
@@ -609,7 +811,7 @@ impl AuditStore {
                 policy_decision,
                 policy_module,
                 receipt,
-                signature,
+                signatures: decode_signatures(&signatures_json),
             });
         }
 
@@ -693,7 +895,7 @@ impl AuditStore {
             .conn
             .prepare(
                 "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
-                        conversation_id, policy_decision, policy_module, receipt, signature
+                        conversation_id, policy_decision, policy_module, receipt, signatures
                  FROM audit_entries
                  WHERE json_extract(receipt, '$.receipt_type') = ?1
                  ORDER BY rowid DESC
@@ -713,7 +915,7 @@ impl AuditStore {
                 let policy_decision_json: String = row.get(7)?;
                 let policy_module: String = row.get(8)?;
                 let receipt_json: Option<String> = row.get(9)?;
-                let signature: Option<String> = row.get(10)?;
+                let signatures_json: String = row.get(10)?;
 
                 Ok((
                     id_str,
@@ -726,7 +928,7 @@ impl AuditStore {
                     policy_decision_json,
                     policy_module,
                     receipt_json,
-                    signature,
+                    signatures_json,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -745,7 +947,7 @@ impl AuditStore {
             .conn
             .prepare(
                 "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
-                        conversation_id, policy_decision, policy_module, receipt, signature
+                        conversation_id, policy_decision, policy_module, receipt, signatures
                  FROM audit_entries
                  WHERE json_extract(receipt, '$.receipt_type') = 'revocation_claim'
                    AND json_extract(receipt, '$.claim_metadata.revoked_receipt_id') = ?1
@@ -766,7 +968,7 @@ impl AuditStore {
                 let policy_decision_json: String = row.get(7)?;
                 let policy_module: String = row.get(8)?;
                 let receipt_json: Option<String> = row.get(9)?;
-                let signature: Option<String> = row.get(10)?;
+                let signatures_json: String = row.get(10)?;
 
                 Ok((
                     id_str,
@@ -779,7 +981,7 @@ impl AuditStore {
                     policy_decision_json,
                     policy_module,
                     receipt_json,
-                    signature,
+                    signatures_json,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -796,7 +998,7 @@ impl AuditStore {
             .conn
             .prepare(
                 "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
-                        conversation_id, policy_decision, policy_module, receipt, signature
+                        conversation_id, policy_decision, policy_module, receipt, signatures
                  FROM audit_entries
                  WHERE json_extract(receipt, '$.expires_at') IS NOT NULL
                    AND json_extract(receipt, '$.expires_at') < ?1
@@ -817,7 +1019,7 @@ impl AuditStore {
                 let policy_decision_json: String = row.get(7)?;
                 let policy_module: String = row.get(8)?;
                 let receipt_json: Option<String> = row.get(9)?;
-                let signature: Option<String> = row.get(10)?;
+                let signatures_json: String = row.get(10)?;
 
                 Ok((
                     id_str,
@@ -830,7 +1032,7 @@ impl AuditStore {
                     policy_decision_json,
                     policy_module,
                     receipt_json,
-                    signature,
+                    signatures_json,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -855,7 +1057,7 @@ impl AuditStore {
             policy_decision_json,
             policy_module,
             receipt_json,
-            signature,
+            signatures_json,
         ) in entries
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
@@ -895,7 +1097,7 @@ impl AuditStore {
                 policy_decision,
                 policy_module,
                 receipt,
-                signature,
+                signatures: decode_signatures(&signatures_json),
             });
         }
         Ok(result)
@@ -923,7 +1125,7 @@ mod tests {
     fn test_genesis_hash() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let store = AuditStore::open(&path).unwrap();
+        let store = AuditStore::open_unsigned(&path).unwrap();
         let hash = store.get_latest_hash().unwrap();
         assert_eq!(hash, genesis_hash());
     }
@@ -932,7 +1134,7 @@ mod tests {
     fn test_export_chain_empty() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let store = AuditStore::open(&path).unwrap();
+        let store = AuditStore::open_unsigned(&path).unwrap();
 
         let chain = store.export_chain(100).unwrap();
         assert!(chain.is_empty());
@@ -942,7 +1144,7 @@ mod tests {
     fn test_append_links_atomically() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let mut store = AuditStore::open(&path).unwrap();
+        let mut store = AuditStore::open_unsigned(&path).unwrap();
 
         let e1 = store.append(unsealed("mod1")).unwrap();
         let e2 = store.append(unsealed("mod2")).unwrap();
@@ -960,7 +1162,7 @@ mod tests {
     fn test_verify_with_report_on_valid_store() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let mut store = AuditStore::open(&path).unwrap();
+        let mut store = AuditStore::open_unsigned(&path).unwrap();
 
         store.append(unsealed("mod1")).unwrap();
         store.append(unsealed("mod2")).unwrap();
@@ -981,7 +1183,7 @@ mod tests {
     fn test_catalog_verify_after_sequential_append() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let mut store = AuditStore::open(&path).unwrap();
+        let mut store = AuditStore::open_unsigned(&path).unwrap();
 
         for i in 0..10 {
             store.append(unsealed(&format!("mod{i}"))).unwrap();
@@ -1015,8 +1217,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
 
-        let store_a = Arc::new(Mutex::new(AuditStore::open(&path).unwrap()));
-        let store_b = Arc::new(Mutex::new(AuditStore::open(&path).unwrap()));
+        let store_a = Arc::new(Mutex::new(AuditStore::open_unsigned(&path).unwrap()));
+        let store_b = Arc::new(Mutex::new(AuditStore::open_unsigned(&path).unwrap()));
 
         const THREADS_PER_HANDLE: usize = 4;
         const APPENDS_PER_THREAD: usize = 25;
@@ -1069,7 +1271,7 @@ mod tests {
         use crate::chain::recompute_entry_hash;
 
         let dir = tempfile::tempdir().unwrap();
-        let mut store = AuditStore::open(dir.path().join("audit.db")).unwrap();
+        let mut store = AuditStore::open_unsigned(dir.path().join("audit.db")).unwrap();
 
         let mut sealed_ids = Vec::new();
         let mut sealed_hashes = Vec::new();
@@ -1151,25 +1353,26 @@ mod tests {
             conn.pragma_update(None, "user_version", 1i32).unwrap();
         }
 
-        // Now AuditStore::open must refuse it.
-        let err = match AuditStore::open(&path) {
+        // Now AuditStore::open_unsigned must refuse it (the schema-mismatch
+        // check fires before any signer is consulted).
+        let err = match AuditStore::open_unsigned(&path) {
             Ok(_) => panic!("expected SchemaMismatch, got Ok"),
             Err(e) => e,
         };
         match err {
             StoreError::SchemaMismatch { found, expected } => {
                 assert_eq!(found, 1);
-                assert_eq!(expected, 2);
+                assert_eq!(expected, 3);
             }
             other => panic!("expected SchemaMismatch, got {other:?}"),
         }
     }
 
     /// Sweep 5 — schema migration: a v0 database (PRAGMA user_version = 0,
-    /// the brand-new state) must be accepted and stamped to v2. This is the
+    /// the brand-new state) must be accepted and stamped to v3. This is the
     /// "fresh install" path and must remain frictionless.
     #[test]
-    fn test_sweep5_accepts_v0_and_stamps_v2() {
+    fn test_sweep5_accepts_v0_and_stamps_v3() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
 
@@ -1178,12 +1381,12 @@ mod tests {
             let _conn = Connection::open(&path).unwrap();
         }
 
-        let store = AuditStore::open(&path).unwrap();
+        let store = AuditStore::open_unsigned(&path).unwrap();
         let v: i32 = store
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(v, 2, "fresh open must stamp user_version=2");
+        assert_eq!(v, 3, "fresh open must stamp user_version=3");
     }
 
     /// Sweep 5 — fork rejection at the storage layer.
@@ -1209,7 +1412,7 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let mut store = AuditStore::open(&path).unwrap();
+        let mut store = AuditStore::open_unsigned(&path).unwrap();
 
         // Lay down two legitimate entries so we have a real prev_hash to
         // collide with.
@@ -1222,7 +1425,7 @@ mod tests {
         let inject = side.execute(
             "INSERT INTO audit_entries
              (id, timestamp, prev_hash, entry_hash, actor, action, conversation_id,
-              policy_decision, policy_module, receipt, signature)
+              policy_decision, policy_module, receipt, signatures)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 "fork-attempt-id",
@@ -1235,7 +1438,8 @@ mod tests {
                 "{\"Allow\":{\"conditions\":[]}}",
                 "fork-test",
                 Option::<String>::None,
-                Option::<String>::None,
+                // signatures column is NOT NULL with default '[]' under v=3.
+                "[]".to_string(),
             ],
         );
 
@@ -1268,39 +1472,101 @@ mod tests {
         assert_eq!(report.receipts_checked, 3);
     }
 
-    /// Sweep 5 — recovery after a poisoned write attempt.
+    /// Phase 1.C — corrupt-clone integrity demo.
     ///
-    /// Combines the fork-rejection path with `verify_with_catalog`: after
-    /// a rejected duplicate-`prev_hash` insert AND after a forced
-    /// `tamper_entry_hash` followed by `restore_entry_hash` (the demo back
-    /// door), the chain must still verify ACCEPT. This pins the
-    /// "rejection does not poison the WAL" claim from the canonical
-    /// schema docstring.
+    /// Replaces the old `tamper_entry_hash` / `restore_entry_hash` round-trip
+    /// (which mutated the DB via a back-door UPDATE) with the in-memory
+    /// clone path. The on-disk chain is **never** modified — Phase 1.C
+    /// triggers reject UPDATE/DELETE on `audit_entries` at the storage
+    /// layer.
+    ///
+    /// The demo claim is preserved: a corrupted entry exhibits chain
+    /// violations to the verifier, while the real DB remains clean. The
+    /// playground integrity demo at `zeropoint.global` consumes this same
+    /// API to render the failure mode without ever creating a tampered
+    /// row on disk.
     #[cfg(feature = "pentest-demo")]
     #[test]
-    fn test_sweep5_tamper_and_restore_keeps_chain_valid() {
+    fn test_corrupt_clone_breaks_verify_without_touching_db() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.db");
-        let mut store = AuditStore::open(&path).unwrap();
+        let mut store = AuditStore::open_unsigned(&path).unwrap();
 
         let e1 = store.append(unsealed("mod1")).unwrap();
         let _e2 = store.append(unsealed("mod2")).unwrap();
 
-        // Tamper, verify the chain breaks, restore, verify it heals.
-        let id = e1.id.0.to_string();
-        store.tamper_entry_hash(&id, &"f".repeat(64)).unwrap();
-        let bad = store.verify_with_catalog().unwrap();
+        // The DB chain is clean to start.
+        let report_before = store.verify_with_catalog().unwrap();
         assert!(
-            !bad.violations().is_empty(),
-            "tampered chain must surface violations"
+            report_before.violations().is_empty(),
+            "chain must verify clean before any tampering, got {:?}",
+            report_before.violations()
         );
 
-        store.restore_entry_hash(&id, &e1.entry_hash).unwrap();
-        let good = store.verify_with_catalog().unwrap();
-        assert!(
-            good.violations().is_empty(),
-            "restored chain must verify clean, got {:?}",
-            good.violations()
+        // Get a corrupted in-memory clone of e1 via the demo helper.
+        let id = e1.id.0.to_string();
+        let tampered = store.corrupt_clone_for_demo(&id).unwrap();
+        assert_ne!(
+            tampered.entry_hash, e1.entry_hash,
+            "clone must carry a different (bogus) entry_hash"
         );
+
+        // The on-disk row is untouched: re-verify the real DB.
+        let report_after = store.verify_with_catalog().unwrap();
+        assert!(
+            report_after.violations().is_empty(),
+            "real DB must remain clean after corrupt_clone_for_demo, got {:?}",
+            report_after.violations()
+        );
+
+        // The clone, run through the chain verifier, would surface a hash
+        // violation — that's the demo's payload to the user.
+        let recomputed = crate::chain::recompute_entry_hash(&tampered);
+        assert_ne!(
+            recomputed, tampered.entry_hash,
+            "verifier-side recompute of the tampered clone must mismatch"
+        );
+    }
+
+    /// Phase 1.C — DB-level append-only enforcement.
+    ///
+    /// The BEFORE UPDATE / BEFORE DELETE triggers reject row mutation at
+    /// the SQLite layer, even when a malicious caller bypasses
+    /// [`AuditStore::append`] entirely with a raw connection. This pins
+    /// the storage-layer half of "signing is gravity" — a tampered row
+    /// can't physically exist on disk.
+    #[test]
+    fn test_phase1c_triggers_block_raw_update_and_delete() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.db");
+        let mut store = AuditStore::open_unsigned(&path).unwrap();
+        let e1 = store.append(unsealed("mod1")).unwrap();
+
+        // Reach around the typed API with a raw connection.
+        let raw = Connection::open(&path).unwrap();
+
+        let upd = raw.execute(
+            "UPDATE audit_entries SET entry_hash = ? WHERE id = ?",
+            params!["deadbeef".repeat(8), e1.id.0.to_string()],
+        );
+        assert!(
+            upd.is_err(),
+            "BEFORE UPDATE trigger must reject row mutation; got Ok"
+        );
+
+        let del = raw.execute(
+            "DELETE FROM audit_entries WHERE id = ?",
+            params![e1.id.0.to_string()],
+        );
+        assert!(
+            del.is_err(),
+            "BEFORE DELETE trigger must reject row deletion; got Ok"
+        );
+
+        // The row is still there and verifies clean.
+        let count: i64 = raw
+            .query_row("SELECT COUNT(*) FROM audit_entries", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "row must survive rejected UPDATE/DELETE");
     }
 }

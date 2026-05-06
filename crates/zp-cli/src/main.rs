@@ -6,6 +6,7 @@ use zp_configure as configure;
 mod emit;
 mod guard;
 mod init;
+mod shell;
 mod mesh_commands;
 mod recover;
 mod onboard;
@@ -13,6 +14,7 @@ mod onboard;
 mod policy_commands;
 mod secure;
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -1505,10 +1507,11 @@ async fn main() -> anyhow::Result<()> {
                 None => break 'server false,
             };
 
-            // Read session token from ~/ZeroPoint/session.json
+            // Read session token from the canonical ~/ZeroPoint/session.json
+            // (Seam 19: route through zp_core::paths so ZP_HOME override and
+            // future path-resolution changes are inherited automatically).
             let token = match (|| -> Option<String> {
-                let home = std::env::var("HOME").ok()?;
-                let path = std::path::Path::new(&home).join("ZeroPoint/session.json");
+                let path = zp_core::paths::session_path().ok()?;
                 let data = std::fs::read_to_string(path).ok()?;
                 let v: serde_json::Value = serde_json::from_str(&data).ok()?;
                 v["token"].as_str().map(|s| s.to_string())
@@ -1616,7 +1619,7 @@ async fn main() -> anyhow::Result<()> {
                 args.data_dir.join("audit.db")
             }
         });
-        let store = match zp_audit::AuditStore::open(&db_path) {
+        let store = match zp_audit::AuditStore::open_readonly(&db_path) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("Error opening audit store at {}: {}", db_path.display(), e);
@@ -1646,7 +1649,7 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "embedded-server")]
         let irreversible_counts = {
             use std::sync::{Arc, Mutex};
-            match zp_audit::AuditStore::open(&db_path) {
+            match zp_audit::AuditStore::open_readonly(&db_path) {
                 Ok(s) => {
                     let s = Arc::new(Mutex::new(s));
                     Some(zp_server::tool_chain::count_irreversible_actions(&s))
@@ -2505,7 +2508,7 @@ async fn main() -> anyhow::Result<()> {
         // 6. Audit chain
         let audit_db = data.join("audit.db");
         if audit_db.exists() {
-            if let Ok(store) = zp_audit::AuditStore::open(&audit_db) {
+            if let Ok(store) = zp_audit::AuditStore::open_readonly(&audit_db) {
                 match store.verify_with_catalog() {
                     Ok(report) => {
                         if report.violations().is_empty() {
@@ -2562,7 +2565,7 @@ async fn main() -> anyhow::Result<()> {
             // so doctor doesn't FAIL just because the user hasn't started the
             // server yet.
             if audit_db.exists() {
-                let store_for_canon = match zp_audit::AuditStore::open(&audit_db) {
+                let store_for_canon = match zp_audit::AuditStore::open_readonly(&audit_db) {
                     Ok(s) => Some(Arc::new(Mutex::new(s))),
                     Err(_) => None,
                 };
@@ -2570,7 +2573,7 @@ async fn main() -> anyhow::Result<()> {
                 // ── (a) F6 CHAIN INTEGRITY ─────────────────────────────────
                 // Distilled `zp verify`: total entries, signature pass/fail,
                 // hash-link continuity (P1 + M3), and genesis sealed status.
-                if let Ok(store) = zp_audit::AuditStore::open(&audit_db) {
+                if let Ok(store) = zp_audit::AuditStore::open_readonly(&audit_db) {
                     match store.verify_with_catalog() {
                         Ok(report) => {
                             let errors = report.error_count();
@@ -3051,8 +3054,17 @@ async fn main() -> anyhow::Result<()> {
     // the pipeline. No second handle is ever opened for the same process.
     let audit_db = config.data_dir.join("audit.db");
     std::fs::create_dir_all(&config.data_dir).ok();
+
+    // Derive the audit signer from the Genesis secret
+    let keyring = crate::commands::open_keyring()
+        .context("Failed to open keyring")?;
+    let (genesis_secret, _) = keyring.load_genesis_secret()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+
     let audit_store = std::sync::Arc::new(std::sync::Mutex::new(
-        zp_audit::AuditStore::open(&audit_db)
+        zp_audit::AuditStore::open_signed(&audit_db, audit_signer)
             .map_err(|e| anyhow::anyhow!("audit store open: {}", e))?,
     ));
     let mut pipeline = Pipeline::new(config, audit_store)?;
@@ -3168,7 +3180,7 @@ fn run_discover(
     #[cfg(feature = "embedded-server")]
     let bead_zeros = {
         use std::sync::{Arc, Mutex};
-        match zp_audit::AuditStore::open(&db_path) {
+        match zp_audit::AuditStore::open_readonly(&db_path) {
             Ok(store) => {
                 let store = Arc::new(Mutex::new(store));
                 zp_server::tool_chain::query_bead_zeros(&store)
@@ -3355,7 +3367,26 @@ fn run_adapt(
     #[cfg(feature = "embedded-server")]
     let entry_hash = {
         use std::sync::{Arc, Mutex};
-        let store = match zp_audit::AuditStore::open(&db_path) {
+
+        // Derive the audit signer from the Genesis secret
+        let keyring = match crate::commands::open_keyring() {
+            Ok(k) => k,
+            Err(e) => {
+                eprintln!("\x1b[31merror\x1b[0m: failed to open keyring: {}", e);
+                return 2;
+            }
+        };
+        let (genesis_secret, _) = match keyring.load_genesis_secret() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("\x1b[31merror\x1b[0m: failed to load Genesis secret: {}", e);
+                return 2;
+            }
+        };
+        let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+        let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+
+        let store = match zp_audit::AuditStore::open_signed(&db_path, audit_signer) {
             Ok(s) => Arc::new(Mutex::new(s)),
             Err(e) => {
                 eprintln!(
@@ -3467,9 +3498,13 @@ struct AnchorReport {
 
 /// Default audit DB path: ~/ZeroPoint/data/audit.db
 /// Used as smart fallback when the server is down and no --data-dir given.
+///
+/// Seam 19: routes through `zp_core::paths::data_dir()` so the ZP_HOME
+/// and ZP_DATA_DIR overrides are inherited from the canonical resolver.
 fn dirs_fallback_audit_db() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    PathBuf::from(home).join("ZeroPoint/data/audit.db")
+    zp_core::paths::data_dir()
+        .map(|d| d.join("audit.db"))
+        .unwrap_or_else(|_| PathBuf::from("ZeroPoint/data/audit.db"))
 }
 
 /// Truncate a hash for display.
@@ -3574,7 +3609,26 @@ fn run_anchor(
     use zp_receipt::compute_merkle_root;
 
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
-    let mut store = match zp_audit::AuditStore::open(&db_path) {
+
+    // Derive the audit signer from the Genesis secret
+    let keyring = match crate::commands::open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("error: failed to open keyring: {}", e);
+            return 2;
+        }
+    };
+    let (genesis_secret, _) = match keyring.load_genesis_secret() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: failed to load Genesis secret: {}", e);
+            return 2;
+        }
+    };
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+
+    let mut store = match zp_audit::AuditStore::open_signed(&db_path, audit_signer) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error opening audit store at {}: {}", db_path.display(), e);
@@ -3972,7 +4026,26 @@ fn run_delegate(
 
     // Emit the chain receipt.
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
-    let store = match zp_audit::AuditStore::open(&db_path) {
+
+    // Derive the audit signer from the Genesis secret
+    let keyring = match crate::commands::open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("error: failed to open keyring: {}", e);
+            return 2;
+        }
+    };
+    let (genesis_secret, _) = match keyring.load_genesis_secret() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: failed to load Genesis secret: {}", e);
+            return 2;
+        }
+    };
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+
+    let store = match zp_audit::AuditStore::open_signed(&db_path, audit_signer) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error opening audit store at {}: {}", db_path.display(), e);
@@ -4087,7 +4160,26 @@ fn run_revoke(
     };
 
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
-    let store = match zp_audit::AuditStore::open(&db_path) {
+
+    // Derive the audit signer from the Genesis secret
+    let keyring = match crate::commands::open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("error: failed to open keyring: {}", e);
+            return 2;
+        }
+    };
+    let (genesis_secret, _) = match keyring.load_genesis_secret() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: failed to load Genesis secret: {}", e);
+            return 2;
+        }
+    };
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+
+    let store = match zp_audit::AuditStore::open_signed(&db_path, audit_signer) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error opening audit store at {}: {}", db_path.display(), e);
@@ -4272,7 +4364,7 @@ fn run_grants(
     json: bool,
 ) -> i32 {
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
-    let store = match zp_audit::AuditStore::open(&db_path) {
+    let store = match zp_audit::AuditStore::open_readonly(&db_path) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error opening audit store at {}: {}", db_path.display(), e);
@@ -4514,7 +4606,7 @@ fn load_known_tools(
     {
         use std::sync::{Arc, Mutex};
         if db_path.exists() {
-            if let Ok(store) = zp_audit::AuditStore::open(&db_path) {
+            if let Ok(store) = zp_audit::AuditStore::open_readonly(&db_path) {
                 let store = Arc::new(Mutex::new(store));
                 let bead_zeros = zp_server::tool_chain::query_bead_zeros(&store);
                 let mut tools: Vec<String> = bead_zeros

@@ -1,185 +1,241 @@
-//! Canonical serialization for deterministic signing.
+//! Canonical JSON serialization for deterministic hashing and signing.
 //!
-//! Phase 2.8 (P2-5): Ensures that structurally identical values always
-//! produce the same byte sequence, regardless of field declaration order
-//! or serializer implementation details.
+//! # The wire (Seam 17)
 //!
-//! ## Guarantee
+//! Every place in ZeroPoint that produces a hash or signature over JSON
+//! data goes through this module. The architectural commitment: there is
+//! one canonical form, defined once, used everywhere. Per-domain hand-
+//! rolled preimages are forbidden because they're how subtle inconsistencies
+//! creep in (one site sorts keys, another doesn't; one site escapes
+//! Unicode one way, another differently; etc.).
 //!
-//! `canonical_bytes(value)` produces deterministic output because:
+//! # The scheme — "ZP-canonical-v1"
 //!
-//! 1. `serde_json::json!({})` creates a `serde_json::Map` backed by
-//!    `BTreeMap<String, Value>` (keys are always sorted).
-//! 2. `serde_json::to_vec()` serializes `BTreeMap` in key order.
-//! 3. The `preserve_order` feature of `serde_json` is NOT enabled in
-//!    this workspace (which would switch to `IndexMap` and break
-//!    determinism).
+//! `canonical_bytes` produces deterministic output because:
 //!
-//! This module provides a single canonical serialization function and
-//! tests that pin the determinism guarantee.
+//! 1. `serde_json::json!({...})` and `serde_json::to_value(&T)` create a
+//!    `serde_json::Map` backed by `BTreeMap<String, Value>` — keys are
+//!    always serialized in lexicographic order.
+//! 2. `serde_json::to_vec(&Value)` walks the BTreeMap in key order.
+//! 3. The `preserve_order` feature of `serde_json` is NOT enabled in this
+//!    workspace (which would switch to `IndexMap` and break determinism).
+//!    The pinned test `preserve_order_not_enabled` fails the build if it
+//!    ever gets enabled.
 //!
-//! ## When to use
+//! This is a *workspace-internal* canonical form, not RFC 8785 (JCS). It
+//! is sufficient for ZeroPoint's signing because every consumer of a hash
+//! produced here is also a member of this workspace. If interop with
+//! another implementation is ever needed, JCS would land as v2 with
+//! versioned dispatch — never as a silent change to v1, which would
+//! invalidate every existing hash on disk.
 //!
-//! Use `canonical_bytes()` before any BLAKE3 hash or Ed25519 signature
-//! computation. Never hash raw struct serialization — always go through
-//! the canonical form.
+//! # When to use which API
+//!
+//! - You have a `&serde_json::Value`: use [`canonical_bytes`],
+//!   [`canonical_string`], or [`canonical_hash`].
+//! - You have a typed struct that implements `Serialize`: use
+//!   [`canonical_bytes_of`] or [`canonical_hash_of`]. They serialize via
+//!   `serde_json::to_value` first, which is the conversion most callers
+//!   were doing manually.
+//!
+//! # Discipline
+//!
+//! Never hash raw struct serialization — always go through one of these
+//! functions. Code that calls `serde_json::to_vec(&my_struct)` followed
+//! by `blake3::hash(...)` is bypassing the canonical form's guarantee
+//! and is wrong even if it happens to produce the same bytes today.
 
-/// Serialize a `serde_json::Value` to deterministic canonical bytes.
+use serde::Serialize;
+
+/// Serialize a [`serde_json::Value`] to deterministic canonical bytes.
 ///
-/// For `Value::Object` (created by `serde_json::json!{}`), keys are
-/// sorted alphabetically because `serde_json::Map` is `BTreeMap`-backed.
+/// For `Value::Object` (created by `serde_json::json!{}` or
+/// `serde_json::to_value`), keys are emitted in lexicographic order
+/// because `serde_json::Map` is `BTreeMap`-backed.
 ///
 /// # Panics
 ///
 /// Panics if serialization fails, which should never happen for a
-/// well-formed `serde_json::Value`.
+/// well-formed `serde_json::Value` (it has no non-serializable values).
 pub fn canonical_bytes(value: &serde_json::Value) -> Vec<u8> {
     serde_json::to_vec(value).expect("canonical JSON serialization cannot fail for Value")
 }
 
-/// Serialize a `serde_json::Value` to a deterministic canonical string.
+/// Serialize a [`serde_json::Value`] to a deterministic canonical string.
 pub fn canonical_string(value: &serde_json::Value) -> String {
     serde_json::to_string(value).expect("canonical JSON serialization cannot fail for Value")
 }
 
-/// Compute the BLAKE3 hash of the canonical serialization of a value.
+/// Compute the BLAKE3 hash (hex-encoded) of the canonical serialization.
 pub fn canonical_hash(value: &serde_json::Value) -> String {
     let bytes = canonical_bytes(value);
     blake3::hash(&bytes).to_hex().to_string()
 }
 
+/// Compute the BLAKE3 hash (raw 32 bytes) of the canonical serialization.
+///
+/// Use this when you need the raw hash bytes for further signing or
+/// hashing (e.g. as the message input to Ed25519). For display or
+/// storage, prefer [`canonical_hash`] which returns the hex form.
+pub fn canonical_hash_bytes(value: &serde_json::Value) -> [u8; 32] {
+    let bytes = canonical_bytes(value);
+    *blake3::hash(&bytes).as_bytes()
+}
+
+/// Serialize any [`Serialize`] type to deterministic canonical bytes.
+///
+/// Internally goes through `serde_json::to_value` first so the BTreeMap-
+/// backed `Map` produces lexicographic key order regardless of how the
+/// type's fields were declared. This is the API most callers want — if
+/// you have a typed struct, you should not have to construct a
+/// `serde_json::Value` yourself.
+///
+/// # Errors
+///
+/// Returns the underlying serde error if the type can't be serialized
+/// (e.g. a `Map` with non-string keys, or a custom `Serialize` impl that
+/// errors).
+pub fn canonical_bytes_of<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
+    let v = serde_json::to_value(value)?;
+    Ok(canonical_bytes(&v))
+}
+
+/// Compute the BLAKE3 hash (hex-encoded) of any [`Serialize`] type's
+/// canonical form.
+pub fn canonical_hash_of<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
+    let bytes = canonical_bytes_of(value)?;
+    Ok(blake3::hash(&bytes).to_hex().to_string())
+}
+
+/// Compute the BLAKE3 hash (raw 32 bytes) of any [`Serialize`] type's
+/// canonical form. Companion to [`canonical_hash_of`].
+pub fn canonical_hash_bytes_of<T: Serialize>(value: &T) -> Result<[u8; 32], serde_json::Error> {
+    let bytes = canonical_bytes_of(value)?;
+    Ok(*blake3::hash(&bytes).as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::{Deserialize, Serialize};
 
     #[test]
-    fn test_key_ordering_is_alphabetical() {
-        // serde_json::json!{} uses BTreeMap — keys must be sorted
+    fn key_ordering_is_alphabetical() {
+        // serde_json::json!{} uses BTreeMap — keys must be sorted.
         let value = serde_json::json!({
             "zebra": 1,
             "alpha": 2,
             "middle": 3,
         });
 
-        let bytes = canonical_bytes(&value);
-        let output = String::from_utf8(bytes).unwrap();
+        let s = canonical_string(&value);
 
-        // Keys must appear in alphabetical order
-        let alpha_pos = output.find("\"alpha\"").unwrap();
-        let middle_pos = output.find("\"middle\"").unwrap();
-        let zebra_pos = output.find("\"zebra\"").unwrap();
-
-        assert!(alpha_pos < middle_pos, "alpha must come before middle");
-        assert!(middle_pos < zebra_pos, "middle must come before zebra");
+        let alpha = s.find("\"alpha\"").unwrap();
+        let middle = s.find("\"middle\"").unwrap();
+        let zebra = s.find("\"zebra\"").unwrap();
+        assert!(alpha < middle && middle < zebra);
     }
 
     #[test]
-    fn test_determinism_across_calls() {
-        let value = serde_json::json!({
-            "id": "rcpt-001",
-            "version": "1.0",
-            "status": "success",
-            "created_at": "2026-04-19T00:00:00.000Z",
-        });
-
-        let bytes1 = canonical_bytes(&value);
-        let bytes2 = canonical_bytes(&value);
-        assert_eq!(bytes1, bytes2, "canonical_bytes must be deterministic");
+    fn determinism_across_calls() {
+        let value = serde_json::json!({"id": "rcpt-001", "version": "1.0"});
+        assert_eq!(canonical_bytes(&value), canonical_bytes(&value));
     }
 
     #[test]
-    fn test_determinism_across_construction_order() {
-        // Build the same object with fields specified in different orders.
-        // serde_json::json!{} sorts by key regardless of declaration order.
-        let v1 = serde_json::json!({
-            "a": 1,
-            "b": 2,
-            "c": 3,
-        });
-
-        let v2 = serde_json::json!({
-            "c": 3,
-            "a": 1,
-            "b": 2,
-        });
-
-        assert_eq!(
-            canonical_bytes(&v1),
-            canonical_bytes(&v2),
-            "field declaration order must not affect canonical bytes"
-        );
+    fn determinism_across_construction_order() {
+        let v1 = serde_json::json!({"a": 1, "b": 2, "c": 3});
+        let v2 = serde_json::json!({"c": 3, "a": 1, "b": 2});
+        assert_eq!(canonical_bytes(&v1), canonical_bytes(&v2));
     }
 
     #[test]
-    fn test_nested_objects_are_sorted() {
-        let value = serde_json::json!({
-            "outer_z": {
-                "inner_b": 2,
-                "inner_a": 1,
-            },
+    fn nested_objects_are_sorted() {
+        let v = serde_json::json!({
+            "outer_z": {"inner_b": 2, "inner_a": 1},
             "outer_a": "first",
         });
-
-        let output = canonical_string(&value);
-
-        // Outer keys sorted
-        let outer_a_pos = output.find("\"outer_a\"").unwrap();
-        let outer_z_pos = output.find("\"outer_z\"").unwrap();
-        assert!(outer_a_pos < outer_z_pos);
-
-        // Inner keys sorted
-        let inner_a_pos = output.find("\"inner_a\"").unwrap();
-        let inner_b_pos = output.find("\"inner_b\"").unwrap();
-        assert!(inner_a_pos < inner_b_pos);
+        let s = canonical_string(&v);
+        assert!(s.find("\"outer_a\"").unwrap() < s.find("\"outer_z\"").unwrap());
+        assert!(s.find("\"inner_a\"").unwrap() < s.find("\"inner_b\"").unwrap());
     }
 
     #[test]
-    fn test_canonical_hash_is_deterministic() {
-        let value = serde_json::json!({
-            "receipt_type": "Execution",
-            "id": "rcpt-test",
-            "status": "Success",
-        });
-
-        let hash1 = canonical_hash(&value);
-        let hash2 = canonical_hash(&value);
-        assert_eq!(hash1, hash2);
-        assert_eq!(hash1.len(), 64); // BLAKE3 hex output
-    }
-
-    #[test]
-    fn test_null_and_missing_fields_differ() {
-        let with_null = serde_json::json!({
-            "a": 1,
-            "b": null,
-        });
-
-        let without = serde_json::json!({
-            "a": 1,
-        });
-
-        // These must produce different canonical bytes — null is not the same
-        // as absent.
+    fn null_and_missing_fields_differ() {
+        let with_null = serde_json::json!({"a": 1, "b": null});
+        let without = serde_json::json!({"a": 1});
         assert_ne!(canonical_bytes(&with_null), canonical_bytes(&without));
     }
 
     /// Pin test: verify that the `preserve_order` feature is not enabled.
     ///
-    /// If someone enables `preserve_order` on `serde_json`, this test will
-    /// fail because field declaration order will suddenly matter.
+    /// If someone adds `serde_json/preserve_order` to a workspace dep,
+    /// this test fails because `serde_json::Map` would switch to
+    /// `IndexMap` (insertion order) instead of `BTreeMap` (sorted order),
+    /// and every signed structure in the substrate would silently change
+    /// its hash.
     #[test]
-    fn test_preserve_order_not_enabled() {
-        // If preserve_order were enabled, these two objects would produce
-        // different byte sequences because serde_json::Map would use
-        // IndexMap (insertion order) instead of BTreeMap (sorted order).
-        let v1 = serde_json::json!({ "z": 1, "a": 2 });
-        let v2 = serde_json::json!({ "a": 2, "z": 1 });
-
+    fn preserve_order_not_enabled() {
+        let v1 = serde_json::json!({"z": 1, "a": 2});
+        let v2 = serde_json::json!({"a": 2, "z": 1});
         assert_eq!(
             canonical_bytes(&v1),
             canonical_bytes(&v2),
-            "serde_json preserve_order feature must NOT be enabled — \
-             canonical serialization requires BTreeMap-backed Map"
+            "serde_json preserve_order feature must NOT be enabled"
         );
+    }
+
+    // ── Generic Serialize overloads ──────────────────────────────────
+
+    #[derive(Serialize, Deserialize)]
+    struct ExampleStruct {
+        // Field declaration order is deliberately non-alphabetical to
+        // prove the canonical form sorts regardless.
+        zebra: u32,
+        alpha: String,
+        middle: bool,
+    }
+
+    #[test]
+    fn struct_overload_sorts_keys_lexicographically() {
+        let s = ExampleStruct {
+            zebra: 1,
+            alpha: "hello".to_string(),
+            middle: true,
+        };
+        let bytes = canonical_bytes_of(&s).unwrap();
+        let out = std::str::from_utf8(&bytes).unwrap();
+        assert!(out.find("\"alpha\"").unwrap() < out.find("\"middle\"").unwrap());
+        assert!(out.find("\"middle\"").unwrap() < out.find("\"zebra\"").unwrap());
+    }
+
+    #[test]
+    fn struct_and_value_paths_agree() {
+        // The same logical document, built two different ways, must
+        // produce identical bytes. This is the discipline guarantee:
+        // call sites that have a struct can use `_of` and call sites
+        // that have a Value can use the plain helpers, and they round-
+        // trip the same hash.
+        let s = ExampleStruct {
+            zebra: 1,
+            alpha: "hello".to_string(),
+            middle: true,
+        };
+        let v = serde_json::json!({
+            "zebra": 1,
+            "alpha": "hello",
+            "middle": true,
+        });
+        assert_eq!(canonical_bytes_of(&s).unwrap(), canonical_bytes(&v));
+        assert_eq!(canonical_hash_of(&s).unwrap(), canonical_hash(&v));
+    }
+
+    #[test]
+    fn hash_bytes_matches_hash_hex() {
+        let v = serde_json::json!({"a": 1});
+        let raw = canonical_hash_bytes(&v);
+        let hex = canonical_hash(&v);
+        assert_eq!(hex, blake3::Hash::from_bytes(raw).to_hex().to_string());
+        assert_eq!(hex.len(), 64);
     }
 }

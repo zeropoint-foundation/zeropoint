@@ -808,8 +808,11 @@ impl CapabilityGrant {
             subject_public_key: self.subject_public_key.clone(),
         };
 
-        // Serialize to JSON with sorted keys
-        serde_json::to_vec(&canonical).unwrap_or_default()
+        // Seam 17: route through the canonical helper so the byte form
+        // matches every other signed structure in the workspace. The
+        // helper lives in zp-receipt (because zp-core depends on
+        // zp-receipt — see lib.rs); zp_core::canonical re-exports it.
+        zp_receipt::canonical::canonical_bytes_of(&canonical).unwrap_or_default()
     }
 
     /// Sign this grant with an Ed25519 signing key.
@@ -829,36 +832,33 @@ impl CapabilityGrant {
     /// and the canonical bytes of this grant. Returns false if no signature
     /// is present, or if verification fails.
     pub fn verify_signature(&self) -> bool {
-        match (&self.signature, &self.signer_public_key) {
-            (Some(sig_hex), Some(pubkey_hex)) => {
-                // Parse the public key from hex
-                let pubkey_bytes = match hex::decode(pubkey_hex) {
-                    Ok(b) if b.len() == 32 => b,
-                    _ => return false,
-                };
-                let mut key_array = [0u8; 32];
-                key_array.copy_from_slice(&pubkey_bytes);
+        // Seam 5: route through the canonical verify primitive. The
+        // pre-Seam-5 path open-coded `VerifyingKey::from_bytes`,
+        // `Signature::from_bytes`, and `verify_strict(...).is_ok()` —
+        // five separate failure modes hidden behind one bool. The helper
+        // surfaces them as typed errors and uses the same primitive
+        // every other verifier in the workspace uses.
+        let (sig_hex, pubkey_hex) = match (&self.signature, &self.signer_public_key) {
+            (Some(s), Some(p)) => (s, p),
+            _ => return false,
+        };
 
-                let verifying_key = match VerifyingKey::from_bytes(&key_array) {
-                    Ok(k) => k,
-                    Err(_) => return false,
-                };
+        let pubkey_bytes = match hex::decode(pubkey_hex) {
+            Ok(b) if b.len() == 32 => b,
+            _ => return false,
+        };
+        let mut pk = [0u8; 32];
+        pk.copy_from_slice(&pubkey_bytes);
 
-                // Parse the signature from hex
-                let sig_bytes = match hex::decode(sig_hex) {
-                    Ok(b) if b.len() == 64 => b,
-                    _ => return false,
-                };
-                let mut sig_array = [0u8; 64];
-                sig_array.copy_from_slice(&sig_bytes);
-                let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
+        let sig_bytes = match hex::decode(sig_hex) {
+            Ok(b) if b.len() == 64 => b,
+            _ => return false,
+        };
+        let mut sig = [0u8; 64];
+        sig.copy_from_slice(&sig_bytes);
 
-                // Verify against canonical bytes (excludes signature itself)
-                let canonical = self.canonical_bytes();
-                verifying_key.verify_strict(&canonical, &signature).is_ok()
-            }
-            _ => false,
-        }
+        // Verify against canonical bytes (excludes signature itself).
+        zp_receipt::verify::verify_signature(&pk, &self.canonical_bytes(), &sig).is_ok()
     }
 
     /// Helper: check if a path matches any glob pattern in scope.
@@ -890,6 +890,16 @@ impl CapabilityGrant {
                 pattern == endpoint
             }
         })
+    }
+}
+
+// Seam 20: hash-then-sign discipline via the canonical [`zp_receipt::Signable`]
+// trait. The preimage delegates to the hand-rolled `canonical_bytes` method on
+// `CapabilityGrant`, which already excludes the signature field by
+// constructing a `CanonicalForm` view that omits it.
+impl zp_receipt::Signable for CapabilityGrant {
+    fn canonical_preimage(&self) -> Vec<u8> {
+        self.canonical_bytes()
     }
 }
 

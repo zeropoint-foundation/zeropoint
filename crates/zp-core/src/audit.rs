@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::policy::PolicyDecision;
-use crate::types::{ConversationId, Receipt};
+use crate::types::{ConversationId, Receipt, SignatureBlock};
 
 /// Unique identifier for an audit entry.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -45,8 +45,14 @@ pub struct AuditEntry {
     pub policy_module: String,
     /// Execution proof, if applicable
     pub receipt: Option<Receipt>,
-    /// Signature (tier-dependent: none for Tier 0, local key for Tier 1, Genesis for Tier 2)
-    pub signature: Option<String>,
+    /// Signature blocks attesting this entry. Algorithm-agile (mirrors
+    /// [`Receipt::signatures`]): each block carries `(algorithm, key_id,
+    /// signature_b64)` over the entry hash. Empty before signing; populated
+    /// by [`zp_audit::AuditStore::append`] when the store holds a signer.
+    /// Canonical ordering (`(algorithm.as_str(), key_id)`) is preserved so
+    /// the JSON form is deterministic.
+    #[serde(default)]
+    pub signatures: Vec<SignatureBlock>,
 }
 
 /// Who performed an action.
