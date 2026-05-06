@@ -45,8 +45,7 @@ pub async fn handle_configure(
 
     // Expand ~ for the shell command
     let expanded_path = if let Some(suffix) = scan_path.strip_prefix("~/") {
-        dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
+        zp_core::paths::user_home_or(".")
             .join(suffix)
             .display()
             .to_string()

@@ -261,8 +261,7 @@ struct SearchResponse {
 
 /// ZeroPoint project root — the repo directory.
 fn zp_root() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_default()
+    zp_core::paths::user_home_or("")
         .join("projects")
         .join("zeropoint")
 }

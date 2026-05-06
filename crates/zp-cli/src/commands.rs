@@ -26,12 +26,8 @@ use zp_policy::GovernanceGate;
 ///   ZP_HOME=/opt/zeropoint zp keys list   → /opt/zeropoint
 ///   (default)                             → ~/ZeroPoint
 pub fn resolve_zp_home() -> PathBuf {
-    zp_core::paths::home().unwrap_or_else(|_| {
-        std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("ZeroPoint")
-    })
+    zp_core::paths::home()
+        .unwrap_or_else(|_| zp_core::paths::user_home_or(".").join("ZeroPoint"))
 }
 
 /// Open a keyring using the resolved ZP home.

@@ -131,9 +131,7 @@ impl OnboardState {
 
         // ── Scan path + tools discovery ──
         // Check default scan path for tools
-        let scan_path = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("projects");
+        let scan_path = zp_core::paths::user_home_or(".").join("projects");
 
         if scan_path.exists() && state.genesis_complete {
             let mut tool_count = 0;

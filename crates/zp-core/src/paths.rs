@@ -43,8 +43,11 @@ pub enum PathError {
 /// 1. `ZP_HOME` environment variable (highest priority)
 /// 2. `~/ZeroPoint/` (the canonical location)
 ///
-/// This is the single source of truth for all path construction
-/// in the ZeroPoint codebase.
+/// This is the single source of truth for all ZP-data path construction
+/// in the ZeroPoint codebase. For the *user's* home directory (e.g. for
+/// scanning `~/projects` or redacting log paths) use [`user_home`]
+/// instead — that's a different abstraction and the discipline pin
+/// enforces the distinction.
 pub fn home() -> Result<PathBuf, PathError> {
     // 1. Explicit override
     if let Ok(zp_home) = std::env::var("ZP_HOME") {
@@ -52,11 +55,66 @@ pub fn home() -> Result<PathBuf, PathError> {
     }
 
     // 2. ~/ZeroPoint/
-    let user_home = std::env::var("HOME")
-        .map(PathBuf::from)
-        .map_err(|_| PathError::NoHome)?;
+    Ok(user_home()?.join("ZeroPoint"))
+}
 
-    Ok(user_home.join("ZeroPoint"))
+/// Return the user's actual home directory (e.g. `/Users/alice`).
+///
+/// This is distinct from [`home`], which returns the ZeroPoint data root
+/// (`~/ZeroPoint/`). Use `user_home` when you genuinely need the user's
+/// home directory — scanning `~/projects` for tools, redacting `~` from
+/// log lines, locating a non-ZP path under the user's account.
+///
+/// Resolution order:
+/// 1. `HOME` environment variable (POSIX)
+/// 2. `USERPROFILE` environment variable (Windows fallback)
+///
+/// # Why a separate carrier?
+///
+/// Two distinct concepts share the same call surface in ad-hoc code —
+/// `dirs::home_dir()` and `std::env::var("HOME")` — but they can mean
+/// either "the ZP data root" or "the user's home." The discipline pin
+/// (`no_raw_home_lookup`) forbids both raw forms; callers must opt in
+/// to one carrier or the other, making the intent explicit at every
+/// site.
+pub fn user_home() -> Result<PathBuf, PathError> {
+    if let Ok(h) = std::env::var("HOME") {
+        if !h.is_empty() {
+            return Ok(PathBuf::from(h));
+        }
+    }
+    // Windows fallback (HOME is unset on stock Windows shells but
+    // USERPROFILE is the conventional source).
+    if let Ok(h) = std::env::var("USERPROFILE") {
+        if !h.is_empty() {
+            return Ok(PathBuf::from(h));
+        }
+    }
+    Err(PathError::NoHome)
+}
+
+/// Return the user's home directory or a fallback path if it cannot be
+/// resolved. Convenience for callers (typically scan paths) that prefer
+/// graceful degradation over an error.
+///
+/// Equivalent to `user_home().unwrap_or_else(|_| fallback.into())`.
+pub fn user_home_or<P: Into<PathBuf>>(fallback: P) -> PathBuf {
+    user_home().unwrap_or_else(|_| fallback.into())
+}
+
+/// Replace occurrences of the user's home directory in `s` with `~`.
+///
+/// Used by log-redaction and error-message formatting. If the home
+/// directory cannot be resolved, returns `s` unchanged — redaction is
+/// best-effort and never fails closed.
+pub fn redact_user_home(s: &str) -> String {
+    match user_home() {
+        Ok(home) => {
+            let home_str = home.to_string_lossy();
+            s.replace(home_str.as_ref(), "~")
+        }
+        Err(_) => s.to_string(),
+    }
 }
 
 /// Keys directory — cryptographic identity material.

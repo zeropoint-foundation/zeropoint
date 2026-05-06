@@ -1011,7 +1011,7 @@ async fn preflight_tool(
     if has_cargo {
         let pid_dirs = [
             // ~/.{toolname}/{toolname}.pid
-            dirs::home_dir().map(|h| h.join(format!(".{}", name))),
+            zp_core::paths::user_home().ok().map(|h| h.join(format!(".{}", name))),
             // ./tmp/{toolname}.pid
             Some(path.join("tmp")),
         ];
@@ -1736,9 +1736,7 @@ pub(crate) async fn handle_preflight(
     _state: &mut OnboardState,
     app_state: &crate::AppState,
 ) -> Vec<OnboardEvent> {
-    let scan_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("projects");
+    let scan_path = zp_core::paths::user_home_or(".").join("projects");
 
     // Pass the audit store so preflight receipts are emitted into the
     // canonical chain — not just the JSON cache.  Without this, tools

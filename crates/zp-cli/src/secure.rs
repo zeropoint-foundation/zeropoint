@@ -1510,11 +1510,11 @@ pub fn status() -> i32 {
 // Utilities
 // ============================================================================
 
+/// Local convenience wrapper around `zp_core::paths::user_home_or` so
+/// existing callers in this module need only a name change. New code
+/// should call `zp_core::paths::user_home_or` directly.
 fn dirs_home() -> PathBuf {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
+    zp_core::paths::user_home_or("/tmp")
 }
 
 fn which(cmd: &str) -> Result<PathBuf, ()> {

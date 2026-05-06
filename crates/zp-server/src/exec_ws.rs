@@ -124,7 +124,7 @@ async fn execute_and_stream(
     // ── CWD governance (P2-2, INJ-VULN-02/03) ──────────────────────────
     // Use the centralized safe_path() to canonicalize, resolve symlinks,
     // reject traversal, and verify the cwd falls under $HOME.
-    let home_dir = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/nonexistent"));
+    let home_dir = zp_core::paths::user_home_or("/nonexistent");
     let resolved_cwd = match auth::safe_path(cwd, &home_dir) {
         Ok(canonical) => canonical.to_string_lossy().to_string(),
         Err(e) => {

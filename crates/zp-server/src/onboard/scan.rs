@@ -15,9 +15,7 @@ pub async fn handle_scan(action: &OnboardAction, state: &mut OnboardState) -> Ve
 
     // Expand ~ to home directory
     let expanded = if let Some(suffix) = scan_path.strip_prefix("~/") {
-        dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(suffix)
+        zp_core::paths::user_home_or(".").join(suffix)
     } else {
         std::path::PathBuf::from(scan_path)
     };

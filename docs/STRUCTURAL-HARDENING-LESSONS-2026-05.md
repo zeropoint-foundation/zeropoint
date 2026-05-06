@@ -219,10 +219,17 @@ Several things surfaced during the work and were deliberately deferred:
   helper exists; some call sites still call `verify_strict` directly.
   A future discipline pin (`no_direct_verify_strict_outside_helper`)
   becomes available once those sites are swept.
-- **More discipline pins.** The framework supports many more than four.
-  Reasonable next targets: `no_raw_home_dir` (Seam 19), `no_direct_
-  serde_json_to_vec_in_signing_path` (Seam 17 strengthened),
-  `no_direct_panic_in_zp_server` (operational hygiene).
+- **More discipline pins.** The framework supports many more than five.
+  Reasonable next targets: `no_direct_serde_json_to_vec_in_signing_path`
+  (Seam 17 strengthened), `no_direct_panic_in_zp_server` (operational
+  hygiene), `no_anyhow_in_zp_core` (error-type discipline).
+- **`zp-paths` micro-crate.** Seam 19 closure (`no_raw_home_lookup` pin)
+  allowlists `zp-preflight` and `zp-config` because both are
+  deliberately minimal-deps and maintain documented mirrors of
+  `zp_core::paths::home`. The structural fix is to extract `paths` into
+  a zero-dep micro-crate that zp-core, zp-preflight, and zp-config can
+  all depend on. Until then, the mirrors are the documented exception
+  and the pin's allowlist documents the carve-out.
 - **Hardware-wallet sovereignty providers v0.3.** Detection-only stubs
   for YubiKey, Ledger, OnlyKey are still there. Trezor v0.2 is the
   only one with full implementation. The CLAUDE.md TODO table tracks

@@ -2663,9 +2663,7 @@ async fn main() -> anyhow::Result<()> {
                         zp_server::tool_chain::query_bead_zeros(store);
                     // Match `zp discover`'s default scan path so the same set
                     // of tools surfaces in both commands.
-                    let scan_path = std::env::var("HOME")
-                        .map(|h| PathBuf::from(h).join("projects"))
-                        .unwrap_or_else(|_| PathBuf::from("."));
+                    let scan_path = zp_core::paths::user_home_or(".").join("projects");
                     let scan = zp_engine::scan::scan_tools(&scan_path);
                     let fs_tools: Vec<&str> =
                         scan.tools.iter().map(|t| t.name.as_str()).collect();
@@ -3165,11 +3163,7 @@ fn run_discover(
     json: bool,
 ) -> i32 {
     // Resolve scan path: explicit flag → ~/projects fallback.
-    let scan_path = scan_path.unwrap_or_else(|| {
-        std::env::var("HOME")
-            .map(|h| PathBuf::from(h).join("projects"))
-            .unwrap_or_else(|_| PathBuf::from("."))
-    });
+    let scan_path = scan_path.unwrap_or_else(|| zp_core::paths::user_home_or(".").join("projects"));
 
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
 
@@ -3322,9 +3316,10 @@ fn run_adapt(
     use zp_engine::tool_scan_security::{scan_path, ScanVerdict};
 
     let tool_path = path.unwrap_or_else(|| {
-        std::env::var("HOME")
-            .map(|h| PathBuf::from(h).join("projects").join(tool))
-            .unwrap_or_else(|_| PathBuf::from(tool))
+        match zp_core::paths::user_home() {
+            Ok(home) => home.join("projects").join(tool),
+            Err(_) => PathBuf::from(tool),
+        }
     });
 
     if !tool_path.exists() {

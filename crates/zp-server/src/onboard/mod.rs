@@ -438,12 +438,12 @@ fn validate_scan_path(path: &str) -> Result<(), String> {
 
     // Expand tilde
     let expanded = if path.starts_with("~/") || path == "~" {
-        match dirs::home_dir() {
-            Some(home) => home
+        match zp_core::paths::user_home() {
+            Ok(home) => home
                 .join(path.strip_prefix("~/").unwrap_or(""))
                 .to_string_lossy()
                 .to_string(),
-            None => path.to_string(),
+            Err(_) => path.to_string(),
         }
     } else {
         path.to_string()
@@ -498,7 +498,7 @@ fn validate_scan_path(path: &str) -> Result<(), String> {
     }
 
     // Must be under home directory
-    if let Some(home) = dirs::home_dir() {
+    if let Ok(home) = zp_core::paths::user_home() {
         let home_str = home.to_string_lossy();
         if !expanded.starts_with(home_str.as_ref()) && expanded != "." {
             return Err(format!(

@@ -844,12 +844,12 @@ pub fn safe_path(raw: &str, boundary: &Path) -> Result<PathBuf, PathError> {
 
     // 2. Expand tilde for ergonomics.
     let expanded = if raw.starts_with("~/") || raw == "~" {
-        match dirs::home_dir() {
-            Some(home) => home
+        match zp_core::paths::user_home() {
+            Ok(home) => home
                 .join(raw.strip_prefix("~/").unwrap_or(""))
                 .to_string_lossy()
                 .to_string(),
-            None => raw.to_string(),
+            Err(_) => raw.to_string(),
         }
     } else {
         raw.to_string()
@@ -1391,12 +1391,12 @@ pub fn validate_register_path(path: &str) -> Result<std::path::PathBuf, String> 
 
     // Expand tilde
     let expanded = if path.starts_with("~/") || path == "~" {
-        match dirs::home_dir() {
-            Some(home) => home
+        match zp_core::paths::user_home() {
+            Ok(home) => home
                 .join(path.strip_prefix("~/").unwrap_or(""))
                 .to_string_lossy()
                 .to_string(),
-            None => path.to_string(),
+            Err(_) => path.to_string(),
         }
     } else {
         path.to_string()
@@ -1752,7 +1752,10 @@ mod tests {
         );
         let fake_home = std::env::temp_dir().join(format!("{}-home", unique));
         std::fs::create_dir_all(&fake_home).expect("mk fake home");
-        let prior_home = std::env::var_os("HOME");
+        // Test isolation — save/restore real HOME around fake-home
+        // redirection. The HOME-OK marker on each line opts the
+        // discipline pin out (see zp-discipline/tests/no_raw_home_lookup.rs).
+        let prior_home = std::env::var_os("HOME"); // HOME-OK: test isolation
         std::env::set_var("HOME", &fake_home);
 
         // Two `SessionAuth::new_with_persistence` calls pointing at the
@@ -1867,7 +1870,7 @@ mod tests {
     #[test]
     fn test_safe_path_valid_within_boundary() {
         // A path within the home directory boundary should succeed.
-        let home = dirs::home_dir().expect("need $HOME for test");
+        let home = zp_core::paths::user_home().expect("need $HOME for test");
         assert!(safe_path(&home.to_string_lossy(), &home).is_ok());
     }
 

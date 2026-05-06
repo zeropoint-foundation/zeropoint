@@ -3107,13 +3107,7 @@ async fn topology_handler() -> Json<security::NetworkTopology> {
 
 /// Redact filesystem paths from a string to prevent information disclosure.
 fn redact_paths(s: &str) -> String {
-    // Replace home directory paths with ~
-    if let Some(home) = dirs::home_dir() {
-        let home_str = home.to_string_lossy();
-        s.replace(home_str.as_ref(), "~")
-    } else {
-        s.to_string()
-    }
+    zp_core::paths::redact_user_home(s)
 }
 
 // ============================================================================
@@ -3552,9 +3546,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
 /// exist for a tool, that tool is governed — regardless of whether a
 /// filesystem scan can find it at request time.
 async fn tools_handler(State(state): State<AppState>) -> Json<ToolsListResponse> {
-    let scan_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("projects");
+    let scan_path = zp_core::paths::user_home_or(".").join("projects");
 
     let has_genesis = zp_paths::home().ok().map(|h| h.join("genesis.json").exists()).unwrap_or(false);
 
@@ -4022,8 +4014,7 @@ fn kill_tool_process(name: &str, pid: u32) -> bool {
     info!("Stopping {} (PID {})", name, pid);
 
     // For docker-compose tools, try `docker compose down` first
-    let tool_path = dirs::home_dir()
-        .unwrap_or_default()
+    let tool_path = zp_core::paths::user_home_or("")
         .join("projects")
         .join(name);
     let has_compose = tool_path.join("docker-compose.yml").exists()
@@ -4189,9 +4180,7 @@ async fn tools_launch_handler(
         );
     }
 
-    let scan_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("projects");
+    let scan_path = zp_core::paths::user_home_or(".").join("projects");
 
     let tool_path = scan_path.join(&req.name);
     if !tool_path.exists() {
@@ -4557,11 +4546,11 @@ async fn tools_register_handler(
 
     // Tilde expansion (the dashboard accepts ~/projects/foo style).
     let expanded = if let Some(stripped) = raw_path.strip_prefix("~/") {
-        dirs::home_dir()
+        zp_core::paths::user_home()
             .map(|h| h.join(stripped))
-            .unwrap_or_else(|| std::path::PathBuf::from(raw_path))
+            .unwrap_or_else(|_| std::path::PathBuf::from(raw_path))
     } else if raw_path == "~" {
-        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from(raw_path))
+        zp_core::paths::user_home_or(raw_path)
     } else {
         std::path::PathBuf::from(raw_path)
     };
@@ -4798,16 +4787,15 @@ async fn tools_resolve_handler(
         Some(p) if !p.trim().is_empty() => {
             let raw = p.trim();
             let expanded = if let Some(stripped) = raw.strip_prefix("~/") {
-                dirs::home_dir()
+                zp_core::paths::user_home()
                     .map(|h| h.join(stripped))
-                    .unwrap_or_else(|| std::path::PathBuf::from(raw))
+                    .unwrap_or_else(|_| std::path::PathBuf::from(raw))
             } else {
                 std::path::PathBuf::from(raw)
             };
             expanded
         }
-        _ => dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
+        _ => zp_core::paths::user_home_or(".")
             .join("projects")
             .join(&tool_name),
     };
@@ -5954,9 +5942,7 @@ async fn tools_log_handler(
 /// Run preflight checks on all configured tools (POST).
 /// This pulls docker images, installs deps, fixes permissions, etc.
 async fn tools_preflight_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let scan_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("projects");
+    let scan_path = zp_core::paths::user_home_or(".").join("projects");
 
     // Detect which tools have vault-backed config
     let vault = state.0.vault_key.get()
@@ -6003,9 +5989,7 @@ async fn tools_single_preflight_handler(
         );
     }
 
-    let scan_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("projects");
+    let scan_path = zp_core::paths::user_home_or(".").join("projects");
 
     // Verify the tool directory exists before running preflight.
     let tool_path = scan_path.join(&tool_name);
@@ -6120,9 +6104,7 @@ async fn tools_configure_handler(
             state.0.port_allocator.release(&tool_name);
 
             // Detect the port var and tool path
-            let scan_path = dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("projects");
+            let scan_path = zp_core::paths::user_home_or(".").join("projects");
             let tool_path = scan_path.join(&tool_name);
             let all_port_vars = tool_ports::detect_all_port_vars(&tool_path);
             let port_var = all_port_vars.first().cloned().unwrap_or_else(|| "PORT".to_string());
@@ -6209,9 +6191,7 @@ async fn tools_repair_handler(
             // Safe restart: `docker compose restart` in the tool's directory.
             // This does NOT modify infrastructure (networks, volumes) —
             // it only restarts the existing containers.
-            let scan_path = dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("projects");
+            let scan_path = zp_core::paths::user_home_or(".").join("projects");
             let tool_path = scan_path.join(&tool_name);
 
             if !tool_path.exists() {
@@ -6359,9 +6339,7 @@ async fn tools_reconfigure_handler(
     }
 
     // Locate the tool's manifest to validate the parameter
-    let scan_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("projects");
+    let scan_path = zp_core::paths::user_home_or(".").join("projects");
     let manifest_path = scan_path.join(&tool_name).join(".zp-configure.toml");
 
     let manifest = match zp_engine::capability::load_manifest(&manifest_path) {
