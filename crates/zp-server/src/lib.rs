@@ -5585,30 +5585,23 @@ fn lease_prereq_for_agent(state: &AppState, agent_id: &str) -> Option<&'static s
 }
 
 /// Verify a hex-encoded Ed25519 signature over `payload` using `pubkey_hex`.
+///
+/// Routes through the single canonical verify primitive (Seam 5).
 #[allow(dead_code)] // Used by anchor pipeline once external anchoring is wired
 fn verify_ed25519_signature(pubkey_hex: &str, signature_hex: &str, payload: &[u8]) -> bool {
     let Ok(pk_bytes) = hex::decode(pubkey_hex) else {
         return false;
     };
-    if pk_bytes.len() != 32 {
-        return false;
-    }
-    let mut pk_arr = [0u8; 32];
-    pk_arr.copy_from_slice(&pk_bytes);
-    let Ok(verifying) = ed25519_dalek::VerifyingKey::from_bytes(&pk_arr) else {
+    let Ok(pk_arr): Result<[u8; 32], _> = pk_bytes.as_slice().try_into() else {
         return false;
     };
-
     let Ok(sig_bytes) = hex::decode(signature_hex) else {
         return false;
     };
-    if sig_bytes.len() != 64 {
+    let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
         return false;
-    }
-    let mut sig_arr = [0u8; 64];
-    sig_arr.copy_from_slice(&sig_bytes);
-    let signature = ed25519_dalek::Signature::from_bytes(&sig_arr);
-    verifying.verify_strict(payload, &signature).is_ok()
+    };
+    zp_receipt::verify::verify_signature(&pk_arr, payload, &sig_arr).is_ok()
 }
 
 #[derive(Deserialize)]

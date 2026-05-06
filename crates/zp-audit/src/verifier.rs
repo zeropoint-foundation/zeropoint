@@ -225,12 +225,12 @@ impl ChainVerifier {
     /// Verify a single Ed25519 [`SignatureBlock`] on an entry against the
     /// verifier's known-keys list.
     ///
-    /// `verify_strict` is used (not the malleable `verify`) — the chain is
-    /// the substrate's source of truth, and signature malleability would
-    /// give an attacker two distinct receipts for the same entry hash.
+    /// Routes through `zp_receipt::verify::verify_signature` — the single
+    /// canonical verify primitive (Seam 5). The helper enforces strict
+    /// verification; malleability would give an attacker two distinct
+    /// receipts for the same entry hash.
     fn verify_block(&self, entry: &AuditEntry, block: &zp_core::SignatureBlock) -> bool {
         use base64::Engine;
-        use ed25519_dalek::VerifyingKey;
 
         // Decode the block's base64 signature. Any malformed encoding fails
         // closed — a block is either a valid signature or it isn't.
@@ -240,10 +240,9 @@ impl ChainVerifier {
             Ok(b) if b.len() == 64 => b,
             _ => return false,
         };
-
-        let mut sig_array = [0u8; 64];
-        sig_array.copy_from_slice(&sig_bytes);
-        let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
+        let Ok(sig_array): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
+            return false;
+        };
 
         // The signed material is the entry_hash (a hex string).
         let message = entry.entry_hash.as_bytes();
@@ -252,10 +251,8 @@ impl ChainVerifier {
         // against a known-keys index, but the linear scan is fine for
         // chain sizes the verifier handles in practice.
         for (key_bytes, _label) in &self.known_keys {
-            if let Ok(verifying_key) = VerifyingKey::from_bytes(key_bytes) {
-                if verifying_key.verify_strict(message, &signature).is_ok() {
-                    return true;
-                }
+            if zp_receipt::verify::verify_signature(key_bytes, message, &sig_array).is_ok() {
+                return true;
             }
         }
 

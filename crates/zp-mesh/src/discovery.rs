@@ -540,19 +540,11 @@ pub struct ValidatedDiscovery {
 ///
 /// Used by both the DiscoveryManager and the runtime's direct announce handler.
 pub fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u8; 64]) -> bool {
-    use ed25519_dalek::{Signature, VerifyingKey};
-
     let Ok(key_array): Result<[u8; 32], _> = signing_key.try_into() else {
         return false;
     };
-
-    let Ok(verifying_key) = VerifyingKey::from_bytes(&key_array) else {
-        return false;
-    };
-
-    let sig = Signature::from_bytes(signature);
-    // Phase 1.C: verify_strict for non-malleable announce signatures.
-    verifying_key.verify_strict(data, &sig).is_ok()
+    // Routes through the single canonical verify primitive (Seam 5).
+    zp_receipt::verify::verify_signature(&key_array, data, signature).is_ok()
 }
 
 // ─────────────────────────────────────────────────────────────

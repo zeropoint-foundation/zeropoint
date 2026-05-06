@@ -389,12 +389,12 @@ mod tests {
         let data = b"hello from agent";
         let sig = agent.sign(data);
 
-        // Verify with the agent's public key from the chain
+        // Verify with the agent's public key from the chain via the
+        // canonical verify primitive (Seam 5).
         let chain = agent.chain().unwrap();
         let leaf_pub = chain.leaf_public_key().unwrap();
-        let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&leaf_pub).unwrap();
-        let signature = ed25519_dalek::Signature::from_bytes(&sig);
-        assert!(verifying_key.verify_strict(data, &signature).is_ok());
+        zp_receipt::verify::verify_signature(&leaf_pub, data, &sig)
+            .expect("agent signature must verify under chain leaf key");
     }
 
     #[test]

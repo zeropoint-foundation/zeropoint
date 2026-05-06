@@ -9,7 +9,7 @@
 //! and enforced locally by the Guard."
 
 use chrono::{DateTime, Timelike, Utc};
-use ed25519_dalek::{Signer as DalekSigner, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signer as DalekSigner, SigningKey};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -475,26 +475,17 @@ impl CapabilityGrant {
         let Ok(pk_bytes) = hex::decode(pk_hex) else {
             return false;
         };
-        if pk_bytes.len() != 32 {
-            return false;
-        }
-        let mut pk_arr = [0u8; 32];
-        pk_arr.copy_from_slice(&pk_bytes);
-        let Ok(verifying) = VerifyingKey::from_bytes(&pk_arr) else {
+        let Ok(pk_arr): Result<[u8; 32], _> = pk_bytes.as_slice().try_into() else {
             return false;
         };
-
         let Ok(sig_bytes) = hex::decode(signature_hex) else {
             return false;
         };
-        if sig_bytes.len() != 64 {
+        let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
             return false;
-        }
-        let mut sig_arr = [0u8; 64];
-        sig_arr.copy_from_slice(&sig_bytes);
-        let signature = ed25519_dalek::Signature::from_bytes(&sig_arr);
-
-        verifying.verify_strict(payload, &signature).is_ok()
+        };
+        // Routes through the single canonical verify primitive (Seam 5).
+        zp_receipt::verify::verify_signature(&pk_arr, payload, &sig_arr).is_ok()
     }
 
     /// Whether this grant has a lease attached.

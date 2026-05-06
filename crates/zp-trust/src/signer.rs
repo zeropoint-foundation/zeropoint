@@ -2,7 +2,7 @@
 //!
 //! Uses Ed25519 for signing and signature verification.
 
-use ed25519_dalek::{Signer as _, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signer as _, SigningKey};
 use rand::rngs::OsRng;
 use thiserror::Error;
 
@@ -104,17 +104,14 @@ impl Signer {
         let mut sig_array = [0u8; 64];
         sig_array.copy_from_slice(&signature_bytes);
 
-        // Create a verifying key from the public key
-        let verifying_key =
-            VerifyingKey::from_bytes(public_key).map_err(|_| SignerError::InvalidKeyMaterial)?;
-
-        // Create the signature from the bytes
-        let signature_obj = ed25519_dalek::Signature::from_bytes(&sig_array);
-
-        // Verify
-        match verifying_key.verify_strict(data, &signature_obj) {
+        // Routes through the single canonical verify primitive (Seam 5).
+        // `InvalidPublicKey` propagates as `SignerError::InvalidKeyMaterial`;
+        // a Mismatch (good key, wrong sig) returns `Ok(false)`.
+        use zp_core::{verify_signature, VerifyError};
+        match verify_signature(public_key, data, &sig_array) {
             Ok(()) => Ok(true),
-            Err(_) => Ok(false),
+            Err(VerifyError::InvalidPublicKey) => Err(SignerError::InvalidKeyMaterial),
+            Err(VerifyError::Mismatch | VerifyError::InvalidSignature) => Ok(false),
         }
     }
 

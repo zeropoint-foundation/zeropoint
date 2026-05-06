@@ -107,8 +107,6 @@ fn verify_attestation_signature(
     signature_hex: &str,
     signer_public_key_hex: &str,
 ) -> bool {
-    use ed25519_dalek::{Signature, VerifyingKey};
-
     // Decode public key
     let pk_bytes = match hex::decode(signer_public_key_hex) {
         Ok(b) if b.len() == 32 => b,
@@ -118,11 +116,6 @@ fn verify_attestation_signature(
         Ok(a) => a,
         Err(_) => return false,
     };
-    let verifying_key = match VerifyingKey::from_bytes(&pk_array) {
-        Ok(vk) => vk,
-        Err(_) => return false,
-    };
-
     // Decode signature
     let sig_bytes = match hex::decode(signature_hex) {
         Ok(b) if b.len() == 64 => b,
@@ -132,14 +125,11 @@ fn verify_attestation_signature(
         Ok(a) => a,
         Err(_) => return false,
     };
-    let signature = Signature::from_bytes(&sig_array);
 
-    // Verify: signature is over the hash bytes (hex-encoded hash string).
-    // Phase 1.C: verify_strict — non-strict verify is signature-malleable
-    // and would let an attacker present two distinct signatures for the
-    // same attestation hash.
+    // Routes through the single canonical verify primitive (Seam 5).
+    // Non-strict verify is signature-malleable; the helper enforces strict.
     let hash_bytes = attestation_hash.as_bytes();
-    verifying_key.verify_strict(hash_bytes, &signature).is_ok()
+    zp_receipt::verify::verify_signature(&pk_array, hash_bytes, &sig_array).is_ok()
 }
 
 // ============================================================================

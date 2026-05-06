@@ -112,7 +112,6 @@ mod tests {
     #[test]
     fn sign_then_verify_roundtrips() {
         use base64::Engine;
-        use ed25519_dalek::{Signature, VerifyingKey};
 
         let seed = [0x55u8; 32];
         let signer = AuditSigner::from_seed(&seed);
@@ -122,27 +121,27 @@ mod tests {
         assert!(matches!(block.algorithm, SignatureAlgorithm::Ed25519));
         assert_eq!(block.key_id, signer.public_key_hex);
 
-        // Verify the produced signature.
+        // Verify the produced signature via the canonical primitive (Seam 5).
         let pk_bytes = hex::decode(&block.key_id).expect("key_id is hex");
         let pk_array: [u8; 32] = pk_bytes.try_into().unwrap();
-        let verifying_key = VerifyingKey::from_bytes(&pk_array).unwrap();
 
         let sig_bytes = base64::engine::general_purpose::STANDARD
             .decode(&block.signature_b64)
             .expect("signature_b64 is base64");
         let sig_array: [u8; 64] = sig_bytes.try_into().unwrap();
-        let signature = Signature::from_bytes(&sig_array);
 
-        // verify_strict — same primitive the chain verifier uses.
-        verifying_key
-            .verify_strict(entry_hash.as_bytes(), &signature)
+        // Same primitive the chain verifier uses.
+        zp_receipt::verify::verify_signature(&pk_array, entry_hash.as_bytes(), &sig_array)
             .expect("signature must verify under the signer's own pk");
 
         // Sanity: a malformed entry_hash must NOT verify under the same sig.
         let wrong_hash = "ff".repeat(32);
-        assert!(verifying_key
-            .verify_strict(wrong_hash.as_bytes(), &signature)
-            .is_err());
+        assert!(zp_receipt::verify::verify_signature(
+            &pk_array,
+            wrong_hash.as_bytes(),
+            &sig_array
+        )
+        .is_err());
     }
 
     #[test]

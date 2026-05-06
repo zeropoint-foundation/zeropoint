@@ -414,20 +414,15 @@ async fn handle_announce_packet(
 }
 
 /// Verify an Ed25519 signature over announce data.
+///
+/// Routes through `zp_receipt::verify::verify_signature` — the single
+/// canonical verify primitive (Seam 5). Direct `verify_strict` calls are
+/// forbidden by discipline outside that helper.
 fn verify_announce_signature(signing_key: &[u8], data: &[u8], signature: &[u8; 64]) -> bool {
-    use ed25519_dalek::{Signature, VerifyingKey};
-
     let Ok(key_array): Result<[u8; 32], _> = signing_key.try_into() else {
         return false;
     };
-
-    let Ok(verifying_key) = VerifyingKey::from_bytes(&key_array) else {
-        return false;
-    };
-
-    let sig = Signature::from_bytes(signature);
-    // Phase 1.C: verify_strict for non-malleable mesh signatures.
-    verifying_key.verify_strict(data, &sig).is_ok()
+    zp_receipt::verify::verify_signature(&key_array, data, signature).is_ok()
 }
 
 /// Dispatch a single envelope to the appropriate handler.

@@ -10,7 +10,7 @@
 //! This mirrors the Reticulum identity model exactly, enabling interop
 //! with Reticulum nodes running MeshChat, Sideband, or NomadNet.
 
-use ed25519_dalek::{Signer as DalekSigner, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signer as DalekSigner, SigningKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -129,24 +129,32 @@ impl MeshIdentity {
     }
 
     /// Verify a signature against this identity's public key.
+    ///
+    /// Routes through `zp_receipt::verify::verify_signature` (Seam 5).
     pub fn verify(&self, data: &[u8], signature: &[u8; 64]) -> bool {
-        let sig = ed25519_dalek::Signature::from_bytes(signature);
-        self.signing_key
-            .verifying_key()
-            .verify_strict(data, &sig)
-            .is_ok()
+        let pk = self.signing_key.verifying_key().to_bytes();
+        zp_receipt::verify::verify_signature(&pk, data, signature).is_ok()
     }
 
     /// Verify a signature against an arbitrary Ed25519 public key.
+    ///
+    /// Routes through `zp_receipt::verify::verify_signature` (Seam 5).
+    /// Returns `Ok(true)` on success, `Ok(false)` if the signature does
+    /// not verify, and `Err(MeshError::InvalidKeyMaterial)` only when
+    /// `public_key` is structurally invalid (not a curve point).
     pub fn verify_with_key(
         public_key: &[u8; 32],
         data: &[u8],
         signature: &[u8; 64],
     ) -> MeshResult<bool> {
-        let verifying_key = VerifyingKey::from_bytes(public_key)
-            .map_err(|_| MeshError::InvalidKeyMaterial("invalid Ed25519 public key".into()))?;
-        let sig = ed25519_dalek::Signature::from_bytes(signature);
-        Ok(verifying_key.verify_strict(data, &sig).is_ok())
+        match zp_receipt::verify::verify_signature(public_key, data, signature) {
+            Ok(()) => Ok(true),
+            Err(zp_receipt::verify::VerifyError::Mismatch) => Ok(false),
+            Err(zp_receipt::verify::VerifyError::InvalidPublicKey) => Err(
+                MeshError::InvalidKeyMaterial("invalid Ed25519 public key".into()),
+            ),
+            Err(zp_receipt::verify::VerifyError::InvalidSignature) => Ok(false),
+        }
     }
 
     // ── Key exchange ─────────────────────────────────────────────

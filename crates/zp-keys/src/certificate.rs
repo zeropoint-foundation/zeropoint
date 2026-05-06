@@ -9,7 +9,7 @@
 //! certificates, operators sign agent certificates.
 
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{Signer as DalekSigner, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signer as DalekSigner, SigningKey};
 use serde::{Deserialize, Serialize};
 
 use crate::error::KeyError;
@@ -136,26 +136,26 @@ impl Certificate {
         let mut key_array = [0u8; 32];
         key_array.copy_from_slice(&issuer_bytes);
 
-        let verifying_key = VerifyingKey::from_bytes(&key_array)
-            .map_err(|e| KeyError::InvalidKeyMaterial(e.to_string()))?;
-
         let sig_bytes =
             hex::decode(&self.signature).map_err(|e| KeyError::InvalidSignature(e.to_string()))?;
-
-        if sig_bytes.len() != 64 {
-            return Err(KeyError::InvalidSignature(
-                "signature must be 64 bytes".into(),
-            ));
-        }
-
-        let mut sig_array = [0u8; 64];
-        sig_array.copy_from_slice(&sig_bytes);
-        let signature = ed25519_dalek::Signature::from_bytes(&sig_array);
+        let sig_array: [u8; 64] = sig_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| KeyError::InvalidSignature("signature must be 64 bytes".into()))?;
 
         let canonical =
             serde_json::to_vec(&self.body).map_err(|e| KeyError::Serialization(e.to_string()))?;
 
-        Ok(verifying_key.verify_strict(&canonical, &signature).is_ok())
+        // Routes through the single canonical verify primitive (Seam 5).
+        // Invalid public-key bytes surface as `InvalidKeyMaterial`; a
+        // mismatched signature returns `Ok(false)`.
+        match zp_receipt::verify::verify_signature(&key_array, &canonical, &sig_array) {
+            Ok(()) => Ok(true),
+            Err(zp_receipt::verify::VerifyError::InvalidPublicKey) => Err(
+                KeyError::InvalidKeyMaterial("invalid Ed25519 public key bytes".into()),
+            ),
+            Err(_) => Ok(false),
+        }
     }
 
     /// Check if this certificate has expired.

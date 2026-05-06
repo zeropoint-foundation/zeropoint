@@ -4,7 +4,7 @@
 
 use crate::Receipt;
 use base64::Engine;
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use ed25519_dalek::SigningKey;
 
 /// Ed25519 signer for receipts.
 #[derive(Clone)]
@@ -109,19 +109,21 @@ impl Signer {
             .decode(&sig_b64)
             .map_err(|e| format!("Invalid signature encoding: {}", e))?;
 
-        let signature = ed25519_dalek::Signature::from_slice(&sig_bytes)
-            .map_err(|e| format!("Invalid signature format: {}", e))?;
+        let sig_arr: [u8; 64] = sig_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| "signature must be 64 bytes".to_string())?;
 
-        let verifying_key = VerifyingKey::from_bytes(public_key)
-            .map_err(|e| format!("Invalid public key: {}", e))?;
-
-        // Phase 1.C: verify_strict, never the malleable verify. The pairing
-        // with `Signer::sign` always produces canonical signatures, so any
-        // input that would verify but not verify_strict is structurally
-        // invalid and should be rejected.
-        Ok(verifying_key
-            .verify_strict(receipt.content_hash.as_bytes(), &signature)
-            .is_ok())
+        // Routes through the single canonical verify primitive (Seam 5).
+        // The helper enforces verify_strict; the pairing with `Signer::sign`
+        // always produces canonical signatures, so anything the malleable
+        // form would accept but verify_strict rejects is structurally invalid.
+        Ok(crate::verify::verify_signature(
+            public_key,
+            receipt.content_hash.as_bytes(),
+            &sig_arr,
+        )
+        .is_ok())
     }
 }
 

@@ -382,7 +382,7 @@ fn verify_one_ed25519<E: VerifiableEntry>(
     report: &mut VerifyReport,
 ) {
     use base64::Engine;
-    use ed25519_dalek::{Signature, VerifyingKey};
+    use ed25519_dalek::Signature;
 
     report.signature_checks += 1;
 
@@ -449,35 +449,33 @@ fn verify_one_ed25519<E: VerifiableEntry>(
         }
     };
 
-    let verifying_key = match VerifyingKey::from_bytes(&pk_array) {
-        Ok(k) => k,
-        Err(e) => {
+    // Routes through the single canonical verify primitive (Seam 5).
+    // The helper enforces verify_strict; this closes the second half of
+    // CRIT-4 from the 2026-04 security audit (zp-audit's ChainVerifier
+    // was already strict; zp-verify is now too).
+    let sig_arr = signature.to_bytes();
+    match zp_receipt::verify::verify_signature(&pk_array, payload, &sig_arr) {
+        Ok(()) => {}
+        Err(zp_receipt::verify::VerifyError::InvalidPublicKey) => {
             report.signature_failures += 1;
             report.findings.push(VerifyFinding {
                 rule: "S1".to_string(),
                 entry_id: entry.entry_id().to_string(),
-                description: format!("Invalid public key: {}", e),
+                description: "Invalid public key".to_string(),
                 severity: FindingSeverity::Error,
             });
             report.passed = false;
-            return;
         }
-    };
-
-    // Phase 1.C: verify_strict (not the malleable verify) — the chain is
-    // the substrate's source of truth, and signature malleability would
-    // give an attacker two distinct receipts for the same entry hash.
-    // Closes the second half of CRIT-4 from the 2026-04 security audit
-    // (zp-audit's ChainVerifier was already strict; zp-verify is now too).
-    if verifying_key.verify_strict(payload, &signature).is_err() {
-        report.signature_failures += 1;
-        report.findings.push(VerifyFinding {
-            rule: "S1".to_string(),
-            entry_id: entry.entry_id().to_string(),
-            description: "Signature does not verify against signer_public_key".to_string(),
-            severity: FindingSeverity::Error,
-        });
-        report.passed = false;
+        Err(_) => {
+            report.signature_failures += 1;
+            report.findings.push(VerifyFinding {
+                rule: "S1".to_string(),
+                entry_id: entry.entry_id().to_string(),
+                description: "Signature does not verify against signer_public_key".to_string(),
+                severity: FindingSeverity::Error,
+            });
+            report.passed = false;
+        }
     }
 }
 
