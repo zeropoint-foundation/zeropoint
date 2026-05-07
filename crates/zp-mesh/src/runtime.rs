@@ -51,7 +51,7 @@ use tracing::{debug, info, warn};
 use crate::envelope::{EnvelopeType, MeshEnvelope};
 use crate::identity::PeerIdentity;
 use crate::packet::PacketType;
-use crate::transport::{AgentCapabilities, MeshNode};
+use crate::transport::{MeshNode, SignedAnnounce};
 
 /// An inbound envelope that the runtime dispatched but the consumer
 /// may want to process further (e.g., inbound receipts for the pipeline).
@@ -326,10 +326,11 @@ async fn run_event_loop(
 
 /// Handle an inbound announce packet.
 ///
-/// Announces contain:
+/// Announces contain (Seam 8 — replay-protected wire format):
 /// 1. Combined public key (64 bytes): Ed25519 (32) + X25519 (32)
-/// 2. JSON-encoded AgentCapabilities (variable length)
-/// 3. Ed25519 signature over the payload (64 bytes)
+/// 2. Canonical-bytes serialization of `SignedAnnounce` — wraps
+///    `AgentCapabilities` with `announced_at` timestamp + 16-byte nonce
+/// 3. Ed25519 signature over (1) || (2) (64 bytes)
 async fn handle_announce_packet(
     node: &Arc<MeshNode>,
     packet: &crate::packet::Packet,
@@ -379,14 +380,23 @@ async fn handle_announce_packet(
         return;
     }
 
-    // Parse AgentCapabilities from JSON
-    let capabilities: AgentCapabilities = match serde_json::from_slice(announce_data) {
-        Ok(caps) => caps,
+    // Parse the signed envelope (Seam 8). The replay-protection
+    // metadata (announced_at + nonce) is part of the signed preimage,
+    // so the signature check above already validated tampering with
+    // those fields. However, the runtime's direct-mesh-announce path
+    // does NOT yet apply the (timestamp + nonce) replay check —
+    // that protection currently lives in `DiscoveryManager::
+    // validate_discovery`. Wiring DiscoveryManager into the runtime
+    // is a known follow-up; until then, this path accepts any
+    // signature-valid announce regardless of freshness.
+    let envelope: SignedAnnounce = match serde_json::from_slice(announce_data) {
+        Ok(env) => env,
         Err(e) => {
-            debug!(error = %e, "Failed to parse AgentCapabilities from announce");
+            debug!(error = %e, "Failed to parse SignedAnnounce envelope");
             return;
         }
     };
+    let capabilities = envelope.capabilities;
 
     // Create PeerIdentity from combined key (use hops=1 for directly-received announces)
     let peer_identity = match PeerIdentity::from_combined_key(&combined_key_bytes, 1) {
@@ -937,18 +947,24 @@ mod tests {
     ) {
         use crate::packet::PacketType;
 
-        // Seam 17: must match the production canonical form (see
-        // discovery.rs and transport.rs) so the verifier in this test
-        // accepts the same byte sequence production would produce.
-        let announce_data = zp_core::canonical_bytes_of(capabilities).unwrap();
+        // Seam 8: announce wire format is the canonical-bytes
+        // serialization of a `SignedAnnounce` envelope (capabilities
+        // + announced_at + nonce), not bare capabilities. Wrapping
+        // here ensures the runtime's `serde_json::from_slice::
+        // <SignedAnnounce>` parses successfully — and that the
+        // anti-replay metadata is part of the signed preimage.
+        // Seam 17: canonical-bytes serialization so verifiers can
+        // recompute the same bytes deterministically.
+        let envelope = SignedAnnounce::new(capabilities.clone());
+        let announce_data = zp_core::canonical_bytes_of(&envelope).unwrap();
 
-        // Build announce: combined public key + capabilities + signature
+        // Build announce: combined public key + envelope + signature
         let combined_key = sender_id.combined_public_key();
         let mut payload = Vec::with_capacity(64 + announce_data.len() + 64);
         payload.extend_from_slice(&combined_key);
         payload.extend_from_slice(&announce_data);
 
-        // Sign the announce payload
+        // Sign the announce payload (key + envelope, not the signature itself)
         let signature = sender_id.sign(&payload);
         payload.extend_from_slice(&signature);
 

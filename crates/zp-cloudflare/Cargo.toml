@@ -1,0 +1,35 @@
+[package]
+name = "zp-cloudflare"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Adapter crate — implements ZeroPoint port traits using Cloudflare primitives"
+publish = false
+
+# This crate is the *only* place in the ZeroPoint workspace allowed to
+# import Cloudflare-specific Rust types (worker, cloudflare, cf_*, etc.).
+# The discipline pin `no_cloudflare_imports_in_zp_crates` enforces the
+# boundary mechanically — every other zp-* crate is structurally
+# forbidden from referencing Cloudflare APIs.
+#
+# See docs/STACK-CLOUDFLARE-2026-05.md for the full reference
+# integration: ports, adapters, wires, and the per-phase plan.
+
+[lib]
+name = "zp_cloudflare"
+path = "src/lib.rs"
+
+[dependencies]
+# Port traits this crate will implement. Empty for now (Phase 1.0 is
+# scaffold-only); each phase pulls in the relevant zp-* crate as it
+# adds an adapter:
+#
+#   Phase 1.2 (Workers AI):  zp-cognitive   (Inference port)
+#   Phase 2.1 (Vectorize):   zp-cognitive   (VectorIndex port)
+#   Phase 2.2 (Queues):      zp-mesh        (FleetBus port)
+#   Phase 2.3 (Workflows):   zp-pipeline    (GovernedWorkflow port)
+#   Phase 1.0 / future:      zp-audit       (AuditStore port — D1 adapter)
+#
+# Cloudflare-side dependencies (worker, cloudflare, etc.) will be
+# added when the first adapter lands. Until then, this crate has no
+# external dependencies and compiles to an empty library.

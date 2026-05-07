@@ -101,16 +101,13 @@ fn chmod_700(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Set restrictive permissions on a secret file (owner read/write only).
-#[cfg(unix)]
-fn chmod_600(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-}
-#[cfg(not(unix))]
-fn chmod_600(_path: &Path) -> std::io::Result<()> {
-    Ok(())
-}
+// `chmod_600` was the pre-Phase-2 helper that set 0600 *after* the
+// file was written — vulnerable to the brief 0644 window CRIT-8 named.
+// Removed when keyring.rs migrated to `secret_file::write_atomic`,
+// which creates the file at 0600 in one syscall (O_CREAT|O_EXCL|0600
+// + fsync + atomic rename). See Seam 7 in
+// `docs/STRUCTURAL-AUDIT-2026-05.md` and the `no_std_fs_write_in_keyring`
+// discipline pin.
 
 /// Atomically write a secret file with mode 0600. Delegates to
 /// [`crate::secret_file::write_atomic`] which closes the chmod-after-write
