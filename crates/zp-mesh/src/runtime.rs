@@ -119,6 +119,20 @@ pub struct MeshRuntime {
     inbound_rx: Option<mpsc::Receiver<InboundEnvelope>>,
     /// Runtime stats (shared with the background task).
     stats: Arc<tokio::sync::RwLock<RuntimeStats>>,
+    /// Per-peer recently-seen-nonces cache for replay protection on
+    /// the direct-mesh-announce path (Seam 8). Keyed by destination
+    /// hash; values are FIFO queues of `(nonce, announced_at)` pairs
+    /// pruned by `REPLAY_WINDOW`. Single-source — no source
+    /// dimension — because the runtime processes direct-mesh
+    /// announces from one delivery layer.
+    recent_nonces: Arc<
+        tokio::sync::RwLock<
+            std::collections::HashMap<
+                [u8; 16],
+                std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>,
+            >,
+        >,
+    >,
 }
 
 impl MeshRuntime {
@@ -130,10 +144,12 @@ impl MeshRuntime {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let (inbound_tx, inbound_rx) = mpsc::channel(config.inbound_channel_capacity);
         let stats = Arc::new(tokio::sync::RwLock::new(RuntimeStats::default()));
+        let recent_nonces = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
         let task_stats = stats.clone();
+        let task_nonces = recent_nonces.clone();
         let task = tokio::spawn(async move {
-            run_event_loop(node, config, shutdown_rx, inbound_tx, task_stats).await;
+            run_event_loop(node, config, shutdown_rx, inbound_tx, task_stats, task_nonces).await;
         });
 
         info!("Mesh runtime started");
@@ -143,6 +159,7 @@ impl MeshRuntime {
             shutdown_tx,
             inbound_rx: Some(inbound_rx),
             stats,
+            recent_nonces,
         }
     }
 
@@ -201,6 +218,14 @@ async fn run_event_loop(
     mut shutdown_rx: watch::Receiver<bool>,
     inbound_tx: mpsc::Sender<InboundEnvelope>,
     stats: Arc<tokio::sync::RwLock<RuntimeStats>>,
+    recent_nonces: Arc<
+        tokio::sync::RwLock<
+            std::collections::HashMap<
+                [u8; 16],
+                std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>,
+            >,
+        >,
+    >,
 ) {
     info!("Mesh runtime event loop running");
 
@@ -244,7 +269,7 @@ async fn run_event_loop(
                                 let mut s = stats.write().await;
                                 s.announces_seen += 1;
                             }
-                            handle_announce_packet(&node, &packet, &stats).await;
+                            handle_announce_packet(&node, &packet, &stats, &recent_nonces).await;
                             continue;
                         }
 
@@ -335,6 +360,14 @@ async fn handle_announce_packet(
     node: &Arc<MeshNode>,
     packet: &crate::packet::Packet,
     stats: &Arc<tokio::sync::RwLock<RuntimeStats>>,
+    recent_nonces: &Arc<
+        tokio::sync::RwLock<
+            std::collections::HashMap<
+                [u8; 16],
+                std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>,
+            >,
+        >,
+    >,
 ) {
     let payload = &packet.data;
 
@@ -383,12 +416,7 @@ async fn handle_announce_packet(
     // Parse the signed envelope (Seam 8). The replay-protection
     // metadata (announced_at + nonce) is part of the signed preimage,
     // so the signature check above already validated tampering with
-    // those fields. However, the runtime's direct-mesh-announce path
-    // does NOT yet apply the (timestamp + nonce) replay check —
-    // that protection currently lives in `DiscoveryManager::
-    // validate_discovery`. Wiring DiscoveryManager into the runtime
-    // is a known follow-up; until then, this path accepts any
-    // signature-valid announce regardless of freshness.
+    // those fields.
     let envelope: SignedAnnounce = match serde_json::from_slice(announce_data) {
         Ok(env) => env,
         Err(e) => {
@@ -396,9 +424,11 @@ async fn handle_announce_packet(
             return;
         }
     };
-    let capabilities = envelope.capabilities;
 
-    // Create PeerIdentity from combined key (use hops=1 for directly-received announces)
+    // Resolve the destination hash for the replay-cache key BEFORE
+    // applying the freshness check. We need the same key shape for
+    // every check + register call so a peer's identity binds to the
+    // same cache slot across calls.
     let peer_identity = match PeerIdentity::from_combined_key(&combined_key_bytes, 1) {
         Ok(pi) => pi,
         Err(e) => {
@@ -406,8 +436,35 @@ async fn handle_announce_packet(
             return;
         }
     };
+    let dest_hash = peer_identity.destination_hash;
 
-    // Register the peer with the node
+    // Replay-protection check (Seam 8 — runtime-path closure).
+    // Routes through the singular replay-check carrier
+    // (`transport::check_and_record_announce_freshness`) which is
+    // also used by `DiscoveryManager`. Per-peer scoping (no source
+    // dimension) — the runtime processes direct-mesh announces from
+    // a single delivery layer, unlike DiscoveryManager which polls
+    // multiple backends and scopes per-(peer, source).
+    if let Err(e) = crate::transport::check_and_record_announce_freshness(
+        recent_nonces,
+        dest_hash,
+        &envelope,
+    )
+    .await
+    {
+        debug!(
+            peer_address = %hex::encode(&combined_key_bytes[..32]),
+            error = %e,
+            "Announce replay check failed, skipping"
+        );
+        return;
+    }
+
+    let capabilities = envelope.capabilities;
+
+    // Register the peer with the node. `peer_identity` was
+    // constructed above the replay check (we needed its
+    // destination_hash for the cache key); reuse it here.
     node.register_peer(peer_identity, Some(capabilities.clone()))
         .await;
 
@@ -945,18 +1002,31 @@ mod tests {
         sender_id: &MeshIdentity,
         capabilities: &AgentCapabilities,
     ) {
-        use crate::packet::PacketType;
-
         // Seam 8: announce wire format is the canonical-bytes
         // serialization of a `SignedAnnounce` envelope (capabilities
         // + announced_at + nonce), not bare capabilities. Wrapping
         // here ensures the runtime's `serde_json::from_slice::
         // <SignedAnnounce>` parses successfully — and that the
         // anti-replay metadata is part of the signed preimage.
+        let envelope = SignedAnnounce::new(capabilities.clone());
+        inject_announce_envelope(lo, sender_id, &envelope).await;
+    }
+
+    /// Helper: inject a pre-constructed [`SignedAnnounce`] envelope.
+    ///
+    /// Lets replay-protection tests stamp a specific `announced_at` /
+    /// `nonce` so we can exercise the runtime's replay-check carrier
+    /// (`transport::check_and_record_announce_freshness`) directly.
+    async fn inject_announce_envelope(
+        lo: &LoopbackInterface,
+        sender_id: &MeshIdentity,
+        envelope: &SignedAnnounce,
+    ) {
+        use crate::packet::PacketType;
+
         // Seam 17: canonical-bytes serialization so verifiers can
         // recompute the same bytes deterministically.
-        let envelope = SignedAnnounce::new(capabilities.clone());
-        let announce_data = zp_core::canonical_bytes_of(&envelope).unwrap();
+        let announce_data = zp_core::canonical_bytes_of(envelope).unwrap();
 
         // Build announce: combined public key + envelope + signature
         let combined_key = sender_id.combined_public_key();
@@ -977,6 +1047,17 @@ mod tests {
         lo.inject(&packet).await;
     }
 
+    fn make_test_capabilities() -> AgentCapabilities {
+        AgentCapabilities {
+            name: "test-agent".to_string(),
+            version: "1.0.0".to_string(),
+            receipt_types: vec!["execution".to_string()],
+            skills: vec!["shell".to_string()],
+            actor_type: "agent".to_string(),
+            trust_tier: "tier0".to_string(),
+        }
+    }
+
     #[tokio::test]
     async fn test_runtime_handles_announce_discovery() {
         let (node, lo) = setup_node_with_loopback().await;
@@ -992,14 +1073,7 @@ mod tests {
 
         // Create a test peer identity and capabilities
         let peer_id = MeshIdentity::generate();
-        let capabilities = AgentCapabilities {
-            name: "test-agent".to_string(),
-            version: "1.0.0".to_string(),
-            receipt_types: vec!["execution".to_string()],
-            skills: vec!["shell".to_string()],
-            actor_type: "agent".to_string(),
-            trust_tier: "tier0".to_string(),
-        };
+        let capabilities = make_test_capabilities();
 
         // Inject an announce packet
         inject_announce_packet(&lo, &peer_id, &capabilities).await;
@@ -1025,6 +1099,135 @@ mod tests {
         let stats = runtime.stats().await;
         assert_eq!(stats.announces_seen, 1);
         assert_eq!(stats.peers_discovered, 1);
+
+        runtime.shutdown();
+    }
+
+    /// Replay protection (Seam 8 — runtime path).
+    ///
+    /// A second announce with the same nonce must be rejected. Both
+    /// packets are seen (`announces_seen == 2`), but only the first
+    /// causes a peer registration (`peers_discovered == 1`).
+    #[tokio::test]
+    async fn test_runtime_rejects_announce_replay() {
+        let (node, lo) = setup_node_with_loopback().await;
+
+        let mut runtime = MeshRuntime::start(
+            node.clone(),
+            RuntimeConfig {
+                poll_interval: Duration::from_millis(10),
+                ..Default::default()
+            },
+        );
+        let _inbound_rx = runtime.take_inbound_rx().unwrap();
+
+        let peer_id = MeshIdentity::generate();
+        let capabilities = make_test_capabilities();
+
+        // Build one envelope and inject it twice — same nonce both
+        // times. The second injection exercises the replay-cache hit.
+        let envelope = SignedAnnounce::new(capabilities.clone());
+        inject_announce_envelope(&lo, &peer_id, &envelope).await;
+        // Drain the first packet end-to-end before the second one
+        // arrives so the cache write completes first.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        inject_announce_envelope(&lo, &peer_id, &envelope).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let stats = runtime.stats().await;
+        assert_eq!(
+            stats.announces_seen, 2,
+            "both packets must reach handle_announce_packet"
+        );
+        assert_eq!(
+            stats.peers_discovered, 1,
+            "replay must not produce a second discovery"
+        );
+
+        // The peer should be registered exactly once.
+        let peers = node.known_peers().await;
+        let matches: Vec<_> = peers
+            .iter()
+            .filter(|p| p.address == peer_id.address())
+            .collect();
+        assert_eq!(matches.len(), 1, "peer registered exactly once");
+
+        runtime.shutdown();
+    }
+
+    /// Replay protection — ancient timestamp (Seam 8 — runtime path).
+    ///
+    /// An announce stamped 10 minutes in the past is outside the
+    /// 5-minute `REPLAY_WINDOW` and must be dropped before the cache
+    /// is even touched.
+    #[tokio::test]
+    async fn test_runtime_rejects_ancient_announce() {
+        use chrono::Utc;
+
+        let (node, lo) = setup_node_with_loopback().await;
+
+        let mut runtime = MeshRuntime::start(
+            node.clone(),
+            RuntimeConfig {
+                poll_interval: Duration::from_millis(10),
+                ..Default::default()
+            },
+        );
+        let _inbound_rx = runtime.take_inbound_rx().unwrap();
+
+        let peer_id = MeshIdentity::generate();
+        let capabilities = make_test_capabilities();
+
+        let mut envelope = SignedAnnounce::new(capabilities);
+        envelope.announced_at = Utc::now() - chrono::Duration::minutes(10);
+        inject_announce_envelope(&lo, &peer_id, &envelope).await;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let stats = runtime.stats().await;
+        assert_eq!(stats.announces_seen, 1);
+        assert_eq!(
+            stats.peers_discovered, 0,
+            "ancient announce must be rejected on the timestamp window"
+        );
+        assert!(node.known_peers().await.is_empty());
+
+        runtime.shutdown();
+    }
+
+    /// Replay protection — future-dated timestamp (Seam 8 — runtime path).
+    ///
+    /// Symmetric rejection. Forward-stamping is the adversarial move
+    /// that lets a captured announce stay "fresh" longer; rejecting
+    /// it for the same window collapses both attack surfaces.
+    #[tokio::test]
+    async fn test_runtime_rejects_future_dated_announce() {
+        use chrono::Utc;
+
+        let (node, lo) = setup_node_with_loopback().await;
+
+        let mut runtime = MeshRuntime::start(
+            node.clone(),
+            RuntimeConfig {
+                poll_interval: Duration::from_millis(10),
+                ..Default::default()
+            },
+        );
+        let _inbound_rx = runtime.take_inbound_rx().unwrap();
+
+        let peer_id = MeshIdentity::generate();
+        let capabilities = make_test_capabilities();
+
+        let mut envelope = SignedAnnounce::new(capabilities);
+        envelope.announced_at = Utc::now() + chrono::Duration::minutes(10);
+        inject_announce_envelope(&lo, &peer_id, &envelope).await;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let stats = runtime.stats().await;
+        assert_eq!(stats.announces_seen, 1);
+        assert_eq!(stats.peers_discovered, 0);
+        assert!(node.known_peers().await.is_empty());
 
         runtime.shutdown();
     }

@@ -125,6 +125,78 @@ impl SignedAnnounce {
 /// while keeping the cache footprint bounded.
 pub const REPLAY_WINDOW: chrono::Duration = chrono::Duration::minutes(5);
 
+/// Replay-protection check shared by the DiscoveryManager poll path
+/// and the MeshRuntime direct-announce path (Seam 8 — singular
+/// carrier).
+///
+/// Both paths receive [`SignedAnnounce`] envelopes; both need
+/// identical replay semantics. Rather than duplicate the algorithm,
+/// each caller maintains its own cache (`HashMap<K, VecDeque<...>>`)
+/// keyed by whatever scoping makes sense for its layer
+/// (`(dest_hash, source)` for DiscoveryManager; `dest_hash` for
+/// the single-source runtime), and delegates the check here.
+///
+/// # Algorithm
+///
+/// 1. Reject if `signed_at` is outside `±REPLAY_WINDOW` from
+///    `Utc::now()` (ancient or future-dated payloads).
+/// 2. Look up the per-key queue. Evict any entries older than
+///    `REPLAY_WINDOW` (eviction is safe — those would fail the
+///    timestamp check on their own anyway).
+/// 3. Reject if the envelope's nonce is already in the queue
+///    (replay).
+/// 4. On accept, push `(nonce, signed_at)` to the queue.
+///
+/// # Errors
+///
+/// Returns [`MeshError::AnnounceTimestampSkewed`] for window
+/// violations and [`MeshError::AnnounceReplayDetected`] for nonce
+/// reuse. The cache is mutated only on accept; failures leave it
+/// unchanged.
+pub async fn check_and_record_announce_freshness<K>(
+    cache: &tokio::sync::RwLock<
+        std::collections::HashMap<K, std::collections::VecDeque<(String, chrono::DateTime<Utc>)>>,
+    >,
+    key: K,
+    envelope: &SignedAnnounce,
+) -> crate::error::MeshResult<()>
+where
+    K: std::hash::Hash + Eq,
+{
+    let now = Utc::now();
+    let skew = now.signed_duration_since(envelope.announced_at);
+    let skew_abs = if skew < chrono::Duration::zero() {
+        -skew
+    } else {
+        skew
+    };
+    if skew_abs > REPLAY_WINDOW {
+        return Err(crate::error::MeshError::AnnounceTimestampSkewed {
+            skew_secs: skew.num_seconds(),
+        });
+    }
+
+    let mut cache_guard = cache.write().await;
+    let queue = cache_guard
+        .entry(key)
+        .or_insert_with(std::collections::VecDeque::new);
+
+    while let Some((_n, ts)) = queue.front() {
+        if now.signed_duration_since(*ts) >= REPLAY_WINDOW {
+            queue.pop_front();
+        } else {
+            break;
+        }
+    }
+
+    if queue.iter().any(|(n, _)| n == &envelope.nonce) {
+        return Err(crate::error::MeshError::AnnounceReplayDetected);
+    }
+
+    queue.push_back((envelope.nonce.clone(), envelope.announced_at));
+    Ok(())
+}
+
 /// The transport trait — implemented by any agent communication layer.
 ///
 /// This is the interface that `zp-pipeline` and other consumers use.

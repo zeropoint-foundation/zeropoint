@@ -573,43 +573,20 @@ impl DiscoveryManager {
         source: DiscoverySource,
         envelope: &SignedAnnounce,
     ) -> MeshResult<()> {
-        let now = Utc::now();
-        let skew = now.signed_duration_since(envelope.announced_at);
-
-        // Use absolute value of the skew so future-dated and ancient
-        // announces are both rejected.
-        let skew_abs = if skew < chrono::Duration::zero() {
-            -skew
-        } else {
-            skew
-        };
-        if skew_abs > REPLAY_WINDOW {
-            return Err(MeshError::AnnounceTimestampSkewed {
-                skew_secs: skew.num_seconds(),
-            });
-        }
-
-        let mut nonces = self.recent_nonces.write().await;
-        let queue = nonces
-            .entry((*dest_hash, source))
-            .or_insert_with(VecDeque::new);
-
-        // Evict stale entries first — keeps the contains check below
-        // bounded by the window's worth of announces.
-        while let Some((_n, ts)) = queue.front() {
-            if now.signed_duration_since(*ts) >= REPLAY_WINDOW {
-                queue.pop_front();
-            } else {
-                break;
-            }
-        }
-
-        if queue.iter().any(|(n, _)| n == &envelope.nonce) {
-            return Err(MeshError::AnnounceReplayDetected);
-        }
-
-        queue.push_back((envelope.nonce.clone(), envelope.announced_at));
-        Ok(())
+        // Delegates to the singular replay-check carrier in
+        // `transport::check_and_record_announce_freshness`. The cache
+        // is scoped per-(peer, source) so a peer's legitimate
+        // broadcast on multiple backends (web AND reticulum) is
+        // accepted on both — only re-arrival on the same source is
+        // treated as a replay. The runtime path uses the same helper
+        // with a per-peer key (no source dimension) since it sees
+        // direct-mesh announces from a single delivery layer.
+        crate::transport::check_and_record_announce_freshness(
+            &self.recent_nonces,
+            (*dest_hash, source),
+            envelope,
+        )
+        .await
     }
 
     /// Get the count of known peers across all sources.

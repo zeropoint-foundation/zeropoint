@@ -131,12 +131,16 @@ Each seam below has six fields:
 
 ### Seam 8 — Discovery announce replay window
 
-- **Intent.** Every signed announce carries a monotonic `(seq, ts)`; receivers reject stale or regressing values.
-- **Carrier.** `AgentAnnounce` signed payload schema + a per-agent receiver-side state map. Today the signed payload omits both fields.
-- **Status.** **Open**.
+- **Intent.** Every signed announce binds itself to a moment via `(announced_at, nonce)` covered by the same signature. Receivers reject announces outside `±REPLAY_WINDOW` and any nonce already seen for that peer.
+- **Carrier.** [`SignedAnnounce`] in `crates/zp-mesh/src/transport.rs` (capabilities + `announced_at` + 16-byte nonce) + the singular replay-check helper [`check_and_record_announce_freshness<K>`] in the same module. Both the discovery-poll path and the runtime direct-mesh path delegate to that helper with their own scoping key.
+- **Status.** **Closed (May 2026).**
+  - The wire format is `SignedAnnounce`. Senders stamp `announced_at` and a fresh random nonce per call; receivers verify the Ed25519 signature over canonical bytes of the envelope (so timestamp/nonce tampering invalidates the signature).
+  - `DiscoveryManager` keeps a per-`(dest_hash, source)` cache so a peer's legitimate broadcast on multiple backends (web AND reticulum) is accepted on each — only re-arrival on the *same* source counts as a replay.
+  - `MeshRuntime` keeps a per-`dest_hash` cache (no source dimension — direct-mesh announces arrive from a single delivery layer) and routes `handle_announce_packet` through the same shared helper.
+  - Test coverage: 5 replay tests in `discovery.rs` + 3 runtime-path replay tests (`test_runtime_rejects_announce_replay`, `test_runtime_rejects_ancient_announce`, `test_runtime_rejects_future_dated_announce`) in `runtime.rs`.
 - **Catalog rule.** M9, M10 (discovery layer integrity).
-- **Wire.** Extend signed payload to include `(seq: u64, announced_at_ms: i64)`. Receiver maintains `HashMap<AgentId, (last_seq, last_ts)>`. Reject when `seq <= last_seq || ts < now - SKEW || ts > now + SKEW`. Default `SKEW = 5 minutes`.
-- **Blast radius.** `zp-mesh/src/discovery.rs` payload schema, `zp-mesh/src/runtime.rs` receiver state, all senders.
+- **Wire (closed).** Extract the algorithm into one carrier; both DiscoveryManager and MeshRuntime call it. The carrier owns the algorithm; callers own the cache + scoping key.
+- **Blast radius.** `zp-mesh/src/{transport,discovery,runtime,error}.rs`. Senders are `crates/zp-server/src/{lib,fleet}.rs` (already emit `SignedAnnounce` at announce-build time as part of Seam 8 closure).
 
 ### Seam 9 — Tool launch + token plumbing
 
@@ -374,9 +378,9 @@ The principles (`ARCHITECTURE-2026-04.md` §V½) are the design philosophy made 
 | **2. Identity is a key, not a location** | Seams 3, 16 | Open. Fleet heartbeat trusts location (3); receipts attribute to actors who have no registered key (16). Phase 3/4 territory. |
 | **3. There is no center** | Seam 5 (verifier-as-re-deriver), Seam 14 (every node can verify a peer's chain regardless of version) | Partially closed. Verifier exists; symmetry across the codebase is incomplete. |
 | **4. Every bit counts** | Seams 13, 17, 18 | Partial. Receipt schema is clean (Phase 6 stripped duplicate detail JSON). Error types and canonical JSON are still scattered. |
-| **5. Store-and-forward primary** | Seam 1 (the chain is primary), Seam 8 (announce replay) | Seam 1 closed; Seam 8 open. Replay protection is a precondition for treating announces as substrate-level state. |
+| **5. Store-and-forward primary** | Seam 1 (the chain is primary), Seam 8 (announce replay) | Both closed (May 2026). Replay protection now exists as the singular `check_and_record_announce_freshness` carrier, called by both DiscoveryManager and MeshRuntime. |
 | **6. A tool is intent, crystallized** | Seams 2, 9 | Seam 2 (the classification side) closed. Seam 9 (the launch side) open. Until ToolSpec replaces `sh -c`, intent doesn't fully crystallize — there's a parallel path the gate doesn't see. |
-| **7. Contact does not commit** | Seam 4 (receipts as the membrane), Seam 8 (rejecting replays before they become state), Seam 16 (actor identity binds events to commitments) | Open across all three. Phase 4 work. |
+| **7. Contact does not commit** | Seam 4 (receipts as the membrane), Seam 8 (rejecting replays before they become state), Seam 16 (actor identity binds events to commitments) | Seam 8 closed; Seams 4 + 16 open (Phase 4). Replays no longer leak past contact into substrate state — they're filtered at the same wire seam, on every path. |
 
 ---
 
@@ -399,7 +403,7 @@ These close many beads with one wire and don't require new design.
 Bigger architectural pieces. Identity-as-key story.
 
 6. **Seam 3 — Fleet auth middleware.** Closes CRIT-5. Requires designing the node-identity registration ceremony.
-7. **Seam 8 — Announce replay window.** Closes CRIT-7. Schema change to signed payload, receiver state, plus migration plan for existing announces.
+7. ~~**Seam 8 — Announce replay window.**~~ **Closed May 2026.** `SignedAnnounce` envelope (capabilities + `announced_at` + nonce) covered by the same signature; `check_and_record_announce_freshness<K>` is the singular replay-check carrier called by both `DiscoveryManager` (per-(peer, source) scoping) and `MeshRuntime` (per-peer scoping).
 8. **Seam 16 — Actor key registry.** Lays the substrate for receipt-actor binding. Useful before Seam 4.
 
 ### Tier 3 — Capability/lease layer (Phase 4)
