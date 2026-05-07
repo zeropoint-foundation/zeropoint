@@ -208,6 +208,46 @@ will also catch the framework's own discussion of those violations.
 Skip-line filters are not optional. Plan for them when you author the
 pin.
 
+## Working tree state vs HEAD state are not the same thing
+
+Two commits in the May 2026 hardening pushed broken state to
+`origin/main`:
+
+- `93b2fe7` (Phase 1.0 adapter scaffold) imported `SignedAnnounce`
+  from `crate::transport`, but the type definition lived in an
+  uncommitted file. The local working tree compiled because the
+  file was on disk; `origin` couldn't build because the import
+  resolved against a tree that didn't contain it.
+- The same commit added `crates/zp-cloudflare` as a workspace member
+  but didn't include the corresponding `Cargo.lock` entry — the
+  resolver could recover, but a fresh clone hit a lockfile mismatch.
+
+The lesson: *`cargo build` against the local working tree is not the
+same check as `cargo build` against the to-be-pushed state*. Working
+tree drift — modified files, untracked files, mid-stream edits —
+silently masks both classes of failure. The convention "make sure
+your commit is self-contained" is a developer-memory rule, which is
+the same kind of rule the discipline framework was built to
+crystallize.
+
+The carrier is a pre-push hook that materializes HEAD into a
+disposable git worktree and runs `cargo check` there. The check
+ignores the live working tree entirely; it answers the only question
+that matters at push time: *"if someone clones origin right now and
+runs cargo build, will it succeed?"*
+
+The hook lives in `.githooks/pre-push`. Activation is
+`.githooks/install.sh` (one-time per checkout: sets `git config
+core.hooksPath .githooks`). Bypass via `git push --no-verify` for
+genuine emergencies. Future drift in this class — a commit that
+references working-tree-only types — fails the push with a
+structured error before it can corrupt `origin`.
+
+This is a different shape of enforcement than the discipline
+framework's regex pins. Pins enforce *code shape*; the pre-push
+hook enforces *commit shape*. Both are convention-→-invariant moves;
+both refuse to let the build be green when the discipline lapses.
+
 ## What didn't get done
 
 Several things surfaced during the work and were deliberately deferred:

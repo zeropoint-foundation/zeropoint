@@ -1,0 +1,77 @@
+#!/bin/sh
+#
+# .githooks/pre-push
+#
+# Verify HEAD builds cleanly before pushing. The check materializes
+# HEAD into a fresh git worktree and runs `cargo check --workspace`
+# there — NOT against the live working tree. This catches the class
+# of bug that broke origin/main in 93b2fe7 (May 2026): a commit that
+# imports types from working-tree-only files, which compiles locally
+# but leaves origin unbuildable on a fresh clone.
+#
+# # Why a worktree, not the working tree?
+#
+# `cargo check --workspace` against the live tree compiles whatever
+# is on disk — including modified files, untracked files, and
+# committed-but-not-yet-pushed state. That's the wrong frame: the
+# question is "does what we're about to push build cleanly?", not
+# "does my local environment compile?".
+#
+# `git worktree add --detach <tmpdir> HEAD` materializes a
+# pristine snapshot of HEAD into a separate filesystem tree, ignoring
+# all uncommitted changes. Running `cargo check` there answers the
+# right question: "if someone clones origin right now and runs
+# cargo build, will it succeed?"
+#
+# # Why cargo check (not cargo test)?
+#
+# Pre-push needs to be fast (~5-30s) so people don't disable it.
+# `cargo check` catches the build-doesn't-resolve-types class of
+# bugs, which is what motivated this hook. Test failures are caught
+# by the existing discipline pins (cargo test on demand) and CI.
+#
+# # Activation
+#
+# Run `.githooks/install.sh` once after cloning to point git at
+# this directory. Already-installed checkouts pick up new hooks
+# automatically.
+#
+# # Bypass
+#
+# In genuine emergencies, `git push --no-verify` skips the hook.
+# Use sparingly. The hook exists because the convention "make sure
+# your commit is self-contained" was previously a developer-memory
+# rule and turned out to be insufficient.
+
+set -e
+
+WORKTREE=$(mktemp -d -t zp-prepush.XXXXXX)
+
+cleanup() {
+    # Best-effort cleanup; failures here don't matter for the push.
+    git worktree remove --force "$WORKTREE" >/dev/null 2>&1 || true
+    rm -rf "$WORKTREE" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+echo "pre-push: materializing HEAD into temp worktree..."
+git worktree add --quiet --detach "$WORKTREE" HEAD
+
+echo "pre-push: cargo check --workspace against HEAD..."
+if ! ( cd "$WORKTREE" && cargo check --workspace --quiet ); then
+    echo ""
+    echo "pre-push: HEAD does not build cleanly. Push aborted."
+    echo ""
+    echo "Likely cause: a commit references types or files that"
+    echo "exist only in the working tree, not in HEAD. Common shape:"
+    echo "  modified:  src/parent.rs       (uncommitted)"
+    echo "  committed: src/child.rs        (uses parent type)"
+    echo ""
+    echo "Fix: stage and commit the supporting files, or unstage"
+    echo "the dependent change."
+    echo ""
+    echo "If you must push anyway: git push --no-verify (sparingly)."
+    exit 1
+fi
+
+echo "pre-push: HEAD builds cleanly."
