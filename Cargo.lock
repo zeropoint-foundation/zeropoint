@@ -5771,6 +5771,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-cloudflare"
+version = "0.1.0"
+
+[[package]]
 name = "zp-config"
 version = "0.1.0"
 dependencies = [

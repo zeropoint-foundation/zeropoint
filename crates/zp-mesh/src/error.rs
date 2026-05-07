@@ -14,6 +14,16 @@ pub enum MeshError {
     #[error("Signature verification failed")]
     SignatureVerificationFailed,
 
+    /// Announce timestamp is outside the acceptable window
+    /// (Seam 8 — replay protection).
+    #[error("Announce timestamp outside replay window: skew {skew_secs}s")]
+    AnnounceTimestampSkewed { skew_secs: i64 },
+
+    /// Announce nonce was already seen for this peer within the
+    /// replay window (Seam 8 — replay protection).
+    #[error("Announce nonce already seen for this peer")]
+    AnnounceReplayDetected,
+
     /// Key exchange failed.
     #[error("Key exchange failed: {0}")]
     KeyExchangeFailed(String),

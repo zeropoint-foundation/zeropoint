@@ -56,6 +56,75 @@ pub struct AgentCapabilities {
     pub trust_tier: String,
 }
 
+/// Signed announce envelope — what actually goes on the wire.
+///
+/// # The wire (Seam 8)
+///
+/// The signed-and-canonicalized form of an announce. Wraps
+/// [`AgentCapabilities`] with anti-replay metadata that's covered by
+/// the same signature, so a captured announce cannot be re-broadcast
+/// indefinitely.
+///
+/// ## Replay protection
+///
+/// - **`announced_at`** — the issuer's wall-clock timestamp. The
+///   verifier rejects announces outside `±REPLAY_WINDOW` from now,
+///   bounding the size of the per-peer nonce cache and rejecting
+///   ancient or future-dated payloads outright.
+///
+/// - **`nonce`** — a 16-byte random value. The verifier maintains a
+///   per-peer recently-seen-nonces cache; an announce whose nonce is
+///   already in the cache is rejected as a replay. Cache eviction is
+///   tied to the same window — entries older than `REPLAY_WINDOW` are
+///   dropped, which is safe because their timestamps would also fail
+///   the window check.
+///
+/// ## Why the envelope is signed, not the capabilities
+///
+/// The signature covers the canonical bytes of `SignedAnnounce`, not
+/// just the inner `AgentCapabilities`. If only the capabilities were
+/// signed, an attacker could splice the timestamp/nonce off and replace
+/// them with fresh values — the signature would still verify because
+/// it didn't cover them. Signing the envelope means tampering with the
+/// timestamp or nonce invalidates the signature.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedAnnounce {
+    /// What the agent claims to be / can do.
+    pub capabilities: AgentCapabilities,
+    /// Issuer-side timestamp (UTC). Verifiers reject anything outside
+    /// `±REPLAY_WINDOW` from their own `Utc::now()`.
+    pub announced_at: chrono::DateTime<Utc>,
+    /// 16-byte random nonce, hex-encoded for canonical-bytes
+    /// serialization stability. Verifiers reject any announce whose
+    /// (peer_address, nonce) pair is already in the recently-seen
+    /// cache.
+    pub nonce: String,
+}
+
+impl SignedAnnounce {
+    /// Construct a fresh announce envelope around the given
+    /// capabilities. Generates a random 16-byte nonce and stamps the
+    /// current UTC time.
+    pub fn new(capabilities: AgentCapabilities) -> Self {
+        use rand::RngCore;
+        let mut nonce_bytes = [0u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+        Self {
+            capabilities,
+            announced_at: Utc::now(),
+            nonce: hex::encode(nonce_bytes),
+        }
+    }
+}
+
+/// Tolerance window for announce timestamps. Announces outside
+/// `now ± REPLAY_WINDOW` are rejected; nonces older than this are
+/// evicted from the per-peer cache.
+///
+/// Five minutes leaves room for moderate clock skew across mesh peers
+/// while keeping the cache footprint bounded.
+pub const REPLAY_WINDOW: chrono::Duration = chrono::Duration::minutes(5);
+
 /// The transport trait — implemented by any agent communication layer.
 ///
 /// This is the interface that `zp-pipeline` and other consumers use.

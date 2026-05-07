@@ -48,8 +48,13 @@ certs/
 # Foundation — legal docs, workspace infra, onboarding (local only)
 foundation/
 
-# Website (keep private to prevent impersonation)
+# Public website (keep private to prevent impersonation)
 zeropoint.global/
+
+# Foundation workspace — Cloudflare Worker for zeropointfoundation.org,
+# gated by Cloudflare Access. Contains workspace infra; never push to
+# the public repo. Force-add specific files with `git add -f` if needed.
+zeropointfoundation.org/
 
 # Experimental / legacy projects
 clawd/

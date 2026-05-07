@@ -45,7 +45,7 @@
 //! └──────────────────────────────────────────────────┘
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -56,7 +56,7 @@ use tracing::{debug, info, warn};
 
 use crate::error::{MeshError, MeshResult};
 use crate::identity::{MeshIdentity, PeerIdentity};
-use crate::transport::AgentCapabilities;
+use crate::transport::{AgentCapabilities, SignedAnnounce, REPLAY_WINDOW};
 
 // ─────────────────────────────────────────────────────────────
 // Discovery types
@@ -202,6 +202,21 @@ pub struct DiscoveryManager {
     /// Per-peer discovery records, keyed by destination hash.
     /// This is the ONLY state the manager retains, and it's memory-only.
     peer_records: RwLock<HashMap<[u8; 16], PeerDiscoveryRecord>>,
+    /// Recently-seen-nonces cache (Seam 8 — replay protection).
+    ///
+    /// Keyed by `(destination_hash, source)`. Scoping per-source means
+    /// the same announce arriving on two different backends (legitimate
+    /// multi-backend delivery — peers broadcast on web AND reticulum)
+    /// is accepted on both sides; only retransmission on the SAME
+    /// source within `REPLAY_WINDOW` is rejected as replay.
+    ///
+    /// Each entry holds a queue of `(nonce_hex, announced_at)` pairs
+    /// ordered oldest-first. Entries older than `REPLAY_WINDOW` are
+    /// evicted on every check (and also during `prune_expired`),
+    /// keeping the cache footprint bounded by the announce rate inside
+    /// the window.
+    recent_nonces:
+        RwLock<HashMap<([u8; 16], DiscoverySource), VecDeque<(String, chrono::DateTime<Utc>)>>>,
     /// Our cached announce payload (rebuilt on each announce cycle).
     cached_announce: RwLock<Option<Vec<u8>>>,
     /// Peer TTL — entries older than this are pruned.
@@ -216,6 +231,7 @@ impl DiscoveryManager {
         Self {
             backends: RwLock::new(Vec::new()),
             peer_records: RwLock::new(HashMap::new()),
+            recent_nonces: RwLock::new(HashMap::new()),
             cached_announce: RwLock::new(None),
             peer_ttl,
             discoveries_total: RwLock::new(0),
@@ -239,23 +255,43 @@ impl DiscoveryManager {
 
     /// Build and cache the signed announce payload for our identity.
     ///
-    /// Format: `[combined_key(64)] + [capabilities_json] + [ed25519_signature(64)]`
-    /// The signature covers `combined_key + capabilities_json`.
+    /// Wire format (Seam 8):
+    /// `[combined_key(64)] + [signed_announce_canonical_bytes] + [ed25519_signature(64)]`
+    ///
+    /// The middle section is the canonical-bytes serialization of a
+    /// [`SignedAnnounce`] envelope, which wraps the [`AgentCapabilities`]
+    /// with anti-replay metadata (`announced_at` timestamp + 16-byte
+    /// nonce). The signature covers the combined_key concatenated with
+    /// the envelope bytes — so tampering with the timestamp or nonce
+    /// invalidates the signature, not just the inner capabilities.
     pub fn build_announce_payload(
         identity: &MeshIdentity,
         capabilities: &AgentCapabilities,
     ) -> MeshResult<Vec<u8>> {
-        // Seam 17: announce payload is signed; preimage must match the
+        let envelope = SignedAnnounce::new(capabilities.clone());
+        Self::build_announce_payload_with_envelope(identity, &envelope)
+    }
+
+    /// Build an announce payload from a pre-constructed [`SignedAnnounce`].
+    ///
+    /// Used by tests to inject deterministic timestamps/nonces; production
+    /// code should call [`build_announce_payload`] which freshly stamps
+    /// each announce.
+    pub(crate) fn build_announce_payload_with_envelope(
+        identity: &MeshIdentity,
+        envelope: &SignedAnnounce,
+    ) -> MeshResult<Vec<u8>> {
+        // Seam 17: announce envelope is signed; preimage must match the
         // canonical form so verifiers can recompute the bytes deterministically.
-        let caps_json = zp_core::canonical_bytes_of(capabilities)
+        let envelope_bytes = zp_core::canonical_bytes_of(envelope)
             .map_err(|e| MeshError::Serialization(e.to_string()))?;
 
         let combined_key = identity.combined_public_key();
-        let mut payload = Vec::with_capacity(64 + caps_json.len() + 64);
+        let mut payload = Vec::with_capacity(64 + envelope_bytes.len() + 64);
         payload.extend_from_slice(&combined_key);
-        payload.extend_from_slice(&caps_json);
+        payload.extend_from_slice(&envelope_bytes);
 
-        // Sign the payload (key + caps, not including the signature itself)
+        // Sign the payload (key + envelope, not including the signature itself)
         let signature = identity.sign(&payload);
         payload.extend_from_slice(&signature);
 
@@ -386,7 +422,7 @@ impl DiscoveryManager {
             .try_into()
             .map_err(|_| MeshError::InvalidPacket("Bad signature".into()))?;
 
-        let caps_json = &payload[64..sig_start];
+        let envelope_bytes = &payload[64..sig_start];
 
         // Verify Ed25519 signature
         let signing_key = &combined_key[..32];
@@ -394,12 +430,27 @@ impl DiscoveryManager {
             return Err(MeshError::SignatureVerificationFailed);
         }
 
-        // Parse capabilities
-        let capabilities: AgentCapabilities = serde_json::from_slice(caps_json)?;
+        // Parse the signed envelope (Seam 8 — replay protection lives here).
+        let envelope: SignedAnnounce = serde_json::from_slice(envelope_bytes)?;
+        let capabilities = envelope.capabilities.clone();
 
-        // Build PeerIdentity
+        // Build PeerIdentity (we need the destination hash to key the
+        // per-peer nonce cache before we accept the announce).
         let peer = PeerIdentity::from_combined_key(&combined_key, disc.hops)?;
         let dest_hash = peer.destination_hash;
+
+        // Replay protection (Seam 8):
+        //   1. Reject announces whose timestamp is outside ±REPLAY_WINDOW
+        //      from now. This bounds the nonce cache and rejects ancient
+        //      or future-dated payloads outright.
+        //   2. Reject announces whose nonce is already in this peer's
+        //      recently-seen-nonces queue. This catches replays inside
+        //      the time window where the timestamp check alone would
+        //      pass.
+        //   3. On accept, evict entries older than REPLAY_WINDOW from
+        //      this peer's queue, then push the new (nonce, announced_at).
+        self.check_and_record_announce(&dest_hash, disc.source, &envelope)
+            .await?;
 
         // Check for duplicate / update records
         let mut records = self.peer_records.write().await;
@@ -452,7 +503,9 @@ impl DiscoveryManager {
     ///
     /// Entries whose last_seen across ALL sources is older than `peer_ttl`
     /// are removed. This is the only "forgetting" the manager does — and it
-    /// happens by time, not by action.
+    /// happens by time, not by action. Also evicts stale entries from the
+    /// per-peer recently-seen-nonces cache (Seam 8) — anything older than
+    /// the replay window is unreachable for replay purposes anyway.
     pub async fn prune_expired(&self) -> usize {
         let now = Utc::now();
         let ttl_chrono = chrono::Duration::from_std(self.peer_ttl)
@@ -477,7 +530,86 @@ impl DiscoveryManager {
                 "Pruned expired peer records"
             );
         }
+
+        // Seam 8 — also evict stale nonce-cache entries. An entry older
+        // than REPLAY_WINDOW could not be replayed because the timestamp
+        // check would reject it on its own; keeping it serves no purpose.
+        let mut nonces = self.recent_nonces.write().await;
+        nonces.retain(|_key, queue| {
+            queue.retain(|(_n, ts)| now.signed_duration_since(*ts) < REPLAY_WINDOW);
+            !queue.is_empty()
+        });
+
         pruned
+    }
+
+    /// Replay-protection check (Seam 8).
+    ///
+    /// Validates that an announce envelope is fresh and unseen for the
+    /// given (peer, source) pair. Two checks:
+    ///
+    /// 1. `announced_at` must be within `±REPLAY_WINDOW` of `Utc::now()`.
+    ///    Rejects ancient or future-dated payloads outright.
+    /// 2. `nonce` must not appear in this `(peer, source)`'s
+    ///    recently-seen-nonces queue. Catches retransmission of the
+    ///    same announce on the same source within the window. The
+    ///    cache is scoped per-source so a peer's legitimate broadcast
+    ///    on multiple backends (web AND reticulum) is accepted on
+    ///    both — only re-arrival on the same source is treated as
+    ///    a replay.
+    ///
+    /// On accept, evicts entries older than the window from this
+    /// `(peer, source)`'s queue and records the new
+    /// `(nonce, announced_at)` pair.
+    ///
+    /// # Errors
+    ///
+    /// Returns `MeshError::AnnounceTimestampSkewed` if the timestamp
+    /// is outside the window, or `MeshError::AnnounceReplayDetected`
+    /// if the nonce has been seen on this source.
+    async fn check_and_record_announce(
+        &self,
+        dest_hash: &[u8; 16],
+        source: DiscoverySource,
+        envelope: &SignedAnnounce,
+    ) -> MeshResult<()> {
+        let now = Utc::now();
+        let skew = now.signed_duration_since(envelope.announced_at);
+
+        // Use absolute value of the skew so future-dated and ancient
+        // announces are both rejected.
+        let skew_abs = if skew < chrono::Duration::zero() {
+            -skew
+        } else {
+            skew
+        };
+        if skew_abs > REPLAY_WINDOW {
+            return Err(MeshError::AnnounceTimestampSkewed {
+                skew_secs: skew.num_seconds(),
+            });
+        }
+
+        let mut nonces = self.recent_nonces.write().await;
+        let queue = nonces
+            .entry((*dest_hash, source))
+            .or_insert_with(VecDeque::new);
+
+        // Evict stale entries first — keeps the contains check below
+        // bounded by the window's worth of announces.
+        while let Some((_n, ts)) = queue.front() {
+            if now.signed_duration_since(*ts) >= REPLAY_WINDOW {
+                queue.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        if queue.iter().any(|(n, _)| n == &envelope.nonce) {
+            return Err(MeshError::AnnounceReplayDetected);
+        }
+
+        queue.push_back((envelope.nonce.clone(), envelope.announced_at));
+        Ok(())
     }
 
     /// Get the count of known peers across all sources.
@@ -883,5 +1015,209 @@ mod tests {
         assert_eq!(manager.total_discoveries().await, 0);
         manager.poll_all().await;
         assert_eq!(manager.total_discoveries().await, 1);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Seam 8 — replay protection
+    // ─────────────────────────────────────────────────────────────
+
+    /// Helper: build an announce payload with a custom envelope so
+    /// tests can stamp a specific timestamp and nonce.
+    fn build_with_envelope(
+        identity: &MeshIdentity,
+        envelope: &SignedAnnounce,
+    ) -> Vec<u8> {
+        DiscoveryManager::build_announce_payload_with_envelope(identity, envelope).unwrap()
+    }
+
+    #[tokio::test]
+    async fn replay_rejected_when_same_nonce_repeats_on_same_source() {
+        let manager = DiscoveryManager::default();
+        let (peer_id, peer_caps) = make_test_identity_and_caps();
+        let envelope = SignedAnnounce::new(peer_caps);
+        let payload = build_with_envelope(&peer_id, &envelope);
+
+        let backend = MockBackend::new("web", DiscoverySource::Web);
+        // Inject the SAME payload twice on the SAME source.
+        for _ in 0..2 {
+            backend
+                .pending_discoveries
+                .write()
+                .await
+                .push(DiscoveredPeer {
+                    payload: payload.clone(),
+                    source: DiscoverySource::Web,
+                    discovered_at: Utc::now(),
+                    hops: 1,
+                });
+        }
+        manager.add_backend(Box::new(backend)).await;
+
+        let results = manager.poll_all().await;
+        // First arrival is accepted (new peer); second is rejected as
+        // a replay before reaching the dedup logic.
+        assert_eq!(
+            results.len(),
+            1,
+            "second arrival of same nonce on same source must be rejected"
+        );
+        assert!(results[0].is_new);
+    }
+
+    #[tokio::test]
+    async fn same_announce_on_two_sources_is_accepted_on_both() {
+        let manager = DiscoveryManager::default();
+        let (peer_id, peer_caps) = make_test_identity_and_caps();
+        let envelope = SignedAnnounce::new(peer_caps);
+        let payload = build_with_envelope(&peer_id, &envelope);
+
+        // Web sees the announce.
+        let web = MockBackend::new("web", DiscoverySource::Web);
+        web.pending_discoveries.write().await.push(DiscoveredPeer {
+            payload: payload.clone(),
+            source: DiscoverySource::Web,
+            discovered_at: Utc::now(),
+            hops: 2,
+        });
+        manager.add_backend(Box::new(web)).await;
+
+        // Reticulum sees the SAME announce (legitimate multi-backend
+        // delivery — peer broadcast on both transports).
+        let ret = MockBackend::new("ret", DiscoverySource::Reticulum);
+        ret.pending_discoveries.write().await.push(DiscoveredPeer {
+            payload: payload.clone(),
+            source: DiscoverySource::Reticulum,
+            discovered_at: Utc::now(),
+            hops: 1,
+        });
+        manager.add_backend(Box::new(ret)).await;
+
+        let results = manager.poll_all().await;
+        // Both arrivals are accepted — first registers as new, second
+        // updates source-tracking on the already-known peer.
+        assert_eq!(results.len(), 2);
+        let new_count = results.iter().filter(|r| r.is_new).count();
+        let dup_count = results.iter().filter(|r| !r.is_new).count();
+        assert_eq!(new_count, 1, "exactly one arrival should register as new");
+        assert_eq!(dup_count, 1, "the other should update an existing peer");
+
+        let records = manager.peer_records.read().await;
+        let dest_hash = PeerIdentity::from_combined_key(&peer_id.combined_public_key(), 1)
+            .unwrap()
+            .destination_hash;
+        let record = records.get(&dest_hash).unwrap();
+        assert!(record.sources.contains(&DiscoverySource::Web));
+        assert!(record.sources.contains(&DiscoverySource::Reticulum));
+    }
+
+    #[tokio::test]
+    async fn ancient_announce_rejected_outside_replay_window() {
+        let manager = DiscoveryManager::default();
+        let (peer_id, peer_caps) = make_test_identity_and_caps();
+
+        // Stamp the envelope with a timestamp 10 minutes in the past
+        // (well outside the 5-minute REPLAY_WINDOW).
+        let mut envelope = SignedAnnounce::new(peer_caps);
+        envelope.announced_at = Utc::now() - chrono::Duration::minutes(10);
+        let payload = build_with_envelope(&peer_id, &envelope);
+
+        let backend = MockBackend::new("web", DiscoverySource::Web);
+        backend
+            .pending_discoveries
+            .write()
+            .await
+            .push(DiscoveredPeer {
+                payload,
+                source: DiscoverySource::Web,
+                discovered_at: Utc::now(),
+                hops: 1,
+            });
+        manager.add_backend(Box::new(backend)).await;
+
+        let results = manager.poll_all().await;
+        assert_eq!(
+            results.len(),
+            0,
+            "ancient announce must be rejected on timestamp"
+        );
+        assert_eq!(manager.peer_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn future_dated_announce_rejected_outside_replay_window() {
+        let manager = DiscoveryManager::default();
+        let (peer_id, peer_caps) = make_test_identity_and_caps();
+
+        // Future-date the timestamp by 10 minutes — symmetric rejection
+        // catches misconfigured clocks AND adversarial forward-stamping
+        // designed to extend a captured announce's effective lifetime.
+        let mut envelope = SignedAnnounce::new(peer_caps);
+        envelope.announced_at = Utc::now() + chrono::Duration::minutes(10);
+        let payload = build_with_envelope(&peer_id, &envelope);
+
+        let backend = MockBackend::new("web", DiscoverySource::Web);
+        backend
+            .pending_discoveries
+            .write()
+            .await
+            .push(DiscoveredPeer {
+                payload,
+                source: DiscoverySource::Web,
+                discovered_at: Utc::now(),
+                hops: 1,
+            });
+        manager.add_backend(Box::new(backend)).await;
+
+        let results = manager.poll_all().await;
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn nonce_cache_evicts_stale_entries_on_prune() {
+        let manager = DiscoveryManager::default();
+        let (peer_id, peer_caps) = make_test_identity_and_caps();
+        let envelope = SignedAnnounce::new(peer_caps);
+        let payload = build_with_envelope(&peer_id, &envelope);
+
+        let backend = MockBackend::new("web", DiscoverySource::Web);
+        backend
+            .pending_discoveries
+            .write()
+            .await
+            .push(DiscoveredPeer {
+                payload,
+                source: DiscoverySource::Web,
+                discovered_at: Utc::now(),
+                hops: 1,
+            });
+        manager.add_backend(Box::new(backend)).await;
+
+        manager.poll_all().await;
+
+        // Cache should have one entry for this (peer, source).
+        {
+            let nonces = manager.recent_nonces.read().await;
+            assert_eq!(nonces.len(), 1);
+            let queue = nonces.values().next().unwrap();
+            assert_eq!(queue.len(), 1);
+        }
+
+        // Manually backdate the queued nonce so prune evicts it.
+        {
+            let mut nonces = manager.recent_nonces.write().await;
+            for queue in nonces.values_mut() {
+                for entry in queue.iter_mut() {
+                    entry.1 = Utc::now() - chrono::Duration::minutes(10);
+                }
+            }
+        }
+
+        manager.prune_expired().await;
+
+        let nonces = manager.recent_nonces.read().await;
+        assert!(
+            nonces.is_empty(),
+            "stale entries must be evicted; cache should empty out"
+        );
     }
 }
