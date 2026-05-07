@@ -712,14 +712,14 @@ function IntroPage({ onStart }) {
 
       <div style={{ textAlign: 'center', marginTop: '40px' }}>
         <button className="nav-btn primary" onClick={onStart} style={{ padding: '12px 32px', fontSize: '0.9rem' }}>
-          Begin Module 1 &rarr;
+          Begin Course &rarr;
         </button>
       </div>
     </div>
   );
 }
 
-function ModulePage({ module, completed, onComplete, onPrev, onNext, hasPrev, hasNext }) {
+function ModulePage({ module, displayNumber, totalModules, completed, onComplete, onPrev, onNext, hasPrev, hasNext }) {
   const [activeTab, setActiveTab] = useState('concept');
   const contentRef = useRef(null);
 
@@ -747,7 +747,7 @@ function ModulePage({ module, completed, onComplete, onPrev, onNext, hasPrev, ha
   return (
     <div className="content-wrapper" ref={contentRef}>
       <div className="module-header">
-        <div className="module-header-num">Module {module.id} of {courseData.modules.length}</div>
+        <div className="module-header-num">Module {displayNumber} of {totalModules}</div>
         <h1>{module.title}</h1>
       </div>
 
@@ -958,14 +958,18 @@ function App() {
 
           {courseData.modules.map((mod, idx) => {
             const isDone = completedModules.has(mod.id);
-            const isActive = currentModule === mod.id;
+            // `currentModule` is a 1-based step index (0 = IntroPage,
+            // 1 = first module). Match sidebar selection to the
+            // rendered step, not to mod.id (which is 0 for the first
+            // module and would collide with IntroPage).
+            const isActive = currentModule === idx + 1;
             return (
               <div
                 key={mod.id}
                 className={`module-item ${isActive ? 'active' : ''}`}
-                onClick={() => goTo(mod.id)}
+                onClick={() => goTo(idx + 1)}
               >
-                <div className="module-num">{String(mod.id).padStart(2, '0')}</div>
+                <div className="module-num">{String(idx + 1).padStart(2, '0')}</div>
                 <div className="module-info">
                   <div className="module-name">{mod.title}</div>
                 </div>
@@ -993,17 +997,22 @@ function App() {
       <div className="main" ref={mainRef}>
         {currentModule === 0 ? (
           <IntroPage onStart={() => goTo(1)} />
-        ) : (
-          <ModulePage
-            module={courseData.modules[currentModule - 1]}
-            completed={completedModules.has(currentModule)}
-            onComplete={handleComplete}
-            onPrev={() => goTo(currentModule - 1)}
-            onNext={() => goTo(currentModule + 1)}
-            hasPrev={currentModule > 0}
-            hasNext={currentModule < courseData.modules.length}
-          />
-        )}
+        ) : (() => {
+          const renderedModule = courseData.modules[currentModule - 1];
+          return (
+            <ModulePage
+              module={renderedModule}
+              displayNumber={currentModule}
+              totalModules={courseData.modules.length}
+              completed={completedModules.has(renderedModule.id)}
+              onComplete={handleComplete}
+              onPrev={() => goTo(currentModule - 1)}
+              onNext={() => goTo(currentModule + 1)}
+              hasPrev={currentModule > 0}
+              hasNext={currentModule < courseData.modules.length}
+            />
+          );
+        })()}
       </div>
 
       {/* ================================================================
