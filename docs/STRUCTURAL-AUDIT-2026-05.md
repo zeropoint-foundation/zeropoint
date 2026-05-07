@@ -160,12 +160,17 @@ Each seam below has six fields:
 
 ### Seam 10 — Public-page supply chain
 
-- **Intent.** Every external script the user's browser executes is exactly the bytes the developer signed off on.
-- **Carrier.** CI lint over `*.html`; either pin SRI hashes or self-host vendored copies.
-- **Status.** **Open**. CDN scripts (`cdnjs.cloudflare.com`) loaded with no `integrity=` on the public site (`zeropoint.global/*.html`). Private dashboard has the same problem to a smaller blast radius.
-- **Catalog rule.** Outside the substrate proper; this is the trust-of-the-shopfront layer.
-- **Wire.** CI script that scans HTML files and fails the build if any external `<script src="https://">` lacks `integrity` and `crossorigin`. Or self-host pinned copies.
-- **Blast radius.** `zeropoint.global/*.html`, `crates/zp-server/assets/*.html`, CI workflow.
+- **Intent.** Every external script and stylesheet the user's browser executes under `zeropoint.global` is exactly the bytes we deliberately pinned. The browser refuses anything else — even bytes that *parse the same* but differ from what we shipped.
+- **Carrier.** [`docs/SUPPLY-CHAIN-MANIFEST.md`] — singular record of `URL → SHA-384` pins, with the file:line locations referencing each + an update procedure. The HTML files reference the pinned URLs with matching `integrity="sha384-..."` and `crossorigin="anonymous"` attributes. Discipline pin `no_external_script_without_integrity` (in `crates/zp-discipline/tests/`) walks `zeropoint.global/**/*.html` and fails the build if any external `<script src="https://...">` or external `<link rel="stylesheet" href="https://...">` lacks `integrity=` and `crossorigin=`.
+- **Status.** **Closed (May 2026).**
+  - 13 external assets pinned across `course.html`, `course-sdk.html`, `footprint.html`, `lab/sim01.html` (React, ReactDOM, Babel-Standalone, Marked, Prism core + 4 language components + tomorrow theme, GSAP, Cesium core + widgets CSS).
+  - SHA-384 values were computed locally over the bytes returned by each pinned URL and cross-checked against cdnjs's published SHA-512 (via `https://api.cdnjs.com/libraries/.../<version>?fields=sri`) — the SHA-384 values are over the same canonical bytes the CDN serves today.
+  - **Exemptions** documented inline: Google Fonts CSS (`fonts.googleapis.com`, `fonts.gstatic.com`) — Google serves per-User-Agent CSS, so a single SRI hash isn't workable. Self-hosting the fonts costs more than the residual risk; we accept the trade-off and the discipline pin allowlists those hosts.
+  - **`<link rel="canonical|preconnect|preload">`** etc. don't load executable bytes; the pin only enforces SRI on `<script>` tags and `<link rel="stylesheet">` tags (plus `rel="preload" as="script|style"`).
+  - **Internal HTML** (`crates/zp-server/assets/`) loads no external scripts — the dashboard ships compiled-in via `include_str!()` and uses only same-origin `/static/*.js`. No SRI needed.
+- **Catalog rule.** Outside the substrate proper — this is the trust-of-the-shopfront layer. ZP's claim is that *trust is structural, not asserted*; pinning here makes the public site's claim true at the wire.
+- **Wire (closed).** Discipline pin scans HTML; manifest is the canonical record; update procedure is one curl + openssl invocation.
+- **Blast radius.** `zeropoint.global/{course,course-sdk,footprint}.html`, `zeropoint.global/lab/sim01.html`, `docs/SUPPLY-CHAIN-MANIFEST.md`, `crates/zp-discipline/tests/no_external_script_without_integrity.rs`.
 
 ### Seam 11 — Test/production identity isolation
 
