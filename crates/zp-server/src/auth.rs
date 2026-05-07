@@ -546,9 +546,15 @@ fn is_exempt(path: &str) -> bool {
             // Web-browser session cookies are the wrong primitive for fleet
             // node identity; Ed25519 keys are.
             | "/api/v1/lease/renew"
-            // Fleet heartbeat — fleet nodes register/refresh without session
-            // cookies. The heartbeat itself is low-privilege (presence only),
-            // and will gain Ed25519 authentication in the Rust Sentinel rewrite.
+            // Fleet heartbeat — fleet nodes register/refresh without
+            // session cookies (web-browser session cookies are the
+            // wrong primitive for fleet-node identity). Authenticates
+            // by Ed25519 signature in the handler against the
+            // registered public key (TOFU on first sight). See
+            // Seam 3 in docs/STRUCTURAL-AUDIT-2026-05.md and
+            // `fleet_heartbeat_handler` in `fleet.rs`. Bypassing
+            // session auth here is correct; the handler is the
+            // authoritative auth check.
             | "/api/v1/fleet/heartbeat"
     )
     // Prefix matches for static assets (served by ServeDir, but just in case)

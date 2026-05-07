@@ -53,3 +53,9 @@ default = []
 # When off, MeshBridge accepts unsigned inbound receipts as-is (legacy v0 behavior).
 # When on, CompactReceipt signatures are verified against a PeerKeyStore where keys are known.
 mesh-auth-v1 = []
+# Test-support helpers exposed to external test crates. Production
+# builds MUST NOT enable this feature — it unlocks `record_unverified`
+# on `NodeRegistry`, which bypasses the Seam 3 signature check. Inside
+# `zp-mesh` the helpers are available unconditionally to `cfg(test)`
+# so the crate's own test suite needs no opt-in.
+test-support = []

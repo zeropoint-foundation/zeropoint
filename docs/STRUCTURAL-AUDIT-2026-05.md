@@ -81,11 +81,19 @@ Each seam below has six fields:
 ### Seam 3 — Fleet/node identity authentication
 
 - **Intent.** No endpoint that mutates `state.node_registry` accepts an unauthenticated request. Identity is derived from a key, never asserted by the client.
-- **Carrier.** A new `fleet_sig_middleware` that verifies Ed25519 over `(node_id || policy_version || timestamp || nonce)` against a registered public key. Today there is no carrier.
-- **Status.** **Open**. `/api/v1/fleet/heartbeat` is on the auth-bypass list (`crates/zp-server/src/auth.rs`); the handler trusts client-supplied `node_id` and `trust_tier`.
+- **Carrier.** [`SignedHeartbeat`] envelope (in `crates/zp-mesh/src/node_registry.rs`) + [`NodeRegistry::verify_and_record`] which verifies the Ed25519 signature, applies TOFU on first sight, and enforces public-key-binding + monotonic-seq + timestamp-window on every subsequent heartbeat.
+- **Status.** **Closed (May 2026 — TOFU mode).**
+  - `FleetNode` gained `public_key`, `last_seq`, `last_signed_at` fields.
+  - `SignedHeartbeat` envelope wraps the unsigned `NodeHeartbeat` with `seq`, `signed_at`, `public_key`, and `signature` covering the canonical preimage.
+  - `NodeRegistry::verify_and_record` is the production-canonical entry point. The unsigned `record_unverified` is feature-gated to `cfg(any(test, feature = "test-support"))`.
+  - `fleet_heartbeat_handler` takes `Json<SignedHeartbeat>`; verification failures map to 401 (auth) / 400 (encoding) / 500 (server) with structured error bodies.
+  - `/api/v1/fleet/heartbeat` stays on the session-auth bypass list because session cookies are the wrong primitive for fleet-node identity; the handler is now the authoritative auth check.
+  - 9 new tests cover TOFU registration, monotonic accept, squat rejection (`PublicKeyMismatch`), tampered-signature rejection, ancient + future timestamp rejection, sequence regression, and malformed key/signature encoding.
 - **Catalog rule.** M1 (gate coverage extends to network-facing surfaces).
-- **Wire.** `fleet_sig_middleware` middleware that verifies a sigblock and binds `node_id` to the verifying key as a middleware extension. Handlers read `node_id` from the extension, never from the JSON body. Read endpoints stay session-authed or public; mutating endpoints require the middleware.
-- **Blast radius.** `zp-server/src/auth.rs` (is_exempt), `zp-server/src/fleet.rs` (handlers), `zp-mesh/src/discovery.rs` (signed-payload schema if shared), `zp-cli` (whatever issues node heartbeats).
+- **Wire.** `Json<SignedHeartbeat>` is the wire shape; type-system enforcement keeps handlers from reading `node_id` from a body in any other shape. The discipline-pin framework does not need a regex pin here — the typed envelope is the invariant. Read endpoints stay session-authed or public; the heartbeat (the only fleet-state-mutating endpoint without operator session auth) requires the verified envelope.
+- **Blast radius.** `zp-mesh/src/node_registry.rs` (struct + verifier + tests), `zp-server/src/fleet.rs` (handler), `zp-server/src/auth.rs` (comment update on the bypass entry).
+- **Future strengthening.** TOFU has a race window (an attacker who heartbeats a `node_id` before the legitimate node binds the squatter's key). The `MembershipStatus::Attested { receipt_id }` enum already exists for the operator-attested upgrade path: a `FleetMembershipGranted` receipt that names `(node_id, public_key)` ahead of the first heartbeat eliminates the race. That ceremony is not yet built; it is the natural follow-up to this closure.
+- **Also open as follow-up.** `/api/v1/fleet/policy/rollouts/:id/ack` takes `node_id` from a JSON body and is currently session-authed. Fleet nodes don't have sessions, so either (a) the endpoint moves to the same `SignedHeartbeat`-style envelope, or (b) operators ack on behalf of nodes. Decide and close with the same wire shape.
 
 ### Seam 4 — Receipt generation authority
 

@@ -11,28 +11,73 @@ use serde_json::Value;
 use serde::Deserialize;
 
 use crate::AppState;
-use zp_mesh::NodeHeartbeat;
+use zp_mesh::node_registry::{HeartbeatError, SignedHeartbeat};
 
-/// POST /api/v1/fleet/heartbeat — register or refresh a node.
+/// POST /api/v1/fleet/heartbeat — register or refresh a node (Seam 3).
+///
+/// The endpoint is exempt from session-cookie auth (see
+/// `auth.rs::is_exempt`) because session cookies are the wrong
+/// primitive for fleet-node identity — fleet nodes don't have a
+/// browser. Authentication happens here, in the handler, via Ed25519
+/// signature verification:
+///
+/// - The body is a [`SignedHeartbeat`] envelope wrapping the
+///   underlying `NodeHeartbeat` payload with a monotonic `seq`,
+///   a `signed_at` timestamp, the node's `public_key`, and a
+///   signature over the canonical preimage.
+/// - Verification, TOFU registration, replay rejection, and
+///   public-key-binding enforcement all live inside
+///   `NodeRegistry::verify_and_record`.
+/// - On verification failure, the handler returns 401 (or 400 for
+///   malformed encoding) and the registry state is unchanged. No
+///   partial-effect side channels.
 pub async fn fleet_heartbeat_handler(
     State(state): State<AppState>,
-    Json(heartbeat): Json<NodeHeartbeat>,
+    Json(signed): Json<SignedHeartbeat>,
 ) -> (StatusCode, Json<Value>) {
-    let node_id = heartbeat.node_id.clone();
-    state.0.node_registry.heartbeat(heartbeat).await;
+    let node_id = signed.heartbeat.node_id.clone();
 
-    // Broadcast heartbeat as SSE event
-    let item = crate::events::EventStreamItem::system(
-        "node_heartbeat",
-        format!("heartbeat from {}", node_id),
-    );
-    crate::events::broadcast_event(&state.0.event_tx, item);
+    match state.0.node_registry.verify_and_record(signed).await {
+        Ok(()) => {
+            // Broadcast heartbeat as SSE event (post-verification only).
+            let item = crate::events::EventStreamItem::system(
+                "node_heartbeat",
+                format!("heartbeat from {}", node_id),
+            );
+            crate::events::broadcast_event(&state.0.event_tx, item);
 
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "ok",
+                    "node_id": node_id,
+                })),
+            )
+        }
+        Err(err) => heartbeat_error_response(err, &node_id),
+    }
+}
+
+/// Map a [`HeartbeatError`] to the appropriate HTTP status + JSON
+/// body. Authentication failures are 401; encoding failures are 400;
+/// internal serialization bugs are 500.
+fn heartbeat_error_response(err: HeartbeatError, node_id: &str) -> (StatusCode, Json<Value>) {
+    let status = match &err {
+        HeartbeatError::TimestampSkewed { .. }
+        | HeartbeatError::SequenceRegression { .. }
+        | HeartbeatError::PublicKeyMismatch
+        | HeartbeatError::SignatureMismatch => StatusCode::UNAUTHORIZED,
+        HeartbeatError::InvalidPublicKey | HeartbeatError::InvalidSignature => {
+            StatusCode::BAD_REQUEST
+        }
+        HeartbeatError::SerializationFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
     (
-        StatusCode::OK,
+        status,
         Json(serde_json::json!({
-            "status": "ok",
+            "status": "error",
             "node_id": node_id,
+            "error": err.to_string(),
         })),
     )
 }

@@ -288,8 +288,8 @@ mod tests {
     #[tokio::test]
     async fn push_delivers_to_online_nodes() {
         let registry = NodeRegistry::new();
-        registry.heartbeat(test_hb("n1")).await;
-        registry.heartbeat(test_hb("n2")).await;
+        registry.record_unverified(test_hb("n1")).await;
+        registry.record_unverified(test_hb("n2")).await;
 
         let dist = PolicyDistributor::new(registry);
         let id = dist
@@ -308,8 +308,8 @@ mod tests {
         // Use a stale timeout that won't trigger during the test for fresh nodes,
         // but will for nodes we manually mark offline.
         let registry = NodeRegistry::new();
-        registry.heartbeat(test_hb("n1")).await;
-        registry.heartbeat(test_hb("n2")).await;
+        registry.record_unverified(test_hb("n1")).await;
+        registry.record_unverified(test_hb("n2")).await;
 
         let dist = PolicyDistributor::new(registry.clone());
 
@@ -342,7 +342,7 @@ mod tests {
     #[tokio::test]
     async fn acknowledge_updates_delivery() {
         let registry = NodeRegistry::new();
-        registry.heartbeat(test_hb("n1")).await;
+        registry.record_unverified(test_hb("n1")).await;
 
         let dist = PolicyDistributor::new(registry);
         let id = dist
@@ -360,7 +360,7 @@ mod tests {
     #[tokio::test]
     async fn mark_failed_records_error() {
         let registry = NodeRegistry::new();
-        registry.heartbeat(test_hb("n1")).await;
+        registry.record_unverified(test_hb("n1")).await;
 
         let dist = PolicyDistributor::new(registry);
         let id = dist
