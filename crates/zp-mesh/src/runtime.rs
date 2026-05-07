@@ -119,20 +119,14 @@ pub struct MeshRuntime {
     inbound_rx: Option<mpsc::Receiver<InboundEnvelope>>,
     /// Runtime stats (shared with the background task).
     stats: Arc<tokio::sync::RwLock<RuntimeStats>>,
-    /// Per-peer recently-seen-nonces cache for replay protection on
-    /// the direct-mesh-announce path (Seam 8). Keyed by destination
-    /// hash; values are FIFO queues of `(nonce, announced_at)` pairs
-    /// pruned by `REPLAY_WINDOW`. Single-source — no source
-    /// dimension — because the runtime processes direct-mesh
-    /// announces from one delivery layer.
-    recent_nonces: Arc<
-        tokio::sync::RwLock<
-            std::collections::HashMap<
-                [u8; 16],
-                std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>,
-            >,
-        >,
-    >,
+    // Note: the per-peer replay-nonce cache (Seam 8 — runtime path)
+    // lives entirely inside the spawned task. The task gets the only
+    // `Arc<RwLock<...>>` it needs at start time; nothing on the
+    // outside ever reads it. Storing it on the struct as well would
+    // be duplication for no observability gain (and Rust would warn
+    // it dead). If a future surface needs cache-shape introspection,
+    // expose a `cache_size()` method that returns a bare `usize`
+    // rather than re-exposing the inner type.
 }
 
 impl MeshRuntime {
@@ -144,10 +138,12 @@ impl MeshRuntime {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let (inbound_tx, inbound_rx) = mpsc::channel(config.inbound_channel_capacity);
         let stats = Arc::new(tokio::sync::RwLock::new(RuntimeStats::default()));
-        let recent_nonces = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
+        // Per-peer replay-nonce cache for Seam 8 (runtime path). Owned
+        // entirely by the spawned task — see the comment on the
+        // struct definition for why we don't retain a copy here.
+        let task_nonces = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
         let task_stats = stats.clone();
-        let task_nonces = recent_nonces.clone();
         let task = tokio::spawn(async move {
             run_event_loop(node, config, shutdown_rx, inbound_tx, task_stats, task_nonces).await;
         });
@@ -159,7 +155,6 @@ impl MeshRuntime {
             shutdown_tx,
             inbound_rx: Some(inbound_rx),
             stats,
-            recent_nonces,
         }
     }
 
