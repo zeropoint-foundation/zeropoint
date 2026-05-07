@@ -557,22 +557,14 @@ fn detect_auth_var(tool_path: &Path) -> String {
 
 /// Build a shell preamble that sources env files in priority order.
 ///
-/// Layering (last write wins):
-///   1. `.env.example`  — project defaults (DATABASE_URL, etc.)
-///   2. `.env`          — operator overrides
-///   3. `.env.zp`       — ZP port assignment + auth token (always wins)
-///
-/// Each file is optional — a missing `.env` must not prevent `.env.zp`
-/// from being sourced. We use semicolons between file blocks so each
-/// `[ -f X ] && . ./X` is an independent statement whose exit code
-/// doesn't short-circuit the rest of the preamble.
-///
-/// `set -a` exports all variables so child processes inherit them.
-/// Vault-injected env vars are set directly on the Command and always
-/// override everything (they bypass the shell entirely).
-pub fn env_zp_preamble() -> &'static str {
-    "set -a; [ -f .env.example ] && . ./.env.example; [ -f .env ] && . ./.env; [ -f .env.zp ] && . ./.env.zp; set +a && "
-}
+// `env_zp_preamble` was the shell-sourced preamble for the historical
+// `Command::new("sh").arg("-c")` launch flow. It built a string like
+// `set -a; [ -f .env.example ] && . ./.env.example; ...` that was
+// prepended to the start command. Removed in Seam 9a (May 2026):
+// argv-form launch parses `.env` files in Rust via
+// `crate::tool_launch::load_dotenv_layered`, which has clearer
+// priority semantics and no shell-injection surface. See
+// `docs/STRUCTURAL-AUDIT-2026-05.md` Seam 9 for the full rationale.
 
 // ── Port variable detection ────────────────────────────────────────────
 
@@ -638,29 +630,10 @@ pub fn detect_all_port_vars(tool_path: &Path) -> Vec<String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn preamble_uses_semicolons_not_and_chains() {
-        let preamble = env_zp_preamble();
-        // Each file block should be separated by semicolons so missing
-        // files don't short-circuit the chain.
-        assert!(
-            preamble.contains("; [ -f .env ] && . ./.env;"),
-            "Preamble should use semicolons between file blocks, got: {}",
-            preamble,
-        );
-        // .env.zp must always be sourced last (highest priority)
-        assert!(
-            preamble.contains("; [ -f .env.zp ] && . ./.env.zp;"),
-            "Preamble should source .env.zp with semicolons, got: {}",
-            preamble,
-        );
-        // Must NOT contain the fragile `&& [ -f .env ]` pattern
-        assert!(
-            !preamble.contains("&& [ -f .env ]"),
-            "Preamble must not chain file tests with &&, got: {}",
-            preamble,
-        );
-    }
+    // `preamble_uses_semicolons_not_and_chains` removed in Seam 9a —
+    // the shell preamble it tested is gone. See
+    // `crate::tool_launch::tests::load_dotenv_layered_priority` for
+    // the equivalent test of the new in-Rust .env layering.
 
     #[test]
     fn proxy_target_prefers_proxy_port() {

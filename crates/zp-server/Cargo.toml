@@ -64,3 +64,13 @@ base64 = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+# zp-audit's `test-support` feature exposes `AuditStore::open_unsigned`
+# (and `AuditSigner::generate`) so test fixtures can populate audit
+# stores without a sovereignty unlock. The same crate is in
+# `[dependencies]` without features for production builds — Cargo
+# merges feature sets across [dependencies] and [dev-dependencies],
+# so `cargo test` gets the test-only constructors while
+# `cargo build` does not. The `dev-tools` feature gate above already
+# pulls this in for the dev-tools binary; this entry adds the same
+# capability to the test build paths.
+zp-audit = { path = "../zp-audit", features = ["test-support"] }

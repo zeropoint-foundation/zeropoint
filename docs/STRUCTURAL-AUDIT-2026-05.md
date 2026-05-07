@@ -141,11 +141,18 @@ Each seam below has six fields:
 ### Seam 9 — Tool launch + token plumbing
 
 - **Intent.** Tools run argv-form (no shell interpretation). Tokens flow through headers or postMessage handshake, never URL.
-- **Carrier.** A `ToolSpec { argv: Vec<String>, env: HashMap<String, String> }` type for launch; a postMessage handshake from parent dashboard to tool iframe for token plumbing.
-- **Status.** **Open**. `Command::new("sh").arg("-c")` with auto-detected start commands. `auth_token` written to `window.location.search` via history.replaceState (leaks via referrer, devtools, browser history sync).
+- **Carrier.** [`ToolSpec`] (in `crates/zp-server/src/tool_launch.rs`) for argv-form launch + [`load_dotenv_layered`] for in-Rust `.env` parsing; a postMessage handshake from parent dashboard to tool iframe for token plumbing (Seam 9b — pending).
+- **Status.** **Closed for argv-form (Seam 9a, May 2026); open for token plumbing (Seam 9b).**
+  - `crates/zp-server/src/tool_launch.rs` defines `ToolSpec { argv, env, cwd, log_path }` with a `from_start_cmd` constructor that refuses any input containing shell metacharacters (`;`, `&&`, `||`, `|`, `$(`, `` ` ``, `>`, `<`, `\n`).
+  - `load_dotenv_layered` parses `.env.example` → `.env` → `.env.zp` in priority order — replaces the historical shell preamble (`set -a; . file; set +a`) with deterministic Rust-side env merging.
+  - The cockpit launch handler in `lib.rs` builds a `ToolSpec`, opens the log file in Rust (`Stdio::from(File)` replaces `> 'log' 2>&1`), and spawns argv-form via `Command::new(&spec.argv[0]).args(&spec.argv[1..]).envs(&spec.env)`.
+  - Discipline pin `no_sh_c_in_tool_launch` (in `crates/zp-discipline/tests/`) forbids `Command::new("sh"|"bash")` and `.arg("-c")` patterns under `crates/zp-server/src/`. Future drift to shell-interpreted launch fails the build.
+  - 16 new tests cover ToolSpec construction (simple, quoted, relative paths), every shell-metacharacter rejection (`;`, `&&`, `||`, `|`, `$(`, `` ` ``, `>`), unbalanced-quote rejection, env layering, and dotenv parsing edge cases (quotes, comments, `$VAR` non-expansion).
 - **Catalog rule.** M1 (gate coverage on side effects), M6 (sovereignty leakage).
-- **Wire.** Replace string-form launch specs with `ToolSpec`. Replace URL-token injection with parent-frame `postMessage("zp.token", token)`. Lint or `forbid` `sh -c` patterns under `crates/zp-server/src/tool_*`.
-- **Blast radius.** `zp-server/src/{tool_proxy,tool_chain,lib}.rs`, dashboard JS (the iframe parent), every tool that reads token from URL.
+- **Wire (closed).** Replace string-form launch specs with [`ToolSpec`]. Lint forbids `sh -c` under `crates/zp-server/src/`.
+- **Wire (pending — Seam 9b).** Replace URL-token injection (`window.location.search` via `history.replaceState`) with parent-frame `postMessage("zp.token", token)` handshake. Touches dashboard JS in `zeropoint.global/` plus a small Rust change to stop emitting tokens in URL. Deferred to a session with dashboard JS focus.
+- **Blast radius (closed).** `zp-server/src/{lib,tool_launch,tool_ports}.rs`. The handler refactor changes env-priority semantics: the historical flow had shell-sourced `.env` files override `cmd.env(...)` due to how `set -a; . file` interacts with the inherited environment. The new flow has unambiguous priority — `.env` files are lowest, vault env > deep-scan corrections > ZP-managed port vars in increasing priority. Tools that depended on shell-side `$VAR`/`$(cmd)` expansion in `.env` files will see literal values now; those expansions were always footgun-shaped (parent-shell context).
+- **Blast radius (pending).** Dashboard JS, every tool that reads token from URL.
 
 ### Seam 10 — Public-page supply chain
 

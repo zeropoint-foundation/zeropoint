@@ -22,6 +22,7 @@ pub mod onboard;
 pub mod proxy;
 pub mod security;
 pub mod tool_chain;
+pub mod tool_launch;
 pub mod tool_ports;
 pub mod tool_proxy;
 pub mod tool_state;
@@ -4254,12 +4255,6 @@ async fn tools_launch_handler(
     std::fs::create_dir_all(&log_dir).ok();
     let log_path = log_dir.join(format!("{}.log", req.name));
 
-    // Prepend .env.zp sourcing so the tool picks up ZP-assigned port
-    let full_cmd = format!("{}{}", tool_ports::env_zp_preamble(), start_cmd);
-
-    // Wrap the command so stdout+stderr go to the log file
-    let logged_cmd = format!("{{ {} ; }} > '{}' 2>&1", full_cmd, log_path.display());
-
     // ── Stop-before-start ──────────────────────────────────────────
     // If the tool is already running, kill it cleanly before relaunching.
     let mut restarted = false;
@@ -4285,16 +4280,58 @@ async fn tools_launch_handler(
     }
 
     info!(
-        "Cockpit launch: {} → {} (port :{})",
-        req.name, full_cmd, assignment.port
+        "Cockpit launch: {} → {:?} (port :{})",
+        req.name, start_cmd, assignment.port
     );
-    // ── Vault env injection ─────────────────────────────────────────
-    // If the vault has tool config for this tool, inject all resolved
-    // env vars directly into the process. This is the vault-backed
-    // alternative to .env files — secrets never touch the filesystem.
-    let mut vault_env: Vec<(String, String)> = Vec::new();
+
+    // ── Build ToolSpec (Seam 9a — argv-form launch) ────────────────
+    // Replaces the historical Command::new("sh").arg("-c") flow.
+    // start_cmd flows from project-config files (package.json
+    // scripts.start, docker-compose service commands, detected
+    // start.sh) which are not ZP-controlled. The ToolSpec
+    // constructor refuses any start_cmd containing shell
+    // metacharacters that imply multi-command flow — multi-step
+    // launches must move into a single launcher script.
+    let mut spec = match tool_launch::ToolSpec::from_start_cmd(
+        &start_cmd,
+        tool_path.clone(),
+        log_path.clone(),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": format!("Tool launch refused: {}", e),
+                    "hint": "ZP launches tools in argv-form (no `sh -c`). \
+                             Multi-step sequences (`npm install && npm start`) \
+                             must move into a single launcher script.",
+                    "tool": req.name,
+                    "start_cmd": start_cmd,
+                })),
+            );
+        }
+    };
+
+    // ── Layer environment variables (lowest → highest priority) ────
+    //
+    //   1. .env.example  →  .env  →  .env.zp     (later overrides earlier)
+    //   2. Vault-resolved env (secrets, never on disk)
+    //   3. Deep-scan corrections (auto-fixes for misconfigurations)
+    //   4. ZP-managed port assignments
+    //   5. ZP_MANAGED flag
+    //
+    // Note: the previous flow relied on a shell preamble (`set -a;
+    // . .env.example; . .env; . .env.zp`) that was sourced AFTER
+    // cmd.env(...) was set, so file values silently overrode
+    // cmd.env() for matching keys — contrary to the inline comment
+    // claim that "cmd.env() cannot be overridden." The new flow has
+    // unambiguous priority: explicit env (vault, deep-scan, ZP) wins.
+    spec.extend_env(tool_launch::load_dotenv_layered(&tool_path));
+
     if let Some(resolved_key) = state.0.vault_key.get().and_then(|k| k.as_ref()) {
-        let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+        let vault_path = zp_paths::vault_path()
+            .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
         if let Ok(vault) =
             zp_trust::CredentialVault::load_or_create(&resolved_key.key, &vault_path)
         {
@@ -4307,7 +4344,7 @@ async fn tools_launch_handler(
                     );
                     for (var, value) in &env_map {
                         if let Ok(s) = std::str::from_utf8(value) {
-                            vault_env.push((var.clone(), s.to_string()));
+                            spec.set_env(var.clone(), s.to_string());
                         }
                     }
                 }
@@ -4325,41 +4362,8 @@ async fn tools_launch_handler(
         }
     }
 
-    // Create the child in its own process group (PGID = child PID).
-    // This isolates the tool from the ZP server's process group so that
-    // killing the tool never accidentally kills the server.
-    #[cfg(unix)]
-    use std::os::unix::process::CommandExt;
-
-    let mut cmd = std::process::Command::new("sh");
-    cmd.arg("-c")
-        .arg(&logged_cmd)
-        .current_dir(&tool_path)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .process_group(0); // new process group, isolated from ZP server
-
-    // Inject vault-resolved env vars into the process
-    for (key, value) in &vault_env {
-        cmd.env(key, value);
-    }
-
-    // Inject ZP port assignment directly into the process env.
-    // This is the nuclear option — cmd.env() overrides even dotenvy/dotenv
-    // crates that load .env files at runtime.  The shell preamble handles
-    // most tools, but Rust tools that call dotenvy::overload() can clobber
-    // shell env vars.  cmd.env() is inherited and cannot be overridden.
-    cmd.env(&assignment.port_var, assignment.port.to_string());
-    // Inject all extra port assignments (e.g. GATEWAY_PORT alongside HTTP_PORT)
-    for (var, port) in &assignment.extra_ports {
-        cmd.env(var, port.to_string());
-    }
-    // Signal to the tool that ZP is managing it
-    cmd.env("ZP_MANAGED", "1");
-
-    // Deep scan: cross-reference docker-compose, .env.example, and Cargo.toml
-    // to detect and auto-correct misconfigurations before launch.
+    // Deep scan: cross-reference docker-compose, .env.example, and
+    // Cargo.toml to detect and auto-correct misconfigurations.
     let scan_result = onboard::deep_scan::analyze_tool(&req.name, &tool_path);
     if !scan_result.corrected_env.is_empty() {
         tracing::info!(
@@ -4371,54 +4375,54 @@ async fn tools_launch_handler(
     for finding in scan_result.warnings() {
         tracing::warn!("Deep scan [{}]: {}", req.name, finding.message);
     }
+    spec.extend_env(scan_result.corrected_env.clone());
 
-    // Source .env.example defaults into the process env so tools get
-    // baseline config (DATABASE_URL, etc.) even without a .env file.
-    // We parse .env.example and inject any vars NOT already set by vault.
-    // Deep scan corrections take priority over raw .env.example values.
-    let env_example = tool_path.join(".env.example");
-    if env_example.exists() {
-        if let Ok(contents) = std::fs::read_to_string(&env_example) {
-            let vault_keys: std::collections::HashSet<&str> =
-                vault_env.iter().map(|(k, _)| k.as_str()).collect();
-            for line in contents.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with('#') || trimmed.is_empty() || !trimmed.contains('=') {
-                    continue;
-                }
-                if let Some((key, val)) = trimmed.split_once('=') {
-                    let key = key.trim();
-                    let val = val.trim().trim_matches('"').trim_matches('\'');
-                    // Don't override vault-injected vars or any ZP-managed port var
-                    let is_zp_port = key == assignment.port_var
-                        || assignment.extra_ports.contains_key(key);
-                    if !vault_keys.contains(key) && !is_zp_port {
-                        // Use deep scan correction if available, else raw value
-                        let effective_val = scan_result
-                            .corrected_env
-                            .get(key)
-                            .map(|s| s.as_str())
-                            .unwrap_or(val);
-                        cmd.env(key, effective_val);
-                    }
-                }
-            }
-        }
+    // ZP-managed port assignments — highest priority among env keys.
+    spec.set_env(assignment.port_var.clone(), assignment.port.to_string());
+    for (var, port) in &assignment.extra_ports {
+        spec.set_env(var.clone(), port.to_string());
     }
+    spec.set_env("ZP_MANAGED", "1");
 
-    // Inject any deep scan corrections for vars NOT in .env.example
-    // (e.g. synthesized DATABASE_URL when none was declared)
-    {
-        let vault_keys: std::collections::HashSet<&str> =
-            vault_env.iter().map(|(k, _)| k.as_str()).collect();
-        for (key, val) in &scan_result.corrected_env {
-            let is_zp_port = key == &assignment.port_var
-                || assignment.extra_ports.contains_key(key.as_str());
-            if !vault_keys.contains(key.as_str()) && !is_zp_port {
-                cmd.env(key, val);
-            }
+    // ── Open the log file in Rust (replaces shell `> 'log' 2>&1`) ──
+    let log_file = match std::fs::File::create(&spec.log_path) {
+        Ok(f) => f,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to open log file: {}", e),
+                    "log_path": spec.log_path.display().to_string(),
+                })),
+            );
         }
-    }
+    };
+    let log_for_stderr = match log_file.try_clone() {
+        Ok(f) => f,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to clone log file handle: {}", e),
+                })),
+            );
+        }
+    };
+
+    // ── Spawn argv-form (Seam 9a) ──────────────────────────────────
+    // The child runs in its own process group so killing the tool
+    // never reaches the ZP server's process group.
+    #[cfg(unix)]
+    use std::os::unix::process::CommandExt;
+
+    let mut cmd = std::process::Command::new(&spec.argv[0]);
+    cmd.args(&spec.argv[1..])
+        .current_dir(&spec.cwd)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::from(log_file))
+        .stderr(std::process::Stdio::from(log_for_stderr))
+        .process_group(0)
+        .envs(&spec.env);
 
     let spawn_result = cmd.spawn();
 
@@ -4433,7 +4437,7 @@ async fn tools_launch_handler(
 
             // Emit launched receipt into the chain
             let event = tool_chain::ToolEvent::launched(&req.name);
-            let launch_detail = format!("cmd={} port={}", full_cmd, assignment.port);
+            let launch_detail = format!("cmd={} port={}", start_cmd, assignment.port);
             tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&launch_detail));
 
             // ── Capability Verification (Tier 1 + Tier 2) ──────────
@@ -4490,7 +4494,7 @@ async fn tools_launch_handler(
                 Json(serde_json::to_value(ToolLaunchResponse {
                     status: if restarted { "restarting" } else { "starting" }.to_string(),
                     name: req.name.clone(),
-                    cmd: full_cmd.clone(),
+                    cmd: start_cmd.clone(),
                     url: proxy_url,
                     raw_url,
                     port: assignment.port,
