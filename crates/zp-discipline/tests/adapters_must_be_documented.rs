@@ -92,25 +92,14 @@ const EXEMPT_PATH_FRAGMENTS: &[&str] = &["/mod.rs", "/lib.rs", "/tests/", "/benc
 /// **Adding a new entry is a code smell.** New adapters must be documented
 /// from the start. This list captures the legacy gap, not the steady state.
 ///
-/// Tracked as cleanup work; the discipline is forward-looking until the
-/// list is empty.
-const KNOWN_UNDOCUMENTED_ADAPTERS: &[&str] = &[
-    // zp-keys sovereignty providers — informational `//` headers exist;
-    // need conversion to `//!` doc-comment form.
-    "crates/zp-keys/src/sovereignty/face.rs",
-    "crates/zp-keys/src/sovereignty/file_based.rs",
-    "crates/zp-keys/src/sovereignty/fingerprint.rs",
-    "crates/zp-keys/src/sovereignty/login_password.rs",
-    "crates/zp-keys/src/sovereignty/touchid.rs",
-    "crates/zp-keys/src/sovereignty/windows_hello.rs",
-    "crates/zp-keys/src/sovereignty/hardware/ledger.rs",
-    "crates/zp-keys/src/sovereignty/hardware/onlykey.rs",
-    "crates/zp-keys/src/sovereignty/hardware/trezor.rs",
-    "crates/zp-keys/src/sovereignty/hardware/yubikey.rs",
-    // zp-mesh transport / discovery adapters — same shape.
-    "crates/zp-mesh/src/tcp.rs",
-    "crates/zp-mesh/src/web_discovery.rs",
-];
+/// **As of May 8 2026 (task 57): empty.** All 12 pre-discipline adapters
+/// were swept in a single commit; every adapter implementation in the
+/// codebase now carries a `//!` module doc comment naming the port it
+/// adapts. The list is preserved (rather than removed entirely) so that
+/// any future adapter that for some reason cannot be documented from
+/// the start has a sanctioned path to landing without disabling the
+/// discipline globally.
+const KNOWN_UNDOCUMENTED_ADAPTERS: &[&str] = &[];
 
 #[test]
 fn adapters_must_carry_documentation() {
@@ -141,10 +130,19 @@ fn adapters_must_carry_documentation() {
         .collect();
 
     // The fuzzy documentation marker. A module doc comment line
-    // (`//! ...`) containing any of these words satisfies the
-    // requirement.
+    // (`//! ...`) containing any of these word *stems* satisfies the
+    // requirement. Case-insensitive, and matches conjugations:
+    //   - "adapter", "Adapter", "adapters", "Adapters"
+    //   - "implement", "implements", "implementing", "implementation"
+    //   - "provider", "Provider", "providers"
+    //   - "backend", "Backend", "backends"
+    //
+    // No trailing `\b` — by anchoring at word start only, common
+    // suffix forms (-s, -ing, -ation, -ers) all match. This is the
+    // forgiveness layer: authors should write naturally, not contort
+    // their prose to match a regex.
     let doc_marker = Regex::new(
-        r"(?m)^//!.*\b(adapter|adapts|implements|provider|backend|implementation)\b",
+        r"(?im)^//!.*\b(adapter|implement|provider|backend)",
     )
     .unwrap();
 

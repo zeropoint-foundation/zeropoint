@@ -1,13 +1,15 @@
-// crates/zp-keys/src/sovereignty/hardware/onlykey.rs
-//
-// OnlyKey hardware token sovereignty provider.
-//
-// Uses OnlyKey's challenge-response (HMACSHA1 in a configured slot)
-// to derive a wrapping key. The Genesis secret is encrypted with this
-// key and stored locally.
-//
-// Dependencies: feature-gated behind `hw-onlykey`
-// - `hidapi` for raw USB HID communication
+//! OnlyKey hardware token sovereignty provider.
+//!
+//! Adapter implementing `SovereigntyProvider` for OnlyKey devices, serving
+//! operators with OnlyKey hardware who want physical-presence-attested
+//! unlock of their Genesis secret.
+//!
+//! Uses OnlyKey's challenge-response (HMACSHA1 in a configured slot)
+//! to derive a wrapping key. The Genesis secret is encrypted with this
+//! key and stored locally.
+//!
+//! Dependencies: feature-gated behind `hw-onlykey`
+//! - `hidapi` for raw USB HID communication
 
 use super::super::{EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;

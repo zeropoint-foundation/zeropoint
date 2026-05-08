@@ -1,5 +1,10 @@
 //! Web discovery — privacy-preserving pub/sub relay over WebSocket.
 //!
+//! Adapter implementing `DiscoveryBackend` for online operators, serving
+//! ZeroPoint agents that need internet-reachable peer discovery without
+//! a Reticulum mesh. The relay backend is intentionally minimal — see
+//! the privacy architecture section below.
+//!
 //! ## Privacy Architecture
 //!
 //! The web relay is a **dumb pipe**. It receives announce blobs from connected

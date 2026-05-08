@@ -1,10 +1,11 @@
-// crates/zp-keys/src/sovereignty/login_password.rs
-//
-// Login password sovereignty provider — OS credential store with default access.
-//
-// This is the solid default. The Genesis secret is stored in the platform's
-// credential store (macOS Keychain, Linux Secret Service, Windows Credential
-// Manager) with the user's login password as the gate.
+//! Login password sovereignty provider — OS credential store with default access.
+//!
+//! Adapter implementing `SovereigntyProvider` via the platform's native
+//! credential store. The solid default — serves operators who don't want
+//! biometric or hardware-token providers but do want their Genesis secret
+//! gated by login credentials. The secret is stored in macOS Keychain,
+//! Linux Secret Service, or Windows Credential Manager with the user's
+//! login password as the gate.
 
 use super::{ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;

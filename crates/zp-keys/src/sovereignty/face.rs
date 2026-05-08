@@ -1,28 +1,30 @@
-// crates/zp-keys/src/sovereignty/face.rs
-//
-// Cross-platform face enrollment sovereignty provider.
-//
-// Uses OpenCV (via the `opencv` crate) to capture webcam frames during
-// onboarding, build a face template, and verify against a live frame
-// before unlocking the Genesis secret.
-//
-// The face template is NOT the secret — it gates access to the secret.
-// The Genesis secret is stored in the OS credential store (or encrypted
-// on disk), and the face verification must succeed before it's released.
-//
-// Privacy: The face template is stored locally in
-// `~/ZeroPoint/sovereignty/face_template.bin`. No images are saved.
-// No data leaves the machine.
-//
-// v0.1 (face-enroll feature only):
-//   - Face detection via Haar cascade
-//   - Template is BLAKE3 hash of 128x128 pixel data
-//   - Verify = "a face was detected" (presence, not identity)
-//
-// v0.2 (face-embeddings feature):
-//   - Face detection via Haar cascade (same)
-//   - Template is a 128-d embedding vector from MobileFaceNet (ONNX)
-//   - Verify = cosine similarity between live embedding and stored template
+//! Cross-platform face enrollment sovereignty provider.
+//!
+//! Adapter implementing `SovereigntyProvider` via webcam-based face
+//! verification, serving operators on machines with cameras who want
+//! OS-independent biometric unlock of their Genesis secret.
+//!
+//! Uses OpenCV (via the `opencv` crate) to capture webcam frames during
+//! onboarding, build a face template, and verify against a live frame
+//! before unlocking the Genesis secret.
+//!
+//! The face template is NOT the secret — it gates access to the secret.
+//! The Genesis secret is stored in the OS credential store (or encrypted
+//! on disk), and the face verification must succeed before it's released.
+//!
+//! Privacy: The face template is stored locally in
+//! `~/ZeroPoint/sovereignty/face_template.bin`. No images are saved.
+//! No data leaves the machine.
+//!
+//! v0.1 (face-enroll feature only):
+//!   - Face detection via Haar cascade
+//!   - Template is BLAKE3 hash of 128x128 pixel data
+//!   - Verify = "a face was detected" (presence, not identity)
+//!
+//! v0.2 (face-embeddings feature):
+//!   - Face detection via Haar cascade (same)
+//!   - Template is a 128-d embedding vector from MobileFaceNet (ONNX)
+//!   - Verify = cosine similarity between live embedding and stored template
 //   - Threshold: 0.55 (adjustable via ZP_FACE_THRESHOLD env var)
 //   - This actually confirms the RIGHT person, not just ANY person
 //

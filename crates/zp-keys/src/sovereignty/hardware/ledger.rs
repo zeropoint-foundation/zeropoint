@@ -1,14 +1,16 @@
-// crates/zp-keys/src/sovereignty/hardware/ledger.rs
-//
-// Ledger hardware wallet sovereignty provider.
-//
-// Uses a Ledger app (or the generic Bitcoin/Ethereum app) to derive
-// a wrapping key from a BIP-32 path specific to ZeroPoint. The Genesis
-// secret is encrypted with this key and stored locally.
-//
-// Dependencies: feature-gated behind `hw-ledger`
-// - `ledger-transport-hid` for USB HID communication
-// - `ledger-apdu` for APDU command construction
+//! Ledger hardware wallet sovereignty provider.
+//!
+//! Adapter implementing `SovereigntyProvider` for Ledger devices, serving
+//! operators with Ledger hardware who want physical-presence-attested unlock
+//! of their Genesis secret.
+//!
+//! Uses a Ledger app (or the generic Bitcoin/Ethereum app) to derive
+//! a wrapping key from a BIP-32 path specific to ZeroPoint. The Genesis
+//! secret is encrypted with this key and stored locally.
+//!
+//! Dependencies: feature-gated behind `hw-ledger`
+//! - `ledger-transport-hid` for USB HID communication
+//! - `ledger-apdu` for APDU command construction
 
 use super::super::{EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;

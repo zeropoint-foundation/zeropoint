@@ -1,25 +1,27 @@
-// crates/zp-keys/src/sovereignty/hardware/trezor.rs
-//
-// Trezor hardware wallet sovereignty provider.
-//
-// Uses Trezor's CipherKeyValue message to deterministically derive a 32-byte
-// wrapping key from a BIP-32 path + key name. The Genesis secret is encrypted
-// with this key (ChaCha20-Poly1305) and stored locally. To unlock, the user
-// must confirm on the Trezor display — physical presence proven.
-//
-// Key derivation path:  m/10016'/0  (Trezor CipherKeyValue standard path)
-// Key name:             "ZeroPoint Genesis"
-// Encrypt:              true
-// Ask on encrypt:       true  (requires physical confirmation)
-// Ask on decrypt:       true  (requires physical confirmation)
-//
-// The 32-byte "value" we encrypt on the device is a fixed domain-separation
-// constant. The device returns 32 bytes of deterministic ciphertext which we
-// use as the wrapping key. This is NOT the Genesis secret — it's the key that
-// wraps the Genesis secret for local storage.
-//
-// Dependencies: feature-gated behind `hw-trezor`
-// - `trezor-client` for USB communication and CipherKeyValue protobuf
+//! Trezor hardware wallet sovereignty provider.
+//!
+//! Adapter implementing `SovereigntyProvider` for Trezor devices, serving
+//! operators with Trezor hardware (One, Model T, Safe series) who want
+//! physical-presence-attested unlock of their Genesis secret.
+//!
+//! Uses Trezor's CipherKeyValue message to deterministically derive a 32-byte
+//! wrapping key from a BIP-32 path + key name. The Genesis secret is encrypted
+//! with this key (ChaCha20-Poly1305) and stored locally. To unlock, the user
+//! must confirm on the Trezor display — physical presence proven.
+//!
+//! Key derivation path:  m/10016'/0  (Trezor CipherKeyValue standard path)
+//! Key name:             "ZeroPoint Genesis"
+//! Encrypt:              true
+//! Ask on encrypt:       true  (requires physical confirmation)
+//! Ask on decrypt:       true  (requires physical confirmation)
+//!
+//! The 32-byte "value" we encrypt on the device is a fixed domain-separation
+//! constant. The device returns 32 bytes of deterministic ciphertext which we
+//! use as the wrapping key. This is NOT the Genesis secret — it's the key that
+//! wraps the Genesis secret for local storage.
+//!
+//! Dependencies: feature-gated behind `hw-trezor`
+//! - `trezor-client` for USB communication and CipherKeyValue protobuf
 
 use super::super::{
     EnrollmentResult, ProviderCapabilities, ProviderCapability, ProviderStatus, SovereigntyMode,

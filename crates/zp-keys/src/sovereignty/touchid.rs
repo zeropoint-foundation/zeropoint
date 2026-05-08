@@ -1,20 +1,22 @@
-// crates/zp-keys/src/sovereignty/touchid.rs
-//
-// Touch ID sovereignty provider — macOS Secure Enclave biometric gating.
-//
-// v0.1 (legacy): Uses the `keyring` crate for storage and `bioutil -w`
-//   for application-layer biometric verification before load.
-//   Any process that knows the Keychain service/account can read without
-//   biometric — the bioutil check is a courtesy, not enforcement.
-//
-// v0.2 (current, `biometric-keychain` feature):
-//   Uses `security-framework` with kSecAccessControlBiometryCurrentSet.
-//   The Keychain item's access control list is set at creation time so
-//   that EVERY read triggers a Secure Enclave biometric check. No
-//   application-layer bypass is possible — the OS kernel enforces it.
-//
-//   The v0.1 `bioutil -w` check is still used as a pre-flight during
-//   enrollment to confirm hardware works, but it's no longer the gate.
+//! Touch ID sovereignty provider — macOS Secure Enclave biometric gating.
+//!
+//! Adapter implementing `SovereigntyProvider` for macOS, serving operators
+//! on Apple hardware who want OS-level biometric unlock of their Genesis
+//! secret.
+//!
+//! v0.1 (legacy): Uses the `keyring` crate for storage and `bioutil -w`
+//!   for application-layer biometric verification before load.
+//!   Any process that knows the Keychain service/account can read without
+//!   biometric — the bioutil check is a courtesy, not enforcement.
+//!
+//! v0.2 (current, `biometric-keychain` feature):
+//!   Uses `security-framework` with kSecAccessControlBiometryCurrentSet.
+//!   The Keychain item's access control list is set at creation time so
+//!   that EVERY read triggers a Secure Enclave biometric check. No
+//!   application-layer bypass is possible — the OS kernel enforces it.
+//!
+//!   The v0.1 `bioutil -w` check is still used as a pre-flight during
+//!   enrollment to confirm hardware works, but it's no longer the gate.
 
 use super::{ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;

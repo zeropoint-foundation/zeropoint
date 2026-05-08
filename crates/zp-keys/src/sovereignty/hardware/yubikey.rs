@@ -1,18 +1,20 @@
-// crates/zp-keys/src/sovereignty/hardware/yubikey.rs
-//
-// YubiKey sovereignty provider.
-//
-// Uses FIDO2 hmac-secret extension to derive a wrapping key from the
-// YubiKey. The Genesis secret is encrypted with this key and stored
-// locally. Every load requires the YubiKey to be physically present
-// and touched (if PIN + touch policy is configured).
-//
-// Alternative: PIV slot 9a can do RSA/EC operations, but FIDO2
-// hmac-secret is more universal (works on all YubiKey 5+ models).
-//
-// Dependencies: feature-gated behind `hw-yubikey`
-// - `ctap-hid-fido2` crate for FIDO2 hmac-secret
-// - `hidapi` for USB HID communication
+//! YubiKey sovereignty provider.
+//!
+//! Adapter implementing `SovereigntyProvider` for YubiKey devices, serving
+//! operators with YubiKey 5+ hardware who want physical-presence-attested
+//! unlock of their Genesis secret.
+//!
+//! Uses FIDO2 hmac-secret extension to derive a wrapping key from the
+//! YubiKey. The Genesis secret is encrypted with this key and stored
+//! locally. Every load requires the YubiKey to be physically present
+//! and touched (if PIN + touch policy is configured).
+//!
+//! Alternative: PIV slot 9a can do RSA/EC operations, but FIDO2
+//! hmac-secret is more universal (works on all YubiKey 5+ models).
+//!
+//! Dependencies: feature-gated behind `hw-yubikey`
+//! - `ctap-hid-fido2` crate for FIDO2 hmac-secret
+//! - `hidapi` for USB HID communication
 
 use super::super::{EnrollmentResult, ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;

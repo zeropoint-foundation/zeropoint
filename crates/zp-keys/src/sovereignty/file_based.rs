@@ -1,10 +1,11 @@
-// crates/zp-keys/src/sovereignty/file_based.rs
-//
-// File-based sovereignty provider — secret on disk with file permissions.
-//
-// For headless servers, CI, or systems without a credential store.
-// Weakest option — any process with user privileges can read the file.
-// Recommended only for automated deployments.
+//! File-based sovereignty provider — secret on disk with file permissions.
+//!
+//! Adapter implementing `SovereigntyProvider` for headless deployments,
+//! serving operators running ZP on servers, CI runners, or systems
+//! without a credential store. Weakest option — any process with user
+//! privileges can read the file. Recommended only for automated
+//! deployments where biometric / hardware-token providers are
+//! unavailable.
 
 use super::{ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;

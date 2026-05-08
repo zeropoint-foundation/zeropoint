@@ -1,11 +1,13 @@
-// crates/zp-keys/src/sovereignty/fingerprint.rs
-//
-// Linux fingerprint reader sovereignty provider via fprintd.
-//
-// Linux doesn't have OS-level biometric access control on keyring items
-// the way macOS does with SecAccessControl. Instead, the secret lives in
-// Secret Service and every READ is gated by fprintd-verify. The verify
-// must succeed before we release the secret.
+//! Linux fingerprint reader sovereignty provider via fprintd.
+//!
+//! Adapter implementing `SovereigntyProvider` for Linux, serving operators
+//! on Linux machines with fingerprint hardware who want biometric unlock
+//! of their Genesis secret.
+//!
+//! Linux doesn't have OS-level biometric access control on keyring items
+//! the way macOS does with SecAccessControl. Instead, the secret lives in
+//! Secret Service and every READ is gated by fprintd-verify. The verify
+//! must succeed before we release the secret.
 
 use super::{ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;

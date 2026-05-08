@@ -1,5 +1,9 @@
 //! TCP transport interfaces — Reticulum-compatible HDLC framing over TCP.
 //!
+//! Adapters implementing `Interface` for TCP-reachable peers, serving
+//! ZeroPoint agents that participate in the Reticulum mesh network over
+//! conventional TCP/IP infrastructure (instead of radio media).
+//!
 //! Provides `TcpServerInterface` and `TcpClientInterface` that speak the
 //! Reticulum wire protocol (HDLC-framed packets), making ZeroPoint agents
 //! first-class citizens of the Reticulum mesh network.

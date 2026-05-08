@@ -1,15 +1,17 @@
-// crates/zp-keys/src/sovereignty/windows_hello.rs
-//
-// Windows Hello sovereignty provider — TPM 2.0 biometric gating.
-//
-// v0.1 (current): Detection via PowerShell WMI queries to check for
-//   Windows Hello capability (TPM, biometric hardware, enrollment status).
-//   Storage uses `keyring` crate (Windows Credential Manager) with a
-//   PowerShell-invoked UserConsentVerifier prompt before load.
-//
-// v0.2 (planned): Native WinRT bindings via the `windows` crate for
-//   UserConsentVerifier and KeyCredentialManager APIs. No PowerShell shims.
-//   Direct TPM-backed key creation with biometric access policy.
+//! Windows Hello sovereignty provider — TPM 2.0 biometric gating.
+//!
+//! Adapter implementing `SovereigntyProvider` for Windows, serving operators
+//! on Windows machines with TPM hardware + Windows Hello enrollment who
+//! want OS-level biometric unlock of their Genesis secret.
+//!
+//! v0.1 (current): Detection via PowerShell WMI queries to check for
+//!   Windows Hello capability (TPM, biometric hardware, enrollment status).
+//!   Storage uses `keyring` crate (Windows Credential Manager) with a
+//!   PowerShell-invoked UserConsentVerifier prompt before load.
+//!
+//! v0.2 (planned): Native WinRT bindings via the `windows` crate for
+//!   UserConsentVerifier and KeyCredentialManager APIs. No PowerShell shims.
+//!   Direct TPM-backed key creation with biometric access policy.
 
 use super::{ProviderCapability, SovereigntyMode, SovereigntyProvider};
 use crate::error::KeyError;
