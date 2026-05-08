@@ -61,6 +61,53 @@ Each seam below has six fields:
 - **Wire.** The structural commitment that closes the seam, in implementation terms.
 - **Blast radius.** The files that need to change when the seam is closed.
 
+### Port / adapter classification (May 8 2026)
+
+Every seam in this catalog is now classified under Principle II.0 of `ARCHITECTURE-2026-05.md` (*contracts are singular; implementations are plural*). The classification answers the question "what kind of architectural commitment does this seam close?"
+
+- **Port** — the seam closes a singular contract (one schema, one canonical helper, one trait, one ceremony). Adding a second such carrier for the same concern is the warning sign.
+- **Adapter** — the seam closes a plural-implementation discipline (each adapter justified, each documented, with the same port served by all).
+- **Both** — the seam has both a port portion (the singular shape) and an adapter portion (the plural implementations of that shape).
+
+| Seam | Closure | Classification | Rationale |
+|---|---|---|---|
+| 1 — Audit chain write path | Closed | **Port** | `AuditStore::append` is the singular write-path; chain format is the contract |
+| 2 — Gate evaluation | Closed | **Port** | Single `evaluate` entry point; gate semantics are a contract |
+| 3 — Fleet identity auth | Closed | **Port** | `SignedHeartbeat` envelope + `verify_and_record` are the contract; per-peer key registry is internal state |
+| 4 — Receipt generation authority | Closed | **Port** | Which actors may issue which receipts is a contract |
+| 5 — Verifier symmetry | Closed | **Port** | `verify_signature` is the singular Ed25519 verify primitive |
+| 6 — Sovereignty key encryption | Closed | **Port** | `encrypt_secret` is the singular encryption primitive |
+| 7 — Secret file I/O | Closed | **Port** | `write_atomic` is the singular safe-write helper |
+| 8 — Discovery announce replay | Closed | **Both** | `SignedAnnounce` envelope + `check_and_record_announce_freshness` are the port; `DiscoveryManager` and `MeshRuntime` are two adapters with per-(peer, source) and per-peer cache scoping respectively |
+| 9a — Argv-form tool launch | Closed | **Port** | `ToolSpec` is the singular launch contract |
+| 9b — Token plumbing | Deferred | **Port (latent)** | The token-transport contract; collapses to zero under pixel-streamed delivery (Architecture VII.4 / II.0) |
+| 10 — Public-page supply chain | Closed | **Port** | `docs/SUPPLY-CHAIN-MANIFEST.md` is the singular record; SRI hashes are the contract |
+| 11 — Test/production identity isolation | Closed | **Both** | Namespace function = port; mock backend + OS keychain = two adapters of the credential-builder port |
+| 12 — Configuration provenance | Partial | **Port** | `ConfigResolver` as the singular config-read carrier |
+| 13 — Error-type boundary discipline | Open | **Port** | One error enum per crate is a port-discipline rule |
+| 14 — Versioned-format dispatch | Partial | **Port** | "Every persistent format has a version byte" is a contract rule; the version byte itself is the port; readers/writers are not plural in a way that requires adapter discipline |
+| 15 — Async cancellation | Open | **Port** | Cancellation semantics as a contract |
+| 16 — Receipt-actor key management | Open | **Port** | Actor-to-key binding is a contract |
+| 17 — Canonical JSON | Closed | **Port** | `canonical_bytes_of` is the singular serializer |
+| 18 — String-typed identifiers | Open | **Port** | Newtype identifiers are typed contracts |
+| 19 — Home directory / path resolution | Closed | **Port** | `paths::home` is the singular carrier |
+| 20 — Hash-then-sign discipline | Partial | **Port** | `Signable` trait + canonical-hash discipline |
+| 22 — API surface (typed verb set; plural deliveries) | Open | **Both, by design** | Verb set = port; deliveries = plural adapters with per-instance justification |
+
+#### Observations
+
+**The catalog has been overwhelmingly port work.** 17 of 21 seams are pure port-shaping. That's expected: port discipline is what the substrate's claims rest on. The pattern of "port has a singular carrier; carrier owns enforcement; sweep + lint" is what most seam closures look like.
+
+**The four hybrid seams are the most interesting.** Seams 3, 8, 11, and 22 each have a port portion (singular shape) AND a documented plural-adapter portion. They demonstrate the principle composing within a single seam — closing the port doesn't reduce adapter plurality; it gives the adapters a shared shape to adapt.
+
+**No seam was miscategorized.** Every "closed" seam in the catalog is closed at the right altitude. The work has been correctly identifying contracts and disciplining them as singular. If any seam had been treated as plural-adapter when it should have been singular-port, the audit would have surfaced it; none did.
+
+**Adapter discipline is happening but is mostly off-catalog.** The clearest plural-adapter system in ZP — `SovereigntyProvider` (with Touch ID, fingerprint, Trezor, YubiKey, etc. as adapters) — isn't a "seam" because it was already in good shape; it's the canonical example of port + plural adapters in the substrate. The mesh `Interface` trait (with Reticulum, TCP, Loopback as adapters) is the other. These are *evidence* that the principle was always implicit; they're not on the catalog because they didn't need closing.
+
+**Implication for future seams.** When proposing a new seam, ask first: "is this port discipline (singular carrier needed) or adapter discipline (plural implementations need documentation/justification)?" The two have different shapes of closure. Confusing them is the failure mode the principle is designed to prevent.
+
+---
+
 ### Seam 1 — Audit chain write path
 
 - **Intent.** No non-genesis entry reaches storage unsigned.
@@ -282,6 +329,58 @@ The lesson recorded so future structural decisions hold the dimensions together:
 - **Catalog rule.** M3, M4, X2.
 - **Wire.** A `Signable` trait with `canonical_hash(&self) -> [u8; 32]` and a `sign_in_place(&mut self, signer)`. Everything signed in the substrate implements `Signable` and goes through the trait.
 - **Blast radius.** `zp-core` (trait definition), `zp-receipt`, `zp-audit::chain`, `zp-keys::certificate`, anywhere else that signs.
+
+### Seam 22 — API surface discipline (typed verb set; plural deliveries)
+
+- **Intent.** The substrate's public API is *a bounded, typed set of receipt-issuing verbs*. Every operator and agent interaction with a ZP node — regardless of how the bytes arrive — invokes one of those verbs. The verbs produce or consume receipts; nothing else. Ad-hoc JSON response shapes are forbidden. Delivery mechanisms are plural; the verb set is singular.
+- **Why this framing.** The earlier draft of this seam said "pixel-streaming for humans, receipts-only for agents." That over-simplified into a structural mistake. ZP supports a spectrum of operator environments — from the high-bandwidth same-room operator down to a Reticulum mesh node operating at 9.6 kbps over packet radio (which `zp-mesh` already has interfaces for, see `crates/zp-mesh/src/reticulum_discovery.rs`). Pixel-streaming is *one* delivery mechanism well-suited to one part of that spectrum; it cannot serve the off-grid, low-bandwidth, store-and-forward end. The discipline lives at the verb layer, not the transport layer.
+- **Carrier (proposed).** A `proto/zp_v1.proto` schema (or equivalent typed-schema mechanism) defining the receipt-issuing verb set. Plus a discipline pin enforcing that every public surface — HTTP handler, CLI command, mesh envelope handler, gRPC method — implements a verb from the schema and returns a receipt or receipt envelope. The mesh wire is already disciplined this way (17 typed `EnvelopeType` variants, msgpack); the HTTP wire is currently the wild west.
+- **Status.** **Open.** 109 routes under `/api/v1/*` today. The audit-chain and receipt-generation endpoints already return receipts; the rest invent shapes (`HealthResponse`, `IdentityResponse`, `PolicyRulesResponse`, `StatsResponse`, etc.). Each new endpoint adds a new type with no structural force pushing back.
+- **Catalog rule.** Operational integrity / DX. Not in the original M-rules — discovered through the May 2026 *"why aren't we intentional about API patterns?"* and *"pixel-streaming would betray Reticulum users"* conversations.
+
+#### Delivery mechanisms ZP commits to
+
+The same verb set is reachable through every delivery; each delivery is optimised for a different environment.
+
+| Operator environment | Delivery | Properties |
+|---|---|---|
+| Same machine as node | Native UI in-process | Direct function call. No network. Strongest "no part." |
+| Good remote connection | Pixel-streamed native UI (WebRTC) | Rich experience; verbs run server-side. ~1-5 Mbps bandwidth, <300ms RTT. |
+| Flaky / constrained remote | CLI over HTTP or SSH | Tens of kbps tolerated. Each invocation = one verb call = one receipt. |
+| Reticulum / radio mesh | CLI over Reticulum (LXMF-shaped or via mesh envelopes) | 300 bps – 1.2 Mbps. Async / store-and-forward tolerated. |
+| Air-gapped / signed-message | Detached signed receipt files | Sneakernet (USB, QR, paper). Same verb set, asynchronous. |
+| Third-party agent (SDK) | Mesh envelopes or gRPC | Already disciplined for mesh; gRPC adds typed bindings for non-mesh consumers. |
+
+Cost honest: pixel-streaming has bandwidth/latency requirements that exclude part of ZP's user-class spectrum. The CLI deliveries (HTTP, Reticulum) are the survivable-on-anything path. Both pixel-streaming and CLI-over-HTTP go away on a 300 bps LoRa node; only Reticulum-native delivery survives there. The architecture admits this consciously rather than papering over it.
+
+#### What this is NOT
+
+- **Not** "gRPC across the mesh" — that wire is intentionally msgpack-over-arbitrary-transport for radio-bandwidth reasons (see `crates/zp-mesh/src/envelope.rs`).
+- **Not** GraphQL — ZP's API is commands, not queries; GraphQL's value prop ("client picks fields") is wrong-shaped for a substrate where responses are signed and deterministic.
+- **Not** "remove the API entirely" — that was the original "best part is no part" misread. We remove the *undisciplined* surface (handlers inventing JSON shapes); we keep a *bounded typed verb set* with multiple transports.
+- **Not** "one shape for all operators." Plural deliveries by design; honors Reticulum, off-grid, disaster-response, low-bandwidth, and air-gapped use cases that ZP's positioning explicitly claims.
+
+#### Wire (proposed)
+
+Three reinforcing structural commitments:
+
+1. **Verb schema as source of truth.** `proto/zp_v1.proto` (or an equivalent typed-schema mechanism in pure Rust) defines every receipt-issuing verb, every input type, every receipt response type. Generated Rust types replace today's hand-rolled `*Response` structs.
+2. **Allowlist for non-verb resources.** `/health`, `/version`, static assets, the WebRTC signaling endpoint, the SSE event stream, etc. — explicit infrastructure paths that don't issue receipts. Everything else MUST be a verb-from-schema returning a receipt.
+3. **Discipline pin** `no_ad_hoc_response_types` scans `crates/zp-server/src/` (and any future delivery crate) for handler return types. Anything outside the infrastructure allowlist that isn't a `Receipt` / receipt-envelope variant fails the build. Same pin pattern across deliveries — HTTP handlers, CLI commands, gRPC methods all subject to the same check.
+
+#### Companion work
+
+- **Receipt-level policy attestation.** A real un-thought question that the verb-set design will have to resolve: does every receipt carry a `policy_snapshot_hash` (or equivalent) so a third party can independently re-derive *under what rules* the receipt was issued? Today Claim 4 (independent verification) is partially false because the ruleset isn't part of the receipt's preimage. Whether this becomes a top-level receipt field or a separate envelope is a design decision that lands as part of defining the verb set's response types — not a separate seam pretending to be designable in isolation. Will be resolved in `ARCHITECTURE-2026-05.md`.
+- **Seam 12 (config provenance)** — rehabilitated. The CLI delivery still needs config provenance; `ConfigResolver` as the singular env-var carrier remains correct. What changes is that there are fewer *handlers* to refactor (most of the 109 routes go away) and the remaining receipt-issuing verbs are accessed through one of the deliveries above.
+- **Seam 9b (token plumbing via postMessage)** — collapses to zero for the pixel-streamed delivery (no client-side context to leak a token to). Remains relevant only if a future browser-side delivery is introduced; deferred.
+
+#### Blast radius
+
+- **New crates / dirs:** `proto/zp_v1.proto` or `crates/zp-verbs/` (typed verb set), `crates/zp-cli-verbs/` (CLI delivery wrapping the verbs), possibly `crates/zp-stream/` (WebRTC signaling adapter).
+- **Touches:** `crates/zp-server/src/lib.rs` (most handlers either delete or migrate to verb-handlers), `crates/zp-server/assets/` (HTML/JS dashboard probably retires in favour of native+streamed UI), `crates/zp-cli/src/main.rs` (CLI verbs), `crates/zp-mesh/src/envelope.rs` (envelope types may grow to cover the verb set, or a parallel verb-envelope is introduced).
+- **Discipline:** new pin `no_ad_hoc_response_types`, possibly `verb_must_emit_receipt`.
+- **Course / SDK:** `course-sdk.html` adopts the typed bindings; the SDK becomes "a thin client over the verb schema."
+- **Magnitude.** This is not a sweep. It's an architectural arc spanning multiple sessions — design, scaffold, migrate, deprecate. Worth budgeting accordingly.
 
 ---
 
