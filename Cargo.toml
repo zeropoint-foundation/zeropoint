@@ -65,6 +65,11 @@ zeroize = { version = "1.7", features = ["derive"] }
 # Post-quantum: ML-DSA-65 (FIPS 204, Dilithium). Used for hybrid signing.
 # RUSTSEC-2025-0144 timing side-channel patched in >=0.1.0-rc.3.
 ml-dsa = { version = "0.1.0-rc", default-features = false }
+# libp2p identity primitives — PeerId derivation from Ed25519 public keys.
+# Per Architecture II.6 / II.10, ZP commits to libp2p alongside Reticulum;
+# `MeshIdentity` produces both a Reticulum destination hash and a libp2p
+# `PeerId` deterministically from the same Ed25519 key (Architecture II.0).
+libp2p-identity = { version = "0.2", features = ["ed25519", "peerid"] }
 
 # Database
 rusqlite = { version = "0.32", features = ["bundled"] }

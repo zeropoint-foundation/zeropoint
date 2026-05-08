@@ -37,6 +37,10 @@ aes.workspace = true
 cbc.workspace = true
 hmac.workspace = true
 
+# libp2p PeerId derivation (Architecture II.6 / II.10) — same Ed25519 key
+# produces both a Reticulum destination hash and a libp2p PeerId.
+libp2p-identity.workspace = true
+
 # Serialization — msgpack for Reticulum wire format
 rmp-serde.workspace = true
 
