@@ -41,6 +41,11 @@ hmac.workspace = true
 # produces both a Reticulum destination hash and a libp2p PeerId.
 libp2p-identity.workspace = true
 
+# libp2p stack for the Libp2pInterface adapter (Architecture II.10).
+# MVP: TCP transport + gossipsub for broadcast. QUIC / WebSocket / WebRTC
+# follow in future commits.
+libp2p.workspace = true
+
 # Serialization — msgpack for Reticulum wire format
 rmp-serde.workspace = true
 

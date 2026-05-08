@@ -70,6 +70,18 @@ ml-dsa = { version = "0.1.0-rc", default-features = false }
 # `MeshIdentity` produces both a Reticulum destination hash and a libp2p
 # `PeerId` deterministically from the same Ed25519 key (Architecture II.0).
 libp2p-identity = { version = "0.2", features = ["ed25519", "peerid"] }
+# libp2p umbrella — full P2P stack. Architecture II.10 commits to QUIC +
+# TCP + WebSocket + WebRTC transports; MVP enables TCP only, with the
+# others added in follow-up commits as the adapter matures.
+libp2p = { version = "0.55", features = [
+    "tokio",
+    "tcp",
+    "noise",
+    "yamux",
+    "gossipsub",
+    "macros",
+    "dns",
+] }
 
 # Database
 rusqlite = { version = "0.32", features = ["bundled"] }

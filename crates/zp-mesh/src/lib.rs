@@ -68,6 +68,7 @@ pub mod envelope;
 pub mod error;
 pub mod identity;
 pub mod interface;
+pub mod libp2p_interface;
 pub mod link;
 pub mod node_registry;
 pub mod packet;
@@ -109,6 +110,7 @@ pub use node_registry::{
 pub use policy_distributor::{PolicyDistributor, PolicyRollout, RolloutSummary};
 pub use runtime::{InboundEnvelope, MeshRuntime, RuntimeConfig, RuntimeStats};
 pub use store::MeshStore;
+pub use libp2p_interface::{Libp2pInterface, MESH_TOPIC};
 pub use tcp::{TcpClientInterface, TcpServerInterface};
 pub use transport::{AgentTransport, MeshNode};
 
