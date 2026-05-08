@@ -152,3 +152,4 @@ generate-foundations-audio.sh
 
 # Relay bundles (binary, transferred out-of-band)
 zp-artemis-relay/
+.DS_Store
