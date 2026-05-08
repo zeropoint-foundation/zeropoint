@@ -107,6 +107,21 @@ pub struct ZpConfig {
     /// Upstream server address for delegate nodes (e.g., "192.168.1.199:17770").
     /// Ignored when node_role is "genesis".
     pub node_upstream: Sourced<Option<String>>,
+
+    // ── Server runtime paths (Seam 12-B) ──
+    /// Optional override directory for HTML/CSS/JS assets the server
+    /// serves. When set and present, takes precedence over the
+    /// compiled-in assets — used by `zp-dev.sh html` for instant
+    /// reload during development. When unset or missing, the server
+    /// falls back to `include_str!()`-embedded assets.
+    ///
+    /// Env: `ZP_ASSETS_DIR` (path).
+    pub assets_dir: Sourced<Option<PathBuf>>,
+    /// Optional directory of bridge / cockpit-side scratch files.
+    /// Resolved relative to `home_dir` if unset.
+    ///
+    /// Env: `ZP_BRIDGE_DIR` (path).
+    pub bridge_dir: Sourced<Option<PathBuf>>,
 }
 
 impl Default for ZpConfig {
@@ -149,6 +164,9 @@ impl Default for ZpConfig {
 
             node_role: Sourced::default_value("genesis".into()),
             node_upstream: Sourced::default_value(None),
+
+            assets_dir: Sourced::default_value(None),
+            bridge_dir: Sourced::default_value(None),
         }
     }
 }
