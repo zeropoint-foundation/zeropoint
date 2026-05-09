@@ -761,4 +761,22 @@ The survey is the natural prerequisite to drafting `proto/zp_v1.proto` (the verb
 
 ---
 
+## Appendix D — Pencilled-in horizons
+
+Not on any task list, not architectural commitment, not driving any near-term work — but worth recording so the analysis isn't lost when the topic resurfaces. These are feature classes that fit ZP's substrate naturally but are premature today.
+
+### LLM Wiki — receipt-native knowledge layer
+
+The "LLM Wiki" pattern (Karpathy's framing; popularized in mid-2026 tutorials) describes an AI agent that ingests sources once and maintains an interlinked, persistent knowledge base — rather than re-searching raw documents per query. Three layers: raw sources, AI-generated wiki pages, schema defining ingestion + linking + lint behavior.
+
+**Why it fits ZP's horizon.** The pattern shape is the same as ZP's substrate-at-the-cognition-layer story: persistent state, structural relationships, lint-as-discipline. The natural ZP rendering: each wiki page is a receipt (or small receipt chain) referencing source receipts and other page receipts; the markdown view is a materialization, not the source of truth; lint rules are policy gates that emit receipts on violation; the operator's knowledge graph inherits ZP's chain integrity, actor attribution, and tamper detection. The receipt format already does what the markdown layer would do — but with structural trust the markdown can't carry on its own.
+
+**Why it's premature today.** Two prerequisites. (1) The verb-set must be drafted enough to define ingestion / page-creation / cross-reference verbs — building the wiki before that means inventing schema the verb-set work would re-invent. (2) V.7 (receipt composability — `Part V`) must be designed — wiki links *are* typed cross-receipt references; without that primitive the wiki has no structural way to express linkage.
+
+**When to revisit.** When the V.7 design session opens, use the wiki feature as a primary informing use case — it forces the cross-receipt reference primitive to be expressive enough for real consumption rather than abstract. A first wiki MVP then becomes a natural concrete demonstration of ZP at the cognition layer, alongside the LARQL/MEDS Layer 3 vision (`docs/future-work/cognitive-accountability.md` and `CLAUDE.md` § "Intellectual Context & Adjacent Thinkers"). Together they form the cognition-layer story: LARQL decomposes what models *know*; MEDS characterizes how they *reason*; the wiki layer captures what they've *learned and where it came from*.
+
+**Recursive observation.** ZP's own development workflow is using a primitive form of this pattern right now — `CLAUDE.md` is the schema, `docs/` is the wiki, today's architectural arc was wiki-maintenance work (discover structural inconsistencies, name meta-principles, ripple them through the doc graph). That's evidence the pattern holds at development scale; experience here informs what the operator-facing version should look like when it's time.
+
+---
+
 *End of draft. Not committed. Open for revision.*
