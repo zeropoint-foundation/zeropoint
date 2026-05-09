@@ -69,7 +69,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, SwarmBuilder,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
@@ -77,6 +77,14 @@ use crate::error::{MeshError, MeshResult};
 use crate::identity::MeshIdentity;
 use crate::interface::{Interface, InterfaceConfig, InterfaceStats, InterfaceType};
 use crate::packet::Packet;
+
+/// Commands sent from the interface handle to the swarm task.
+enum OutboundCommand {
+    /// Publish raw packet bytes on the gossipsub topic.
+    Publish(Vec<u8>),
+    /// Dial a remote peer at the given multiaddr.
+    Dial(Multiaddr),
+}
 
 /// The single gossipsub topic used by all mesh traffic on this adapter.
 ///
@@ -98,12 +106,16 @@ struct MeshBehaviour {
 pub struct Libp2pInterface {
     /// Static interface config (name, type, MTU, etc.).
     config: InterfaceConfig,
-    /// Channel to the swarm task: outbound packet bytes go here, the
-    /// swarm task publishes them on the gossipsub topic.
-    outbound_tx: mpsc::UnboundedSender<Vec<u8>>,
+    /// Channel to the swarm task: outbound commands (publish bytes or
+    /// dial a peer) go here.
+    outbound_tx: mpsc::UnboundedSender<OutboundCommand>,
     /// Channel from the swarm task: inbound gossipsub messages arrive
     /// as raw packet bytes ready for `Packet::from_bytes`.
     inbound_rx: Mutex<mpsc::UnboundedReceiver<Vec<u8>>>,
+    /// Accumulated listen addresses — the swarm task appends to this
+    /// whenever a `NewListenAddr` event fires; `listen_addresses()`
+    /// returns a snapshot.
+    listen_addrs: Arc<RwLock<Vec<Multiaddr>>>,
     /// Send/recv counters.
     stats: Mutex<InterfaceStats>,
     /// Handle to the long-running swarm task. Dropped on interface
@@ -180,9 +192,14 @@ impl Libp2pInterface {
             .map_err(|e| MeshError::InterfaceError(format!("libp2p listen_on: {}", e)))?;
 
         // Channels bridging the swarm task and the Interface trait.
-        let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<OutboundCommand>();
         let (inbound_tx, inbound_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let interface_name = config.name.clone();
+
+        // Shared listen-address accumulator — the swarm task writes here
+        // whenever a NewListenAddr event fires; listen_addresses() reads it.
+        let listen_addrs: Arc<RwLock<Vec<Multiaddr>>> = Arc::new(RwLock::new(Vec::new()));
+        let listen_addrs_task = Arc::clone(&listen_addrs);
 
         // Spawn the long-running swarm event loop.
         let task = tokio::spawn(async move {
@@ -203,6 +220,7 @@ impl Libp2pInterface {
                             }
                             SwarmEvent::NewListenAddr { address, .. } => {
                                 info!(addr = %address, "libp2p listening");
+                                listen_addrs_task.write().await.push(address);
                             }
                             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                                 debug!(peer = %peer_id, "libp2p connection established");
@@ -210,30 +228,42 @@ impl Libp2pInterface {
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                 debug!(peer = %peer_id, "libp2p connection closed");
                             }
+                            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                warn!(peer = ?peer_id, error = %error, "libp2p outgoing connection error");
+                            }
                             _ => {}
                         }
                     }
-                    // Outbound packets requested by Interface::send.
+                    // Outbound commands requested by Interface::send / dial.
                     cmd = outbound_rx.recv() => {
-                        let Some(bytes) = cmd else {
+                        let Some(command) = cmd else {
                             // Sender dropped — interface is gone; exit.
                             debug!("libp2p outbound sender dropped, exiting task");
                             break;
                         };
-                        if let Err(e) = swarm
-                            .behaviour_mut()
-                            .gossipsub
-                            .publish(topic.clone(), bytes)
-                        {
-                            // PublishError::InsufficientPeers is normal when
-                            // no peers have joined the mesh yet; downgrade
-                            // to debug.
-                            match e {
-                                gossipsub::PublishError::InsufficientPeers => {
-                                    debug!("gossipsub: no peers yet for publish");
+                        match command {
+                            OutboundCommand::Publish(bytes) => {
+                                if let Err(e) = swarm
+                                    .behaviour_mut()
+                                    .gossipsub
+                                    .publish(topic.clone(), bytes)
+                                {
+                                    // PublishError::InsufficientPeers is normal when
+                                    // no peers have joined the mesh yet; downgrade
+                                    // to debug.
+                                    match e {
+                                        gossipsub::PublishError::InsufficientPeers => {
+                                            debug!("gossipsub: no peers yet for publish");
+                                        }
+                                        other => {
+                                            warn!(error = ?other, "gossipsub publish failed");
+                                        }
+                                    }
                                 }
-                                other => {
-                                    warn!(error = ?other, "gossipsub publish failed");
+                            }
+                            OutboundCommand::Dial(addr) => {
+                                if let Err(e) = swarm.dial(addr.clone()) {
+                                    warn!(addr = %addr, error = %e, "libp2p dial failed to queue");
                                 }
                             }
                         }
@@ -247,6 +277,7 @@ impl Libp2pInterface {
             config,
             outbound_tx,
             inbound_rx: Mutex::new(inbound_rx),
+            listen_addrs,
             stats: Mutex::new(InterfaceStats::default()),
             _swarm_task: Arc::new(task),
         })
@@ -260,6 +291,31 @@ impl Libp2pInterface {
             .parse()
             .expect("valid multiaddr literal");
         Self::new(config, identity, &listen)
+    }
+
+    /// Returns the multiaddrs the swarm has bound to.
+    ///
+    /// When constructed with `/ip4/127.0.0.1/tcp/0`, the OS assigns an
+    /// ephemeral port; callers use this method to discover the actual
+    /// address so that other peers can dial in.  The list grows as
+    /// `NewListenAddr` events fire in the swarm task — wait a short
+    /// time after construction before calling (see `new_default` doc).
+    pub async fn listen_addresses(&self) -> Vec<Multiaddr> {
+        self.listen_addrs.read().await.clone()
+    }
+
+    /// Queue a dial to `addr`.
+    ///
+    /// The command is sent to the swarm task which calls
+    /// `swarm.dial(addr)`.  This method returns as soon as the command
+    /// is queued; connection success or failure surfaces asynchronously
+    /// as libp2p swarm events (`ConnectionEstablished` /
+    /// `OutgoingConnectionError`) that are logged by the task.
+    pub async fn dial(&self, addr: &Multiaddr) -> MeshResult<()> {
+        self.outbound_tx
+            .send(OutboundCommand::Dial(addr.clone()))
+            .map_err(|_| MeshError::Other("libp2p swarm task ended".into()))?;
+        Ok(())
     }
 }
 
@@ -282,7 +338,7 @@ impl Interface for Libp2pInterface {
         let bytes = packet.to_bytes();
         let len = bytes.len();
         self.outbound_tx
-            .send(bytes)
+            .send(OutboundCommand::Publish(bytes))
             .map_err(|_| MeshError::Other("libp2p swarm task ended".into()))?;
         let mut s = self.stats.lock().await;
         s.packets_sent += 1;
@@ -388,5 +444,84 @@ mod tests {
         let identity = MeshIdentity::generate();
         let iface = Libp2pInterface::new_default("libp2p-online", &identity).unwrap();
         assert!(iface.is_online());
+    }
+
+    /// Real two-peer round-trip: B dials A, A publishes, B receives.
+    ///
+    /// Pattern:
+    ///   1. Create A and B on loopback ephemeral ports.
+    ///   2. Wait for both to start listening.
+    ///   3. Discover A's actual address via `listen_addresses()`.
+    ///   4. B dials A; wait for the gossipsub mesh to form.
+    ///   5. A sends a packet; B polls `recv()` until it arrives.
+    ///
+    /// Gossipsub requires at least one full heartbeat (default 10 s in
+    /// production, but we keep the default here to match real behaviour —
+    /// the test waits up to 5 s for the packet after a 2 s mesh-formation
+    /// window, which is enough because gossipsub's mesh forms within the
+    /// first heartbeat cycle after the connection is established; if it
+    /// doesn't arrive the test fails with a clear message rather than
+    /// silently passing with an incomplete assertion).
+    #[tokio::test]
+    async fn test_libp2p_interface_two_peer_round_trip() {
+        let id_a = MeshIdentity::generate();
+        let id_b = MeshIdentity::generate();
+
+        let iface_a = Libp2pInterface::new_default("libp2p-rt-a", &id_a).unwrap();
+        let iface_b = Libp2pInterface::new_default("libp2p-rt-b", &id_b).unwrap();
+
+        // Give both swarms time to bind and emit NewListenAddr.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        // Discover A's actual bound address.
+        let a_addrs = iface_a.listen_addresses().await;
+        assert!(
+            !a_addrs.is_empty(),
+            "iface_a should have at least one listen address after 200ms"
+        );
+        let a_addr = a_addrs[0].clone();
+
+        // B dials A.
+        iface_b.dial(&a_addr).await.unwrap();
+
+        // Wait for the TCP connection + gossipsub mesh heartbeat to form.
+        // Gossipsub heartbeat is every 10 s by default, but the initial
+        // mesh graft happens within the first heartbeat after a peer
+        // connects, so 2 s is sufficient for a loopback connection.
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        // A publishes a packet.
+        let dummy_dest = DestinationHash::from_public_key(&id_a.combined_public_key());
+        let pkt = Packet::data(
+            dummy_dest,
+            b"round-trip-payload".to_vec(),
+            PacketContext::Receipt,
+        )
+        .unwrap();
+        iface_a.send(&pkt).await.unwrap();
+
+        // B polls recv() until the packet arrives or we time out.
+        let deadline = std::time::Duration::from_secs(5);
+        let poll_interval = std::time::Duration::from_millis(100);
+        let start = std::time::Instant::now();
+        let received = loop {
+            if let Some(p) = iface_b.recv().await.unwrap() {
+                break Some(p);
+            }
+            if start.elapsed() >= deadline {
+                break None;
+            }
+            tokio::time::sleep(poll_interval).await;
+        };
+
+        let received =
+            received.expect("iface_b should receive the packet within 5 s of iface_a sending");
+
+        // Verify the packet is what A sent.
+        assert_eq!(
+            received.destination, pkt.destination,
+            "destination mismatch"
+        );
+        assert_eq!(received.data, b"round-trip-payload", "payload mismatch");
     }
 }
