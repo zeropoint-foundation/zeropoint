@@ -170,6 +170,19 @@ message ProxyReceipt {
   uint32 upstream_status = 4;
 }
 
+// PolicyModuleAction — discriminator for PolicyModuleReceipt.action.
+//
+// Typed enum (not string) so Rust pattern-matching catches missing
+// cases at compile time. Per Architecture II.0 / Working Principles
+// (CLAUDE.md): typed contracts beat free-form strings for invariants
+// the build can enforce.
+enum PolicyModuleAction {
+  POLICY_MODULE_ACTION_UNSPECIFIED = 0;
+  POLICY_MODULE_ACTION_LOAD = 1;
+  POLICY_MODULE_ACTION_ENABLE = 2;
+  POLICY_MODULE_ACTION_DISABLE = 3;
+}
+
 // PolicyModuleReceipt — full chained receipt for a policy module lifecycle event
 // (load, enable, or disable).
 // header.kind = RECEIPT_KIND_POLICY_MODULE.
@@ -182,8 +195,8 @@ message PolicyModuleReceipt {
   string module_name = 3;
   // Version of the affected module.
   string module_version = 4;
-  // The lifecycle action: "load", "enable", or "disable".
-  string action = 5;
+  // The lifecycle action.
+  PolicyModuleAction action = 5;
 }
 
 // PolicyModulesEnvelope — plain envelope listing all loaded policy modules.

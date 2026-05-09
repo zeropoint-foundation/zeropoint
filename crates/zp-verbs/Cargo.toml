@@ -1,0 +1,16 @@
+[package]
+name = "zp-verbs"
+description = "Generated Rust types for the ZeroPoint v1 verb set (protobuf schema → Rust via tonic-build)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+prost = { workspace = true }
+tonic = { workspace = true }
+prost-types = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true }
