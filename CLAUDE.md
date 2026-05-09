@@ -162,3 +162,52 @@ The sovereignty provider system should be designed from the ground up for multi-
 **Feature-aware readiness**: Only Trezor has `cfg!(feature = "hw-trezor")` → `Ready` in `implementation_status()`. When YubiKey/Ledger/OnlyKey get implemented, each needs the same pattern. Consider a macro to reduce copy-paste.
 
 **Enrollment `provider_data`**: Currently untyped `serde_json::Value`. Works for v0.1 but should evolve to a `ProviderData` enum with per-device variants for compile-time safety when multiple devices are in play.
+
+## Working principles (Karpathy-style)
+
+These shape *how* to work in this repo, not what to know about it. Co-equal with the graphify directive below; both are behavioral rules, not encyclopedic context.
+
+### Think before coding
+
+For any non-trivial change:
+
+- If intent is ambiguous, ASK before assuming. A clarifying question costs less than a wrong implementation.
+- For architectural decisions, surface the trade-off explicitly before picking. The architecture doc (`docs/ARCHITECTURE-2026-05.md`) and the seam catalog (`docs/STRUCTURAL-AUDIT-2026-05.md`) exist to be consulted.
+- Outline the change shape (which files, which abstractions) before editing. Easier to course-correct an outline than a half-built diff.
+
+### Simplicity first
+
+Prefer the smallest viable change. The substrate is large enough that adding bloat compounds. If a feature can be expressed in 20 lines instead of 200, do the 20.
+
+The discipline-pin system, the verb-set frame, and Architecture II.0 (contracts singular, implementations plural) all point in this direction. A new abstraction must justify its existence; an existing one should not be casually rewrapped.
+
+### Surgical changes
+
+Touch what's needed for the requested change. Do NOT:
+
+- Reformat unrelated code in the same file
+- Rewrite imports, comments, or structure that isn't the target
+- "Clean up" adjacent code as a courtesy
+- Refactor as a side effect
+
+If you notice something genuinely worth fixing nearby, surface it as a separate task, not a same-commit drive-by. The pre-push hook and discipline pins enforce some of this; the rest is on you.
+
+### Goal-driven, not step-driven
+
+Ken describes what "done" looks like; you choose the path. If the goal is "users can attest delegation withdrawal," that's the success criterion — the verb-set verbs, the receipt schema, the storage shape are yours to propose and confirm.
+
+If steps are unclear, ask "what does done look like?" rather than guessing.
+
+### When in doubt
+
+Subagent dispatch (Sonnet) for mechanical sweeps, surveys, and verification passes. Primary context for architectural reasoning, ambiguous-intent moments, and code that informs the current decision. See `docs/MODEL-SELECTION-2026-05.md` for the per-task calibration.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- ALWAYS read graphify-out/GRAPH_REPORT.md before reading any source files, running grep/glob searches, or answering codebase questions. The graph is your primary map of the codebase.
+- IF graphify-out/wiki/index.md EXISTS, navigate it instead of reading raw files
+- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
