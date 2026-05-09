@@ -1,0 +1,337 @@
+// proto/v1/mesh.proto — Mesh service.
+//
+// Covers all mesh-wire operations: agent announcement, liveness heartbeats,
+// policy advertisement and negotiation, peer audit challenge/response/attestation,
+// reputation broadcasting, and receipt chain transfer.
+//
+// Mesh-specific message types are self-contained here. They capture the
+// conceptual shape of each envelope; Rust-side migration from EnvelopeType
+// variants follows from this schema.
+//
+// Architecture II.7: this file is part of the verb-set schema layer.
+// Response categories follow Architecture VII.3:
+//   *Envelope      → plain (no signature)
+//   Signed*        → signed envelope (not chained)
+//   *Receipt       → full receipt (signed and chained)
+
+syntax = "proto3";
+
+package zeropoint.v1.mesh;
+
+import "google/protobuf/timestamp.proto";
+import "v1/common.proto";
+
+// =============================================================================
+// Service
+// =============================================================================
+
+service Mesh {
+  // AnnounceAgent — broadcast this agent's identity and capabilities to mesh peers.
+  // Signed envelope: the announcement is attested by the announcing node.
+  // Subsumes: mesh EnvelopeType::AgentAnnounce.
+  rpc AnnounceAgent(AnnounceAgentRequest) returns (SignedAnnounce);
+
+  // SendHeartbeat — send a signed liveness heartbeat to a registry or peer.
+  // Signed envelope: the heartbeat is attested (the registry can verify it
+  // came from the claimed node).
+  // Subsumes: POST /api/v1/fleet/heartbeat, mesh liveness.
+  rpc SendHeartbeat(SendHeartbeatRequest) returns (SignedHeartbeat);
+
+  // AdvertisePolicy — broadcast loaded policy module metadata to mesh peers
+  // to enable policy-aware mesh link establishment.
+  // Signed envelope: the advertisement is attested by the advertising node.
+  // Subsumes: mesh EnvelopeType::PolicyAdvertisement.
+  rpc AdvertisePolicy(AdvertisePolicyRequest) returns (SignedPolicyAdvertisement);
+
+  // ProposePolicy — propose a policy for governing a mesh link with a peer.
+  // Signed envelope: the proposal is attested by the proposing node.
+  // Subsumes: mesh EnvelopeType::PolicyProposal.
+  rpc ProposePolicy(ProposePolicyRequest) returns (SignedPolicyProposal);
+
+  // VotePolicy — vote on an open policy proposal for a mesh link.
+  // Full receipt: a vote is a binding, auditable governance action.
+  // Subsumes: mesh EnvelopeType::PolicyVote.
+  rpc VotePolicy(VotePolicyRequest) returns (PolicyVoteReceipt);
+
+  // FinalizePolicy — record finalized policy agreement for a mesh link after
+  // quorum is reached. Full receipt: the agreement is a binding, chained event.
+  // Subsumes: mesh EnvelopeType::PolicyAgreement.
+  rpc FinalizePolicy(FinalizePolicyRequest) returns (PolicyAgreementReceipt);
+
+  // ChallengeAudit — send an audit challenge to a peer requesting chain segments
+  // for cross-node chain verification.
+  // Signed envelope: the challenge is attested by the challenging node.
+  // Subsumes: mesh EnvelopeType::AuditChallenge.
+  rpc ChallengeAudit(ChallengeAuditRequest) returns (SignedAuditChallenge);
+
+  // RespondAuditChallenge — respond to a peer audit challenge with the requested
+  // chain segments.
+  // Signed envelope: the response is attested by the responding node.
+  // Subsumes: mesh EnvelopeType::AuditResponse.
+  rpc RespondAuditChallenge(RespondAuditChallengeRequest) returns (SignedAuditResponse);
+
+  // AttestPeerAudit — attest that a peer's audit chain segment was verified.
+  // Full receipt: the attestation is a binding, chained claim on the local node.
+  // Trigger is mesh-based (following a ChallengeAudit/RespondAuditChallenge flow);
+  // effect is a new chain entry on the local node.
+  // Subsumes: mesh EnvelopeType::AuditAttestation.
+  rpc AttestPeerAudit(AttestPeerAuditRequest) returns (AttestationReceipt);
+
+  // BroadcastReputationSummary — broadcast a reputation summary about a peer
+  // to the mesh. Signed envelope: attested by the broadcasting node.
+  // Subsumes: mesh EnvelopeType::ReputationSummary.
+  rpc BroadcastReputationSummary(BroadcastReputationRequest) returns (SignedReputationSummary);
+
+  // TransferReceiptChain — transfer a receipt chain segment to another peer,
+  // e.g. for portability or cross-node audit.
+  // Signed envelope: attested by the transferring node.
+  // Subsumes: mesh EnvelopeType::ReceiptChain.
+  rpc TransferReceiptChain(TransferReceiptChainRequest) returns (SignedReceiptChainEnvelope);
+}
+
+// =============================================================================
+// Request messages
+// =============================================================================
+
+// AnnounceAgentRequest — this node's identity and advertised capabilities.
+message AnnounceAgentRequest {
+  // The announcing agent's identity reference.
+  common.ActorRef agent = 1;
+  // Human-readable capability names this agent advertises.
+  repeated string advertised_capabilities = 2;
+  // Supported protocol versions (e.g. ["zp/1.0", "zp/1.1"]).
+  repeated string protocol_versions = 3;
+}
+
+// SendHeartbeatRequest — liveness ping to a registry or direct peer.
+message SendHeartbeatRequest {
+  // The node sending the heartbeat.
+  common.ActorRef node = 1;
+  // Monotonically increasing heartbeat sequence number.
+  uint64 sequence = 2;
+  // Optional: target peer or registry to direct this heartbeat to.
+  string target_peer_hash = 3;
+}
+
+// AdvertisePolicyRequest — policy module metadata to broadcast to peers.
+message AdvertisePolicyRequest {
+  // BLAKE3 hex content hash of the WASM module being advertised.
+  string module_hash = 1;
+  // Human-readable module name.
+  string module_name = 2;
+  // Module version.
+  string module_version = 3;
+}
+
+// ProposePolicyRequest — propose a policy for a specific mesh link.
+message ProposePolicyRequest {
+  // The peer this proposal targets (their identity hash).
+  string target_peer_hash = 1;
+  // BLAKE3 hex hash of the proposed policy module.
+  string module_hash = 2;
+  // Opaque proposal payload (may include terms, TTL, scope).
+  bytes proposal_bytes = 3;
+}
+
+// VotePolicyRequest — cast a vote on an open policy proposal.
+message VotePolicyRequest {
+  // Identifier of the proposal being voted on.
+  string proposal_id = 1;
+  // The peer whose proposal this vote targets.
+  string target_peer_hash = 2;
+  // Vote outcome.
+  PolicyVote vote = 3;
+  // Optional rationale for the vote.
+  string rationale = 4;
+}
+
+// PolicyVote — the set of valid vote outcomes for a policy proposal.
+enum PolicyVote {
+  POLICY_VOTE_UNSPECIFIED = 0;
+  POLICY_VOTE_ACCEPT = 1;
+  POLICY_VOTE_REJECT = 2;
+  POLICY_VOTE_ABSTAIN = 3;
+}
+
+// FinalizePolicyRequest — record a policy agreement after quorum is reached.
+message FinalizePolicyRequest {
+  // Identifier of the proposal that reached quorum.
+  string proposal_id = 1;
+  // The peer this agreement governs.
+  string peer_hash = 2;
+  // BLAKE3 hex hash of the agreed policy module.
+  string agreed_module_hash = 3;
+}
+
+// ChallengeAuditRequest — request chain segments from a peer for verification.
+message ChallengeAuditRequest {
+  // The peer being challenged (their identity hash).
+  string target_peer_hash = 1;
+  // Chain position range to request [from_position, to_position].
+  uint64 from_position = 2;
+  uint64 to_position = 3;
+  // Nonce for replay protection.
+  bytes nonce = 4;
+}
+
+// RespondAuditChallengeRequest — send chain segments in response to a challenge.
+message RespondAuditChallengeRequest {
+  // The peer who issued the challenge.
+  string challenger_peer_hash = 1;
+  // Original challenge nonce, echoed back for correlation.
+  bytes challenge_nonce = 2;
+  // The requested chain entries, in order.
+  repeated common.AuditEntry entries = 3;
+}
+
+// AttestPeerAuditRequest — assert that a peer's chain segment was verified.
+message AttestPeerAuditRequest {
+  // The peer whose chain was verified.
+  string peer_hash = 1;
+  // The chain position range that was verified [from_position, to_position].
+  uint64 verified_from_position = 2;
+  uint64 verified_to_position = 3;
+  // Whether the segment was found valid.
+  bool chain_valid = 4;
+  // Human-readable summary of any integrity failures (empty if valid).
+  string failure_summary = 5;
+}
+
+// BroadcastReputationRequest — a signed reputation summary about a peer.
+message BroadcastReputationRequest {
+  // The peer being described.
+  string subject_peer_hash = 1;
+  // Reputation score in [0, 100].
+  uint32 score = 2;
+  // Opaque evidence payload (JSON-serialized reputation signals).
+  bytes evidence_bytes = 3;
+}
+
+// TransferReceiptChainRequest — a chain segment to transfer to another peer.
+message TransferReceiptChainRequest {
+  // The peer to receive the chain segment.
+  string target_peer_hash = 1;
+  // The receipt entries to transfer.
+  repeated common.AuditEntry entries = 2;
+  // Optional reason for the transfer (e.g. "portability", "cross-node-audit").
+  string reason = 3;
+}
+
+// =============================================================================
+// Response messages
+// =============================================================================
+
+// SignedAnnounce — signed envelope for an agent announcement.
+message SignedAnnounce {
+  common.ActorRef agent = 1;
+  repeated string advertised_capabilities = 2;
+  repeated string protocol_versions = 3;
+  google.protobuf.Timestamp announced_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}
+
+// SignedHeartbeat — signed envelope for a liveness heartbeat.
+message SignedHeartbeat {
+  common.ActorRef node = 1;
+  uint64 sequence = 2;
+  google.protobuf.Timestamp sent_at = 3;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 4;
+}
+
+// SignedPolicyAdvertisement — signed envelope for a policy advertisement.
+message SignedPolicyAdvertisement {
+  string module_hash = 1;
+  string module_name = 2;
+  string module_version = 3;
+  google.protobuf.Timestamp advertised_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}
+
+// SignedPolicyProposal — signed envelope for a policy proposal.
+message SignedPolicyProposal {
+  // Server-assigned stable proposal identifier.
+  string proposal_id = 1;
+  string target_peer_hash = 2;
+  string module_hash = 3;
+  bytes proposal_bytes = 4;
+  google.protobuf.Timestamp proposed_at = 5;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 6;
+}
+
+// PolicyVoteReceipt — full chained receipt for a policy vote.
+// header.kind = RECEIPT_KIND_POLICY_VOTE.
+message PolicyVoteReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  string proposal_id = 2;
+  string target_peer_hash = 3;
+  PolicyVote vote = 4;
+  string rationale = 5;
+}
+
+// PolicyAgreementReceipt — full chained receipt for a finalized policy agreement.
+// header.kind = RECEIPT_KIND_POLICY_AGREEMENT.
+message PolicyAgreementReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  string proposal_id = 2;
+  string peer_hash = 3;
+  string agreed_module_hash = 4;
+}
+
+// SignedAuditChallenge — signed envelope for an audit challenge.
+message SignedAuditChallenge {
+  string target_peer_hash = 1;
+  uint64 from_position = 2;
+  uint64 to_position = 3;
+  bytes nonce = 4;
+  google.protobuf.Timestamp challenged_at = 5;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 6;
+}
+
+// SignedAuditResponse — signed envelope for an audit challenge response.
+message SignedAuditResponse {
+  string challenger_peer_hash = 1;
+  bytes challenge_nonce = 2;
+  repeated common.AuditEntry entries = 3;
+  google.protobuf.Timestamp responded_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}
+
+// AttestationReceipt — full chained receipt for a peer audit attestation.
+// header.kind = RECEIPT_KIND_PEER_AUDIT.
+message AttestationReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  string peer_hash = 2;
+  uint64 verified_from_position = 3;
+  uint64 verified_to_position = 4;
+  bool chain_valid = 5;
+  string failure_summary = 6;
+}
+
+// SignedReputationSummary — signed envelope for a peer reputation broadcast.
+message SignedReputationSummary {
+  string subject_peer_hash = 1;
+  uint32 score = 2;
+  bytes evidence_bytes = 3;
+  google.protobuf.Timestamp summarized_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}
+
+// SignedReceiptChainEnvelope — signed envelope for a transferred chain segment.
+message SignedReceiptChainEnvelope {
+  string target_peer_hash = 1;
+  repeated common.AuditEntry entries = 2;
+  string reason = 3;
+  google.protobuf.Timestamp transferred_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}

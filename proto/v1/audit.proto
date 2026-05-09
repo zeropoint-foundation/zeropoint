@@ -1,0 +1,203 @@
+// proto/v1/audit.proto — Audit service.
+//
+// Covers chain head queries, filtered audit entry retrieval, chain integrity
+// verification, trust state reconstitution, streaming entry tail, anchor
+// inspection, and derived system state. System state is Audit-service work
+// because it is derived from the receipt chain.
+//
+// Architecture II.7: this file is part of the verb-set schema layer.
+// Response categories follow Architecture VII.3:
+//   *Envelope      → plain (no signature)
+//   Signed*        → signed envelope (not chained)
+//   *Receipt       → full receipt (signed and chained)
+//
+// Note on QueryAuditEntries: the signed envelope is sufficient for external
+// verification ("at T, entries E1..En existed"). If a caller needs their
+// act of verification to be chained, they should call VerifyChainIntegrity
+// instead, which produces a full receipt.
+
+syntax = "proto3";
+
+package zeropoint.v1.audit;
+
+import "google/protobuf/timestamp.proto";
+import "v1/common.proto";
+
+// =============================================================================
+// Service
+// =============================================================================
+
+service Audit {
+  // GetChainHead — return the current audit chain head (latest entry hash and
+  // chain position). Signed envelope: drives downstream verification decisions
+  // without chaining every read of the chain's own head.
+  // Subsumes: GET /api/v1/audit/chain-head.
+  rpc GetChainHead(GetChainHeadRequest) returns (SignedChainHead);
+
+  // QueryAuditEntries — return a filtered, paginated page of audit entries.
+  // Signed envelope: the response is attestable ("at T, these entries existed")
+  // without growing the chain on every dashboard poll.
+  // Subsumes: GET /api/v1/audit/entries.
+  rpc QueryAuditEntries(QueryAuditEntriesRequest) returns (SignedAuditEntriesEnvelope);
+
+  // VerifyChainIntegrity — attest that the local audit chain is internally
+  // consistent (no hash-link breaks, all signatures valid). Full chained receipt
+  // because the verification event itself is auditable — a node that verified
+  // its chain at T is a fact worth recording.
+  // Subsumes: GET /api/v1/audit/verify.
+  rpc VerifyChainIntegrity(VerifyChainIntegrityRequest) returns (AttestationReceipt);
+
+  // TailAuditEntries — server-streaming verb that pushes new audit entries as
+  // they are appended to the chain. Resume after disconnect by passing
+  // since_sequence (the sequence number of the last received entry).
+  // Subsumes: GET /api/v1/events/stream (audit events portion).
+  rpc TailAuditEntries(TailAuditEntriesRequest) returns (stream common.AuditEntry);
+
+  // ReconstituteTrustState — rebuild trust state (capabilities, posture, policy
+  // version) from the full audit chain. Full chained receipt because reconstitution
+  // is an explicit trust-establishing operation that should itself be auditable.
+  // Subsumes: POST /api/v1/security/reconstitute.
+  rpc ReconstituteTrustState(ReconstituteTrustStateRequest) returns (ReconstitutionReceipt);
+
+  // GetLatestAnchor — return the most recent OpenTimestamps proof bound to a
+  // chain head. Anchoring runs automatically per substrate config; this verb
+  // is a query, not a trigger. Signed envelope because the anchor proof drives
+  // downstream verification trust decisions.
+  // Replaces AnchorChainHead (per surprise resolution #5 — anchoring is automatic;
+  // the verb surfaces the latest proof, not a trigger).
+  rpc GetLatestAnchor(GetLatestAnchorRequest) returns (SignedAnchorEnvelope);
+
+  // GetSystemState — return derived system state from the receipt chain
+  // (active capabilities, policy version, posture summary). Audit-service
+  // because system state is chain-derived. Signed envelope: drives operational
+  // decisions without chaining every status check.
+  // Subsumes: GET /api/v1/system/state.
+  rpc GetSystemState(GetSystemStateRequest) returns (SignedSystemStateEnvelope);
+}
+
+// =============================================================================
+// Request messages
+// =============================================================================
+
+// GetChainHeadRequest — intentionally empty; always returns the current head.
+// Empty for forward-compatibility: future versions may add a chain ID field
+// for multi-chain support.
+message GetChainHeadRequest {}
+
+// QueryAuditEntriesRequest — filter, sort, and page for audit entry retrieval.
+message QueryAuditEntriesRequest {
+  // Filter predicates — all populated fields must match.
+  common.ReceiptFilter filter = 1;
+  common.PageRequest page = 2;
+}
+
+// VerifyChainIntegrityRequest — intentionally empty; verifies the full local chain.
+// Empty for forward-compatibility: future versions may add a from_sequence field
+// to verify a tail of the chain rather than the whole.
+message VerifyChainIntegrityRequest {}
+
+// TailAuditEntriesRequest — stream position to resume from.
+// Set since_sequence to the sequence number of the last received AuditEntry;
+// the server will start from the next entry. 0 means "from the beginning."
+message TailAuditEntriesRequest {
+  // Resume cursor: stream entries with sequence > since_sequence.
+  uint64 since_sequence = 1;
+}
+
+// ReconstituteTrustStateRequest — intentionally empty; reconstitutes from the
+// full local chain. Empty for forward-compatibility.
+message ReconstituteTrustStateRequest {}
+
+// GetLatestAnchorRequest — intentionally empty; returns the most recent anchor.
+// Empty for forward-compatibility: future versions may add a chain_position
+// field to retrieve the anchor for a specific head.
+message GetLatestAnchorRequest {}
+
+// GetSystemStateRequest — intentionally empty; returns current derived state.
+// Empty for forward-compatibility: future versions may add component selectors.
+message GetSystemStateRequest {}
+
+// =============================================================================
+// Response messages
+// =============================================================================
+
+// SignedChainHead — signed envelope for the current chain head.
+message SignedChainHead {
+  // BLAKE3 hex hash of the most recent chain entry.
+  common.ContentHash head_hash = 1;
+  // Chain position (sequence number) of the head entry.
+  uint64 chain_position = 2;
+  google.protobuf.Timestamp as_of = 3;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 4;
+}
+
+// SignedAuditEntriesEnvelope — signed envelope wrapping a page of audit entries.
+message SignedAuditEntriesEnvelope {
+  repeated common.AuditEntry entries = 1;
+  common.PageInfo page = 2;
+  // Chain head at the moment this query was served.
+  common.ContentHash head_at_query = 3;
+  google.protobuf.Timestamp queried_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}
+
+// AttestationReceipt — full chained receipt for a chain integrity verification.
+// Shared type: also used by Receipts service for external-fact attestations.
+// header.kind = RECEIPT_KIND_ATTESTATION.
+message AttestationReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // Whether the chain was found internally consistent.
+  bool chain_valid = 2;
+  // Chain position range verified [from_position, to_position].
+  uint64 verified_from_position = 3;
+  uint64 verified_to_position = 4;
+  // Human-readable summary of any integrity failures (empty if valid).
+  string failure_summary = 5;
+}
+
+// ReconstitutionReceipt — full chained receipt for a trust state reconstitution.
+// header.kind = RECEIPT_KIND_RECONSTITUTION.
+message ReconstitutionReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // Chain position from which reconstitution was performed.
+  uint64 reconstituted_from = 2;
+  // Chain position at which reconstitution completed.
+  uint64 reconstituted_to = 3;
+  // Summary of state rebuilt (e.g. active capability count, policy version).
+  uint32 active_capabilities_count = 4;
+  uint64 policy_version = 5;
+}
+
+// SignedAnchorEnvelope — signed envelope containing the latest OpenTimestamps proof.
+message SignedAnchorEnvelope {
+  // Chain head hash that was anchored.
+  common.ContentHash anchored_head_hash = 1;
+  // Chain position of the anchored head.
+  uint64 anchored_chain_position = 2;
+  // Raw OpenTimestamps proof bytes (calendar or Bitcoin-confirmed).
+  bytes ots_proof_bytes = 3;
+  // Whether the proof is Bitcoin-confirmed (true) or still pending (false).
+  bool confirmed = 4;
+  google.protobuf.Timestamp anchored_at = 5;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 6;
+}
+
+// SignedSystemStateEnvelope — signed envelope containing derived system state.
+message SignedSystemStateEnvelope {
+  // Current policy version.
+  uint64 policy_version = 1;
+  // Number of active capabilities in the trust graph.
+  uint32 active_capabilities_count = 2;
+  // Number of entries in the audit chain.
+  uint64 chain_length = 3;
+  // Hash of the current chain head.
+  common.ContentHash chain_head_hash = 4;
+  google.protobuf.Timestamp as_of = 5;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 6;
+}

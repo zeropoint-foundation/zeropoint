@@ -660,48 +660,55 @@ To set explicit boundaries on what the regroup must produce versus what is alrea
 
 ---
 
-## Appendix A — Sketch of a verb set (illustrative only)
+## Appendix A — The v1 verb set
 
-This is *not* the verb set. It's a sketch to make the principle concrete.
+The verb set is real and on disk. See:
 
-```
-service Substrate {
-  // Receipt-issuing verbs
-  rpc Evaluate(GuardRequest)              returns (GuardReceipt);
-  rpc Grant(GrantRequest)                 returns (DelegationReceipt);
-  rpc Delegate(DelegateRequest)           returns (DelegationReceipt);
-  rpc Withdraw(WithdrawRequest)           returns (WithdrawalReceipt);
-  rpc Generate(ReceiptGenerateRequest)    returns (Receipt);
+- **`proto/v1/common.proto`** — shared types (`ActorRef`, `Signature`, `ContentHash`, `ReceiptHeader`, `ReceiptKind`, `AuditEntry`, `PageRequest`, `ReceiptFilter`).
+- **`proto/v1/guard.proto`** — Guard service (9 verbs): gate evaluation, proxy calls, policy module management, policy version control.
+- **`proto/v1/delegation.proto`** — Delegation service (5 verbs): grant, delegate, verify-chain, renew-lease, get-credentials. (`WithdrawCapability` deferred pending V.3.)
+- **`proto/v1/receipts.proto`** — Receipts service (6 verbs): generate, ingest, attestation issue/lookup/list, watch (streaming).
+- **`proto/v1/audit.proto`** — Audit service (7 verbs): chain head, query entries, verify integrity, tail (streaming), reconstitute, get-latest-anchor, get-system-state.
+- **`proto/v1/mesh.proto`** — Mesh service (11 verbs): announce, heartbeat, policy advertisement / proposal / vote / agreement, audit challenge / response / attestation, reputation broadcast, receipt-chain transfer.
+- **`proto/v1/subscriptions.proto`** — Subscriptions service (4 verbs): subscribe, unsubscribe, list, register-channel-webhook. Targets are plural per Architecture II.11 (HTTP webhook, gossipsub topic, Reticulum address, mesh peer hash).
+- **`proto/v1/nodestatus.proto`** — NodeStatus service (10 verbs): identity, stats, security posture, topology, blast-radius register/get, compromise report, fleet node list/get/deregister.
 
-  // Read verbs (open question whether these issue receipts)
-  rpc ChainHead(Empty)                    returns (ChainHead);
-  rpc AuditEntries(AuditEntriesRequest)   returns (stream AuditEntry);
-  rpc AuditVerify(AuditVerifyRequest)     returns (AttestationReceipt);
-  rpc Identity(Empty)                     returns (IdentityResponse);
+**Total: 7 services, 52 verbs across ~1,800 lines of proto.**
 
-  // Mesh verbs
-  rpc Announce(AgentCapabilities)         returns (SignedAnnounce);
-  rpc Heartbeat(HeartbeatRequest)         returns (SignedHeartbeat);
+### Conventions applied (from Phase 3 design decisions, May 9 2026)
 
-  // Streaming verbs (open question whether these are first-class
-  // or whether streaming is a property of any read verb's response)
-  rpc TailEntries(TailRequest)            returns (stream AuditEntry);
-  rpc WatchReceipts(ReceiptFilter)        returns (stream Receipt);
+- **Naming:** verb-first with resource (`EvaluateGate`, `GrantCapability`, `GetChainHead`).
+- **File layout:** per-service files in `proto/v1/`; common types in `proto/v1/common.proto`.
+- **Service partitioning:** 7 services (Guard, Delegation, Receipts, Audit, Mesh, Subscriptions, NodeStatus).
+- **Empty-input convention:** every verb has its own `<Verb>Request` message — no use of `google.protobuf.Empty`. Forward-compatible field addition.
+- **Response category encoding** (per VII.3): type-name suffix.
+  - `*Envelope` → plain envelope (no signature). Frequently-polled state; observation only.
+  - `Signed*` → signed envelope (signed but not chained). Attestable answers driving downstream commitments.
+  - `*Receipt` → full receipt (signed and chained). State-changing events.
+  - Two carve-outs: `common.Receipt` (the canonical receipt type, used directly by `GenerateReceipt` / `IngestReceipt`) and `common.AuditEntry` (chain-bookkeeping wrapper used by `TailAuditEntries`).
 
-  // Subscription verbs (outbound delivery 4.7)
-  rpc Subscribe(SubscribeRequest)         returns (SubscriptionReceipt);
-  rpc Unsubscribe(UnsubscribeRequest)     returns (CancellationReceipt);
-}
+### Reserved fields for future seams
 
-// Infrastructure resources (allowlist, not verbs):
-//   GET  /health
-//   GET  /version
-//   GET  /events/stream  (SSE)
-//   POST /webrtc/signal  (WebRTC SDP exchange)
-//   GET  /assets/*       (static)
-```
+The schema reserves two fields on `ReceiptHeader` for the un-thought dimensions:
 
-This sketch is illustrative. The real verb set will emerge from the design work and is likely to be smaller and tighter than this.
+- **`policy_snapshot_hash`** — Architecture II.12 trust-portability composition; populated when V.5 design lands.
+- **`references`** — typed cross-receipt references; populated when V.7 (receipt composability) design lands.
+
+Both are present in the schema but empty in v1 receipts. Adding them later is a non-breaking change because they're already declared.
+
+### Infrastructure resources (allowlist, not verbs)
+
+Per Architecture III, these HTTP paths stay as infrastructure resources and don't emit receipts:
+
+- `GET /api/v1/health` — process supervisor / load balancer probe.
+- `GET /api/v1/version` — version disclosure for compatibility checks.
+- `GET /api/v1/events/stream` — SSE backing for `WatchReceipts` and `TailAuditEntries` streaming verbs.
+- `POST /webrtc/signal` (to be added) — WebRTC SDP signaling for delivery 4.2 (pixel-streamed UI).
+- `GET /assets/*` — static asset serving.
+
+### Inventory of routes that retire
+
+See `docs/VERB-SET-INVENTORY-2026-05.md` for the full list of ~44 HTTP routes that retire under the verb-set design. Categories: dashboard glue (replaced by delivery 4.1 / 4.2), dev-tools-only (feature-flagged, never ship), and duplicates (multiple HTTP paths collapsing into single verbs).
 
 ---
 

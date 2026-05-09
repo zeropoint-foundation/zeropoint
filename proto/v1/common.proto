@@ -1,0 +1,240 @@
+// proto/v1/common.proto — Shared types for the ZeroPoint v1 verb set.
+//
+// Architecture II.7: protobuf is the verb-set schema layer.
+// Architecture II.0: contracts are singular; this file IS the contract for
+// shared types across all 7 services. Adding a second `common.proto`
+// for the same concern is a warning sign.
+//
+// Response category convention (Architecture VII.3):
+//   *Envelope        → plain envelope (typed data, no signature)
+//   Signed*          → signed envelope (typed data + node signature, not chained)
+//   *Receipt         → full receipt (signed and chained)
+//
+// Discipline pin `verbs_must_match_schema` enforces that every public-API
+// response type matches one of these three patterns.
+
+syntax = "proto3";
+
+package zeropoint.v1.common;
+
+import "google/protobuf/timestamp.proto";
+
+// =============================================================================
+// Identity — actors that sign, are attested to, or hold capabilities.
+// =============================================================================
+
+// An actor identifier. The `kind` discriminates the actor category;
+// `id` is a stable opaque identifier within that kind.
+//
+// Examples:
+//   { kind: HUMAN,  id: "alice@example.com" }
+//   { kind: AGENT,  id: "tool/codex/v1" }
+//   { kind: SYSTEM, id: "zp-server@apollo" }
+//   { kind: CODEX,  id: "codex/repo-curator/v2" }
+message ActorRef {
+  ActorKind kind = 1;
+  string id = 2;
+}
+
+enum ActorKind {
+  ACTOR_KIND_UNSPECIFIED = 0;
+  ACTOR_KIND_HUMAN = 1;
+  ACTOR_KIND_CODEX = 2;
+  ACTOR_KIND_AGENT = 3;
+  ACTOR_KIND_SYSTEM = 4;
+}
+
+// =============================================================================
+// Cryptographic primitives — signatures, hashes, public keys.
+// =============================================================================
+
+// A single signature over a canonical preimage.
+// Per Seam 5, all verifications go through `zp_receipt::verify::verify_signature`.
+message Signature {
+  // Hex-encoded 32-byte Ed25519 verifying (public) key.
+  string public_key = 1;
+  // Hex-encoded 64-byte Ed25519 signature.
+  string signature = 2;
+  SignatureAlgorithm algorithm = 3;
+}
+
+enum SignatureAlgorithm {
+  SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
+  SIGNATURE_ALGORITHM_ED25519 = 1;
+  // Future: ML-DSA-65 for hybrid post-quantum signing.
+  SIGNATURE_ALGORITHM_ML_DSA_65 = 2;
+}
+
+// A content-addressable hash. Hex-encoded BLAKE3 by convention.
+message ContentHash {
+  string hex = 1;
+  HashAlgorithm algorithm = 2;
+}
+
+enum HashAlgorithm {
+  HASH_ALGORITHM_UNSPECIFIED = 0;
+  HASH_ALGORITHM_BLAKE3 = 1;
+  HASH_ALGORITHM_SHA256 = 2;
+  HASH_ALGORITHM_SHA384 = 3;
+}
+
+// =============================================================================
+// Receipt — the canonical wire-format unit of substrate trust.
+// =============================================================================
+
+// A receipt header — the stable preamble shared by every receipt variant.
+//
+// Receipt variants in service-specific .proto files (e.g. GuardReceipt,
+// DelegationReceipt) embed a ReceiptHeader as their first field plus
+// any verb-specific payload fields.
+//
+// Per Architecture II.20 (hash-then-sign): `content_hash` is computed
+// over the canonical bytes of the receipt with `signatures` empty;
+// signing then populates `signatures`. The hash never feeds back into
+// itself.
+message ReceiptHeader {
+  // Stable receipt identifier (UUID v7; carries embedded timestamp).
+  string id = 1;
+
+  // Schema version of THIS receipt. Per Seam 14 (versioned-format
+  // dispatch), readers route on this field. Current: "1.0.0".
+  string schema_version = 2;
+
+  // Wall-clock issue time (UTC).
+  google.protobuf.Timestamp issued_at = 3;
+
+  // Actor that issued this receipt (signed by their key).
+  ActorRef issuer = 4;
+
+  // Optional target — what or whom this receipt is about. May equal
+  // `issuer` (e.g. a self-attestation) or differ (e.g. a delegation
+  // grant where issuer = grantor, target = grantee).
+  ActorRef target = 5;
+
+  // Receipt kind — discriminates the variant. Used for chain queries
+  // and discipline-pin enforcement of category rules.
+  ReceiptKind kind = 6;
+
+  // BLAKE3 content hash over the canonical-bytes preimage of the
+  // receipt with `signatures` empty. The chain-integrity invariant.
+  ContentHash content_hash = 7;
+
+  // Hash of the preceding receipt in the chain. Forms the audit chain's
+  // hash-linked structure (Seam 1, M3).
+  ContentHash previous_hash = 8;
+
+  // Monotonically increasing position in the local chain. Starts at 0
+  // for the genesis receipt.
+  uint64 chain_position = 9;
+
+  // Signatures over the canonical preimage. Typically one Ed25519
+  // signature from the issuer; multi-signature variants are reserved
+  // for quorum sovereignty (V.2).
+  repeated Signature signatures = 10;
+
+  // Snapshot hash of the policy + config active at receipt issue time.
+  // Reserved for V.5 trust-portability composition (Architecture II.12).
+  // Empty in v1 receipts; populated when V.5 design lands.
+  ContentHash policy_snapshot_hash = 11;
+
+  // Optional cross-receipt references. Reserved for V.7 (receipt
+  // composability) — typed references to other receipts that this
+  // receipt depends on or cites. Empty in v1; populated when V.7 design lands.
+  repeated ReceiptRef references = 12;
+}
+
+// A typed reference to another receipt in the chain (or in another
+// node's chain reachable via libp2p content routing — Architecture II.12).
+//
+// Reserved for V.7 (receipt composability). The `relation` field
+// names *why* this receipt cites the other one ("derives_from",
+// "cites_evidence", "supersedes", etc.); the namespace will be
+// designed when V.7 opens.
+message ReceiptRef {
+  ContentHash hash = 1;
+  string relation = 2;
+}
+
+// Receipt kind — every receipt declares one. Used for chain queries
+// and matching against verb declarations (the discipline pin enforces
+// that, e.g., the response to `EvaluateGate` is RECEIPT_KIND_GUARD).
+enum ReceiptKind {
+  RECEIPT_KIND_UNSPECIFIED = 0;
+  RECEIPT_KIND_EXECUTION = 1;
+  RECEIPT_KIND_GUARD = 2;
+  RECEIPT_KIND_PROXY = 3;
+  RECEIPT_KIND_POLICY_MODULE = 4;
+  RECEIPT_KIND_POLICY_VERSION = 5;
+  RECEIPT_KIND_POLICY_VOTE = 6;
+  RECEIPT_KIND_POLICY_AGREEMENT = 7;
+  RECEIPT_KIND_DELEGATION = 8;
+  RECEIPT_KIND_LEASE_RENEWAL = 9;
+  RECEIPT_KIND_WITHDRAWAL = 10;
+  RECEIPT_KIND_ATTESTATION = 11;
+  RECEIPT_KIND_PEER_AUDIT = 12;
+  RECEIPT_KIND_RECONSTITUTION = 13;
+  RECEIPT_KIND_ANCHORING = 14;
+  RECEIPT_KIND_BLAST_RADIUS = 15;
+  RECEIPT_KIND_COMPROMISE = 16;
+  RECEIPT_KIND_NODE_DEREGISTRATION = 17;
+  RECEIPT_KIND_SUBSCRIPTION = 18;
+  RECEIPT_KIND_CANCELLATION = 19;
+}
+
+// =============================================================================
+// Audit chain — the local, append-only, hash-linked log of receipts.
+// =============================================================================
+
+// A single entry in the local audit chain. Entries are receipts plus
+// chain bookkeeping; queries return entries (not raw receipts) so the
+// caller has the chain context.
+message AuditEntry {
+  uint64 sequence = 1;
+  google.protobuf.Timestamp appended_at = 2;
+  ContentHash content_hash = 3;
+  ContentHash previous_hash = 4;
+  // The receipt at this chain position, embedded as canonical bytes.
+  // Concrete receipt type is determined by the embedded ReceiptHeader.kind.
+  bytes receipt_canonical_bytes = 5;
+}
+
+// =============================================================================
+// Pagination — used by query verbs that return potentially-large lists.
+// =============================================================================
+
+// Standard pagination request fields. Verbs that need pagination embed
+// these fields directly in their request messages.
+message PageRequest {
+  // Maximum entries to return. 0 means "server default" (typically 100).
+  uint32 page_size = 1;
+
+  // Opaque cursor returned by a previous page response. Empty for first page.
+  string page_token = 2;
+}
+
+message PageInfo {
+  // Cursor for the next page. Empty if this is the last page.
+  string next_page_token = 1;
+  // Total count if known and inexpensive to compute. 0 means "unknown".
+  uint64 total_size = 2;
+}
+
+// =============================================================================
+// Filters — typed predicates used by query/watch/subscribe verbs.
+// =============================================================================
+
+// A receipt filter. Verbs accepting this filter return only receipts
+// matching all populated fields. Empty fields are ignored (don't filter).
+message ReceiptFilter {
+  // Restrict to these receipt kinds. Empty means "all kinds".
+  repeated ReceiptKind kinds = 1;
+  // Restrict to receipts issued by this actor.
+  ActorRef issuer = 2;
+  // Restrict to receipts targeting this actor.
+  ActorRef target = 3;
+  // Restrict to receipts issued in the time range [from, to).
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  // Restrict to receipts at or above this chain position.
+  uint64 since_chain_position = 6;
+}

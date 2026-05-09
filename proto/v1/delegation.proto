@@ -1,0 +1,156 @@
+// proto/v1/delegation.proto — Delegation service.
+//
+// Covers capability issuance, delegation, chain verification, lease renewal,
+// and credential retrieval. Capability-adjacent operations live here.
+//
+// Architecture II.7: this file is part of the verb-set schema layer.
+// Response categories follow Architecture VII.3:
+//   *Envelope      → plain (no signature)
+//   Signed*        → signed envelope (not chained)
+//   *Receipt       → full receipt (signed and chained)
+
+syntax = "proto3";
+
+package zeropoint.v1.delegation;
+
+import "google/protobuf/timestamp.proto";
+import "v1/common.proto";
+
+// =============================================================================
+// Service
+// =============================================================================
+
+service Delegation {
+  // GrantCapability — issue a new top-level capability grant to an actor.
+  // Full receipt because issuing a capability is a state-changing, auditable event.
+  // Subsumes: POST /api/v1/capabilities/grant.
+  rpc GrantCapability(GrantCapabilityRequest) returns (DelegationReceipt);
+
+  // DelegateCapability — delegate an existing capability to another agent.
+  // Full receipt. Subsumes: POST /api/v1/capabilities/delegate,
+  // mesh EnvelopeType::Delegation.
+  rpc DelegateCapability(DelegateCapabilityRequest) returns (DelegationReceipt);
+
+  // VerifyDelegationChain — verify the integrity and validity of a delegation chain.
+  // Signed envelope: verification drives downstream trust decisions but should
+  // not grow the chain on every check. See inventory open question on cross-service
+  // tension — if verification needs to be auditable, use VerifyChainIntegrity instead.
+  // Subsumes: POST /api/v1/capabilities/verify-chain.
+  rpc VerifyDelegationChain(VerifyDelegationChainRequest) returns (SignedDelegationChainVerification);
+
+  // RenewLease — renew a standing delegation lease before it expires.
+  // Full receipt. Subsumes: POST /api/v1/lease/renew.
+  rpc RenewLease(RenewLeaseRequest) returns (DelegationReceipt);
+
+  // WithdrawCapability verb deferred pending V.3 design (see Architecture-2026-05.md Part V.3).
+
+  // GetCredentials — retrieve credentials for a named provider.
+  // Signed envelope: credential answers drive authorization decisions.
+  // Subsumes: GET /api/v1/credentials/:provider.
+  rpc GetCredentials(GetCredentialsRequest) returns (SignedCredentialsEnvelope);
+}
+
+// =============================================================================
+// Request messages
+// =============================================================================
+
+// GrantCapabilityRequest — the grantee, capability name, and scope.
+message GrantCapabilityRequest {
+  // Actor receiving the capability.
+  common.ActorRef grantee = 1;
+  // Name identifying the capability being granted.
+  string capability_name = 2;
+  // Optional expiry. Zero value means no expiry.
+  google.protobuf.Timestamp expires_at = 3;
+  // Optional scope constraints (JSON-serialized predicate).
+  bytes scope = 4;
+}
+
+// DelegateCapabilityRequest — source capability, delegatee, and narrowed scope.
+message DelegateCapabilityRequest {
+  // Identifier of the capability being delegated (receipt ID of the grant).
+  string source_capability_id = 1;
+  // Actor receiving the delegated capability.
+  common.ActorRef delegatee = 2;
+  // Optional further-narrowed scope. Must be a subset of the source scope.
+  bytes scope = 3;
+  // Optional expiry — must not exceed the source capability's expiry.
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// VerifyDelegationChainRequest — the chain of capability IDs to verify.
+message VerifyDelegationChainRequest {
+  // Ordered list of capability receipt IDs forming the delegation chain,
+  // from root grant to the leaf capability being verified.
+  repeated string capability_ids = 1;
+  // The actor claiming to hold the leaf capability.
+  common.ActorRef claimant = 2;
+}
+
+// RenewLeaseRequest — identify the lease to renew and the new expiry.
+message RenewLeaseRequest {
+  // Identifier of the capability lease to renew (receipt ID).
+  string capability_id = 1;
+  // New expiry time. Must not exceed the grantor's own expiry.
+  google.protobuf.Timestamp new_expires_at = 2;
+}
+
+// GetCredentialsRequest — the provider name to retrieve credentials for.
+message GetCredentialsRequest {
+  // Provider identifier (e.g. "openai", "anthropic", "github").
+  string provider = 1;
+  // Actor on whose behalf credentials are requested.
+  common.ActorRef actor = 2;
+}
+
+// =============================================================================
+// Response messages
+// =============================================================================
+
+// DelegationReceipt — full chained receipt for grant, delegate, or lease renewal.
+// header.kind = RECEIPT_KIND_DELEGATION (grant/delegate) or
+//               RECEIPT_KIND_LEASE_RENEWAL (renew).
+message DelegationReceipt {
+  // Stable receipt preamble — chain position, hash, signatures, issuer, etc.
+  common.ReceiptHeader header = 1;
+  // Stable identifier for the capability created or renewed.
+  string capability_id = 2;
+  // Name of the capability.
+  string capability_name = 3;
+  // Effective expiry (zero if unlimited).
+  google.protobuf.Timestamp expires_at = 4;
+  // For delegation: the capability this was derived from (empty for root grants).
+  string parent_capability_id = 5;
+}
+
+// SignedDelegationChainVerification — signed envelope attesting chain validity.
+// The node signs its claim that the chain was verified as of `verified_at`.
+message SignedDelegationChainVerification {
+  // Whether the chain is valid end-to-end.
+  bool valid = 1;
+  // If invalid, the capability ID where verification failed.
+  string failed_at_id = 2;
+  // Human-readable reason for failure (empty if valid).
+  string failure_reason = 3;
+  // The leaf capability ID that was verified (or rejected).
+  string leaf_capability_id = 4;
+  google.protobuf.Timestamp verified_at = 5;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 6;
+}
+
+// SignedCredentialsEnvelope — signed envelope containing provider credentials.
+// Credential material drives authorization decisions; the signature lets
+// callers verify provenance.
+message SignedCredentialsEnvelope {
+  // Provider identifier.
+  string provider = 1;
+  // Opaque credential material (API key, token, etc.). Callers should treat
+  // this as sensitive; transport encryption is a separate concern.
+  bytes credential_bytes = 2;
+  // Credential expiry (zero if not applicable).
+  google.protobuf.Timestamp expires_at = 3;
+  google.protobuf.Timestamp retrieved_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}

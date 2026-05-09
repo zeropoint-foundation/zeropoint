@@ -1,0 +1,309 @@
+// proto/v1/nodestatus.proto — NodeStatus service.
+//
+// Covers node identity, runtime statistics, security posture, mesh topology,
+// blast-radius management, compromise reporting, and fleet node management.
+//
+// Architecture II.7: this file is part of the verb-set schema layer.
+// Response categories follow Architecture VII.3:
+//   *Envelope      → plain (no signature)
+//   Signed*        → signed envelope (not chained)
+//   *Receipt       → full receipt (signed and chained)
+
+syntax = "proto3";
+
+package zeropoint.v1.nodestatus;
+
+import "google/protobuf/timestamp.proto";
+import "v1/common.proto";
+
+// =============================================================================
+// Service
+// =============================================================================
+
+service NodeStatus {
+  // GetIdentity — return the node's cryptographic identity (public key, bead zero).
+  // Signed envelope: identity answers drive trust decisions (who am I talking to?).
+  // Subsumes: GET /api/v1/identity, GET /api/v1/genesis.
+  rpc GetIdentity(GetIdentityRequest) returns (SignedIdentity);
+
+  // GetNodeStats — return runtime statistics (receipts issued, chain length, uptime).
+  // Plain envelope: fast-polling observation, does not drive trust-critical decisions.
+  // Subsumes: GET /api/v1/stats.
+  rpc GetNodeStats(GetNodeStatsRequest) returns (NodeStatsEnvelope);
+
+  // GetSecurityPosture — return the node's security posture assessment.
+  // Signed envelope: posture drives operational decisions; signature confirms
+  // the assessment came from this node at this time.
+  // Subsumes: GET /api/v1/security/posture.
+  rpc GetSecurityPosture(GetSecurityPostureRequest) returns (SignedSecurityPosture);
+
+  // GetTopology — return the mesh topology view from this node's perspective.
+  // Plain envelope: topology is observation-only; dashboards poll frequently.
+  // Subsumes: GET /api/v1/security/topology.
+  rpc GetTopology(GetTopologyRequest) returns (SignedTopologyEnvelope);
+
+  // RegisterBlastRadius — register a key-compromise blast-radius record,
+  // describing which capabilities and receipts are affected by a key compromise.
+  // Full receipt: registration is a state-changing, auditable event.
+  // Subsumes: POST /api/v1/security/blast-radius/register.
+  rpc RegisterBlastRadius(RegisterBlastRadiusRequest) returns (BlastRadiusReceipt);
+
+  // GetBlastRadius — query blast-radius impact for a specific key.
+  // Signed envelope: the answer may drive downstream key-rotation decisions.
+  // Subsumes: GET /api/v1/security/blast-radius/:key.
+  rpc GetBlastRadius(GetBlastRadiusRequest) returns (SignedBlastRadiusEnvelope);
+
+  // ReportCompromise — report a key compromise event.
+  // Full receipt: compromise events are binding, high-stakes, chained facts.
+  // Subsumes: POST /api/v1/security/compromise.
+  rpc ReportCompromise(ReportCompromiseRequest) returns (CompromiseReceipt);
+
+  // ListFleetNodes — list all fleet nodes registered with this node.
+  // Plain envelope: observation-only list; may be polled by dashboards.
+  // Subsumes: GET /api/v1/fleet/nodes, GET /api/v1/fleet/summary.
+  rpc ListFleetNodes(ListFleetNodesRequest) returns (FleetNodesEnvelope);
+
+  // GetFleetNode — return detail for a single fleet node by ID.
+  // Signed envelope: node detail answers may drive provisioning decisions.
+  // Subsumes: GET /api/v1/fleet/nodes/:id.
+  rpc GetFleetNode(GetFleetNodeRequest) returns (SignedFleetNodeEnvelope);
+
+  // DeregisterFleetNode — remove a fleet node from the registry.
+  // Full receipt: deregistration is a state-changing, auditable event.
+  // Subsumes: DELETE /api/v1/fleet/nodes/:id.
+  rpc DeregisterFleetNode(DeregisterFleetNodeRequest) returns (NodeDeregistrationReceipt);
+}
+
+// =============================================================================
+// Request messages
+// =============================================================================
+
+// GetIdentityRequest — intentionally empty; always returns this node's identity.
+// Empty for forward-compatibility: future versions may add a peer hash field to
+// query a known peer's identity from the local mesh view.
+message GetIdentityRequest {}
+
+// GetNodeStatsRequest — intentionally empty; returns all current runtime stats.
+// Empty for forward-compatibility: future versions may add component selectors.
+message GetNodeStatsRequest {}
+
+// GetSecurityPostureRequest — intentionally empty; returns the current posture.
+// Empty for forward-compatibility: future versions may add a posture profile field.
+message GetSecurityPostureRequest {}
+
+// GetTopologyRequest — intentionally empty; returns the full mesh topology view.
+// Empty for forward-compatibility: future versions may add depth limit fields.
+message GetTopologyRequest {}
+
+// RegisterBlastRadiusRequest — the key and impact description to register.
+message RegisterBlastRadiusRequest {
+  // Hex-encoded public key of the compromised or rotated key.
+  string affected_key = 1;
+  // List of capability IDs affected by this key's compromise.
+  repeated string affected_capability_ids = 2;
+  // List of receipt IDs (chain positions) whose signatures are now suspect.
+  repeated string affected_receipt_ids = 3;
+  // Optional human-readable impact description.
+  string impact_description = 4;
+}
+
+// GetBlastRadiusRequest — identify the key to query blast radius for.
+message GetBlastRadiusRequest {
+  // Hex-encoded public key to query.
+  string key = 1;
+}
+
+// ReportCompromiseRequest — the compromised key and evidence.
+message ReportCompromiseRequest {
+  // Hex-encoded public key that is compromised.
+  string compromised_key = 1;
+  // Actor reporting the compromise.
+  common.ActorRef reporter = 2;
+  // Optional evidence payload (JSON-serialized context).
+  bytes evidence_bytes = 3;
+  // Human-readable description of how the compromise was detected.
+  string description = 4;
+}
+
+// ListFleetNodesRequest — optional filter and pagination.
+message ListFleetNodesRequest {
+  // Optional: filter to nodes with this status (empty = all).
+  string status_filter = 1;
+  common.PageRequest page = 2;
+}
+
+// GetFleetNodeRequest — identify the fleet node to retrieve.
+message GetFleetNodeRequest {
+  // Fleet node identifier.
+  string node_id = 1;
+}
+
+// DeregisterFleetNodeRequest — identify the fleet node to remove.
+message DeregisterFleetNodeRequest {
+  // Fleet node identifier.
+  string node_id = 1;
+  // Optional reason for deregistration.
+  string reason = 2;
+}
+
+// =============================================================================
+// Response messages
+// =============================================================================
+
+// SignedIdentity — signed envelope containing this node's cryptographic identity.
+message SignedIdentity {
+  // Hex-encoded Ed25519 public key (bead zero key).
+  string public_key = 1;
+  // Stable node identifier derived from the public key.
+  string node_id = 2;
+  // Human-readable node name (if set during genesis ceremony).
+  string node_name = 3;
+  // Chain position of the genesis receipt (bead zero).
+  uint64 genesis_chain_position = 4;
+  // Content hash of the genesis receipt.
+  common.ContentHash genesis_receipt_hash = 5;
+  google.protobuf.Timestamp identity_as_of = 6;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 7;
+}
+
+// NodeStatsEnvelope — plain envelope with runtime statistics.
+message NodeStatsEnvelope {
+  // Total receipts issued since genesis.
+  uint64 receipts_issued = 1;
+  // Current audit chain length (number of entries).
+  uint64 chain_length = 2;
+  // Node uptime in seconds.
+  uint64 uptime_seconds = 3;
+  // Number of active mesh peers.
+  uint32 active_peers = 4;
+  // Number of active capabilities in the trust graph.
+  uint32 active_capabilities = 5;
+  google.protobuf.Timestamp stats_at = 6;
+}
+
+// SignedSecurityPosture — signed envelope for the node's security posture.
+message SignedSecurityPosture {
+  // Overall posture level.
+  PostureLevel level = 1;
+  // Ordered list of active posture findings.
+  repeated PostureFinding findings = 2;
+  // Current policy version (used in posture assessment).
+  uint64 policy_version = 3;
+  google.protobuf.Timestamp assessed_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}
+
+// PostureLevel — the overall security posture of the node.
+enum PostureLevel {
+  POSTURE_LEVEL_UNSPECIFIED = 0;
+  POSTURE_LEVEL_NOMINAL = 1;
+  POSTURE_LEVEL_DEGRADED = 2;
+  POSTURE_LEVEL_CRITICAL = 3;
+}
+
+// PostureFinding — a single posture assessment finding.
+message PostureFinding {
+  // Short machine-readable finding code (e.g. "UNSIGNED_RECEIPT_GAP").
+  string code = 1;
+  // Human-readable description.
+  string description = 2;
+  // Severity level.
+  PostureLevel severity = 3;
+}
+
+// SignedTopologyEnvelope — signed envelope containing the mesh topology view.
+// Signed because topology data may drive routing and trust decisions.
+message SignedTopologyEnvelope {
+  repeated TopologyNode nodes = 1;
+  google.protobuf.Timestamp topology_at = 2;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 3;
+}
+
+// TopologyNode — a single node in the mesh topology view.
+message TopologyNode {
+  string node_id = 1;
+  string node_name = 2;
+  // Hex-encoded public key.
+  string public_key = 3;
+  // Last seen timestamp.
+  google.protobuf.Timestamp last_seen = 4;
+  // Whether this node is currently reachable.
+  bool reachable = 5;
+}
+
+// BlastRadiusReceipt — full chained receipt for a blast-radius registration.
+// header.kind = RECEIPT_KIND_BLAST_RADIUS.
+message BlastRadiusReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // The affected key.
+  string affected_key = 2;
+  uint32 affected_capabilities_count = 3;
+  uint32 affected_receipts_count = 4;
+  string impact_description = 5;
+}
+
+// SignedBlastRadiusEnvelope — signed envelope for a blast-radius query result.
+message SignedBlastRadiusEnvelope {
+  string key = 1;
+  repeated string affected_capability_ids = 2;
+  repeated string affected_receipt_ids = 3;
+  string impact_description = 4;
+  google.protobuf.Timestamp registered_at = 5;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 6;
+}
+
+// CompromiseReceipt — full chained receipt for a key compromise report.
+// header.kind = RECEIPT_KIND_COMPROMISE.
+message CompromiseReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // The compromised key.
+  string compromised_key = 2;
+  string description = 3;
+  google.protobuf.Timestamp reported_at = 4;
+}
+
+// FleetNodesEnvelope — plain envelope listing fleet nodes.
+message FleetNodesEnvelope {
+  repeated FleetNodeSummary nodes = 1;
+  common.PageInfo page = 2;
+}
+
+// FleetNodeSummary — a single row in the FleetNodesEnvelope list.
+message FleetNodeSummary {
+  string node_id = 1;
+  string node_name = 2;
+  string public_key = 3;
+  string status = 4;
+  google.protobuf.Timestamp last_heartbeat = 5;
+}
+
+// SignedFleetNodeEnvelope — signed envelope with detailed fleet node information.
+message SignedFleetNodeEnvelope {
+  string node_id = 1;
+  string node_name = 2;
+  string public_key = 3;
+  string status = 4;
+  google.protobuf.Timestamp last_heartbeat = 5;
+  google.protobuf.Timestamp registered_at = 6;
+  // Advertised capability names.
+  repeated string capabilities = 7;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 8;
+}
+
+// NodeDeregistrationReceipt — full chained receipt for a fleet node deregistration.
+// header.kind = RECEIPT_KIND_NODE_DEREGISTRATION.
+message NodeDeregistrationReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // The node that was deregistered.
+  string deregistered_node_id = 2;
+  string reason = 3;
+  google.protobuf.Timestamp deregistered_at = 4;
+}

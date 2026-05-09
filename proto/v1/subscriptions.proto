@@ -1,0 +1,145 @@
+// proto/v1/subscriptions.proto — Subscriptions service.
+//
+// Covers subscription lifecycle: register a filter + outbound target,
+// cancel a subscription, list active subscriptions, and register a
+// Slack/Discord channel webhook as a dedicated subscription target.
+//
+// Transport selection (gossipsub, HTTP webhook, Reticulum push, mesh push)
+// is expressed via the SubscribeRequest's oneof target field — one verb,
+// multiple delivery transports (Architecture II.11).
+//
+// Architecture II.7: this file is part of the verb-set schema layer.
+// Response categories follow Architecture VII.3:
+//   *Envelope      → plain (no signature)
+//   Signed*        → signed envelope (not chained)
+//   *Receipt       → full receipt (signed and chained)
+
+syntax = "proto3";
+
+package zeropoint.v1.subscriptions;
+
+import "google/protobuf/timestamp.proto";
+import "v1/common.proto";
+
+// =============================================================================
+// Service
+// =============================================================================
+
+service Subscriptions {
+  // Subscribe — register a receipt filter and outbound delivery target.
+  // The transport is selected via the oneof target in SubscribeRequest.
+  // Full receipt: subscription creation is a state-changing, auditable event.
+  // No current HTTP route — capability gap surfaced by verb-set design.
+  rpc Subscribe(SubscribeRequest) returns (SubscriptionReceipt);
+
+  // Unsubscribe — cancel an active subscription by ID.
+  // Full receipt: cancellation is an auditable state change.
+  // No current HTTP route — capability gap.
+  rpc Unsubscribe(UnsubscribeRequest) returns (CancellationReceipt);
+
+  // ListSubscriptions — return active subscriptions for this node.
+  // Plain envelope: observation-only list read.
+  // No current HTTP route — capability gap.
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (SubscriptionsEnvelope);
+
+  // RegisterChannelWebhook — register a Slack or Discord channel webhook URL
+  // as a subscription target for receipt delivery. ZeroPoint is the publisher;
+  // the webhook URL is the subscriber endpoint. Full receipt: registration is
+  // a state-changing, auditable event.
+  // Subsumes: POST /api/v1/channels/slack/webhook (reframed — the existing
+  // handler receives inbound Slack events; this verb registers an outbound
+  // delivery target).
+  rpc RegisterChannelWebhook(RegisterChannelWebhookRequest) returns (SubscriptionReceipt);
+}
+
+// =============================================================================
+// Request messages
+// =============================================================================
+
+// SubscribeRequest — filter controlling which receipts are delivered, plus
+// the outbound transport target. One verb covers all four delivery transports
+// (Architecture II.11).
+message SubscribeRequest {
+  // Filter: only matching receipts are delivered.
+  common.ReceiptFilter filter = 1;
+
+  // Delivery target — select exactly one transport.
+  oneof target {
+    // HTTP webhook URL to POST matching receipts to.
+    string webhook_url = 2;
+    // libp2p gossipsub topic to publish matching receipts on.
+    string gossipsub_topic = 3;
+    // Reticulum network address to push matching receipts to.
+    string reticulum_address = 4;
+    // Mesh peer identity hash to push matching receipts to.
+    string mesh_peer_hash = 5;
+  }
+}
+
+// UnsubscribeRequest — identify the subscription to cancel.
+message UnsubscribeRequest {
+  // Subscription ID (receipt ID of the SubscriptionReceipt issued at Subscribe time).
+  string subscription_id = 1;
+}
+
+// ListSubscriptionsRequest — intentionally empty; returns all active subscriptions.
+// Empty for forward-compatibility: future versions may add actor filter fields.
+message ListSubscriptionsRequest {}
+
+// RegisterChannelWebhookRequest — a Slack or Discord webhook URL to register
+// as a subscription delivery target.
+message RegisterChannelWebhookRequest {
+  // The channel platform: "slack" or "discord".
+  string platform = 1;
+  // Webhook URL provided by the channel platform.
+  string webhook_url = 2;
+  // Optional receipt filter to apply (only matching receipts are pushed).
+  common.ReceiptFilter filter = 3;
+  // Human-readable label for this webhook registration.
+  string label = 4;
+}
+
+// =============================================================================
+// Response messages
+// =============================================================================
+
+// SubscriptionReceipt — full chained receipt for a subscription registration.
+// Returned by both Subscribe and RegisterChannelWebhook.
+// header.kind = RECEIPT_KIND_SUBSCRIPTION.
+message SubscriptionReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // Stable identifier for the created subscription (same as header.id).
+  string subscription_id = 2;
+  // The delivery target that was registered (webhook URL, topic, etc.).
+  string target_description = 3;
+  // Filter summary: receipt kinds included (empty = all).
+  repeated common.ReceiptKind filter_kinds = 4;
+}
+
+// CancellationReceipt — full chained receipt for a subscription cancellation.
+// header.kind = RECEIPT_KIND_CANCELLATION.
+message CancellationReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // The subscription that was cancelled.
+  string cancelled_subscription_id = 2;
+  google.protobuf.Timestamp cancelled_at = 3;
+}
+
+// SubscriptionsEnvelope — plain envelope listing active subscriptions.
+message SubscriptionsEnvelope {
+  repeated SubscriptionSummary subscriptions = 1;
+}
+
+// SubscriptionSummary — a single row in the SubscriptionsEnvelope list.
+message SubscriptionSummary {
+  string subscription_id = 1;
+  // Delivery target description (webhook URL, topic name, etc.).
+  string target_description = 2;
+  // Receipt kinds included by the filter (empty = all).
+  repeated common.ReceiptKind filter_kinds = 3;
+  google.protobuf.Timestamp registered_at = 4;
+  // Whether this subscription is currently active (not cancelled).
+  bool active = 5;
+}

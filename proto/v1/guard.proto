@@ -1,0 +1,235 @@
+// proto/v1/guard.proto — Guard service.
+//
+// Covers policy evaluation, governance-aware LLM proxy, and WASM policy
+// module lifecycle management. All gate-adjacent operations live here.
+//
+// Architecture II.7: this file is part of the verb-set schema layer.
+// Response categories follow Architecture VII.3:
+//   *Envelope      → plain (no signature)
+//   Signed*        → signed envelope (not chained)
+//   *Receipt       → full receipt (signed and chained)
+
+syntax = "proto3";
+
+package zeropoint.v1.guard;
+
+import "google/protobuf/timestamp.proto";
+import "v1/common.proto";
+
+// GuardVerdict — the outcome of a gate evaluation.
+enum GuardVerdict {
+  GUARD_VERDICT_UNSPECIFIED = 0;
+  GUARD_VERDICT_ALLOW = 1;
+  GUARD_VERDICT_DENY = 2;
+  GUARD_VERDICT_ESCALATE = 3;
+}
+
+// =============================================================================
+// Service
+// =============================================================================
+
+service Guard {
+  // EvaluateGate — evaluate a tool or action against the active policy.
+  // Returns a GuardReceipt (full receipt, chained) containing the verdict.
+  // Subsumes: POST /api/v1/evaluate, POST /api/v1/guard/evaluate,
+  //           POST /api/v1/gate/tool-call, mesh GuardRequest/GuardResponse.
+  rpc EvaluateGate(EvaluateGateRequest) returns (GuardReceipt);
+
+  // ProxyCall — governance-aware LLM provider proxy. Applies policy,
+  // meters tokens, and issues a receipt for every proxied call.
+  // Subsumes: POST /api/v1/proxy/*proxy_path.
+  rpc ProxyCall(ProxyCallRequest) returns (ProxyReceipt);
+
+  // LoadPolicyModule — load a WASM policy module into the runtime.
+  // Subsumes: POST /api/v1/policy/wasm/load.
+  rpc LoadPolicyModule(LoadPolicyModuleRequest) returns (PolicyModuleReceipt);
+
+  // DisablePolicyModule — disable a loaded WASM module by content hash.
+  // Subsumes: POST /api/v1/policy/wasm/:hash/disable.
+  rpc DisablePolicyModule(DisablePolicyModuleRequest) returns (PolicyModuleReceipt);
+
+  // EnablePolicyModule — re-enable a previously disabled WASM module by hash.
+  // Subsumes: POST /api/v1/policy/wasm/:hash/enable.
+  rpc EnablePolicyModule(EnablePolicyModuleRequest) returns (PolicyModuleReceipt);
+
+  // ListPolicyModules — list all loaded WASM policy modules and their status.
+  // Subsumes: GET /api/v1/policy/wasm.
+  rpc ListPolicyModules(ListPolicyModulesRequest) returns (PolicyModulesEnvelope);
+
+  // GetPolicyRules — return the active policy ruleset. Signed envelope because
+  // policy rules drive trust decisions (callers can verify the rules at a point
+  // in time without chaining a read).
+  // Subsumes: GET /api/v1/policy/rules.
+  rpc GetPolicyRules(GetPolicyRulesRequest) returns (SignedPolicyRules);
+
+  // AdvancePolicyVersion — bump the monotonic policy version counter.
+  // Provides downgrade resistance. Full receipt because the version advance
+  // is a state-changing, auditable event.
+  // Subsumes: POST /api/v1/security/policy-version/advance.
+  rpc AdvancePolicyVersion(AdvancePolicyVersionRequest) returns (PolicyVersionReceipt);
+
+  // GetPolicyVersion — return the current policy version counter.
+  // Signed envelope: the version answer drives compatibility decisions.
+  // Subsumes: GET /api/v1/security/policy-version.
+  rpc GetPolicyVersion(GetPolicyVersionRequest) returns (SignedPolicyVersion);
+}
+
+// =============================================================================
+// Request messages
+// =============================================================================
+
+// EvaluateGateRequest — the action, actor, and payload to evaluate.
+message EvaluateGateRequest {
+  // Name or type of the action/tool being gated.
+  string action_type = 1;
+  // Actor requesting the action.
+  common.ActorRef actor = 2;
+  // Opaque action payload (JSON-serialized tool call arguments, etc.).
+  bytes payload = 3;
+}
+
+// ProxyCallRequest — the proxied LLM provider call.
+message ProxyCallRequest {
+  // Target provider path (mirrors the wildcard in /api/v1/proxy/*proxy_path).
+  string proxy_path = 1;
+  // Actor making the proxy request.
+  common.ActorRef actor = 2;
+  // Raw request body to forward to the upstream provider.
+  bytes body = 3;
+  // Optional HTTP headers to forward (e.g. Content-Type).
+  map<string, string> headers = 4;
+}
+
+// LoadPolicyModuleRequest — WASM module bytes and metadata.
+message LoadPolicyModuleRequest {
+  // WASM binary content.
+  bytes wasm_bytes = 1;
+  // Human-readable module name.
+  string name = 2;
+  // Semantic version of this module.
+  string version = 3;
+}
+
+// DisablePolicyModuleRequest — identify the module to disable by its content hash.
+message DisablePolicyModuleRequest {
+  // BLAKE3 hex content hash of the WASM module to disable.
+  string module_hash = 1;
+}
+
+// EnablePolicyModuleRequest — identify the module to re-enable by its content hash.
+message EnablePolicyModuleRequest {
+  // BLAKE3 hex content hash of the WASM module to enable.
+  string module_hash = 1;
+}
+
+// ListPolicyModulesRequest — intentionally empty; returns all loaded modules.
+// Empty for forward-compatibility: future versions may add filter fields.
+message ListPolicyModulesRequest {}
+
+// GetPolicyRulesRequest — intentionally empty; returns the full active ruleset.
+// Empty for forward-compatibility: future versions may add a version pin field.
+message GetPolicyRulesRequest {}
+
+// AdvancePolicyVersionRequest — intentionally empty; the server owns the counter.
+// Empty for forward-compatibility: future versions may include a reason string.
+message AdvancePolicyVersionRequest {}
+
+// GetPolicyVersionRequest — intentionally empty; returns the current version.
+// Empty for forward-compatibility.
+message GetPolicyVersionRequest {}
+
+// =============================================================================
+// Response messages
+// =============================================================================
+
+// GuardReceipt — full chained receipt for a gate evaluation.
+// header.kind = RECEIPT_KIND_GUARD.
+message GuardReceipt {
+  // Stable receipt preamble — chain position, hash, signatures, issuer, etc.
+  common.ReceiptHeader header = 1;
+  // The gate evaluation verdict.
+  GuardVerdict verdict = 2;
+  // Human-readable explanation for the verdict (may be empty on ALLOW).
+  string reason = 3;
+  // The action_type that was evaluated.
+  string action_type = 4;
+  // The policy rule or module that produced this verdict (identifier).
+  string matched_rule = 5;
+}
+
+// ProxyReceipt — full chained receipt for a proxied LLM call.
+// header.kind = RECEIPT_KIND_PROXY.
+message ProxyReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // Provider path that was proxied.
+  string proxy_path = 2;
+  // Token count metered for this call (prompt + completion).
+  uint64 tokens_used = 3;
+  // HTTP status code returned by the upstream provider.
+  uint32 upstream_status = 4;
+}
+
+// PolicyModuleReceipt — full chained receipt for a policy module lifecycle event
+// (load, enable, or disable).
+// header.kind = RECEIPT_KIND_POLICY_MODULE.
+message PolicyModuleReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // BLAKE3 hex content hash of the affected module.
+  string module_hash = 2;
+  // Name of the affected module.
+  string module_name = 3;
+  // Version of the affected module.
+  string module_version = 4;
+  // The lifecycle action: "load", "enable", or "disable".
+  string action = 5;
+}
+
+// PolicyModulesEnvelope — plain envelope listing all loaded policy modules.
+message PolicyModulesEnvelope {
+  repeated PolicyModuleSummary modules = 1;
+}
+
+// PolicyModuleSummary — a single entry in the PolicyModulesEnvelope list.
+message PolicyModuleSummary {
+  string module_hash = 1;
+  string name = 2;
+  string version = 3;
+  // Whether the module is currently active.
+  bool enabled = 4;
+  google.protobuf.Timestamp loaded_at = 5;
+}
+
+// SignedPolicyRules — signed envelope containing the active ruleset.
+// Callers can verify the node's signature to confirm the rules at this instant.
+message SignedPolicyRules {
+  // Canonical serialization of the active policy rules.
+  bytes rules_bytes = 1;
+  // Human-readable format hint (e.g. "rego", "json").
+  string format = 2;
+  // Policy version active when this snapshot was taken.
+  uint64 policy_version = 3;
+  google.protobuf.Timestamp snapshot_at = 4;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 5;
+}
+
+// PolicyVersionReceipt — full chained receipt for a policy version advance.
+// header.kind = RECEIPT_KIND_POLICY_VERSION.
+message PolicyVersionReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // The new (post-advance) policy version.
+  uint64 new_version = 2;
+  // The previous version, for audit clarity.
+  uint64 previous_version = 3;
+}
+
+// SignedPolicyVersion — signed envelope containing the current version counter.
+message SignedPolicyVersion {
+  uint64 version = 1;
+  google.protobuf.Timestamp as_of = 2;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 3;
+}

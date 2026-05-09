@@ -1,0 +1,178 @@
+// proto/v1/receipts.proto — Receipts service.
+//
+// Covers receipt generation, ingestion of external receipts, attestation
+// issuance and lookup, and streaming receipt watch. Tool-call receipts are
+// a subset of GenerateReceipt (collapsed per surprise resolution #6).
+//
+// Architecture II.7: this file is part of the verb-set schema layer.
+// Response categories follow Architecture VII.3:
+//   *Envelope      → plain (no signature)
+//   Signed*        → signed envelope (not chained)
+//   *Receipt       → full receipt (signed and chained)
+
+syntax = "proto3";
+
+package zeropoint.v1.receipts;
+
+import "google/protobuf/timestamp.proto";
+import "v1/common.proto";
+
+// =============================================================================
+// Service
+// =============================================================================
+
+service Receipts {
+  // GenerateReceipt — issue a new signed, chained receipt for an action by
+  // this node. Covers both general receipts and tool-call receipts (tool-call
+  // receipts are receipts with a tool-specific detail shape; they use this
+  // verb with receipt_kind and detail_bytes set appropriately).
+  // Subsumes: POST /api/v1/receipts/generate, POST /api/v1/tools/receipt.
+  rpc GenerateReceipt(GenerateReceiptRequest) returns (Receipt);
+
+  // IngestReceipt — accept an externally-issued receipt for verification and
+  // chain inclusion. The receipt is verified (signature, chain link) before
+  // being appended to the local audit chain.
+  // Subsumes: POST /api/v1/receipts (external ingestion path).
+  rpc IngestReceipt(IngestReceiptRequest) returns (Receipt);
+
+  // IssueAttestation — issue a signed attestation for an external fact
+  // (e.g. course completion, external event). Full chained receipt.
+  // Subsumes: POST /api/v1/attestations.
+  rpc IssueAttestation(IssueAttestationRequest) returns (AttestationReceipt);
+
+  // LookupAttestation — retrieve a single attestation by ID.
+  // Signed envelope: the answer drives downstream trust decisions without
+  // needing to chain the lookup itself.
+  // Subsumes: GET /api/v1/attestations.
+  rpc LookupAttestation(LookupAttestationRequest) returns (SignedAttestationEnvelope);
+
+  // ListAttestations — list attestations, optionally filtered and paginated.
+  // Plain envelope: observation-only list read.
+  // Subsumes: GET /api/v1/attestations/all.
+  rpc ListAttestations(ListAttestationsRequest) returns (AttestationsEnvelope);
+
+  // WatchReceipts — server-streaming verb that pushes receipts matching
+  // the filter as they are issued or ingested. Resume via the filter's
+  // since_chain_position field after a disconnect.
+  // Subsumes: GET /api/v1/events/stream (receipt events portion).
+  rpc WatchReceipts(WatchReceiptsRequest) returns (stream Receipt);
+}
+
+// =============================================================================
+// Request messages
+// =============================================================================
+
+// GenerateReceiptRequest — the action details for which a receipt is issued.
+// For tool-call receipts, populate tool_name and set receipt_kind to the
+// appropriate kind; detail_bytes carries tool-specific argument/result data.
+message GenerateReceiptRequest {
+  // Actor performing the action.
+  common.ActorRef actor = 1;
+  // Optional target actor (e.g. the agent being acted upon).
+  common.ActorRef target = 2;
+  // Receipt kind to assign (must be a valid common.ReceiptKind).
+  common.ReceiptKind receipt_kind = 3;
+  // For tool-call receipts: the tool name being invoked.
+  string tool_name = 4;
+  // Opaque detail payload (JSON-serialized verb-specific context).
+  bytes detail_bytes = 5;
+}
+
+// IngestReceiptRequest — a canonically-serialized external receipt for
+// verification and chain inclusion.
+message IngestReceiptRequest {
+  // Canonical bytes of the externally-issued receipt (must include a valid
+  // ReceiptHeader with signatures, chain_position relative to the remote
+  // chain, and a content_hash verified before ingestion).
+  bytes receipt_canonical_bytes = 1;
+  // Public key of the external issuer, for signature verification.
+  string issuer_public_key = 2;
+}
+
+// IssueAttestationRequest — the external fact and subject to attest.
+message IssueAttestationRequest {
+  // Actor being attested about.
+  common.ActorRef subject = 1;
+  // Human-readable attestation type (e.g. "course_completion", "peer_review").
+  string attestation_type = 2;
+  // Opaque attestation payload (JSON-serialized fact data).
+  bytes detail_bytes = 3;
+  // Optional expiry for the attestation.
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// LookupAttestationRequest — retrieve a single attestation by receipt ID.
+message LookupAttestationRequest {
+  // Receipt ID of the attestation to look up.
+  string attestation_id = 1;
+}
+
+// ListAttestationsRequest — list attestations with optional filter and pagination.
+message ListAttestationsRequest {
+  // Optional: filter to attestations of this type (empty = all types).
+  string attestation_type = 1;
+  // Optional: filter to attestations about this subject.
+  common.ActorRef subject = 2;
+  common.PageRequest page = 3;
+}
+
+// WatchReceiptsRequest — filter controlling which receipts are streamed.
+// Resume after disconnect by setting filter.since_chain_position.
+message WatchReceiptsRequest {
+  common.ReceiptFilter filter = 1;
+}
+
+// =============================================================================
+// Response messages
+// =============================================================================
+
+// Receipt — full chained receipt returned by GenerateReceipt and IngestReceipt.
+// header.kind is set by the server based on the action type.
+// This is the canonical receipt wire type; service-specific receipt messages
+// (GuardReceipt, DelegationReceipt, etc.) are richer typed variants.
+message Receipt {
+  // Stable receipt preamble — chain position, hash, signatures, issuer, etc.
+  common.ReceiptHeader header = 1;
+  // Opaque detail payload (mirrors GenerateReceiptRequest.detail_bytes).
+  bytes detail_bytes = 2;
+  // For tool-call receipts: the tool name that was invoked.
+  string tool_name = 3;
+}
+
+// AttestationReceipt — full chained receipt for an issued attestation.
+// header.kind = RECEIPT_KIND_ATTESTATION.
+message AttestationReceipt {
+  // Stable receipt preamble.
+  common.ReceiptHeader header = 1;
+  // Human-readable attestation type.
+  string attestation_type = 2;
+  // Opaque attestation payload.
+  bytes detail_bytes = 3;
+  // Optional expiry.
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// SignedAttestationEnvelope — signed envelope for a single attestation lookup.
+// The node signs its claim that this attestation existed at lookup_at.
+message SignedAttestationEnvelope {
+  // The attestation receipt, embedded for the caller's inspection.
+  AttestationReceipt attestation = 1;
+  google.protobuf.Timestamp lookup_at = 2;
+  // Node signature over the canonical preimage of this message.
+  common.Signature signature = 3;
+}
+
+// AttestationsEnvelope — plain envelope listing attestations (paginated).
+message AttestationsEnvelope {
+  repeated AttestationSummary attestations = 1;
+  common.PageInfo page = 2;
+}
+
+// AttestationSummary — a single row in the AttestationsEnvelope list.
+message AttestationSummary {
+  string attestation_id = 1;
+  string attestation_type = 2;
+  common.ActorRef subject = 3;
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
