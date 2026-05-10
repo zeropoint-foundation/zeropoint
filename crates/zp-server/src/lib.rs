@@ -27,6 +27,12 @@ pub mod tool_ports;
 pub mod tool_proxy;
 pub mod tool_state;
 
+/// gRPC service handlers — Phase 2b foothold (NodeStatus pilot).
+///
+/// Per Architecture II.13 and II.14, gRPC is the substrate's outer
+/// surface. Adapter for the verb-set port (`zp_verbs`).
+pub mod grpc;
+
 use axum::http::HeaderValue;
 use axum::{
     extract::{
@@ -1432,6 +1438,37 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         std::fs::remove_file(&server_pid_path).ok();
         info!("All tools stopped. Goodbye.");
     };
+
+    // ── gRPC server (Phase 2b foothold: NodeStatus pilot) ──────────────
+    // Per Architecture II.13, gRPC is the substrate's outer surface. For
+    // the migration we run tonic alongside axum on `port + 1` so handlers
+    // can move one service at a time without breaking existing clients.
+    // Only `NodeStatus.GetNodeStats` is implemented in this commit; the
+    // other nine NodeStatus verbs return `Unimplemented`. Each verb (and
+    // each successive service) lands as a focused follow-up commit.
+    //
+    // The spawned task runs until process exit. No graceful-shutdown
+    // wiring yet — axum's shutdown signal terminates the whole process.
+    let grpc_bind: &str = if config.bind_addr == "localhost" {
+        "127.0.0.1"
+    } else {
+        config.bind_addr.as_str()
+    };
+    let grpc_addr: std::net::SocketAddr = format!("{}:{}", grpc_bind, config.port + 1)
+        .parse()
+        .map_err(|e| anyhow::anyhow!("invalid gRPC bind address: {}", e))?;
+    let nodestatus_handler = grpc::NodeStatusHandler::new(state.clone());
+    let grpc_server = tonic::transport::Server::builder()
+        .add_service(
+            zp_verbs::nodestatus::node_status_server::NodeStatusServer::new(nodestatus_handler),
+        )
+        .serve(grpc_addr);
+    tokio::spawn(async move {
+        if let Err(e) = grpc_server.await {
+            tracing::error!("gRPC server error: {}", e);
+        }
+    });
+    info!("gRPC server on {} (NodeStatus pilot — Phase 2b)", grpc_addr);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown)
