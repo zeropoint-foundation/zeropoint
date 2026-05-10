@@ -149,6 +149,25 @@ V.1 (trust portability) is closed as a three-part composition:
 
 Full IPFS is not adopted; the underlying libp2p protocols (Bitswap, DHT) are. This composition closes both V.1 and V.5 (anchoring threat model) — the threat model V.5 enforces is stated explicitly: **OpenTimestamps anchoring defends against retroactive chain rewrites at hour-to-day granularity. Sub-hour rewrites are not in this defense's scope; the chain's own hash-linked structure handles them.**
 
+### 13. Pure gRPC; HTTP/JSON deprecated entirely
+
+The substrate exposes its verb set over **gRPC only** (Architecture II.8). HTTP/JSON — including Connect-mediated, schema-bound HTTP/JSON — is deprecated and not exposed. The 109-route ad-hoc HTTP API retires (II.4); no HTTP/JSON variant of the verb set replaces it.
+
+**Rationale.** ZP's central thesis is minimum-surface trust. JSON adds attack-surface classes that protobuf doesn't have: number type confusion (signed-int validation bypassable via float coercion), parser CVEs (billion-laughs, deep nesting, Unicode normalization, escape edge cases), and unknown-field tolerance (servers process unexpected fields by default). HTTP/JSON also reintroduces CSRF/CORS surface for browser clients absent from server-only gRPC. The "operator wants to curl things" ergonomic argument is satisfied by the `zp` CLI binary (a gRPC client that prints responses for human reading), not by exposing an HTTP/JSON wire.
+
+**Reserved exceptions** (added when concrete need surfaces; not in v1):
+
+- *Inbound webhook ingestion* (Slack slash commands, monitoring alerts triggering verbs) — if needed, lands as a deliberately-narrow inbound HTTP endpoint with a strict allowlist of accepted operations. Not a "verb set in HTTP form" — a separate, scoped surface.
+- *Browser SDK access* — if needed, lands as **gRPC-Web** (gRPC over HTTP/1.1, no JSON wire). Avoids JSON's CVE class while keeping schema-bound discipline.
+
+**What this changes downstream.**
+
+- **Delivery 4.3 (CLI / remote)** — wire is gRPC over HTTP/2 + TLS, or SSH-tunneled gRPC. The CLI binary speaks gRPC; users see the ergonomic shell.
+- **109-route retirement (Phase 2 work)** — the ~52 routes that currently subsume into the verb set become tonic gRPC handlers. The ~44 ad-hoc routes delete outright.
+- **Discipline pin `verbs_must_match_schema`** — no behavioral change; tonic's compiler-enforced trait conformance covers the gRPC-only case.
+
+---
+
 ### Reconciliation — the April doc's seven design principles under II.0
 
 Part V½ of `docs/ARCHITECTURE-2026-04.md` lists seven design principles for the substrate. Principle II.0 above does not replace them; it refines them by giving each a structural location. The seven principles remain authoritative; II.0 names where each lives.
@@ -248,11 +267,11 @@ The verb set is reachable through each of these. Each is optimised for a differe
 
 **Trade-offs:** Bandwidth/latency cost is real. Operators on flaky connections experience visible degradation; operators on high-latency satellite or aircraft wifi find it unusable. This is the explicit reason §4.3–4.4 exist.
 
-### 4.3 CLI over HTTP / SSH
+### 4.3 CLI over gRPC / SSH
 
 **Operator class:** Operator on a constrained but functional internet connection — cellular brownouts, hotel wifi with bad infra, corporate networks where WebRTC is firewalled, rural fixed wireless.
 
-**Mechanism:** A CLI binary (`zp <verb> ...`) that talks to the local-or-remote ZP runtime. Each verb invocation is one receipt-issuing call. Transport is HTTP over TLS or SSH-tunneled HTTP. The CLI is *not* a JSON-API-in-disguise — it implements the same typed verb set as every other delivery, just with a different transport.
+**Mechanism:** A CLI binary (`zp <verb> ...`) that talks to the local-or-remote ZP runtime. Each verb invocation is one receipt-issuing call. Transport is **gRPC over HTTP/2 + TLS, or SSH-tunneled gRPC** (per Architecture II.13 — pure gRPC; HTTP/JSON deprecated). The CLI binary speaks gRPC; users see only the ergonomic shell. Responses can be printed as JSON for human reading via `--json` flag, but the wire format is protobuf throughout.
 
 **Properties:**
 - Bandwidth: tens of kbps tolerated; each verb call is on the order of receipt-size (hundreds of bytes to a few KB).
