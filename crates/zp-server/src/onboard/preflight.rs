@@ -158,18 +158,6 @@ pub(crate) async fn run_preflight_force(
     run_preflight_inner(scan_path, audit_store, true, None, vault_tools, vault_key).await
 }
 
-/// Run preflight scoped to a single tool. Other tools are skipped.
-/// Always forces a fresh run (never skips based on chain freshness).
-pub(crate) async fn run_preflight_single(
-    scan_path: &Path,
-    tool_name: &str,
-    audit_store: Option<&Arc<Mutex<AuditStore>>>,
-    vault_tools: &VaultConfiguredTools,
-    vault_key: Option<&zp_keys::ResolvedVaultKey>,
-) -> (PreflightResults, Vec<OnboardEvent>) {
-    run_preflight_inner(scan_path, audit_store, true, Some(tool_name), vault_tools, vault_key).await
-}
-
 async fn run_preflight_inner(
     scan_path: &Path,
     audit_store: Option<&Arc<Mutex<AuditStore>>>,

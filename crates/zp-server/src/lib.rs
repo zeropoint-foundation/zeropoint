@@ -30,19 +30,16 @@ pub mod tool_state;
 use axum::http::HeaderValue;
 use axum::{
     extract::{
-        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
         Path as AxumPath, Query, State,
     },
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use chrono::Utc;
 use ed25519_dalek::{Signer as DalekSigner, SigningKey};
 use rand::RngCore;
-use futures::stream::StreamExt;
-use futures::SinkExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
@@ -53,7 +50,7 @@ use zp_audit::AuditStore;
 use zp_core::{
     ActionType as CoreActionType, ActorId, CapabilityGrant, Channel, ConversationId,
     DelegationChain, EventProvenance, GrantProvenance, GrantedCapability, OperatorIdentity,
-    PolicyContext, PolicyDecision, Request, TrustTier,
+    PolicyContext, PolicyDecision, TrustTier,
 };
 use zp_core::governance::{
     ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent,
@@ -1038,27 +1035,6 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             .allow_origin("https://zeropoint.global".parse::<HeaderValue>().unwrap())
             .allow_methods(tower_http::cors::Any)
             .allow_headers(tower_http::cors::Any)
-    };
-
-    // Pre-load Bridge UI HTML if configured (before router construction)
-    let bridge_html: Option<&'static str> = if let Some(ref bridge_dir) = config.bridge_dir {
-        if bridge_dir.exists() {
-            let index_path = bridge_dir.join("index.html");
-            if let Ok(html_content) = std::fs::read_to_string(&index_path) {
-                info!("Bridge UI: http://localhost:{}/bridge", config.port);
-                Some(Box::leak(html_content.into_boxed_str()))
-            } else {
-                None
-            }
-        } else {
-            tracing::warn!(
-                "ZP_BRIDGE_DIR={:?} does not exist, Bridge UI disabled",
-                bridge_dir
-            );
-            None
-        }
-    } else {
-        None
     };
 
     let mut router = Router::new()
@@ -2543,88 +2519,6 @@ fn redact_paths(s: &str) -> String {
 // Tools / Cockpit — Typed Response Structs (P2-4)
 // ============================================================================
 
-/// Response for GET /api/v1/tools — lists all configured tools.
-#[derive(Serialize)]
-struct ToolsListResponse {
-    tools: Vec<CockpitTool>,
-    scan_path: String,
-    has_genesis: bool,
-    chain_receipts: bool,
-    /// All canonicalization anchors (bead zeros) across all domain wires.
-    /// Keys: "provider:anthropic", "tool:ironclaw", "node:edge-1", etc.
-    canonicalization_anchors: std::collections::HashMap<String, String>, // key → timestamp
-}
-
-/// Response for POST /api/v1/tools/launch — tool started successfully.
-#[derive(Serialize)]
-struct ToolLaunchResponse {
-    status: String,
-    name: String,
-    cmd: String,
-    url: String,
-    raw_url: String,
-    port: u16,
-    kind: String,
-    pid: u32,
-    /// Absolute path to the tool's launch log (for terminal streaming).
-    log_path: String,
-}
-
-/// Response for POST /api/v1/tools/stop — tool stopped.
-#[derive(Serialize)]
-struct ToolStopResponse {
-    status: String,
-    name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pid: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    killed: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
-}
-
-/// Response for GET /api/v1/tools/log — tool launch log tail.
-#[derive(Serialize)]
-struct ToolLogResponse {
-    name: String,
-    log: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    lines: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
-}
-
-/// Query parameters for GET /api/v1/tools/log.
-#[derive(Deserialize)]
-struct ToolLogQuery {
-    name: Option<String>,
-    /// Number of trailing lines to return (default 50).
-    tail: Option<usize>,
-}
-
-/// Response for POST /api/v1/tools/:tool_name/configure.
-#[derive(Serialize)]
-struct ToolConfigureResponse {
-    ok: bool,
-    tool: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    new_port: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    port_var: Option<String>,
-}
-
-/// Response for POST /api/v1/tools/:tool_name/repair.
-#[derive(Serialize)]
-struct ToolRepairResponse {
-    ok: bool,
-    tool: String,
-    action: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    hint: Option<String>,
-}
-
 /// Response for POST /api/v1/tools/receipt.
 #[derive(Serialize)]
 struct ToolReceiptResponse {
@@ -2637,34 +2531,9 @@ struct ToolReceiptResponse {
     error: Option<String>,
 }
 
-/// Response for GET /api/v1/tools/chain.
-#[derive(Serialize)]
-struct ToolChainResponse {
-    tools: Vec<tool_chain::ToolChainState>,
-    source: String,
-}
-
 // ============================================================================
 // Tools / Cockpit Handler
 // ============================================================================
-
-/// A configured tool for the agentic cockpit.
-#[derive(Serialize)]
-struct CockpitTool {
-    name: String,
-    path: String,
-    status: String,                // "governed", "configured", "unconfigured"
-    governance: String,            // "genesis-bound", "unanchored", "none"
-    canonicalized: bool,           // bead zero: first-known-state receipt exists
-    #[serde(skip_serializing_if = "Option::is_none")]
-    canonicalized_at: Option<String>,
-    providers: Vec<String>,        // provider names found in .env.example
-    launch: ToolLaunch,            // how to open this tool
-    ready: bool,                   // preflight passed?
-    preflight_issues: Vec<String>, // failures from last preflight
-    verified: bool,                // Tier 2: all required capabilities verified?
-    capabilities: Vec<tool_chain::CapabilityChainState>, // per-capability results
-}
 
 /// How a cockpit tile launches its tool.
 #[derive(Serialize)]
@@ -2975,12 +2844,6 @@ fn pid_dir() -> std::path::PathBuf {
     dir
 }
 
-/// Write a PID file for a launched tool.
-fn write_pid_file(name: &str, pid: u32) {
-    let path = pid_dir().join(format!("{}.pid", name));
-    std::fs::write(&path, pid.to_string()).ok();
-}
-
 /// Read a stored PID for a tool, if it exists and the process is still alive.
 fn read_live_pid(name: &str) -> Option<u32> {
     let path = pid_dir().join(format!("{}.pid", name));
@@ -3104,54 +2967,6 @@ fn find_child_pids(parent: u32) -> Vec<u32> {
         _ => vec![],
     }
 }
-
-/// Also kill anything listening on the port (safety net for orphaned processes).
-/// Validate that a tool name is safe for use in paths and commands.
-///
-/// Phase 1.4: AUTHZ-VULN-10, AUTHZ-VULN-11 — prevents path injection
-/// and command injection via tool_name parameter. Tool names must be
-/// 1-64 characters and contain only alphanumeric, hyphens, underscores,
-/// and dots (no leading dot).
-fn is_safe_tool_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 64
-        && !name.starts_with('.')
-        && !name.contains("..")
-        && name
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
-}
-
-fn kill_port_occupant(port: u16) {
-    // lsof -ti :<port> returns PIDs of anything on that port
-    if let Ok(output) = std::process::Command::new("lsof")
-        .args(["-ti", &format!(":{}", port)])
-        .output()
-    {
-        if output.status.success() {
-            let pids = String::from_utf8_lossy(&output.stdout);
-            for pid_str in pids.trim().lines() {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    info!("Killing orphaned process {} on port {}", pid, port);
-                    let _ = std::process::Command::new("kill")
-                        .args(["-TERM", &pid.to_string()])
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .status();
-                }
-            }
-        }
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LaunchRequest {
-    name: String,
-}
-
-
-
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -3881,38 +3696,6 @@ fn verify_ed25519_signature(pubkey_hex: &str, signature_hex: &str, payload: &[u8
 
 
 
-/// V7 helper: scan the most recent `~/ZeroPoint/logs/<name>.log` for a
-/// `gateway  http://...` banner line and return the URL. None if no log
-/// exists, the file is unreadable, or no match is found.
-fn extract_gateway_url_from_log(tool_name: &str) -> Option<String> {
-    let log_path = zp_paths::home()
-        .ok()?
-        .join("logs")
-        .join(format!("{}.log", tool_name));
-    let contents = std::fs::read_to_string(&log_path).ok()?;
-    // IronClaw's banner: `  gateway     http://127.0.0.1:9101/?token=zp-...`
-    // Match any whitespace-separated `gateway` keyword followed by an
-    // http(s) URL. Take the LAST match — re-launches append.
-    let mut latest: Option<String> = None;
-    for line in contents.lines() {
-        let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("gateway") {
-            let rest = rest.trim_start();
-            if let Some(url_start) = rest.find("http") {
-                let url_part: &str = &rest[url_start..];
-                let url: String = url_part
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
-                if !url.is_empty() {
-                    latest = Some(url);
-                }
-            }
-        }
-    }
-    latest
-}
 
 
 
@@ -3921,26 +3704,6 @@ fn extract_gateway_url_from_log(tool_name: &str) -> Option<String> {
 // ============================================================================
 // Tool configure / repair — ecosystem self-healing actions
 // ============================================================================
-
-/// Typed request body for POST /api/v1/tools/:tool_name/configure.
-/// Phase 2.8 (P2-4): replaces loose `serde_json::Value` parsing.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ToolConfigureRequest {
-    /// The configure action to perform. Currently: "reassign_port".
-    action: String,
-}
-
-/// Typed request body for POST /api/v1/tools/:tool_name/repair.
-/// Phase 2.8 (P2-4): replaces loose `serde_json::Value` parsing.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ToolRepairRequest {
-    /// The repair action to perform. Currently: "restart_compose".
-    action: String,
-}
-
-
 
 // ============================================================================
 // Tool-issued lifecycle receipts (tools attest to their own state)
@@ -3978,33 +3741,13 @@ async fn tools_receipt_handler(
 }
 
 
-// ── P6-3: Runtime reconfiguration with receipt chain audit trail ────────
-
-/// Request body for POST /api/v1/tools/:tool_name/reconfigure.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ReconfigureRequest {
-    /// Parameter to reconfigure (must match a ConfigurableParam name)
-    parameter: String,
-    /// New value to apply
-    value: serde_json::Value,
-}
-
-
-
 // ============================================================================
 // Dashboard Handler (Verification Surface)
 // ============================================================================
 
-// Embedded fallbacks — used only if the on-disk file is missing.
 // ─── Compiled-in assets ─────────────────────────────────────────────────────
 // Everything below is baked into the binary at compile time.  No filesystem
 // pipeline, no bootstrap, no staleness.  `cargo build && zp serve` just works.
-
-const DASHBOARD_HTML: &str = include_str!("../assets/dashboard.html");
-const ONBOARD_HTML: &str = include_str!("../assets/onboard.html");
-const SPEAK_HTML: &str = include_str!("../assets/speak.html");
-const ECOSYSTEM_HTML: &str = include_str!("../assets/ecosystem.html");
 
 const ONBOARD_CSS: &str = include_str!("../assets/onboard.css");
 const ONBOARD_JS: &str = include_str!("../assets/onboard.js");
@@ -4052,18 +3795,6 @@ fn embedded_assets_router() -> axum::Router {
         .route("/fonts/inter-latin.woff2", get(|| async { binary_response(FONT_INTER, "font/woff2") }))
         .route("/fonts/jetbrainsmono-latin.woff2", get(|| async { binary_response(FONT_JETBRAINS, "font/woff2") }))
 }
-
-
-
-/// Query parameters for the onboard page.
-#[derive(Debug, Deserialize)]
-struct OnboardQuery {
-    token: Option<String>,
-    /// When `?review=true`, serve onboarding post-genesis as a read-only
-    /// reference instead of redirecting to the dashboard.
-    review: Option<String>,
-}
-
 
 
 
