@@ -33,17 +33,19 @@
 
 use std::time::SystemTime;
 
+use chrono::{DateTime, Utc};
 use prost_types::Timestamp;
 use tonic::{Request, Response, Status};
 
+use zp_verbs::common::PageInfo;
 use zp_verbs::nodestatus::node_status_server::NodeStatus;
 use zp_verbs::nodestatus::{
-    BlastRadiusReceipt, CompromiseReceipt, DeregisterFleetNodeRequest, FleetNodesEnvelope,
-    GetBlastRadiusRequest, GetFleetNodeRequest, GetIdentityRequest, GetNodeStatsRequest,
-    GetSecurityPostureRequest, GetTopologyRequest, ListFleetNodesRequest,
+    BlastRadiusReceipt, CompromiseReceipt, DeregisterFleetNodeRequest, FleetNodeSummary,
+    FleetNodesEnvelope, GetBlastRadiusRequest, GetFleetNodeRequest, GetIdentityRequest,
+    GetNodeStatsRequest, GetSecurityPostureRequest, GetTopologyRequest, ListFleetNodesRequest,
     NodeDeregistrationReceipt, NodeStatsEnvelope, RegisterBlastRadiusRequest,
-    ReportCompromiseRequest, SignedBlastRadiusEnvelope, SignedFleetNodeEnvelope,
-    SignedIdentity, SignedSecurityPosture, SignedTopologyEnvelope,
+    ReportCompromiseRequest, SignedBlastRadiusEnvelope, SignedFleetNodeEnvelope, SignedIdentity,
+    SignedSecurityPosture, SignedTopologyEnvelope,
 };
 
 use crate::AppState;
@@ -171,13 +173,83 @@ impl NodeStatus for NodeStatusHandler {
         ))
     }
 
+    /// List fleet nodes registered with this node, with optional status
+    /// filtering and offset-based pagination.
+    ///
+    /// Plain envelope (no signature) — observation-only list, may be
+    /// polled by dashboards.
     async fn list_fleet_nodes(
         &self,
-        _request: Request<ListFleetNodesRequest>,
+        request: Request<ListFleetNodesRequest>,
     ) -> Result<Response<FleetNodesEnvelope>, Status> {
-        Err(Status::unimplemented(
-            "NodeStatus.ListFleetNodes — Phase 2b follow-up (needs node_registry pagination)",
-        ))
+        let req = request.into_inner();
+
+        // Snapshot the registry. `list_nodes()` clones under an `RwLock`
+        // read, so the returned Vec is independent of subsequent mutations.
+        let mut all_nodes = self.state.0.node_registry.list_nodes().await;
+
+        // Status filter — empty string means "no filter, return all".
+        // Matches the lowercase Display strings: "online" / "stale" / "offline".
+        if !req.status_filter.is_empty() {
+            all_nodes.retain(|n| n.status.to_string() == req.status_filter);
+        }
+
+        let total = all_nodes.len() as u64;
+
+        // Offset pagination. `page_token` carries the start index as a
+        // decimal string; empty token = first page. `page_size` of 0 means
+        // "server default" (100, per common.proto convention).
+        //
+        // TODO: cursor-based pagination once we need stability across
+        // mutations. Offset pagination is fine for v1 — the registry only
+        // mutates on heartbeat receipt, and dashboards re-poll often
+        // enough that consistency-on-page-boundary is not load-bearing.
+        let page_request = req.page.unwrap_or_default();
+        let page_size = if page_request.page_size == 0 {
+            100
+        } else {
+            page_request.page_size as usize
+        };
+        let start: usize = if page_request.page_token.is_empty() {
+            0
+        } else {
+            page_request.page_token.parse().map_err(|_| {
+                Status::invalid_argument(format!(
+                    "page_token must be a non-negative integer, got: {:?}",
+                    page_request.page_token
+                ))
+            })?
+        };
+
+        let end = start.saturating_add(page_size).min(all_nodes.len());
+        let nodes: Vec<FleetNodeSummary> = if start < all_nodes.len() {
+            all_nodes[start..end]
+                .iter()
+                .map(|n| FleetNodeSummary {
+                    node_id: n.node_id.clone(),
+                    node_name: n.name.clone(),
+                    public_key: n.public_key.clone(),
+                    status: n.status.to_string(),
+                    last_heartbeat: Some(datetime_to_timestamp(&n.last_heartbeat)),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let next_page_token = if end < all_nodes.len() {
+            end.to_string()
+        } else {
+            String::new()
+        };
+
+        Ok(Response::new(FleetNodesEnvelope {
+            nodes,
+            page: Some(PageInfo {
+                next_page_token,
+                total_size: total,
+            }),
+        }))
     }
 
     async fn get_fleet_node(
@@ -207,5 +279,16 @@ fn now_timestamp() -> Timestamp {
     Timestamp {
         seconds: dur.as_secs() as i64,
         nanos: dur.subsec_nanos() as i32,
+    }
+}
+
+/// Convert a `chrono::DateTime<Utc>` to `prost_types::Timestamp`.
+///
+/// Used wherever the substrate's internal time type (chrono) meets the
+/// proto wire type (prost_types). Sub-second precision preserved.
+fn datetime_to_timestamp(dt: &DateTime<Utc>) -> Timestamp {
+    Timestamp {
+        seconds: dt.timestamp(),
+        nanos: dt.timestamp_subsec_nanos() as i32,
     }
 }
