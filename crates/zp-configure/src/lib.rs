@@ -324,11 +324,14 @@ impl ConfigEngine {
     ///   1. Finds any LLM_BACKEND / LLM_PROVIDER style variable in the resolutions
     ///   2. If it points to a provider we DON'T have credentials for, and we DO
     ///      have credentials for another provider, switch it
-    ///   3. Respects priority: anthropic > openai > google > others
+    ///   3. Respects the manifest `prefer` list for the capability that owns the
+    ///      backend var; falls back to hardcoded PROVIDER_PRIORITY when no manifest
+    ///      opinion is expressed.
     fn apply_provider_coherence(
         &self,
         resolutions: &mut [Resolution],
         activated_providers: &[String],
+        requirements: &[zp_engine::capability::CapabilityRequirement],
     ) {
         // Known backend variable names
         const BACKEND_VARS: &[&str] = &[
@@ -339,7 +342,8 @@ impl ConfigEngine {
             "DEFAULT_PROVIDER",
         ];
 
-        // Provider priority — first available wins
+        // Hardcoded fallback priority — only consulted when the manifest has no
+        // prefer list for the capability that owns a given backend var.
         const PROVIDER_PRIORITY: &[&str] = &[
             "anthropic",
             "openai",
@@ -351,15 +355,37 @@ impl ConfigEngine {
             "openrouter",
         ];
 
-        // Find the best activated provider
-        let best_provider = PROVIDER_PRIORITY
-            .iter()
-            .find(|p| activated_providers.iter().any(|a| a == *p));
+        /// For a given backend var name, find the best activated provider.
+        ///
+        /// 1. Look up the `CapabilityRequirement` whose `env_vars` contains this
+        ///    var name and use its `prefer` list (filtered by `activated_providers`).
+        /// 2. If no manifest match or the manifest prefer yields nothing, fall back
+        ///    to `PROVIDER_PRIORITY` filtered by `activated_providers`.
+        fn best_for_var(
+            var_name: &str,
+            activated_providers: &[String],
+            requirements: &[zp_engine::capability::CapabilityRequirement],
+        ) -> Option<String> {
+            // Step 1: manifest prefer for the owning capability
+            if let Some(req) = requirements
+                .iter()
+                .find(|r| r.env_vars.iter().any(|v| v == var_name))
+            {
+                if let Some(p) = req
+                    .prefer
+                    .iter()
+                    .find(|p| activated_providers.iter().any(|a| a == *p))
+                {
+                    return Some(p.clone());
+                }
+            }
 
-        let best_provider = match best_provider {
-            Some(p) => *p,
-            None => return, // No recognized LLM provider activated
-        };
+            // Step 2: hardcoded fallback
+            PROVIDER_PRIORITY
+                .iter()
+                .find(|p| activated_providers.iter().any(|a| a == *p))
+                .map(|p| p.to_string())
+        }
 
         // Scan resolutions for backend selector variables.
         // Only activate the FIRST occurrence of each backend var —
@@ -388,16 +414,21 @@ impl ConfigEngine {
                             .iter()
                             .any(|a| value.contains(a.as_str()))
                         {
-                            info!(
-                                "Provider coherence: switching {} from '{}' to '{}'",
-                                var_name, value, best_provider
-                            );
-                            backend_set.insert(var_name.clone());
-                            *resolution = Resolution::DefaultResolved {
-                                var_name: var_name.clone(),
-                                pattern_name: "provider_coherence".into(),
-                                value: best_provider.to_string(),
-                            };
+                            let best = best_for_var(var_name, activated_providers, requirements);
+                            if let Some(best_provider) = best {
+                                info!(
+                                    "Provider coherence: switching {} from '{}' to '{}'",
+                                    var_name, value, best_provider
+                                );
+                                backend_set.insert(var_name.clone());
+                                *resolution = Resolution::DefaultResolved {
+                                    var_name: var_name.clone(),
+                                    pattern_name: "provider_coherence".into(),
+                                    value: best_provider,
+                                };
+                            } else {
+                                backend_set.insert(var_name.clone());
+                            }
                         } else {
                             backend_set.insert(var_name.clone());
                         }
@@ -410,13 +441,20 @@ impl ConfigEngine {
                         if let Some((key, _)) = uncommented.split_once('=') {
                             let key = key.trim();
                             if BACKEND_VARS.contains(&key) && !backend_set.contains(key) {
-                                info!("Provider coherence: activating {} = {}", key, best_provider);
-                                backend_set.insert(key.to_string());
-                                *resolution = Resolution::DefaultResolved {
-                                    var_name: key.to_string(),
-                                    pattern_name: "provider_coherence".into(),
-                                    value: best_provider.to_string(),
-                                };
+                                let best =
+                                    best_for_var(key, activated_providers, requirements);
+                                if let Some(best_provider) = best {
+                                    info!(
+                                        "Provider coherence: activating {} = {}",
+                                        key, best_provider
+                                    );
+                                    backend_set.insert(key.to_string());
+                                    *resolution = Resolution::DefaultResolved {
+                                        var_name: key.to_string(),
+                                        pattern_name: "provider_coherence".into(),
+                                        value: best_provider,
+                                    };
+                                }
                             }
                         }
                     }
@@ -458,6 +496,7 @@ impl ConfigEngine {
         vault: &CredentialVault,
         policy_check: PolicyCheckFn,
         tool_name: &str,
+        requirements: &[zp_engine::capability::CapabilityRequirement],
     ) -> io::Result<Vec<Resolution>> {
         let content = fs::read_to_string(template_path)?;
         let injector = CredentialInjector::new(vault, policy_check);
@@ -717,7 +756,7 @@ impl ConfigEngine {
             .cloned()
             .collect();
         if !all_activated.is_empty() {
-            self.apply_provider_coherence(&mut resolutions, &all_activated);
+            self.apply_provider_coherence(&mut resolutions, &all_activated, requirements);
         }
 
         Ok(resolutions)
@@ -1790,6 +1829,46 @@ fn strip_legacy_env(tool_path: &Path, tool_name: &str) -> bool {
 }
 
 // ============================================================================
+// Manifest helpers
+// ============================================================================
+
+/// Load a `.zp-configure.toml` from `<tool_dir>/.zp-configure.toml` and
+/// return the concatenated required + optional `CapabilityRequirement` list.
+///
+/// The manifest is OPTIONAL — if the file doesn't exist or fails to parse,
+/// this returns an empty vec and logs at debug level.  Callers pass the
+/// result straight into `process_env_file` as the `requirements` slice,
+/// preserving backward-compatible `&[]` semantics for tools that haven't
+/// yet written a manifest.
+fn load_manifest_requirements(
+    tool_dir: &Path,
+) -> Vec<zp_engine::capability::CapabilityRequirement> {
+    let manifest_path = tool_dir.join(".zp-configure.toml");
+    if !manifest_path.exists() {
+        debug!(
+            path = %manifest_path.display(),
+            "No .zp-configure.toml found — using empty requirements (PROVIDER_PRIORITY fallback)"
+        );
+        return Vec::new();
+    }
+    match zp_engine::capability::load_manifest(&manifest_path) {
+        Ok(m) => {
+            let mut reqs = m.required;
+            reqs.extend(m.optional);
+            reqs
+        }
+        Err(e) => {
+            debug!(
+                path = %manifest_path.display(),
+                error = %e,
+                "Failed to parse .zp-configure.toml — using empty requirements"
+            );
+            Vec::new()
+        }
+    }
+}
+
+// ============================================================================
 // CLI Entry Points
 // ============================================================================
 
@@ -1820,7 +1899,8 @@ pub fn run_tool(
     println!("Storage: vault-backed (encrypted)");
     println!();
 
-    match engine.process_env_file(&template, vault, policy_check, tool_name) {
+    let manifest_reqs = load_manifest_requirements(tool_path);
+    match engine.process_env_file(&template, vault, policy_check, tool_name, &manifest_reqs) {
         Ok(resolutions) => {
             ConfigEngine::print_summary(&resolutions);
 
@@ -2770,11 +2850,13 @@ pub fn run_auto(
         // Configure this tool
         println!("  CONFIG  {} (legacy) ...", tool.name);
 
+        let tool_manifest_reqs = load_manifest_requirements(&tool.path);
         match engine.process_env_file(
             &tool.template,
             vault,
             policy_check,
             &tool.name,
+            &tool_manifest_reqs,
         ) {
             Ok(resolutions) => {
                 if dry_run {
@@ -3137,8 +3219,9 @@ pub fn resolve_tool(
     }
 
     let engine = ConfigEngine::new();
+    let manifest_reqs = load_manifest_requirements(tool_path);
     let resolutions = engine
-        .process_env_file(&template, vault, allow_all_policy, tool_name)
+        .process_env_file(&template, vault, allow_all_policy, tool_name, &manifest_reqs)
         .map_err(|e| format!("process_env_file: {}", e))?;
 
     let mut vault_resolved = 0u32;
@@ -3738,6 +3821,7 @@ LLM_MODEL=gpt-4
             verification: None,
             configurable: vec![],
             capabilities: Default::default(),
+            launch: None,
         }
     }
 
@@ -4055,5 +4139,174 @@ LLM_MODEL=gpt-4
         // No provider stored — rotate should fail
         let exit = run_rotate(&vault, "nonexistent", "api_key");
         assert_eq!(exit, 1, "rotate should fail for missing provider");
+    }
+
+    /// Regression test: apply_provider_coherence must consult the manifest's
+    /// `prefer` list before falling back to hardcoded PROVIDER_PRIORITY.
+    ///
+    /// Scenario:
+    ///   - Vault has BOTH openai and anthropic credentials.
+    ///   - The manifest's CapabilityRequirement for LLM_BACKEND declares
+    ///     prefer = ["openai", "anthropic", "ollama"].
+    ///   - The .env.example has `# LLM_BACKEND=somethingelse` (commented out).
+    ///
+    /// Expected: resolved LLM_BACKEND = "openai" (manifest prefer wins), NOT
+    ///           "anthropic" (which PROVIDER_PRIORITY would pick first).
+    #[test]
+    fn test_provider_coherence_honors_manifest_prefer() {
+        let root = std::env::temp_dir().join("zp-coherence-prefer-test");
+        let tool = root.join("prefer-tool");
+        let _ = fs::create_dir_all(&tool);
+
+        // .env.example: both provider API keys and a commented-out LLM_BACKEND
+        fs::write(
+            tool.join(".env.example"),
+            "\
+ANTHROPIC_API_KEY=\n\
+OPENAI_API_KEY=\n\
+# LLM_BACKEND=somethingelse\n",
+        )
+        .unwrap();
+
+        let master_key = [0x42u8; 32];
+        let mut vault = CredentialVault::new(&master_key);
+        vault.store("anthropic/api_key", b"sk-ant-test").unwrap();
+        vault.store("openai/api_key", b"sk-openai-test").unwrap();
+
+        let engine = ConfigEngine::new();
+
+        // Manifest: LLM_BACKEND owned by a capability with prefer = openai first
+        let requirements = vec![zp_engine::capability::CapabilityRequirement {
+            capability: "reasoning_llm".to_string(),
+            env_vars: vec!["LLM_BACKEND".to_string()],
+            config_vars: HashMap::new(),
+            prefer: vec![
+                "openai".to_string(),
+                "anthropic".to_string(),
+                "ollama".to_string(),
+            ],
+            shared_with: None,
+            model_env: None,
+            model_default: None,
+            defaults: HashMap::new(),
+            attention: None,
+            local_default: false,
+            notes: None,
+            backend_groups: vec![],
+            auto_generate: vec![],
+        }];
+
+        let template = tool.join(".env.example");
+        let resolutions = engine
+            .process_env_file(&template, &vault, test_policy, "prefer-tool", &requirements)
+            .expect("process_env_file should succeed");
+
+        // Find the LLM_BACKEND resolution
+        let backend_res = resolutions.iter().find(|r| match r {
+            Resolution::DefaultResolved { var_name, .. } => var_name == "LLM_BACKEND",
+            _ => false,
+        });
+
+        assert!(
+            backend_res.is_some(),
+            "LLM_BACKEND should be resolved by provider coherence"
+        );
+
+        if let Some(Resolution::DefaultResolved {
+            var_name,
+            value,
+            pattern_name,
+        }) = backend_res
+        {
+            assert_eq!(var_name, "LLM_BACKEND");
+            assert_eq!(pattern_name, "provider_coherence");
+            assert_eq!(
+                value, "openai",
+                "manifest prefer=[openai, anthropic, ...] must win over hardcoded PROVIDER_PRIORITY (anthropic first)"
+            );
+        }
+
+        // Cleanup
+        let _ = fs::remove_file(tool.join(".env.example"));
+        let _ = fs::remove_dir(&tool);
+        let _ = fs::remove_dir(&root);
+    }
+
+    /// End-to-end test for the `run_tool` path: a `.zp-configure.toml` on disk
+    /// declares `prefer = ["openai", "anthropic"]` for LLM_BACKEND.  The vault
+    /// has BOTH providers.  Without the manifest the hardcoded PROVIDER_PRIORITY
+    /// (anthropic-first) would win; with the manifest openai must win.
+    ///
+    /// Validates that `load_manifest_requirements` picks up the file and threads
+    /// it through to `apply_provider_coherence`.
+    #[test]
+    fn test_run_tool_honors_manifest_prefer_end_to_end() {
+        let root = std::env::temp_dir().join("zp-run-tool-e2e-test");
+        let tool_dir = root.join("e2e-tool");
+        let _ = fs::create_dir_all(&tool_dir);
+
+        // .env.example: both provider API keys + commented-out LLM_BACKEND
+        fs::write(
+            tool_dir.join(".env.example"),
+            "\
+ANTHROPIC_API_KEY=\n\
+OPENAI_API_KEY=\n\
+# LLM_BACKEND=somethingelse\n",
+        )
+        .unwrap();
+
+        // .zp-configure.toml declaring prefer = ["openai", "anthropic"] for LLM_BACKEND
+        fs::write(
+            tool_dir.join(".zp-configure.toml"),
+            r#"
+[tool]
+name = "e2e-tool"
+description = "End-to-end manifest prefer test"
+
+[[required]]
+capability = "reasoning_llm"
+env_vars = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "LLM_BACKEND"]
+prefer = ["openai", "anthropic"]
+"#,
+        )
+        .unwrap();
+
+        let master_key = [0xABu8; 32];
+        let mut vault = CredentialVault::new(&master_key);
+        vault.store("anthropic/api_key", b"sk-ant-test").unwrap();
+        vault.store("openai/api_key", b"sk-openai-test").unwrap();
+
+        // Temp vault path for run_tool to persist to
+        let vault_file = root.join("vault.dat");
+
+        let exit = run_tool(
+            &tool_dir,
+            "e2e-tool",
+            false, // NOT dry_run — we need vault to be written
+            &mut vault,
+            test_policy,
+            Some(&vault_file),
+        );
+        assert_eq!(exit, 0, "run_tool should succeed");
+
+        // Verify LLM_BACKEND was stored as "openai" (manifest prefer wins over
+        // hardcoded PROVIDER_PRIORITY which puts anthropic first)
+        let env = vault.resolve_tool_env("e2e-tool").expect("resolve_tool_env should succeed");
+        let backend = env
+            .get("LLM_BACKEND")
+            .map(|v| String::from_utf8_lossy(v).into_owned());
+        assert_eq!(
+            backend.as_deref(),
+            Some("openai"),
+            "manifest prefer=[openai, anthropic] must win over PROVIDER_PRIORITY (anthropic-first); got {:?}",
+            backend
+        );
+
+        // Cleanup
+        let _ = fs::remove_file(tool_dir.join(".env.example"));
+        let _ = fs::remove_file(tool_dir.join(".zp-configure.toml"));
+        let _ = fs::remove_file(&vault_file);
+        let _ = fs::remove_dir(&tool_dir);
+        let _ = fs::remove_dir(&root);
     }
 }

@@ -488,6 +488,7 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
         verification: None,
         configurable: Vec::new(),
         capabilities: Default::default(),
+        launch: None,
     };
 
     DiscoveryResult {

@@ -365,6 +365,114 @@ pub struct ToolManifest {
     /// which the gate treats conservatively (same as `Irreversible`).
     #[serde(default)]
     pub capabilities: CapabilityEnvelope,
+
+    /// Universal launch spec — `zp run <name>` uses this to exec the tool.
+    /// Optional: tools without a `[launch]` section can still be exec'd via
+    /// `zp configure exec --name <name> -- <cmd>`.
+    #[serde(default)]
+    pub launch: Option<LaunchSpec>,
+}
+
+// ============================================================================
+// LaunchSpec — [launch] section
+// ============================================================================
+
+/// How to launch this tool via `zp run <name>`.
+///
+/// Security constraint: vault references (`${vault:...}`) are FORBIDDEN in
+/// all launch fields. They are only permitted in `[[provider_overrides]] env_map`.
+/// The parser rejects any launch field containing a vault reference.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LaunchSpec {
+    /// Executable to run (e.g., "cargo", "python3", "./run.sh").
+    pub command: String,
+
+    /// Arguments passed to the command.
+    #[serde(default)]
+    pub args: Vec<String>,
+
+    /// Working directory for the child process.
+    /// Relative paths are resolved against the manifest's directory.
+    /// Defaults to the manifest's directory when absent.
+    #[serde(default)]
+    pub working_dir: Option<String>,
+
+    /// Parent env inheritance policy.
+    #[serde(default)]
+    pub inherit_env: Option<InheritEnv>,
+}
+
+/// Declares which additional env vars (beyond the default whitelist) the
+/// child process should inherit from the parent shell.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InheritEnv {
+    /// Extra env var names to pass through from the parent environment.
+    #[serde(default)]
+    pub extra: Vec<String>,
+}
+
+/// Validate a `LaunchSpec` for forbidden vault references.
+///
+/// Returns `Err` with a location message if any vault ref is found in
+/// `command`, `args`, or `working_dir`. The `env_map` in
+/// `[[provider_overrides]]` is the only permitted location for vault refs.
+pub fn validate_launch_spec_no_vault_refs(spec: &LaunchSpec) -> Result<(), String> {
+    const SENTINEL: &str = "${vault:";
+
+    if spec.command.contains(SENTINEL) {
+        return Err(
+            "vault references are only allowed in [[provider_overrides]] env_map; \
+             found in [launch].command"
+                .to_string(),
+        );
+    }
+
+    for (i, arg) in spec.args.iter().enumerate() {
+        if arg.contains(SENTINEL) {
+            return Err(format!(
+                "vault references are only allowed in [[provider_overrides]] env_map; \
+                 found in [launch].args[{i}]"
+            ));
+        }
+    }
+
+    if let Some(wd) = &spec.working_dir {
+        if wd.contains(SENTINEL) {
+            return Err(
+                "vault references are only allowed in [[provider_overrides]] env_map; \
+                 found in [launch].working_dir"
+                    .to_string(),
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Load and parse a `.zp-configure.toml` manifest, rejecting vault refs in
+/// the `[launch]` section.
+///
+/// This is the security-hardened entry point. All code that validates launch
+/// manifests should call this instead of calling `load_manifest` directly.
+pub fn load_manifest_validated(path: &Path) -> Result<ToolManifest, ManifestError> {
+    let manifest = load_manifest(path)?;
+    if let Some(ref launch) = manifest.launch {
+        validate_launch_spec_no_vault_refs(launch).map_err(|msg| {
+            ManifestError::VaultRefInLaunch(path.to_path_buf(), msg)
+        })?;
+    }
+    Ok(manifest)
+}
+
+/// Load and parse a `.zp-configure.toml` manifest from raw bytes, rejecting
+/// vault refs in the `[launch]` section.
+pub fn load_manifest_bytes_validated(bytes: &[u8]) -> Result<ToolManifest, String> {
+    let content = std::str::from_utf8(bytes).map_err(|e| format!("invalid UTF-8: {e}"))?;
+    let manifest: ToolManifest = toml::from_str(content).map_err(|e| format!("parse error: {e}"))?;
+    if let Some(ref launch) = manifest.launch {
+        validate_launch_spec_no_vault_refs(launch)?;
+    }
+    Ok(manifest)
 }
 
 /// F5 capability envelope — properties of a tool's actions that the
@@ -713,6 +821,8 @@ pub fn reversibility_for_tool_dir(tool_dir: &Path) -> Reversibility {
 pub enum ManifestError {
     Io(std::path::PathBuf, std::io::Error),
     Parse(std::path::PathBuf, toml::de::Error),
+    /// Vault reference found in a [launch] field where it is forbidden.
+    VaultRefInLaunch(std::path::PathBuf, String),
 }
 
 impl fmt::Display for ManifestError {
@@ -720,6 +830,9 @@ impl fmt::Display for ManifestError {
         match self {
             Self::Io(path, e) => write!(f, "cannot read {}: {}", path.display(), e),
             Self::Parse(path, e) => write!(f, "invalid manifest {}: {}", path.display(), e),
+            Self::VaultRefInLaunch(path, msg) => {
+                write!(f, "security error in {}: {}", path.display(), msg)
+            }
         }
     }
 }
@@ -1361,5 +1474,119 @@ mod tests {
         assert!(Reversibility::Partial.requires_elevated_tier());
         assert!(Reversibility::Irreversible.requires_elevated_tier());
         assert!(Reversibility::Unknown.requires_elevated_tier());
+    }
+
+    // ── LaunchSpec / [launch] section tests ──────────────────────────────
+
+    #[test]
+    fn test_launch_section_parsed_correctly() {
+        let toml_str = r#"
+            [tool]
+            name = "my-tool"
+            version = "0.1"
+            description = "x"
+
+            [launch]
+            command = "cargo"
+            args = ["run", "--release", "--", "run", "--cli-only"]
+            working_dir = "."
+
+            [launch.inherit_env]
+            extra = ["AWS_REGION", "DOCKER_HOST"]
+        "#;
+
+        let manifest: ToolManifest = toml::from_str(toml_str).unwrap();
+        let launch = manifest.launch.as_ref().expect("[launch] section present");
+        assert_eq!(launch.command, "cargo");
+        assert_eq!(
+            launch.args,
+            vec!["run", "--release", "--", "run", "--cli-only"]
+        );
+        assert_eq!(launch.working_dir.as_deref(), Some("."));
+        let extra = launch
+            .inherit_env
+            .as_ref()
+            .map(|ie| ie.extra.as_slice())
+            .unwrap_or_default();
+        assert_eq!(extra, &["AWS_REGION", "DOCKER_HOST"]);
+    }
+
+    #[test]
+    fn test_vault_ref_in_command_rejected() {
+        let spec = LaunchSpec {
+            command: "${vault:some/secret}".to_string(),
+            args: vec![],
+            working_dir: None,
+            inherit_env: None,
+        };
+        let err = validate_launch_spec_no_vault_refs(&spec).unwrap_err();
+        assert!(
+            err.contains("[launch].command"),
+            "error should mention location: {err}"
+        );
+    }
+
+    #[test]
+    fn test_vault_ref_in_args_rejected() {
+        let spec = LaunchSpec {
+            command: "cargo".to_string(),
+            args: vec![
+                "run".to_string(),
+                "--release".to_string(),
+                "${vault:openai/api_key}".to_string(),
+            ],
+            working_dir: None,
+            inherit_env: None,
+        };
+        let err = validate_launch_spec_no_vault_refs(&spec).unwrap_err();
+        // The error message should call out args[2]
+        assert!(
+            err.contains("[launch].args[2]"),
+            "error should mention location: {err}"
+        );
+        assert!(
+            err.contains("vault references are only allowed"),
+            "error should be actionable: {err}"
+        );
+    }
+
+    #[test]
+    fn test_vault_ref_in_working_dir_rejected() {
+        let spec = LaunchSpec {
+            command: "cargo".to_string(),
+            args: vec![],
+            working_dir: Some("${vault:some/path}".to_string()),
+            inherit_env: None,
+        };
+        let err = validate_launch_spec_no_vault_refs(&spec).unwrap_err();
+        assert!(
+            err.contains("[launch].working_dir"),
+            "error should mention location: {err}"
+        );
+    }
+
+    #[test]
+    fn test_clean_launch_spec_passes_validation() {
+        let spec = LaunchSpec {
+            command: "cargo".to_string(),
+            args: vec!["run".to_string(), "--release".to_string()],
+            working_dir: Some(".".to_string()),
+            inherit_env: Some(InheritEnv {
+                extra: vec!["AWS_REGION".to_string()],
+            }),
+        };
+        assert!(validate_launch_spec_no_vault_refs(&spec).is_ok());
+    }
+
+    #[test]
+    fn test_manifest_without_launch_is_valid() {
+        let toml_str = r#"
+            [tool]
+            name = "no-launch"
+            version = "0.1"
+            description = "x"
+        "#;
+        let manifest: ToolManifest = toml::from_str(toml_str).unwrap();
+        assert!(manifest.launch.is_none());
     }
 }

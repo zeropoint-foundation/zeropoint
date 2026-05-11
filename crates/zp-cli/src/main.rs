@@ -6,6 +6,7 @@ use zp_configure as configure;
 mod emit;
 mod guard;
 mod init;
+mod run;
 mod shell;
 mod mesh_commands;
 mod recover;
@@ -437,6 +438,19 @@ enum Commands {
         json: bool,
     },
 
+    /// Launch a ZP-governed tool by name using its manifest's [launch] section.
+    ///
+    /// The tool must have been configured via `zp configure tool` first.
+    /// Verifies the manifest hash, emits a receipt, then exec's the child
+    /// process with vault-resolved env and a restricted parent env whitelist.
+    Run {
+        /// Tool name (must have been configured via `zp configure tool` first)
+        name: String,
+        /// Extra args appended after the manifest's args (after `--`)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        extra_args: Vec<String>,
+    },
+
     /// V6 — Refresh a canon'd tool's bead-zero metadata to current schema.
     ///
     /// Reads the tool's `.zp-configure.toml` and registry/tools/*.json from
@@ -650,6 +664,12 @@ enum ConfigureCmd {
         /// Dry run — show what would be resolved without writing
         #[arg(long)]
         dry_run: bool,
+
+        /// Accept a changed manifest — update the stored hash baseline.
+        /// Required when the manifest has been intentionally modified since
+        /// the last `zp configure tool` run.
+        #[arg(long)]
+        refresh: bool,
     },
     /// List providers registered in the vault
     Providers,
@@ -734,6 +754,22 @@ enum ConfigureCmd {
         /// Field to rotate (e.g., "api_key")
         #[arg(long)]
         field: String,
+    },
+    /// Resolve a tool's vault-backed config into env and exec a command.
+    ///
+    /// Secrets are injected directly into the child process environment and
+    /// never appear in shell history.  The resolved env vars OVERRIDE any
+    /// identically-named vars already in the current environment.
+    ///
+    /// Example:
+    ///   zp configure exec --name ironclaw -- bash -c 'echo key_len=${#OPENAI_API_KEY}'
+    Exec {
+        /// Tool name (matches what was used in `configure tool --name`)
+        #[arg(long)]
+        name: String,
+        /// Command and args to execute (after `--`)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
     },
 }
 
@@ -1103,15 +1139,56 @@ async fn main() -> anyhow::Result<()> {
                 path,
                 name,
                 dry_run,
+                refresh,
             } => match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-                Ok(mut vault) => configure::run_tool(
-                    path,
-                    name,
-                    *dry_run,
-                    &mut vault,
-                    configure_policy,
-                    Some(&vault_path),
-                ),
+                Ok(mut vault) => {
+                    let exit = configure::run_tool(
+                        path,
+                        name,
+                        *dry_run,
+                        &mut vault,
+                        configure_policy,
+                        Some(&vault_path),
+                    );
+                    // Pin manifest hash after successful configure (Security mitigation M3).
+                    // Skip on dry-run (nothing was stored).
+                    // --refresh unconditionally updates the stored hash.
+                    if exit == 0 && !*dry_run {
+                        let manifest_file = path.join(".zp-configure.toml");
+                        if manifest_file.exists() {
+                            match std::fs::read(&manifest_file) {
+                                Ok(manifest_bytes) => {
+                                    // Reload vault to pick up changes from run_tool
+                                    match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                                        Ok(mut vault2) => {
+                                            match run::pin_manifest_hash(&mut vault2, name, &manifest_file, &manifest_bytes) {
+                                                Ok(()) => {
+                                                    if let Err(e) = vault2.save(&vault_path) {
+                                                        eprintln!("Warning: manifest hash stored but vault persist failed: {}", e);
+                                                    } else if *refresh {
+                                                        println!("\x1b[32m✓\x1b[0m  Manifest hash refreshed for '{}'", name);
+                                                    } else {
+                                                        println!("\x1b[32m✓\x1b[0m  Manifest hash pinned for '{}'", name);
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("Warning: could not pin manifest hash: {}", e);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Warning: could not reload vault for hash pin: {}", e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Warning: could not read manifest for hash pin: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    exit
+                }
                 Err(e) => {
                     eprintln!("Error loading vault: {}", e);
                     1
@@ -1213,7 +1290,187 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+            ConfigureCmd::Exec { name, command } => {
+                if command.is_empty() {
+                    eprintln!();
+                    eprintln!("  \x1b[31mNo command specified.\x1b[0m");
+                    eprintln!();
+                    eprintln!("  Usage: zp configure exec --name <tool> -- <command> [args...]");
+                    eprintln!("  Example: zp configure exec --name ironclaw -- bash -c 'echo hi'");
+                    eprintln!();
+                    1
+                } else {
+                    match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                        Ok(vault) => {
+                            match vault.resolve_tool_env(name) {
+                                Ok(env_map) => {
+                                    if env_map.is_empty() {
+                                        // Check if the tool name is a typo — list what IS configured.
+                                        let available: Vec<String> = {
+                                            let mut tools: std::collections::BTreeSet<String> =
+                                                std::collections::BTreeSet::new();
+                                            for key in vault.list() {
+                                                if let Some(rest) = key.strip_prefix("tools/") {
+                                                    if let Some(slash) = rest.find('/') {
+                                                        tools.insert(rest[..slash].to_string());
+                                                    }
+                                                }
+                                            }
+                                            tools.into_iter().collect()
+                                        };
+                                        if available.is_empty() {
+                                            eprintln!();
+                                            eprintln!(
+                                                "  \x1b[31mNo tools are configured in the vault.\x1b[0m"
+                                            );
+                                            eprintln!();
+                                            eprintln!(
+                                                "  Run `zp configure tool --name {} --path <dir>` first.",
+                                                name
+                                            );
+                                        } else {
+                                            eprintln!();
+                                            eprintln!(
+                                                "  \x1b[31mTool '{}' has no vault config.\x1b[0m",
+                                                name
+                                            );
+                                            eprintln!();
+                                            eprintln!("  Configured tools: {}", available.join(", "));
+                                            eprintln!(
+                                                "  Run `zp configure tool --name {} --path <dir>` to configure it.",
+                                                name
+                                            );
+                                        }
+                                        eprintln!();
+                                        1
+                                    } else {
+                                        eprintln!(
+                                            "resolved {} env var(s) for tool '{}'",
+                                            env_map.len(),
+                                            name
+                                        );
+
+                                        // Emit launch receipt BEFORE exec (Security mitigation M4).
+                                        // collect vault-resolved var names only — never values.
+                                        let vault_resolved_names: Vec<String> =
+                                            env_map.keys().cloned().collect();
+                                        let exec_args: Vec<String> =
+                                            command[1..].iter().map(|s| s.to_string()).collect();
+
+                                        let receipt_keyring = crate::commands::open_keyring();
+                                        let db_path = args.data_dir.join("audit.db");
+                                        match receipt_keyring {
+                                            Ok(kr) => {
+                                                let receipt_fields = run::LaunchReceiptFields {
+                                                    tool_name: name,
+                                                    manifest_hash: "(ad-hoc exec — no manifest hash)",
+                                                    command: &command[0],
+                                                    args: &exec_args,
+                                                    inherited: &[],
+                                                    extra_inherited: &[],
+                                                    vault_resolved: &vault_resolved_names,
+                                                };
+                                                if let Err(e) = run::emit_launch_receipt(&receipt_fields, &db_path, &kr) {
+                                                    eprintln!();
+                                                    eprintln!("  \x1b[31mLaunch blocked: could not emit receipt.\x1b[0m");
+                                                    eprintln!("  {}", e);
+                                                    eprintln!();
+                                                    eprintln!("  ZP-governed tools must be auditable. Fix the audit chain and retry.");
+                                                    eprintln!();
+                                                    std::process::exit(1);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!();
+                                                eprintln!("  \x1b[31mLaunch blocked: cannot open keyring for receipt signing.\x1b[0m");
+                                                eprintln!("  {}", e);
+                                                eprintln!();
+                                                std::process::exit(1);
+                                            }
+                                        }
+
+                                        let mut child = std::process::Command::new(&command[0]);
+                                        child.args(&command[1..]);
+                                        // Inject resolved vars (override inherited env).
+                                        for (k, v) in &env_map {
+                                            if let Ok(s) = std::str::from_utf8(v) {
+                                                child.env(k, s);
+                                            }
+                                        }
+                                        // exec() replaces the current process on Unix — secrets
+                                        // never live in two processes simultaneously.
+                                        #[cfg(unix)]
+                                        {
+                                            use std::os::unix::process::CommandExt;
+                                            let err = child.exec();
+                                            // exec() only returns on failure.
+                                            eprintln!("exec failed: {}", err);
+                                            1
+                                        }
+                                        #[cfg(not(unix))]
+                                        {
+                                            match child.status() {
+                                                Ok(status) => {
+                                                    status.code().unwrap_or(1)
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("Failed to run command: {}", e);
+                                                    1
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Error resolving vault env for '{}': {}", name, e);
+                                    1
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Error loading vault: {}", e);
+                            1
+                        }
+                    }
+                }
+            }
         };
+        std::process::exit(exit_code);
+    }
+
+    // Run — universal ZP-governed tool launch
+    if let Some(Commands::Run { name, extra_args }) = &args.command {
+        let home_zp = commands::resolve_zp_home();
+        let keyring = zp_keys::Keyring::open(home_zp.join("keys")).ok();
+        let resolved = match &keyring {
+            Some(kr) => match zp_keys::resolve_vault_key(kr) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!();
+                    eprintln!("  \x1b[31mCould not resolve vault key.\x1b[0m {}", e);
+                    eprintln!("  Run `zp init` first to create your Genesis key.");
+                    eprintln!();
+                    std::process::exit(1);
+                }
+            },
+            None => {
+                eprintln!();
+                eprintln!("  \x1b[31mNo keyring found.\x1b[0m Run `zp init` first.");
+                eprintln!();
+                std::process::exit(1);
+            }
+        };
+        let padded_key = *resolved.key;
+        let vault_path = zp_core::paths::vault_path()
+            .unwrap_or_else(|_| commands::resolve_zp_home().join("vault.json"));
+
+        let exit_code = run::run(
+            name,
+            extra_args,
+            &padded_key,
+            &vault_path,
+            &args.data_dir,
+        );
         std::process::exit(exit_code);
     }
 
@@ -3112,6 +3369,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Scan { .. }) => unreachable!(),     // handled above
         Some(Commands::Operator(_)) => unreachable!(),    // handled above
         Some(Commands::Emit { .. }) => unreachable!(),    // handled above
+        Some(Commands::Run { .. }) => unreachable!(),      // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,
@@ -4785,5 +5043,63 @@ fn print_discover_text(r: &DiscoverReport) {
         println!();
         println!("remediation: emit a CanonicalizedClaim receipt for each missing entity");
         println!("             (see crates/zp-server/src/tool_chain.rs append_bead_zero)");
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    /// Verify that `resolve_tool_env` returns the expected env vars for `zp configure exec`.
+    ///
+    /// Sets up a vault with:
+    ///   - a provider credential: openai/api_key = "sk-test-12345"
+    ///   - a tool ref:           tools/test-tool/OPENAI_API_KEY → openai/api_key
+    ///
+    /// Then resolves the tool env and asserts OPENAI_API_KEY = "sk-test-12345".
+    /// This is the same resolution path the Exec dispatch handler calls.
+    #[test]
+    fn test_configure_exec_env_resolution() {
+        let master_key = [0x5a_u8; 32];
+        let mut vault = zp_trust::vault::CredentialVault::new(&master_key);
+
+        // Store the provider credential at the canonical providers/ path.
+        vault
+            .store("providers/openai/api_key", b"sk-test-12345")
+            .unwrap();
+
+        // Store a ref from the tool's env var to the provider credential.
+        // store_tool_ref(tool, var, provider, field) writes
+        //   tools/test-tool/OPENAI_API_KEY → providers/openai/api_key
+        vault
+            .store_tool_ref("test-tool", "OPENAI_API_KEY", "openai", "api_key")
+            .unwrap();
+
+        // Resolve — same call the Exec handler makes.
+        let env_map = vault.resolve_tool_env("test-tool").unwrap();
+
+        assert!(
+            !env_map.is_empty(),
+            "env map should not be empty for test-tool"
+        );
+
+        let raw = env_map
+            .get("OPENAI_API_KEY")
+            .expect("OPENAI_API_KEY must be present in resolved env");
+        assert_eq!(
+            std::str::from_utf8(raw).unwrap(),
+            "sk-test-12345",
+            "resolved value must match the vault credential"
+        );
+
+        // Confirm the resolved map can be converted to String for injection.
+        let as_str = std::str::from_utf8(raw).unwrap();
+        assert_eq!(as_str.len(), 13, "key should be 13 chars");
+
+        // Confirm unknown tool returns an empty map (not an error).
+        let empty = vault.resolve_tool_env("no-such-tool").unwrap();
+        assert!(empty.is_empty(), "unknown tool should yield empty map");
     }
 }
