@@ -164,10 +164,109 @@ members/<member>/*                   → Member-private (operational data for th
 leadership/*                         → Leadership-only (in-flight high-stakes)
 ```
 
-Chain receipts are universally readable by authenticated members; what
-varies is the **document body** for documents linked to receipts. The
-chain proves *that* a high-stakes decision was made; the body might
-only be accessible to the leadership tier that made it.
+### The substrate-side visibility model
+
+Static tiers tell you what's *possible*; practical controls are how
+members actually navigate the tiers in real work. Members need to
+toggle between private exploration and shared collaboration as their
+work cadence demands — not by classifying every individual action, but
+by working in sessions whose tier is explicit.
+
+The substrate models this by extending every chain receipt with a
+**visibility** field:
+
+```protobuf
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PUBLIC = 1;       // only used for explicitly-public things
+  VISIBILITY_TEAM = 2;         // default for Foundation team operations
+  VISIBILITY_LEADERSHIP = 3;   // leadership tier only
+  VISIBILITY_MEMBER = 4;       // member-id list scopes who can read
+}
+
+message ReceiptHeader {
+  // ... existing fields ...
+  Visibility visibility = 13;
+  // For VISIBILITY_MEMBER, the list of member IDs (plus Operator) who can read.
+  // Empty for other visibility values.
+  repeated string visible_to_members = 14;
+}
+```
+
+Every receipt the substrate produces declares its visibility. The chain
+stores everything; the substrate enforces ACL at **read time**: a
+member's `Audit.Watch` and `Audit.Query` requests are filtered to
+return only receipts whose visibility includes them.
+
+Receipts a member can't read still **exist cryptographically** — the
+chain's hash linkage is unaffected by visibility — but their content
+fields are opaque to unauthorized readers (the body is encrypted with
+a per-receipt key wrapped to authorized readers' public keys, similar
+to the document-confidentiality pattern in II.15).
+
+### Promotion, demotion, multi-party consent
+
+The session-level toggle members operate (see II.17 for the UX surface)
+maps to substrate-level state changes:
+
+**Promotion** (private → broader visibility): a member promotes a
+session they own. The substrate emits a `RECEIPT_KIND_VISIBILITY_PROMOTION`
+receipt declaring "session X promoted from tier A to tier B at time T."
+All receipts in that session from this point forward use the new
+visibility. Past receipts in the session also become readable at the
+new tier (re-wrapped with new audience's keys). One-way action; the
+chain records the promotion as an attestable event.
+
+**Demotion** (broader → narrower): substantially more restricted. Past
+content that was visible to the team **cannot be made not-visible** —
+other members may have already seen and acted on it. What can change
+is the visibility of *future* actions in the session. A demotion
+receipt declares "session X demoted from tier A to tier B at time T;
+this affects subsequent receipts only." Past content remains where it
+landed.
+
+**Multi-party consent for 1:1 promotions**: promoting a 1:1 session
+(VISIBILITY_MEMBER with two specific members) to a broader tier
+requires consent from ALL listed members. Substrate enforces this:
+a `RECEIPT_KIND_VISIBILITY_PROMOTION` for a 1:1 session is only valid
+if signed by every listed member. Prevents one party from unilaterally
+publishing a private conversation.
+
+**Adding a member to a session**: similar consent flow. A member can
+propose adding another member to their session; the proposed-additional
+member must sign a consent receipt before they're added. Until then,
+the session remains scoped to its original participants.
+
+### Non-negotiable visibility minimums
+
+Some chain content has a structural reason to be at-least-team-visible
+regardless of session context:
+
+- **Document signature receipts** (`RECEIPT_KIND_DOCUMENT_SIGNATURE`,
+  `SIGNING_COMPLETION`): the *fact* of signing must be auditable. The
+  document body can be tier-restricted (II.15's encrypted document
+  store), but the signing receipts themselves are at minimum
+  Foundation-team-visible.
+- **Governance ratifications** (`RECEIPT_KIND_POLICY_VOTE`,
+  `POLICY_AGREEMENT`): decisions need a witnessable record.
+- **Membership lifecycle** (`MEMBER_INVITATION`, `MEMBER_ENROLLED`,
+  `MEMBER_REVOCATION`): every member needs to know who's in the
+  Foundation and when transitions happened.
+- **Audit-chain hash linkage**: every member can verify chain
+  integrity end-to-end, even when specific receipts' contents are
+  tier-restricted. The hash field stays universal.
+- **Public profile info** (name, role, member-handle, public key):
+  needed for routing and verification; can't be private.
+
+These are enforced at substrate level: the visibility field on these
+receipt kinds is constrained to at minimum `VISIBILITY_TEAM`. Attempts
+to mark them more restrictive fail at validation.
+
+Chain receipts are universally readable by authenticated members
+*subject to these visibility scopes*; what varies is the **document
+body** for documents linked to receipts. The chain proves *that* a
+high-stakes decision was made; the body might only be accessible to
+the leadership tier that made it.
 
 ## Authentication: Passkeys / WebAuthn
 

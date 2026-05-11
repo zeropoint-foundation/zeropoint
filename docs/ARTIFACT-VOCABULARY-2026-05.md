@@ -148,6 +148,89 @@ conversation. Members can also invoke artifacts directly via explicit
 URLs (`foundation.zeropoint.global/calendar`,
 `foundation.zeropoint.global/timeline`) if they prefer.
 
+## Privacy controls in the chat surface
+
+The default IronClaw chat surface is where members most often interact
+with the substrate, and it's where privacy controls have to feel
+natural. The substrate provides the model (visibility field on every
+receipt, see II.16); the chat surface provides the practical controls
+that make it usable.
+
+### Session modes
+
+Every chat session has a privacy tier, shown prominently:
+
+| Session mode | Default visibility | Visual indicator | Typical use |
+|--------------|-------------------|------------------|-------------|
+| **Working** (default) | Member-private (visible to member + Operator) | Lock icon, dimmed background | Personal exploration, drafting, search, thinking-out-loud |
+| **Team** | Foundation team (all authenticated members) | Foundation badge, normal background | Collaborative work, decisions, document review |
+| **1:1** | Member + named other member(s) | Lock + named-members icon | Private discussions between specific people |
+| **Leadership** | Leadership tier only | Crown icon, distinct background | Strategic discussions, sensitive negotiations |
+
+The mode chosen when starting a session is preserved throughout. All
+actions taken in the session (chain receipts emitted, artifacts
+invoked, documents touched) inherit the session's visibility tier
+unless the member explicitly overrides for a single action (rare).
+
+### Inline controls
+
+In any chat session, the member sees:
+
+- **Privacy tier indicator** at the top, always visible: shows the
+  current tier, who can read, and how many receipts in this session
+  so far.
+- **Change privacy button** opens a small dialog with tier options
+  + plain-language explanation: "Promote to team — all messages and
+  actions in this conversation become visible to all Foundation
+  members. This is permanent for past messages; cannot be undone."
+- **Add member** (for 1:1 sessions): invite another member; requires
+  their consent receipt before they join.
+- **Take this offline**: start a new private session, optionally
+  carrying selected context forward. Useful when a member realizes
+  mid-conversation that they need to switch tiers without affecting
+  the existing session's record.
+
+### Natural-language shortcuts
+
+For members who prefer chat over clicking:
+
+| Member says | IronClaw does |
+|-------------|---------------|
+| "make this private" | Switch session to Working mode (warn if there are existing team-visible receipts: those can't be un-shared) |
+| "share this with the team" | Initiate promotion to Team tier; show confirmation dialog before emitting the promotion receipt |
+| "loop in Alice" | Propose adding Alice to the session; Alice gets a consent prompt |
+| "move to leadership" | Escalate session to Leadership tier (member must have leadership scope; otherwise IronClaw declines with the reason) |
+| "what can people see here?" | Show the privacy tier, list of readers, count of receipts at this tier |
+
+### Visibility minimums shown clearly
+
+When a member tries to do something that triggers a visibility minimum
+(e.g., trying to sign a document in a Working-mode session), IronClaw
+surfaces this explicitly: "Signing a document produces a Foundation-
+team-visible receipt regardless of session tier. The document body
+can remain private per its ACL, but the signing event will be visible
+to the team. Proceed?"
+
+Members never silently accidentally publish something private; they
+also never silently fail to record something the substrate requires to
+be visible. Both directions are confirmed.
+
+### Visual indicator carries through artifacts
+
+When an artifact is invoked inside a session, the artifact UI shows
+the session's privacy tier in a corner badge. This ensures members
+understand "I'm looking at this calendar event in a Working-mode
+chat — anything I do here is private" vs "I'm in the Team chat,
+RSVPing to this meeting publishes my RSVP to the team chain."
+
+### Audit chain perspective on session modes
+
+Every session-mode change is itself a chain receipt
+(`VISIBILITY_PROMOTION` or `VISIBILITY_DEMOTION` per II.16). The chain
+records when sessions changed tiers, who initiated, who consented
+(for promotions of multi-party sessions). Auditing "what privacy
+transitions happened this month" is a chain query.
+
 ## How an artifact gets defined
 
 Each artifact has:
