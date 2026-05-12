@@ -99,13 +99,13 @@
   p { margin-bottom: 16px; color: var(--text); }
   p.dim { color: var(--text-dim); font-size: 14px; }
 
-  /* ── Steward's voice ── */
-  .steward {
+  /* ── Sage's voice ── */
+  .sage {
     border-left: 2px solid var(--accent);
     padding-left: 18px;
     margin-bottom: 32px;
   }
-  .steward-label {
+  .sage-label {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -114,13 +114,13 @@
     margin-bottom: 12px;
     opacity: 0.8;
   }
-  .steward p {
+  .sage p {
     color: var(--text-dim);
     font-size: 15px;
     line-height: 1.7;
     margin-bottom: 10px;
   }
-  .steward p:last-child { margin-bottom: 0; }
+  .sage p:last-child { margin-bottom: 0; }
 
   /* ── Director picker ── */
   .picker {
@@ -652,8 +652,8 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
-function stewardHtml(...paras) {
-  return `<div class="steward"><div class="steward-label">Steward</div>${paras.map(p => `<p>${p}</p>`).join("")}</div>`;
+function sageHtml(...paras) {
+  return `<div class="sage"><div class="sage-label">Sage</div>${paras.map(p => `<p>${p}</p>`).join("")}</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -666,8 +666,8 @@ async function renderWelcome() {
     <div class="phase">
       <h2>Welcome</h2>
       <h1>ZeroPoint Foundation</h1>
-      ${stewardHtml(
-        "Welcome to ZeroPoint Foundation onboarding. I'm Steward — the Foundation's assistant. To begin, identify yourself from the list below."
+      ${sageHtml(
+        "Welcome to ZeroPoint Foundation onboarding. I'm Sage — the Foundation's assistant. To begin, identify yourself from the list below."
       )}
       <div class="picker" id="picker"><div class="working-label">Loading…</div></div>
       <div class="actions"><button class="btn" id="continue" disabled>Continue</button></div>
@@ -725,7 +725,7 @@ async function renderWelcome() {
         <div class="phase">
           <h2>Already registered</h2>
           <h1>${escapeHtml(selected.name)}</h1>
-          ${stewardHtml(
+          ${sageHtml(
             `${escapeHtml(selected.name)}, your operator identity is already bound to a real key.
              If you're trying to recover access or re-onboard, that's a different flow.
              I'll log the attempt and flag it for review.`
@@ -739,12 +739,12 @@ async function renderWelcome() {
 
     await emit(1, "onboard:start", "completed", { name: selected.name, role: selected.role }, "Onboarding started");
 
-    // Show Steward's greeting now that we know who this is
+    // Show Sage's greeting now that we know who this is
     card.innerHTML = `
       <div class="phase">
         <h2>Welcome</h2>
         <h1>Hello, ${escapeHtml(selected.name.split(" ")[0])}.</h1>
-        ${stewardHtml(
+        ${sageHtml(
           `Before we begin: this ceremony establishes your cryptographic identity with the Foundation.
            Three things will happen — you'll generate a keypair, record a recovery path,
            and demonstrate how your authority works. Each step is yours to take.
@@ -768,7 +768,7 @@ async function renderIdentity() {
     <div class="phase">
       <h2>Identity</h2>
       <h1>Your cryptographic identity</h1>
-      ${stewardHtml(
+      ${sageHtml(
         "Now I'll generate your cryptographic identity. The keypair is created on this device, in your browser, using Web Crypto. The private key never leaves this machine — not to me, not to the substrate, not to anyone.",
         "Your public key becomes your authority for every action you take in the Foundation. The private key is what proves it's you.",
         "Your call: proceed."
@@ -833,7 +833,7 @@ async function renderRegister() {
     <div class="phase">
       <h2>Register</h2>
       <h1>Bind your key to the Foundation</h1>
-      ${stewardHtml(
+      ${sageHtml(
         `Now I'll register your public key with the substrate, replacing the placeholder
          that's been holding your operator slot. This is a one-shot operation — once it
          succeeds, your key is your authority for every action you take here.
@@ -921,7 +921,7 @@ async function renderRecovery() {
     <div class="phase">
       <h2>Recovery phrase</h2>
       <h1>Your twenty-four words</h1>
-      ${stewardHtml(
+      ${sageHtml(
         "Now the recovery phrase. Twenty-four words. If you ever lose this device or its disk fails, those words are how you regain access to your operator identity. No one — not me, not the substrate, not Ken — can recover them for you. They're yours alone.",
         "Write them down. On paper. By hand. Twice. Keep the two copies in physically separate places — one at home, one in a safe deposit box, or similar.",
         "Don't photograph them. Don't email them. Don't store them in a notes app or password manager. Don't read them aloud on a call you don't control.",
@@ -953,9 +953,9 @@ async function renderRecovery() {
     cont.disabled = true;
     cont.textContent = "Logging…";
 
-    // Steward ack
+    // Sage ack
     card.querySelector(".phase").insertAdjacentHTML("beforeend", `
-      <div class="steward" style="margin-top:16px;margin-bottom:0;">
+      <div class="sage" style="margin-top:16px;margin-bottom:0;">
         <p>Logged. The substrate has recorded that you confirmed your phrase is written down —
            not the phrase itself, just the acknowledgment. If you ever need recovery, the
            substrate will ask for the words; you'll read them from the paper you just wrote.</p>
@@ -995,7 +995,7 @@ async function renderPasskey() {
     <div class="phase">
       <h2>Passkey</h2>
       <h1>Set up your daily sign-in</h1>
-      ${stewardHtml(
+      ${sageHtml(
         "Optional convenience: register a passkey on this device for faster sign-in. With a passkey, your next visit signs you in with your fingerprint, Face ID, or hardware key — no recovery phrase, no typing. It works only on this device; you can register more later from settings.",
         "Your call: register now, or skip."
       )}
@@ -1014,7 +1014,7 @@ async function renderPasskey() {
 
   skip.addEventListener("click", async () => {
     setup.disabled = true; skip.disabled = true;
-    out.innerHTML = stewardHtml("Skipped. You'll sign in with your operator-id and signed requests for now. You can register a passkey from settings anytime.");
+    out.innerHTML = sageHtml("Skipped. You'll sign in with your operator-id and signed requests for now. You can register a passkey from settings anytime.");
     await emit(5, "onboard:passkey:skipped", "skipped",
       { reason: "user-skipped" }, "Passkey skipped");
     await sleep(1600);
@@ -1026,7 +1026,7 @@ async function renderPasskey() {
     out.innerHTML = `<div class="working" style="padding:20px 0 8px;"><div class="pulse" style="width:32px;height:32px;border-width:1.5px;"></div><div class="working-label">Waiting for your device…</div></div>`;
     try {
       await registerPasskey();
-      out.innerHTML = stewardHtml("Registered. You'll see a passkey option next time you visit on this device.");
+      out.innerHTML = sageHtml("Registered. You'll see a passkey option next time you visit on this device.");
       await emit(5, "onboard:passkey:registered", "completed",
         { device: inferDeviceName() }, "Passkey registered");
       await sleep(1600);
@@ -1070,7 +1070,7 @@ async function renderVoice() {
     <div class="phase">
       <h2>Voice</h2>
       <h1>How I'll sound</h1>
-      ${stewardHtml(
+      ${sageHtml(
         "One last small choice. I can speak in a few different voices — pick the one you'd like me to use in our daily work. Each option has a short sample. All voices run locally on the Foundation's substrate; nothing leaves.",
         "You can change this later from settings."
       )}
@@ -1134,10 +1134,10 @@ async function renderVoice() {
     const selectedCard = grid.querySelector(".voice-card.selected");
     if (selectedCard) state.voiceId = selectedCard.dataset.id;
 
-    // Steward confirmation in the chosen "voice" (text only at v1)
+    // Sage confirmation in the chosen "voice" (text only at v1)
     const voice = VOICES.find(v => v.id === state.voiceId) || VOICES[0];
     card.querySelector(".phase").insertAdjacentHTML("beforeend", `
-      <div class="steward" style="margin-top:16px;margin-bottom:0;">
+      <div class="sage" style="margin-top:16px;margin-bottom:0;">
         <p>Selected. From now on, this is the voice you'll hear when I speak.</p>
       </div>
     `);
@@ -1179,7 +1179,7 @@ async function renderBound() {
     <div class="phase">
       <h2>Boundaries</h2>
       <h1>How your authority works</h1>
-      ${stewardHtml(
+      ${sageHtml(
         "Last technical step before we hand you off to your daily surface: a demonstration of how your authority works. I'll attempt two actions on your behalf. The first should succeed because your role permits it. The second should fail because it doesn't. Both produce receipts — the failure as visibly as the success."
       )}
       <div class="demo-panels">
@@ -1275,7 +1275,7 @@ async function renderHandoff() {
     <div class="phase">
       <h2>Welcome aboard</h2>
       <h1>${escapeHtml(name)}.</h1>
-      ${stewardHtml(
+      ${sageHtml(
         "You're commissioned. Your operator identity is bound, your recovery is recorded, your boundaries are demonstrated. Six receipts in the chain mark each step; that's your record of joining.",
         `From here on, your daily surface is at <strong>app.zeropointfoundation.org</strong>. I'll be there — same voice, same patterns, with the context of your role and whatever work you take on.`,
         `Welcome aboard, ${escapeHtml(name)}.`
