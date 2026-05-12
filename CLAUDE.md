@@ -202,6 +202,22 @@ If steps are unclear, ask "what does done look like?" rather than guessing.
 
 Subagent dispatch (Sonnet) for mechanical sweeps, surveys, and verification passes. Primary context for architectural reasoning, ambiguous-intent moments, and code that informs the current decision. See `docs/MODEL-SELECTION-2026-05.md` for the per-task calibration.
 
+## Workflow heuristics
+
+Patterns worth replicating, captured at the moment they fire. Each entry is one heuristic plus the example that revealed it. Append new ones; don't prune.
+
+### Name and shape artifacts for their downstream consumer, not their immediate producer.
+
+When creating anything with a downstream consumer — config file, env var, JSON schema, API endpoint, function signature, even a hypothetical-future consumer — ask *who reads this?* before *who writes it?* and name/shape from the reader's side.
+
+Example (2026-05-12): the Kokoro tuner saves voice favorites to a JSON file. Could have called it `tuner-favorites.json` (producer-side) or `kokoro-saved.json` (tool-side). Called it `onboarding-voice-palette.json` — what the wizard's Phase 5.5 actually reads. The wizard wiring then falls out with no translation layer, no mapping config, no "this is actually X" comment in three places. The filename IS the contract.
+
+Anti-pattern: naming for the producer or the moment of creation. That forces either (a) a rename later, (b) a config mapping, or (c) docstring glue saying "this file means Y." All three are cognitive-bandwidth tax that consumer-side naming avoids.
+
+When no consumer exists yet: name for the *probable* consumer. Right → free integration later. Wrong → rename costs nothing while nothing depends on it.
+
+Connects to *every bit counts* (no translation layer) and *a tool is intent, crystallized* (the name carries the semantics structurally).
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
