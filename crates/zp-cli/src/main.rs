@@ -27,8 +27,9 @@ use zp_pipeline::{MeshConfig, Pipeline, PipelineConfig};
 #[derive(Parser)]
 #[command(name = "zp", about = "ZeroPoint CLI", version)]
 struct Args {
-    #[arg(global = true, long, default_value = "./data/zeropoint")]
-    data_dir: PathBuf,
+    /// Data directory (default: resolves via ZP_DATA_DIR → ZP_HOME/data → ~/ZeroPoint/data)
+    #[arg(global = true, long)]
+    data_dir: Option<PathBuf>,
 
     #[arg(global = true, long, default_value = "tier0")]
     trust_tier: String,
@@ -890,6 +891,9 @@ fn parse_key_val(s: &str) -> Result<(String, String), String> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    // Resolve data_dir once, early. Replaces the old cwd-relative
+    // default with the canonical priority chain (implements #90).
+    let data_dir = resolve_data_dir(args.data_dir.as_ref());
 
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -1358,7 +1362,7 @@ async fn main() -> anyhow::Result<()> {
                                             command[1..].iter().map(|s| s.to_string()).collect();
 
                                         let receipt_keyring = crate::commands::open_keyring();
-                                        let db_path = args.data_dir.join("audit.db");
+                                        let db_path = data_dir.join("audit.db");
                                         match receipt_keyring {
                                             Ok(kr) => {
                                                 let receipt_fields = run::LaunchReceiptFields {
@@ -1469,7 +1473,7 @@ async fn main() -> anyhow::Result<()> {
             extra_args,
             &padded_key,
             &vault_path,
-            &args.data_dir,
+            &data_dir,
         );
         std::process::exit(exit_code);
     }
@@ -1873,7 +1877,7 @@ async fn main() -> anyhow::Result<()> {
             if home_zp.exists() {
                 home_zp
             } else {
-                args.data_dir.join("audit.db")
+                data_dir.join("audit.db")
             }
         });
         let store = match zp_audit::AuditStore::open_readonly(&db_path) {
@@ -2129,7 +2133,7 @@ async fn main() -> anyhow::Result<()> {
 
     // #176 — manual anchor trigger.
     if let Some(Commands::Anchor { audit_db, reason, json }) = &args.command {
-        let exit_code = run_anchor(audit_db.clone(), reason, &args.data_dir, *json);
+        let exit_code = run_anchor(audit_db.clone(), reason, &data_dir, *json);
         std::process::exit(exit_code);
     }
 
@@ -2161,7 +2165,7 @@ async fn main() -> anyhow::Result<()> {
             failure_mode,
             subject_public_key.as_deref(),
             audit_db.clone(),
-            &args.data_dir,
+            &data_dir,
             *json,
         );
         std::process::exit(exit_code);
@@ -2179,7 +2183,7 @@ async fn main() -> anyhow::Result<()> {
             cascade,
             reason,
             audit_db.clone(),
-            &args.data_dir,
+            &data_dir,
             *json,
         );
         std::process::exit(exit_code);
@@ -2190,20 +2194,20 @@ async fn main() -> anyhow::Result<()> {
         json,
     }) = &args.command
     {
-        let exit_code = run_grants(*check, audit_db.clone(), &args.data_dir, *json);
+        let exit_code = run_grants(*check, audit_db.clone(), &data_dir, *json);
         std::process::exit(exit_code);
     }
 
     // Discover — scan filesystem and chain for uncanonicalized entities (M11)
     if let Some(Commands::Discover { scan_path, audit_db, json }) = &args.command {
-        let exit_code = run_discover(scan_path.clone(), audit_db.clone(), &args.data_dir, *json);
+        let exit_code = run_discover(scan_path.clone(), audit_db.clone(), &data_dir, *json);
         std::process::exit(exit_code);
     }
 
     // Scan — F3 content-scan MCP tool definitions before canon.
     // V6 — Adapt: refresh a canon'd tool's bead-zero metadata to current schema.
     if let Some(Commands::Adapt { tool, path, audit_db, json }) = &args.command {
-        let exit_code = run_adapt(tool, path.clone(), audit_db.clone(), &args.data_dir, *json);
+        let exit_code = run_adapt(tool, path.clone(), audit_db.clone(), &data_dir, *json);
         std::process::exit(exit_code);
     }
 
@@ -2216,19 +2220,24 @@ async fn main() -> anyhow::Result<()> {
             upstream.as_deref(),
             meta,
             audit_db.as_deref(),
-            &args.data_dir,
+            &data_dir,
             *json,
         ) {
             Ok(()) => std::process::exit(0),
             Err(e) => {
-                eprintln!("\x1b[31m✗\x1b[0m emit failed: {e}");
+                let msg = e.to_string();
+                if msg.contains("audit") || msg.contains("open") || msg.contains("database") {
+                    navigable_audit_error(&data_dir, &data_dir.join("audit.db"));
+                } else {
+                    eprintln!("\x1b[31m✗\x1b[0m emit failed: {e}");
+                }
                 std::process::exit(1);
             }
         }
     }
 
     if let Some(Commands::Scan { path, json, audit_db }) = &args.command {
-        let exit_code = run_scan(path, *json, audit_db.clone(), &args.data_dir);
+        let exit_code = run_scan(path, *json, audit_db.clone(), &data_dir);
         std::process::exit(exit_code);
     }
 
@@ -2338,7 +2347,7 @@ async fn main() -> anyhow::Result<()> {
             MemoryCmd::Approve { review_id, comment } => {
                 let body = serde_json::json!({
                     "decision": "approve",
-                    "reviewer": args.data_dir.display().to_string(),
+                    "reviewer": data_dir.display().to_string(),
                     "comment": comment,
                 });
                 let resp = client
@@ -2368,7 +2377,7 @@ async fn main() -> anyhow::Result<()> {
             MemoryCmd::Reject { review_id, reason, action } => {
                 let body = serde_json::json!({
                     "decision": "reject",
-                    "reviewer": args.data_dir.display().to_string(),
+                    "reviewer": data_dir.display().to_string(),
                     "reason": reason,
                     "action": action,
                 });
@@ -2399,7 +2408,7 @@ async fn main() -> anyhow::Result<()> {
             MemoryCmd::Defer { review_id, reason } => {
                 let body = serde_json::json!({
                     "decision": "defer",
-                    "reviewer": args.data_dir.display().to_string(),
+                    "reviewer": data_dir.display().to_string(),
                     "reason": reason,
                 });
                 let resp = client
@@ -3301,7 +3310,7 @@ async fn main() -> anyhow::Result<()> {
     let config = PipelineConfig {
         operator_identity: OperatorIdentity::default(),
         trust_tier,
-        data_dir: args.data_dir,
+        data_dir: data_dir,
         mesh: mesh_config.clone(),
     };
 
@@ -3758,6 +3767,44 @@ fn dirs_fallback_audit_db() -> PathBuf {
     zp_core::paths::data_dir()
         .map(|d| d.join("audit.db"))
         .unwrap_or_else(|_| PathBuf::from("ZeroPoint/data/audit.db"))
+}
+
+/// Resolve the data directory using the canonical priority chain:
+///   1. `--data-dir` flag (explicit operator override)
+///   2. `ZP_DATA_DIR` environment variable
+///   3. `$ZP_HOME/data` (via zp_core canonical resolver)
+///   4. `~/ZeroPoint/data` (default)
+///
+/// This replaces the previous cwd-relative default `./data/zeropoint`
+/// which diverged from `zp doctor`'s canonical resolution.
+/// Implements principles #2 and #4 from docs/OBSERVABILITY-2026-05.md.
+fn resolve_data_dir(explicit: Option<&PathBuf>) -> PathBuf {
+    if let Some(p) = explicit {
+        return p.clone();
+    }
+    zp_core::paths::data_dir()
+        .unwrap_or_else(|_| zp_core::paths::user_home_or(".").join("ZeroPoint").join("data"))
+}
+
+/// Emit a navigable error when the audit store cannot be opened from the
+/// resolved data directory. Surfaces what was tried and how to fix it.
+fn navigable_audit_error(data_dir: &PathBuf, tried_db: &PathBuf) {
+    let canonical = zp_core::paths::data_dir().ok();
+    eprintln!();
+    eprintln!("  \x1b[31m✗\x1b[0m Cannot open audit store at {}", tried_db.display());
+    if let Some(ref canon) = canonical {
+        let canon_db = canon.join("audit.db");
+        if canon_db.exists() && canon_db != *tried_db {
+            eprintln!("  \x1b[33mNearby path that exists:\x1b[0m");
+            eprintln!("    {} (canonical default)", canon_db.display());
+        }
+    }
+    eprintln!("  \x1b[2mResolution used:\x1b[0m {}", data_dir.display());
+    eprintln!("  \x1b[2mFix one of:\x1b[0m");
+    eprintln!("    zp <cmd> --data-dir ~/ZeroPoint/data");
+    eprintln!("    export ZP_DATA_DIR=~/ZeroPoint/data");
+    eprintln!("    # or edit ~/ZeroPoint/config.toml → [data] dir = \"~/ZeroPoint/data\"");
+    eprintln!();
 }
 
 /// Truncate a hash for display.
