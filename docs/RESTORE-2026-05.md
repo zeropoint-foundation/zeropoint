@@ -229,6 +229,35 @@ failed drills reveal procedural gaps that documentation alone can't.
   machine. The drill is the substrate's equivalent of a fire-extinguisher
   inspection: necessary precisely because you hope you'll never need it.
 
+## Restore drill results
+
+### Drill 1 — 2026-05-12, APOLLO (tmpdir)
+
+**Environment:** APOLLO-4, macOS, `ZP_HOME=/tmp/zp-restore-drill-51207`  
+**Backup taken:** 2026-05-12T15:06:46Z → `~/ZeroPoint/backups/20260512T150646Z/`  
+**Backup size:** 184K (vault.json 75K, audit.db snapshot, 3 key files, genesis, session)  
+**Wall-clock time:** ~90 seconds end-to-end (backup + restore + drill)
+
+**Procedure steps:**
+1. `scripts/zp-backup.sh` → produced timestamped backup with manifest.json ✓
+2. SHA-256 hash verification of vault.json, genesis.json, session.json against manifest ✓
+3. `sqlite3 "$BACKUP/data/audit.db" ".backup '$DRILL_HOME/data/audit.db'"` — live SQLite backup API, no WAL artifacts ✓
+4. `ZP_HOME=$DRILL_HOME zp doctor` → ✓ System healthy, 21 chain entries, integrity verified, genesis sealed, 17/17 signatures pass ✓
+5. `ZP_HOME=$DRILL_HOME zp emit zp-restore-drill-test --meta context=acceptance` → receipt `obsv-fceda2aac4ea` appended ✓
+
+**Warnings (expected, non-blocking):**
+- Binary version warning (dev build vs HEAD) — cosmetic
+- No config.toml in drill home — uses defaults, as expected for a restore
+- Port 3000 in use (live server running on APOLLO) — irrelevant for CLI-only drill
+- 0/3 tools canonicalized — tools were not part of the backup scope
+
+**Procedural gaps found:** None. The restore procedure in the sections
+above is complete and correct as written.
+
+**Drill result:** PASSED ✓
+
+---
+
 ## Future work
 
 - Schema migration framework (task #91 item 3) — makes
