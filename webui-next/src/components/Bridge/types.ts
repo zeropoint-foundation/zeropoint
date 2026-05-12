@@ -6,7 +6,7 @@
  */
 
 // ── Section Navigation ──────────────────────────────────────────────
-export type SectionId = 'dashboard' | 'trust' | 'operations' | 'investigation' | 'settings';
+export type SectionId = 'workspace' | 'dashboard' | 'trust' | 'operations' | 'investigation' | 'settings';
 
 // ── Agent System ────────────────────────────────────────────────────
 export type AgentId = 'atlas' | 'aegis' | 'themis' | 'sparky' | 'echo';
