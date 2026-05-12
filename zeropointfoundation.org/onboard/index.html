@@ -447,13 +447,87 @@ const card      = document.getElementById("card");
 const indicator = document.getElementById("indicator");
 
 // ─── Voices ──────────────────────────────────────────────────────────
-const VOICES = [
-  { id: "bm_george",   name: "George",   desc: "British male, warm — the closest to the Jarvis reference", default: true },
-  { id: "bm_fable",    name: "Fable",    desc: "British male, slightly drier timbre" },
-  { id: "bf_isabella", name: "Isabella", desc: "British female, professional" },
-  { id: "am_michael",  name: "Michael",  desc: "American male, neutral / modern" },
-  { id: "af_nicole",   name: "Nicole",   desc: "American female, warm" },
-];
+// The CURATED palette is onboarding-voice-palette.json (written by the
+// kokoro-tuner UI, committed to the repo). The wizard fetches that file
+// on Phase 5.5 entry and displays whichever voices are curated, in order.
+//
+// VOICE_DISPLAY below is the presentation layer — it maps Kokoro voice
+// IDs to a friendly name + short description for the wizard's voice
+// cards. Voice IDs not in this map fall back to the palette label.
+const VOICE_DISPLAY = {
+  // British Male
+  bm_daniel:   { name: "Daniel",   desc: "British male, classic" },
+  bm_fable:    { name: "Fable",    desc: "British male, drier timbre" },
+  bm_george:   { name: "George",   desc: "British male, warm — the closest to the Jarvis reference" },
+  bm_lewis:    { name: "Lewis",    desc: "British male, modern" },
+  // British Female
+  bf_alice:    { name: "Alice",    desc: "British female, bright" },
+  bf_emma:     { name: "Emma",     desc: "British female, warm" },
+  bf_isabella: { name: "Isabella", desc: "British female, professional" },
+  bf_lily:     { name: "Lily",     desc: "British female, soft" },
+  // American Male
+  am_adam:     { name: "Adam",    desc: "American male, classic" },
+  am_echo:     { name: "Echo",    desc: "American male, neutral" },
+  am_eric:     { name: "Eric",    desc: "American male, warm" },
+  am_fenrir:   { name: "Fenrir",  desc: "American male, deep" },
+  am_liam:     { name: "Liam",    desc: "American male, modern" },
+  am_michael:  { name: "Michael", desc: "American male, neutral / modern" },
+  am_onyx:     { name: "Onyx",    desc: "American male, deep" },
+  am_puck:     { name: "Puck",    desc: "American male, playful" },
+  am_santa:    { name: "Santa",   desc: "American male, hearty" },
+  // American Female
+  af_alloy:    { name: "Alloy",   desc: "American female, warm" },
+  af_aoede:    { name: "Aoede",   desc: "American female, melodic" },
+  af_bella:    { name: "Bella",   desc: "American female, classic" },
+  af_heart:    { name: "Heart",   desc: "American female, warm" },
+  af_jessica:  { name: "Jessica", desc: "American female, modern" },
+  af_kore:     { name: "Kore",    desc: "American female, light" },
+  af_nicole:   { name: "Nicole",  desc: "American female, warm" },
+  af_nova:     { name: "Nova",    desc: "American female, bright" },
+  af_river:    { name: "River",   desc: "American female, calm" },
+  af_sarah:    { name: "Sarah",   desc: "American female, neutral" },
+  af_sky:      { name: "Sky",     desc: "American female, light" },
+};
+
+// Populated at runtime from onboarding-voice-palette.json. Empty until
+// loadVoicePalette() runs (first call on Phase 5.5 entry).
+let VOICES = [];
+let voicePaletteLoaded = false;
+
+async function loadVoicePalette() {
+  if (voicePaletteLoaded) return;
+  try {
+    const r = await fetch("/onboard/onboarding-voice-palette.json", { cache: "no-store" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const favorites = data.favorites || [];
+    if (!favorites.length) throw new Error("palette is empty");
+
+    VOICES = favorites.map((fav, idx) => {
+      const display = VOICE_DISPLAY[fav.voice] || { name: fav.voice, desc: fav.label || "" };
+      return {
+        id:      fav.voice,
+        name:    display.name,
+        desc:    display.desc,
+        speed:   fav.speed,
+        default: idx === 0,        // first favorite is the suggested default
+      };
+    });
+
+    // If state.voiceId isn't in the loaded palette, reset to the default
+    if (!VOICES.find(v => v.id === state.voiceId)) {
+      state.voiceId = VOICES[0].id;
+    }
+    voicePaletteLoaded = true;
+  } catch (e) {
+    console.error("Failed to load voice palette:", e);
+    // Bare-minimum fallback so the wizard doesn't break if the palette
+    // file is missing or malformed.
+    VOICES = [{ id: "bm_george", name: "George", desc: "British male, warm", default: true }];
+    state.voiceId = "bm_george";
+    voicePaletteLoaded = true;
+  }
+}
 
 // ─── Per-role copy ───────────────────────────────────────────────────
 const ROLE_COPY = {
@@ -1055,6 +1129,7 @@ async function renderPasskey() {
 // ══════════════════════════════════════════════════════════════════════
 async function renderVoice() {
   setIndicator("voice");
+  await loadVoicePalette();
 
   const voiceCards = VOICES.map(v => `
     <div class="voice-card${v.default ? " selected" : ""}" data-id="${v.id}" role="radio" tabindex="0">
