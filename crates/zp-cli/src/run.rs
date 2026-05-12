@@ -953,4 +953,43 @@ mod tests {
             "receipt must record vault-resolved var NAMES (not values)"
         );
     }
+
+    // ── Degrade-closed: manifest hash mismatch ───────────────────────────────
+
+    /// Security mitigation M3: when the manifest has changed since configure,
+    /// verify_manifest_hash must return Err. zp run must refuse to launch.
+    #[test]
+    fn test_degrade_closed_manifest_hash_mismatch_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault_path = dir.path().join("vault.json");
+        let manifest_path = dir.path().join(".zp-configure.toml");
+        const DUMMY_KEY: &[u8; 32] = b"test-key-00000000000000000000000";
+
+        let original_content = b"[tool]\nname = \"degrade-test\"\n";
+        std::fs::write(&manifest_path, original_content).unwrap();
+
+        let mut vault = CredentialVault::load_or_create(DUMMY_KEY, &vault_path).unwrap();
+        let original_hash = blake3_hex(original_content);
+        vault
+            .store(&manifest_hash_vault_key("degrade-test"), original_hash.as_bytes())
+            .unwrap();
+        vault.save(&vault_path).unwrap();
+
+        // Verify passes when manifest matches pinned hash.
+        let vault_r = CredentialVault::load_or_create(DUMMY_KEY, &vault_path).unwrap();
+        assert!(
+            verify_manifest_hash(&vault_r, "degrade-test", &manifest_path).is_ok(),
+            "verify must pass when manifest matches pinned hash"
+        );
+
+        // Simulate unauthorized modification.
+        std::fs::write(&manifest_path, b"[tool]\nname = \"degrade-test\"\n# tampered\n").unwrap();
+
+        // verify must now reject the tampered manifest.
+        let result = verify_manifest_hash(&vault_r, "degrade-test", &manifest_path);
+        assert!(
+            result.is_err(),
+            "verify_manifest_hash must refuse a modified manifest (M3 degrade-closed)"
+        );
+    }
 }
