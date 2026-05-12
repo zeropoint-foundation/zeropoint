@@ -2,9 +2,14 @@
 """
 generate-onboard-voice-samples.py — Sage voice palette sample generator
 
-Produces five short MP3 samples — one per voice in the Sage palette —
-played by the onboarding wizard's Phase 5.5 (Voice) so the director can
-hear each option before choosing.
+Produces one short MP3 sample per voice in the Sage palette, played by
+the onboarding wizard's Phase 5.5 (Voice) so the director can hear each
+option before choosing.
+
+Production mode reads the curated palette from
+`onboarding-voice-palette.json` (single source of truth, written by the
+kokoro-tuner UI). `--all` mode renders the full Kokoro English catalog
+to a side directory for audition.
 
 Output: assets/onboard/voices/{voice_id}-sample.mp3
 Runtime: ~/ZeroPoint/assets/onboard/voices/{voice_id}-sample.mp3
@@ -20,20 +25,24 @@ Usage:
     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
   curl -L -o models/kokoro/voices-v1.0.bin \\
     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
-  # Then generate:
+  # Production palette (reads onboarding-voice-palette.json):
   python3 generate-onboard-voice-samples.py
+  # Full-catalog audition:
+  python3 generate-onboard-voice-samples.py --all
 
 Requires:
   - kokoro-onnx (pip install kokoro-onnx soundfile)
   - ffmpeg on PATH (for WAV → MP3 conversion; brew install ffmpeg)
 
 Refs:
-  - docs/STEWARD-WIZARD-SCRIPT-2026-05.md (Phase 5.5 voice palette)
+  - docs/SAGE-WIZARD-SCRIPT-2026-05.md (Phase 5.5 voice palette)
   - docs/AGENT-AS-UX-ARCHITECTURE-2026-05.md (Sage's Jarvis-shaped voice)
+  - onboarding-voice-palette.json (the consumer-side curated palette)
   - Task #134 (Kokoro integration)
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -44,6 +53,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent
 MODEL_PATH = REPO_ROOT / "models" / "kokoro" / "kokoro-v1.0.onnx"
 VOICES_PATH = REPO_ROOT / "models" / "kokoro" / "voices-v1.0.bin"
+PALETTE_PATH = REPO_ROOT / "onboarding-voice-palette.json"
 OUTPUT_DIR = REPO_ROOT / "assets" / "onboard" / "voices"
 OUTPUT_DIR_ALL = REPO_ROOT / "assets" / "onboard" / "voices" / "all"
 
@@ -57,32 +67,14 @@ SAMPLE_LINE = (
     "If it suits, we'll proceed. If not, we'll try another."
 )
 
-# Voice palette — must match docs/STEWARD-WIZARD-SCRIPT-2026-05.md §5.5
-# and the onboard wizard's voice cards.
-#
-# Kokoro voice naming convention:
-#   {region}{gender}_{name}
-#     a = American, b = British
-#     m = male, f = female
-#
-# lang code passed to kokoro-onnx:
-#   "en-us" for American voices, "en-gb" for British voices.
-VOICES = [
-    # voice_id,      lang,    label
-    ("bm_george",    "en-gb", "British male, warm (Jarvis reference, default)"),
-    ("bm_fable",     "en-gb", "British male, drier timbre"),
-    ("bf_isabella",  "en-gb", "British female, professional"),
-    ("am_michael",   "en-us", "American male, neutral / modern"),
-    ("af_nicole",    "en-us", "American female, warm"),
-]
-
-# Speed: 1.0 is Kokoro default. Lower = slower / more measured.
-# Sage's voice should feel composed, not rushed — try 0.95 first.
-SPEED = 0.95
+# Speed for --all audition mode (uniform across the full catalog so
+# pacing differences don't bias the audition).  Production speeds come
+# from the curated palette, per-voice.
+AUDITION_SPEED = 0.95
 
 # Full English voice catalog (Kokoro v1.0). Used by --all mode for
-# auditioning the whole space before locking in the production palette.
-# Voice IDs taken from kokoro-onnx / Kokoro-82M v1.0 release.
+# auditioning the whole space, and as the lang-lookup source for
+# production-palette voices.
 ALL_ENGLISH_VOICES = [
     # American Female
     ("af_alloy",    "en-us", "AF · alloy"),
@@ -118,8 +110,73 @@ ALL_ENGLISH_VOICES = [
     ("bm_lewis",    "en-gb", "BM · lewis"),
 ]
 
+LANG_BY_ID = {vid: lang for vid, lang, _ in ALL_ENGLISH_VOICES}
 
-# ─── Generation ──────────────────────────────────────────────────
+
+# ─── Production palette loader ───────────────────────────────────
+
+def load_production_voices() -> list[tuple]:
+    """Read the curated production palette from onboarding-voice-palette.json.
+
+    Returns a list of (voice_id, lang, label, speed) tuples. Exits with
+    a clear error if the palette is missing or empty.
+    """
+    if not PALETTE_PATH.exists():
+        sys.stderr.write(
+            f"palette not found: {PALETTE_PATH.relative_to(REPO_ROOT)}\n"
+            f"  Curate favorites via kokoro-tuner-server.py first:\n"
+            f"    python3 kokoro-tuner-server.py\n"
+            f"    # open http://127.0.0.1:8474/, save favorites, then re-run this.\n"
+        )
+        sys.exit(1)
+
+    try:
+        data = json.loads(PALETTE_PATH.read_text())
+    except json.JSONDecodeError as e:
+        sys.stderr.write(f"invalid JSON in {PALETTE_PATH}: {e}\n")
+        sys.exit(1)
+
+    favorites = data.get("favorites", [])
+    if not favorites:
+        sys.stderr.write(
+            f"no favorites in {PALETTE_PATH.relative_to(REPO_ROOT)}\n"
+            f"  Open the tuner UI and save at least one favorite.\n"
+        )
+        sys.exit(1)
+
+    voices = []
+    seen = set()
+    for fav in favorites:
+        vid = fav.get("voice", "")
+        if not vid:
+            sys.stderr.write(f"WARN: skipping favorite with no voice: {fav}\n")
+            continue
+
+        speed = float(fav.get("speed", 1.0))
+        label = fav.get("label") or f"{vid} @ {speed:.2f}x"
+
+        if vid in seen:
+            sys.stderr.write(
+                f"WARN: duplicate voice {vid} in palette — only the first is "
+                f"rendered (sample MP3s are named by voice_id, not favorite_id).\n"
+            )
+            continue
+        seen.add(vid)
+
+        lang = LANG_BY_ID.get(vid)
+        if lang is None:
+            # Best-effort fallback: prefix maps a→en-us, b→en-gb
+            lang = "en-gb" if vid.startswith("b") else "en-us"
+            sys.stderr.write(
+                f"WARN: voice {vid} not in known catalog — inferring lang={lang}\n"
+            )
+
+        voices.append((vid, lang, label, speed))
+
+    return voices
+
+
+# ─── Dep checks ──────────────────────────────────────────────────
 
 def ensure_deps() -> None:
     """Fail fast with a clear message if anything is missing."""
@@ -160,15 +217,17 @@ def ensure_deps() -> None:
         sys.exit(1)
 
 
-def generate_sample(kokoro, voice_id: str, lang: str, out_mp3: Path) -> None:
+# ─── Rendering ───────────────────────────────────────────────────
+
+def generate_sample(kokoro, voice_id: str, lang: str, speed: float, out_mp3: Path) -> None:
     """Render one voice sample as MP3."""
     import soundfile as sf
 
-    print(f"  rendering {voice_id} ({lang}) ...")
+    print(f"  rendering {voice_id} ({lang}) at {speed:.2f}x ...")
     samples, sample_rate = kokoro.create(
         SAMPLE_LINE,
         voice=voice_id,
-        speed=SPEED,
+        speed=speed,
         lang=lang,
     )
 
@@ -186,39 +245,49 @@ def generate_sample(kokoro, voice_id: str, lang: str, out_mp3: Path) -> None:
     print(f"    → {out_mp3.relative_to(REPO_ROOT)}")
 
 
+# ─── Entry ───────────────────────────────────────────────────────
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument(
         "--all", action="store_true",
-        help="Render every English voice in Kokoro's catalog (audition mode). "
-             "Outputs to assets/onboard/voices/all/ so the production palette "
-             "in assets/onboard/voices/ is left untouched.",
+        help="Render every English voice in Kokoro's catalog at the "
+             "audition speed. Outputs to assets/onboard/voices/all/ so "
+             "the production palette in assets/onboard/voices/ is left "
+             "untouched.",
     )
     args = parser.parse_args()
 
     ensure_deps()
 
-    voices = ALL_ENGLISH_VOICES if args.all else VOICES
-    out_dir = OUTPUT_DIR_ALL if args.all else OUTPUT_DIR
+    if args.all:
+        # Full catalog at uniform audition speed
+        voices = [(vid, lang, label, AUDITION_SPEED)
+                  for vid, lang, label in ALL_ENGLISH_VOICES]
+        out_dir = OUTPUT_DIR_ALL
+        mode_label = "FULL CATALOG audition"
+    else:
+        voices = load_production_voices()
+        out_dir = OUTPUT_DIR
+        mode_label = f"Sage palette from {PALETTE_PATH.name}"
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     from kokoro_onnx import Kokoro
     print(f"Loading model: {MODEL_PATH.name}")
     kokoro = Kokoro(str(MODEL_PATH), str(VOICES_PATH))
 
-    mode_label = "FULL CATALOG audition" if args.all else "Sage palette (production)"
     print(f"Generating {len(voices)} samples — {mode_label}")
     print(f"Sample line: {SAMPLE_LINE!r}")
-    print(f"Speed:       {SPEED}")
     print(f"Output dir:  {out_dir.relative_to(REPO_ROOT)}/")
     print()
 
     failed = []
-    for voice_id, lang, label in voices:
-        print(f"[{voice_id}] — {label}")
+    for voice_id, lang, label, speed in voices:
+        print(f"[{voice_id}] @ {speed:.2f}x — {label}")
         out_mp3 = out_dir / f"{voice_id}-sample.mp3"
         try:
-            generate_sample(kokoro, voice_id, lang, out_mp3)
+            generate_sample(kokoro, voice_id, lang, speed, out_mp3)
         except Exception as e:
             print(f"    ✗ failed: {e}")
             failed.append(voice_id)
