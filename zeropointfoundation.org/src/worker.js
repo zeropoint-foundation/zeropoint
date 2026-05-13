@@ -24,7 +24,7 @@ import { emitReceipt, emitAuthFailure } from "./auth/receipts.js";
 import { storeDocument, queryDocuments, getDocument, getDocumentVersions, downloadDocument, updateDocument, deleteDocument, logDocumentAccess } from "./docs/store.js";
 import { uploadAsset, queryAssets, getAsset, transitionAsset, updateAsset, deleteAsset } from "./docs/media.js";
 import { createDownloadLink, serveDownloadLink, revokeDownloadLink, queryDownloadLinks, createUploadLink, consumeUploadLink } from "./docs/links.js";
-import { createSession } from "./auth/session.js";
+import { createSession, buildSessionCookie } from "./auth/session.js";
 import {
   RP_ID, RP_NAME,
   generateChallenge, base64urlEncode, base64urlDecode,
@@ -215,6 +215,13 @@ async function handleApi(request, env) {
     }
 
     // POST /api/auth/session — create session token (pre-auth)
+    //
+    // Returns the token in the JSON body (the wizard JS uses it as a
+    // Bearer header for same-origin API calls) AND sets it as an
+    // HttpOnly cookie scoped to the foundation domain. The cookie is
+    // what carries the session across the wizard → app handoff at
+    // .zeropointfoundation.org — IronClaw's gateway reads it directly
+    // (no second auth challenge).
     if (path === "/api/auth/session" && method === "POST") {
       const body = await request.json();
       if (!body.operatorId) {
@@ -224,7 +231,14 @@ async function handleApi(request, env) {
       if (!result) {
         return json({ error: "Unknown or inactive operator" }, 401);
       }
-      return json(result);
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Set-Cookie": buildSessionCookie(request, env, result.token),
+          ...corsHeaders(),
+        },
+      });
     }
 
     // GET /api/operators/active — list active operators (pre-auth, for login screen).
