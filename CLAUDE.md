@@ -218,6 +218,16 @@ When no consumer exists yet: name for the *probable* consumer. Right → free in
 
 Connects to *every bit counts* (no translation layer) and *a tool is intent, crystallized* (the name carries the semantics structurally).
 
+### For systems spanning trust boundaries, only production tests production.
+
+Localhost cannot reproduce what happens at edges: cross-subdomain cookies, CDN-injected auth (Cloudflare Access JWTs, etc.), worker route ownership conflicts, per-worker secret stores, DNS resolution, the gap between local D1 and remote D1 migration state. Any system whose correctness depends on identity flowing across origins, gateways, or proxies will look correct in localhost while breaking in production.
+
+Example (2026-05-13): the substrate-session HMAC bridge worked perfectly on localhost — wizard issued cookie, IronClaw verified it, handoff cleared. On production, six distinct frictions appeared that localhost couldn't have surfaced: CF Access intercepting at the edge, `zeropoint-global` worker still claiming the foundation routes, secrets needing per-worker mirroring, D1 migrations diverged between `--local` and `--remote`, browser cookies persisting across the dual-auth attempt, and the wizard's "already onboarded" branch becoming a dead-end. None visible until we actually deployed.
+
+The fix is to deploy and walk through from production *early* — not as the validation pass at the end. If the system spans a trust boundary, treat localhost as a dev rig, not as a test rig. A 10-minute production walkthrough mid-build catches what hours of localhost iteration miss.
+
+Connects to *signing is gravity* (the boundary IS the point; testing without it tests nothing) and *store-and-forward is primary* (production state is the real state).
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
