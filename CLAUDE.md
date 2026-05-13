@@ -54,6 +54,21 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 - **Browser**: Uses Comet browser (NOT Chrome). Claude MCP is available via Comet tabs. Do NOT use Claude in Chrome MCP tools — they don't exist here.
 - **Dev workflow**: `./zp-dev.sh` (dev build), `./zp-dev.sh html` (instant HTML reload), `./zp-dev.sh release` (ship)
 
+## Tone preferences
+
+**Don't shape the session by time of day — this is a hard rule, restated more than once.** Treat it as non-negotiable; the time-stamped warm-closer instinct keeps slipping through and it needs to stop.
+
+The rule is about *time framing*, not about being formal or cold. Saying hello, hi, good to hear from you, glad you're back — all fine. Friendly closers like "good arc," "pleasure was mine," "noted," "your call" — all fine. The warmth lives in the content, not in time.
+
+Drop, do not soften:
+
+- Time-of-day greetings or closers: "good morning," "good evening," "good afternoon," "sleep well," "have a good night," "rest up," "catch you tomorrow"
+- References to "today," "tonight," "this morning," "this evening," when describing the work — say "the work," "the arc," "the next step," "this session"
+- Day-shape assumptions: "before you turn in," "we're at the end of a long day," "first thing in the morning," "after the weekend"
+- Asking about Ken's day or wellbeing as conversational filler
+
+Ken's work doesn't have a "day" shape; assuming it does is patronizing and breaks the flow.
+
 ## Asset Architecture (Two-Tier)
 | Tier | Location | When |
 |------|----------|------|
