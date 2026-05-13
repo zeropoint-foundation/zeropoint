@@ -228,6 +228,22 @@ The fix is to deploy and walk through from production *early* — not as the val
 
 Connects to *signing is gravity* (the boundary IS the point; testing without it tests nothing) and *store-and-forward is primary* (production state is the real state).
 
+### Demonstrate publicly with prerendered paths; interpret internally with live agents.
+
+When demonstrating the substrate publicly — marketing exhibits, educational chain views, public-facing tours — every narration path is prerendered and every interactive branch is deterministic. No live LLM call. No live agent surface. The *voice* of an agent (Sage's character, copy patterns, phrasings) can be present through carefully authored copy bound to specific UI events. But the *running agent* stays behind authentication.
+
+Internal surfaces — where operators are authenticated and accountable — can host live agent interpretation: ask Sage what happened, get a chain-grounded answer; let Sage suggest the next action based on operator-specific context. Live agency is a real capability, but it's an authorization-bound one.
+
+Example (2026-05-13): the receipt chain visualization was first drafted with "Sage narrates" wording that read as live-agent-on-marketing-site. Corrected to: Sage's voice surfaces through prerendered copy bound to UI events on public surfaces; live conversational Sage stays inside the authenticated foundation surface only. The public chain demo's verification and tampering interactions are also deterministic — visitor clicks verify, math runs, result shown; no LLM decides what to display.
+
+Why this is load-bearing:
+- **Accountability surfaces must match the chain by construction.** The chain shows what actually happened; the narration must agree. A non-deterministic narrator can drift, contradict, or be prompt-injected into saying something off-message — defeating the trust thesis the demo is supposed to deliver.
+- **Prerendered paths preserve cryptographic verifiability.** The chain says X; the narration says X; both agree because the narration was authored to say X when X happens. There's no place a runtime could lie.
+- **Authorization bounds cost, abuse surface, and context quality.** Internal agent calls happen for known operators with rich context (their session, their receipts, their role). Public agent calls would be anonymous, infinite-scale, context-poor — strictly worse on every dimension.
+- **Voice and agency are different capabilities, deployable at different tiers.** "Sage as a character" is brand and copywriting. "Sage as a running agent" is a runtime surface with operational posture. Confusing the two leads to accidentally exposing runtime where only brand was intended.
+
+Connects to *signing is gravity* (deterministic verifiability is structural, not decorative) and *identity is a key, not a location* (the right to interact with an agent is authorization-bound, not URL-bound).
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
