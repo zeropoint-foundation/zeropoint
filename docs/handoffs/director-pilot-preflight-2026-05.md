@@ -279,6 +279,64 @@ Tell the director about these before they start; manage expectations.
 
 ---
 
+## Post-pilot verification
+
+The substrate is supposed to verify the world; we should use it.
+Don't take "it didn't break" as proof — query what the chain
+actually recorded.
+
+### A. Receipt-chain verification
+
+After the director finishes the ceremony, query the chain for what
+actually got recorded:
+
+```sh
+./scripts/verify-onboarding-receipts.sh <director_id>
+```
+
+Pulls all receipts for the operator from production D1 and checks:
+- Required claims are all present (onboard:start, identity:generated,
+  recovery:acknowledged, voice:selected, complete)
+- Sequence is in expected order
+- Time ordering is monotonic
+- Bookends are correct
+- Unrecognized claims (potential bug surface)
+
+The script does NOT yet verify cryptographic signatures — foundation-
+side receipt signing is open work, see task on signing-receipts-in-
+foundation-worker. Worth knowing what this script can and can't
+prove.
+
+### B. Protocol-level smoke test
+
+Independent of any pilot — also run before any deploy or auth
+change:
+
+```sh
+./scripts/smoke-test-auth.sh <operator_id>
+```
+
+10-second end-to-end exercise of the auth chain:
+1. Static assets reachable (wizard, palette, voice samples)
+2. POST /api/auth/session mints a token + sets the cookie
+3. Bearer token works against /api/me
+4. Cookie replay against app.zp.org/api/gateway/status is accepted
+   by IronClaw's substrate-session verifier
+
+If smoke test fails, do NOT pilot — debug from the failure point.
+The smoke test is exactly the class of bugs the Ken-pilot
+discovered the hard way; running this before a pilot turns hours
+of debugging into seconds of "smoke test failed at step N."
+
+### C. Cross-language HMAC integration test (TODO)
+
+Open work — see task. The unit tests on each side (JS worker, Rust
+IronClaw) pass independently, but the byte-for-byte format compat
+between them is not tested. Until that exists, `smoke-test-auth.sh`
+exercising step 4 is the only end-to-end proof.
+
+---
+
 ## References
 
 - `docs/STEWARD-WIZARD-SCRIPT-2026-05.md` (file was renamed to
