@@ -288,7 +288,7 @@ pub fn emit_launch_receipt(
     // Fallback still hits the process-scoped OnceLock; no new prompt either way.
     let genesis_secret = match fields.genesis_secret {
         Some(s) => s,
-        None => *zp_keys::load_sovereign_root(&keyring.genesis_record_path())
+        None => keyring.genesis_secret()
             .context("Failed to load Genesis secret for audit signer")?,
     };
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
@@ -517,11 +517,9 @@ pub fn run(
     };
 
     let db_path = data_dir.join("audit.db");
-    // Retrieve genesis secret via canonical API (OnceLock cache hit —
-    // resolve_vault_key already primed it via the standard-Keychain fast path).
-    let genesis_secret = zp_keys::load_sovereign_root(&keyring.genesis_record_path())
-        .ok()
-        .map(|s| *s);
+    // genesis_secret is an OnceLock cache hit — resolve_vault_key() already
+    // loaded it via the standard-Keychain path in main.rs.
+    let genesis_secret = keyring.genesis_secret().ok();
     let receipt_fields = LaunchReceiptFields {
         tool_name: name,
         manifest_hash: &manifest_hash,

@@ -113,7 +113,7 @@ pub fn run_emit(
     let receipt_id = receipt.id.clone();
 
     // Derive the audit signer from the Genesis secret
-    let genesis_secret = *zp_keys::load_sovereign_root(&keyring.genesis_record_path())
+    let genesis_secret = keyring.genesis_secret()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);

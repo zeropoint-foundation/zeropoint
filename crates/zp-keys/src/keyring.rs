@@ -308,6 +308,31 @@ impl Keyring {
         self.base_dir.join("genesis.json")
     }
 
+    /// Load the genesis secret via the standard OS Keychain (OnceLock-cached).
+    ///
+    /// On first call in a process, touches the OS Keychain. Subsequent calls
+    /// return the cached value without any new credential-store access or
+    /// sovereignty-provider invocation.
+    ///
+    /// Use this from call sites that need the genesis secret for in-process
+    /// operations — audit signer derivation, `LaunchReceiptFields.genesis_secret`
+    /// threading — after `resolve_vault_key()` has already primed the cache.
+    /// For the full sovereignty-provider path (hardware wallets), use
+    /// `zp_keys::load_sovereign_root()` instead.
+    pub fn genesis_secret(&self) -> Result<[u8; 32], KeyError> {
+        if !self.base_dir.join("genesis.json").exists() {
+            return Err(KeyError::InvalidKeyMaterial(
+                "No genesis.json found — run `zp init` first".into(),
+            ));
+        }
+        load_genesis_from_credential_store().map_err(|e| {
+            KeyError::InvalidKeyMaterial(format!(
+                "Genesis secret not in OS credential store ({}). Run `zp init`.",
+                e
+            ))
+        })
+    }
+
     /// Load just the genesis secret bytes from the OS credential store.
     ///
     /// This is the internal primitive used by [`zp_keys::load_sovereign_root`]
