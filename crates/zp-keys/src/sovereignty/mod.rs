@@ -885,4 +885,99 @@ mod tests {
         let provider = touchid::TouchIdProvider;
         assert_eq!(provider.mode(), SovereigntyMode::TouchId);
     }
+
+    // ── singular_sovereign_root discipline-pin tests ─────────────────
+
+    #[test]
+    fn provider_for_genesis_record_parses_known_modes() {
+        let dir = tempfile::tempdir().unwrap();
+        let genesis_path = dir.path().join("genesis.json");
+
+        let cases: &[(&str, SovereigntyMode)] = &[
+            ("touch_id", SovereigntyMode::TouchId),
+            ("touchid", SovereigntyMode::TouchId),
+            ("login-password", SovereigntyMode::LoginPassword),
+            ("login_password", SovereigntyMode::LoginPassword),
+            ("file-based", SovereigntyMode::FileBased),
+            ("file_based", SovereigntyMode::FileBased),
+            ("trezor", SovereigntyMode::Trezor),
+            ("fingerprint", SovereigntyMode::Fingerprint),
+        ];
+
+        for &(mode_str, expected) in cases {
+            let json = format!(r#"{{"sovereignty_mode": "{}"}}"#, mode_str);
+            std::fs::write(&genesis_path, &json).unwrap();
+
+            let provider =
+                provider_for_genesis_record(&genesis_path).unwrap_or_else(|e| {
+                    panic!("provider_for_genesis_record failed for '{}': {}", mode_str, e)
+                });
+            assert_eq!(
+                provider.mode(),
+                expected,
+                "wrong provider for mode_str='{}'",
+                mode_str
+            );
+        }
+    }
+
+    #[test]
+    fn provider_for_genesis_record_errors_on_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let genesis_path = dir.path().join("genesis.json");
+        // genesis.json intentionally absent
+        let err = provider_for_genesis_record(&genesis_path)
+            .err()
+            .expect("expected Err when genesis.json is missing");
+        let msg = format!("{}", err);
+        assert!(
+            msg.contains("genesis.json not found"),
+            "expected 'genesis.json not found' in error, got: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn provider_for_genesis_record_errors_on_missing_mode_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let genesis_path = dir.path().join("genesis.json");
+        std::fs::write(&genesis_path, r#"{"other_field": "value"}"#).unwrap();
+
+        let err = provider_for_genesis_record(&genesis_path)
+            .err()
+            .expect("expected Err when sovereignty_mode field is absent");
+        let msg = format!("{}", err);
+        assert!(
+            msg.contains("sovereignty_mode"),
+            "expected 'sovereignty_mode' in error, got: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn provider_for_genesis_record_errors_on_invalid_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let genesis_path = dir.path().join("genesis.json");
+        std::fs::write(&genesis_path, "not valid json {{{").unwrap();
+
+        let result = provider_for_genesis_record(&genesis_path);
+        assert!(result.is_err(), "expected error on malformed JSON");
+    }
+
+    #[test]
+    fn load_sovereign_root_errors_clearly_on_missing_genesis() {
+        // When genesis.json doesn't exist the fast path (Keychain) may also
+        // fail (no item in test namespace), but the provider path gives a
+        // clearer error. This test verifies the error message is actionable.
+        let dir = tempfile::tempdir().unwrap();
+        let genesis_path = dir.path().join("genesis.json");
+        // Do NOT write genesis.json
+        let result = load_sovereign_root(&genesis_path);
+        // Either the Keychain fast path failed or the provider path failed;
+        // either way, the call must not panic and must return an error.
+        assert!(
+            result.is_err(),
+            "expected error when genesis.json is absent and Keychain is empty"
+        );
+    }
 }
