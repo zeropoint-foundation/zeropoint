@@ -1373,6 +1373,10 @@ async fn main() -> anyhow::Result<()> {
                                         };
                                         match receipt_keyring {
                                             Ok(kr) => {
+                                                // genesis_secret is a OnceLock cache hit —
+                                                // resolve_vault_key() already loaded it above.
+                                                let genesis_secret =
+                                                    kr.load_genesis_secret().ok().map(|(s, _)| s);
                                                 let receipt_fields = run::LaunchReceiptFields {
                                                     tool_name: name,
                                                     manifest_hash: "(ad-hoc exec — no manifest hash)",
@@ -1381,6 +1385,7 @@ async fn main() -> anyhow::Result<()> {
                                                     inherited: &[],
                                                     extra_inherited: &[],
                                                     vault_resolved: &vault_resolved_names,
+                                                    genesis_secret,
                                                 };
                                                 if let Err(e) = run::emit_launch_receipt(&receipt_fields, &db_path, &kr) {
                                                     eprintln!();

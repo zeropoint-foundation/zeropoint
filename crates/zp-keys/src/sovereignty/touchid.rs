@@ -553,10 +553,56 @@ mod secure_keychain {
         }
     }
 
-    /// Load the Genesis secret. The OS triggers a biometric prompt
-    /// automatically — kSecAccessControlBiometryCurrentSet ensures this
-    /// at the kernel level. No application-layer check needed.
+    /// Load the Genesis secret, cached after the first successful call.
+    ///
+    /// In production builds the result is stored in a `OnceLock` so
+    /// `SecItemCopyMatching` is called at most once per process lifetime.
+    /// Subsequent calls return the cached copy, eliminating repeated Touch ID
+    /// prompts within the same `zp` invocation (e.g., across `zp configure exec`).
+    ///
+    /// In test builds the cache is bypassed so save→load round-trips work
+    /// correctly across test cases.
+    #[cfg(not(test))]
     pub fn load() -> Result<[u8; 32], KeyError> {
+        use std::sync::OnceLock;
+        static CACHED: OnceLock<Result<[u8; 32], String>> = OnceLock::new();
+
+        // `get()` returns `Some` only if the lock was already populated by a
+        // prior call — lets us distinguish "first failure" (show the original
+        // error) from "subsequent cached failure" (show the re-run hint).
+        let already_cached = CACHED.get().is_some();
+
+        let result = CACHED.get_or_init(|| {
+            load_uncached().map_err(|e| format!("{}", e))
+        });
+        match result {
+            Ok(s) => Ok(*s),
+            Err(msg) => {
+                if already_cached {
+                    // The error was set by a prior call in this process.
+                    // Re-running creates a fresh process with an empty OnceLock.
+                    Err(KeyError::CredentialStore(
+                        "Touch ID failed earlier in this process — \
+                         re-run `zp configure exec` to retry."
+                            .into(),
+                    ))
+                } else {
+                    Err(KeyError::CredentialStore(msg.clone()))
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub fn load() -> Result<[u8; 32], KeyError> {
+        load_uncached()
+    }
+
+    /// Actual biometric Keychain read — called at most once via the `OnceLock`
+    /// in the public wrapper above. Every call issues `SecItemCopyMatching` on
+    /// the `kSecAccessControlBiometryCurrentSet`-gated item, triggering a Touch
+    /// ID prompt.
+    fn load_uncached() -> Result<[u8; 32], KeyError> {
         unsafe {
             let service_cf = CFString::new(service());
             let account_cf = CFString::new(account());

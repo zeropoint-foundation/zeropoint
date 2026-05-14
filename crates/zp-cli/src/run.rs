@@ -259,6 +259,12 @@ pub struct LaunchReceiptFields<'a> {
     pub inherited: &'a [String],
     pub extra_inherited: &'a [String],
     pub vault_resolved: &'a [String],
+    /// Genesis secret already loaded by the caller (cache hit from
+    /// `resolve_vault_key`). When `Some`, `emit_launch_receipt` uses it
+    /// directly and skips the redundant `load_genesis_secret()` call.
+    /// When `None`, the function falls back to the keyring (still hits the
+    /// process-scoped `OnceLock` cache — no new Keychain prompt).
+    pub genesis_secret: Option<[u8; 32]>,
 }
 
 /// Emit a signed launch receipt to the audit chain.
@@ -277,10 +283,16 @@ pub fn emit_launch_receipt(
         .secret_key();
     let signer = Signer::from_secret(&secret);
 
-    // Derive audit signer
-    let (genesis_secret, _) = keyring
-        .load_genesis_secret()
-        .context("Failed to load Genesis secret for audit signer")?;
+    // Derive audit signer — use caller-supplied secret if available (avoids a
+    // redundant Keychain lookup when resolve_vault_key already loaded it).
+    // Fallback still hits the process-scoped OnceLock; no new prompt either way.
+    let genesis_secret = match fields.genesis_secret {
+        Some(s) => s,
+        None => keyring
+            .load_genesis_secret()
+            .context("Failed to load Genesis secret for audit signer")?
+            .0,
+    };
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
 
@@ -507,6 +519,9 @@ pub fn run(
     };
 
     let db_path = data_dir.join("audit.db");
+    // Retrieve genesis secret from OnceLock cache (resolve_vault_key was
+    // already called by the zp run dispatch in main.rs — this is a cache hit).
+    let genesis_secret = keyring.load_genesis_secret().ok().map(|(s, _)| s);
     let receipt_fields = LaunchReceiptFields {
         tool_name: name,
         manifest_hash: &manifest_hash,
@@ -515,6 +530,7 @@ pub fn run(
         inherited: &inherited,
         extra_inherited: &extra_inherited,
         vault_resolved: &vault_resolved,
+        genesis_secret,
     };
 
     match emit_launch_receipt(&receipt_fields, &db_path, &keyring) {
