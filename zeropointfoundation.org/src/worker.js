@@ -818,6 +818,60 @@ async function handleApi(request, env) {
       });
     }
 
+    // GET /api/operator/me/chain — return the authenticated operator's own
+    // receipts as a chain, ordered oldest-first. Scoped to the requesting
+    // operator only (broader visibility filtering is a separate concern, #105).
+    //
+    // Optional query: claim_pattern=<glob>  where a trailing "*" maps to SQL
+    // LIKE prefix matching. Exact strings match exactly. No mid-string globs.
+    //
+    // Authenticated via the existing substrate-session cookie; no extra
+    // capability required (reading one's own audit trail is a self-action).
+    if (path === "/api/operator/me/chain" && method === "GET") {
+      const gate = await governanceGate(request, env, null);
+      if (!gate.ok) return gate.response;
+
+      const operatorId = gate.operator.operatorId;
+      const limit = parseInt(url.searchParams.get("limit") || "500", 10);
+      const claimPattern = url.searchParams.get("claim_pattern");
+
+      let query = `SELECT id, operator_id, claim, subject, capability_used, metadata, created_at
+                   FROM receipts WHERE operator_id = ?`;
+      const binds = [operatorId];
+
+      if (claimPattern) {
+        if (claimPattern.endsWith("*")) {
+          query += ` AND claim LIKE ?`;
+          binds.push(claimPattern.slice(0, -1) + "%");
+        } else if (!claimPattern.includes("*")) {
+          query += ` AND claim = ?`;
+          binds.push(claimPattern);
+        } else {
+          return json({ error: "claim_pattern supports trailing '*' only" }, 400);
+        }
+      }
+
+      query += ` ORDER BY created_at ASC LIMIT ?`;
+      binds.push(limit);
+
+      const { results } = await env.DB.prepare(query).bind(...binds).all();
+
+      const receipts = results.map(r => ({
+        ...r,
+        metadata: r.metadata ? JSON.parse(r.metadata) : null,
+      }));
+
+      await emitReceipt(env, {
+        operatorId,
+        claim: "chain:read",
+        subject: operatorId,
+        capability: "self",
+        metadata: { count: receipts.length, claim_pattern: claimPattern || null },
+      });
+
+      return json({ operatorId, count: receipts.length, receipts });
+    }
+
     // POST /api/onboard/register-identity — one-shot self-registration of the
     // director's Ed25519 public key. Succeeds only while the operator's row
     // still has the all-zero placeholder. Once a real key is in place, this
