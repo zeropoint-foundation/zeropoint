@@ -66,25 +66,6 @@ pub(crate) fn genesis_keychain_account() -> &'static str {
     }
 }
 
-/// Service name for the Operator secret in the OS credential store.
-#[allow(dead_code)]
-fn operator_keychain_service() -> &'static str {
-    if is_test_namespace() {
-        "zeropoint-operator-test"
-    } else {
-        "zeropoint-operator"
-    }
-}
-
-/// Account name for the Operator secret in the OS credential store.
-#[allow(dead_code)]
-fn operator_keychain_account() -> &'static str {
-    if is_test_namespace() {
-        "operator-secret-test"
-    } else {
-        "operator-secret"
-    }
-}
 
 /// Version byte for the on-disk encrypted operator secret blob.
 /// Format: [0x01][12-byte nonce][ChaCha20-Poly1305 ciphertext+tag].
@@ -399,27 +380,13 @@ impl Keyring {
 
         let secret = operator.secret_key();
 
-        // Always write the encrypted-at-rest blob.
-        //
-        // Symmetry with [`Self::load_operator`] requires this. `load_operator`
-        // deliberately skips the credential store ("eliminates a separate
-        // macOS Keychain prompt, so the user only sees ONE prompt (genesis)
-        // per recompile") and reads only `operator.secret.enc`. If `save`
-        // were to write only to the credential store and skip the blob,
-        // `load` would fail. Pre-fix: that disagreement was the bug behind
-        // the May 2026 `test_keyring_roundtrip_credential_store` failure.
-        //
-        // The credential-store write below is best-effort — it caches the
-        // operator secret for any future caller that explicitly chooses the
-        // credential-store path, but the blob is the source of truth.
+        // `operator.secret.enc` is the canonical store: ChaCha20-Poly1305
+        // under a vault key derived from Genesis. `load_operator()` reads
+        // only from this file — no Keychain touch for the operator secret.
         let (genesis_secret, _) = self.load_genesis_secret()?;
         let vault_key = derive_vault_key_local(&genesis_secret);
         let blob = encrypt_with_vault_key(&secret, &vault_key)?;
         write_secret_file(&self.base_dir.join("operator.secret.enc"), &blob)?;
-
-        // Best-effort credential-store cache. Failure here is not fatal —
-        // the blob is the canonical store.
-        let _ = save_operator_to_credential_store(&secret);
 
         Ok(())
     }
@@ -470,14 +437,10 @@ impl Keyring {
             serde_json::from_str(&json).map_err(|e| KeyError::Serialization(e.to_string()))?;
         let genesis_cert = self.load_genesis_certificate()?;
 
-        // Skip credential store for operator — go straight to the encrypted
-        // file.  The operator secret is already encrypted on disk under the
-        // vault key (derived from the genesis secret).  Avoiding
-        // load_operator_from_credential_store() eliminates a separate macOS
-        // Keychain prompt, so the user only sees ONE prompt (genesis) per
-        // recompile instead of two+.
-        //
-        // The genesis load below is the single keychain touch point.
+        // The operator secret is encrypted on disk (`operator.secret.enc`,
+        // ChaCha20-Poly1305 under a vault key derived from Genesis). Reading
+        // from disk keeps this function's only Keychain touch at the genesis
+        // load below — the singular sovereign root.
 
         let (genesis_secret, _) = self.load_genesis_secret()?;
         let enc_path = self.base_dir.join("operator.secret.enc");
@@ -553,10 +516,6 @@ impl Keyring {
 }
 
 // ── OS Credential Store helpers ──────────────────────────────────────
-//
-// Note: has_*_in_credential_store and load_operator_from_credential_store
-// are not called in the normal boot path (we use the genesis-first chain
-// instead) but are retained for future diagnostic / recovery tooling.
 
 /// Check if the Genesis secret exists AND is valid in the credential store.
 ///
@@ -671,71 +630,8 @@ fn load_genesis_from_credential_store_uncached() -> Result<[u8; 32], KeyError> {
     }
 }
 
-/// Check if the Operator secret exists and is well-formed in the credential store.
-#[allow(dead_code)]
-fn has_operator_in_credential_store() -> bool {
-    #[cfg(feature = "os-keychain")]
-    {
-        load_operator_from_credential_store().is_ok()
-    }
-    #[cfg(not(feature = "os-keychain"))]
-    {
-        false
-    }
-}
 
-/// Store the Operator secret in the OS credential store.
-fn save_operator_to_credential_store(secret: &[u8; 32]) -> Result<(), KeyError> {
-    #[cfg(feature = "os-keychain")]
-    {
-        let entry = keyring::Entry::new(operator_keychain_service(), operator_keychain_account())
-            .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
-        entry
-            .set_password(&hex::encode(secret))
-            .map_err(|e| KeyError::CredentialStore(format!("store error: {}", e)))?;
-        Ok(())
-    }
 
-    #[cfg(not(feature = "os-keychain"))]
-    {
-        let _ = secret;
-        Err(KeyError::CredentialStore(
-            "OS credential store not available (enable 'os-keychain' feature)".into(),
-        ))
-    }
-}
-
-/// Load the Operator secret from the OS credential store.
-#[allow(dead_code)]
-fn load_operator_from_credential_store() -> Result<[u8; 32], KeyError> {
-    #[cfg(feature = "os-keychain")]
-    {
-        let entry = keyring::Entry::new(operator_keychain_service(), operator_keychain_account())
-            .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
-        let hex_secret = entry
-            .get_password()
-            .map_err(|e| KeyError::CredentialStore(format!("load error: {}", e)))?;
-        let bytes = hex::decode(&hex_secret).map_err(|e| {
-            KeyError::CredentialStore(format!("stored operator secret is not valid hex: {}", e))
-        })?;
-        if bytes.len() != 32 {
-            return Err(KeyError::CredentialStore(format!(
-                "stored operator secret has wrong length: {} (expected 32)",
-                bytes.len()
-            )));
-        }
-        let mut secret = [0u8; 32];
-        secret.copy_from_slice(&bytes);
-        Ok(secret)
-    }
-
-    #[cfg(not(feature = "os-keychain"))]
-    {
-        Err(KeyError::CredentialStore(
-            "OS credential store not available".into(),
-        ))
-    }
-}
 
 /// Clear the Genesis secret from the OS credential store.
 fn clear_genesis_from_credential_store() -> Result<(), KeyError> {

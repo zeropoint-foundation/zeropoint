@@ -76,8 +76,9 @@ pub use blast_radius::{BlastRadius, BlastRadiusTracker, CompromiseResponse, Dele
 
 // ── Sovereignty system (new) ──
 pub use sovereignty::{
-    detect_all_providers, provider_for, BiometricEvidence, EnrollmentResult, ProviderCapabilities,
-    ProviderCapability, SovereigntyCategory, SovereigntyMode, SovereigntyProvider,
+    detect_all_providers, load_sovereign_root, provider_for, provider_for_genesis_record,
+    BiometricEvidence, EnrollmentResult, ProviderCapabilities, ProviderCapability,
+    SovereigntyCategory, SovereigntyMode, SovereigntyProvider,
 };
 
 // ── Hardware wallet infrastructure (quorum-ready) ──

@@ -601,6 +601,111 @@ pub fn provider_for(mode: SovereigntyMode) -> Box<dyn SovereigntyProvider> {
 }
 
 // ---------------------------------------------------------------------------
+// Singular sovereign root — canonical Genesis loader
+// ---------------------------------------------------------------------------
+
+/// Load the Genesis secret for this process.
+///
+/// On first call, tries the standard OS Keychain fast path (works for Touch
+/// ID, login-password, and file-based modes that write the standard Keychain
+/// during enrollment). If that misses — which only happens for hardware
+/// wallets that hold the secret inside the device — reads `genesis.json` at
+/// `genesis_record_path` to determine the sovereignty mode and invokes the
+/// provider.
+///
+/// The result is cached in a process-scoped [`std::sync::OnceLock`]. Every
+/// call after the first returns the cached secret without any Keychain or
+/// provider access. This is the one-ceremony-per-process-lifetime guarantee.
+///
+/// Returns a `&'static` reference into the cache. The secret lives for the
+/// process lifetime; `mlockall()` (applied in main where desired) prevents
+/// swap exposure.
+///
+/// # Errors
+///
+/// On first failure the original error is returned. On subsequent calls when
+/// the failure is cached, an actionable "re-run to retry" message is returned
+/// instead of the raw provider error.
+pub fn load_sovereign_root(
+    genesis_record_path: &std::path::Path,
+) -> Result<&'static [u8; 32], KeyError> {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<Result<[u8; 32], String>> = OnceLock::new();
+
+    let already_cached = CACHED.get().is_some();
+    let result = CACHED.get_or_init(|| {
+        load_sovereign_root_uncached(genesis_record_path).map_err(|e| format!("{}", e))
+    });
+    match result {
+        Ok(s) => Ok(s),
+        Err(msg) => {
+            if already_cached {
+                Err(KeyError::CredentialStore(
+                    "Sovereignty authentication failed earlier in this process — \
+                     re-run to retry."
+                        .into(),
+                ))
+            } else {
+                Err(KeyError::CredentialStore(msg.clone()))
+            }
+        }
+    }
+}
+
+fn load_sovereign_root_uncached(
+    genesis_record_path: &std::path::Path,
+) -> Result<[u8; 32], KeyError> {
+    // Fast path: standard OS Keychain. Touch ID, login-password, and
+    // file-based modes all write the standard Keychain during enrollment,
+    // and load_genesis_from_credential_store() caches the read in its own
+    // OnceLock — so this is at most one Keychain touch per process for
+    // these modes. Hardware wallets don't write the standard Keychain, so
+    // get_password() returns NotFound and we fall through.
+    if let Some(home_dir) = genesis_record_path.parent() {
+        if let Ok(keyring) = crate::keyring::Keyring::open(home_dir.join("keys")) {
+            if let Ok((secret, _)) = keyring.load_genesis_secret() {
+                return Ok(secret);
+            }
+        }
+    }
+
+    // Provider path: hardware wallets (Trezor, YubiKey, etc.) and any mode
+    // where the standard Keychain doesn't hold the secret.
+    let provider = provider_for_genesis_record(genesis_record_path)?;
+    provider.load_secret()
+}
+
+/// Read `genesis.json` and return the appropriate sovereignty provider.
+///
+/// Used by [`load_sovereign_root`] for hardware-wallet modes where the
+/// standard Keychain fast path doesn't apply. Can also be called directly
+/// by server-side code that needs to invoke the provider for a specific
+/// record path.
+pub fn provider_for_genesis_record(
+    genesis_record_path: &std::path::Path,
+) -> Result<Box<dyn SovereigntyProvider>, KeyError> {
+    if !genesis_record_path.exists() {
+        return Err(KeyError::InvalidKeyMaterial(
+            "genesis.json not found — run `zp init` first".into(),
+        ));
+    }
+    let raw = std::fs::read_to_string(genesis_record_path).map_err(|e| {
+        KeyError::InvalidKeyMaterial(format!("failed to read genesis.json: {}", e))
+    })?;
+    let record: serde_json::Value = serde_json::from_str(&raw).map_err(|e| {
+        KeyError::InvalidKeyMaterial(format!("failed to parse genesis.json: {}", e))
+    })?;
+    let mode_str = record
+        .get("sovereignty_mode")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            KeyError::InvalidKeyMaterial("genesis.json missing sovereignty_mode".into())
+        })?;
+    let mode = SovereigntyMode::from_onboard_str(mode_str).resolve();
+    Ok(provider_for(mode))
+}
+
+// ---------------------------------------------------------------------------
 // Parsing from onboarding strings
 // ---------------------------------------------------------------------------
 
