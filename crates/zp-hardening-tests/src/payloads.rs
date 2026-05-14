@@ -46,6 +46,8 @@ pub mod auth {
         "/api/v1/tools/stop",
         "/api/v1/attestations",
         "/api/v1/analytics/event",
+        // Cognition-governance gate — auth regression guard (task #153).
+        "/api/v1/gate/tool-call",
     ];
 
     /// Endpoints that SHOULD be accessible without auth (health, root, onboard).

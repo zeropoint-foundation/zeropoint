@@ -7,14 +7,14 @@ use zp_configure as configure;
 mod emit;
 mod guard;
 mod init;
-mod run;
-mod shell;
 mod mesh_commands;
-mod recover;
 mod onboard;
 #[cfg(feature = "policy-wasm")]
 mod policy_commands;
+mod recover;
+mod run;
 mod secure;
+mod shell;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
@@ -929,13 +929,15 @@ async fn main() -> anyhow::Result<()> {
         // Resolve config: defaults → system → project → env → CLI flags
         let mut cfg = zp_config::ConfigResolver::resolve_standard();
         if let Some(b) = bind {
-            cfg.bind = zp_config::Sourced::new(b.clone(), zp_config::Source::CliFlag("bind".into()));
+            cfg.bind =
+                zp_config::Sourced::new(b.clone(), zp_config::Source::CliFlag("bind".into()));
         }
         if let Some(p) = port {
             cfg.port = zp_config::Sourced::new(*p, zp_config::Source::CliFlag("port".into()));
         }
         if *no_open {
-            cfg.open_dashboard = zp_config::Sourced::new(false, zp_config::Source::CliFlag("no-open".into()));
+            cfg.open_dashboard =
+                zp_config::Sourced::new(false, zp_config::Source::CliFlag("no-open".into()));
         }
         let resolved_bind = cfg.bind.value.clone();
         let resolved_port = cfg.port.value;
@@ -990,7 +992,13 @@ async fn main() -> anyhow::Result<()> {
             .args(["-ti", &format!(":{}", port)])
             .output()
             .ok()
-            .and_then(|o| if o.status.success() { String::from_utf8(o.stdout).ok() } else { None })
+            .and_then(|o| {
+                if o.status.success() {
+                    String::from_utf8(o.stdout).ok()
+                } else {
+                    None
+                }
+            })
             .unwrap_or_default();
 
         let mut killed = false;
@@ -1018,9 +1026,7 @@ async fn main() -> anyhow::Result<()> {
         // Re-exec ourselves as `zp serve`
         let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
         println!("\x1b[32m▶\x1b[0m  Starting zp serve ({})...", git_hash);
-        let err = std::process::Command::new(&exe)
-            .arg("serve")
-            .spawn();
+        let err = std::process::Command::new(&exe).arg("serve").spawn();
         match err {
             Ok(_) => {
                 println!("\x1b[32m✓\x1b[0m  Server restarted on port {}", port);
@@ -1171,60 +1177,73 @@ async fn main() -> anyhow::Result<()> {
                 name,
                 dry_run,
                 refresh,
-            } => match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-                Ok(mut vault) => {
-                    let exit = configure::run_tool(
-                        path,
-                        name,
-                        *dry_run,
-                        &mut vault,
-                        configure_policy,
-                        Some(&vault_path),
-                    );
-                    // Pin manifest hash after successful configure (Security mitigation M3).
-                    // Skip on dry-run (nothing was stored).
-                    // --refresh unconditionally updates the stored hash.
-                    if exit == 0 && !*dry_run {
-                        let manifest_file = path.join(".zp-configure.toml");
-                        if manifest_file.exists() {
-                            match std::fs::read(&manifest_file) {
-                                Ok(manifest_bytes) => {
-                                    // Reload vault to pick up changes from run_tool
-                                    match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
-                                        Ok(mut vault2) => {
-                                            match run::pin_manifest_hash(&mut vault2, name, &manifest_file, &manifest_bytes) {
-                                                Ok(()) => {
-                                                    if let Err(e) = vault2.save(&vault_path) {
-                                                        eprintln!("Warning: manifest hash stored but vault persist failed: {}", e);
-                                                    } else if *refresh {
-                                                        println!("\x1b[32m✓\x1b[0m  Manifest hash refreshed for '{}'", name);
-                                                    } else {
-                                                        println!("\x1b[32m✓\x1b[0m  Manifest hash pinned for '{}'", name);
+            } => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(mut vault) => {
+                        let exit = configure::run_tool(
+                            path,
+                            name,
+                            *dry_run,
+                            &mut vault,
+                            configure_policy,
+                            Some(&vault_path),
+                        );
+                        // Pin manifest hash after successful configure (Security mitigation M3).
+                        // Skip on dry-run (nothing was stored).
+                        // --refresh unconditionally updates the stored hash.
+                        if exit == 0 && !*dry_run {
+                            let manifest_file = path.join(".zp-configure.toml");
+                            if manifest_file.exists() {
+                                match std::fs::read(&manifest_file) {
+                                    Ok(manifest_bytes) => {
+                                        // Reload vault to pick up changes from run_tool
+                                        match zp_trust::vault::CredentialVault::load_or_create(
+                                            &padded_key,
+                                            &vault_path,
+                                        ) {
+                                            Ok(mut vault2) => {
+                                                match run::pin_manifest_hash(
+                                                    &mut vault2,
+                                                    name,
+                                                    &manifest_file,
+                                                    &manifest_bytes,
+                                                ) {
+                                                    Ok(()) => {
+                                                        if let Err(e) = vault2.save(&vault_path) {
+                                                            eprintln!("Warning: manifest hash stored but vault persist failed: {}", e);
+                                                        } else if *refresh {
+                                                            println!("\x1b[32m✓\x1b[0m  Manifest hash refreshed for '{}'", name);
+                                                        } else {
+                                                            println!("\x1b[32m✓\x1b[0m  Manifest hash pinned for '{}'", name);
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!("Warning: could not pin manifest hash: {}", e);
                                                     }
                                                 }
-                                                Err(e) => {
-                                                    eprintln!("Warning: could not pin manifest hash: {}", e);
-                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!("Warning: could not reload vault for hash pin: {}", e);
                                             }
                                         }
-                                        Err(e) => {
-                                            eprintln!("Warning: could not reload vault for hash pin: {}", e);
-                                        }
                                     }
-                                }
-                                Err(e) => {
-                                    eprintln!("Warning: could not read manifest for hash pin: {}", e);
+                                    Err(e) => {
+                                        eprintln!(
+                                            "Warning: could not read manifest for hash pin: {}",
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
+                        exit
                     }
-                    exit
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
                 }
-                Err(e) => {
-                    eprintln!("Error loading vault: {}", e);
-                    1
-                }
-            },
+            }
             ConfigureCmd::Providers => {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(vault) => configure::run_providers(&vault),
@@ -1331,7 +1350,8 @@ async fn main() -> anyhow::Result<()> {
                     eprintln!();
                     1
                 } else {
-                    match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path)
+                    {
                         Ok(vault) => {
                             match vault.resolve_tool_env(name) {
                                 Ok(env_map) => {
@@ -1366,7 +1386,10 @@ async fn main() -> anyhow::Result<()> {
                                                 name
                                             );
                                             eprintln!();
-                                            eprintln!("  Configured tools: {}", available.join(", "));
+                                            eprintln!(
+                                                "  Configured tools: {}",
+                                                available.join(", ")
+                                            );
                                             eprintln!(
                                                 "  Run `zp configure tool --name {} --path <dir>` to configure it.",
                                                 name
@@ -1397,20 +1420,21 @@ async fn main() -> anyhow::Result<()> {
                                         // canonical resolver respects `ZP_HOME` / `ZP_DATA_DIR`
                                         // and falls back to the home-resolved path; if the user
                                         // explicitly passed `--data-dir`, honor that as override.
-                                        let db_path = if args.data_dir == PathBuf::from("./data/zeropoint") {
-                                            dirs_fallback_audit_db()
-                                        } else {
-                                            args.data_dir.join("audit.db")
-                                        };
+                                        let db_path =
+                                            if args.data_dir == PathBuf::from("./data/zeropoint") {
+                                                dirs_fallback_audit_db()
+                                            } else {
+                                                args.data_dir.join("audit.db")
+                                            };
                                         match receipt_keyring {
                                             Ok(kr) => {
                                                 // genesis_secret is an OnceLock cache hit —
                                                 // resolve_vault_key() already loaded it above.
-                                                let genesis_secret =
-                                                    kr.genesis_secret().ok();
+                                                let genesis_secret = kr.genesis_secret().ok();
                                                 let receipt_fields = run::LaunchReceiptFields {
                                                     tool_name: name,
-                                                    manifest_hash: "(ad-hoc exec — no manifest hash)",
+                                                    manifest_hash:
+                                                        "(ad-hoc exec — no manifest hash)",
                                                     command: &command[0],
                                                     args: &exec_args,
                                                     inherited: &[],
@@ -1418,7 +1442,11 @@ async fn main() -> anyhow::Result<()> {
                                                     vault_resolved: &vault_resolved_names,
                                                     genesis_secret,
                                                 };
-                                                if let Err(e) = run::emit_launch_receipt(&receipt_fields, &db_path, &kr) {
+                                                if let Err(e) = run::emit_launch_receipt(
+                                                    &receipt_fields,
+                                                    &db_path,
+                                                    &kr,
+                                                ) {
                                                     eprintln!();
                                                     eprintln!("  \x1b[31mLaunch blocked: could not emit receipt.\x1b[0m");
                                                     eprintln!("  {}", e);
@@ -1445,6 +1473,24 @@ async fn main() -> anyhow::Result<()> {
                                                 child.env(k, s);
                                             }
                                         }
+                                        // Inject ZP session token so the gov hook can authenticate.
+                                        // session.json is Genesis-derived, file-stored, owner-readable
+                                        // — same tier as vault.json (filesystem IPC for a signing-key
+                                        // projection). Not a third sovereign reference; the discipline
+                                        // pin does not fire. If unification is ever needed, move to
+                                        // vault.retrieve("session/*").
+                                        match read_zp_session_token() {
+                                            Ok(tok) => {
+                                                child.env("ZP_SESSION_TOKEN", tok);
+                                            }
+                                            Err(_) => {
+                                                eprintln!();
+                                                eprintln!("  ⚠  ZP session not found at ~/ZeroPoint/session.json");
+                                                eprintln!("     Is `zp serve` running? Tool calls through the gov hook will");
+                                                eprintln!("     fail with 401 until the session is available.");
+                                                eprintln!();
+                                            }
+                                        }
                                         // exec() replaces the current process on Unix — secrets
                                         // never live in two processes simultaneously.
                                         #[cfg(unix)]
@@ -1458,9 +1504,7 @@ async fn main() -> anyhow::Result<()> {
                                         #[cfg(not(unix))]
                                         {
                                             match child.status() {
-                                                Ok(status) => {
-                                                    status.code().unwrap_or(1)
-                                                }
+                                                Ok(status) => status.code().unwrap_or(1),
                                                 Err(e) => {
                                                     eprintln!("Failed to run command: {}", e);
                                                     1
@@ -1512,13 +1556,7 @@ async fn main() -> anyhow::Result<()> {
         let vault_path = zp_core::paths::vault_path()
             .unwrap_or_else(|_| commands::resolve_zp_home().join("vault.json"));
 
-        let exit_code = run::run(
-            name,
-            extra_args,
-            &padded_key,
-            &vault_path,
-            &args.data_dir,
-        );
+        let exit_code = run::run(name, extra_args, &padded_key, &vault_path, &args.data_dir);
         std::process::exit(exit_code);
     }
 
@@ -1550,8 +1588,8 @@ async fn main() -> anyhow::Result<()> {
             }
         };
         let padded_key = *resolved.key;
-        let vault_path = zp_core::paths::vault_path()
-            .unwrap_or_else(|_| home_zp.join("vault.json"));
+        let vault_path =
+            zp_core::paths::vault_path().unwrap_or_else(|_| home_zp.join("vault.json"));
         let mut vault =
             match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                 Ok(v) => v,
@@ -1698,9 +1736,7 @@ async fn main() -> anyhow::Result<()> {
             } => commands::keys_issue(name, capabilities.as_deref(), *expires_days),
             KeysCmd::List => commands::keys_list(),
             KeysCmd::Revoke { name } => commands::keys_revoke(name),
-            KeysCmd::Rotate { target, reason } => {
-                commands::keys_rotate(target, reason.as_deref())
-            }
+            KeysCmd::Rotate { target, reason } => commands::keys_rotate(target, reason.as_deref()),
         };
         std::process::exit(exit_code);
     }
@@ -1726,9 +1762,7 @@ async fn main() -> anyhow::Result<()> {
                 api_url,
                 token,
             } => commands::operator_deactivate(name, api_url, token).await,
-            OperatorCmd::Succession { name, email } => {
-                commands::operator_succession(name, email)
-            }
+            OperatorCmd::Succession { name, email } => commands::operator_succession(name, email),
         };
         std::process::exit(exit_code);
     }
@@ -1766,7 +1800,14 @@ async fn main() -> anyhow::Result<()> {
     //   1. --server CLI flag           (explicit override)
     //   2. [node] upstream from config (delegate nodes)
     //   3. 127.0.0.1:<port>            (genesis default — local server)
-    if let Some(Commands::Verify { audit_db, json, reconstitute, anchors, server }) = &args.command {
+    if let Some(Commands::Verify {
+        audit_db,
+        json,
+        reconstitute,
+        anchors,
+        server,
+    }) = &args.command
+    {
         // Resolve the target server address from topology config.
         let cfg = zp_config::ConfigResolver::resolve_standard();
 
@@ -1794,8 +1835,12 @@ async fn main() -> anyhow::Result<()> {
             match &cfg.node_upstream.value {
                 Some(u) => Some(u.clone()),
                 None => {
-                    eprintln!("\x1b[31m✗\x1b[0m  Node role is \"delegate\" but no upstream configured.");
-                    eprintln!("    Set [node] upstream in zeropoint.toml or ~/ZeroPoint/config.toml,");
+                    eprintln!(
+                        "\x1b[31m✗\x1b[0m  Node role is \"delegate\" but no upstream configured."
+                    );
+                    eprintln!(
+                        "    Set [node] upstream in zeropoint.toml or ~/ZeroPoint/config.toml,"
+                    );
                     eprintln!("    or pass --server <host:port>.");
                     std::process::exit(2);
                 }
@@ -1824,12 +1869,14 @@ async fn main() -> anyhow::Result<()> {
                 Some(t) => t,
                 None => {
                     if is_delegate {
-                        eprintln!("\x1b[31m✗\x1b[0m  No session token found at ~/ZeroPoint/session.json");
+                        eprintln!(
+                            "\x1b[31m✗\x1b[0m  No session token found at ~/ZeroPoint/session.json"
+                        );
                         eprintln!("    Delegate nodes require a session token to authenticate with upstream.");
                         std::process::exit(2);
                     }
                     break 'server false;
-                },
+                }
             };
 
             let timeout_secs = if is_delegate { 10 } else { 5 };
@@ -1844,14 +1891,21 @@ async fn main() -> anyhow::Result<()> {
                 Ok(r) if r.status().is_success() => r,
                 Ok(r) => {
                     if is_delegate {
-                        eprintln!("\x1b[31m✗\x1b[0m  Upstream server at {} returned HTTP {}", addr, r.status());
+                        eprintln!(
+                            "\x1b[31m✗\x1b[0m  Upstream server at {} returned HTTP {}",
+                            addr,
+                            r.status()
+                        );
                         std::process::exit(2);
                     }
                     break 'server false;
                 }
                 Err(e) => {
                     if is_delegate {
-                        eprintln!("\x1b[31m✗\x1b[0m  Cannot reach upstream server at {}: {}", addr, e);
+                        eprintln!(
+                            "\x1b[31m✗\x1b[0m  Cannot reach upstream server at {}: {}",
+                            addr, e
+                        );
                         eprintln!("    Check that the upstream genesis server is running.");
                         std::process::exit(2);
                     }
@@ -1881,13 +1935,21 @@ async fn main() -> anyhow::Result<()> {
                 } else {
                     "via server".to_string()
                 };
-                println!("\x1b[1mzp verify — Chain Attestation ({})\x1b[0m", source_label);
+                println!(
+                    "\x1b[1mzp verify — Chain Attestation ({})\x1b[0m",
+                    source_label
+                );
                 println!();
                 if valid {
-                    println!("  \x1b[32m✓\x1b[0m Chain integrity: {} entries, {} chain links valid",
-                        entries, chain_links);
+                    println!(
+                        "  \x1b[32m✓\x1b[0m Chain integrity: {} entries, {} chain links valid",
+                        entries, chain_links
+                    );
                 } else {
-                    println!("  \x1b[31m✗\x1b[0m Chain integrity: FAILED ({} entries examined)", entries);
+                    println!(
+                        "  \x1b[31m✗\x1b[0m Chain integrity: FAILED ({} entries examined)",
+                        entries
+                    );
                 }
                 if let Some(issues) = issues {
                     if !issues.is_empty() {
@@ -1928,14 +1990,20 @@ async fn main() -> anyhow::Result<()> {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("Error opening audit store at {}: {}", db_path.display(), e);
-                eprintln!("Hint: if the server is running, check that port {} is correct", cfg.port.value);
+                eprintln!(
+                    "Hint: if the server is running, check that port {} is correct",
+                    cfg.port.value
+                );
                 std::process::exit(2);
             }
         };
         // Guard: an empty chain is not ACCEPT — it means we're reading the wrong file.
         if let Ok(entries) = store.export_chain(1) {
             if entries.is_empty() {
-                eprintln!("\x1b[33m⚠\x1b[0m  Audit store at {} is empty — no chain to verify.", db_path.display());
+                eprintln!(
+                    "\x1b[33m⚠\x1b[0m  Audit store at {} is empty — no chain to verify.",
+                    db_path.display()
+                );
                 eprintln!("    This usually means --data-dir points to the wrong location.");
                 eprintln!("    Hint: try --data-dir ~/ZeroPoint/data/zeropoint");
                 std::process::exit(2);
@@ -1988,10 +2056,7 @@ async fn main() -> anyhow::Result<()> {
             println!("entries_checked:  {}", report.entries_checked);
 
             if let Some(ts) = report.genesis_timestamp {
-                println!(
-                    "well-formed since: {}",
-                    ts.format("%Y-%m-%d %H:%M:%S UTC")
-                );
+                println!("well-formed since: {}", ts.format("%Y-%m-%d %H:%M:%S UTC"));
             }
             if let Some(head) = report.chain_head.as_deref() {
                 let short = if head.len() >= 16 { &head[..16] } else { head };
@@ -2079,7 +2144,10 @@ async fn main() -> anyhow::Result<()> {
                     } else {
                         &f.entry_id
                     };
-                    println!("  {} [{}] entry={}… {}", badge, f.rule, entry_short, f.description);
+                    println!(
+                        "  {} [{}] entry={}… {}",
+                        badge, f.rule, entry_short, f.description
+                    );
                 }
             }
         }
@@ -2111,7 +2179,14 @@ async fn main() -> anyhow::Result<()> {
             let state = engine.finalize(chain_integrity);
 
             eprintln!("entries processed:  {}", state.entries_processed);
-            eprintln!("chain integrity:    {}", if state.chain_integrity_verified { "\x1b[32mOK\x1b[0m" } else { "\x1b[31mBROKEN\x1b[0m" });
+            eprintln!(
+                "chain integrity:    {}",
+                if state.chain_integrity_verified {
+                    "\x1b[32mOK\x1b[0m"
+                } else {
+                    "\x1b[31mBROKEN\x1b[0m"
+                }
+            );
             eprintln!("valid operator keys: {}", state.valid_operator_keys.len());
             eprintln!("valid agent keys:    {}", state.valid_agent_keys.len());
             eprintln!("revoked keys:        {}", state.revoked_keys.len());
@@ -2122,9 +2197,15 @@ async fn main() -> anyhow::Result<()> {
             if state.anomalies.is_empty() {
                 eprintln!("\nanomalies:           \x1b[32mnone\x1b[0m");
             } else {
-                eprintln!("\nanomalies:           \x1b[31m{}\x1b[0m", state.anomalies.len());
+                eprintln!(
+                    "\nanomalies:           \x1b[31m{}\x1b[0m",
+                    state.anomalies.len()
+                );
                 for a in &state.anomalies {
-                    eprintln!("  [{:?}] entry={} {:?}: {}", a.severity, a.entry_id, a.kind, a.description);
+                    eprintln!(
+                        "  [{:?}] entry={} {:?}: {}",
+                        a.severity, a.entry_id, a.kind, a.description
+                    );
                 }
             }
         }
@@ -2176,7 +2257,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // #176 — manual anchor trigger.
-    if let Some(Commands::Anchor { audit_db, reason, json }) = &args.command {
+    if let Some(Commands::Anchor {
+        audit_db,
+        reason,
+        json,
+    }) = &args.command
+    {
         let exit_code = run_anchor(audit_db.clone(), reason, &args.data_dir, *json);
         std::process::exit(exit_code);
     }
@@ -2243,19 +2329,40 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Discover — scan filesystem and chain for uncanonicalized entities (M11)
-    if let Some(Commands::Discover { scan_path, audit_db, json }) = &args.command {
+    if let Some(Commands::Discover {
+        scan_path,
+        audit_db,
+        json,
+    }) = &args.command
+    {
         let exit_code = run_discover(scan_path.clone(), audit_db.clone(), &args.data_dir, *json);
         std::process::exit(exit_code);
     }
 
     // Scan — F3 content-scan MCP tool definitions before canon.
     // V6 — Adapt: refresh a canon'd tool's bead-zero metadata to current schema.
-    if let Some(Commands::Adapt { tool, path, audit_db, json }) = &args.command {
+    if let Some(Commands::Adapt {
+        tool,
+        path,
+        audit_db,
+        json,
+    }) = &args.command
+    {
         let exit_code = run_adapt(tool, path.clone(), audit_db.clone(), &args.data_dir, *json);
         std::process::exit(exit_code);
     }
 
-    if let Some(Commands::Emit { label, issue, agent, parent, upstream, meta, audit_db, json }) = &args.command {
+    if let Some(Commands::Emit {
+        label,
+        issue,
+        agent,
+        parent,
+        upstream,
+        meta,
+        audit_db,
+        json,
+    }) = &args.command
+    {
         match emit::run_emit(
             label,
             issue.as_deref(),
@@ -2275,7 +2382,12 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    if let Some(Commands::Scan { path, json, audit_db }) = &args.command {
+    if let Some(Commands::Scan {
+        path,
+        json,
+        audit_db,
+    }) = &args.command
+    {
         let exit_code = run_scan(path, *json, audit_db.clone(), &args.data_dir);
         std::process::exit(exit_code);
     }
@@ -2344,7 +2456,10 @@ async fn main() -> anyhow::Result<()> {
                         let filtered: Vec<_> = if let Some(mid) = memory_id {
                             reviews
                                 .into_iter()
-                                .filter(|r| r.get("memory_id").and_then(|v| v.as_str()) == Some(mid.as_str()))
+                                .filter(|r| {
+                                    r.get("memory_id").and_then(|v| v.as_str())
+                                        == Some(mid.as_str())
+                                })
                                 .collect()
                         } else {
                             reviews
@@ -2356,11 +2471,22 @@ async fn main() -> anyhow::Result<()> {
                             eprintln!("\x1b[1mPending Memory Promotion Reviews\x1b[0m\n");
                             for r in &filtered {
                                 let id = r.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                                let mem = r.get("memory_id").and_then(|v| v.as_str()).unwrap_or("?");
-                                let from = r.get("current_stage").and_then(|v| v.as_str()).unwrap_or("?");
-                                let to = r.get("target_stage").and_then(|v| v.as_str()).unwrap_or("?");
-                                let expires = r.get("expires_at").and_then(|v| v.as_str()).unwrap_or("?");
-                                let deferrals = r.get("deferral_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                                let mem =
+                                    r.get("memory_id").and_then(|v| v.as_str()).unwrap_or("?");
+                                let from = r
+                                    .get("current_stage")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("?");
+                                let to = r
+                                    .get("target_stage")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("?");
+                                let expires =
+                                    r.get("expires_at").and_then(|v| v.as_str()).unwrap_or("?");
+                                let deferrals = r
+                                    .get("deferral_count")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
                                 eprintln!(
                                     "  \x1b[36m{}\x1b[0m  {} → {}  (memory: {}, deferrals: {}, expires: {})",
                                     id, from, to, mem, deferrals, expires
@@ -2390,16 +2516,25 @@ async fn main() -> anyhow::Result<()> {
                     "comment": comment,
                 });
                 let resp = client
-                    .post(format!("{}/api/v1/cognition/reviews/{}/decide", base_url, review_id))
+                    .post(format!(
+                        "{}/api/v1/cognition/reviews/{}/decide",
+                        base_url, review_id
+                    ))
                     .json(&body)
                     .send()
                     .await;
                 match resp {
                     Ok(r) if r.status().is_success() => {
                         let result: serde_json::Value = r.json().await.unwrap_or_default();
-                        let outcome = result.get("outcome").and_then(|v| v.as_str()).unwrap_or("?");
+                        let outcome = result
+                            .get("outcome")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
                         let detail = result.get("detail").and_then(|v| v.as_str()).unwrap_or("");
-                        eprintln!("\x1b[32m✓\x1b[0m Review {}: {} — {}", review_id, outcome, detail);
+                        eprintln!(
+                            "\x1b[32m✓\x1b[0m Review {}: {} — {}",
+                            review_id, outcome, detail
+                        );
                     }
                     Ok(r) => {
                         let status = r.status();
@@ -2413,7 +2548,11 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            MemoryCmd::Reject { review_id, reason, action } => {
+            MemoryCmd::Reject {
+                review_id,
+                reason,
+                action,
+            } => {
                 let body = serde_json::json!({
                     "decision": "reject",
                     "reviewer": args.data_dir.display().to_string(),
@@ -2421,16 +2560,25 @@ async fn main() -> anyhow::Result<()> {
                     "action": action,
                 });
                 let resp = client
-                    .post(format!("{}/api/v1/cognition/reviews/{}/decide", base_url, review_id))
+                    .post(format!(
+                        "{}/api/v1/cognition/reviews/{}/decide",
+                        base_url, review_id
+                    ))
                     .json(&body)
                     .send()
                     .await;
                 match resp {
                     Ok(r) if r.status().is_success() => {
                         let result: serde_json::Value = r.json().await.unwrap_or_default();
-                        let outcome = result.get("outcome").and_then(|v| v.as_str()).unwrap_or("?");
+                        let outcome = result
+                            .get("outcome")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
                         let detail = result.get("detail").and_then(|v| v.as_str()).unwrap_or("");
-                        eprintln!("\x1b[32m✓\x1b[0m Review {}: {} — {}", review_id, outcome, detail);
+                        eprintln!(
+                            "\x1b[32m✓\x1b[0m Review {}: {} — {}",
+                            review_id, outcome, detail
+                        );
                     }
                     Ok(r) => {
                         let status = r.status();
@@ -2451,16 +2599,25 @@ async fn main() -> anyhow::Result<()> {
                     "reason": reason,
                 });
                 let resp = client
-                    .post(format!("{}/api/v1/cognition/reviews/{}/decide", base_url, review_id))
+                    .post(format!(
+                        "{}/api/v1/cognition/reviews/{}/decide",
+                        base_url, review_id
+                    ))
                     .json(&body)
                     .send()
                     .await;
                 match resp {
                     Ok(r) if r.status().is_success() => {
                         let result: serde_json::Value = r.json().await.unwrap_or_default();
-                        let outcome = result.get("outcome").and_then(|v| v.as_str()).unwrap_or("?");
+                        let outcome = result
+                            .get("outcome")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
                         let detail = result.get("detail").and_then(|v| v.as_str()).unwrap_or("");
-                        eprintln!("\x1b[32m✓\x1b[0m Review {}: {} — {}", review_id, outcome, detail);
+                        eprintln!(
+                            "\x1b[32m✓\x1b[0m Review {}: {} — {}",
+                            review_id, outcome, detail
+                        );
                     }
                     Ok(r) => {
                         let status = r.status();
@@ -2504,12 +2661,21 @@ async fn main() -> anyhow::Result<()> {
             .args(["rev-parse", "--short", "HEAD"])
             .output()
             .ok()
-            .and_then(|o| if o.status.success() { String::from_utf8(o.stdout).ok() } else { None })
+            .and_then(|o| {
+                if o.status.success() {
+                    String::from_utf8(o.stdout).ok()
+                } else {
+                    None
+                }
+            })
             .unwrap_or_default();
         let head_hash = head_hash.trim();
 
         let (bin_status, bin_fix) = if !head_hash.is_empty() && git_hash != head_hash {
-            ("warn", format!("Binary is {git_hash} but repo HEAD is {head_hash}. Run: just deploy"))
+            (
+                "warn",
+                format!("Binary is {git_hash} but repo HEAD is {head_hash}. Run: just deploy"),
+            )
         } else {
             ("pass", String::new())
         };
@@ -2562,8 +2728,12 @@ async fn main() -> anyhow::Result<()> {
         } else {
             let derived_str = match &derived_role {
                 zp_config::NodeRole::Genesis => "Genesis (genesis.json present)".to_string(),
-                zp_config::NodeRole::Delegate { upstream_addr, .. } => format!("Delegate (upstream: {})", upstream_addr),
-                zp_config::NodeRole::Standalone => "Standalone (no genesis.json, no delegation receipt)".to_string(),
+                zp_config::NodeRole::Delegate { upstream_addr, .. } => {
+                    format!("Delegate (upstream: {})", upstream_addr)
+                }
+                zp_config::NodeRole::Standalone => {
+                    "Standalone (no genesis.json, no delegation receipt)".to_string()
+                }
             };
             let config_str = &cfg.node_role.value;
             let (status, fix) = if matches!(derived_role, zp_config::NodeRole::Genesis) {
@@ -2645,8 +2815,12 @@ async fn main() -> anyhow::Result<()> {
                 checks.push(Check {
                     label: "Fleet membership".into(),
                     status: "warn",
-                    detail: format!("Delegate of {} — membership receipt not yet attested (T4 pending)", upstream_addr),
-                    fix: "Fleet membership attestation will be issued during delegation handshake.".into(),
+                    detail: format!(
+                        "Delegate of {} — membership receipt not yet attested (T4 pending)",
+                        upstream_addr
+                    ),
+                    fix: "Fleet membership attestation will be issued during delegation handshake."
+                        .into(),
                 });
             }
             zp_config::NodeRole::Standalone => {
@@ -2669,8 +2843,10 @@ async fn main() -> anyhow::Result<()> {
             checks.push(Check {
                 label: "External anchoring".into(),
                 status: "info",
-                detail: "Not configured — chain is locally verifiable but not externally anchored".into(),
-                fix: "Configure a settlement layer (e.g., Hedera HCS) for external timestamping.".into(),
+                detail: "Not configured — chain is locally verifiable but not externally anchored"
+                    .into(),
+                fix: "Configure a settlement layer (e.g., Hedera HCS) for external timestamping."
+                    .into(),
             });
         }
 
@@ -2699,7 +2875,8 @@ async fn main() -> anyhow::Result<()> {
                 checks.push(Check {
                     label: "Upstream certificate".into(),
                     status: "fail",
-                    detail: "upstream genesis.json missing — cannot verify upstream identity".into(),
+                    detail: "upstream genesis.json missing — cannot verify upstream identity"
+                        .into(),
                     fix: "Copy genesis.json from your upstream genesis node.".into(),
                 });
             }
@@ -2882,11 +3059,10 @@ async fn main() -> anyhow::Result<()> {
                     match store.verify_with_catalog() {
                         Ok(report) => {
                             let errors = report.error_count();
-                            let hashlink_ok = report
-                                .findings
-                                .iter()
-                                .all(|f| f.rule != "M3" && f.rule != "P1"
-                                    || f.severity != zp_verify::FindingSeverity::Error);
+                            let hashlink_ok = report.findings.iter().all(|f| {
+                                f.rule != "M3" && f.rule != "P1"
+                                    || f.severity != zp_verify::FindingSeverity::Error
+                            });
                             let genesis_sealed = report.genesis_timestamp.is_some();
                             let sig_ok = report.signature_failures == 0;
 
@@ -2914,9 +3090,7 @@ async fn main() -> anyhow::Result<()> {
                                 let first_err = report
                                     .findings
                                     .iter()
-                                    .find(|f| {
-                                        f.severity == zp_verify::FindingSeverity::Error
-                                    })
+                                    .find(|f| f.severity == zp_verify::FindingSeverity::Error)
                                     .map(|f| {
                                         format!(
                                             "{} [{}] entry={}: {}",
@@ -2944,8 +3118,7 @@ async fn main() -> anyhow::Result<()> {
                                     status: "fail",
                                     detail: format!(
                                         "{} of {} signatures failed verification",
-                                        report.signature_failures,
-                                        report.signature_checks
+                                        report.signature_failures, report.signature_checks
                                     ),
                                     fix: "Run: zp verify --audit-db for details".into(),
                                 });
@@ -2964,20 +3137,16 @@ async fn main() -> anyhow::Result<()> {
 
                 // ── (b) F6 CANONICALIZATION COMPLETENESS ──────────────────
                 if let Some(store) = store_for_canon.as_ref() {
-                    let bead_zeros =
-                        zp_server::tool_chain::query_bead_zeros(store);
+                    let bead_zeros = zp_server::tool_chain::query_bead_zeros(store);
                     // Match `zp discover`'s default scan path so the same set
                     // of tools surfaces in both commands.
                     let scan_path = zp_core::paths::user_home_or(".").join("projects");
                     let scan = zp_engine::scan::scan_tools(&scan_path);
-                    let fs_tools: Vec<&str> =
-                        scan.tools.iter().map(|t| t.name.as_str()).collect();
+                    let fs_tools: Vec<&str> = scan.tools.iter().map(|t| t.name.as_str()).collect();
 
                     let system_canon = bead_zeros.contains_key("system:zeropoint");
-                    let canon_tool_count = bead_zeros
-                        .keys()
-                        .filter(|k| k.starts_with("tool:"))
-                        .count();
+                    let canon_tool_count =
+                        bead_zeros.keys().filter(|k| k.starts_with("tool:")).count();
 
                     if !system_canon {
                         // System bead-zero missing is a hard failure — every
@@ -2996,9 +3165,7 @@ async fn main() -> anyhow::Result<()> {
                         // Tools on disk that lack a bead-zero.
                         let missing: Vec<&str> = fs_tools
                             .iter()
-                            .filter(|name| {
-                                !bead_zeros.contains_key(&format!("tool:{}", name))
-                            })
+                            .filter(|name| !bead_zeros.contains_key(&format!("tool:{}", name)))
                             .copied()
                             .collect();
 
@@ -3048,8 +3215,7 @@ async fn main() -> anyhow::Result<()> {
                 // Both checks read the same per-tool canonicalization metadata,
                 // so we compute it once and feed both.
                 if let Some(store) = store_for_canon.as_ref() {
-                    let canon_meta =
-                        zp_server::tool_chain::query_canonicalization_metadata(store);
+                    let canon_meta = zp_server::tool_chain::query_canonicalization_metadata(store);
                     let tool_meta: Vec<&zp_server::tool_chain::CanonMetadata> =
                         canon_meta.values().filter(|m| m.domain == "tool").collect();
 
@@ -3114,10 +3280,7 @@ async fn main() -> anyhow::Result<()> {
                         checks.push(Check {
                             label: "Content security".into(),
                             status: "pass",
-                            detail: format!(
-                                "{} tools all scanned clean",
-                                tool_meta.len()
-                            ),
+                            detail: format!("{} tools all scanned clean", tool_meta.len()),
                             fix: String::new(),
                         });
                     }
@@ -3137,9 +3300,7 @@ async fn main() -> anyhow::Result<()> {
                             .filter(|m| {
                                 matches!(
                                     m.reversibility.as_deref(),
-                                    Some("reversible")
-                                        | Some("partial")
-                                        | Some("irreversible")
+                                    Some("reversible") | Some("partial") | Some("irreversible")
                                 )
                             })
                             .count();
@@ -3275,7 +3436,10 @@ async fn main() -> anyhow::Result<()> {
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let body: serde_json::Value = resp.json().await.unwrap_or_default();
-                    println!("Policy version: {}", body["current_version"].as_str().unwrap_or("unknown"));
+                    println!(
+                        "Policy version: {}",
+                        body["current_version"].as_str().unwrap_or("unknown")
+                    );
                     if let Some(history) = body["history"].as_array() {
                         if history.is_empty() {
                             println!("No version transitions recorded.");
@@ -3359,9 +3523,9 @@ async fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&config.data_dir).ok();
 
     // Derive the audit signer from the Genesis secret
-    let keyring = crate::commands::open_keyring()
-        .context("Failed to open keyring")?;
-    let genesis_secret = keyring.genesis_secret()
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let genesis_secret = keyring
+        .genesis_secret()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
@@ -3394,12 +3558,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
-        Some(Commands::Restart) => unreachable!(),     // handled above
+        Some(Commands::Restart) => unreachable!(),      // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
         Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Policy(_)) => unreachable!(),    // handled above
         Some(Commands::Configure(_)) => unreachable!(), // handled above
-        Some(Commands::Keychain(_)) => unreachable!(), // handled above
+        Some(Commands::Keychain(_)) => unreachable!(),  // handled above
         Some(Commands::Init { .. }) => unreachable!(),  // handled above
         Some(Commands::Onboard { .. }) => unreachable!(), // handled above
         Some(Commands::Keys(_)) => unreachable!(),      // handled above
@@ -3414,11 +3578,11 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
         Some(Commands::Memory(_)) => unreachable!(),    // handled above
         Some(Commands::Discover { .. }) => unreachable!(), // handled above
-        Some(Commands::Adapt { .. }) => unreachable!(),    // handled above
-        Some(Commands::Scan { .. }) => unreachable!(),     // handled above
-        Some(Commands::Operator(_)) => unreachable!(),    // handled above
-        Some(Commands::Emit { .. }) => unreachable!(),    // handled above
-        Some(Commands::Run { .. }) => unreachable!(),      // handled above
+        Some(Commands::Adapt { .. }) => unreachable!(), // handled above
+        Some(Commands::Scan { .. }) => unreachable!(),  // handled above
+        Some(Commands::Operator(_)) => unreachable!(),  // handled above
+        Some(Commands::Emit { .. }) => unreachable!(),  // handled above
+        Some(Commands::Run { .. }) => unreachable!(),   // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,
@@ -3514,8 +3678,7 @@ fn run_discover(
             let key = format!("tool:{}", t.name);
             // F5: read reversibility from manifest on disk. Falls back to
             // Unknown if the manifest is missing or pre-F5.
-            let reversibility =
-                zp_engine::capability::reversibility_for_tool_dir(&t.path);
+            let reversibility = zp_engine::capability::reversibility_for_tool_dir(&t.path);
             DiscoveredTool {
                 name: t.name.clone(),
                 path: t.path.display().to_string(),
@@ -3567,9 +3730,9 @@ fn run_discover(
         print_discover_text(&report);
     }
 
-    let total_violations =
-        report.tools_missing_canon.len() + report.providers_missing_canon.len()
-            + if report.system_canonicalized { 0 } else { 1 };
+    let total_violations = report.tools_missing_canon.len()
+        + report.providers_missing_canon.len()
+        + if report.system_canonicalized { 0 } else { 1 };
     if total_violations == 0 {
         0
     } else {
@@ -3622,11 +3785,9 @@ fn run_adapt(
     use zp_engine::capability::reversibility_for_tool_dir;
     use zp_engine::tool_scan_security::{scan_path, ScanVerdict};
 
-    let tool_path = path.unwrap_or_else(|| {
-        match zp_core::paths::user_home() {
-            Ok(home) => home.join("projects").join(tool),
-            Err(_) => PathBuf::from(tool),
-        }
+    let tool_path = path.unwrap_or_else(|| match zp_core::paths::user_home() {
+        Ok(home) => home.join("projects").join(tool),
+        Err(_) => PathBuf::from(tool),
     });
 
     if !tool_path.exists() {
@@ -3760,7 +3921,10 @@ fn run_adapt(
             tool_verdict, total, findings_total
         );
         match entry_hash.as_deref() {
-            Some(h) => println!("\x1b[32m✓\x1b[0m emitted tool:adapted:{}  entry_hash={}", tool, h),
+            Some(h) => println!(
+                "\x1b[32m✓\x1b[0m emitted tool:adapted:{}  entry_hash={}",
+                tool, h
+            ),
             None => println!("\x1b[33m⚠\x1b[0m bead not appended (chain unavailable)"),
         }
     }
@@ -3806,8 +3970,34 @@ struct AnchorReport {
 /// resolver error) stays available to the audit-DB-targeting commands that
 /// were built around it (Verify, Anchor, Grants, Discover, Adapt, Emit, Scan).
 fn dirs_fallback_audit_db() -> PathBuf {
-    zp_core::paths::audit_db_path()
-        .unwrap_or_else(|_| PathBuf::from("ZeroPoint/data/audit.db"))
+    zp_core::paths::audit_db_path().unwrap_or_else(|_| PathBuf::from("ZeroPoint/data/audit.db"))
+}
+
+/// Read the ZP session token from `~/ZeroPoint/session.json`.
+///
+/// Delegates to `read_zp_session_token_from` with the canonical path so the
+/// path-resolution logic can be tested independently without touching the real
+/// `~/ZeroPoint` directory.
+fn read_zp_session_token() -> Result<String, Box<dyn std::error::Error>> {
+    let path = zp_core::paths::session_path()?;
+    read_zp_session_token_from(&path)
+}
+
+/// Extract the `token` field from a persisted session file at `path`.
+///
+/// Non-fatal by design: callers degrade gracefully when this returns `Err`
+/// (server not running, file absent, stale schema). The file is written by
+/// `zp serve` at startup and is Genesis-derived: its contents are a
+/// signing-key projection, not a separate sovereign credential.
+fn read_zp_session_token_from(
+    path: &std::path::Path,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let s = std::fs::read_to_string(path)?;
+    let v: serde_json::Value = serde_json::from_str(&s)?;
+    v["token"]
+        .as_str()
+        .map(|t| t.to_string())
+        .ok_or_else(|| "no token field in session.json".into())
 }
 
 /// Truncate a hash for display.
@@ -3848,10 +4038,8 @@ fn verify_anchors(store: &zp_audit::AuditStore) -> Result<AnchorReport, String> 
                                     .get("first_sequence")
                                     .and_then(|x| x.as_i64())
                                     .unwrap_or(0);
-                                let last = v
-                                    .get("last_sequence")
-                                    .and_then(|x| x.as_i64())
-                                    .unwrap_or(0);
+                                let last =
+                                    v.get("last_sequence").and_then(|x| x.as_i64()).unwrap_or(0);
                                 epochs.push((n, root, first, last));
                             }
                         }
@@ -3958,10 +4146,8 @@ fn run_anchor(
                     if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
                         if let Some(detail) = conditions.first() {
                             if let Ok(v) = serde_json::from_str::<serde_json::Value>(detail) {
-                                let last_seq = v
-                                    .get("last_sequence")
-                                    .and_then(|x| x.as_i64())
-                                    .unwrap_or(0);
+                                let last_seq =
+                                    v.get("last_sequence").and_then(|x| x.as_i64()).unwrap_or(0);
                                 if n + 1 > next_epoch_n {
                                     next_epoch_n = n + 1;
                                     last_epoch_seq = last_seq;
@@ -4251,7 +4437,8 @@ fn run_delegate(
     // it. If not, generate a fresh Ed25519 keypair and print both halves
     // so the operator can transcribe the secret into the delegate's
     // lease.toml — the secret never lands on the chain.
-    let (subject_pk_hex, generated_secret_hex): (String, Option<String>) = match subject_public_key {
+    let (subject_pk_hex, generated_secret_hex): (String, Option<String>) = match subject_public_key
+    {
         Some(hex_str) => {
             // Validate length — caller's responsibility for actual validity.
             let trimmed = hex_str.trim();
@@ -4286,7 +4473,8 @@ fn run_delegate(
     // record the rest as constraints. Keeps the existing model intact while
     // surfacing the broader scope on the grant.
     let primary = caps[0].clone();
-    let extra_capability_names: Vec<String> = caps.iter().skip(1).map(|c| c.name().into()).collect();
+    let extra_capability_names: Vec<String> =
+        caps.iter().skip(1).map(|c| c.name().into()).collect();
 
     let lease = zp_core::LeasePolicy {
         lease_duration: std::time::Duration::from_secs(lease_secs),
@@ -4359,8 +4547,7 @@ fn run_delegate(
     let store = Arc::new(Mutex::new(store));
 
     #[cfg(feature = "embedded-server")]
-    let entry_hash =
-        zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant);
+    let entry_hash = zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant);
     #[cfg(not(feature = "embedded-server"))]
     let entry_hash: Option<String> = {
         eprintln!("error: zp delegate requires the 'embedded-server' feature");
@@ -4406,7 +4593,10 @@ fn run_delegate(
         println!("lease_duration:     {}s", lease_secs);
         println!("renewal_interval:   {}s", renewal_secs);
         if let Some(exp) = grant.expires_at {
-            println!("expires_at:         {}", exp.format("%Y-%m-%d %H:%M:%S UTC"));
+            println!(
+                "expires_at:         {}",
+                exp.format("%Y-%m-%d %H:%M:%S UTC")
+            );
         }
         println!("subject_pubkey:     {}", subject_pk_hex);
         println!("entry_hash:         {}", short_hash(&entry_hash));
@@ -4428,9 +4618,7 @@ fn run_delegate(
             println!("    subject_signing_key_hex = \"{}\"", sk_hex);
             println!("    renewal_authorities = [\"http://<authority-host>:17010\"]");
             println!("    renewal_interval_secs = {}", renewal_secs);
-            println!(
-                "    max_consecutive_failures = 3"
-            );
+            println!("    max_consecutive_failures = 3");
             let grace_secs = lease_secs / 16 + 60;
             println!("    grace_period_secs = {}", grace_secs);
             println!("    failure_mode = \"{}\"", failure_mode);
@@ -4563,10 +4751,7 @@ fn run_revoke(
 }
 
 /// Walk the chain to find the `subject` for which the named grant was issued.
-fn find_subject_for_grant(
-    chain: &[zp_core::AuditEntry],
-    grant_id: &str,
-) -> Option<String> {
+fn find_subject_for_grant(chain: &[zp_core::AuditEntry], grant_id: &str) -> Option<String> {
     for entry in chain {
         if let zp_core::AuditAction::SystemEvent { event } = &entry.action {
             if let Some(rest) = event.strip_prefix("delegation:granted:") {
@@ -4839,7 +5024,7 @@ fn run_scan(
     audit_db: Option<PathBuf>,
     data_dir: &std::path::Path,
 ) -> i32 {
-    use zp_engine::tool_scan_security::{ScanVerdict, scan_path};
+    use zp_engine::tool_scan_security::{scan_path, ScanVerdict};
 
     if !path.exists() {
         eprintln!(
@@ -4920,13 +5105,19 @@ fn load_known_tools(
                 return (tools, format!("audit chain ({})", db_path.display()));
             }
         }
-        (Vec::new(), format!("audit chain unavailable ({})", db_path.display()))
+        (
+            Vec::new(),
+            format!("audit chain unavailable ({})", db_path.display()),
+        )
     }
 
     #[cfg(not(feature = "embedded-server"))]
     {
         let _ = db_path;
-        (Vec::new(), "no chain (built without embedded-server)".to_string())
+        (
+            Vec::new(),
+            "no chain (built without embedded-server)".to_string(),
+        )
     }
 }
 
@@ -4935,16 +5126,16 @@ fn print_scan_text(r: &ScanReport) {
 
     println!("\x1b[1mzp scan — F3 MCP tool content falsifier\x1b[0m");
     println!("scan_path:   {}", r.scan_path);
-    println!("known_tools: {} ({})", r.known_tools.len(), r.known_tools_source);
+    println!(
+        "known_tools: {} ({})",
+        r.known_tools.len(),
+        r.known_tools_source
+    );
     println!();
 
     if r.tools.is_empty() {
-        println!(
-            "\x1b[33mwarn\x1b[0m: no tool definitions found at the supplied path"
-        );
-        println!(
-            "       (looked for tool.json, mcp.json, manifest.json, *.tool.json, *.mcp.json,"
-        );
+        println!("\x1b[33mwarn\x1b[0m: no tool definitions found at the supplied path");
+        println!("       (looked for tool.json, mcp.json, manifest.json, *.tool.json, *.mcp.json,");
         println!("       and *.json under tools/ subdirectories)");
         return;
     }
@@ -5018,9 +5209,7 @@ fn print_scan_text(r: &ScanReport) {
             if r.summary.flagged == 1 { "" } else { "s" }
         );
     } else {
-        println!(
-            "verdict:     \x1b[32mCLEAN\x1b[0m — every scanned tool passed every falsifier"
-        );
+        println!("verdict:     \x1b[32mCLEAN\x1b[0m — every scanned tool passed every falsifier");
     }
 }
 
@@ -5079,9 +5268,9 @@ fn print_discover_text(r: &DiscoverReport) {
 
     // Verdict
     println!();
-    let total =
-        r.tools_missing_canon.len() + r.providers_missing_canon.len()
-            + if r.system_canonicalized { 0 } else { 1 };
+    let total = r.tools_missing_canon.len()
+        + r.providers_missing_canon.len()
+        + if r.system_canonicalized { 0 } else { 1 };
     if total == 0 {
         println!("verdict:     \x1b[32mCLEAN\x1b[0m — every discovered entity has a bead zero");
     } else {
@@ -5102,6 +5291,8 @@ fn print_discover_text(r: &DiscoverReport) {
 
 #[cfg(test)]
 mod tests {
+    use super::read_zp_session_token_from;
+
     /// Verify that `resolve_tool_env` returns the expected env vars for `zp configure exec`.
     ///
     /// Sets up a vault with:
@@ -5151,5 +5342,57 @@ mod tests {
         // Confirm unknown tool returns an empty map (not an error).
         let empty = vault.resolve_tool_env("no-such-tool").unwrap();
         assert!(empty.is_empty(), "unknown tool should yield empty map");
+    }
+
+    /// read_zp_session_token_from returns the token from a well-formed session file.
+    #[test]
+    fn test_read_zp_session_token_from_valid() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("session.json");
+        let token = "abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890";
+        std::fs::write(
+            &path,
+            format!(
+                r#"{{"token":"{}","created_at":1747234800,"key_fp":"deadbeef01020304","version":1}}"#,
+                token
+            ),
+        )
+        .unwrap();
+        assert_eq!(read_zp_session_token_from(&path).unwrap(), token);
+    }
+
+    /// read_zp_session_token_from returns Err when the file does not exist.
+    #[test]
+    fn test_read_zp_session_token_from_absent() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("no_such_session.json");
+        assert!(
+            read_zp_session_token_from(&path).is_err(),
+            "absent file must return Err"
+        );
+    }
+
+    /// read_zp_session_token_from returns Err when the token field is missing.
+    #[test]
+    fn test_read_zp_session_token_from_missing_field() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("session.json");
+        std::fs::write(&path, r#"{"created_at":1747234800,"version":1}"#).unwrap();
+        assert!(
+            read_zp_session_token_from(&path).is_err(),
+            "missing token field must return Err"
+        );
+    }
+
+    /// read_zp_session_token_from returns Err on malformed JSON.
+    #[test]
+    fn test_read_zp_session_token_from_malformed() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("session.json");
+        std::fs::write(&path, b"not json at all").unwrap();
+        assert!(
+            read_zp_session_token_from(&path).is_err(),
+            "malformed JSON must return Err"
+        );
     }
 }

@@ -18,6 +18,9 @@ use tower::ServiceExt;
 pub struct TestApp {
     pub router: Router,
     pub config: zp_server::ServerConfig,
+    /// The live session token the server holds. Use with `get_authed` /
+    /// `post_json_authed` to exercise auth-protected endpoints.
+    pub session_token: String,
     _temp_dir: tempfile::TempDir,
 }
 
@@ -69,11 +72,13 @@ impl TestApp {
         };
 
         let state = zp_server::AppState::init(&config).await;
+        let session_token = state.session_token();
         let router = zp_server::build_app(state, &config);
 
         Self {
             router,
             config,
+            session_token,
             _temp_dir: temp_dir,
         }
     }
