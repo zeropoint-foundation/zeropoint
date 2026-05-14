@@ -168,6 +168,55 @@ The substrate exposes its verb set over **gRPC only** (Architecture II.8). HTTP/
 
 ---
 
+### 21. Singular sovereign root — one ceremony per process lifetime
+
+*Landed 2026-05-14. Commits 7f6397b + eb1975f + aba2b26 + 7a9d30d. Task #152.*
+
+There is exactly **one sovereign root** in any ZeroPoint process: Genesis. Every
+other sensitive value is either:
+
+1. **Derived from Genesis in memory** — vault master key (`BLAKE3(genesis,
+   "zp-credential-vault-v1")`), audit signer seed (`derive_audit_signer_seed`),
+   agent certificate material. Never stored independently.
+2. **Stored in the vault** (`vault.json`, ChaCha20-Poly1305 at rest) and
+   decrypted on demand using the in-memory vault master key from (1).
+
+There is no third category. No other secret lives in the OS credential store
+with its own biometric gate.
+
+**The canonical loader** is `zp_keys::sovereignty::load_sovereign_root()`. It
+wraps a process-scoped `OnceLock` — one sovereignty ceremony per process
+lifetime. Fast path: standard OS Keychain (already cached from the OnceLock in
+`load_genesis_from_credential_store`). Provider path: reads `genesis.json` to
+determine mode and invokes the appropriate hardware-wallet or software provider.
+
+**Under II.0:** `load_sovereign_root()` is the **port** (singular). Touch ID,
+login-password, file-based, Trezor, YubiKey, M-of-N quorum — these are the
+**adapters** (plural). Callers see one surface; the surface hides which
+ceremony the operator has enrolled.
+
+**Why this is load-bearing:** direct credential-store reads scattered across
+call sites multiply with every new sovereignty provider added. With M-of-N
+quorum sovereignty (CLAUDE.md, Architecture Direction), each independent
+credential-store read becomes M ceremonies instead of 1. The singular-root
+discipline makes M-of-N tractable.
+
+**Discipline pin** `singular_sovereign_root` in `docs/DISCIPLINE-PINS.md`
+mechanically enforces the boundary: `keyring::Entry::get_password()` outside
+`crates/zp-keys/src/keyring.rs`, `SecItemCopyMatching` outside `touchid.rs`,
+and direct `provider.load_secret()` calls outside `sovereignty/mod.rs` are
+all CI-failing violations.
+
+**Migration on APOLLO (2026-05-14):** three Keychain entries found where one
+was expected. Two were vestigial (`zeropoint/vault-master-key` — relic from a
+pre-Genesis design; `zeropoint-operator/operator-secret` — best-effort cache
+never read back). Both removed from write paths; `zp keychain cleanup --delete`
+removes the stale entries from existing operator machines.
+
+*Full argument: `docs/SINGULAR-SOVEREIGN-ROOT-2026-05.md`.*
+
+---
+
 ### Reconciliation — the April doc's seven design principles under II.0
 
 Part V½ of `docs/ARCHITECTURE-2026-04.md` lists seven design principles for the substrate. Principle II.0 above does not replace them; it refines them by giving each a structural location. The seven principles remain authoritative; II.0 names where each lives.
