@@ -58,7 +58,7 @@ assert_contains() {
 
 # ─── 1. Static asset reachability ─────────────────────────────────
 
-echo "[1/5] Static assets on $FOUNDATION_HOST"
+echo "[1/6] Static assets on $FOUNDATION_HOST"
 
 WIZARD_STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://$FOUNDATION_HOST/onboard/")
 assert_eq "wizard HTML" "$WIZARD_STATUS" "200"
@@ -88,7 +88,7 @@ echo
 
 # ─── 2. Mint a session token ──────────────────────────────────────
 
-echo "[2/5] POST /api/auth/session for operator '$OPERATOR_ID'"
+echo "[2/6] POST /api/auth/session for operator '$OPERATOR_ID'"
 
 COOKIE_JAR=$(mktemp)
 trap "rm -f $COOKIE_JAR" EXIT
@@ -127,7 +127,7 @@ echo
 
 # ─── 3. Bearer token works against same-origin API ────────────────
 
-echo "[3/5] Bearer token against /api/me"
+echo "[3/6] Bearer token against /api/me"
 
 ME_RES=$(curl -s -H "Authorization: Bearer $TOKEN" \
   -w '\nHTTP_STATUS:%{http_code}' \
@@ -147,7 +147,7 @@ echo
 
 # ─── 4. Replay cookie against IronClaw (the cross-language seam) ──
 
-echo "[4/5] Cookie replay against $APP_HOST (substrate-session bridge)"
+echo "[4/6] Cookie replay against $APP_HOST (substrate-session bridge)"
 
 GATEWAY_RES=$(curl -s -b "$COOKIE_JAR" \
   -w '\nHTTP_STATUS:%{http_code}' \
@@ -170,9 +170,72 @@ fi
 
 echo
 
-# ─── 5. Summary ───────────────────────────────────────────────────
+# ─── 5. Chain endpoint + narrative bundle (agent-rendered chain PoC) ─
 
-echo "[5/5] Result"
+echo "[5/6] Chain endpoint and narrative bundle"
+
+# 5a. Narrative bundle served via static assets
+NARR_URL="https://$FOUNDATION_HOST/narratives/foundation-director-onboarding.yaml"
+NARR_STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$NARR_URL")
+assert_eq "narrative bundle status" "$NARR_STATUS" "200"
+
+NARR_BODY=$(curl -s "$NARR_URL")
+assert_contains "narrative bundle workflow_id" "$NARR_BODY" "foundation/director-onboarding"
+assert_contains "narrative bundle voice" "$NARR_BODY" "voice: sage"
+
+# 5b. /api/operator/me/chain with onboard:* filter
+CHAIN_RES=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  -w '\nHTTP_STATUS:%{http_code}' \
+  "https://$FOUNDATION_HOST/api/operator/me/chain?claim_pattern=onboard:*")
+CHAIN_STATUS=$(echo "$CHAIN_RES" | grep '^HTTP_STATUS:' | cut -d: -f2)
+CHAIN_BODY=$(echo "$CHAIN_RES" | sed '/^HTTP_STATUS:/d')
+
+assert_eq "chain endpoint status" "$CHAIN_STATUS" "200"
+
+CHAIN_OP=$(echo "$CHAIN_BODY" | jq -r '.operatorId // empty' 2>/dev/null)
+assert_eq "chain scoped to caller" "$CHAIN_OP" "$OPERATOR_ID"
+
+CHAIN_COUNT=$(echo "$CHAIN_BODY" | jq -r '.count // 0' 2>/dev/null)
+if [[ "$CHAIN_COUNT" -ge 1 ]]; then
+  echo "  ✓ chain has $CHAIN_COUNT receipt(s)"
+else
+  echo "  ✗ chain has 0 receipts for $OPERATOR_ID (expected ≥ 1)"
+  FAIL=1
+fi
+
+# Every returned claim must start with 'onboard:' (filter is doing its job)
+BAD_CLAIM=$(echo "$CHAIN_BODY" | jq -r '.receipts[]?.claim | select(startswith("onboard:") | not)' 2>/dev/null | head -1)
+if [[ -z "$BAD_CLAIM" ]]; then
+  echo "  ✓ claim_pattern filter excluded non-matching claims"
+else
+  echo "  ✗ claim_pattern filter leaked non-matching claim: $BAD_CLAIM"
+  FAIL=1
+fi
+
+# Ordering: created_at ascending
+FIRST_TS=$(echo "$CHAIN_BODY" | jq -r '.receipts[0]?.created_at // empty' 2>/dev/null)
+LAST_TS=$(echo "$CHAIN_BODY" | jq -r '.receipts[-1]?.created_at // empty' 2>/dev/null)
+if [[ -n "$FIRST_TS" && -n "$LAST_TS" && ( "$FIRST_TS" < "$LAST_TS" || "$FIRST_TS" == "$LAST_TS" ) ]]; then
+  echo "  ✓ receipts ordered ASC ($FIRST_TS → $LAST_TS)"
+else
+  echo "  ✗ ordering looks wrong (first=$FIRST_TS, last=$LAST_TS)"
+  FAIL=1
+fi
+
+# Claim names must be unprefixed (no leading 'claim:')
+LEAKED_PREFIX=$(echo "$CHAIN_BODY" | jq -r '.receipts[]?.claim | select(startswith("claim:"))' 2>/dev/null | head -1)
+if [[ -z "$LEAKED_PREFIX" ]]; then
+  echo "  ✓ stored claim names are unprefixed"
+else
+  echo "  ✗ found 'claim:'-prefixed name in storage: $LEAKED_PREFIX"
+  FAIL=1
+fi
+
+echo
+
+# ─── 6. Summary ───────────────────────────────────────────────────
+
+echo "[6/6] Result"
 if [[ "$FAIL" -eq 0 ]]; then
   echo "  ✓ ALL CHECKS PASSED — auth path is live end-to-end"
   exit 0
