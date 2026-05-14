@@ -1373,10 +1373,12 @@ async fn main() -> anyhow::Result<()> {
                                         };
                                         match receipt_keyring {
                                             Ok(kr) => {
-                                                // genesis_secret is a OnceLock cache hit —
-                                                // resolve_vault_key() already loaded it above.
+                                                // OnceLock cache hit — resolve_vault_key() already
+                                                // primed the sovereign root above.
                                                 let genesis_secret =
-                                                    kr.load_genesis_secret().ok().map(|(s, _)| s);
+                                                    zp_keys::load_sovereign_root(&kr.genesis_record_path())
+                                                        .ok()
+                                                        .map(|s| *s);
                                                 let receipt_fields = run::LaunchReceiptFields {
                                                     tool_name: name,
                                                     manifest_hash: "(ad-hoc exec — no manifest hash)",
@@ -3330,7 +3332,7 @@ async fn main() -> anyhow::Result<()> {
     // Derive the audit signer from the Genesis secret
     let keyring = crate::commands::open_keyring()
         .context("Failed to open keyring")?;
-    let (genesis_secret, _) = keyring.load_genesis_secret()
+    let genesis_secret = *zp_keys::load_sovereign_root(&keyring.genesis_record_path())
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
@@ -3646,8 +3648,8 @@ fn run_adapt(
                 return 2;
             }
         };
-        let (genesis_secret, _) = match keyring.load_genesis_secret() {
-            Ok(s) => s,
+        let genesis_secret = match zp_keys::load_sovereign_root(&keyring.genesis_record_path()) {
+            Ok(s) => *s,
             Err(e) => {
                 eprintln!("\x1b[31merror\x1b[0m: failed to load Genesis secret: {}", e);
                 return 2;
@@ -3889,8 +3891,8 @@ fn run_anchor(
             return 2;
         }
     };
-    let (genesis_secret, _) = match keyring.load_genesis_secret() {
-        Ok(s) => s,
+    let genesis_secret = match zp_keys::load_sovereign_root(&keyring.genesis_record_path()) {
+        Ok(s) => *s,
         Err(e) => {
             eprintln!("error: failed to load Genesis secret: {}", e);
             return 2;
@@ -4306,8 +4308,8 @@ fn run_delegate(
             return 2;
         }
     };
-    let (genesis_secret, _) = match keyring.load_genesis_secret() {
-        Ok(s) => s,
+    let genesis_secret = match zp_keys::load_sovereign_root(&keyring.genesis_record_path()) {
+        Ok(s) => *s,
         Err(e) => {
             eprintln!("error: failed to load Genesis secret: {}", e);
             return 2;
@@ -4440,8 +4442,8 @@ fn run_revoke(
             return 2;
         }
     };
-    let (genesis_secret, _) = match keyring.load_genesis_secret() {
-        Ok(s) => s,
+    let genesis_secret = match zp_keys::load_sovereign_root(&keyring.genesis_record_path()) {
+        Ok(s) => *s,
         Err(e) => {
             eprintln!("error: failed to load Genesis secret: {}", e);
             return 2;

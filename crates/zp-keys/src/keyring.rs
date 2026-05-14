@@ -300,14 +300,21 @@ impl Keyring {
         GenesisKey::from_parts(secret, cert)
     }
 
+    /// Path to the `genesis.json` record for this keyring.
+    ///
+    /// Pass this to [`zp_keys::load_sovereign_root`] to load the Genesis
+    /// secret through the canonical single-ceremony API.
+    pub fn genesis_record_path(&self) -> std::path::PathBuf {
+        self.base_dir.join("genesis.json")
+    }
+
     /// Load just the genesis secret bytes from the OS credential store.
     ///
-    /// This is the primitive that `vault_key` and operator-secret encryption
-    /// use for derivation. The `bool` in the return is retained for API
-    /// compatibility with `vault_key::resolve_vault_key`; in canon it is
-    /// always `true` because the credential store is the only supported
-    /// source.
-    pub fn load_genesis_secret(&self) -> Result<([u8; 32], bool), KeyError> {
+    /// This is the internal primitive used by [`zp_keys::load_sovereign_root`]
+    /// (standard-Keychain fast path) and `vault_key::resolve_vault_key`.
+    /// External callers should use `zp_keys::load_sovereign_root()` instead —
+    /// it adds the process-scoped OnceLock and the hardware-wallet fallback.
+    pub(crate) fn load_genesis_secret(&self) -> Result<([u8; 32], bool), KeyError> {
         if !self.base_dir.join("genesis.json").exists() {
             return Err(KeyError::InvalidKeyMaterial(
                 "No genesis.json found — run `zp init` first".into(),

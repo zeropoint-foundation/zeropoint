@@ -263,86 +263,25 @@ fn load_operator_via_sovereignty_provider(
     keyring: &zp_keys::Keyring,
     genesis_record_path: &std::path::Path,
 ) -> Result<zp_keys::hierarchy::OperatorKey, String> {
-    use zeroize::Zeroize;
-
-    let raw = std::fs::read_to_string(genesis_record_path)
-        .map_err(|e| format!("failed to read genesis.json: {}", e))?;
-    let record: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| format!("failed to parse genesis.json: {}", e))?;
-    let mode_str = record
-        .get("sovereignty_mode")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "genesis.json missing sovereignty_mode".to_string())?;
-    let mode = zp_keys::SovereigntyMode::from_onboard_str(mode_str).resolve();
-
-    let provider = zp_keys::provider_for(mode);
-    let mut genesis_secret = provider.load_secret().map_err(|e| {
-        format!(
-            "{} provider could not unlock Genesis: {}",
-            mode.display_name(),
-            e
-        )
-    })?;
-
-    let result = keyring
-        .load_operator_with_genesis_secret(&genesis_secret)
-        .map_err(|e| format!("operator decrypt failed: {}", e));
-
-    genesis_secret.zeroize();
-    result
+    let genesis_secret = zp_keys::load_sovereign_root(genesis_record_path)
+        .map_err(|e| format!("could not unlock Genesis: {}", e))?;
+    keyring
+        .load_operator_with_genesis_secret(genesis_secret)
+        .map_err(|e| format!("operator decrypt failed: {}", e))
 }
 
-/// Load the Genesis secret from the configured sovereignty provider.
-/// Used during audit signer initialization (post-Genesis).
+/// Load the Genesis secret for audit-signer initialization.
 ///
-/// We deliberately do NOT take a `Keyring` here — the credential-store
-/// fast path doesn't have the Genesis secret on hardware-wallet sovereignty
-/// modes, so the only correct route is the sovereignty provider itself.
-/// Reading `genesis.json` tells us which provider to invoke.
+/// Delegates to `zp_keys::load_sovereign_root`, which tries the standard OS
+/// Keychain fast path first (no prompt after load_or_create_identity already
+/// primed the cache) and falls back to the sovereignty provider only for
+/// hardware-wallet modes that don't write the standard Keychain.
 fn load_genesis_secret_from_provider(
     genesis_record_path: &std::path::Path,
 ) -> Result<[u8; 32], String> {
-    if !genesis_record_path.exists() {
-        return Err("genesis.json not found".to_string());
-    }
-
-    let raw = std::fs::read_to_string(genesis_record_path)
-        .map_err(|e| format!("failed to read genesis.json: {}", e))?;
-    let record: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| format!("failed to parse genesis.json: {}", e))?;
-    let mode_str = record
-        .get("sovereignty_mode")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "genesis.json missing sovereignty_mode".to_string())?;
-    let mode = zp_keys::SovereigntyMode::from_onboard_str(mode_str).resolve();
-
-    // Fast path: standard OS Keychain. Touch ID, login-password, and
-    // file-based modes all write the genesis secret to the standard Keychain
-    // during enrollment — and load_or_create_identity() already read it
-    // moments ago, so this call hits the process-scoped OnceLock with no new
-    // auth prompt. Hardware wallet modes (Trezor, YubiKey, etc.) do NOT
-    // write to the standard Keychain, so get_password() returns NotFound and
-    // we fall through to the sovereignty provider.
-    if let Some(home_dir) = genesis_record_path.parent() {
-        if let Ok(keyring) = zp_keys::Keyring::open(home_dir.join("keys")) {
-            if let Ok((secret, _)) = keyring.load_genesis_secret() {
-                return Ok(secret);
-            }
-        }
-    }
-
-    // Sovereignty-provider path — required for hardware wallets that hold
-    // the genesis secret inside the device rather than the OS Keychain.
-    let provider = zp_keys::provider_for(mode);
-    let genesis_secret = provider.load_secret().map_err(|e| {
-        format!(
-            "{} provider could not unlock Genesis: {}",
-            mode.display_name(),
-            e
-        )
-    })?;
-
-    Ok(genesis_secret)
+    zp_keys::load_sovereign_root(genesis_record_path)
+        .map(|s| *s)
+        .map_err(|e| format!("{}", e))
 }
 
 fn load_or_create_identity(config: &ServerConfig) -> (ServerIdentity, bool) {
