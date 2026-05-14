@@ -316,6 +316,23 @@ fn load_genesis_secret_from_provider(
         .ok_or_else(|| "genesis.json missing sovereignty_mode".to_string())?;
     let mode = zp_keys::SovereigntyMode::from_onboard_str(mode_str).resolve();
 
+    // Fast path: standard OS Keychain. Touch ID, login-password, and
+    // file-based modes all write the genesis secret to the standard Keychain
+    // during enrollment — and load_or_create_identity() already read it
+    // moments ago, so this call hits the process-scoped OnceLock with no new
+    // auth prompt. Hardware wallet modes (Trezor, YubiKey, etc.) do NOT
+    // write to the standard Keychain, so get_password() returns NotFound and
+    // we fall through to the sovereignty provider.
+    if let Some(home_dir) = genesis_record_path.parent() {
+        if let Ok(keyring) = zp_keys::Keyring::open(home_dir.join("keys")) {
+            if let Ok((secret, _)) = keyring.load_genesis_secret() {
+                return Ok(secret);
+            }
+        }
+    }
+
+    // Sovereignty-provider path — required for hardware wallets that hold
+    // the genesis secret inside the device rather than the OS Keychain.
     let provider = zp_keys::provider_for(mode);
     let genesis_secret = provider.load_secret().map_err(|e| {
         format!(
