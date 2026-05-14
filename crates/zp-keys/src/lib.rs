@@ -93,7 +93,7 @@ pub use sovereignty::detection::{detect_biometric, BiometricCapability, Biometri
 pub use certificate::{Certificate, CertificateChain, KeyRole};
 pub use error::KeyError;
 pub use hierarchy::{AgentKey, GenesisKey, OperatorKey};
-pub use keyring::Keyring;
+pub use keyring::{delete_keychain_entry, find_orphan_keychain_entries, OrphanEntry, Keyring};
 pub use recovery::{decode_mnemonic, encode_mnemonic, verify_recovery};
 pub use revocation::{
     verify_chain_with_revocation, RevocationCertificate, RevocationReason, RevocationStatus,

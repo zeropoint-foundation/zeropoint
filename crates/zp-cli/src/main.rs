@@ -2,6 +2,7 @@
 
 mod chat;
 mod commands;
+mod keychain;
 use zp_configure as configure;
 mod emit;
 mod guard;
@@ -125,6 +126,10 @@ enum Commands {
     /// Configure tools from vault (Semantic Sed)
     #[command(subcommand)]
     Configure(ConfigureCmd),
+
+    /// Manage OS Keychain entries created by ZeroPoint
+    #[command(subcommand)]
+    Keychain(KeychainCmd),
 
     /// Initialize a new ZeroPoint environment
     ///
@@ -774,6 +779,24 @@ enum ConfigureCmd {
 }
 
 #[derive(Subcommand)]
+enum KeychainCmd {
+    /// List orphan Keychain entries and optionally delete them.
+    ///
+    /// Orphan entries are Keychain items written by old ZeroPoint builds
+    /// that are no longer used by current code. The sovereign root
+    /// (zeropoint-genesis) is never listed or touched.
+    ///
+    /// Default: dry-run — shows what would be deleted without doing anything.
+    /// Pass --delete to actually remove the entries after reviewing them.
+    Cleanup {
+        /// Delete the listed orphan entries. Without this flag the command
+        /// is a dry-run that shows what would be removed.
+        #[arg(long)]
+        delete: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum CfgCmd {
     /// Show all configuration with provenance (where each value came from)
     Show,
@@ -1059,6 +1082,14 @@ async fn main() -> anyhow::Result<()> {
     // Status shows current governance state — no pipeline needed
     if matches!(&args.command, Some(Commands::Status)) {
         let exit_code = secure::status();
+        std::process::exit(exit_code);
+    }
+
+    // Keychain — manage OS Keychain entries, no pipeline needed
+    if let Some(Commands::Keychain(cmd)) = &args.command {
+        let exit_code = match cmd {
+            KeychainCmd::Cleanup { delete } => keychain::run_cleanup(*delete),
+        };
         std::process::exit(exit_code);
     }
 
@@ -3370,6 +3401,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Policy(_)) => unreachable!(),    // handled above
         Some(Commands::Configure(_)) => unreachable!(), // handled above
+        Some(Commands::Keychain(_)) => unreachable!(), // handled above
         Some(Commands::Init { .. }) => unreachable!(),  // handled above
         Some(Commands::Onboard { .. }) => unreachable!(), // handled above
         Some(Commands::Keys(_)) => unreachable!(),      // handled above

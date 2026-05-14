@@ -640,6 +640,83 @@ fn load_genesis_from_credential_store_uncached() -> Result<[u8; 32], KeyError> {
 
 
 
+// ── Orphan-entry cleanup ─────────────────────────────────────────────
+
+/// A Keychain entry that exists on-disk but is no longer used by current
+/// ZeroPoint code. Safe to delete after operator review.
+pub struct OrphanEntry {
+    /// macOS Keychain service label
+    pub service: &'static str,
+    /// macOS Keychain account label
+    pub account: &'static str,
+    /// Human-readable explanation of why this entry is orphaned
+    pub reason: &'static str,
+}
+
+/// Entries created by old ZeroPoint builds that are no longer used.
+const ORPHAN_CANDIDATES: &[(&str, &str, &str)] = &[
+    (
+        "zeropoint",
+        "vault-master-key",
+        "Pre-Genesis vault-key cache (created ~2026-03). The vault master \
+         key is now derived in memory from Genesis via BLAKE3; this entry \
+         is never written or read by current code.",
+    ),
+    (
+        "zeropoint-operator",
+        "operator-secret",
+        "Operator-secret Keychain cache (created ~2026-04). The canonical \
+         store is operator.secret.enc (ChaCha20-Poly1305 on disk under a \
+         vault key derived from Genesis). This Keychain copy is never read \
+         by current code.",
+    ),
+];
+
+/// Scan the OS Keychain for orphan ZeroPoint entries.
+///
+/// Checks each entry in [`ORPHAN_CANDIDATES`] and returns only those that
+/// actually exist. The legitimate `zeropoint-genesis` (and
+/// `zeropoint-genesis-bio`) entries are never included.
+pub fn find_orphan_keychain_entries() -> Vec<OrphanEntry> {
+    let mut found = Vec::new();
+
+    #[cfg(feature = "os-keychain")]
+    for &(service, account, reason) in ORPHAN_CANDIDATES {
+        if let Ok(entry) = keyring::Entry::new(service, account) {
+            if entry.get_password().is_ok() {
+                found.push(OrphanEntry { service, account, reason });
+            }
+        }
+    }
+
+    found
+}
+
+/// Delete a named Keychain entry.
+///
+/// Idempotent: returns `Ok(())` if the entry does not exist.
+/// Used by `zp keychain cleanup --delete` after operator confirmation.
+pub fn delete_keychain_entry(service: &str, account: &str) -> Result<(), KeyError> {
+    #[cfg(feature = "os-keychain")]
+    {
+        let entry = keyring::Entry::new(service, account)
+            .map_err(|e| KeyError::CredentialStore(format!("entry error: {}", e)))?;
+        match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()), // idempotent
+            Err(e) => Err(KeyError::CredentialStore(format!("delete error: {}", e))),
+        }
+    }
+
+    #[cfg(not(feature = "os-keychain"))]
+    {
+        let _ = (service, account);
+        Err(KeyError::CredentialStore(
+            "OS credential store not available (enable 'os-keychain' feature)".into(),
+        ))
+    }
+}
+
 /// Clear the Genesis secret from the OS credential store.
 fn clear_genesis_from_credential_store() -> Result<(), KeyError> {
     #[cfg(feature = "os-keychain")]
