@@ -1407,7 +1407,13 @@ pub fn status() -> i32 {
     }
 
     // ── Audit Chain: wire/bead positions ────────────────────────────
-    let audit_db = zp_home.join("audit.db");
+    // Architecture II.0: route through the canonical audit-DB resolver so
+    // this view matches `zp doctor` and `zp configure exec`. Previously
+    // joined `audit.db` directly onto `zp_home`, which omits the `data/`
+    // subdir and made `zp status` report "not yet initialized" against a
+    // chain that other commands could read fine (#151).
+    let audit_db = zp_core::paths::audit_db_path()
+        .unwrap_or_else(|_| zp_home.join("data").join("audit.db"));
     if audit_db.exists() {
         if let Ok(store) = zp_audit::AuditStore::open_readonly(&audit_db) {
             let store_arc = std::sync::Arc::new(std::sync::Mutex::new(store));

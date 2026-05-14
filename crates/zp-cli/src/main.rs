@@ -1358,7 +1358,19 @@ async fn main() -> anyhow::Result<()> {
                                             command[1..].iter().map(|s| s.to_string()).collect();
 
                                         let receipt_keyring = crate::commands::open_keyring();
-                                        let db_path = args.data_dir.join("audit.db");
+                                        // Architecture II.0: same canonical resolver `zp doctor`
+                                        // and `zp status` use. The clap default for `args.data_dir`
+                                        // is `./data/zeropoint` (relative against CWD), which is
+                                        // broken for the foundation deployment shape — production
+                                        // audit chains live at `~/ZeroPoint/data/audit.db`. The
+                                        // canonical resolver respects `ZP_HOME` / `ZP_DATA_DIR`
+                                        // and falls back to the home-resolved path; if the user
+                                        // explicitly passed `--data-dir`, honor that as override.
+                                        let db_path = if args.data_dir == PathBuf::from("./data/zeropoint") {
+                                            dirs_fallback_audit_db()
+                                        } else {
+                                            args.data_dir.join("audit.db")
+                                        };
                                         match receipt_keyring {
                                             Ok(kr) => {
                                                 let receipt_fields = run::LaunchReceiptFields {
@@ -3752,11 +3764,12 @@ struct AnchorReport {
 /// Default audit DB path: ~/ZeroPoint/data/audit.db
 /// Used as smart fallback when the server is down and no --data-dir given.
 ///
-/// Seam 19: routes through `zp_core::paths::data_dir()` so the ZP_HOME
-/// and ZP_DATA_DIR overrides are inherited from the canonical resolver.
+/// Seam 19: thin delegate to the canonical resolver `zp_core::paths::audit_db_path`.
+/// Kept as a local helper so the existing fallback shape (relative path on
+/// resolver error) stays available to the audit-DB-targeting commands that
+/// were built around it (Verify, Anchor, Grants, Discover, Adapt, Emit, Scan).
 fn dirs_fallback_audit_db() -> PathBuf {
-    zp_core::paths::data_dir()
-        .map(|d| d.join("audit.db"))
+    zp_core::paths::audit_db_path()
         .unwrap_or_else(|_| PathBuf::from("ZeroPoint/data/audit.db"))
 }
 

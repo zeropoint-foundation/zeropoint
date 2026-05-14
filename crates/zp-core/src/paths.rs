@@ -133,6 +133,23 @@ pub fn data_dir() -> Result<PathBuf, PathError> {
     Ok(home()?.join("data"))
 }
 
+/// Audit chain database path — the canonical receipt store.
+/// `~/ZeroPoint/data/audit.db`
+///
+/// This is the singular path-resolver for every audit-store access in
+/// the codebase (Architecture II.0 — contracts singular, implementations
+/// plural). `zp doctor`, `zp status`, `zp configure exec`, and every
+/// other consumer of the audit chain MUST go through this function so
+/// `ZP_HOME` / `ZP_DATA_DIR` overrides apply uniformly and the three
+/// readers cannot drift onto different files.
+///
+/// Reads come through [`zp_audit::AuditStore::open_readonly`]; writes
+/// through [`zp_audit::AuditStore::open_signed`]. Those openers ARE the
+/// store contract — this function is the path contract that feeds them.
+pub fn audit_db_path() -> Result<PathBuf, PathError> {
+    Ok(data_dir()?.join("audit.db"))
+}
+
 /// Vault file — encrypted credential store.
 /// `~/ZeroPoint/vault.json`
 pub fn vault_path() -> Result<PathBuf, PathError> {
@@ -188,9 +205,32 @@ mod tests {
         std::env::set_var("ZP_HOME", "/tmp/zp-paths-test");
         assert_eq!(keys_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/keys"));
         assert_eq!(data_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/data"));
+        assert_eq!(audit_db_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/data/audit.db"));
         assert_eq!(vault_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/vault.json"));
         assert_eq!(session_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/session.json"));
         assert_eq!(policies_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/policies"));
+        std::env::remove_var("ZP_HOME");
+    }
+
+    /// Regression for #151. Before the unification, `zp status` resolved the
+    /// audit DB as `home()?.join("audit.db")` — missing the `data/` subdir —
+    /// and reported "not yet initialized" against a chain that other commands
+    /// could read fine. Pin the invariant: the canonical resolver is rooted
+    /// under `data_dir()`, never directly under `home()`.
+    #[test]
+    fn test_audit_db_is_under_data_dir_not_home() {
+        std::env::set_var("ZP_HOME", "/tmp/zp-paths-test-151");
+        std::env::remove_var("ZP_DATA_DIR");
+        let audit = audit_db_path().unwrap();
+        let home_misresolved = home().unwrap().join("audit.db");
+        assert_ne!(
+            audit, home_misresolved,
+            "audit_db_path() must NOT collapse to home/audit.db — that was the #151 bug"
+        );
+        assert!(
+            audit.starts_with(data_dir().unwrap()),
+            "audit_db_path() must live under data_dir() — got {audit:?}"
+        );
         std::env::remove_var("ZP_HOME");
     }
 
@@ -199,6 +239,10 @@ mod tests {
         std::env::set_var("ZP_HOME", "/tmp/zp-paths-test");
         std::env::set_var("ZP_DATA_DIR", "/custom/data");
         assert_eq!(data_dir().unwrap(), PathBuf::from("/custom/data"));
+        // audit_db_path inherits the ZP_DATA_DIR override transitively —
+        // this is the Architecture II.0 contract: one resolver, env-respecting,
+        // every audit-store consumer sees the same file.
+        assert_eq!(audit_db_path().unwrap(), PathBuf::from("/custom/data/audit.db"));
         std::env::remove_var("ZP_DATA_DIR");
         std::env::remove_var("ZP_HOME");
     }
