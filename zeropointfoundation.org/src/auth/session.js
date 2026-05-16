@@ -42,10 +42,9 @@ export function buildSessionCookie(request, env, token) {
 
   const maxAge = Math.floor(SESSION_TTL_MS / 1000); // seconds
 
-  let cookie = `${SESSION_COOKIE_NAME}=${token}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`;
+  let cookie = `${SESSION_COOKIE_NAME}=${token}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=None; Secure`;
 
   if (!isLocalhost) {
-    cookie += `; Secure`;
     if (env.FOUNDATION_DOMAIN) {
       cookie += `; Domain=.${env.FOUNDATION_DOMAIN}`;
     }
@@ -66,9 +65,8 @@ export function clearSessionCookie(request, env) {
     url.hostname === "127.0.0.1" ||
     url.hostname.endsWith(".localhost");
 
-  let cookie = `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
+  let cookie = `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=None; Secure`;
   if (!isLocalhost) {
-    cookie += `; Secure`;
     if (env.FOUNDATION_DOMAIN) {
       cookie += `; Domain=.${env.FOUNDATION_DOMAIN}`;
     }

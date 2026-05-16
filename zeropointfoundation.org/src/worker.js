@@ -490,7 +490,14 @@ async function handleApi(request, env) {
         },
       });
 
-      return json(session);
+      return new Response(JSON.stringify(session), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Set-Cookie": buildSessionCookie(request, env, session.token),
+          ...corsHeaders(),
+        },
+      });
     }
 
     // GET /api/auth/webauthn/has-passkey?operatorId=<id> — pre-auth probe so the

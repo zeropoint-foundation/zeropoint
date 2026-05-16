@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZeroPoint Foundation — Sign in</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0f;
+    --bg-panel: #12121a;
+    --bg-elevated: #18181f;
+    --border: #222233;
+    --border-soft: #1a1a28;
+    --text: #e0e0e8;
+    --text-dim: #888898;
+    --text-faint: #5a5a6a;
+    --text-bright: #ffffff;
+    --accent: #4a9eff;
+    --accent-soft: rgba(74, 158, 255, 0.08);
+    --green: #3ddc84;
+    --red: #ff6b6b;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 32px 24px; line-height: 1.55; font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wordmark {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--text-faint); font-size: 12px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: 32px;
+  }
+  .wordmark .glyph { width: 12px; height: 12px; border: 1px solid currentColor; transform: rotate(45deg); display: inline-block; }
+  .card {
+    width: 100%; max-width: 440px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 48px 40px 32px;
+  }
+  @media (max-width: 480px) { .card { padding: 32px 24px 24px; } }
+  h1 { font-size: 24px; font-weight: 600; color: var(--text-bright); letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 6px; }
+  h2 { font-size: 13px; font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; }
+  p { margin-bottom: 16px; }
+  p.dim { color: var(--text-dim); font-size: 14px; }
+
+  .director-list { display: flex; flex-direction: column; gap: 8px; margin: 24px 0 8px; }
+  .director-btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-family: inherit; font-size: 15px;
+    text-align: left; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .director-btn:hover { border-color: var(--accent); }
+  .director-btn:disabled { opacity: 0.4; cursor: wait; }
+  .badge { color: var(--text-faint); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .badge.ready { color: var(--green); }
+
+  .working { display: flex; flex-direction: column; align-items: center; padding: 24px 0; }
+  .pulse {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    animation: spin 1.2s linear infinite;
+    margin-bottom: 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .working-label { color: var(--text-dim); font-size: 13px; }
+
+  .error {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: rgba(255, 107, 107, 0.06);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    border-radius: 8px;
+    color: var(--red); font-size: 13px;
+  }
+  .helper { margin-top: 18px; color: var(--text-faint); font-size: 12px; text-align: center; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="wordmark">
+    <span class="glyph"></span>
+    <span>ZeroPoint Foundation</span>
+  </div>
+  <div class="card" id="card">
+    <h2>Sign in</h2>
+    <h1>Welcome back.</h1>
+    <p class="dim">Choose your name to sign in.</p>
+    <div class="director-list" id="list">
+      <div class="working"><div class="pulse"></div><div class="working-label">Loading…</div></div>
+    </div>
+    <p class="helper">After signing in, you'll be taken to your workspace.</p>
+  </div>
+
+<script type="module">
+const list = document.getElementById("list");
+const card = document.getElementById("card");
+
+async function fetchDirectors() {
+  const r = await fetch("/api/operators/active");
+  if (!r.ok) throw new Error("Couldn't load directors");
+  const data = await r.json();
+  return data.operators ?? [];
+}
+
+async function hasPasskey(operatorId) {
+  try {
+    const r = await fetch(`/api/auth/webauthn/has-passkey?operatorId=${encodeURIComponent(operatorId)}`);
+    if (!r.ok) return false;
+    const data = await r.json();
+    return !!data.hasPasskey;
+  } catch { return false; }
+}
+
+async function renderList() {
+  const directors = await fetchDirectors();
+  if (!directors.length) {
+    list.innerHTML = `<div class="error">No directors found. The foundation database may not be initialized yet.</div>`;
+    return;
+  }
+  list.innerHTML = "";
+  for (const d of directors) {
+    const btn = document.createElement("button");
+    btn.className = "director-btn";
+    btn.dataset.id = d.id;
+    btn.innerHTML = `<span>${escapeHtml(d.name)}</span><span class="badge" data-role="badge">…</span>`;
+    btn.addEventListener("click", () => signIn(d, btn));
+    list.appendChild(btn);
+    // Probe for passkey availability and update the badge
+    hasPasskey(d.id).then(has => {
+      const badge = btn.querySelector('[data-role="badge"]');
+      if (has) {
+        badge.textContent = "Passkey ready";
+        badge.classList.add("ready");
+      } else {
+        badge.textContent = "First time?";
+      }
+    });
+  }
+}
+
+async function signIn(director, btn) {
+  for (const b of list.querySelectorAll("button")) b.disabled = true;
+  const out = document.createElement("div");
+  card.appendChild(out);
+  out.innerHTML = `<div class="working" style="padding-top:20px;"><div class="pulse"></div><div class="working-label">Waiting for ${escapeHtml(director.name)}'s device…</div></div>`;
+
+  try {
+    const has = await hasPasskey(director.id);
+    let session;
+    if (has) {
+      session = await signInWithPasskey(director.id);
+    } else {
+      // Fallback: operator-id session. This is the path for directors who
+      // haven't yet registered a passkey on this device.
+      session = await signInWithOperatorId(director.id);
+    }
+    if (!session?.token) throw new Error("Sign-in didn't complete");
+    localStorage.setItem("zp_session_id", session.token);
+    sessionStorage.setItem("zp-session-token", session.token);
+    sessionStorage.setItem("zp-session-operator", JSON.stringify(session.operator));
+    sessionStorage.setItem("zp-session-expires", session.expiresAt);
+    out.innerHTML = `<div class="working" style="padding-top:20px;"><div class="working-label">Signed in. Redirecting…</div></div>`;
+    // Brief delay so the user sees the success state
+    setTimeout(() => { window.location.href = "/mail/"; }, 600);
+  } catch (err) {
+    const msg = err?.message || "Sign-in failed";
+    out.innerHTML = `<div class="error">${escapeHtml(msg)}</div>`;
+    for (const b of list.querySelectorAll("button")) b.disabled = false;
+  }
+}
+
+async function signInWithPasskey(operatorId) {
+  const optsRes = await fetch("/api/auth/webauthn/auth/options", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ operatorId }),
+  });
+  if (!optsRes.ok) {
+    const body = await optsRes.json().catch(() => ({}));
+    throw new Error(body.error || "Couldn't start passkey sign-in");
+  }
+  const opts = await optsRes.json();
+  const publicKey = {
+    ...opts,
+    challenge: base64urlToBuf(opts.challenge),
+    allowCredentials: (opts.allowCredentials || []).map(c => ({
+      ...c,
+      id: base64urlToBuf(c.id),
+    })),
+  };
+  const cred = await navigator.credentials.get({ publicKey });
+  if (!cred) throw new Error("Sign-in cancelled");
+  const verifyRes = await fetch("/api/auth/webauthn/auth/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      operatorId,
+      credential: {
+        id: cred.id,
+        rawId: bufToBase64url(cred.rawId),
+        type: cred.type,
+        response: {
+          clientDataJSON: bufToBase64url(cred.response.clientDataJSON),
+          authenticatorData: bufToBase64url(cred.response.authenticatorData),
+          signature: bufToBase64url(cred.response.signature),
+          userHandle: cred.response.userHandle ? bufToBase64url(cred.response.userHandle) : null,
+        },
+      },
+    }),
+  });
+  if (!verifyRes.ok) {
+    const body = await verifyRes.json().catch(() => ({}));
+    throw new Error(body.error || "Passkey verification failed");
+  }
+  return await verifyRes.json();
+}
+
+async function signInWithOperatorId(operatorId) {
+  const res = await fetch("/api/auth/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ operatorId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Sign-in failed");
+  }
+  return await res.json();
+}
+
+function bufToBase64url(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function base64urlToBuf(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+
+renderList();
+</script>
+</body>
+</html>
