@@ -1,0 +1,26 @@
+[package]
+name = "zp-gate-envelope"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "Per-request Genesis-signed envelopes for the ZeroPoint cognition-governance gate (the 'ZP-Sig' Authorization scheme)."
+
+# Standalone-friendly: depends only on zp-receipt (for canonical bytes +
+# Signable) plus thin encoding helpers. Both gate-side verifier (zp-server)
+# and caller-side signer (IronClaw) import this crate so the envelope format
+# is defined exactly once.
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+zp-receipt = { path = "../zp-receipt" }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
