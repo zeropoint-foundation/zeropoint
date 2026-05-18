@@ -66,8 +66,25 @@ enum Commands {
         #[arg(long)]
         no_open: bool,
     },
-    /// Restart the running ZeroPoint server (kill → re-launch)
-    Restart,
+    /// Restart tools or the ZeroPoint server.
+    ///
+    /// Use --name <tool> to restart a specific ZP-managed tool.
+    /// Use --all to restart all registered tools.
+    /// Use --self to restart the ZP server itself (escape hatch).
+    Restart {
+        /// Restart a specific tool by name
+        #[arg(long)]
+        name: Option<String>,
+        /// Restart all ZP-managed tools
+        #[arg(long)]
+        all: bool,
+        /// Restart the ZP server itself (escape hatch — use when chain can't be queried)
+        #[arg(long, name = "self")]
+        self_: bool,
+    },
+    /// Port registry operations
+    #[command(subcommand)]
+    Port(PortCmd),
     /// Interactive chat with the pipeline
     Chat,
     /// System health check
@@ -483,6 +500,12 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum PortCmd {
+    /// List all tool port assignments in the registry
+    List,
 }
 
 #[derive(Subcommand)]
@@ -980,63 +1003,214 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Restart — kill the running server and re-launch it.
-    // Uses the same config resolution as Serve so bind/port come from config.
-    if matches!(&args.command, Some(Commands::Restart)) {
+    // Restart — tool-targeted restart using the port registry, or server
+    // restart as a documented escape hatch (--self).
+    if let Some(Commands::Restart { name, all, self_ }) = &args.command {
         let cfg = zp_config::ConfigResolver::resolve_standard();
         let port = cfg.port.value;
         let git_hash = env!("ZP_GIT_HASH");
 
-        // Find and kill the running server
-        let pids = std::process::Command::new("lsof")
-            .args(["-ti", &format!(":{}", port)])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    String::from_utf8(o.stdout).ok()
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default();
+        // --self: escape hatch — restart the ZP server process (original behavior).
+        if *self_ {
+            let pids = std::process::Command::new("lsof")
+                .args(["-ti", &format!(":{}", port)])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        String::from_utf8(o.stdout).ok()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
 
-        let mut killed = false;
-        for pid_str in pids.lines() {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                // Don't kill ourselves
-                let our_pid = std::process::id() as i32;
-                if pid != our_pid {
-                    let _ = std::process::Command::new("kill")
-                        .arg(pid_str.trim())
-                        .status();
-                    killed = true;
+            let mut killed = false;
+            for pid_str in pids.lines() {
+                if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                    let our_pid = std::process::id() as i32;
+                    if pid != our_pid {
+                        let _ = std::process::Command::new("kill")
+                            .arg(pid_str.trim())
+                            .status();
+                        killed = true;
+                    }
+                }
+            }
+            if killed {
+                println!("\x1b[33m↻\x1b[0m  Stopped server on port {}", port);
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            } else {
+                println!("\x1b[33m⚠\x1b[0m  No server found on port {}", port);
+            }
+            let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
+            println!("\x1b[32m▶\x1b[0m  Starting zp serve ({})...", git_hash);
+            match std::process::Command::new(&exe).arg("serve").spawn() {
+                Ok(_) => {
+                    println!("\x1b[32m✓\x1b[0m  Server restarted on port {}", port);
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    eprintln!("\x1b[31m✗\x1b[0m  Failed to restart: {}", e);
+                    std::process::exit(1);
                 }
             }
         }
 
-        if killed {
-            println!("\x1b[33m↻\x1b[0m  Stopped server on port {}", port);
-            // Brief pause to let the port release
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        } else {
-            println!("\x1b[33m⚠\x1b[0m  No server found on port {}", port);
+        // --name <tool>: restart a specific registered tool.
+        #[cfg(feature = "embedded-server")]
+        if let Some(tool_name) = name {
+            let data_dir = cfg.data_dir.value.clone();
+            let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
+            match registry.get_assigned(tool_name) {
+                Some(binding) => {
+                    if let Some(pid) = binding.pid {
+                        // SIGTERM first, then wait up to 5s, then SIGKILL.
+                        let _ = std::process::Command::new("kill")
+                            .args(["-TERM", &pid.to_string()])
+                            .status();
+                        let deadline =
+                            std::time::Instant::now() + std::time::Duration::from_secs(5);
+                        while std::time::Instant::now() < deadline {
+                            if !zp_server::tool_ports::is_pid_alive(pid) {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                        }
+                        if zp_server::tool_ports::is_pid_alive(pid) {
+                            let _ = std::process::Command::new("kill")
+                                .args(["-KILL", &pid.to_string()])
+                                .status();
+                        }
+                        println!(
+                            "\x1b[33m↻\x1b[0m  Stopped {} (pid {})",
+                            tool_name, pid
+                        );
+                        registry.release(
+                            tool_name,
+                            zp_server::tool_ports::ReleaseReason::OperatorKill,
+                        );
+                    } else {
+                        eprintln!(
+                            "\x1b[31m✗\x1b[0m  No PID recorded for '{}' — \
+                             use zp doctor to inspect the registry",
+                            tool_name
+                        );
+                        std::process::exit(1);
+                    }
+                    // Re-launch via zp configure exec --name <tool>
+                    println!("\x1b[32m▶\x1b[0m  Re-launching {}...", tool_name);
+                    let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
+                    match std::process::Command::new(&exe)
+                        .args(["configure", "exec", "--name", tool_name])
+                        .spawn()
+                    {
+                        Ok(_) => {
+                            println!("\x1b[32m✓\x1b[0m  {} re-launched", tool_name);
+                            std::process::exit(0);
+                        }
+                        Err(e) => {
+                            eprintln!("\x1b[31m✗\x1b[0m  Re-launch failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => {
+                    eprintln!(
+                        "\x1b[31m✗\x1b[0m  Tool '{}' is not in the port registry — \
+                         is it running?",
+                        tool_name
+                    );
+                    std::process::exit(1);
+                }
+            }
+        }
+        #[cfg(not(feature = "embedded-server"))]
+        if name.is_some() {
+            eprintln!(
+                "\x1b[31m✗\x1b[0m  zp restart --name requires the embedded-server feature"
+            );
+            std::process::exit(1);
         }
 
-        // Re-exec ourselves as `zp serve`
-        let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
-        println!("\x1b[32m▶\x1b[0m  Starting zp serve ({})...", git_hash);
-        let err = std::process::Command::new(&exe).arg("serve").spawn();
-        match err {
-            Ok(_) => {
-                println!("\x1b[32m✓\x1b[0m  Server restarted on port {}", port);
+        // --all: restart all registered tools serially.
+        #[cfg(feature = "embedded-server")]
+        if *all {
+            let data_dir = cfg.data_dir.value.clone();
+            let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
+            let bindings = registry.list();
+            if bindings.is_empty() {
+                println!("No tools registered in port registry.");
                 std::process::exit(0);
             }
-            Err(e) => {
-                eprintln!("\x1b[31m✗\x1b[0m  Failed to restart: {}", e);
-                std::process::exit(1);
+            let mut any_failed = false;
+            let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
+            for binding in bindings {
+                println!("Restarting {}...", binding.tool);
+                match std::process::Command::new(&exe)
+                    .args(["restart", "--name", &binding.tool])
+                    .status()
+                {
+                    Ok(s) if s.success() => {}
+                    _ => {
+                        eprintln!("Failed to restart {}", binding.tool);
+                        any_failed = true;
+                    }
+                }
             }
+            std::process::exit(if any_failed { 1 } else { 0 });
         }
+        #[cfg(not(feature = "embedded-server"))]
+        if *all {
+            eprintln!(
+                "\x1b[31m✗\x1b[0m  zp restart --all requires the embedded-server feature"
+            );
+            std::process::exit(1);
+        }
+
+        // No recognized flag — print usage hint.
+        eprintln!("Specify one of:");
+        eprintln!("  zp restart --name <tool>   restart a specific ZP-managed tool");
+        eprintln!("  zp restart --all           restart all ZP-managed tools");
+        eprintln!("  zp restart --self          restart the ZP server (escape hatch)");
+        std::process::exit(1);
+    }
+
+    // Port registry operations (read-only, no pipeline needed).
+    #[cfg(feature = "embedded-server")]
+    if let Some(Commands::Port(PortCmd::List)) = &args.command {
+        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let data_dir = cfg.data_dir.value.clone();
+        let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
+        let mut bindings = registry.list();
+        if bindings.is_empty() {
+            println!("No tool port assignments.");
+            std::process::exit(0);
+        }
+        bindings.sort_by(|a, b| a.tool.cmp(&b.tool));
+        println!("{:<20} {:<8} {:<10} {:<12}", "TOOL", "PORT", "PID", "PROXY");
+        println!("{}", "─".repeat(52));
+        for b in bindings {
+            println!(
+                "{:<20} {:<8} {:<10} {:<12}",
+                b.tool,
+                b.port,
+                b.pid
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "—".to_string()),
+                b.proxy_port
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "—".to_string()),
+            );
+        }
+        std::process::exit(0);
+    }
+    #[cfg(not(feature = "embedded-server"))]
+    if matches!(&args.command, Some(Commands::Port(_))) {
+        eprintln!(
+            "\x1b[31m✗\x1b[0m  zp port requires the embedded-server feature"
+        );
+        std::process::exit(1);
     }
 
     // Guard runs synchronously without needing the pipeline
@@ -3558,7 +3732,8 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
-        Some(Commands::Restart) => unreachable!(),      // handled above
+        Some(Commands::Restart { .. }) => unreachable!(), // handled above
+        Some(Commands::Port(_)) => unreachable!(),      // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
         Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Policy(_)) => unreachable!(),    // handled above

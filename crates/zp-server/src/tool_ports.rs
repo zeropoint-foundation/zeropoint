@@ -1055,16 +1055,16 @@ mod tests {
 
     // ── PortRegistry unit tests ──────────────────────────────────────
 
-    fn make_registry() -> PortRegistry {
+    fn make_registry() -> (PortRegistry, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
-        // Keep dir alive by leaking it — acceptable for tests
-        let path = dir.into_path();
-        PortRegistry::new(&path)
+        let reg = PortRegistry::new(dir.path());
+        // Return dir so the caller keeps it alive for the test duration.
+        (reg, dir)
     }
 
     #[test]
     fn registry_allocate_returns_binding() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         let b = reg
             .allocate_or_existing(
                 "tool-a",
@@ -1083,7 +1083,7 @@ mod tests {
 
     #[test]
     fn registry_release_removes_binding() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         reg.allocate_or_existing(
             "tool-b",
             2000,
@@ -1100,7 +1100,7 @@ mod tests {
 
     #[test]
     fn registry_owner_returns_holder() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         let b = reg
             .allocate_or_existing(
                 "tool-c",
@@ -1117,7 +1117,7 @@ mod tests {
 
     #[test]
     fn registry_owner_returns_none_after_release() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         let b = reg
             .allocate_or_existing(
                 "tool-d",
@@ -1135,7 +1135,7 @@ mod tests {
 
     #[test]
     fn registry_conflict_returns_conflict_error() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         let b = reg
             .allocate_or_existing(
                 "tool-e",
@@ -1162,7 +1162,7 @@ mod tests {
 
     #[test]
     fn registry_allocate_or_existing_idempotent() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         let b1 = reg
             .allocate_or_existing(
                 "tool-g",
@@ -1191,7 +1191,7 @@ mod tests {
 
     #[test]
     fn sweep_dead_pids_releases_dead_process() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         // u32::MAX is virtually guaranteed to not be a live PID
         reg.allocate_or_existing(
             "dead-tool",
@@ -1208,7 +1208,7 @@ mod tests {
 
     #[test]
     fn sweep_skips_live_pids() {
-        let reg = make_registry();
+        let (reg, _dir) = make_registry();
         let own_pid = std::process::id();
         reg.allocate_or_existing(
             "live-tool",
