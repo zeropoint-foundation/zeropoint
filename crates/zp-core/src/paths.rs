@@ -162,6 +162,14 @@ pub fn session_path() -> Result<PathBuf, PathError> {
     Ok(home()?.join("session.json"))
 }
 
+/// Genesis record — sovereignty mode + provider metadata, written at
+/// onboarding. Genesis secret itself never lives in this file (it's held by
+/// the sovereignty provider; the file only carries the metadata required to
+/// re-load the secret on subsequent runs). `~/ZeroPoint/genesis.json`.
+pub fn genesis_record_path() -> Result<PathBuf, PathError> {
+    Ok(home()?.join("genesis.json"))
+}
+
 /// Policies directory — WASM modules, policy rules.
 /// `~/ZeroPoint/policies/`
 pub fn policies_dir() -> Result<PathBuf, PathError> {

@@ -1669,6 +1669,11 @@ async fn main() -> anyhow::Result<()> {
                                         // projection). Not a third sovereign reference; the discipline
                                         // pin does not fire. If unification is ever needed, move to
                                         // vault.retrieve("session/*").
+                                        //
+                                        // Retained during Step 3 of the genesis-signed-gate-requests
+                                        // migration. The new envelope path (ZP-Sig) reaches IronClaw
+                                        // via IRONCLAW_ZP_GENESIS_PATH below; the bearer token is
+                                        // dead code once Step 4 removes legacy bearer acceptance.
                                         match read_zp_session_token() {
                                             Ok(tok) => {
                                                 child.env("ZP_SESSION_TOKEN", tok);
@@ -1680,6 +1685,16 @@ async fn main() -> anyhow::Result<()> {
                                                 eprintln!("     fail with 401 until the session is available.");
                                                 eprintln!();
                                             }
+                                        }
+
+                                        // Inject Genesis record path for the ZP-Sig envelope signer.
+                                        // IronClaw loads the operator's Genesis via load_sovereign_root,
+                                        // derives the gate signer with derive_gate_signer_seed, and
+                                        // produces a fresh signed envelope on every gate request. The
+                                        // path is *not* a secret — it points at genesis.json, whose
+                                        // contents IronClaw never reads directly.
+                                        if let Ok(genesis_path) = zp_core::paths::genesis_record_path() {
+                                            child.env("IRONCLAW_ZP_GENESIS_PATH", genesis_path);
                                         }
                                         #[cfg(unix)]
                                         {
