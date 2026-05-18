@@ -30,6 +30,7 @@ zp-trust = { path = "../zp-trust" }
 zp-configure = { path = "../zp-configure" }
 zp-mesh = { path = "../zp-mesh" }
 zp-receipt = { path = "../zp-receipt" }
+zp-gate-envelope = { path = "../zp-gate-envelope" }
 zp-anchor = { path = "../zp-anchor" }
 zp-verbs = { path = "../zp-verbs" }
 mle-star-engine = { path = "../mle-star-engine" }
@@ -77,3 +78,6 @@ tempfile = "3"
 # pulls this in for the dev-tools binary; this entry adds the same
 # capability to the test build paths.
 zp-audit = { path = "../zp-audit", features = ["test-support"] }
+# Envelope-middleware integration tests in `tests/envelope_middleware.rs`
+# build a minimal Router and drive it via `tower::ServiceExt::oneshot`.
+tower = { version = "0.5", features = ["util"] }

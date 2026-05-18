@@ -7,6 +7,7 @@ pub mod analysis;
 pub mod anchor_pipeline;
 pub mod attestations;
 pub mod auth;
+pub mod envelope_state;
 pub mod lease_heartbeat;
 pub mod channels;
 pub mod codebase;
@@ -457,6 +458,13 @@ pub struct AppStateInner {
     /// Session authentication — bearer token verification + rotation.
     /// Initialized at server start from the Ed25519 signing key.
     pub session_auth: Arc<auth::SessionAuth>,
+    /// Per-request envelope verifier (`Authorization: ZP-Sig …`).
+    ///
+    /// `Some` once Genesis is established; `None` during the pre-Genesis
+    /// onboarding window. The middleware short-circuits any envelope-shaped
+    /// header to 401 when the verifier is absent — IronClaw should never
+    /// reach the gate before Genesis exists.
+    pub envelope_verifier: Option<Arc<envelope_state::EnvelopeVerifier>>,
     /// Per-IP failed-auth rate limiter (AUTH-VULN-04 mitigation).
     pub rate_limiter: Arc<auth::FailedAuthLimiter>,
     /// Per-endpoint rate limiter (Phase 1.7: AUTH-VULN-04 hardening).
@@ -543,9 +551,17 @@ impl AppState {
         // store is read-only until onboarding finishes. Post-Genesis we go
         // through the sovereignty provider — never the OS credential store
         // fast path, which doesn't hold the secret on hardware-wallet modes.
-        let audit_store_inner = if is_genesis {
-            AuditStore::open_readonly(&audit_path)
-                .expect("Failed to open audit store (readonly)")
+        // Genesis-derived material that several subsystems need at startup:
+        // the audit signer (for the chain) and the gate-request verifier's
+        // expected_kid (for envelope authentication). Derived once from a
+        // single sovereign-root load so the operator sees at most one
+        // ceremony (#152: singular sovereign root).
+        let (audit_store_inner, envelope_verifier) = if is_genesis {
+            (
+                AuditStore::open_readonly(&audit_path)
+                    .expect("Failed to open audit store (readonly)"),
+                None,
+            )
         } else {
             let genesis_record_path = config.home_dir.join("genesis.json");
             let genesis_secret = load_genesis_secret_from_provider(&genesis_record_path)
@@ -554,10 +570,23 @@ impl AppState {
                     panic!("audit signer derivation failed: {}", e);
                 });
 
-            let seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
-            let audit_signer = zp_audit::AuditSigner::from_seed(&seed);
-            AuditStore::open_signed(&audit_path, audit_signer)
-                .expect("Failed to open audit store (signed)")
+            let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+            let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+            let store = AuditStore::open_signed(&audit_path, audit_signer)
+                .expect("Failed to open audit store (signed)");
+
+            let gate_seed = zp_keys::derive_gate_signer_seed(&genesis_secret);
+            let expected_kid = ed25519_dalek::SigningKey::from_bytes(&gate_seed)
+                .verifying_key()
+                .to_bytes();
+            let verifier = envelope_state::EnvelopeVerifier::new(expected_kid);
+            info!(
+                "ZP-Sig envelope verifier ready: kid={} drift={}s",
+                verifier.expected_kid_hex(),
+                verifier.drift_window().as_secs()
+            );
+
+            (store, Some(Arc::new(verifier)))
         };
         let audit_store = Arc::new(std::sync::Mutex::new(audit_store_inner));
 
@@ -772,6 +801,7 @@ impl AppState {
             analysis: analysis::AnalysisEngines::new(),
             config_port: config.port,
             session_auth,
+            envelope_verifier,
             rate_limiter,
             endpoint_limiter,
             onboard_token,
@@ -1119,15 +1149,24 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Exempt: /api/v1/health, /, /onboard, /api/onboard/ws, /assets/*
         .layer(axum::middleware::from_fn({
             let session_auth = state.0.session_auth.clone();
+            let envelope_verifier = state.0.envelope_verifier.clone();
             let rate_limiter = state.0.rate_limiter.clone();
             let endpoint_limiter = state.0.endpoint_limiter.clone();
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let session_auth = session_auth.clone();
+                let envelope_verifier = envelope_verifier.clone();
                 let rate_limiter = rate_limiter.clone();
                 let endpoint_limiter = endpoint_limiter.clone();
                 async move {
-                    auth::require_auth(req, next, session_auth, rate_limiter, endpoint_limiter)
-                        .await
+                    auth::require_auth(
+                        req,
+                        next,
+                        session_auth,
+                        envelope_verifier,
+                        rate_limiter,
+                        endpoint_limiter,
+                    )
+                    .await
                 }
             }
         }))

@@ -17,12 +17,14 @@
 //!   - GET  /                       (root redirect)
 
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     extract::Request,
     http::{header, HeaderValue, StatusCode},
     middleware::Next,
     response::Response,
 };
+
+use crate::envelope_state::{is_envelope_header, EnvelopeVerifier};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -106,9 +108,9 @@ impl SessionAuth {
         Self::new_with_persistence(signing_key_bytes, session_file_path().as_deref())
     }
 
-    /// Ephemeral variant: no disk persistence. Used by unit tests so
-    /// `cargo test` doesn't touch `~/ZeroPoint/session.json`.
-    #[cfg(test)]
+    /// Ephemeral variant: no disk persistence. Used by tests so
+    /// `cargo test` doesn't touch `~/ZeroPoint/session.json`. Also reached
+    /// from integration tests under `tests/` (envelope middleware, etc.).
     pub fn new_in_memory(signing_key_bytes: &[u8; 32]) -> Self {
         Self::new_with_persistence(signing_key_bytes, None)
     }
@@ -577,18 +579,26 @@ fn extract_cookie_token(req: &Request) -> Option<String> {
 /// Axum middleware: require valid session token on protected routes.
 ///
 /// Extracts the session token, in priority order:
-///   1. `Authorization: Bearer <token>` header (CLI + API clients)
-///   2. `Cookie: zp_session=<token>` (browser, HttpOnly, SameSite=Strict)
-///   3. `?token=<token>` query param — **only for /ws/* upgrades** because
-///      browsers can't set headers on WebSocket connections. HTTP routes no
-///      longer honor the query param (AUTH-VULN-03).
+///   1. `Authorization: ZP-Sig v=1, ...` — per-request Genesis-signed envelope
+///      (IronClaw + future programmatic callers). Verified against the gate's
+///      Genesis-derived expected_kid. Path is only taken when `envelope_verifier`
+///      is `Some` (i.e. post-Genesis).
+///   2. `Authorization: Bearer <token>` — legacy bearer-token path retained
+///      during the genesis-signed-gate-requests migration (kept until Step 4
+///      of `docs/handoffs/genesis-signed-gate-requests-design-2026-05.md`).
+///   3. `Cookie: zp_session=<token>` — browser HttpOnly cookie path
+///      (out-of-scope for this migration; tracked under #139).
+///   4. `?token=<token>` query param — **only for /ws/* upgrades** because
+///      browsers can't set headers on WebSocket connections (AUTH-VULN-03).
 ///
-/// Returns 401 for missing/invalid tokens, 429 when the per-IP failed-auth
-/// rate limit is exceeded.
+/// Returns 401 for missing/invalid tokens (with a differentiated
+/// `X-Auth-Reason` header for envelope failures), 429 when the per-IP
+/// failed-auth rate limit is exceeded.
 pub async fn require_auth(
     req: Request,
     next: Next,
     session_auth: Arc<SessionAuth>,
+    envelope_verifier: Option<Arc<EnvelopeVerifier>>,
     rate_limiter: Arc<FailedAuthLimiter>,
     endpoint_limiter: Arc<EndpointRateLimiter>,
 ) -> Result<Response, StatusCode> {
@@ -597,6 +607,40 @@ pub async fn require_auth(
     // Let exempt paths through
     if is_exempt(&path) {
         return Ok(next.run(req).await);
+    }
+
+    // ── Envelope path (priority 1) ─────────────────────────────────────
+    //
+    // Examine the Authorization header to decide whether this request is
+    // structurally a ZP-Sig envelope. If so, take the envelope path; if not,
+    // fall through to the legacy bearer/cookie path. We intentionally do not
+    // record an envelope failure against the per-IP failed-auth rate limiter:
+    // those checks defend against credential-guessing brute force, not against
+    // an envelope that fails a structural binding (which would be a developer
+    // bug or a deliberate probe).
+    let auth_header_value = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    if let Some(header_str) = auth_header_value.as_deref() {
+        if is_envelope_header(header_str) {
+            let verifier = match envelope_verifier.as_deref() {
+                Some(v) => v,
+                None => {
+                    warn!(
+                        "ZP-Sig envelope received before Genesis is established on {}",
+                        path
+                    );
+                    return Ok(build_envelope_response(
+                        StatusCode::UNAUTHORIZED,
+                        "envelope-not-configured",
+                    ));
+                }
+            };
+            return verify_envelope_and_continue(req, next, verifier, endpoint_limiter, &path)
+                .await;
+        }
     }
 
     // Client IP for rate-limiting. Axum doesn't give us ConnectInfo without
@@ -709,6 +753,120 @@ pub async fn require_auth(
             }
         }
     }
+}
+
+/// Maximum body size the envelope verifier will buffer before hashing.
+/// Matches the workspace-level `DefaultBodyLimit::max(1024 * 1024)`. Reuses
+/// the same constant intent (1 MB) without taking a parallel dependency on
+/// `axum::extract::DefaultBodyLimit`.
+const ENVELOPE_MAX_BODY: usize = 1024 * 1024;
+
+/// Verify a `ZP-Sig` envelope and, on success, forward the (rebuilt) request
+/// to the downstream handler. Body is buffered exactly once so the BLAKE3
+/// hash can be computed; the downstream handler receives a `Request` whose
+/// body is the same bytes the verifier hashed.
+async fn verify_envelope_and_continue(
+    req: Request,
+    next: Next,
+    verifier: &EnvelopeVerifier,
+    endpoint_limiter: Arc<EndpointRateLimiter>,
+    path: &str,
+) -> Result<Response, StatusCode> {
+    let client_ip: std::net::IpAddr = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.trim().parse().ok())
+        .or_else(|| {
+            req.headers()
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse().ok())
+        })
+        .unwrap_or_else(|| std::net::IpAddr::from([127, 0, 0, 1]));
+
+    let (parts, body) = req.into_parts();
+
+    let auth_header = parts
+        .headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let Some(auth_header) = auth_header else {
+        // Header disappeared between the outer check and here — treat as
+        // structurally missing for the envelope tier.
+        return Ok(build_envelope_response(StatusCode::UNAUTHORIZED, "missing"));
+    };
+
+    let body_bytes = match to_bytes(body, ENVELOPE_MAX_BODY).await {
+        Ok(b) => b,
+        Err(_) => {
+            warn!("Envelope verify: body exceeds {} bytes on {}", ENVELOPE_MAX_BODY, path);
+            return Ok(build_envelope_response(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "envelope-body-too-large",
+            ));
+        }
+    };
+
+    let method_str = parts.method.as_str().to_string();
+    let path_and_query = parts
+        .uri
+        .path_and_query()
+        .map(|pq| pq.as_str().to_string())
+        .unwrap_or_else(|| "/".to_string());
+    let now = chrono::Utc::now().timestamp();
+
+    match verifier.verify(&auth_header, &method_str, &path_and_query, &body_bytes, now) {
+        Ok(_claims) => {
+            // Endpoint rate-limit applies post-auth for cost control on
+            // expensive operations. Same behaviour as the legacy bearer path.
+            if let Err(retry_after) = endpoint_limiter.check(path, client_ip) {
+                warn!(
+                    "Endpoint rate limit (envelope): {} on {} — retry in {}s",
+                    client_ip,
+                    path,
+                    retry_after.as_secs()
+                );
+                return Err(StatusCode::TOO_MANY_REQUESTS);
+            }
+            let req = Request::from_parts(parts, Body::from(body_bytes));
+            Ok(next.run(req).await)
+        }
+        Err(reject) => {
+            warn!(
+                "Envelope verify rejected on {} ({}): kid_expected={}",
+                path,
+                reject.reason_code(),
+                verifier.expected_kid_hex()
+            );
+            Ok(build_envelope_response(
+                StatusCode::UNAUTHORIZED,
+                reject.reason_code(),
+            ))
+        }
+    }
+}
+
+/// Build a 401-style response for the envelope path with an `X-Auth-Reason`
+/// header that names the specific structural failure.
+fn build_envelope_response(status: StatusCode, reason: &str) -> Response {
+    let body = serde_json::json!({
+        "error": "envelope_rejected",
+        "detail": reason,
+    });
+    let mut resp = Response::new(Body::from(body.to_string()));
+    *resp.status_mut() = status;
+    let headers = resp.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    if let Ok(v) = HeaderValue::from_str(reason) {
+        headers.insert("x-auth-reason", v);
+    }
+    resp
 }
 
 /// Build a 401 (or other) response with an `X-Auth-Reason` header so the
