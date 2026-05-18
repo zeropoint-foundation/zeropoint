@@ -55,6 +55,8 @@ pub enum PreferenceSource {
     Env,
     #[default]
     Default,
+    /// Actual port observed via lsof after launch; overrides allocation intent.
+    PostLaunchObservation,
 }
 
 // ── ReleaseReason ───────────────────────────────────────────────────────
@@ -590,6 +592,129 @@ impl PortRegistry {
             Err(e) => warn!("Failed to serialize port bindings: {}", e),
         }
     }
+
+    // ── Wire 1: PID capture ───────────────────────────────────────────
+
+    /// Record the OS PID of a running tool without changing its port allocation.
+    ///
+    /// Called from `zp configure exec` after `Command::spawn()` succeeds.
+    /// Index-only update — no new receipt; the allocation receipt is unchanged.
+    pub fn update_pid(&self, tool: &str, pid: u32) -> Result<(), RegistryError> {
+        let mut map = self.bindings.lock().unwrap();
+        match map.get_mut(tool) {
+            Some(binding) => {
+                binding.pid = Some(pid);
+                drop(map);
+                self.persist();
+                Ok(())
+            }
+            None => Err(RegistryError::NotAssigned(tool.to_string())),
+        }
+    }
+
+    // ── Wire 2: post-launch port reconciliation ───────────────────────
+
+    /// Reconcile the registry against ports the tool actually bound.
+    ///
+    /// `actual_ports` comes from `lsof_tcp_listen_ports` after the tool has had
+    /// time to start.  If the allocated primary port is absent from `actual_ports`,
+    /// emits a `port:release` for the stale port and a `port:allocate` for the
+    /// first actual port (tagged `PostLaunchObservation`), then updates the binding.
+    ///
+    /// Returns 0 (no mismatch or empty actuals) or 2 (release + allocate pair).
+    pub fn reconcile_ports(&self, tool: &str, pid: u32, actual_ports: &[u16]) -> usize {
+        if actual_ports.is_empty() {
+            return 0;
+        }
+        let binding = match self.get_assigned(tool) {
+            Some(b) => b,
+            None => return 0,
+        };
+        let allocated_port = binding.port;
+        if actual_ports.contains(&allocated_port) {
+            return 0;
+        }
+        let actual_primary = actual_ports[0];
+        debug!(
+            "Port registry: reconcile '{}' allocated={} actual={}",
+            tool, allocated_port, actual_primary
+        );
+        self.emit_release_receipt(tool, allocated_port, Some(pid), ReleaseReason::Reconciliation);
+        let receipt_id = self.emit_allocate_receipt(
+            tool,
+            actual_primary,
+            &binding.port_var,
+            pid,
+            &HashMap::new(),
+            PreferenceSource::PostLaunchObservation,
+        );
+        let mut map = self.bindings.lock().unwrap();
+        if let Some(b) = map.get_mut(tool) {
+            b.port = actual_primary;
+            b.allocated_receipt_id = receipt_id;
+            b.preference_source = PreferenceSource::PostLaunchObservation;
+        }
+        drop(map);
+        self.persist();
+        2
+    }
+}
+
+// ── Post-launch port discovery via lsof ───────────────────────────────
+
+/// Return the set of TCP ports a PID is currently listening on.
+///
+/// Runs `lsof -p <pid> -i -n -P` and parses LISTEN entries.  Best-effort:
+/// returns an empty Vec on lsof errors, permission failures, or parse failures.
+/// On non-Unix targets always returns empty Vec (reconciliation degrades gracefully).
+pub fn lsof_tcp_listen_ports(pid: u32) -> Vec<u16> {
+    #[cfg(unix)]
+    {
+        let output = std::process::Command::new("lsof")
+            .args(["-p", &pid.to_string(), "-i", "-n", "-P"])
+            .output();
+        match output {
+            Ok(o) if o.status.success() || !o.stdout.is_empty() => {
+                parse_lsof_listen_ports(&String::from_utf8_lossy(&o.stdout))
+            }
+            _ => Vec::new(),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        Vec::new()
+    }
+}
+
+/// Parse TCP LISTEN port numbers from `lsof -i -n -P` output.
+///
+/// Expects lines like:
+///   `ironclaw 1234 user 17u IPv4 0x... 0t0 TCP *:3000 (LISTEN)`
+/// Finds the address token immediately before "(LISTEN)" and extracts the
+/// port from after the last ":".
+pub(crate) fn parse_lsof_listen_ports(lsof_output: &str) -> Vec<u16> {
+    let mut ports: Vec<u16> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for line in lsof_output.lines() {
+        if !line.contains("(LISTEN)") {
+            continue;
+        }
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+        for (i, tok) in tokens.iter().enumerate() {
+            if *tok == "(LISTEN)" && i > 0 {
+                // token before "(LISTEN)" is the address, e.g. "*:3000"
+                if let Some(port_str) = tokens[i - 1].rsplit(':').next() {
+                    if let Ok(port) = port_str.parse::<u16>() {
+                        if seen.insert(port) {
+                            ports.push(port);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ports
 }
 
 // ── PID liveness check ─────────────────────────────────────────────────
@@ -1222,5 +1347,109 @@ mod tests {
         reg.sweep_dead_pids();
         // Own PID is alive — binding must still be present
         assert!(reg.get_assigned("live-tool").is_some());
+    }
+
+    // ── Wire 1 tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn update_pid_records_correctly() {
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing("pid-tool", 0, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        assert_eq!(reg.get_assigned("pid-tool").unwrap().pid, Some(0));
+
+        reg.update_pid("pid-tool", 42424).expect("update_pid");
+        let binding = reg.get_assigned("pid-tool").unwrap();
+        assert_eq!(binding.pid, Some(42424));
+        // Port and other fields unchanged
+        assert!(binding.port >= 9100 && binding.port <= 9199);
+    }
+
+    #[test]
+    fn update_pid_returns_err_for_unknown_tool() {
+        let (reg, _dir) = make_registry();
+        let err = reg.update_pid("no-such-tool", 999).unwrap_err();
+        assert!(matches!(err, RegistryError::NotAssigned(_)));
+    }
+
+    // ── Wire 2 tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn post_launch_reconciliation_detects_port_mismatch() {
+        let (reg, _dir) = make_registry();
+        let b = reg
+            .allocate_or_existing("recon-tool", 1234, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        let allocated = b.port;
+
+        // Simulate tool bound to a different port than allocated
+        let actual_ports = vec![allocated + 50];
+        let receipts = reg.reconcile_ports("recon-tool", 1234, &actual_ports);
+        assert_eq!(receipts, 2, "should emit release + allocate receipt pair");
+
+        let updated = reg.get_assigned("recon-tool").unwrap();
+        assert_eq!(updated.port, allocated + 50, "binding reflects actual port");
+        assert_eq!(
+            updated.preference_source,
+            PreferenceSource::PostLaunchObservation
+        );
+    }
+
+    #[test]
+    fn post_launch_reconciliation_no_mismatch_no_receipts() {
+        let (reg, _dir) = make_registry();
+        let b = reg
+            .allocate_or_existing("match-tool", 5678, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+
+        // Tool bound exactly to its allocated port — no mismatch
+        let actual_ports = vec![b.port];
+        let receipts = reg.reconcile_ports("match-tool", 5678, &actual_ports);
+        assert_eq!(receipts, 0, "no receipts when ports match");
+
+        let unchanged = reg.get_assigned("match-tool").unwrap();
+        assert_eq!(unchanged.port, b.port);
+        assert_eq!(unchanged.preference_source, PreferenceSource::Default);
+    }
+
+    #[test]
+    fn reconcile_empty_actual_ports_is_noop() {
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing("crash-tool", 999, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        // Empty actuals = tool crashed before binding; sweeper will clean up
+        let receipts = reg.reconcile_ports("crash-tool", 999, &[]);
+        assert_eq!(receipts, 0);
+        assert!(reg.get_assigned("crash-tool").is_some(), "binding preserved");
+    }
+
+    // ── lsof parser tests ─────────────────────────────────────────────
+
+    #[test]
+    fn parse_lsof_listen_ports_extracts_ports() {
+        let sample = "\
+COMMAND    PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\n\
+ironclaw 1234 user   17u  IPv4 0xabc       0t0  TCP *:3000 (LISTEN)\n\
+ironclaw 1234 user   18u  IPv4 0xdef       0t0  TCP *:8090 (LISTEN)\n\
+ironclaw 1234 user   19u  IPv4 0x123       0t0  TCP 127.0.0.1:50051 (LISTEN)\n\
+ironclaw 1234 user   20u  IPv4 0x456       0t0  TCP 127.0.0.1:50051 (ESTABLISHED)\n";
+        let ports = parse_lsof_listen_ports(sample);
+        assert_eq!(ports, vec![3000, 8090, 50051]);
+    }
+
+    #[test]
+    fn parse_lsof_listen_ports_deduplicates() {
+        let sample = "\
+tool 1 u  TCP *:9100 (LISTEN)\n\
+tool 1 u  TCP *:9100 (LISTEN)\n";
+        let ports = parse_lsof_listen_ports(sample);
+        assert_eq!(ports, vec![9100], "duplicates collapsed");
+    }
+
+    #[test]
+    fn parse_lsof_listen_ports_empty_on_no_listen() {
+        let sample = "tool 1 u  TCP *:9100 (ESTABLISHED)\n";
+        let ports = parse_lsof_listen_ports(sample);
+        assert!(ports.is_empty(), "ESTABLISHED not included");
     }
 }

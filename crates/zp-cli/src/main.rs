@@ -966,6 +966,22 @@ async fn main() -> anyhow::Result<()> {
         let resolved_port = cfg.port.value;
         let resolved_open = cfg.open_dashboard.value;
 
+        // Pre-authenticate before server startup so the Touch ID / Keychain
+        // dialog appears immediately (terminal still frontmost) rather than
+        // 1–2 seconds later inside AppState::init when the operator may have
+        // switched focus. Warms the load_genesis_from_credential_store OnceLock;
+        // all subsequent Keychain accesses in AppState::init are cache hits.
+        // Consistent with singular-sovereign-root (#152): one ceremony here,
+        // everything else derived from the in-process cache.
+        let genesis_record_path = commands::resolve_zp_home().join("genesis.json");
+        if genesis_record_path.exists() {
+            if let Err(e) = zp_keys::load_sovereign_root(&genesis_record_path) {
+                eprintln!("\x1b[31m✗\x1b[0m  Sovereignty authentication failed: {}", e);
+                eprintln!("  Run `zp recover` with your 24-word mnemonic to restore access.");
+                std::process::exit(1);
+            }
+        }
+
         #[cfg(feature = "embedded-server")]
         {
             let config = zp_server::ServerConfig {
@@ -1665,15 +1681,73 @@ async fn main() -> anyhow::Result<()> {
                                                 eprintln!();
                                             }
                                         }
-                                        // exec() replaces the current process on Unix — secrets
-                                        // never live in two processes simultaneously.
                                         #[cfg(unix)]
                                         {
-                                            use std::os::unix::process::CommandExt;
-                                            let err = child.exec();
-                                            // exec() only returns on failure.
-                                            eprintln!("exec failed: {}", err);
-                                            1
+                                            // With embedded-server: spawn() so we can capture the
+                                            // PID and run post-launch reconciliation (Wires 1+2).
+                                            // Without embedded-server: exec() (no registry).
+                                            #[cfg(feature = "embedded-server")]
+                                            {
+                                                use std::os::unix::process::CommandExt;
+                                                // New process group: detach from terminal so the
+                                                // tool survives configure exec exiting.
+                                                child.process_group(0);
+                                                match child.spawn() {
+                                                    Ok(spawned) => {
+                                                        let child_pid = spawned.id();
+                                                        eprintln!("spawned {} (pid {})", name, child_pid);
+                                                        // Wire 1: record PID in port registry.
+                                                        let cfg = zp_config::ConfigResolver::resolve_standard();
+                                                        let data_dir = cfg.data_dir.value.clone();
+                                                        let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
+                                                        if let Err(e) = registry.update_pid(name, child_pid) {
+                                                            eprintln!(
+                                                                "  \u{26a0}  port registry: no binding for '{}' ({})",
+                                                                name, e
+                                                            );
+                                                        }
+                                                        // Wire 2: post-launch lsof reconciliation.
+                                                        // Give the tool time to bind before probing.
+                                                        std::thread::sleep(
+                                                            std::time::Duration::from_millis(1500),
+                                                        );
+                                                        let actual_ports =
+                                                            zp_server::tool_ports::lsof_tcp_listen_ports(child_pid);
+                                                        if !actual_ports.is_empty() {
+                                                            let n = registry.reconcile_ports(
+                                                                name,
+                                                                child_pid,
+                                                                &actual_ports,
+                                                            );
+                                                            if n > 0 {
+                                                                eprintln!(
+                                                                    "  reconciled {} receipt(s) for '{}' \u{2192} actual ports {:?}",
+                                                                    n, name, actual_ports
+                                                                );
+                                                            }
+                                                        }
+                                                        // Tool runs as detached daemon; dropping
+                                                        // Child without wait() reparents it to
+                                                        // init/launchd. configure exec exits cleanly.
+                                                        drop(spawned);
+                                                        0
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!(
+                                                            "\x1b[31m✗\x1b[0m  spawn failed: {}",
+                                                            e
+                                                        );
+                                                        1
+                                                    }
+                                                }
+                                            }
+                                            #[cfg(not(feature = "embedded-server"))]
+                                            {
+                                                use std::os::unix::process::CommandExt;
+                                                let err = child.exec();
+                                                eprintln!("exec failed: {}", err);
+                                                1
+                                            }
                                         }
                                         #[cfg(not(unix))]
                                         {
