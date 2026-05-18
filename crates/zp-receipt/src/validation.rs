@@ -233,6 +233,14 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+
+        // --- Port lifecycle ---
+        ReceiptType::PortAllocated | ReceiptType::PortReleased => TypeRules {
+            required_semantics: ClaimSemantics::AuthorshipProof,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: false,
+        },
     }
 }
 

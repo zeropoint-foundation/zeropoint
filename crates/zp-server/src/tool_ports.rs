@@ -1,11 +1,11 @@
-//! Tool Port Allocator — deterministic port assignment for governed tools.
+//! Tool Port Registry — deterministic port assignment for governed tools.
 //!
 //! ZeroPoint assigns each registered tool a port from a reserved range
 //! (default 9100–9199) so tools that share default ports (8080, etc.)
 //! don't collide.  Assignments are persisted to `{data_dir}/tool-ports.json`
 //! and remain stable across restarts.
 //!
-//! The allocator is used at two points:
+//! The registry is used at two points:
 //!   1. **Launch**: Before spawning a tool, ZP writes `.env.zp` with the
 //!      assigned port.  The launch command sources this file so the tool
 //!      binds to the ZP-managed port instead of its default.
@@ -15,8 +15,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, info, warn};
+use zp_audit::chain::UnsealedEntry;
+use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+use zp_receipt::{ReceiptBuilder, ReceiptType, Status, TrustGrade};
 
 // ── Range ───────────────────────────────────────────────────────────────
 
@@ -26,46 +29,81 @@ const DEFAULT_RANGE_END: u16 = 9199;
 // ── Error ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, thiserror::Error)]
-pub enum PortError {
+pub enum RegistryError {
     #[error("All ports in range {0}–{1} are allocated")]
     RangeExhausted(u16, u16),
 
+    #[error("Port {port} is already owned by '{owner}'")]
+    Conflict { port: u16, owner: String },
+
     #[error("Tool '{0}' has no port assignment")]
     NotAssigned(String),
+
+    #[error("Chain append failed: {0}")]
+    ChainAppend(String),
 }
 
-// ── Allocator ───────────────────────────────────────────────────────────
+// Backward compat alias
+pub use RegistryError as PortError;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PortAssignment {
+// ── PreferenceSource ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PreferenceSource {
+    Manifest,
+    Env,
+    #[default]
+    Default,
+}
+
+// ── ReleaseReason ───────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReleaseReason {
+    GracefulExit,
+    PidDead,
+    OperatorKill,
+    Reconciliation,
+}
+
+// ── ToolBinding (replaces PortAssignment) ───────────────────────────────
+
+/// A tool's full port binding record.
+///
+/// `PortAssignment` is kept as a type alias for backward compat with any
+/// existing callers that still use the old name.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolBinding {
+    pub tool: String,
     pub port: u16,
     /// The .env variable name this tool uses for its primary UI port.
-    /// Stored so `.env.zp` can write the right key.
     pub port_var: String,
     /// ZP-generated auth token injected into `.env.zp` and the proxy.
-    /// The proxy sends this as `Authorization: Bearer {token}` on every
-    /// request, so the user never sees a login screen.
     #[serde(default = "generate_auth_token")]
     pub auth_token: String,
-    /// Additional port vars the tool declares (e.g. GATEWAY_PORT alongside
-    /// HTTP_PORT).  Each gets its own ZP-assigned port so nothing collides.
+    /// Additional port vars the tool declares.
     #[serde(default)]
     pub extra_ports: HashMap<String, u16>,
-    /// Discovered proxy port — the port that actually serves a web UI.
-    ///
-    /// After launch, ZP probes all assigned ports (primary + extras) with
-    /// a GET / request.  The first port that responds with HTTP 200 is
-    /// stored here.  The subdomain proxy uses this port instead of
-    /// `port`, so multi-port tools (webhook + gateway, API + dashboard)
-    /// route correctly without any tool-side configuration.
-    ///
-    /// `None` means probing hasn't run yet or no port responded — the
-    /// proxy falls back to `port`.
+    /// Discovered proxy port after post-launch probing.
     #[serde(default)]
     pub proxy_port: Option<u16>,
+    /// OS PID of the running tool process (None if not tracked).
+    #[serde(default)]
+    pub pid: Option<u32>,
+    /// Receipt ID emitted when this binding was created.
+    #[serde(default)]
+    pub allocated_receipt_id: String,
+    /// Where the port preference originated.
+    #[serde(default)]
+    pub preference_source: PreferenceSource,
 }
 
-impl PortAssignment {
+// Backward compat alias
+pub type PortAssignment = ToolBinding;
+
+impl ToolBinding {
     /// Return the port the subdomain proxy should forward to.
     ///
     /// Prefers the discovered `proxy_port` (from post-launch probing),
@@ -76,11 +114,6 @@ impl PortAssignment {
 }
 
 /// Generate a cryptographically random auth token.
-///
-/// Uses 16 bytes (128 bits) of randomness from the OS CSPRNG via `rand`,
-/// producing a 32-char hex string prefixed with `zp-`. This replaces the
-/// previous timestamp+PID scheme which was predictable if an attacker
-/// could observe process timing.
 fn generate_auth_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -88,23 +121,84 @@ fn generate_auth_token() -> String {
     format!("zp-{}", hex::encode(bytes))
 }
 
-pub struct PortAllocator {
+// ── PortRegistry ────────────────────────────────────────────────────────
+
+pub struct PortRegistry {
     range_start: u16,
     range_end: u16,
-    assignments: Mutex<HashMap<String, PortAssignment>>,
+    bindings: Mutex<HashMap<String, ToolBinding>>,
     persist_path: PathBuf,
+    audit_store: Option<Arc<std::sync::Mutex<zp_audit::AuditStore>>>,
+    executor_id: String,
 }
 
-impl PortAllocator {
-    /// Create a new allocator, loading persisted assignments if they exist.
+// Backward compat alias — all existing `PortAllocator` references still compile.
+pub type PortAllocator = PortRegistry;
+
+impl PortRegistry {
+    /// Create a new registry without chain backing (test / CLI contexts).
     pub fn new(data_dir: &Path) -> Self {
+        Self::new_with_audit(data_dir, None, String::new())
+    }
+
+    /// Create a registry wired into the audit chain.
+    pub fn new_with_audit(
+        data_dir: &Path,
+        audit_store: Option<Arc<std::sync::Mutex<zp_audit::AuditStore>>>,
+        executor_id: String,
+    ) -> Self {
         let persist_path = data_dir.join("tool-ports.json");
-        let assignments: HashMap<String, PortAssignment> = if persist_path.exists() {
+
+        // Load persisted bindings — try new ToolBinding format first,
+        // fall back to old PortAssignment JSON (migration path).
+        let bindings: HashMap<String, ToolBinding> = if persist_path.exists() {
             match std::fs::read_to_string(&persist_path) {
-                Ok(data) => serde_json::from_str(&data).unwrap_or_else(|e| {
-                    warn!("Corrupt tool-ports.json, starting fresh: {}", e);
-                    HashMap::new()
-                }),
+                Ok(data) => {
+                    // Try new format (has "tool" field)
+                    if let Ok(map) = serde_json::from_str::<HashMap<String, ToolBinding>>(&data) {
+                        map
+                    } else {
+                        // Fall back to old PortAssignment — migrate in place
+                        serde_json::from_str::<HashMap<String, serde_json::Value>>(&data)
+                            .unwrap_or_default()
+                            .into_iter()
+                            .filter_map(|(tool_name, v)| {
+                                let port = v.get("port")?.as_u64()? as u16;
+                                let port_var = v
+                                    .get("port_var")?
+                                    .as_str()?
+                                    .to_string();
+                                let auth_token = v
+                                    .get("auth_token")
+                                    .and_then(|t| t.as_str())
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(generate_auth_token);
+                                let extra_ports: HashMap<String, u16> = v
+                                    .get("extra_ports")
+                                    .and_then(|e| serde_json::from_value(e.clone()).ok())
+                                    .unwrap_or_default();
+                                let proxy_port = v
+                                    .get("proxy_port")
+                                    .and_then(|p| p.as_u64())
+                                    .map(|p| p as u16);
+                                Some((
+                                    tool_name.clone(),
+                                    ToolBinding {
+                                        tool: tool_name,
+                                        port,
+                                        port_var,
+                                        auth_token,
+                                        extra_ports,
+                                        proxy_port,
+                                        pid: None,
+                                        allocated_receipt_id: "legacy".to_string(),
+                                        preference_source: PreferenceSource::Default,
+                                    },
+                                ))
+                            })
+                            .collect()
+                    }
+                }
                 Err(e) => {
                     warn!("Could not read tool-ports.json: {}", e);
                     HashMap::new()
@@ -115,101 +209,119 @@ impl PortAllocator {
         };
 
         info!(
-            "Port allocator: {} existing assignments, range {}–{}",
-            assignments.len(),
+            "Port registry: {} existing bindings, range {}–{}",
+            bindings.len(),
             DEFAULT_RANGE_START,
             DEFAULT_RANGE_END,
         );
 
-        let alloc = Self {
+        let registry = Self {
             range_start: DEFAULT_RANGE_START,
             range_end: DEFAULT_RANGE_END,
-            assignments: Mutex::new(assignments),
+            bindings: Mutex::new(bindings),
             persist_path,
+            audit_store,
+            executor_id,
         };
 
-        // Re-persist so any newly-generated auth_tokens (from serde
-        // default on old entries) are saved.
-        alloc.persist();
-        alloc
+        // Re-persist to flush any migrated entries.
+        registry.persist();
+        registry
     }
 
-    /// Get the port for a tool if already assigned.
-    pub fn get_assigned(&self, tool_name: &str) -> Option<PortAssignment> {
-        self.assignments.lock().unwrap().get(tool_name).cloned()
-    }
+    // ── Allocation ────────────────────────────────────────────────────
 
-    /// Get or assign a port.  `port_var` is the .env variable name the
-    /// tool uses for its primary UI port (e.g. "GATEWAY_PORT", "PORT").
-    pub fn get_or_assign(
+    /// Allocate a port for `tool`, or return the existing binding.
+    ///
+    /// Primary API for all new callers. `pid` tracks the process for
+    /// liveness sweeping. `preferred` requests a specific port (conflict
+    /// returns `RegistryError::Conflict`).
+    pub fn allocate_or_existing(
         &self,
-        tool_name: &str,
-        port_var: &str,
-    ) -> Result<PortAssignment, PortError> {
-        self.get_or_assign_multi(tool_name, port_var, &[])
-    }
-
-    /// Get or assign ports for a tool.  `primary_var` is the main port
-    /// (used by the subdomain proxy).  `extra_vars` are additional port
-    /// variables the tool declares — each gets its own ZP-assigned port.
-    pub fn get_or_assign_multi(
-        &self,
-        tool_name: &str,
+        tool: &str,
+        pid: u32,
         primary_var: &str,
         extra_vars: &[String],
-    ) -> Result<PortAssignment, PortError> {
-        let mut map = self.assignments.lock().unwrap();
+        preferred: Option<u16>,
+        preference_source: PreferenceSource,
+    ) -> Result<ToolBinding, RegistryError> {
+        let mut map = self.bindings.lock().unwrap();
 
-        // Already assigned?  Reconcile extra_ports if new vars appeared.
-        if let Some(existing) = map.get(tool_name) {
+        // Already assigned — reconcile extra_ports / update pid.
+        if let Some(existing) = map.get(tool) {
             let mut updated = existing.clone();
-            let mut changed = false;
-            let all_used: std::collections::HashSet<u16> =
-                map.values().flat_map(|a| {
-                    std::iter::once(a.port).chain(a.extra_ports.values().copied())
-                }).collect();
+            let pid_changed = updated.pid != Some(pid);
+            updated.pid = Some(pid);
+            let mut changed = pid_changed;
+
+            let all_used: std::collections::HashSet<u16> = map
+                .values()
+                .flat_map(|b| {
+                    std::iter::once(b.port).chain(b.extra_ports.values().copied())
+                })
+                .collect();
             let mut next_port = self.range_start;
             for var in extra_vars {
                 if !updated.extra_ports.contains_key(var.as_str()) {
-                    // Allocate a new port for this var
                     while next_port <= self.range_end && all_used.contains(&next_port) {
                         next_port += 1;
                     }
                     if next_port > self.range_end {
-                        return Err(PortError::RangeExhausted(self.range_start, self.range_end));
+                        return Err(RegistryError::RangeExhausted(
+                            self.range_start,
+                            self.range_end,
+                        ));
                     }
-                    info!("Port allocator: {} → :{} ({}, extra)", tool_name, next_port, var);
                     updated.extra_ports.insert(var.clone(), next_port);
                     next_port += 1;
                     changed = true;
                 }
             }
             if changed {
-                map.insert(tool_name.to_string(), updated.clone());
+                map.insert(tool.to_string(), updated.clone());
                 drop(map);
                 self.persist();
             }
             return Ok(updated);
         }
 
-        // Find next free port for primary
-        let all_used: std::collections::HashSet<u16> =
-            map.values().flat_map(|a| {
-                std::iter::once(a.port).chain(a.extra_ports.values().copied())
-            }).collect();
-
-        let mut next_free = self.range_start;
-        while next_free <= self.range_end && all_used.contains(&next_free) {
-            next_free += 1;
+        // Conflict check for preferred port.
+        if let Some(pref) = preferred {
+            if let Some(owner) = map.values().find(|b| {
+                b.port == pref || b.extra_ports.values().any(|&p| p == pref)
+            }) {
+                return Err(RegistryError::Conflict {
+                    port: pref,
+                    owner: owner.tool.clone(),
+                });
+            }
         }
-        if next_free > self.range_end {
-            return Err(PortError::RangeExhausted(self.range_start, self.range_end));
-        }
-        let primary_port = next_free;
-        next_free += 1;
 
-        // Allocate extra ports
+        // Find primary port.
+        let all_used: std::collections::HashSet<u16> = map
+            .values()
+            .flat_map(|b| std::iter::once(b.port).chain(b.extra_ports.values().copied()))
+            .collect();
+
+        let primary_port = if let Some(pref) = preferred {
+            pref
+        } else {
+            let mut next = self.range_start;
+            while next <= self.range_end && all_used.contains(&next) {
+                next += 1;
+            }
+            if next > self.range_end {
+                return Err(RegistryError::RangeExhausted(
+                    self.range_start,
+                    self.range_end,
+                ));
+            }
+            next
+        };
+
+        // Extra ports.
         let mut extra_ports = HashMap::new();
+        let mut next_free = primary_port + 1;
         for var in extra_vars {
             while next_free <= self.range_end
                 && (all_used.contains(&next_free) || next_free == primary_port)
@@ -217,90 +329,288 @@ impl PortAllocator {
                 next_free += 1;
             }
             if next_free > self.range_end {
-                return Err(PortError::RangeExhausted(self.range_start, self.range_end));
+                return Err(RegistryError::RangeExhausted(
+                    self.range_start,
+                    self.range_end,
+                ));
             }
-            info!("Port allocator: {} → :{} ({}, extra)", tool_name, next_free, var);
             extra_ports.insert(var.clone(), next_free);
             next_free += 1;
         }
 
-        let assignment = PortAssignment {
+        let receipt_id = self.emit_allocate_receipt(
+            tool,
+            primary_port,
+            primary_var,
+            pid,
+            &extra_ports,
+            preference_source,
+        );
+
+        let binding = ToolBinding {
+            tool: tool.to_string(),
             port: primary_port,
             port_var: primary_var.to_string(),
             auth_token: generate_auth_token(),
             extra_ports,
             proxy_port: None,
+            pid: Some(pid),
+            allocated_receipt_id: receipt_id,
+            preference_source,
         };
-        info!("Port allocator: {} → :{} ({})", tool_name, primary_port, primary_var);
-        map.insert(tool_name.to_string(), assignment.clone());
+        info!("Port registry: {} → :{} ({})", tool, primary_port, primary_var);
+        map.insert(tool.to_string(), binding.clone());
         drop(map);
         self.persist();
-        Ok(assignment)
+        Ok(binding)
     }
 
-    /// Release a tool's port assignment.
-    pub fn release(&self, tool_name: &str) {
-        let mut map = self.assignments.lock().unwrap();
-        if map.remove(tool_name).is_some() {
-            info!("Port allocator: released {}", tool_name);
+    /// Backward-compat wrapper — no pid, no preferred port.
+    pub fn get_or_assign_multi(
+        &self,
+        tool_name: &str,
+        primary_var: &str,
+        extra_vars: &[String],
+    ) -> Result<ToolBinding, RegistryError> {
+        self.allocate_or_existing(
+            tool_name,
+            0,
+            primary_var,
+            extra_vars,
+            None,
+            PreferenceSource::Default,
+        )
+    }
+
+    /// Backward-compat single-port wrapper.
+    pub fn get_or_assign(
+        &self,
+        tool_name: &str,
+        port_var: &str,
+    ) -> Result<ToolBinding, RegistryError> {
+        self.get_or_assign_multi(tool_name, port_var, &[])
+    }
+
+    // ── Release ───────────────────────────────────────────────────────
+
+    /// Release a tool's binding and emit a `PortReleased` receipt.
+    pub fn release(&self, tool: &str, reason: ReleaseReason) {
+        let mut map = self.bindings.lock().unwrap();
+        if let Some(binding) = map.remove(tool) {
+            info!(
+                "Port registry: released {} (port {}, reason: {:?})",
+                tool, binding.port, reason
+            );
             drop(map);
+            self.emit_release_receipt(tool, binding.port, binding.pid, reason);
             self.persist();
         }
     }
 
-    /// All current assignments (for dashboard / debugging).
-    pub fn list(&self) -> HashMap<String, PortAssignment> {
-        self.assignments.lock().unwrap().clone()
+    // ── Query ─────────────────────────────────────────────────────────
+
+    /// Get the binding for a specific tool, if present.
+    pub fn get_assigned(&self, tool_name: &str) -> Option<ToolBinding> {
+        self.bindings.lock().unwrap().get(tool_name).cloned()
     }
 
+    /// Return the binding that owns `port` (primary or extra), if any.
+    pub fn owner(&self, port: u16) -> Option<ToolBinding> {
+        self.bindings
+            .lock()
+            .unwrap()
+            .values()
+            .find(|b| b.port == port || b.extra_ports.values().any(|&p| p == port))
+            .cloned()
+    }
+
+    /// All current bindings as a Vec (primary API for dashboards / CLI).
+    pub fn list(&self) -> Vec<ToolBinding> {
+        self.bindings.lock().unwrap().values().cloned().collect()
+    }
+
+    /// All current bindings as a HashMap (legacy API for tool_proxy.rs).
+    pub fn list_map(&self) -> HashMap<String, ToolBinding> {
+        self.bindings.lock().unwrap().clone()
+    }
+
+    // ── Proxy port management ─────────────────────────────────────────
+
+    /// Update the discovered proxy port for a tool and persist.
+    pub fn set_proxy_port(&self, tool_name: &str, proxy_port: u16) {
+        let mut map = self.bindings.lock().unwrap();
+        if let Some(binding) = map.get_mut(tool_name) {
+            if binding.proxy_port != Some(proxy_port) {
+                info!(
+                    "Port registry: {} proxy_port discovered → :{}",
+                    tool_name, proxy_port
+                );
+                binding.proxy_port = Some(proxy_port);
+                drop(map);
+                self.persist();
+            }
+        }
+    }
+
+    /// Clear a previously discovered proxy port for re-discovery after relaunch.
+    pub fn clear_proxy_port(&self, tool_name: &str) {
+        let mut map = self.bindings.lock().unwrap();
+        if let Some(binding) = map.get_mut(tool_name) {
+            if binding.proxy_port.is_some() {
+                debug!(
+                    "Port registry: {} proxy_port cleared for re-discovery",
+                    tool_name
+                );
+                binding.proxy_port = None;
+                drop(map);
+                self.persist();
+            }
+        }
+    }
+
+    // ── PID liveness sweeper ──────────────────────────────────────────
+
+    /// Release bindings for tools whose recorded PIDs are no longer alive.
+    ///
+    /// Called periodically by the background sweeper task. Uses POSIX
+    /// `kill -0` on Unix; degrades gracefully on non-Unix (no releases).
+    pub fn sweep_dead_pids(&self) {
+        let snapshot: Vec<ToolBinding> = self
+            .bindings
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect();
+        for binding in snapshot {
+            if let Some(pid) = binding.pid {
+                if !is_pid_alive(pid) {
+                    debug!(
+                        "Port registry: pid {} for {} is dead, releasing",
+                        pid, binding.tool
+                    );
+                    self.release(&binding.tool, ReleaseReason::PidDead);
+                }
+            }
+        }
+    }
+
+    // ── Chain receipt helpers ─────────────────────────────────────────
+
+    fn emit_allocate_receipt(
+        &self,
+        tool: &str,
+        port: u16,
+        port_var: &str,
+        pid: u32,
+        extra_ports: &HashMap<String, u16>,
+        preference_source: PreferenceSource,
+    ) -> String {
+        let receipt = ReceiptBuilder::new(ReceiptType::PortAllocated, &self.executor_id)
+            .status(Status::Success)
+            .trust_grade(TrustGrade::D)
+            .extension(
+                "zp.port.lifecycle",
+                serde_json::json!({
+                    "tool": tool,
+                    "port": port,
+                    "port_var": port_var,
+                    "pid": pid,
+                    "extra_ports": extra_ports,
+                    "preference_source": preference_source,
+                }),
+            )
+            .finalize();
+        let receipt_id = receipt.id.clone();
+        self.append_to_chain(receipt);
+        receipt_id
+    }
+
+    fn emit_release_receipt(
+        &self,
+        tool: &str,
+        port: u16,
+        pid: Option<u32>,
+        reason: ReleaseReason,
+    ) {
+        let receipt = ReceiptBuilder::new(ReceiptType::PortReleased, &self.executor_id)
+            .status(Status::Success)
+            .trust_grade(TrustGrade::D)
+            .extension(
+                "zp.port.lifecycle",
+                serde_json::json!({
+                    "tool": tool,
+                    "port": port,
+                    "pid": pid,
+                    "reason": reason,
+                }),
+            )
+            .finalize();
+        self.append_to_chain(receipt);
+    }
+
+    fn append_to_chain(&self, receipt: zp_receipt::Receipt) {
+        let Some(ref audit_arc) = self.audit_store else {
+            return;
+        };
+        let unsealed = UnsealedEntry::new(
+            ActorId::System("port_registry".to_string()),
+            AuditAction::SystemEvent {
+                event: format!("port:lifecycle:{}", receipt.receipt_type.id_prefix()),
+            },
+            ConversationId::new(),
+            PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            "port_registry",
+        )
+        .with_receipt(receipt);
+        match audit_arc.lock() {
+            Ok(mut store) => {
+                if let Err(e) = store.append(unsealed) {
+                    warn!("Port registry: failed to append receipt to chain: {}", e);
+                }
+            }
+            Err(e) => warn!("Port registry: audit store lock poisoned: {}", e),
+        }
+    }
+
+    // ── Persistence ───────────────────────────────────────────────────
+
     fn persist(&self) {
-        let map = self.assignments.lock().unwrap();
+        let map = self.bindings.lock().unwrap();
         match serde_json::to_string_pretty(&*map) {
             Ok(json) => {
                 if let Err(e) = std::fs::write(&self.persist_path, &json) {
                     warn!("Failed to persist tool-ports.json: {}", e);
                 } else {
-                    debug!("Persisted {} port assignments", map.len());
+                    debug!("Persisted {} port bindings", map.len());
                 }
             }
-            Err(e) => warn!("Failed to serialize port assignments: {}", e),
+            Err(e) => warn!("Failed to serialize port bindings: {}", e),
         }
     }
+}
 
-    /// Update the discovered proxy port for a tool and persist.
-    ///
-    /// Called after post-launch probing identifies which port serves
-    /// the web UI.
-    pub fn set_proxy_port(&self, tool_name: &str, proxy_port: u16) {
-        let mut map = self.assignments.lock().unwrap();
-        if let Some(assignment) = map.get_mut(tool_name) {
-            if assignment.proxy_port != Some(proxy_port) {
-                info!(
-                    "Port allocator: {} proxy_port discovered → :{}",
-                    tool_name, proxy_port
-                );
-                assignment.proxy_port = Some(proxy_port);
-                drop(map);
-                self.persist();
-            }
-        }
+// ── PID liveness check ─────────────────────────────────────────────────
+
+/// Returns true if the given PID is alive and signal-accessible.
+///
+/// Uses POSIX `kill -0` on Unix (no actual signal sent, just existence check).
+/// Non-Unix builds always return `true` (sweeper degrades gracefully).
+pub fn is_pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
     }
-
-    /// Clear a previously discovered proxy port so re-discovery can run
-    /// fresh after a tool relaunch (prevents stale routing).
-    pub fn clear_proxy_port(&self, tool_name: &str) {
-        let mut map = self.assignments.lock().unwrap();
-        if let Some(assignment) = map.get_mut(tool_name) {
-            if assignment.proxy_port.is_some() {
-                debug!(
-                    "Port allocator: {} proxy_port cleared for re-discovery",
-                    tool_name
-                );
-                assignment.proxy_port = None;
-                drop(map);
-                self.persist();
-            }
-        }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        true
     }
 }
 
@@ -315,7 +625,7 @@ impl PortAllocator {
 /// auth token, mirroring what the proxy itself would send.
 ///
 /// Returns `None` if no port responds within the deadline.
-pub async fn discover_proxy_port(assignment: &PortAssignment) -> Option<u16> {
+pub async fn discover_proxy_port(assignment: &ToolBinding) -> Option<u16> {
     let mut candidates: Vec<u16> = vec![assignment.port];
     // Add extra ports — these might be the actual web UI
     candidates.extend(assignment.extra_ports.values());
@@ -397,7 +707,7 @@ pub async fn discover_proxy_port(assignment: &PortAssignment) -> Option<u16> {
 /// Used by the launch flow to discover the proxy port asynchronously
 /// without blocking the launch response.
 pub async fn discover_proxy_port_with_retry(
-    assignment: &PortAssignment,
+    assignment: &ToolBinding,
     max_attempts: u32,
     interval: std::time::Duration,
 ) -> Option<u16> {
@@ -427,7 +737,7 @@ pub async fn discover_proxy_port_with_retry(
 pub fn write_env_zp(
     tool_path: &Path,
     tool_name: &str,
-    assignment: &PortAssignment,
+    assignment: &ToolBinding,
 ) -> std::io::Result<()> {
     let zp_env = tool_path.join(".env.zp");
 
@@ -478,7 +788,8 @@ pub fn write_env_zp(
     let dot_env = tool_path.join(".env");
     if dot_env.exists() {
         if let Ok(env_contents) = std::fs::read_to_string(&dot_env) {
-            let mut zp_owned: Vec<&str> = vec![auth_var.as_str(), assignment.port_var.as_str(), "ZP_MANAGED"];
+            let mut zp_owned: Vec<&str> =
+                vec![auth_var.as_str(), assignment.port_var.as_str(), "ZP_MANAGED"];
             for var in assignment.extra_ports.keys() {
                 zp_owned.push(var.as_str());
             }
@@ -492,7 +803,10 @@ pub fn write_env_zp(
                     if let Some((key, _)) = trimmed.split_once('=') {
                         let key = key.trim();
                         if zp_owned.contains(&key) {
-                            debug!("Removing shadowed {} from .env (ZP owns via .env.zp)", key);
+                            debug!(
+                                "Removing shadowed {} from .env (ZP owns via .env.zp)",
+                                key
+                            );
                             return false;
                         }
                     }
@@ -637,56 +951,71 @@ mod tests {
 
     #[test]
     fn proxy_target_prefers_proxy_port() {
-        let assignment = PortAssignment {
+        let binding = ToolBinding {
+            tool: "test-tool".to_string(),
             port: 9100,
             port_var: "HTTP_PORT".to_string(),
             auth_token: "zp-test".to_string(),
             extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 9101)]),
             proxy_port: Some(9101),
+            pid: None,
+            allocated_receipt_id: String::new(),
+            preference_source: PreferenceSource::Default,
         };
-        assert_eq!(assignment.proxy_target(), 9101);
+        assert_eq!(binding.proxy_target(), 9101);
     }
 
     #[test]
     fn proxy_target_falls_back_to_primary() {
-        let assignment = PortAssignment {
+        let binding = ToolBinding {
+            tool: "test-tool".to_string(),
             port: 9100,
             port_var: "HTTP_PORT".to_string(),
             auth_token: "zp-test".to_string(),
             extra_ports: HashMap::new(),
             proxy_port: None,
+            pid: None,
+            allocated_receipt_id: String::new(),
+            preference_source: PreferenceSource::Default,
         };
-        assert_eq!(assignment.proxy_target(), 9100);
+        assert_eq!(binding.proxy_target(), 9100);
     }
 
     #[test]
     fn proxy_port_serde_default_is_none() {
-        // Existing persisted assignments (pre-proxy_port) should
-        // deserialize with proxy_port: None thanks to #[serde(default)].
+        // Old PortAssignment JSON (without new fields) should deserialize
+        // with defaults thanks to #[serde(default)] on the new fields.
         let json = r#"{
+            "tool": "test-tool",
             "port": 9100,
             "port_var": "HTTP_PORT",
             "auth_token": "zp-test",
             "extra_ports": {}
         }"#;
-        let assignment: PortAssignment = serde_json::from_str(json).unwrap();
-        assert_eq!(assignment.proxy_port, None);
-        assert_eq!(assignment.proxy_target(), 9100);
+        let binding: ToolBinding = serde_json::from_str(json).unwrap();
+        assert_eq!(binding.proxy_port, None);
+        assert_eq!(binding.proxy_target(), 9100);
     }
 
     #[test]
     fn proxy_port_serde_round_trip() {
-        let assignment = PortAssignment {
+        let binding = ToolBinding {
+            tool: "test-tool".to_string(),
             port: 9100,
             port_var: "HTTP_PORT".to_string(),
             auth_token: "zp-test".to_string(),
             extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 9101)]),
             proxy_port: Some(9101),
+            pid: Some(12345),
+            allocated_receipt_id: "port-abc123".to_string(),
+            preference_source: PreferenceSource::Manifest,
         };
-        let json = serde_json::to_string(&assignment).unwrap();
-        let deserialized: PortAssignment = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&binding).unwrap();
+        let deserialized: ToolBinding = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.proxy_port, Some(9101));
         assert_eq!(deserialized.proxy_target(), 9101);
+        assert_eq!(deserialized.pid, Some(12345));
+        assert_eq!(deserialized.preference_source, PreferenceSource::Manifest);
     }
 
     #[test]
@@ -709,14 +1038,189 @@ mod tests {
     #[tokio::test]
     async fn discover_skips_single_port_tools() {
         // Single-port tools shouldn't waste time probing
-        let assignment = PortAssignment {
+        let binding = ToolBinding {
+            tool: "test-tool".to_string(),
             port: 9100,
             port_var: "PORT".to_string(),
             auth_token: "zp-test".to_string(),
             extra_ports: HashMap::new(),
             proxy_port: None,
+            pid: None,
+            allocated_receipt_id: String::new(),
+            preference_source: PreferenceSource::Default,
         };
-        let result = discover_proxy_port(&assignment).await;
+        let result = discover_proxy_port(&binding).await;
         assert_eq!(result, None);
+    }
+
+    // ── PortRegistry unit tests ──────────────────────────────────────
+
+    fn make_registry() -> PortRegistry {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // Keep dir alive by leaking it — acceptable for tests
+        let path = dir.into_path();
+        PortRegistry::new(&path)
+    }
+
+    #[test]
+    fn registry_allocate_returns_binding() {
+        let reg = make_registry();
+        let b = reg
+            .allocate_or_existing(
+                "tool-a",
+                1000,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate");
+        assert_eq!(b.tool, "tool-a");
+        assert_eq!(b.port_var, "PORT");
+        assert!(b.port >= 9100 && b.port <= 9199);
+        assert_eq!(b.pid, Some(1000));
+    }
+
+    #[test]
+    fn registry_release_removes_binding() {
+        let reg = make_registry();
+        reg.allocate_or_existing(
+            "tool-b",
+            2000,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
+        assert!(reg.get_assigned("tool-b").is_some());
+        reg.release("tool-b", ReleaseReason::GracefulExit);
+        assert!(reg.get_assigned("tool-b").is_none());
+    }
+
+    #[test]
+    fn registry_owner_returns_holder() {
+        let reg = make_registry();
+        let b = reg
+            .allocate_or_existing(
+                "tool-c",
+                3000,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate");
+        let owner = reg.owner(b.port).expect("owner");
+        assert_eq!(owner.tool, "tool-c");
+    }
+
+    #[test]
+    fn registry_owner_returns_none_after_release() {
+        let reg = make_registry();
+        let b = reg
+            .allocate_or_existing(
+                "tool-d",
+                4000,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate");
+        let port = b.port;
+        reg.release("tool-d", ReleaseReason::GracefulExit);
+        assert!(reg.owner(port).is_none());
+    }
+
+    #[test]
+    fn registry_conflict_returns_conflict_error() {
+        let reg = make_registry();
+        let b = reg
+            .allocate_or_existing(
+                "tool-e",
+                5000,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate first");
+        // Attempt to allocate a different tool on the same port
+        let err = reg
+            .allocate_or_existing(
+                "tool-f",
+                6000,
+                "PORT",
+                &[],
+                Some(b.port),
+                PreferenceSource::Default,
+            )
+            .expect_err("should conflict");
+        assert!(matches!(err, RegistryError::Conflict { .. }));
+    }
+
+    #[test]
+    fn registry_allocate_or_existing_idempotent() {
+        let reg = make_registry();
+        let b1 = reg
+            .allocate_or_existing(
+                "tool-g",
+                7000,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("first");
+        let b2 = reg
+            .allocate_or_existing(
+                "tool-g",
+                7001,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("second (idempotent)");
+        // Same port returned
+        assert_eq!(b1.port, b2.port);
+        // PID updated
+        assert_eq!(b2.pid, Some(7001));
+    }
+
+    #[test]
+    fn sweep_dead_pids_releases_dead_process() {
+        let reg = make_registry();
+        // u32::MAX is virtually guaranteed to not be a live PID
+        reg.allocate_or_existing(
+            "dead-tool",
+            u32::MAX,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
+        reg.sweep_dead_pids();
+        assert!(reg.get_assigned("dead-tool").is_none());
+    }
+
+    #[test]
+    fn sweep_skips_live_pids() {
+        let reg = make_registry();
+        let own_pid = std::process::id();
+        reg.allocate_or_existing(
+            "live-tool",
+            own_pid,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
+        reg.sweep_dead_pids();
+        // Own PID is alive — binding must still be present
+        assert!(reg.get_assigned("live-tool").is_some());
     }
 }

@@ -570,6 +570,12 @@ pub enum ReceiptType {
     /// asset types, counterparty restrictions, approval thresholds, and
     /// escrow requirements.
     FinancialCapabilityGrant,
+
+    // --- Port lifecycle ---
+    /// Records that a port was allocated to a named tool.
+    PortAllocated,
+    /// Records that a port allocation was released.
+    PortReleased,
 }
 
 impl ReceiptType {
@@ -599,6 +605,8 @@ impl ReceiptType {
             ReceiptType::FleetMembershipAccepted => "fmac",
             ReceiptType::ExternalAnchor => "xanc",
             ReceiptType::FinancialCapabilityGrant => "fcap",
+            ReceiptType::PortAllocated => "port",
+            ReceiptType::PortReleased => "port",
         }
     }
 
@@ -639,6 +647,8 @@ impl ReceiptType {
             ReceiptType::ExternalAnchor => None,
             // Financial capability grants reference a delegation receipt
             ReceiptType::FinancialCapabilityGrant => None,
+            // Port lifecycle receipts are standalone
+            ReceiptType::PortAllocated | ReceiptType::PortReleased => None,
         }
     }
 
@@ -715,6 +725,8 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::FleetMembershipAccepted => write!(f, "fleet_membership_accepted"),
             ReceiptType::ExternalAnchor => write!(f, "external_anchor"),
             ReceiptType::FinancialCapabilityGrant => write!(f, "financial_capability_grant"),
+            ReceiptType::PortAllocated => write!(f, "port_allocated"),
+            ReceiptType::PortReleased => write!(f, "port_released"),
         }
     }
 }

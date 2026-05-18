@@ -449,7 +449,7 @@ pub struct AppStateInner {
     /// Cached here so we never hit the Keychain again during the session.
     pub vault_key: std::sync::OnceLock<Option<zp_keys::ResolvedVaultKey>>,
     /// Manages port assignments for governed tools so they don't collide.
-    pub port_allocator: tool_ports::PortAllocator,
+    pub port_registry: tool_ports::PortRegistry,
     /// MLE STAR + Monte Carlo analysis engines fed by receipt chain data.
     pub analysis: analysis::AnalysisEngines,
     /// Server port — needed by proxy for subdomain URL generation.
@@ -614,8 +614,12 @@ impl AppState {
         // from accepting connections promptly.
         let vault_key = std::sync::OnceLock::new();
 
-        // Port allocator — manages the 9100–9199 range for governed tools
-        let port_allocator = tool_ports::PortAllocator::new(std::path::Path::new(&config.data_dir));
+        // Port registry — manages the 9100–9199 range for governed tools
+        let port_registry = tool_ports::PortRegistry::new_with_audit(
+            std::path::Path::new(&config.data_dir),
+            Some(audit_store.clone()),
+            identity.destination_hash.clone(),
+        );
 
         // Session auth — derives HMAC key from the signing key, mints first token.
         // AUTH-VULN-01: this is the foundation for protecting all API endpoints.
@@ -764,7 +768,7 @@ impl AppState {
             grants: std::sync::Mutex::new(Vec::new()),
             data_dir: config.data_dir.clone(),
             vault_key,
-            port_allocator,
+            port_registry,
             analysis: analysis::AnalysisEngines::new(),
             config_port: config.port,
             session_auth,

@@ -166,7 +166,7 @@ pub(crate) async fn proxy_inner(
     // Look up the assigned port
     let assignment = state
         .0
-        .port_allocator
+        .port_registry
         .get_assigned(tool_name)
         .ok_or_else(|| {
             warn!("Proxy: no port assignment for tool '{}'", tool_name);
@@ -441,7 +441,7 @@ fn emit_traffic_receipt(state: &AppState, tool_name: &str, status: u16) {
 /// API endpoint to list current port assignments (for dashboard / debugging).
 pub async fn port_assignments_handler(State(state): State<AppState>) -> impl IntoResponse {
     let port = state.0.config_port;
-    let assignments = state.0.port_allocator.list();
+    let assignments = state.0.port_registry.list_map();
     let entries: Vec<serde_json::Value> = assignments
         .iter()
         .map(|(name, a)| {
