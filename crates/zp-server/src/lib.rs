@@ -1399,6 +1399,21 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         info!("All tools stopped. Goodbye.");
     };
 
+    // ── PID liveness sweeper ────────────────────────────────────────────
+    // Releases stale port bindings when tools die without a graceful exit.
+    // Runs every 30 seconds; uses POSIX kill -0 on Unix (no actual signal).
+    {
+        let registry_arc = state.0.clone();
+        tokio::spawn(async move {
+            let mut ticker =
+                tokio::time::interval(std::time::Duration::from_secs(30));
+            loop {
+                ticker.tick().await;
+                registry_arc.port_registry.sweep_dead_pids();
+            }
+        });
+    }
+
     // ── gRPC server (Phase 2b foothold: NodeStatus pilot) ──────────────
     // Per Architecture II.13, gRPC is the substrate's outer surface. For
     // the migration we run tonic alongside axum on `port + 1` so handlers
