@@ -58,7 +58,7 @@ start_server() {
     echo "  commit: $commit"
 
     ZP_ASSETS_DIR="$REPO/crates/zp-server/assets" \
-    RUST_LOG=info nohup "$bin" serve --port "$PORT" > "$LOG" 2>&1 &
+    RUST_LOG=info nohup "$bin" serve --foreground --port "$PORT" > "$LOG" 2>&1 &
     local server_pid=$!
 
     # Vault key resolution takes ~9 seconds; give the server up to 25 seconds
