@@ -36,10 +36,21 @@ import argparse
 import io
 import json
 import os
+import re
 import sys
 import wave
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+
+from zp_md_filter import strip_markdown
+
+# Maximum characters per Kokoro synthesis call. Longer texts are split
+# on sentence boundaries, synthesized chunk-by-chunk, and concatenated
+# in samples space. Kokoro's model has a hard 510-token (phoneme) limit
+# per call; English text averages ~0.8 phonemes per character via the
+# espeak tokenizer, so 400 chars leaves comfortable headroom under the
+# 510-token ceiling. Mirrors Piper's chunking discipline.
+MAX_CHUNK_CHARS = 400
 
 # ─── Defaults ────────────────────────────────────────────────────
 
@@ -113,16 +124,100 @@ def load_kokoro():
     return KOKORO
 
 
+def _split_text(text: str) -> list[str]:
+    """Split text into sentence-bounded chunks under MAX_CHUNK_CHARS.
+
+    Splits on sentence endings (.!?) then merges short sentences into
+    chunks that stay under the limit. Falls back to whitespace splitting
+    for any single sentence longer than MAX_CHUNK_CHARS. Never sends more
+    than MAX_CHUNK_CHARS to a single kokoro.create() invocation.
+    """
+    if len(text) <= MAX_CHUNK_CHARS:
+        return [text]
+
+    # Split on sentence boundaries, keeping the delimiter
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks = []
+    current = ""
+
+    for sent in sentences:
+        if current and len(current) + len(sent) + 1 > MAX_CHUNK_CHARS:
+            chunks.append(current.strip())
+            current = sent
+        else:
+            current = f"{current} {sent}" if current else sent
+
+    if current.strip():
+        chunks.append(current.strip())
+
+    # Safety: hard-split any chunk still over the limit on whitespace
+    final = []
+    for chunk in chunks:
+        if len(chunk) <= MAX_CHUNK_CHARS:
+            final.append(chunk)
+        else:
+            words = chunk.split()
+            sub = ""
+            for w in words:
+                if sub and len(sub) + len(w) + 1 > MAX_CHUNK_CHARS:
+                    final.append(sub)
+                    sub = w
+                else:
+                    sub = f"{sub} {w}" if sub else w
+            if sub:
+                final.append(sub)
+
+    # Final safety: character-level truncation for edge cases where a
+    # single word (URL, code identifier, etc.) is itself over the limit.
+    # Rare in narration text but covers the worst case.
+    safe = []
+    for chunk in final:
+        if len(chunk) <= MAX_CHUNK_CHARS:
+            safe.append(chunk)
+        else:
+            for i in range(0, len(chunk), MAX_CHUNK_CHARS):
+                safe.append(chunk[i:i + MAX_CHUNK_CHARS])
+
+    return safe
+
+
 def synthesize_wav(text: str, voice: str, speed: float) -> bytes:
-    """Generate WAV bytes for given text + params."""
+    """Generate WAV bytes for given text + params. Chunks long text on
+    sentence boundaries and concatenates in samples space."""
     import soundfile as sf
+    import numpy as np
 
     kokoro = load_kokoro()
     lang = VOICE_LANG.get(voice, "en-us")
-    samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)
+
+    # Drop chunks that are empty after markdown stripping — kokoro.create("")
+    # raises, and a whitespace-only chunk carries no speakable content.
+    chunks = [c for c in _split_text(text) if c.strip()]
+    if not chunks:
+        raise ValueError("no speakable content after filtering")
+
+    all_samples = []
+    sample_rate = None
+
+    for chunk in chunks:
+        try:
+            samples, sr = kokoro.create(chunk, voice=voice, speed=speed, lang=lang)
+        except Exception as e:
+            # One bad chunk (unusual characters, phoneme overflow, etc.) should
+            # not abort the whole synthesis — skip it and keep going.
+            print(f"  WARN  skipping chunk ({len(chunk)} chars): {e}", file=sys.stderr)
+            continue
+        if sample_rate is None:
+            sample_rate = sr
+        all_samples.append(samples)
+
+    if not all_samples:
+        raise ValueError("all chunks failed synthesis")
+
+    combined = np.concatenate(all_samples) if len(all_samples) > 1 else all_samples[0]
 
     buf = io.BytesIO()
-    sf.write(buf, samples, sample_rate, format="WAV")
+    sf.write(buf, combined, sample_rate, format="WAV")
     return buf.getvalue()
 
 
@@ -269,7 +364,7 @@ class TunerHandler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send_json(400, {"error": f"invalid JSON: {e}"})
 
-        text = (payload.get("text") or "").strip()
+        text = strip_markdown((payload.get("text") or "").strip())
         voice = (payload.get("voice") or "").strip()
         speed = payload.get("speed", 1.0)
 

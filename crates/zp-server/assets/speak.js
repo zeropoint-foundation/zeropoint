@@ -29,22 +29,63 @@ async function probe() {
   return false;
 }
 
-// ── Text chunking ────────────────────────────────────────────
-function chunkText(text) {
-  // Clean up markdown-ish formatting for spoken form
-  text = text
-    .replace(/```[\s\S]*?```/g, ' (code block omitted) ')  // skip code blocks
-    .replace(/`([^`]+)`/g, '$1')                             // inline code → plain
-    .replace(/\*\*([^*]+)\*\*/g, '$1')                       // bold → plain
-    .replace(/\*([^*]+)\*/g, '$1')                           // italic → plain
-    .replace(/^#{1,6}\s+/gm, '')                             // strip markdown headers
-    .replace(/^[-*]\s+/gm, '')                               // strip list markers
-    .replace(/^\d+\.\s+/gm, '')                              // strip numbered lists
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')                 // links → text
-    .replace(/\n{2,}/g, '. ')                                // paragraph breaks → sentence pause
-    .replace(/\n/g, ' ')                                     // newlines → space
+// ── Markdown filter (mirrors zp_md_filter.py) ───────────────
+function stripMarkdown(text) {
+  return text
+    // fenced code blocks → "code block"
+    .replace(/```[\s\S]*?```/g, ' code block ')
+    .replace(/~~~[\s\S]*?~~~/g, ' code block ')
+    // inline code → content
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/`/g, '')
+    // setext heading underlines → drop
+    .replace(/^[=\-]{3,}\s*$/gm, '')
+    // ATX headers → text only
+    .replace(/^#{1,6}\s+/gm, '')
+    // horizontal rules → drop
+    .replace(/^(\*{3,}|-{3,}|_{3,})\s*$/gm, '')
+    // blockquotes → content
+    .replace(/^>\s?/gm, '')
+    // bold-italic ***text*** / ___text___
+    .replace(/\*{3}([^*\n]+)\*{3}/g, '$1')
+    .replace(/_{3}([^_\n]+)_{3}/g, '$1')
+    // bold **text** / __text__
+    .replace(/\*{2}([^*\n]+)\*{2}/g, '$1')
+    .replace(/_{2}([^_\n]+)_{2}/g, '$1')
+    // italic *text* — guard against mid-word matches
+    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '$1')
+    // italic _text_ — word-boundary guard preserves snake_case
+    .replace(/(?<!\w)_([^_\n]+)_(?!\w)/g, '$1')
+    // strikethrough ~~text~~
+    .replace(/~~([^~\n]+)~~/g, '$1')
+    // images → alt text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_, alt) => alt.trim() || 'image')
+    // links → link text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    // bare URLs → "link"
+    .replace(/https?:\/\/\S+/g, 'link')
+    // table separator rows → drop
+    .replace(/^\|[-| :]+\|\s*$/gm, '')
+    // table rows → strip pipes
+    .replace(/^\|(.+)\|\s*$/gm, (_, cells) => cells.replace(/\|/g, '  '))
+    // list markers
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+[.)]\s+/gm, '')
+    // HTML tags
+    .replace(/<[^>]+>/g, '')
+    // stray markdown punctuation
+    .replace(/[*#|\\~]/g, ' ')
+    // whitespace normalization
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ' ')
+    .replace(/\.{2,}/g, '.')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// ── Text chunking ────────────────────────────────────────────
+function chunkText(text) {
+  text = stripMarkdown(text);
 
   const sentences = text.match(/[^.!?]+[.!?]+[\s]*/g) || [text];
   const chunks = [];
