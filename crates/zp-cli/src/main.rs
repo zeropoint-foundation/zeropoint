@@ -975,6 +975,10 @@ fn spawn_serve_daemon(
     cmd.args(&daemon_args);
     cmd.process_group(0); // detach from terminal's process group — no shell job to reap
     cmd.stdin(std::process::Stdio::null());
+    // Default to info logging so the log file is useful; operator can override with RUST_LOG.
+    if std::env::var("RUST_LOG").is_err() {
+        cmd.env("RUST_LOG", "info");
+    }
 
     // Redirect daemon stdio to log file; fall back to /dev/null if open fails.
     let log_file = std::fs::OpenOptions::new()
