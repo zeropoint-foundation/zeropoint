@@ -89,25 +89,6 @@ impl ConfigResolver {
                 Source::EnvVar("ZP_NO_OPEN".into()),
             );
         }
-        if let Ok(v) = std::env::var("ZP_LOG_LEVEL") {
-            self.config
-                .log_level
-                .override_with(v, Source::EnvVar("ZP_LOG_LEVEL".into()));
-        }
-        if let Ok(v) = std::env::var("ZP_SESSION_MAX_AGE_SECONDS") {
-            if let Ok(secs) = v.parse::<u64>() {
-                self.config
-                    .session_max_age_s
-                    .override_with(secs, Source::EnvVar("ZP_SESSION_MAX_AGE_SECONDS".into()));
-            }
-        }
-        if let Ok(v) = std::env::var("ZP_AUTH_RATE_LIMIT_PER_MIN") {
-            if let Ok(rate) = v.parse::<u32>() {
-                self.config
-                    .auth_rate_limit_per_min
-                    .override_with(rate, Source::EnvVar("ZP_AUTH_RATE_LIMIT_PER_MIN".into()));
-            }
-        }
         // ZP_NODE_ROLE is NO LONGER HONORED — node role is derived from chain state (genesis.json
         // or delegation receipt), not from config or env vars. This is a critical security fix.
         // If someone sets ZP_NODE_ROLE, it is silently ignored. To override role in testing,
@@ -152,26 +133,42 @@ impl ConfigResolver {
         self
     }
 
-    pub fn apply_cli_log_level(mut self, level: String) -> Self {
-        self.config
-            .log_level
-            .override_with(level, Source::CliFlag("log-level".into()));
-        self
-    }
-
     /// Finalize and return the resolved configuration.
     pub fn resolve(self) -> ZpConfig {
         self.config
     }
 
-    /// Standard resolution: defaults → system → project → env → (no CLI yet).
-    /// CLI flags are applied by the caller after this.
-    pub fn resolve_standard() -> ZpConfig {
-        Self::new()
-            .load_system_config()
-            .load_project_config()
-            .load_env_vars()
-            .resolve()
+    /// Standard resolution with error propagation: defaults → system → project → env.
+    /// Returns Err if any config file contains unknown sections or invalid TOML.
+    pub fn resolve_standard() -> Result<ZpConfig, ConfigError> {
+        let mut r = Self::new();
+
+        let system_path = r.config.home_dir.value.join("config.toml");
+        if system_path.exists() {
+            let file = load_toml(&system_path)?;
+            r.apply_file(file, Source::SystemConfig);
+        }
+
+        if let Some(project_path) = find_project_config() {
+            let file = load_toml(&project_path)?;
+            r.apply_file(file, Source::ProjectConfig);
+        }
+
+        Ok(r.load_env_vars().resolve())
+    }
+
+    /// Resolve standard config, or print a clear error and exit(1).
+    /// Use this in CLI entry points; use resolve_standard() in tests.
+    pub fn resolve_standard_or_exit() -> ZpConfig {
+        match Self::resolve_standard() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m  Config error: {e}");
+                eprintln!("  Check your config file for unknown sections or typos.");
+                eprintln!("  Run `zp config show` to see the active configuration.");
+                std::process::exit(1);
+            }
+        }
     }
 
     // ── Internal ─────────────────────────────────────────────
@@ -196,74 +193,9 @@ impl ConfigResolver {
         if let Some(v) = file.identity.operator {
             self.config.operator_name.override_with(v, source.clone());
         }
-        if let Some(v) = file.identity.sovereignty_mode {
-            self.config
-                .sovereignty_mode
-                .override_with(v, source.clone());
-        }
-        // Governance
-        if let Some(v) = file.governance.posture {
-            self.config.posture.override_with(v, source.clone());
-        }
         // LLM
         if let Some(v) = file.llm.enabled {
             self.config.llm_enabled.override_with(v, source.clone());
-        }
-        // Logging
-        if let Some(v) = file.logging.level {
-            self.config.log_level.override_with(v, source.clone());
-        }
-        // Session
-        if let Some(v) = file.session.max_age_s {
-            self.config
-                .session_max_age_s
-                .override_with(v, source.clone());
-        }
-        if let Some(v) = file.session.auth_rate_limit_per_min {
-            self.config
-                .auth_rate_limit_per_min
-                .override_with(v, source.clone());
-        }
-        // Mesh
-        if let Some(v) = file.mesh.enabled {
-            self.config.mesh_enabled.override_with(v, source.clone());
-        }
-        if let Some(v) = file.mesh.listen {
-            self.config
-                .mesh_listen
-                .override_with(Some(v), source.clone());
-        }
-        if let Some(v) = file.mesh.peers {
-            self.config.mesh_peers.override_with(v, source.clone());
-        }
-        // DLT
-        if let Some(v) = file.dlt.enabled {
-            self.config.dlt_enabled.override_with(v, source.clone());
-        }
-        if let Some(v) = file.dlt.network {
-            self.config.dlt_network.override_with(v, source.clone());
-        }
-        // Shell
-        if let Some(v) = file.shell.hook_enabled {
-            self.config
-                .shell_hook_enabled
-                .override_with(v, source.clone());
-        }
-        if let Some(v) = file.shell.posture {
-            self.config.shell_posture.override_with(v, source.clone());
-        }
-        // Filesystem
-        if let Some(v) = file.filesystem.watch_enabled {
-            self.config
-                .fs_watch_enabled
-                .override_with(v, source.clone());
-        }
-        if let Some(v) = file.filesystem.watch_dirs {
-            self.config.fs_watch_dirs.override_with(v, source.clone());
-        }
-        // Docker
-        if let Some(v) = file.docker.enabled {
-            self.config.docker_enabled.override_with(v, source.clone());
         }
         // Node topology
         if let Some(v) = file.node.role {
@@ -374,30 +306,6 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
             }
             file.data.dir = Some(value.into());
         }
-        "posture" | "governance.posture" => {
-            match value {
-                "permissive" | "balanced" | "strict" => {}
-                _ => {
-                    return Err(ConfigError::InvalidValue {
-                        key: key.into(),
-                        reason: "must be one of: permissive, balanced, strict".into(),
-                    })
-                }
-            }
-            file.governance.posture = Some(value.into());
-        }
-        "log_level" | "logging.level" => {
-            match value {
-                "trace" | "debug" | "info" | "warn" | "error" => {}
-                _ => {
-                    return Err(ConfigError::InvalidValue {
-                        key: key.into(),
-                        reason: "must be one of: trace, debug, info, warn, error".into(),
-                    })
-                }
-            }
-            file.logging.level = Some(value.into());
-        }
         "operator" | "identity.operator" => {
             file.identity.operator = Some(value.into());
         }
@@ -407,35 +315,6 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
                 reason: "must be true or false".into(),
             })?;
             file.llm.enabled = Some(b);
-        }
-        "mesh.enabled" => {
-            let b = parse_bool(value).ok_or(ConfigError::InvalidValue {
-                key: key.into(),
-                reason: "must be true or false".into(),
-            })?;
-            file.mesh.enabled = Some(b);
-        }
-        "mesh.listen" => {
-            file.mesh.listen = Some(value.into());
-        }
-        "dlt.enabled" => {
-            let b = parse_bool(value).ok_or(ConfigError::InvalidValue {
-                key: key.into(),
-                reason: "must be true or false".into(),
-            })?;
-            file.dlt.enabled = Some(b);
-        }
-        "dlt.network" => {
-            match value {
-                "mainnet" | "testnet" | "previewnet" => {}
-                _ => {
-                    return Err(ConfigError::InvalidValue {
-                        key: key.into(),
-                        reason: "must be one of: mainnet, testnet, previewnet".into(),
-                    })
-                }
-            }
-            file.dlt.network = Some(value.into());
         }
         "node.role" => {
             match value {
@@ -481,5 +360,42 @@ fn parse_bool(s: &str) -> Option<bool> {
         "true" | "1" | "yes" => Some(true),
         "false" | "0" | "no" => Some(false),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_section_rejected() {
+        let toml = r#"
+[server]
+port = 17010
+
+[bogus]
+foo = "bar"
+"#;
+        let result: Result<crate::schema::ConfigFile, _> = toml::from_str(toml);
+        assert!(result.is_err(), "unknown section must be rejected");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("bogus") || msg.contains("unknown"),
+            "error must mention the unknown field: {msg}"
+        );
+    }
+
+    #[test]
+    fn known_sections_accepted() {
+        let toml = r#"
+[server]
+port = 17010
+bind = "127.0.0.1"
+
+[identity]
+operator = "testuser"
+"#;
+        let result: Result<crate::schema::ConfigFile, _> = toml::from_str(toml);
+        assert!(result.is_ok(), "valid config must parse: {:?}", result.err());
     }
 }

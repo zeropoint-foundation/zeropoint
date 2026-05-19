@@ -8,10 +8,10 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() {
     // Resolve configuration: defaults → system config → project config → env vars
-    let zp_cfg = zp_config::ConfigResolver::resolve_standard();
+    let zp_cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
 
-    // Initialise logging at the configured level
-    let filter = format!("zp=debug,{}", zp_cfg.log_level.value);
+    // Initialise logging; level controlled by RUST_LOG env var (default: info)
+    let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "zp=debug,info".into());
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::from_default_env().add_directive(

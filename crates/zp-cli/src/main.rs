@@ -1029,7 +1029,7 @@ async fn main() -> anyhow::Result<()> {
     }) = &args.command
     {
         // Resolve config: defaults → system → project → env → CLI flags
-        let mut cfg = zp_config::ConfigResolver::resolve_standard();
+        let mut cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
         if let Some(b) = bind {
             cfg.bind =
                 zp_config::Sourced::new(b.clone(), zp_config::Source::CliFlag("bind".into()));
@@ -1112,7 +1112,7 @@ async fn main() -> anyhow::Result<()> {
     // Restart — tool-targeted restart using the port registry, or server
     // restart as a documented escape hatch (--self).
     if let Some(Commands::Restart { name, all, self_ }) = &args.command {
-        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
         let port = cfg.port.value;
         let git_hash = env!("ZP_GIT_HASH");
 
@@ -1286,7 +1286,7 @@ async fn main() -> anyhow::Result<()> {
     // Port registry operations (read-only, no pipeline needed).
     #[cfg(feature = "embedded-server")]
     if let Some(Commands::Port(PortCmd::List)) = &args.command {
-        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
         let data_dir = cfg.data_dir.value.clone();
         let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
         let mut bindings = registry.list();
@@ -1803,7 +1803,7 @@ async fn main() -> anyhow::Result<()> {
                                                         let child_pid = spawned.id();
                                                         eprintln!("spawned {} (pid {})", name, child_pid);
                                                         // Wire 1: record PID in port registry.
-                                                        let cfg = zp_config::ConfigResolver::resolve_standard();
+                                                        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                                                         let data_dir = cfg.data_dir.value.clone();
                                                         let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
                                                         if let Err(e) = registry.update_pid(name, child_pid) {
@@ -2163,7 +2163,7 @@ async fn main() -> anyhow::Result<()> {
     }) = &args.command
     {
         // Resolve the target server address from topology config.
-        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
 
         // Derive node role from chain state + config hint.
         // Config hint disambiguates delegate (holding upstream cert) from genesis.
@@ -2750,7 +2750,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(Commands::Cfg(cmd)) = &args.command {
         match cmd {
             CfgCmd::Show => {
-                let cfg = zp_config::ConfigResolver::resolve_standard();
+                let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                 println!("{}", cfg.show());
             }
             CfgCmd::Set { key, value } => match zp_config::resolve::config_set(key, value) {
@@ -2764,7 +2764,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             },
             CfgCmd::Validate { json } => {
-                let cfg = zp_config::ConfigResolver::resolve_standard();
+                let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                 let errors = zp_config::validate(&cfg);
                 if *json {
                     let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
@@ -2991,7 +2991,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Doctor — post-install diagnostics
     if let Some(Commands::Doctor { json }) = &args.command {
-        let cfg = zp_config::ConfigResolver::resolve_standard();
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
         let home = &cfg.home_dir.value;
         let data = &cfg.data_dir.value;
 
