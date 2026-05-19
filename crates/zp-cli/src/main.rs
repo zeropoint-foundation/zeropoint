@@ -65,6 +65,10 @@ enum Commands {
         /// Don't open the dashboard in browser
         #[arg(long)]
         no_open: bool,
+
+        /// Run in the foreground instead of daemonizing (debug use)
+        #[arg(long)]
+        foreground: bool,
     },
     /// Restart tools or the ZeroPoint server.
     ///
@@ -933,6 +937,76 @@ fn parse_key_val(s: &str) -> Result<(String, String), String> {
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
+/// Spawn a daemonized `zp serve --foreground` child, detached from the terminal.
+///
+/// Pre-auth must be done by the caller first (Touch ID fires while the terminal
+/// is still frontmost). The Keychain credential unlocked by pre-auth persists
+/// in the macOS session, so the daemon's AppState::init auth is a cache hit.
+///
+/// Logs go to `~/ZeroPoint/logs/zp-serve.log`. Returns the log path on success;
+/// on spawn failure prints the error and calls `process::exit(1)`.
+#[cfg(unix)]
+fn spawn_serve_daemon(
+    port: &Option<u16>,
+    bind: &Option<String>,
+    no_open: bool,
+) -> std::path::PathBuf {
+    use std::os::unix::process::CommandExt;
+
+    let log_dir = commands::resolve_zp_home().join("logs");
+    std::fs::create_dir_all(&log_dir).ok();
+    let log_path = log_dir.join("zp-serve.log");
+
+    let mut daemon_args = vec!["serve".to_string(), "--foreground".to_string()];
+    if let Some(p) = port {
+        daemon_args.push("--port".to_string());
+        daemon_args.push(p.to_string());
+    }
+    if let Some(b) = bind {
+        daemon_args.push("--bind".to_string());
+        daemon_args.push(b.clone());
+    }
+    if no_open {
+        daemon_args.push("--no-open".to_string());
+    }
+
+    let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.args(&daemon_args);
+    cmd.process_group(0); // detach from terminal's process group — no shell job to reap
+    cmd.stdin(std::process::Stdio::null());
+
+    // Redirect daemon stdio to log file; fall back to /dev/null if open fails.
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path);
+    match log_file {
+        Ok(f) => match f.try_clone() {
+            Ok(f2) => {
+                cmd.stdout(std::process::Stdio::from(f));
+                cmd.stderr(std::process::Stdio::from(f2));
+            }
+            Err(_) => {
+                cmd.stdout(std::process::Stdio::null());
+                cmd.stderr(std::process::Stdio::null());
+            }
+        },
+        Err(_) => {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
+    }
+
+    match cmd.spawn() {
+        Ok(_) => log_path,
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m  Failed to start zp serve daemon: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -947,6 +1021,7 @@ async fn main() -> anyhow::Result<()> {
         bind,
         port,
         no_open,
+        foreground,
     }) = &args.command
     {
         // Resolve config: defaults → system → project → env → CLI flags
@@ -980,6 +1055,17 @@ async fn main() -> anyhow::Result<()> {
                 eprintln!("  Run `zp recover` with your 24-word mnemonic to restore access.");
                 std::process::exit(1);
             }
+        }
+
+        // Daemonize by default on Unix so `zp serve` returns the terminal immediately.
+        // `--foreground` keeps it attached (debug use, or for callers that manage the
+        // process themselves). Pre-auth above runs in the parent so Touch ID fires while
+        // the terminal is frontmost; the Keychain unlock persists into the daemon's auth.
+        #[cfg(unix)]
+        if !foreground {
+            let log_path = spawn_serve_daemon(port, bind, *no_open);
+            println!("\x1b[32m▶\x1b[0m  zp serve started  (logs: {})", log_path.display());
+            return Ok(());
         }
 
         #[cfg(feature = "embedded-server")]
@@ -1048,6 +1134,7 @@ async fn main() -> anyhow::Result<()> {
                     if pid != our_pid {
                         let _ = std::process::Command::new("kill")
                             .arg(pid_str.trim())
+                            .stderr(std::process::Stdio::null())
                             .status();
                         killed = true;
                     }
