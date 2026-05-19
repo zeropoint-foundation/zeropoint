@@ -836,10 +836,10 @@ async fn verify_envelope_and_continue(
         }
         Err(reject) => {
             warn!(
-                "Envelope verify rejected on {} ({}): kid_expected={}",
+                "Envelope verify rejected on {} ({}): kid_expected={}…",
                 path,
                 reject.reason_code(),
-                verifier.expected_kid_hex()
+                &verifier.expected_kid_hex()[..16]
             );
             Ok(build_envelope_response(
                 StatusCode::UNAUTHORIZED,

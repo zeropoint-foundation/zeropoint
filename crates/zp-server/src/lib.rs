@@ -580,11 +580,16 @@ impl AppState {
                 .verifying_key()
                 .to_bytes();
             let verifier = envelope_state::EnvelopeVerifier::new(expected_kid);
+            // Log a short fingerprint prefix at INFO — the kid is a structurally
+            // public identifier (pubkey fingerprint), but 64 hex chars triggers
+            // entropy scanners in log aggregators. Full hex available at DEBUG.
+            let kid_hex = verifier.expected_kid_hex();
             info!(
-                "ZP-Sig envelope verifier ready: kid={} drift={}s",
-                verifier.expected_kid_hex(),
+                "ZP-Sig envelope verifier ready: kid={}… drift={}s",
+                &kid_hex[..16],
                 verifier.drift_window().as_secs()
             );
+            debug!("ZP-Sig envelope verifier kid (full): {}", kid_hex);
 
             (store, Some(Arc::new(verifier)))
         };
@@ -1399,11 +1404,13 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
                 warn!("Stale zp-server (PID {}) still running — killing", old_pid);
                 let _ = std::process::Command::new("kill")
                     .args(["-TERM", &old_pid.to_string()])
+                    .stderr(std::process::Stdio::null())
                     .status();
                 std::thread::sleep(std::time::Duration::from_millis(500));
-                // SIGKILL if it didn't exit
+                // SIGKILL if it didn't exit; suppress stderr — process may have exited cleanly
                 let _ = std::process::Command::new("kill")
                     .args(["-9", &old_pid.to_string()])
+                    .stderr(std::process::Stdio::null())
                     .status();
                 std::thread::sleep(std::time::Duration::from_millis(200));
             }
