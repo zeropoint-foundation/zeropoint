@@ -1205,13 +1205,29 @@ async fn main() -> anyhow::Result<()> {
                         );
                         std::process::exit(1);
                     }
-                    // Re-launch via zp configure exec --name <tool>
+                    // Re-launch via stored launch command.
+                    let lc = match binding.launch_command {
+                        Some(lc) => lc,
+                        None => {
+                            eprintln!(
+                                "\x1b[31m✗\x1b[0m  No launch command recorded for '{}'.",
+                                tool_name
+                            );
+                            eprintln!("  Re-launch once manually to register it:");
+                            eprintln!(
+                                "    zp configure exec --name {} -- <command> [args...]",
+                                tool_name
+                            );
+                            std::process::exit(1);
+                        }
+                    };
                     println!("\x1b[32m▶\x1b[0m  Re-launching {}...", tool_name);
                     let exe = std::env::current_exe().unwrap_or_else(|_| "zp".into());
-                    match std::process::Command::new(&exe)
-                        .args(["configure", "exec", "--name", tool_name])
-                        .spawn()
-                    {
+                    let mut relaunch = std::process::Command::new(&exe);
+                    relaunch.args(["configure", "exec", "--name", tool_name, "--"]);
+                    relaunch.arg(&lc.command);
+                    relaunch.args(&lc.args);
+                    match relaunch.spawn() {
                         Ok(_) => {
                             println!("\x1b[32m✓\x1b[0m  {} re-launched", tool_name);
                             std::process::exit(0);
@@ -1805,7 +1821,7 @@ async fn main() -> anyhow::Result<()> {
                                                     Ok(spawned) => {
                                                         let child_pid = spawned.id();
                                                         eprintln!("spawned {} (pid {})", name, child_pid);
-                                                        // Wire 1: record PID in port registry.
+                                                        // Wire 1: record PID + launch command in port registry.
                                                         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                                                         let data_dir = cfg.data_dir.value.clone();
                                                         let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
@@ -1815,6 +1831,11 @@ async fn main() -> anyhow::Result<()> {
                                                                 name, e
                                                             );
                                                         }
+                                                        let _ = registry.store_launch_command(
+                                                            name,
+                                                            &command[0],
+                                                            &command[1..].to_vec(),
+                                                        );
                                                         // Wire 2: post-launch lsof reconciliation.
                                                         // Give the tool time to bind before probing.
                                                         std::thread::sleep(

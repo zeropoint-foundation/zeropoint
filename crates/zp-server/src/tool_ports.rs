@@ -70,6 +70,19 @@ pub enum ReleaseReason {
     Reconciliation,
 }
 
+// ── StoredLaunchCommand ─────────────────────────────────────────────────
+
+/// The command line recorded when a tool was last spawned via `zp configure exec`.
+///
+/// Stored in `ToolBinding` so `zp restart --name <tool>` can replay the launch
+/// without requiring operator re-input. Persists across `clear_binding` events.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StoredLaunchCommand {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
 // ── ToolBinding (replaces PortAssignment) ───────────────────────────────
 
 /// A tool's full port binding record.
@@ -99,6 +112,10 @@ pub struct ToolBinding {
     /// Actual extra ports the tool bound (post-reconciliation, per port_var).
     #[serde(default)]
     pub actual_extra_ports: HashMap<String, u16>,
+    /// Launch command stored at spawn time so `zp restart` can replay it.
+    /// Preserved across `clear_binding` (allocation-side, not runtime-side).
+    #[serde(default)]
+    pub launch_command: Option<StoredLaunchCommand>,
     /// OS PID of the running tool process (None if not tracked).
     #[serde(default)]
     pub pid: Option<u32>,
@@ -203,6 +220,7 @@ impl PortRegistry {
                                         proxy_port,
                                         actual_port: None,
                                         actual_extra_ports: HashMap::new(),
+                                        launch_command: None,
                                         pid: None,
                                         allocated_receipt_id: "legacy".to_string(),
                                         preference_source: PreferenceSource::Default,
@@ -369,6 +387,7 @@ impl PortRegistry {
             proxy_port: None,
             actual_port: None,
             actual_extra_ports: HashMap::new(),
+            launch_command: None,
             pid: Some(pid),
             allocated_receipt_id: receipt_id,
             preference_source,
@@ -664,6 +683,30 @@ impl PortRegistry {
         match map.get_mut(tool) {
             Some(binding) => {
                 binding.pid = Some(pid);
+                drop(map);
+                self.persist();
+                Ok(())
+            }
+            None => Err(RegistryError::NotAssigned(tool.to_string())),
+        }
+    }
+
+    /// Store the launch command so `zp restart` can replay it without operator re-input.
+    ///
+    /// Called from `zp configure exec` after spawn. Preserved across `clear_binding`.
+    pub fn store_launch_command(
+        &self,
+        tool: &str,
+        command: &str,
+        args: &[String],
+    ) -> Result<(), RegistryError> {
+        let mut map = self.bindings.lock().unwrap();
+        match map.get_mut(tool) {
+            Some(binding) => {
+                binding.launch_command = Some(StoredLaunchCommand {
+                    command: command.to_string(),
+                    args: args.to_vec(),
+                });
                 drop(map);
                 self.persist();
                 Ok(())
@@ -1149,6 +1192,7 @@ mod tests {
             proxy_port: None,
             actual_port: None,
             actual_extra_ports: HashMap::new(),
+            launch_command: None,
             pid: None,
             allocated_receipt_id: String::new(),
             preference_source: PreferenceSource::Default,
@@ -1211,6 +1255,7 @@ mod tests {
             proxy_port: Some(9101),
             actual_port: Some(3000),
             actual_extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 8090)]),
+            launch_command: None,
             pid: Some(12345),
             allocated_receipt_id: "port-abc123".to_string(),
             preference_source: PreferenceSource::Manifest,
@@ -1447,6 +1492,45 @@ mod tests {
         reg.sweep_dead_pids();
         // Own PID is alive — binding must still be present
         assert!(reg.get_assigned("live-tool").is_some());
+    }
+
+    // ── Launch command tests ──────────────────────────────────────────
+
+    #[test]
+    fn store_launch_command_round_trips() {
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing("lc-tool", 1, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        reg.store_launch_command("lc-tool", "ironclaw", &["--port".to_string(), "9100".to_string()])
+            .expect("store");
+        let lc = reg.get_assigned("lc-tool").unwrap().launch_command.unwrap();
+        assert_eq!(lc.command, "ironclaw");
+        assert_eq!(lc.args, vec!["--port", "9100"]);
+    }
+
+    #[test]
+    fn store_launch_command_unknown_tool_err() {
+        let (reg, _dir) = make_registry();
+        let err = reg
+            .store_launch_command("ghost", "cmd", &[])
+            .unwrap_err();
+        assert!(matches!(err, RegistryError::NotAssigned(_)));
+    }
+
+    #[test]
+    fn launch_command_survives_clear_binding() {
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing("persist-lc", 2, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        reg.store_launch_command("persist-lc", "mytool", &[]).expect("store");
+        reg.clear_binding("persist-lc", ReleaseReason::GracefulExit);
+        // Allocation-side data survives runtime clear
+        let lc = reg
+            .get_assigned("persist-lc")
+            .unwrap()
+            .launch_command
+            .unwrap();
+        assert_eq!(lc.command, "mytool");
     }
 
     // ── Wire 1 tests ─────────────────────────────────────────────────
