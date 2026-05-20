@@ -79,18 +79,26 @@ pub enum ReleaseReason {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolBinding {
     pub tool: String,
+    /// Allocated port preference (ZP-managed, stable across restarts).
     pub port: u16,
     /// The .env variable name this tool uses for its primary UI port.
     pub port_var: String,
     /// ZP-generated auth token injected into `.env.zp` and the proxy.
     #[serde(default = "generate_auth_token")]
     pub auth_token: String,
-    /// Additional port vars the tool declares.
+    /// Allocated extra port vars (stable across restarts).
     #[serde(default)]
     pub extra_ports: HashMap<String, u16>,
     /// Discovered proxy port after post-launch probing.
     #[serde(default)]
     pub proxy_port: Option<u16>,
+    /// Actual port the tool bound after launch (may differ from `port` if the
+    /// tool ignored the env var). Cleared on binding-clear event.
+    #[serde(default)]
+    pub actual_port: Option<u16>,
+    /// Actual extra ports the tool bound (post-reconciliation, per port_var).
+    #[serde(default)]
+    pub actual_extra_ports: HashMap<String, u16>,
     /// OS PID of the running tool process (None if not tracked).
     #[serde(default)]
     pub pid: Option<u32>,
@@ -108,10 +116,11 @@ pub type PortAssignment = ToolBinding;
 impl ToolBinding {
     /// Return the port the subdomain proxy should forward to.
     ///
-    /// Prefers the discovered `proxy_port` (from post-launch probing),
-    /// falling back to the statically-assigned primary `port`.
+    /// Priority: `proxy_port` (HTTP probe) → `actual_port` (lsof reconcile) → `port` (allocated).
     pub fn proxy_target(&self) -> u16 {
-        self.proxy_port.unwrap_or(self.port)
+        self.proxy_port
+            .or(self.actual_port)
+            .unwrap_or(self.port)
     }
 }
 
@@ -192,6 +201,8 @@ impl PortRegistry {
                                         auth_token,
                                         extra_ports,
                                         proxy_port,
+                                        actual_port: None,
+                                        actual_extra_ports: HashMap::new(),
                                         pid: None,
                                         allocated_receipt_id: "legacy".to_string(),
                                         preference_source: PreferenceSource::Default,
@@ -356,6 +367,8 @@ impl PortRegistry {
             auth_token: generate_auth_token(),
             extra_ports,
             proxy_port: None,
+            actual_port: None,
+            actual_extra_ports: HashMap::new(),
             pid: Some(pid),
             allocated_receipt_id: receipt_id,
             preference_source,
@@ -393,18 +406,63 @@ impl PortRegistry {
         self.get_or_assign_multi(tool_name, port_var, &[])
     }
 
-    // ── Release ───────────────────────────────────────────────────────
+    // ── Release / clear binding / deallocate ──────────────────────────
 
-    /// Release a tool's binding and emit a `PortReleased` receipt.
+    /// Clear the runtime binding (PID, actual ports) while preserving the allocation.
+    ///
+    /// This is the correct action on process death (kill, crash, sweeper).
+    /// The operator's port preferences (allocated port, auth_token, port_var,
+    /// extra_ports) survive so the next launch inherits the same configuration.
+    ///
+    /// Emits `PortReleased` with `event_type = "binding_cleared"`.
+    pub fn clear_binding(&self, tool: &str, reason: ReleaseReason) {
+        let mut map = self.bindings.lock().unwrap();
+        if let Some(binding) = map.get_mut(tool) {
+            let port = binding.port;
+            let pid = binding.pid;
+            binding.pid = None;
+            binding.actual_port = None;
+            binding.actual_extra_ports.clear();
+            info!(
+                "Port registry: cleared binding for {} (port {}, reason: {:?})",
+                tool, port, reason
+            );
+            drop(map);
+            self.emit_release_receipt(tool, port, pid, reason, "binding_cleared");
+            self.persist();
+        }
+    }
+
+    /// Backward-compat wrapper — routes to `clear_binding`.
+    ///
+    /// All existing call sites (sweeper, restart) get correct binding-clear
+    /// semantics without requiring immediate call-site changes.
     pub fn release(&self, tool: &str, reason: ReleaseReason) {
+        self.clear_binding(tool, reason);
+    }
+
+    /// Fully remove a tool's allocation from the registry.
+    ///
+    /// Unlike `clear_binding`, this removes the entire entry — port, auth_token,
+    /// extra_ports, and all.  Use only for explicit deallocation (future
+    /// `zp port deallocate <tool>` verb). Do not call on process death.
+    ///
+    /// Emits `PortReleased` with `event_type = "allocation_removed"`.
+    pub fn deallocate(&self, tool: &str) {
         let mut map = self.bindings.lock().unwrap();
         if let Some(binding) = map.remove(tool) {
             info!(
-                "Port registry: released {} (port {}, reason: {:?})",
-                tool, binding.port, reason
+                "Port registry: deallocated {} (port {})",
+                tool, binding.port
             );
             drop(map);
-            self.emit_release_receipt(tool, binding.port, binding.pid, reason);
+            self.emit_release_receipt(
+                tool,
+                binding.port,
+                binding.pid,
+                ReleaseReason::OperatorKill,
+                "allocation_removed",
+            );
             self.persist();
         }
     }
@@ -534,6 +592,7 @@ impl PortRegistry {
         port: u16,
         pid: Option<u32>,
         reason: ReleaseReason,
+        event_type: &str,
     ) {
         let receipt = ReceiptBuilder::new(ReceiptType::PortReleased, &self.executor_id)
             .status(Status::Success)
@@ -545,6 +604,7 @@ impl PortRegistry {
                     "port": port,
                     "pid": pid,
                     "reason": reason,
+                    "event_type": event_type,
                 }),
             )
             .finalize();
@@ -639,8 +699,14 @@ impl PortRegistry {
             "Port registry: reconcile '{}' allocated={} actual={}",
             tool, allocated_port, actual_primary
         );
-        self.emit_release_receipt(tool, allocated_port, Some(pid), ReleaseReason::Reconciliation);
-        let receipt_id = self.emit_allocate_receipt(
+        self.emit_release_receipt(
+            tool,
+            allocated_port,
+            Some(pid),
+            ReleaseReason::Reconciliation,
+            "reconciliation",
+        );
+        self.emit_allocate_receipt(
             tool,
             actual_primary,
             &binding.port_var,
@@ -650,9 +716,8 @@ impl PortRegistry {
         );
         let mut map = self.bindings.lock().unwrap();
         if let Some(b) = map.get_mut(tool) {
-            b.port = actual_primary;
-            b.allocated_receipt_id = receipt_id;
-            b.preference_source = PreferenceSource::PostLaunchObservation;
+            // Write actual_port — `port` (allocated preference) stays unchanged.
+            b.actual_port = Some(actual_primary);
         }
         drop(map);
         self.persist();
@@ -1074,36 +1139,49 @@ mod tests {
     // `crate::tool_launch::tests::load_dotenv_layered_priority` for
     // the equivalent test of the new in-Rust .env layering.
 
-    #[test]
-    fn proxy_target_prefers_proxy_port() {
-        let binding = ToolBinding {
+    fn make_binding(port: u16) -> ToolBinding {
+        ToolBinding {
             tool: "test-tool".to_string(),
-            port: 9100,
-            port_var: "HTTP_PORT".to_string(),
-            auth_token: "zp-test".to_string(),
-            extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 9101)]),
-            proxy_port: Some(9101),
-            pid: None,
-            allocated_receipt_id: String::new(),
-            preference_source: PreferenceSource::Default,
-        };
-        assert_eq!(binding.proxy_target(), 9101);
-    }
-
-    #[test]
-    fn proxy_target_falls_back_to_primary() {
-        let binding = ToolBinding {
-            tool: "test-tool".to_string(),
-            port: 9100,
+            port,
             port_var: "HTTP_PORT".to_string(),
             auth_token: "zp-test".to_string(),
             extra_ports: HashMap::new(),
             proxy_port: None,
+            actual_port: None,
+            actual_extra_ports: HashMap::new(),
             pid: None,
             allocated_receipt_id: String::new(),
             preference_source: PreferenceSource::Default,
-        };
-        assert_eq!(binding.proxy_target(), 9100);
+        }
+    }
+
+    #[test]
+    fn proxy_target_prefers_proxy_port() {
+        let mut b = make_binding(9100);
+        b.extra_ports = HashMap::from([("GATEWAY_PORT".to_string(), 9101)]);
+        b.proxy_port = Some(9101);
+        assert_eq!(b.proxy_target(), 9101);
+    }
+
+    #[test]
+    fn proxy_target_prefers_actual_over_allocated() {
+        let mut b = make_binding(9100);
+        b.actual_port = Some(3000);
+        assert_eq!(b.proxy_target(), 3000, "actual_port beats allocated");
+    }
+
+    #[test]
+    fn proxy_target_proxy_port_beats_actual() {
+        let mut b = make_binding(9100);
+        b.actual_port = Some(3000);
+        b.proxy_port = Some(8080);
+        assert_eq!(b.proxy_target(), 8080, "proxy_port beats actual_port");
+    }
+
+    #[test]
+    fn proxy_target_falls_back_to_primary() {
+        let b = make_binding(9100);
+        assert_eq!(b.proxy_target(), 9100);
     }
 
     #[test]
@@ -1131,6 +1209,8 @@ mod tests {
             auth_token: "zp-test".to_string(),
             extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 9101)]),
             proxy_port: Some(9101),
+            actual_port: Some(3000),
+            actual_extra_ports: HashMap::from([("GATEWAY_PORT".to_string(), 8090)]),
             pid: Some(12345),
             allocated_receipt_id: "port-abc123".to_string(),
             preference_source: PreferenceSource::Manifest,
@@ -1138,7 +1218,8 @@ mod tests {
         let json = serde_json::to_string(&binding).unwrap();
         let deserialized: ToolBinding = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.proxy_port, Some(9101));
-        assert_eq!(deserialized.proxy_target(), 9101);
+        assert_eq!(deserialized.proxy_target(), 9101, "proxy_port wins");
+        assert_eq!(deserialized.actual_port, Some(3000));
         assert_eq!(deserialized.pid, Some(12345));
         assert_eq!(deserialized.preference_source, PreferenceSource::Manifest);
     }
@@ -1162,18 +1243,7 @@ mod tests {
 
     #[tokio::test]
     async fn discover_skips_single_port_tools() {
-        // Single-port tools shouldn't waste time probing
-        let binding = ToolBinding {
-            tool: "test-tool".to_string(),
-            port: 9100,
-            port_var: "PORT".to_string(),
-            auth_token: "zp-test".to_string(),
-            extra_ports: HashMap::new(),
-            proxy_port: None,
-            pid: None,
-            allocated_receipt_id: String::new(),
-            preference_source: PreferenceSource::Default,
-        };
+        let binding = make_binding(9100);
         let result = discover_proxy_port(&binding).await;
         assert_eq!(result, None);
     }
@@ -1207,7 +1277,7 @@ mod tests {
     }
 
     #[test]
-    fn registry_release_removes_binding() {
+    fn registry_release_clears_binding_preserves_allocation() {
         let (reg, _dir) = make_registry();
         reg.allocate_or_existing(
             "tool-b",
@@ -1218,9 +1288,13 @@ mod tests {
             PreferenceSource::Default,
         )
         .expect("allocate");
-        assert!(reg.get_assigned("tool-b").is_some());
+        let allocated_port = reg.get_assigned("tool-b").unwrap().port;
         reg.release("tool-b", ReleaseReason::GracefulExit);
-        assert!(reg.get_assigned("tool-b").is_none());
+        // Entry preserved — allocation survives process death.
+        let binding = reg.get_assigned("tool-b").expect("allocation preserved");
+        assert_eq!(binding.port, allocated_port, "allocated port unchanged");
+        assert_eq!(binding.pid, None, "pid cleared");
+        assert_eq!(binding.actual_port, None, "actual_port cleared");
     }
 
     #[test]
@@ -1241,7 +1315,9 @@ mod tests {
     }
 
     #[test]
-    fn registry_owner_returns_none_after_release() {
+    fn registry_owner_still_finds_after_release() {
+        // After clear_binding, the allocation persists — owner() still finds
+        // the allocated port so conflict detection works.
         let (reg, _dir) = make_registry();
         let b = reg
             .allocate_or_existing(
@@ -1255,7 +1331,27 @@ mod tests {
             .expect("allocate");
         let port = b.port;
         reg.release("tool-d", ReleaseReason::GracefulExit);
-        assert!(reg.owner(port).is_none());
+        // Allocation persists — allocated port is still "owned"
+        assert!(reg.owner(port).is_some(), "owner still holds allocated port");
+    }
+
+    #[test]
+    fn deallocate_removes_entry() {
+        let (reg, _dir) = make_registry();
+        let b = reg
+            .allocate_or_existing(
+                "tool-dealloc",
+                5555,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate");
+        let port = b.port;
+        reg.deallocate("tool-dealloc");
+        assert!(reg.get_assigned("tool-dealloc").is_none(), "entry removed");
+        assert!(reg.owner(port).is_none(), "port freed after deallocation");
     }
 
     #[test]
@@ -1315,7 +1411,7 @@ mod tests {
     }
 
     #[test]
-    fn sweep_dead_pids_releases_dead_process() {
+    fn sweep_dead_pids_clears_binding_preserves_allocation() {
         let (reg, _dir) = make_registry();
         // u32::MAX is virtually guaranteed to not be a live PID
         reg.allocate_or_existing(
@@ -1327,8 +1423,12 @@ mod tests {
             PreferenceSource::Default,
         )
         .expect("allocate");
+        let allocated_port = reg.get_assigned("dead-tool").unwrap().port;
         reg.sweep_dead_pids();
-        assert!(reg.get_assigned("dead-tool").is_none());
+        // Allocation preserved — only runtime binding cleared.
+        let binding = reg.get_assigned("dead-tool").expect("allocation preserved");
+        assert_eq!(binding.port, allocated_port);
+        assert_eq!(binding.pid, None, "pid cleared by sweeper");
     }
 
     #[test]
@@ -1372,6 +1472,38 @@ mod tests {
         assert!(matches!(err, RegistryError::NotAssigned(_)));
     }
 
+    #[test]
+    fn clear_binding_zeroes_pid_and_actuals() {
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing("cb-tool", 9999, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        reg.update_pid("cb-tool", 9999).expect("update_pid");
+        // Manually set actual_port by doing a reconciliation
+        let b = reg.get_assigned("cb-tool").unwrap();
+        reg.reconcile_ports("cb-tool", 9999, &[b.port + 1]);
+
+        reg.clear_binding("cb-tool", ReleaseReason::GracefulExit);
+        let after = reg.get_assigned("cb-tool").expect("allocation preserved");
+        assert_eq!(after.pid, None);
+        assert_eq!(after.actual_port, None);
+        assert!(after.actual_extra_ports.is_empty());
+        // Allocated port stays
+        assert_eq!(after.port, b.port);
+    }
+
+    #[test]
+    fn clear_binding_preserves_auth_token_and_port_var() {
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing("auth-tool", 1111, "MY_PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        let original = reg.get_assigned("auth-tool").unwrap();
+        reg.clear_binding("auth-tool", ReleaseReason::PidDead);
+        let after = reg.get_assigned("auth-tool").unwrap();
+        assert_eq!(after.port_var, "MY_PORT");
+        assert_eq!(after.auth_token, original.auth_token);
+        assert_eq!(after.port, original.port);
+    }
+
     // ── Wire 2 tests ─────────────────────────────────────────────────
 
     #[test]
@@ -1388,11 +1520,15 @@ mod tests {
         assert_eq!(receipts, 2, "should emit release + allocate receipt pair");
 
         let updated = reg.get_assigned("recon-tool").unwrap();
-        assert_eq!(updated.port, allocated + 50, "binding reflects actual port");
+        // Allocated port is UNCHANGED — actual_port carries the observation.
+        assert_eq!(updated.port, allocated, "allocated port unchanged");
         assert_eq!(
-            updated.preference_source,
-            PreferenceSource::PostLaunchObservation
+            updated.actual_port,
+            Some(allocated + 50),
+            "actual_port reflects observation"
         );
+        // preference_source tracks the allocation, not the observation
+        assert_eq!(updated.preference_source, PreferenceSource::Default);
     }
 
     #[test]

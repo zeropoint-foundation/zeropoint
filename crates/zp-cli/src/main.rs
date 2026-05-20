@@ -1295,13 +1295,16 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(0);
         }
         bindings.sort_by(|a, b| a.tool.cmp(&b.tool));
-        println!("{:<20} {:<8} {:<10} {:<12}", "TOOL", "PORT", "PID", "PROXY");
-        println!("{}", "─".repeat(52));
+        println!("{:<20} {:<10} {:<10} {:<10} {:<10}", "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY");
+        println!("{}", "─".repeat(62));
         for b in bindings {
             println!(
-                "{:<20} {:<8} {:<10} {:<12}",
+                "{:<20} {:<10} {:<10} {:<10} {:<10}",
                 b.tool,
                 b.port,
+                b.actual_port
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "—".to_string()),
                 b.pid
                     .map(|p| p.to_string())
                     .unwrap_or_else(|| "—".to_string()),
