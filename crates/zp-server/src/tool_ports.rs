@@ -717,14 +717,17 @@ impl PortRegistry {
 
     // ── Wire 2: post-launch port reconciliation ───────────────────────
 
-    /// Reconcile the registry against ports the tool actually bound.
+    /// Reconcile the registry against every TCP port the tool actually bound.
     ///
-    /// `actual_ports` comes from `lsof_tcp_listen_ports` after the tool has had
-    /// time to start.  If the allocated primary port is absent from `actual_ports`,
-    /// emits a `port:release` for the stale port and a `port:allocate` for the
-    /// first actual port (tagged `PostLaunchObservation`), then updates the binding.
+    /// `actual_ports` is the list from `lsof_tcp_listen_ports` (already filtered
+    /// to LISTEN state, this PID only).  For each declared port_var that doesn't
+    /// match the corresponding actual port, emits a release+allocate receipt pair
+    /// and writes the actual into `actual_port` / `actual_extra_ports`.
     ///
-    /// Returns 0 (no mismatch or empty actuals) or 2 (release + allocate pair).
+    /// Ports bound by the tool that don't match any declared port_var are captured
+    /// in `actual_extra_ports` with a WARN log (e.g. hardcoded ports in config files).
+    ///
+    /// Returns the number of receipt PAIRS emitted (each pair = release + allocate).
     pub fn reconcile_ports(&self, tool: &str, pid: u32, actual_ports: &[u16]) -> usize {
         if actual_ports.is_empty() {
             return 0;
@@ -733,38 +736,95 @@ impl PortRegistry {
             Some(b) => b,
             None => return 0,
         };
-        let allocated_port = binding.port;
-        if actual_ports.contains(&allocated_port) {
-            return 0;
+
+        // Build ordered list of (port_var, allocated_port) pairs.
+        // Primary first, then extra_ports in consistent order.
+        let mut declared: Vec<(String, u16)> = vec![(binding.port_var.clone(), binding.port)];
+        let mut extra_sorted: Vec<(String, u16)> =
+            binding.extra_ports.iter().map(|(k, &v)| (k.clone(), v)).collect();
+        extra_sorted.sort_by_key(|(k, _)| k.clone());
+        declared.extend(extra_sorted);
+
+        // Match each declared var to an actual port by position.
+        let mut pairs_emitted = 0usize;
+        let mut new_actual_port: Option<u16> = None;
+        let mut new_actual_extras: HashMap<String, u16> = HashMap::new();
+        let mut unmatched_actuals: Vec<u16> = actual_ports.to_vec();
+
+        for (i, (var, alloc_port)) in declared.iter().enumerate() {
+            // First preference: actual port at the same positional index.
+            let candidate = actual_ports.get(i).copied();
+            match candidate {
+                Some(actual) if actual == *alloc_port => {
+                    // Match — no receipt needed.
+                    unmatched_actuals.retain(|&p| p != actual);
+                    if i == 0 {
+                        new_actual_port = None; // actual == allocated, leave as None
+                    }
+                }
+                Some(actual) => {
+                    // Mismatch — emit release + allocate for this var.
+                    debug!(
+                        "Port registry: reconcile '{}' {}={} actual={}",
+                        tool, var, alloc_port, actual
+                    );
+                    self.emit_release_receipt(
+                        tool,
+                        *alloc_port,
+                        Some(pid),
+                        ReleaseReason::Reconciliation,
+                        "reconciliation",
+                    );
+                    self.emit_allocate_receipt(
+                        tool,
+                        actual,
+                        var,
+                        pid,
+                        &HashMap::new(),
+                        PreferenceSource::PostLaunchObservation,
+                    );
+                    unmatched_actuals.retain(|&p| p != actual);
+                    pairs_emitted += 1;
+                    if i == 0 {
+                        new_actual_port = Some(actual);
+                    } else {
+                        new_actual_extras.insert(var.clone(), actual);
+                    }
+                }
+                None => {
+                    // No actual port at this position — tool didn't bind this var.
+                    debug!(
+                        "Port registry: '{}' has no actual port for {}={} (not bound)",
+                        tool, var, alloc_port
+                    );
+                }
+            }
         }
-        let actual_primary = actual_ports[0];
-        debug!(
-            "Port registry: reconcile '{}' allocated={} actual={}",
-            tool, allocated_port, actual_primary
-        );
-        self.emit_release_receipt(
-            tool,
-            allocated_port,
-            Some(pid),
-            ReleaseReason::Reconciliation,
-            "reconciliation",
-        );
-        self.emit_allocate_receipt(
-            tool,
-            actual_primary,
-            &binding.port_var,
-            pid,
-            &HashMap::new(),
-            PreferenceSource::PostLaunchObservation,
-        );
+
+        // Capture remaining unmatched actual ports as extras with a warning.
+        for (idx, &port) in unmatched_actuals.iter().enumerate() {
+            let synthetic_var = format!("UNMATCHED_PORT_{}", idx);
+            warn!(
+                "Port registry: '{}' bound port {} which has no declared port_var. \
+                 Recording as {}. Consider updating the tool manifest.",
+                tool, port, synthetic_var
+            );
+            new_actual_extras.insert(synthetic_var, port);
+        }
+
+        // Apply all updates in one lock.
         let mut map = self.bindings.lock().unwrap();
         if let Some(b) = map.get_mut(tool) {
-            // Write actual_port — `port` (allocated preference) stays unchanged.
-            b.actual_port = Some(actual_primary);
+            if let Some(ap) = new_actual_port {
+                b.actual_port = Some(ap);
+            }
+            b.actual_extra_ports.extend(new_actual_extras);
         }
         drop(map);
-        self.persist();
-        2
+        if pairs_emitted > 0 || !unmatched_actuals.is_empty() {
+            self.persist();
+        }
+        pairs_emitted
     }
 }
 
@@ -778,8 +838,22 @@ impl PortRegistry {
 pub fn lsof_tcp_listen_ports(pid: u32) -> Vec<u16> {
     #[cfg(unix)]
     {
+        // -a: AND all filters (without -a, macOS lsof ORs -p and -i, returning
+        //     ALL internet connections regardless of PID — the root cause of
+        //     capturing rapportd's port 49197 instead of the tool's own ports).
+        // -iTCP: TCP only (no UDP)
+        // -sTCP:LISTEN: LISTEN state only (no ESTABLISHED/TIME_WAIT outbound)
+        // -n -P: numeric host + port (no name resolution)
         let output = std::process::Command::new("lsof")
-            .args(["-p", &pid.to_string(), "-i", "-n", "-P"])
+            .args([
+                "-a",
+                "-p",
+                &pid.to_string(),
+                "-iTCP",
+                "-sTCP:LISTEN",
+                "-n",
+                "-P",
+            ])
             .output();
         match output {
             Ok(o) if o.status.success() || !o.stdout.is_empty() => {
@@ -1600,8 +1674,8 @@ mod tests {
 
         // Simulate tool bound to a different port than allocated
         let actual_ports = vec![allocated + 50];
-        let receipts = reg.reconcile_ports("recon-tool", 1234, &actual_ports);
-        assert_eq!(receipts, 2, "should emit release + allocate receipt pair");
+        let pairs = reg.reconcile_ports("recon-tool", 1234, &actual_ports);
+        assert_eq!(pairs, 1, "one mismatch → one release+allocate pair");
 
         let updated = reg.get_assigned("recon-tool").unwrap();
         // Allocated port is UNCHANGED — actual_port carries the observation.
@@ -1641,6 +1715,88 @@ mod tests {
         let receipts = reg.reconcile_ports("crash-tool", 999, &[]);
         assert_eq!(receipts, 0);
         assert!(reg.get_assigned("crash-tool").is_some(), "binding preserved");
+    }
+
+    // ── Multi-port reconciliation tests ───────────────────────────────
+
+    #[test]
+    fn reconcile_multi_port_all_mismatch() {
+        let (reg, _dir) = make_registry();
+        // Allocate tool with one extra port var
+        let b = reg
+            .allocate_or_existing(
+                "multi-tool",
+                1,
+                "HTTP_PORT",
+                &["GATEWAY_PORT".to_string()],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate");
+        let alloc_primary = b.port;
+        let alloc_extra = *b.extra_ports.get("GATEWAY_PORT").unwrap();
+
+        // Tool bound different ports for both vars
+        let actual_ports = vec![alloc_primary + 1000, alloc_extra + 1000];
+        let pairs = reg.reconcile_ports("multi-tool", 1, &actual_ports);
+        assert_eq!(pairs, 2, "two mismatch pairs = 4 receipts");
+
+        let updated = reg.get_assigned("multi-tool").unwrap();
+        assert_eq!(updated.actual_port, Some(alloc_primary + 1000));
+        assert_eq!(
+            updated.actual_extra_ports.get("GATEWAY_PORT"),
+            Some(&(alloc_extra + 1000))
+        );
+        assert_eq!(updated.port, alloc_primary, "allocated unchanged");
+    }
+
+    #[test]
+    fn reconcile_multi_port_partial_match() {
+        let (reg, _dir) = make_registry();
+        let b = reg
+            .allocate_or_existing(
+                "partial-tool",
+                2,
+                "HTTP_PORT",
+                &["GATEWAY_PORT".to_string()],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate");
+        let alloc_primary = b.port;
+        let alloc_extra = *b.extra_ports.get("GATEWAY_PORT").unwrap();
+
+        // Primary matches, extra mismatches
+        let actual_ports = vec![alloc_primary, alloc_extra + 500];
+        let pairs = reg.reconcile_ports("partial-tool", 2, &actual_ports);
+        assert_eq!(pairs, 1, "one mismatch pair");
+
+        let updated = reg.get_assigned("partial-tool").unwrap();
+        assert_eq!(updated.actual_port, None, "primary matched — actual_port not set");
+        assert_eq!(
+            updated.actual_extra_ports.get("GATEWAY_PORT"),
+            Some(&(alloc_extra + 500))
+        );
+    }
+
+    #[test]
+    fn reconcile_unmatched_actual_captured_as_extra() {
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing("um-tool", 3, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        let alloc = reg.get_assigned("um-tool").unwrap().port;
+
+        // Tool bound its allocated port PLUS an undeclared port
+        let actual_ports = vec![alloc, 50051];
+        let pairs = reg.reconcile_ports("um-tool", 3, &actual_ports);
+        assert_eq!(pairs, 0, "no mismatch for declared var");
+
+        let updated = reg.get_assigned("um-tool").unwrap();
+        assert!(
+            updated.actual_extra_ports.contains_key("UNMATCHED_PORT_0"),
+            "undeclared port captured"
+        );
+        assert_eq!(updated.actual_extra_ports.get("UNMATCHED_PORT_0"), Some(&50051));
     }
 
     // ── lsof parser tests ─────────────────────────────────────────────
