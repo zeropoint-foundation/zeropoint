@@ -241,6 +241,17 @@ enum Commands {
         /// Delegate nodes auto-resolve this from zeropoint.toml [node] upstream.
         #[arg(long)]
         server: Option<String>,
+
+        /// Verify the foundation chain at zeropointfoundation.org instead of
+        /// the local audit chain. Fetches entries over HTTPS and verifies
+        /// hash linkage + Ed25519 signatures. Requires workspace:admin capability.
+        #[arg(long)]
+        foundation: bool,
+
+        /// Foundation worker URL (default: https://zeropointfoundation.org).
+        /// Override for local wrangler dev: --foundation-url http://localhost:8787
+        #[arg(long)]
+        foundation_url: Option<String>,
     },
 
     /// #176 — Force an immediate Merkle epoch seal.
@@ -2184,8 +2195,15 @@ async fn main() -> anyhow::Result<()> {
         reconstitute,
         anchors,
         server,
+        foundation,
+        foundation_url,
     }) = &args.command
     {
+        // ── Foundation chain verification (remote HTTPS path) ──────────────
+        if *foundation {
+            let exit = verify_foundation_chain(foundation_url.as_deref(), *json).await;
+            std::process::exit(exit);
+        }
         // Resolve the target server address from topology config.
         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
 
@@ -4340,6 +4358,173 @@ struct AnchorReport {
     coverage_pct: f64,
     mismatches: Vec<AnchorMismatch>,
 }
+
+// ── Foundation chain verification (zp verify --foundation) ───────────────────
+
+/// Walk the foundation chain at `url` (default: https://zeropointfoundation.org),
+/// verify every entry's hash linkage and Ed25519 signature, and print a report.
+/// Returns the process exit code: 0 = pass, 1 = verification failure, 2 = error.
+async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) -> i32 {
+    use zp_verify::foundation::{
+        FoundationChainResponse, FoundationPubkeyResponse, verify_foundation_chain as verify_chain,
+    };
+
+    let base_url = url_override
+        .unwrap_or("https://zeropointfoundation.org")
+        .trim_end_matches('/');
+
+    // Read the session token for Bearer auth (same path as local verify).
+    let token = match (|| -> Option<String> {
+        let path = zp_core::paths::session_path().ok()?;
+        let data = std::fs::read_to_string(path).ok()?;
+        let v: serde_json::Value = serde_json::from_str(&data).ok()?;
+        v["token"].as_str().map(|s| s.to_string())
+    })() {
+        Some(t) => t,
+        None => {
+            eprintln!(
+                "\x1b[31m✗\x1b[0m  No session token at ~/ZeroPoint/session.json"
+            );
+            eprintln!("    Log in first: zp session login");
+            return 2;
+        }
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap();
+
+    // 1. Fetch the worker's public key + chain metadata.
+    let pubkey_resp: FoundationPubkeyResponse = match client
+        .get(format!("{}/api/v1/foundation/pubkey", base_url))
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => match r.json().await {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m  Failed to parse pubkey response: {}", e);
+                return 2;
+            }
+        },
+        Ok(r) => {
+            eprintln!(
+                "\x1b[31m✗\x1b[0m  /api/v1/foundation/pubkey returned HTTP {}",
+                r.status()
+            );
+            return 2;
+        }
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m  Cannot reach {}: {}", base_url, e);
+            return 2;
+        }
+    };
+
+    if pubkey_resp.schema_version != "foundation-canonical-v1" {
+        eprintln!(
+            "\x1b[31m✗\x1b[0m  Unsupported schema_version: {}",
+            pubkey_resp.schema_version
+        );
+        return 2;
+    }
+
+    let chain_id = &pubkey_resp.chain_id;
+    let pubkey_hex = &pubkey_resp.pubkey_hex;
+
+    // 2. Page through the full chain.
+    let mut all_entries = Vec::new();
+    let mut from: u64 = 0;
+    loop {
+        let resp: FoundationChainResponse = match client
+            .get(format!(
+                "{}/api/v1/foundation/chain?from={}&limit=1000",
+                base_url, from
+            ))
+            .bearer_auth(&token)
+            .send()
+            .await
+        {
+            Ok(r) if r.status().is_success() => match r.json().await {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("\x1b[31m✗\x1b[0m  Failed to parse chain response: {}", e);
+                    return 2;
+                }
+            },
+            Ok(r) => {
+                eprintln!(
+                    "\x1b[31m✗\x1b[0m  /api/v1/foundation/chain returned HTTP {}",
+                    r.status()
+                );
+                return 2;
+            }
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m  Chain fetch failed: {}", e);
+                return 2;
+            }
+        };
+
+        all_entries.extend(resp.entries);
+        match resp.next_from {
+            Some(next) => from = next,
+            None => break,
+        }
+    }
+
+    // 3. Run the verifier.
+    let report = verify_chain(&all_entries, chain_id, pubkey_hex);
+
+    // 4. Emit report.
+    if emit_json {
+        let out = serde_json::json!({
+            "source": "foundation",
+            "chain_id": chain_id,
+            "schema_version": pubkey_resp.schema_version,
+            "passed": report.passed,
+            "entries_checked": report.entries_checked,
+            "signature_checks": report.signature_checks,
+            "signature_failures": report.signature_failures,
+            "chain_head": report.chain_head,
+            "findings": report.findings,
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    } else {
+        println!(
+            "\x1b[1mzp verify --foundation — Foundation Chain Attestation\x1b[0m"
+        );
+        println!("  chain_id : {}", chain_id);
+        println!("  url      : {}", base_url);
+        println!();
+        if report.passed {
+            println!(
+                "  \x1b[32m✓\x1b[0m  {} entries verified  |  {} signatures checked",
+                report.entries_checked, report.signature_checks
+            );
+            if let Some(head) = &report.chain_head {
+                println!("  head     : {}", head);
+            }
+        } else {
+            println!(
+                "  \x1b[31m✗\x1b[0m  VERIFICATION FAILED  ({} entries checked)",
+                report.entries_checked
+            );
+            for f in &report.findings {
+                let label = match f.severity {
+                    zp_verify::FindingSeverity::Error => "\x1b[31mERROR\x1b[0m",
+                    zp_verify::FindingSeverity::Warning => "\x1b[33mWARN \x1b[0m",
+                    zp_verify::FindingSeverity::Info => "\x1b[36mINFO \x1b[0m",
+                };
+                println!("  [{}] [{}] {} — {}", label, f.rule, f.entry_id, f.description);
+            }
+        }
+        println!();
+    }
+
+    if report.passed { 0 } else { 1 }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Default audit DB path: ~/ZeroPoint/data/audit.db
 /// Used as smart fallback when the server is down and no --data-dir given.

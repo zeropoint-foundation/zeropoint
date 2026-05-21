@@ -9,6 +9,7 @@
 //! accepting any receipt as valid evidence, callers should check it
 //! against the `RevocationIndex` via `verify_receipt_status()`.
 
+pub mod foundation;
 pub mod receipt_status;
 
 use chrono::{DateTime, Utc};

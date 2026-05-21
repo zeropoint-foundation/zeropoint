@@ -842,31 +842,55 @@ async function handleApi(request, env) {
       const limit = parseInt(url.searchParams.get("limit") || "500", 10);
       const claimPattern = url.searchParams.get("claim_pattern");
 
-      let query = `SELECT id, operator_id, claim, subject, capability_used, metadata, created_at
-                   FROM receipts WHERE operator_id = ?`;
-      const binds = [operatorId];
-
+      // Build WHERE clauses for the claim_pattern filter (applied to both tables).
+      let whereExtra = "";
+      const extraBinds = [];
       if (claimPattern) {
         if (claimPattern.endsWith("*")) {
-          query += ` AND claim LIKE ?`;
-          binds.push(claimPattern.slice(0, -1) + "%");
+          whereExtra = " AND claim LIKE ?";
+          extraBinds.push(claimPattern.slice(0, -1) + "%");
         } else if (!claimPattern.includes("*")) {
-          query += ` AND claim = ?`;
-          binds.push(claimPattern);
+          whereExtra = " AND claim = ?";
+          extraBinds.push(claimPattern);
         } else {
           return json({ error: "claim_pattern supports trailing '*' only" }, 400);
         }
       }
 
-      query += ` ORDER BY created_at ASC LIMIT ?`;
-      binds.push(limit);
+      // Legacy pre-signing-era rows from `receipts` table.
+      const legacyQuery = `SELECT id, operator_id, claim, subject, capability_used,
+                                  metadata, created_at
+                           FROM receipts WHERE operator_id = ?${whereExtra}`;
+      const legacyBinds = [operatorId, ...extraBinds];
 
-      const { results } = await env.DB.prepare(query).bind(...binds).all();
+      // Signed entries from `chain_entries` table.
+      const chainQuery = `SELECT id, operator_id, claim, subject, capability_used,
+                                 metadata, created_at,
+                                 sequence, prev_hash, entry_hash, signatures
+                          FROM chain_entries WHERE operator_id = ?${whereExtra}`;
+      const chainBinds = [operatorId, ...extraBinds];
 
-      const receipts = results.map(r => ({
+      const [legacyRes, chainRes] = await Promise.all([
+        env.DB.prepare(legacyQuery).bind(...legacyBinds).all(),
+        env.DB.prepare(chainQuery).bind(...chainBinds).all(),
+      ]);
+
+      const legacyReceipts = legacyRes.results.map(r => ({
         ...r,
         metadata: r.metadata ? JSON.parse(r.metadata) : null,
+        pre_signing_era: true,
       }));
+      const chainReceipts = chainRes.results.map(r => ({
+        ...r,
+        metadata: r.metadata ? JSON.parse(r.metadata) : null,
+        signatures: r.signatures ? JSON.parse(r.signatures) : [],
+        pre_signing_era: false,
+      }));
+
+      // Merge and sort oldest-first, bounded by the caller's limit.
+      const receipts = [...legacyReceipts, ...chainReceipts]
+        .sort((a, b) => a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0)
+        .slice(0, limit);
 
       await emitReceipt(env, {
         operatorId,
@@ -1500,6 +1524,89 @@ async function handleApi(request, env) {
       });
 
       return json({ ok: true, ...link });
+    }
+
+    // ── Foundation chain endpoints (/api/v1/foundation/*) ─────────────────────
+
+    // GET /api/v1/foundation/pubkey — unauthenticated; returns the worker's
+    // Ed25519 public key + chain_id so verifiers can bootstrap.
+    if (path === "/api/v1/foundation/pubkey" && method === "GET") {
+      const { getChainId } = await import("./chain/chain.js");
+      const chainId = await getChainId(env);
+      if (!chainId) {
+        return json({ error: "chain not yet initialized" }, 503);
+      }
+      return new Response(
+        JSON.stringify({
+          alg: "Ed25519",
+          kid: "foundation-root-v1",
+          pubkey_hex: env.FOUNDATION_SIGNING_KEY_PUB_HEX || "",
+          chain_id: chainId,
+          schema_version: "foundation-canonical-v1",
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=300",
+            ...corsHeaders(),
+          },
+        }
+      );
+    }
+
+    // GET /api/v1/foundation/chain/head — lightweight head pointer; unauthenticated.
+    if (path === "/api/v1/foundation/chain/head" && method === "GET") {
+      const { getChainId, readChainTip } = await import("./chain/chain.js");
+      const [chainId, tip] = await Promise.all([
+        getChainId(env),
+        env.DB.prepare(
+          "SELECT sequence, entry_hash FROM chain_entries ORDER BY sequence DESC LIMIT 1"
+        ).first(),
+      ]);
+      if (!chainId || !tip) return json({ error: "chain not yet initialized" }, 503);
+      return json({
+        chain_id: chainId,
+        head_sequence: tip.sequence,
+        head_entry_hash: tip.entry_hash,
+      });
+    }
+
+    // GET /api/v1/foundation/chain — paginated chain walk (admin only).
+    // Query params: from (integer, default 0), limit (integer, default 100, max 1000).
+    if (path === "/api/v1/foundation/chain" && method === "GET") {
+      const gate = await governanceGate(request, env, "workspace:admin");
+      if (!gate.ok) return gate.response;
+
+      const { getChainId } = await import("./chain/chain.js");
+      const chainId = await getChainId(env);
+      if (!chainId) return json({ error: "chain not yet initialized" }, 503);
+
+      const from = Math.max(0, parseInt(url.searchParams.get("from") || "0", 10));
+      const limit = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("limit") || "100", 10)));
+
+      const [headRow, { results }] = await Promise.all([
+        env.DB.prepare(
+          "SELECT sequence FROM chain_entries ORDER BY sequence DESC LIMIT 1"
+        ).first(),
+        env.DB.prepare(
+          `SELECT id, operator_id, claim, subject, capability_used, metadata,
+                  created_at, sequence, prev_hash, entry_hash, signatures
+           FROM chain_entries WHERE sequence >= ?
+           ORDER BY sequence ASC LIMIT ?`
+        ).bind(from, limit).all(),
+      ]);
+
+      const headSequence = headRow?.sequence ?? -1;
+      const entries = results.map(r => ({
+        ...r,
+        metadata: r.metadata ? JSON.parse(r.metadata) : {},
+        signatures: r.signatures ? JSON.parse(r.signatures) : [],
+      }));
+      const lastSeq = entries.length > 0 ? entries[entries.length - 1].sequence : null;
+      const nextFrom = (lastSeq !== null && lastSeq < headSequence) ? lastSeq + 1 : null;
+
+      return json({ chain_id: chainId, head_sequence: headSequence, entries, next_from: nextFrom });
     }
 
     return json({ error: "not found" }, 404);
