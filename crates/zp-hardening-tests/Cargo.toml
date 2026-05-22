@@ -16,6 +16,9 @@ path = "src/lib.rs"
 # Server under test — we call build_app() directly
 zp-server = { path = "../zp-server" }
 zp-config = { path = "../zp-config" }
+# Loopback bind helpers + CancellationToken — exercised by the
+# singular-loopback shutdown integration test.
+zp-net = { path = "../zp-net" }
 # Seam 11 follow-up: pull in the test-support feature so the harness
 # can install the in-memory mock credential builder before any zp-keys
 # code touches the OS Keychain. Eliminates rebuild-induced ACL
@@ -44,3 +47,7 @@ hyper = { version = "1", features = ["full"] }
 
 # Temp dirs for isolated data_dir per test
 tempfile = { workspace = true }
+
+# HTTP client — used by the singular-loopback-shutdown test to probe
+# the v4 listener before triggering token cancel.
+reqwest = { workspace = true }

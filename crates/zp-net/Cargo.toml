@@ -1,0 +1,26 @@
+[package]
+name = "zp-net"
+version = "0.1.0"
+edition = "2021"
+
+# Canonical loopback networking primitives.
+#
+# Bottom-of-graph: depends on no other zp-* crate. All substrate
+# loopback servers route their TcpListener bind through `bind_loopback`
+# (HTTP) or `serve_loopback_grpc_with_shutdown` (tonic). All substrate
+# clients addressing a substrate peer service route URL construction
+# through `peer_url` / `peer_origin` / `peer_grpc_uri` (Phase 2 —
+# `peer.rs` lands in a follow-up commit).
+#
+# Discipline pins in `zp-discipline` enforce that direct
+# `TcpListener::bind` and `tonic::transport::Server::builder().serve(...)`
+# calls do not appear outside this crate's `src/`.
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = "0.7"
+tokio-stream = { version = "0.1", features = ["net"] }
+tonic = { workspace = true }
+http = "1"
+anyhow = { workspace = true }
+tracing = { workspace = true }

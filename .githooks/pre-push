@@ -74,4 +74,23 @@ if ! ( cd "$WORKTREE" && cargo check --workspace --quiet ); then
     exit 1
 fi
 
-echo "pre-push: HEAD builds cleanly."
+# Discipline pins — structural rules expressed as regex scans over
+# the workspace. ~1-2s; pure-Rust file I/O. Pins also run in CI as
+# part of `cargo test --workspace`; this is the local fast-fail layer.
+echo "pre-push: cargo test -p zp-discipline against HEAD..."
+if ! ( cd "$WORKTREE" && cargo test -p zp-discipline --quiet ); then
+    echo ""
+    echo "pre-push: A discipline pin is failing on HEAD. Push aborted."
+    echo ""
+    echo "Discipline pins live in crates/zp-discipline/tests/ and"
+    echo "express structural invariants (e.g. \"no raw TcpListener::bind"
+    echo "outside zp-net\", \"no sh -c in tool launch\"). A failing pin"
+    echo "means the commit introduces a pattern the substrate has"
+    echo "structurally banned."
+    echo ""
+    echo "Run locally for the full violation list:"
+    echo "  cargo test -p zp-discipline -- --nocapture"
+    exit 1
+fi
+
+echo "pre-push: HEAD builds cleanly and pins pass."

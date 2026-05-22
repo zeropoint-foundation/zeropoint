@@ -7303,6 +7303,7 @@ dependencies = [
  "futures",
  "http-body-util",
  "hyper",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
@@ -7312,6 +7313,7 @@ dependencies = [
  "tower-http 0.5.2",
  "zp-config",
  "zp-keys",
+ "zp-net",
  "zp-server",
 ]
 
@@ -7449,6 +7451,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-net"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "http 1.4.0",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tonic",
+ "tracing",
+]
+
+[[package]]
 name = "zp-observation"
 version = "0.1.0"
 dependencies = [
@@ -7567,6 +7582,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "toml",
  "tonic",
  "tower 0.5.3",
@@ -7586,6 +7602,7 @@ dependencies = [
  "zp-keys",
  "zp-memory",
  "zp-mesh",
+ "zp-net",
  "zp-observation",
  "zp-pipeline",
  "zp-policy",

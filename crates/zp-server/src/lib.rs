@@ -1060,6 +1060,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/audit/entries", get(audit_entries_handler))
         .route("/api/v1/audit/chain-head", get(audit_chain_head_handler))
         .route("/api/v1/audit/verify", get(audit_verify_handler))
+        .route("/api/v1/audit/receipts", get(audit_receipts_handler))
         // Receipts
         .route("/api/v1/receipts/generate", post(receipt_generate_handler))
         // Stats
@@ -1419,31 +1420,43 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // Write our own PID
     std::fs::write(&server_pid_path, std::process::id().to_string()).ok();
 
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    // ── Singular loopback binding: all listener binds + serve+shutdown ─
+    // wiring routes through `zp_net`. One CancellationToken gates the
+    // ctrl_c watcher (which performs tool-PID cleanup) and all four
+    // listener tasks (HTTP v4/v6, gRPC v4/v6 — or one each on
+    // network-facing deployments). See
+    // `docs/handoffs/singular-loopback-binding-design-2026-05.md`.
+    let shutdown = zp_net::CancellationToken::new();
 
-    // ── Graceful shutdown: kill all tool processes on SIGINT/SIGTERM ──
-    let shutdown = async move {
-        tokio::signal::ctrl_c().await.ok();
-        info!("Shutdown signal received — stopping launched tools...");
-        // Walk PID directory, kill every tool process
-        if let Ok(entries) = std::fs::read_dir(pid_dir()) {
-            for entry in entries.flatten() {
-                let fname = entry.file_name();
-                let name = fname.to_string_lossy();
-                if name == "zp-server.pid" {
-                    continue; // don't kill ourselves
-                }
-                if let Some(tool_name) = name.strip_suffix(".pid") {
-                    if let Some(pid) = read_live_pid(tool_name) {
-                        kill_tool_process(tool_name, pid);
-                    }
-                }
-            }
-        }
-        // Remove server PID file
-        std::fs::remove_file(&server_pid_path).ok();
-        info!("All tools stopped. Goodbye.");
+    let is_loopback = config.bind_addr == "127.0.0.1"
+        || config.bind_addr == "localhost"
+        || config.bind_addr == "::1";
+
+    // HTTP bind — dual-stack for loopback, single-stack for network.
+    let http_listener = if is_loopback {
+        zp_net::bind_loopback(config.port).await?
+    } else {
+        let v4 = zp_net::bind_network(&config.bind_addr, config.port).await?;
+        zp_net::DualStackListener { v4, v6: None }
     };
+
+    // ── Shutdown watcher: ctrl_c → PID cleanup → token.cancel() ───────
+    // The cleanup body is preserved byte-identical from the previous
+    // single-shot shutdown closure (Phase 0) so operator log output
+    // does not change across the migration. The only difference is
+    // *scheduling*: the cleanup now runs in a watcher task that fires
+    // the token on completion, so every listener under the token
+    // drains together instead of HTTP v4 draining while the rest die
+    // abruptly with the process.
+    {
+        let signal_shutdown = shutdown.clone();
+        let server_pid_path = server_pid_path.clone();
+        tokio::spawn(async move {
+            tokio::signal::ctrl_c().await.ok();
+            cleanup_launched_tools(&pid_dir(), &server_pid_path);
+            signal_shutdown.cancel();
+        });
+    }
 
     // ── PID liveness sweeper ────────────────────────────────────────────
     // Releases stale port bindings when tools die without a graceful exit.
@@ -1468,33 +1481,94 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // other nine NodeStatus verbs return `Unimplemented`. Each verb (and
     // each successive service) lands as a focused follow-up commit.
     //
-    // The spawned task runs until process exit. No graceful-shutdown
-    // wiring yet — axum's shutdown signal terminates the whole process.
-    let grpc_bind: &str = if config.bind_addr == "localhost" {
-        "127.0.0.1"
-    } else {
-        config.bind_addr.as_str()
-    };
-    let grpc_addr: std::net::SocketAddr = format!("{}:{}", grpc_bind, config.port + 1)
-        .parse()
-        .map_err(|e| anyhow::anyhow!("invalid gRPC bind address: {}", e))?;
-    let nodestatus_handler = grpc::NodeStatusHandler::new(state.clone());
-    let grpc_server = tonic::transport::Server::builder()
-        .add_service(
-            zp_verbs::nodestatus::node_status_server::NodeStatusServer::new(nodestatus_handler),
+    // The serve tasks watch the same CancellationToken as the HTTP
+    // listeners so all four listeners drain together on ctrl_c.
+    let grpc_port = config.port + 1;
+    let grpc_state = state.clone();
+    let grpc_factory = move || {
+        let handler = grpc::NodeStatusHandler::new(grpc_state.clone());
+        tonic::transport::Server::builder().add_service(
+            zp_verbs::nodestatus::node_status_server::NodeStatusServer::new(handler),
         )
-        .serve(grpc_addr);
-    tokio::spawn(async move {
-        if let Err(e) = grpc_server.await {
-            tracing::error!("gRPC server error: {}", e);
-        }
-    });
-    info!("gRPC server on {} (NodeStatus pilot — Phase 2b)", grpc_addr);
+    };
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
+    let _grpc_handles = if is_loopback {
+        let handles = zp_net::serve_loopback_grpc_with_shutdown(
+            grpc_factory,
+            grpc_port,
+            shutdown.clone(),
+        )
+        .await?;
+        info!(
+            "gRPC server on 127.0.0.1:{} (NodeStatus pilot — Phase 2b, stacks: {:?})",
+            grpc_port, handles.bound_stacks
+        );
+        handles
+    } else {
+        let handles = zp_net::serve_network_grpc_with_shutdown(
+            grpc_factory,
+            &config.bind_addr,
+            grpc_port,
+            shutdown.clone(),
+        )
+        .await?;
+        info!(
+            "gRPC server on {}:{} (NodeStatus pilot — Phase 2b)",
+            config.bind_addr, grpc_port
+        );
+        handles
+    };
+
+    // HTTP IPv6 loopback task — drains under the same token as v4.
+    if let Some(v6) = http_listener.v6 {
+        let app_v6 = app.clone();
+        let v6_shutdown = shutdown.clone();
+        tokio::spawn(async move {
+            if let Err(e) = axum::serve(v6, app_v6)
+                .with_graceful_shutdown(v6_shutdown.cancelled_owned())
+                .await
+            {
+                tracing::error!("IPv6 loopback serve error: {}", e);
+            }
+        });
+    }
+
+    // HTTP IPv4 — the main task. Awaited so `run_server` returns when
+    // the listener finishes draining, after the token cancel fired
+    // and in-flight requests completed.
+    axum::serve(http_listener.v4, app)
+        .with_graceful_shutdown(shutdown.cancelled_owned())
         .await?;
     Ok(())
+}
+
+/// Walk the PID directory, kill every tool process, remove our own
+/// PID file. Factored out of the ctrl_c watcher closure so it can be
+/// unit-tested without driving the full server.
+///
+/// Idempotent: missing PIDs / already-dead processes are skipped
+/// silently. Safe to call from a single watcher task on shutdown.
+pub fn cleanup_launched_tools(
+    pid_dir_path: &std::path::Path,
+    server_pid_path: &std::path::Path,
+) {
+    info!("Shutdown signal received — stopping launched tools...");
+    if let Ok(entries) = std::fs::read_dir(pid_dir_path) {
+        for entry in entries.flatten() {
+            let fname = entry.file_name();
+            let name = fname.to_string_lossy();
+            if name == "zp-server.pid" {
+                continue; // don't kill ourselves
+            }
+            if let Some(tool_name) = name.strip_suffix(".pid") {
+                if let Some(pid) = read_live_pid(tool_name) {
+                    kill_tool_process(tool_name, pid);
+                }
+            }
+        }
+    }
+    std::fs::remove_file(server_pid_path).ok();
+    info!("All tools stopped. Goodbye.");
 }
 
 fn open_browser(url: &str) {
@@ -2426,6 +2500,112 @@ async fn audit_verify_handler(State(state): State<AppState>) -> Json<ChainVerify
     }
 }
 
+
+// ── Audit receipts (normalized, ZpClient-compatible schema) ─────────────────
+
+#[derive(Deserialize)]
+struct AuditReceiptsQuery {
+    claim_pattern: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct AuditReceiptsResponse {
+    receipts: Vec<serde_json::Value>,
+    count: usize,
+}
+
+/// Extract a claim string from an audit entry action.
+fn audit_extract_claim(action: &zp_core::AuditAction) -> Option<String> {
+    match action {
+        zp_core::AuditAction::SystemEvent { event } => Some(event.clone()),
+        zp_core::AuditAction::ToolInvoked { tool_name, .. } => {
+            Some(format!("tool:invoked:{tool_name}"))
+        }
+        zp_core::AuditAction::ToolCompleted {
+            tool_name, success, ..
+        } => {
+            if *success {
+                Some(format!("tool:completed:{tool_name}"))
+            } else {
+                Some(format!("tool:failed:{tool_name}"))
+            }
+        }
+        zp_core::AuditAction::MessageReceived { .. } => {
+            Some("cognition:message:received".to_string())
+        }
+        zp_core::AuditAction::ResponseGenerated { .. } => {
+            Some("cognition:response:generated".to_string())
+        }
+        zp_core::AuditAction::ApiCallProxied {
+            provider, endpoint, ..
+        } => Some(format!("api:proxied:{provider}:{endpoint}")),
+        _ => None,
+    }
+}
+
+/// True if `claim` matches the operator-supplied pattern.
+/// Only trailing `*` glob is supported (same contract as foundation endpoint).
+fn audit_matches_pattern(claim: &str, pattern: &str) -> bool {
+    if pattern == "*" || pattern.is_empty() {
+        return true;
+    }
+    if let Some(prefix) = pattern.strip_suffix('*') {
+        return claim.starts_with(prefix);
+    }
+    claim == pattern
+}
+
+/// Normalize a chain entry into the foundation-compatible receipt shape so
+/// chain_render's rendering logic works identically for local and foundation
+/// sources.
+fn audit_normalize_entry(entry: &zp_core::AuditEntry, claim: &str) -> serde_json::Value {
+    let detail = match &entry.policy_decision {
+        PolicyDecision::Allow { conditions } => conditions.first().cloned(),
+        PolicyDecision::Block { reason, .. } => Some(reason.clone()),
+        PolicyDecision::Warn { message, .. } => Some(message.clone()),
+        _ => None,
+    };
+    serde_json::json!({
+        "id": entry.entry_hash,
+        "claim": claim,
+        "metadata": { "detail": detail },
+        "created_at": entry.timestamp.to_rfc3339(),
+    })
+}
+
+/// `GET /api/v1/audit/receipts` — return normalized chain entries in the
+/// foundation-compatible receipt schema (`{id, claim, metadata, created_at}`).
+///
+/// Used by IronClaw's `chain_render` tool when `source=local` so the same
+/// narration logic works without requiring a `zp_session` cookie.
+/// Authenticated via the existing ZP-Sig envelope middleware.
+async fn audit_receipts_handler(
+    State(state): State<AppState>,
+    Query(params): Query<AuditReceiptsQuery>,
+) -> Json<AuditReceiptsResponse> {
+    let limit = params.limit.unwrap_or(100);
+    let pattern = params.claim_pattern.as_deref().unwrap_or("*");
+
+    let entries = {
+        let store = state.0.audit_store.lock().unwrap();
+        store.export_chain(limit).unwrap_or_default()
+    };
+
+    let receipts: Vec<serde_json::Value> = entries
+        .iter()
+        .filter_map(|e| {
+            let claim = audit_extract_claim(&e.action)?;
+            if !audit_matches_pattern(&claim, pattern) {
+                return None;
+            }
+            Some(audit_normalize_entry(e, &claim))
+        })
+        .collect();
+
+    let count = receipts.len();
+    Json(AuditReceiptsResponse { receipts, count })
+}
 
 // ============================================================================
 // Receipt Generation

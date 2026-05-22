@@ -33,6 +33,7 @@ zp-receipt = { path = "../zp-receipt" }
 zp-gate-envelope = { path = "../zp-gate-envelope" }
 zp-anchor = { path = "../zp-anchor" }
 zp-verbs = { path = "../zp-verbs" }
+zp-net = { path = "../zp-net" }
 mle-star-engine = { path = "../mle-star-engine" }
 monte-carlo-engine = { path = "../monte-carlo-engine" }
 
@@ -65,6 +66,7 @@ toml = { workspace = true }
 zeroize = { workspace = true }
 shlex = "1"
 base64 = { workspace = true }
+tokio-util = "0.7"
 
 [dev-dependencies]
 tempfile = "3"

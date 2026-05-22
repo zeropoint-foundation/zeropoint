@@ -37,6 +37,7 @@ members = [
     "crates/zp-discipline",
     "crates/zp-cloudflare",
     "crates/zp-gate-envelope",
+    "crates/zp-net",
 ]
 
 [workspace.package]
