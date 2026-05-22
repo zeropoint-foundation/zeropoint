@@ -56,7 +56,7 @@ pub async fn verify_tool_capabilities(
     audit_store: &Arc<Mutex<AuditStore>>,
     internal_auth: Option<&crate::internal_auth::InternalAuthority>,
 ) -> VerificationResult {
-    let base = format!("http://127.0.0.1:{}", tool_port);
+    let base = zp_net::peer_origin("127.0.0.1", tool_port);
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()

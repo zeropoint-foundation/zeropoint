@@ -2837,7 +2837,7 @@ async fn main() -> anyhow::Result<()> {
             .ok()
             .and_then(|p| p.parse().ok())
             .unwrap_or(17770);
-        let base_url = format!("http://127.0.0.1:{}", port);
+        let base_url = zp_net::peer_origin("127.0.0.1", port);
         let client = reqwest::Client::new();
 
         match cmd {
@@ -3827,7 +3827,11 @@ async fn main() -> anyhow::Result<()> {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(17770);
-            let url = format!("http://127.0.0.1:{}/api/v1/security/policy-version", port);
+            let url = zp_net::peer_url_with_path(
+                "127.0.0.1",
+                port,
+                "/api/v1/security/policy-version",
+            );
             let client = reqwest::Client::new();
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {

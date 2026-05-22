@@ -9,12 +9,13 @@ edition = "2021"
 # loopback servers route their TcpListener bind through `bind_loopback`
 # (HTTP) or `serve_loopback_grpc_with_shutdown` (tonic). All substrate
 # clients addressing a substrate peer service route URL construction
-# through `peer_url` / `peer_origin` / `peer_grpc_uri` (Phase 2 —
-# `peer.rs` lands in a follow-up commit).
+# through `peer_url` / `peer_url_with_path` / `peer_origin` /
+# `peer_grpc_uri`.
 #
 # Discipline pins in `zp-discipline` enforce that direct
-# `TcpListener::bind` and `tonic::transport::Server::builder().serve(...)`
-# calls do not appear outside this crate's `src/`.
+# `TcpListener::bind`, `tonic::transport::Server::builder().serve(...)`,
+# and raw `http://localhost:` / `http://127.0.0.1:` URL literals do
+# not appear outside this crate's `src/`.
 
 [dependencies]
 tokio = { workspace = true }

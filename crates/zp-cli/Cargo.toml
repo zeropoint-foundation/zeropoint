@@ -36,6 +36,7 @@ zp-anchor = { path = "../zp-anchor" }
 zp-policy = { path = "../zp-policy" }
 zp-audit = { path = "../zp-audit" }
 zp-verify = { path = "../zp-verify" }
+zp-net = { path = "../zp-net" }
 zp-server = { path = "../zp-server", optional = true }
 
 # Workspace dependencies

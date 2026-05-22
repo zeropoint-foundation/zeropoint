@@ -183,7 +183,11 @@ pub(crate) async fn proxy_inner(
         .query()
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
-    let target_url = format!("http://127.0.0.1:{}/{}{}", target_port, path, query);
+    let target_url = zp_net::peer_url_with_path(
+        "127.0.0.1",
+        target_port,
+        &format!("/{}{}", path, query),
+    );
 
     debug!("Proxy: {} → {}", tool_name, target_url);
 

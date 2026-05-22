@@ -954,7 +954,7 @@ pub async fn discover_proxy_port(assignment: &ToolBinding) -> Option<u16> {
     let mut first_200: Option<u16> = None;
 
     for &port in &candidates {
-        let url = format!("http://127.0.0.1:{}/", port);
+        let url = zp_net::peer_url_with_path("127.0.0.1", port, "/");
         let result = client
             .get(&url)
             .header("Authorization", format!("Bearer {}", assignment.auth_token))

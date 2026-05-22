@@ -24,11 +24,13 @@
 
 pub mod bind;
 pub mod grpc;
+pub mod peer;
 
 pub use bind::{bind_loopback, bind_network, DualStackListener};
 pub use grpc::{
     serve_loopback_grpc_with_shutdown, serve_network_grpc_with_shutdown, GrpcServeHandles,
 };
+pub use peer::{peer_grpc_uri, peer_origin, peer_url, peer_url_with_path};
 
 // Re-export CancellationToken so callers don't need a direct
 // dependency on tokio-util just to wire shutdown.

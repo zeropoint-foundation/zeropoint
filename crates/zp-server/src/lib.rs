@@ -2861,7 +2861,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             .launch
             .url
             .clone()
-            .or_else(|| o.launch.port.map(|p| format!("http://localhost:{}", p)));
+            .or_else(|| o.launch.port.map(|p| zp_net::peer_origin("localhost", p)));
         return ToolLaunch {
             kind: o.launch.kind,
             url,
@@ -2905,7 +2905,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         );
         ToolLaunch {
             kind: "native".to_string(),
-            url: port.map(|p| format!("http://localhost:{}", p)),
+            url: port.map(|p| zp_net::peer_origin("localhost", p)),
             port,
             cmd: Some(cmd),
         }
@@ -2979,7 +2979,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         };
         ToolLaunch {
             kind: kind.to_string(),
-            url: Some(format!("http://localhost:{}", p)),
+            url: Some(zp_net::peer_origin("localhost", p)),
             port: Some(p),
             cmd,
         }

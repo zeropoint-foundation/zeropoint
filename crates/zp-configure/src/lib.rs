@@ -304,9 +304,10 @@ impl ConfigEngine {
                         &original_default[host_start + i..]
                     })
                     .unwrap_or("");
-                format!(
-                    "http://localhost:{}/api/v1/proxy/{}{}",
-                    port, provider, suffix
+                zp_net::peer_url_with_path(
+                    "localhost",
+                    port,
+                    &format!("/api/v1/proxy/{}{}", provider, suffix),
                 )
             }
             None => original_default.to_string(),
@@ -3729,16 +3730,19 @@ OLLAMA_SERVER_URL=http://localhost:11434
         let pattern = m.unwrap();
         assert_eq!(pattern.field, ConfigField::Url);
 
-        // The proxy_url method should rewrite
+        // The proxy_url method should rewrite — and route through
+        // zp_net::peer_url_with_path, which normalizes `localhost` to
+        // the IPv4 literal so the launched tool reaches the substrate
+        // over IPv4 regardless of the host's resolver order.
         let url = engine.proxy_url("openai", "https://api.openai.com/v1");
-        assert_eq!(url, "http://localhost:17770/api/v1/proxy/openai/v1");
+        assert_eq!(url, "http://127.0.0.1:17770/api/v1/proxy/openai/v1");
     }
 
     #[test]
     fn test_proxy_url_anthropic() {
         let engine = ConfigEngine::with_proxy(4000);
         let url = engine.proxy_url("anthropic", "https://api.anthropic.com");
-        assert_eq!(url, "http://localhost:4000/api/v1/proxy/anthropic");
+        assert_eq!(url, "http://127.0.0.1:4000/api/v1/proxy/anthropic");
     }
 
     #[test]
@@ -3777,8 +3781,11 @@ LLM_MODEL=gpt-4
         let env = vault.resolve_tool_env("proxy-tool").unwrap();
 
         let base_url = env.get("OPENAI_BASE_URL").expect("OPENAI_BASE_URL should be in vault");
+        // The proxy URL is loopback-normalized to the IPv4 literal via
+        // zp_net::peer_url_with_path so the launched tool reaches the
+        // substrate over IPv4 regardless of resolver order.
         assert!(
-            std::str::from_utf8(base_url).unwrap().contains("localhost:17770/api/v1/proxy/openai"),
+            std::str::from_utf8(base_url).unwrap().contains("127.0.0.1:17770/api/v1/proxy/openai"),
             "URL should be rewritten to proxy"
         );
 
