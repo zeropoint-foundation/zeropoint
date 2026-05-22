@@ -125,6 +125,14 @@ pub struct ToolBinding {
     /// Where the port preference originated.
     #[serde(default)]
     pub preference_source: PreferenceSource,
+    /// IP stacks the listener bound on. `Some(["ipv4"])` for
+    /// single-stack, `Some(["ipv4", "ipv6"])` for dual-stack via
+    /// `zp_net::bind_loopback`. `None` means the stacks weren't
+    /// observed at allocation time — pre-Phase-4 receipts on the
+    /// chain and tool-side bindings where ZP can't directly inspect
+    /// the bind both read as None.
+    #[serde(default)]
+    pub bound_stacks: Option<Vec<String>>,
 }
 
 // Backward compat alias
@@ -224,6 +232,7 @@ impl PortRegistry {
                                         pid: None,
                                         allocated_receipt_id: "legacy".to_string(),
                                         preference_source: PreferenceSource::Default,
+                                        bound_stacks: None,
                                     },
                                 ))
                             })
@@ -275,6 +284,39 @@ impl PortRegistry {
         extra_vars: &[String],
         preferred: Option<u16>,
         preference_source: PreferenceSource,
+    ) -> Result<ToolBinding, RegistryError> {
+        self.allocate_or_existing_with_stacks(
+            tool,
+            pid,
+            primary_var,
+            extra_vars,
+            preferred,
+            preference_source,
+            None,
+        )
+    }
+
+    /// Allocate a port for `tool` and record the IP stacks the
+    /// listener bound on. Used by callers that hold a
+    /// [`zp_net::DualStackListener`] at allocation time (e.g.
+    /// substrate-own listeners going through PortRegistry — see
+    /// design doc Phase 4 finding #3 option (b)). For tool
+    /// processes where the actual bind happens in a subprocess,
+    /// `bound_stacks` is unknown at allocation time and callers
+    /// should use [`Self::allocate_or_existing`] (which passes
+    /// `None`).
+    ///
+    /// Pass canonical values: `Some(&["ipv4"])` for single-stack,
+    /// `Some(&["ipv4", "ipv6"])` for dual-stack. `None` for unknown.
+    pub fn allocate_or_existing_with_stacks(
+        &self,
+        tool: &str,
+        pid: u32,
+        primary_var: &str,
+        extra_vars: &[String],
+        preferred: Option<u16>,
+        preference_source: PreferenceSource,
+        bound_stacks: Option<&[&str]>,
     ) -> Result<ToolBinding, RegistryError> {
         let mut map = self.bindings.lock().unwrap();
 
@@ -376,6 +418,7 @@ impl PortRegistry {
             pid,
             &extra_ports,
             preference_source,
+            bound_stacks,
         );
 
         let binding = ToolBinding {
@@ -391,6 +434,8 @@ impl PortRegistry {
             pid: Some(pid),
             allocated_receipt_id: receipt_id,
             preference_source,
+            bound_stacks: bound_stacks
+                .map(|s| s.iter().map(|x| x.to_string()).collect()),
         };
         info!("Port registry: {} → :{} ({})", tool, primary_port, primary_var);
         map.insert(tool.to_string(), binding.clone());
@@ -423,6 +468,48 @@ impl PortRegistry {
         port_var: &str,
     ) -> Result<ToolBinding, RegistryError> {
         self.get_or_assign_multi(tool_name, port_var, &[])
+    }
+
+    // ── Bound-stacks observation (Phase 4) ────────────────────────────
+
+    /// Record which IP stacks the listener for `tool` actually bound
+    /// on, after the bind happens. Used by callers that learn the
+    /// stacks post-allocation — e.g. an lsof-based reconciler that
+    /// observes both IPv4 and IPv6 listening sockets, or the
+    /// substrate's own listener-registration code that holds a
+    /// [`zp_net::DualStackListener`] after `bind_loopback` returns.
+    ///
+    /// Pass canonical values: `&["ipv4"]` for single-stack,
+    /// `&["ipv4", "ipv6"]` for dual-stack. The values land on the
+    /// in-memory `ToolBinding` and in a fresh `PortAllocated`
+    /// receipt extension so the chain records when stacks became
+    /// known. The original allocation receipt is unchanged —
+    /// the chain reads as "allocated → stacks-observed" across two
+    /// receipts, the second carrying the `bound_stacks` field.
+    ///
+    /// No-op if `tool` isn't allocated.
+    pub fn record_bound_stacks(&self, tool: &str, stacks: &[&str]) {
+        let mut map = self.bindings.lock().unwrap();
+        if let Some(binding) = map.get_mut(tool) {
+            binding.bound_stacks =
+                Some(stacks.iter().map(|s| s.to_string()).collect());
+            let port = binding.port;
+            let port_var = binding.port_var.clone();
+            let pid = binding.pid.unwrap_or(0);
+            let extra_ports = binding.extra_ports.clone();
+            let preference_source = binding.preference_source;
+            drop(map);
+            self.emit_allocate_receipt(
+                tool,
+                port,
+                &port_var,
+                pid,
+                &extra_ports,
+                preference_source,
+                Some(stacks),
+            );
+            self.persist();
+        }
     }
 
     // ── Release / clear binding / deallocate ──────────────────────────
@@ -584,21 +671,30 @@ impl PortRegistry {
         pid: u32,
         extra_ports: &HashMap<String, u16>,
         preference_source: PreferenceSource,
+        bound_stacks: Option<&[&str]>,
     ) -> String {
+        // Phase 4: include `bound_stacks` only when the caller knows
+        // them. Old receipts on the chain don't have the field; new
+        // receipts emitted by callers that don't yet observe stacks
+        // (subprocess tools, reconciliation events) also omit it.
+        // Both shapes deserialize against the flexible PortAllocated
+        // TypeRules — no validator change required.
+        let mut extension = serde_json::json!({
+            "tool": tool,
+            "port": port,
+            "port_var": port_var,
+            "pid": pid,
+            "extra_ports": extra_ports,
+            "preference_source": preference_source,
+        });
+        if let Some(stacks) = bound_stacks {
+            extension["bound_stacks"] = serde_json::json!(stacks);
+        }
+
         let receipt = ReceiptBuilder::new(ReceiptType::PortAllocated, &self.executor_id)
             .status(Status::Success)
             .trust_grade(TrustGrade::D)
-            .extension(
-                "zp.port.lifecycle",
-                serde_json::json!({
-                    "tool": tool,
-                    "port": port,
-                    "port_var": port_var,
-                    "pid": pid,
-                    "extra_ports": extra_ports,
-                    "preference_source": preference_source,
-                }),
-            )
+            .extension("zp.port.lifecycle", extension)
             .finalize();
         let receipt_id = receipt.id.clone();
         self.append_to_chain(receipt);
@@ -782,6 +878,11 @@ impl PortRegistry {
                         pid,
                         &HashMap::new(),
                         PreferenceSource::PostLaunchObservation,
+                        // bound_stacks unknown at reconciliation —
+                        // lsof-based observation of v4/v6 binds is
+                        // the natural follow-up. Tracked as part of
+                        // Phase 4 finding #3 option (b).
+                        None,
                     );
                     unmatched_actuals.retain(|&p| p != actual);
                     pairs_emitted += 1;
@@ -1270,6 +1371,7 @@ mod tests {
             pid: None,
             allocated_receipt_id: String::new(),
             preference_source: PreferenceSource::Default,
+            bound_stacks: None,
         }
     }
 
@@ -1333,6 +1435,7 @@ mod tests {
             pid: Some(12345),
             allocated_receipt_id: "port-abc123".to_string(),
             preference_source: PreferenceSource::Manifest,
+            bound_stacks: None,
         };
         let json = serde_json::to_string(&binding).unwrap();
         let deserialized: ToolBinding = serde_json::from_str(&json).unwrap();
@@ -1827,5 +1930,231 @@ tool 1 u  TCP *:9100 (LISTEN)\n";
         let sample = "tool 1 u  TCP *:9100 (ESTABLISHED)\n";
         let ports = parse_lsof_listen_ports(sample);
         assert!(ports.is_empty(), "ESTABLISHED not included");
+    }
+
+    // ── Phase 4: bound_stacks round-trip ──────────────────────────────
+
+    /// `allocate_or_existing_with_stacks` records the stacks on the
+    /// returned binding, persists them, and reloads them through the
+    /// `tool-ports.json` serde round-trip.
+    #[test]
+    fn bound_stacks_persist_and_reload() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = PortRegistry::new(dir.path());
+        let b = reg
+            .allocate_or_existing_with_stacks(
+                "dual-stack-tool",
+                4242,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+                Some(&["ipv4", "ipv6"]),
+            )
+            .expect("allocate");
+        assert_eq!(
+            b.bound_stacks.as_deref(),
+            Some(&["ipv4".to_string(), "ipv6".to_string()][..]),
+            "binding carries stacks from allocation"
+        );
+
+        // Reload from disk — the in-memory + persisted shape match.
+        let reg2 = PortRegistry::new(dir.path());
+        let reloaded = reg2.get_assigned("dual-stack-tool").expect("reload");
+        assert_eq!(
+            reloaded.bound_stacks.as_deref(),
+            Some(&["ipv4".to_string(), "ipv6".to_string()][..]),
+            "stacks survive serde round-trip"
+        );
+    }
+
+    /// Existing `allocate_or_existing` (no-stacks signature) leaves
+    /// `bound_stacks` as None — the chain-history-compat shape.
+    #[test]
+    fn allocate_without_stacks_leaves_none() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = PortRegistry::new(dir.path());
+        let b = reg
+            .allocate_or_existing(
+                "tool-without-stacks",
+                4243,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
+            .expect("allocate");
+        assert!(
+            b.bound_stacks.is_none(),
+            "no-stacks path leaves bound_stacks unset"
+        );
+    }
+
+    /// Phase 4 smoke test: a chain-backed allocation with stacks
+    /// produces a `PortAllocated` receipt whose `zp.port.lifecycle`
+    /// extension carries `bound_stacks`. This is the chain-canonical
+    /// fact the substrate's lsof maturity gate depends on.
+    #[test]
+    fn allocate_with_stacks_emits_chain_receipt_with_field() {
+        use std::sync::{Arc, Mutex};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db"))
+            .expect("audit store");
+        let store = Arc::new(Mutex::new(store));
+        let reg = PortRegistry::new_with_audit(
+            dir.path(),
+            Some(store.clone()),
+            "phase4-test".to_string(),
+        );
+
+        reg.allocate_or_existing_with_stacks(
+            "chain-stack-tool",
+            5555,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+            Some(&["ipv4", "ipv6"]),
+        )
+        .expect("allocate");
+
+        let entries = store
+            .lock()
+            .unwrap()
+            .export_chain(10)
+            .expect("export_chain");
+
+        let lifecycle_entries: Vec<&serde_json::Value> = entries
+            .iter()
+            .filter_map(|e| e.receipt.as_ref())
+            .filter_map(|r| r.extensions.as_ref()?.get("zp.port.lifecycle"))
+            .collect();
+
+        assert!(
+            !lifecycle_entries.is_empty(),
+            "at least one zp.port.lifecycle receipt landed on chain"
+        );
+        let allocation_ext = lifecycle_entries
+            .iter()
+            .find(|ext| ext.get("tool").and_then(|t| t.as_str()) == Some("chain-stack-tool"))
+            .expect("allocation receipt for chain-stack-tool");
+        let stacks = allocation_ext
+            .get("bound_stacks")
+            .and_then(|s| s.as_array())
+            .expect("bound_stacks present in extension");
+        let stack_names: Vec<&str> = stacks
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert_eq!(
+            stack_names,
+            vec!["ipv4", "ipv6"],
+            "bound_stacks records what the listener bound"
+        );
+    }
+
+    /// `allocate_or_existing` (no-stacks form) emits a receipt
+    /// WITHOUT a `bound_stacks` field — chain-history-compat is
+    /// preserved.
+    #[test]
+    fn allocate_without_stacks_omits_field_from_chain_receipt() {
+        use std::sync::{Arc, Mutex};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db"))
+            .expect("audit store");
+        let store = Arc::new(Mutex::new(store));
+        let reg = PortRegistry::new_with_audit(
+            dir.path(),
+            Some(store.clone()),
+            "phase4-test".to_string(),
+        );
+
+        reg.allocate_or_existing(
+            "no-stacks-tool",
+            5556,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
+
+        let entries = store
+            .lock()
+            .unwrap()
+            .export_chain(10)
+            .expect("export_chain");
+        let allocation_ext = entries
+            .iter()
+            .filter_map(|e| e.receipt.as_ref())
+            .filter_map(|r| r.extensions.as_ref()?.get("zp.port.lifecycle"))
+            .find(|ext| ext.get("tool").and_then(|t| t.as_str()) == Some("no-stacks-tool"))
+            .expect("allocation receipt for no-stacks-tool");
+        assert!(
+            allocation_ext.get("bound_stacks").is_none(),
+            "bound_stacks omitted when stacks unknown — pre-Phase-4 shape preserved"
+        );
+    }
+
+    /// `record_bound_stacks` updates an existing binding and emits a
+    /// follow-up PortAllocated receipt carrying the stacks. The use
+    /// case is callers that learn stacks after the initial allocation
+    /// (lsof reconciler, substrate-listener registration).
+    #[test]
+    fn record_bound_stacks_updates_binding_and_emits_chain_receipt() {
+        use std::sync::{Arc, Mutex};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db"))
+            .expect("audit store");
+        let store = Arc::new(Mutex::new(store));
+        let reg = PortRegistry::new_with_audit(
+            dir.path(),
+            Some(store.clone()),
+            "phase4-test".to_string(),
+        );
+
+        reg.allocate_or_existing(
+            "deferred-stacks",
+            5557,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
+
+        // Initial allocation: bound_stacks unknown.
+        assert!(reg.get_assigned("deferred-stacks").unwrap().bound_stacks.is_none());
+
+        // Caller observes the actual bind result and reports.
+        reg.record_bound_stacks("deferred-stacks", &["ipv4", "ipv6"]);
+
+        let updated = reg.get_assigned("deferred-stacks").unwrap();
+        assert_eq!(
+            updated.bound_stacks.as_deref(),
+            Some(&["ipv4".to_string(), "ipv6".to_string()][..]),
+            "binding now carries the observed stacks"
+        );
+
+        // The follow-up receipt is on chain; the most recent
+        // zp.port.lifecycle entry for this tool carries bound_stacks.
+        let entries = store
+            .lock()
+            .unwrap()
+            .export_chain(20)
+            .expect("export_chain");
+        let with_stacks: Vec<_> = entries
+            .iter()
+            .filter_map(|e| e.receipt.as_ref())
+            .filter_map(|r| r.extensions.as_ref()?.get("zp.port.lifecycle"))
+            .filter(|ext| {
+                ext.get("tool").and_then(|t| t.as_str()) == Some("deferred-stacks")
+                    && ext.get("bound_stacks").is_some()
+            })
+            .collect();
+        assert!(
+            !with_stacks.is_empty(),
+            "record_bound_stacks emitted a follow-up receipt carrying the field"
+        );
     }
 }
