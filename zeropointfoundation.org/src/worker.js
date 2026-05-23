@@ -24,7 +24,7 @@ import { emitReceipt, emitAuthFailure } from "./auth/receipts.js";
 import { storeDocument, queryDocuments, getDocument, getDocumentVersions, downloadDocument, updateDocument, deleteDocument, logDocumentAccess } from "./docs/store.js";
 import { uploadAsset, queryAssets, getAsset, transitionAsset, updateAsset, deleteAsset } from "./docs/media.js";
 import { createDownloadLink, serveDownloadLink, revokeDownloadLink, queryDownloadLinks, createUploadLink, consumeUploadLink } from "./docs/links.js";
-import { createSession, buildSessionCookie } from "./auth/session.js";
+import { createSession, buildSessionCookie, clearSessionCookie } from "./auth/session.js";
 import {
   RP_ID, RP_NAME,
   generateChallenge, base64urlEncode, base64urlDecode,
@@ -236,6 +236,21 @@ async function handleApi(request, env) {
         headers: {
           "Content-Type": "application/json",
           "Set-Cookie": buildSessionCookie(request, env, result.token),
+          ...corsHeaders(),
+        },
+      });
+    }
+
+    // POST /api/auth/logout — clear the session cookie. HMAC session
+    // tokens are stateless (no server-side revocation list), so all
+    // we can do here is clear the browser-side cookie. Programmatic
+    // Bearer holders manage their own token lifetime.
+    if (path === "/api/auth/logout" && method === "POST") {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Set-Cookie": clearSessionCookie(request, env),
           ...corsHeaders(),
         },
       });
@@ -901,6 +916,93 @@ async function handleApi(request, env) {
       });
 
       return json({ operatorId, count: receipts.length, receipts });
+    }
+
+    // GET /api/operator/me/chain/stream — SSE feed of new chain_entries rows
+    // for the requesting operator. Polls D1 every 2s and pushes events as
+    // new rows arrive. Client reconnects via Last-Event-ID header.
+    if (path === "/api/operator/me/chain/stream" && method === "GET") {
+      const gate = await governanceGate(request, env, null);
+      if (!gate.ok) return gate.response;
+
+      const operatorId = gate.operator.operatorId;
+      const lastEventId = request.headers.get("Last-Event-ID");
+      let lastSeq = lastEventId ? parseInt(lastEventId, 10) : 0;
+      if (isNaN(lastSeq)) lastSeq = 0;
+
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const encoder = new TextEncoder();
+
+      // Polling loop — CF Workers keeps the request alive while the stream is open
+      (async () => {
+        try {
+          // Send an initial keep-alive comment so the client knows the stream is live
+          await writer.write(encoder.encode(": connected\n\n"));
+
+          while (true) {
+            await new Promise(r => setTimeout(r, 2000));
+
+            const rows = await env.DB.prepare(
+              `SELECT id, operator_id, claim, subject, capability_used,
+                      metadata, created_at, sequence, prev_hash, entry_hash, signatures
+               FROM chain_entries WHERE operator_id = ? AND sequence > ?
+               ORDER BY sequence ASC LIMIT 20`
+            ).bind(operatorId, lastSeq).all();
+
+            for (const row of rows.results) {
+              const receipt = {
+                ...row,
+                metadata: row.metadata ? JSON.parse(row.metadata) : null,
+                signatures: row.signatures ? JSON.parse(row.signatures) : [],
+                pre_signing_era: false,
+              };
+              const event =
+                `event: receipt\n` +
+                `id: ${row.sequence}\n` +
+                `data: ${JSON.stringify(receipt)}\n\n`;
+              await writer.write(encoder.encode(event));
+              lastSeq = row.sequence;
+            }
+          }
+        } catch {
+          await writer.close().catch(() => {});
+        }
+      })();
+
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          ...corsHeaders(),
+        },
+      });
+    }
+
+    // POST /api/feedback/viz — director feedback on the chain visualizer.
+    // Emits a feedback:viz receipt into chain_entries so feedback is chain-native.
+    if (path === "/api/feedback/viz" && method === "POST") {
+      const gate = await governanceGate(request, env, null);
+      if (!gate.ok) return gate.response;
+
+      const operatorId = gate.operator.operatorId;
+      const body = await request.json().catch(() => ({}));
+      const feedbackText = (body.feedback || "").slice(0, 2000);
+      if (!feedbackText) return json({ error: "feedback required" }, 400);
+
+      const receiptId = await emitReceipt(env, {
+        operatorId,
+        claim: "feedback:viz",
+        subject: operatorId,
+        capability: "self",
+        metadata: {
+          feedback_text: feedbackText,
+          context: body.context || {},
+        },
+      });
+
+      return json({ ok: true, receiptId });
     }
 
     // POST /api/onboard/register-identity — one-shot self-registration of the

@@ -392,7 +392,6 @@ class ZpReceiptChain extends HTMLElement {
   async _init() {
     this._closeSSE();
     const token = this._token();
-    if (!token) return;
 
     const initialUrl = this.getAttribute('initial') || '/api/operator/me/chain';
     const limit = Math.min(
@@ -400,9 +399,18 @@ class ZpReceiptChain extends HTMLElement {
       500,
     );
 
+    // Browser surfaces auth via the zp_session HttpOnly cookie
+    // (sent automatically with credentials: 'include'). Programmatic
+    // callers can still pass an auth-token attribute or write a
+    // session token to storage; if either is available, use it as a
+    // Bearer header for the request. Otherwise rely on the cookie.
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+
     try {
       const res = await fetch(`${initialUrl}?limit=${limit}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
+        credentials: 'include',
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -427,7 +435,6 @@ class ZpReceiptChain extends HTMLElement {
 
   _openSSE() {
     const token = this._token();
-    if (!token) return;
 
     const feedUrl = this.getAttribute('feed') || '/api/operator/me/chain/stream';
     const ctrl = new AbortController();
@@ -440,12 +447,14 @@ class ZpReceiptChain extends HTMLElement {
       if (ctrl.signal.aborted) return;
 
       try {
+        const headers = {
+          'Last-Event-ID': String(lastSeq),
+          Accept: 'text/event-stream',
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
         const res = await fetch(feedUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Last-Event-ID': String(lastSeq),
-            Accept: 'text/event-stream',
-          },
+          headers,
+          credentials: 'include',
           signal: ctrl.signal,
         });
 
@@ -1125,7 +1134,6 @@ class ZpReceiptChain extends HTMLElement {
     if (!text) return;
 
     const token = this._token();
-    if (!token) return;
 
     const context = {
       current_mode: this._mode,
@@ -1134,12 +1142,12 @@ class ZpReceiptChain extends HTMLElement {
     };
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch('/api/feedback/viz', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ feedback: text, context }),
       });
       if (res.ok) {

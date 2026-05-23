@@ -261,7 +261,26 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 }
 
-renderList();
+// On load, probe /api/me with the session cookie. If the director is
+// already signed in (returning visit, cookie still valid), skip the
+// director-select UI entirely and land them in their workspace.
+// This is the "stays signed in across tabs" path now that
+// verifyRequest reads the zp_session cookie.
+async function maybeRedirectIfSignedIn() {
+  try {
+    const r = await fetch("/api/me", { credentials: "include" });
+    if (r.ok) {
+      window.location.href = "/mail/";
+      return true;
+    }
+  } catch { /* network failure → fall through to interactive sign-in */ }
+  return false;
+}
+
+(async () => {
+  const skipUi = await maybeRedirectIfSignedIn();
+  if (!skipUi) renderList();
+})();
 </script>
 </body>
 </html>
