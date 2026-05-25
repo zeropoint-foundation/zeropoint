@@ -47,6 +47,8 @@ capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vi
 openai_compatible = true
 input_per_million_usd = 2.50
 output_per_million_usd = 10.00
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "anthropic"
@@ -65,6 +67,8 @@ openai_compatible = false
 openai_proxy = true
 input_per_million_usd = 3.00
 output_per_million_usd = 15.00
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "gemini"
@@ -82,6 +86,8 @@ capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vi
 openai_compatible = true
 input_per_million_usd = 1.25
 output_per_million_usd = 5.00
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "mistral"
@@ -99,6 +105,8 @@ capabilities = ["reasoning_llm", "fast_llm", "code_llm", "vision", "embedding"]
 openai_compatible = true
 input_per_million_usd = 0.40
 output_per_million_usd = 1.20
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "cohere"
@@ -116,6 +124,8 @@ capabilities = ["reasoning_llm", "embedding", "reranking"]
 openai_compatible = true
 input_per_million_usd = 0.50
 output_per_million_usd = 1.50
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "xai"
@@ -148,6 +158,8 @@ capabilities = ["reasoning_llm", "code_llm"]
 openai_compatible = true
 input_per_million_usd = 0.27
 output_per_million_usd = 1.10
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "perplexity"
@@ -165,6 +177,8 @@ capabilities = ["reasoning_llm", "web_search"]
 openai_compatible = true
 input_per_million_usd = 1.00
 output_per_million_usd = 1.00
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "groq"
@@ -182,6 +196,8 @@ capabilities = ["reasoning_llm", "fast_llm"]
 openai_compatible = true
 input_per_million_usd = 0.05
 output_per_million_usd = 0.10
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "together"
@@ -199,6 +215,8 @@ capabilities = ["reasoning_llm", "fast_llm", "code_llm", "image_gen", "embedding
 openai_compatible = true
 input_per_million_usd = 0.20
 output_per_million_usd = 0.80
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "fireworks"
@@ -216,6 +234,8 @@ capabilities = ["reasoning_llm", "fast_llm", "code_llm", "embedding"]
 openai_compatible = true
 input_per_million_usd = 0.20
 output_per_million_usd = 0.80
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "ai21"
@@ -251,6 +271,8 @@ aggregator = true
 routing = "intelligent"
 input_per_million_usd = 0.90
 output_per_million_usd = 3.50
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 # ── Embedding / Specialized ─────────────────────────────────
 
@@ -376,6 +398,8 @@ aggregator = true
 routing = "explicit"
 input_per_million_usd = 1.00
 output_per_million_usd = 3.00
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "deepinfra"
@@ -393,6 +417,8 @@ capabilities = ["reasoning_llm", "fast_llm", "code_llm"]
 openai_compatible = true
 input_per_million_usd = 0.20
 output_per_million_usd = 0.60
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 # ── Search / Tool APIs ─────────────────────────────────────
 
@@ -520,6 +546,8 @@ aggregator = true
 routing = "explicit"
 input_per_million_usd = 0.10
 output_per_million_usd = 0.30
+pricing_source = "manual"
+pricing_verified_at = "2026-05-25T00:00:00Z"
 
 [[providers]]
 id = "doubao"

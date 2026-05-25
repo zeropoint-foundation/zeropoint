@@ -241,6 +241,14 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: false,
         },
+
+        // --- Pricing freshness ---
+        ReceiptType::PricingRefreshClaim => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None, // pricing records persist indefinitely
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -289,6 +297,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::FleetMembershipAccepted { .. } => "FleetMembershipAccepted",
         ClaimMetadata::FinancialCapability { .. } => "FinancialCapability",
         ClaimMetadata::ExternalAnchor { .. } => "ExternalAnchor",
+        ClaimMetadata::PricingRefresh { .. } => "PricingRefresh",
     }
 }
 
@@ -317,6 +326,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::FleetMembershipAccepted, ClaimMetadata::FleetMembershipAccepted { .. })
             | (ReceiptType::FinancialCapabilityGrant, ClaimMetadata::FinancialCapability { .. })
             | (ReceiptType::ExternalAnchor, ClaimMetadata::ExternalAnchor { .. })
+            | (ReceiptType::PricingRefreshClaim, ClaimMetadata::PricingRefresh { .. })
     )
 }
 

@@ -43,19 +43,46 @@ use crate::AppState;
 // ============================================================================
 
 static PROVIDER_CATALOG: OnceLock<Vec<ProviderProfile>> = OnceLock::new();
+/// Layer over PROVIDER_CATALOG that holds a refreshed snapshot after `zp pricing refresh`.
+/// The inner `Option` is `None` until the first refresh; `catalog_snapshot()` falls
+/// back to PROVIDER_CATALOG when no refresh has been applied.
+static REFRESHED_CATALOG: OnceLock<std::sync::RwLock<Option<Vec<ProviderProfile>>>> =
+    OnceLock::new();
 
 fn get_catalog() -> &'static Vec<ProviderProfile> {
     PROVIDER_CATALOG.get_or_init(|| zp_engine::providers::load_catalog())
 }
 
+/// Return a snapshot of the current catalog, preferring the refreshed version.
+fn catalog_snapshot() -> Vec<ProviderProfile> {
+    let lock = REFRESHED_CATALOG
+        .get_or_init(|| std::sync::RwLock::new(None));
+    if let Ok(guard) = lock.read() {
+        if let Some(ref refreshed) = *guard {
+            return refreshed.clone();
+        }
+    }
+    get_catalog().clone()
+}
+
+/// Replace the in-process catalog with a freshly-fetched snapshot.
+/// Called by the `POST /api/v1/pricing/refresh` handler after a successful fetch.
+pub fn reload_provider_catalog(updated: Vec<ProviderProfile>) {
+    let lock = REFRESHED_CATALOG
+        .get_or_init(|| std::sync::RwLock::new(None));
+    if let Ok(mut guard) = lock.write() {
+        *guard = Some(updated);
+    }
+}
+
 /// Look up a provider profile by proxy provider name.
-/// Handles the proxy name → catalog id mapping for non-matching entries.
-fn catalog_lookup(proxy_provider: &str) -> Option<&'static ProviderProfile> {
+/// Returns an owned clone so the refreshed catalog (RwLock) can be consulted.
+fn catalog_lookup(proxy_provider: &str) -> Option<ProviderProfile> {
     let catalog_id = match proxy_provider {
         "google" => "gemini",
         other => other,
     };
-    get_catalog().iter().find(|p| p.id == catalog_id)
+    catalog_snapshot().into_iter().find(|p| p.id == catalog_id)
 }
 
 /// Rates for a provider: (input_per_million_usd, output_per_million_usd).
@@ -91,14 +118,40 @@ pub struct RoutingConfig {
     pub experimental: Option<TierRoute>,
 }
 
-/// TOML wrapper for `[tiers.*]` table structure.
+// ============================================================================
+// Pricing staleness config — loaded from [pricing] section of routing.toml
+// ============================================================================
+
+/// Per-host pricing staleness override.
+#[derive(Debug, Clone, Deserialize)]
+pub struct HostPricingConfig {
+    pub stale_days: u64,
+}
+
+/// Operator pricing freshness configuration.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PricingConfig {
+    /// Days after which pricing is considered stale (global default).
+    #[serde(default = "default_stale_days")]
+    pub default_stale_days: u64,
+    /// Per-host overrides: provider ID → stale threshold.
+    #[serde(default)]
+    pub hosts: std::collections::HashMap<String, HostPricingConfig>,
+}
+
+fn default_stale_days() -> u64 { 30 }
+
+/// TOML wrapper for `[tiers.*]` and `[pricing]` table structure.
 #[derive(Debug, Deserialize, Default)]
 struct RoutingFile {
     #[serde(default)]
     tiers: RoutingConfig,
+    #[serde(default)]
+    pricing: PricingConfig,
 }
 
 static ROUTING_CONFIG: OnceLock<RoutingConfig> = OnceLock::new();
+static PRICING_CONFIG: OnceLock<PricingConfig> = OnceLock::new();
 
 fn get_routing_config() -> &'static RoutingConfig {
     ROUTING_CONFIG.get_or_init(|| {
@@ -147,6 +200,8 @@ fn get_routing_config() -> &'static RoutingConfig {
                         if f.tiers.experimental.is_some() {
                             config.experimental = f.tiers.experimental;
                         }
+                        // Populate pricing config from the same file
+                        let _ = PRICING_CONFIG.set(f.pricing);
                     }
                     Err(e) => {
                         warn!(error = %e, "Failed to parse routing.toml; using compiled-in defaults");
@@ -157,6 +212,21 @@ fn get_routing_config() -> &'static RoutingConfig {
 
         config
     })
+}
+
+fn get_pricing_config() -> &'static PricingConfig {
+    PRICING_CONFIG.get_or_init(PricingConfig::default)
+}
+
+/// Staleness threshold in days for a given provider host ID.
+/// Uses per-host override from routing.toml `[pricing.hosts.*]` if present,
+/// falling back to the global `default_stale_days`.
+pub fn stale_threshold_days(provider_id: &str) -> u64 {
+    let cfg = get_pricing_config();
+    cfg.hosts
+        .get(provider_id)
+        .map(|h| h.stale_days)
+        .unwrap_or(cfg.default_stale_days)
 }
 
 /// Resolve an `InferenceTier` to a `(provider, model)` pair.
@@ -646,10 +716,25 @@ pub async fn proxy_handler(
     let (input_per_m, output_per_m) = provider_rates(&provider);
     let cost = estimate_cost_usd(input_per_m, output_per_m, &usage);
 
+    // Collect pricing provenance for receipt extensions
+    let provider_profile = catalog_lookup(&provider);
+    let pricing_age_days = provider_profile
+        .as_ref()
+        .and_then(|p| p.pricing_age_days());
+    let pricing_source_str = provider_profile.as_ref().map(|p| {
+        match &p.pricing_source {
+            zp_engine::providers::PricingSource::Fetch { source_url } => {
+                format!("fetch:{}", source_url)
+            }
+            zp_engine::providers::PricingSource::Manual => "manual".to_string(),
+            zp_engine::providers::PricingSource::Unknown => "unknown".to_string(),
+        }
+    });
+
     // 5. Generate receipt
     let _receipt_id = format!("rcpt-proxy-{}", uuid::Uuid::now_v7());
 
-    let receipt = zp_receipt::Receipt::execution("zp-proxy")
+    let mut receipt_builder = zp_receipt::Receipt::execution("zp-proxy")
         .status(if status.is_success() {
             zp_receipt::Status::Success
         } else {
@@ -678,8 +763,31 @@ pub async fn proxy_handler(
             tokens_input: Some(usage.prompt_tokens),
             tokens_output: Some(usage.completion_tokens),
             cost_usd: Some(cost),
-        })
-        .finalize();
+        });
+
+    // Pricing provenance extensions (Commit 5)
+    if let Some(ref src) = pricing_source_str {
+        receipt_builder = receipt_builder.extension(
+            "zp.pricing.source",
+            serde_json::Value::String(src.clone()),
+        );
+    }
+    if let Some(age) = pricing_age_days {
+        receipt_builder = receipt_builder.extension(
+            "zp.pricing.age_days",
+            serde_json::Value::Number(age.into()),
+        );
+        // Emit a staleness warning extension when pricing is stale
+        let threshold = stale_threshold_days(&provider);
+        if age > threshold {
+            receipt_builder = receipt_builder.extension(
+                "zp.pricing.stale",
+                serde_json::Value::Bool(true),
+            );
+        }
+    }
+
+    let receipt = receipt_builder.finalize();
 
     info!(
         receipt_id = %receipt.id,
@@ -743,6 +851,65 @@ pub async fn proxy_handler(
         response_bytes.to_vec(),
     )
         .into_response()
+}
+
+// ============================================================================
+// POST /api/v1/pricing/refresh — live pricing refresh endpoint
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct PricingRefreshRequest {
+    /// Provider host IDs to refresh. Defaults to all hosts with known fetchers.
+    #[serde(default)]
+    pub hosts: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PricingRefreshResponse {
+    pub method: String,
+    pub host_ids: Vec<String>,
+    pub changed_count: u32,
+    pub unchanged_count: u32,
+    pub delta_lines: Vec<String>,
+    pub source_urls: Vec<String>,
+}
+
+pub async fn pricing_refresh_handler(
+    State(_state): State<AppState>,
+    Json(req): Json<PricingRefreshRequest>,
+) -> impl IntoResponse {
+    let host_ids = if req.hosts.is_empty() {
+        vec!["abacus".to_string()]
+    } else {
+        req.hosts
+    };
+
+    let catalog = catalog_snapshot();
+    let result = zp_engine::pricing::refresh_hosts(&catalog, &host_ids, |provider_id| {
+        let env_key = format!("{}_API_KEY", provider_id.to_uppercase());
+        std::env::var(&env_key).unwrap_or_default()
+    })
+    .await;
+
+    // Hot-reload the in-process catalog so subsequent proxy requests use
+    // updated rates without a server restart.
+    reload_provider_catalog(result.updated_profiles.clone());
+
+    info!(
+        changed = result.changed_count,
+        unchanged = result.unchanged_count,
+        hosts = ?result.host_ids,
+        "pricing refresh complete"
+    );
+
+    Json(PricingRefreshResponse {
+        method: result.method,
+        host_ids: result.host_ids,
+        changed_count: result.changed_count,
+        unchanged_count: result.unchanged_count,
+        delta_lines: result.delta_lines,
+        source_urls: result.source_urls,
+    })
 }
 
 // ============================================================================

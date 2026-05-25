@@ -1139,6 +1139,8 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         )
         // API Proxy — governance-aware LLM provider proxy
         .route("/api/v1/proxy/*proxy_path", post(proxy::proxy_handler))
+        // Pricing freshness — live refresh of provider pricing data
+        .route("/api/v1/pricing/refresh", post(proxy::pricing_refresh_handler))
         .layer(cors)
         // ── Request body size limit (Phase 1.1: strict input validation) ──
         // Cap request bodies at 1 MB to prevent denial-of-service via

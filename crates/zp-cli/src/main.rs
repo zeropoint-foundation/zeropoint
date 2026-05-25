@@ -515,6 +515,10 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Pricing freshness — fetch live pricing data or manually attest pricing.
+    #[command(subcommand)]
+    Pricing(PricingCmd),
 }
 
 #[derive(Subcommand)]
@@ -690,6 +694,55 @@ enum GateCmd {
     },
     /// List installed gates (constitutional + custom)
     List,
+}
+
+#[derive(Subcommand)]
+enum PricingCmd {
+    /// Fetch live pricing from provider APIs and update the local catalog.
+    ///
+    /// For each host ID that has a fetcher, queries the provider's pricing
+    /// endpoint and backfills `pricing_verified_at` + `pricing_source` in the
+    /// operator's providers.toml override. Emits a signed PricingRefreshClaim
+    /// receipt to the audit chain.
+    ///
+    /// Example:
+    ///   zp pricing refresh --host abacus
+    ///   zp pricing refresh         (refreshes all hosts with known fetchers)
+    Refresh {
+        /// Provider host ID to refresh (repeatable; default: all hosts with fetchers).
+        #[arg(long = "host")]
+        hosts: Vec<String>,
+
+        /// Path to audit store (default: <data-dir>/audit.db).
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
+
+        /// Emit JSON instead of formatted text.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Manually attest that pricing data was verified at this moment.
+    ///
+    /// Use when you have checked pricing by hand (e.g., the provider's pricing
+    /// page) and want to reset the staleness clock without a live API fetch.
+    /// Emits a signed PricingRefreshClaim receipt with method="manual".
+    ///
+    /// Example:
+    ///   zp pricing attest --host openai --host anthropic
+    Attest {
+        /// Provider host ID to attest (repeatable; required).
+        #[arg(long = "host", required = true)]
+        hosts: Vec<String>,
+
+        /// Path to audit store (default: <data-dir>/audit.db).
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
+
+        /// Emit JSON instead of formatted text.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2748,6 +2801,16 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    if let Some(Commands::Pricing(cmd)) = &args.command {
+        match run_pricing(cmd, &args.data_dir).await {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m pricing failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     if let Some(Commands::Emit {
         label,
         issue,
@@ -3980,6 +4043,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Memory(_)) => unreachable!(),    // handled above
         Some(Commands::Discover { .. }) => unreachable!(), // handled above
         Some(Commands::Adapt { .. }) => unreachable!(), // handled above
+        Some(Commands::Pricing(_)) => unreachable!(),  // handled above
         Some(Commands::Scan { .. }) => unreachable!(),  // handled above
         Some(Commands::Operator(_)) => unreachable!(),  // handled above
         Some(Commands::Emit { .. }) => unreachable!(),  // handled above
@@ -5850,6 +5914,177 @@ fn print_discover_text(r: &DiscoverReport) {
         println!();
         println!("remediation: emit a CanonicalizedClaim receipt for each missing entity");
         println!("             (see crates/zp-server/src/tool_chain.rs append_bead_zero)");
+    }
+}
+
+// ============================================================================
+// zp pricing — freshness refresh and manual attestation
+// ============================================================================
+
+async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::chain::UnsealedEntry;
+    use zp_audit::AuditStore;
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_engine::pricing::{refresh_hosts, PricingRefreshResult};
+    use zp_engine::providers::{load_catalog, PricingSource, ProviderProfile};
+    use zp_receipt::{ClaimMetadata, ReceiptBuilder, ReceiptType, Signer, Status};
+
+    let (host_ids, audit_db, json, method) = match cmd {
+        PricingCmd::Refresh { hosts, audit_db, json } => {
+            let ids = if hosts.is_empty() {
+                vec!["abacus".to_string()]
+            } else {
+                hosts.clone()
+            };
+            (ids, audit_db, *json, "fetch")
+        }
+        PricingCmd::Attest { hosts, audit_db, json } => (hosts.clone(), audit_db, *json, "manual"),
+    };
+
+    let db_path = audit_db
+        .as_deref()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let secret = keyring
+        .load_operator()
+        .context("No operator key available — run `zp init` first")?
+        .secret_key();
+    let signer = Signer::from_secret(&secret);
+
+    let catalog = load_catalog();
+    let result: PricingRefreshResult = if method == "fetch" {
+        refresh_hosts(&catalog, &host_ids, |provider_id| {
+            // Resolve API key from environment (e.g. ABACUS_API_KEY)
+            let env_key = format!("{}_API_KEY", provider_id.to_uppercase());
+            std::env::var(&env_key).unwrap_or_default()
+        })
+        .await
+    } else {
+        // Manual attestation: backfill timestamps, no API call
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut updated = catalog.clone();
+        for p in &mut updated {
+            if host_ids.contains(&p.id) {
+                p.pricing_verified_at = Some(now.clone());
+                p.pricing_source = PricingSource::Manual;
+            }
+        }
+        PricingRefreshResult {
+            host_ids: host_ids.clone(),
+            method: "manual".to_string(),
+            source_urls: vec![],
+            changed_count: 0,
+            unchanged_count: host_ids.len() as u32,
+            delta_lines: vec![],
+            updated_profiles: updated,
+        }
+    };
+
+    // Emit PricingRefreshClaim receipt
+    let mut receipt = ReceiptBuilder::new(ReceiptType::PricingRefreshClaim, "zp-cli")
+        .status(Status::Success)
+        .claim_metadata(ClaimMetadata::PricingRefresh {
+            host_ids: result.host_ids.clone(),
+            method: result.method.clone(),
+            source_urls: result.source_urls.clone(),
+            changed_count: result.changed_count,
+            unchanged_count: result.unchanged_count,
+            delta_lines: result.delta_lines.clone(),
+        })
+        .finalize();
+    signer.sign(&mut receipt);
+    let receipt_id = receipt.id.clone();
+
+    let genesis_secret = keyring
+        .genesis_secret()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
+    let entry = UnsealedEntry::new(
+        ActorId::System("zp-pricing".to_string()),
+        AuditAction::SystemEvent {
+            event: format!("pricing:refresh:{}", result.method),
+        },
+        ConversationId::new(),
+        PolicyDecision::Allow { conditions: vec![] },
+        "zp-pricing",
+    )
+    .with_receipt(receipt);
+    store.append(entry).context("Failed to append to chain")?;
+
+    // Persist refreshed entries to operator's providers.toml override
+    persist_pricing_overrides(&host_ids, &result.updated_profiles);
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "receipt_id": receipt_id,
+                "method": result.method,
+                "host_ids": result.host_ids,
+                "changed_count": result.changed_count,
+                "unchanged_count": result.unchanged_count,
+                "delta_lines": result.delta_lines,
+                "source_urls": result.source_urls,
+            })
+        );
+    } else {
+        println!("\x1b[32m✓\x1b[0m  Pricing {} complete", result.method);
+        println!("  Receipt: {}", receipt_id);
+        println!(
+            "  {} changed, {} unchanged",
+            result.changed_count, result.unchanged_count
+        );
+        for line in &result.delta_lines {
+            println!("  Δ {}", line);
+        }
+    }
+
+    Ok(())
+}
+
+/// Write the refreshed provider entries into ~/ZeroPoint/config/providers.toml.
+///
+/// Merges with any existing override file: entries with matching IDs are
+/// replaced; new entries are appended. Unknown existing entries are preserved.
+fn persist_pricing_overrides(host_ids: &[String], updated_profiles: &[zp_engine::providers::ProviderProfile]) {
+    use zp_engine::providers::ProviderProfile;
+
+    let Ok(zp_home) = zp_core::paths::home() else { return };
+    let override_path = zp_home.join("config").join("providers.toml");
+
+    // Load existing override file, or start with an empty list
+    let mut existing: Vec<ProviderProfile> = if override_path.exists() {
+        #[derive(serde::Deserialize, Default)]
+        struct Catalog { #[serde(default)] providers: Vec<ProviderProfile> }
+        std::fs::read_to_string(&override_path)
+            .ok()
+            .and_then(|s| toml::from_str::<Catalog>(&s).ok())
+            .map(|c| c.providers)
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    // Merge: replace matching IDs, append new ones
+    for updated in updated_profiles.iter().filter(|p| host_ids.contains(&p.id)) {
+        if let Some(pos) = existing.iter().position(|p| p.id == updated.id) {
+            existing[pos] = updated.clone();
+        } else {
+            existing.push(updated.clone());
+        }
+    }
+
+    #[derive(serde::Serialize)]
+    struct Catalog { providers: Vec<ProviderProfile> }
+    if let Ok(content) = toml::to_string_pretty(&Catalog { providers: existing }) {
+        std::fs::create_dir_all(override_path.parent().unwrap_or(std::path::Path::new("."))).ok();
+        std::fs::write(&override_path, content).ok();
     }
 }
 

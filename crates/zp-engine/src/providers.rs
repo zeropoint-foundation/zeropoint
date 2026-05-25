@@ -6,11 +6,25 @@
 //! - Mapping env var names → provider IDs
 //! - Inferring provider names from unrecognized var names
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // Types
 // ============================================================================
+
+/// How a provider's pricing data is kept current.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PricingSource {
+    /// Fetched from the provider's API; `pricing_verified_at` is the fetch timestamp.
+    Fetch { source_url: String },
+    /// Manually attested via `zp pricing attest`; `pricing_verified_at` is the attestation time.
+    Manual,
+    /// Not yet verified — using initial seed or catalog default.
+    #[default]
+    Unknown,
+}
 
 /// A known AI/LLM provider from the TOML catalog.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +74,20 @@ pub struct ProviderProfile {
     /// Cost per million output tokens in USD (provider-level default).
     #[serde(default)]
     pub output_per_million_usd: Option<f64>,
+
+    // ── Pricing provenance ───────────────────────────────────
+    /// When this entry's pricing was last verified (RFC 3339 / ISO 8601).
+    /// Set by `zp pricing attest` (manual) or `zp pricing refresh` (fetch).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pricing_verified_at: Option<String>,
+
+    /// How this entry's pricing is kept current.
+    #[serde(default)]
+    pub pricing_source: PricingSource,
+
+    /// Cached-token input rate where supported (Anthropic prompt cache, Abacus cached tokens).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_input_per_million_usd: Option<f64>,
 }
 
 impl ProviderProfile {
@@ -81,6 +109,14 @@ impl ProviderProfile {
     /// Whether ZP proxy can translate OpenAI protocol for this provider.
     pub fn needs_proxy(&self) -> bool {
         self.openai_proxy.unwrap_or(false) && !self.is_openai_compatible()
+    }
+
+    /// Age of pricing data in whole days, or `None` if `pricing_verified_at` is unset.
+    pub fn pricing_age_days(&self) -> Option<u64> {
+        let ts = self.pricing_verified_at.as_deref()?;
+        let verified = ts.parse::<DateTime<Utc>>().ok()?;
+        let age = Utc::now() - verified;
+        Some(age.num_days().max(0) as u64)
     }
 
     /// Get all providers from a catalog that satisfy a given capability.

@@ -576,6 +576,10 @@ pub enum ReceiptType {
     PortAllocated,
     /// Records that a port allocation was released.
     PortReleased,
+
+    // --- Pricing ---
+    /// Records a pricing refresh action (API fetch or manual attestation) for one or more hosts.
+    PricingRefreshClaim,
 }
 
 impl ReceiptType {
@@ -607,6 +611,7 @@ impl ReceiptType {
             ReceiptType::FinancialCapabilityGrant => "fcap",
             ReceiptType::PortAllocated => "port",
             ReceiptType::PortReleased => "port",
+            ReceiptType::PricingRefreshClaim => "pric",
         }
     }
 
@@ -649,6 +654,8 @@ impl ReceiptType {
             ReceiptType::FinancialCapabilityGrant => None,
             // Port lifecycle receipts are standalone
             ReceiptType::PortAllocated | ReceiptType::PortReleased => None,
+            // Pricing refresh claims are standalone
+            ReceiptType::PricingRefreshClaim => None,
         }
     }
 
@@ -727,6 +734,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::FinancialCapabilityGrant => write!(f, "financial_capability_grant"),
             ReceiptType::PortAllocated => write!(f, "port_allocated"),
             ReceiptType::PortReleased => write!(f, "port_released"),
+            ReceiptType::PricingRefreshClaim => write!(f, "pricing_refresh_claim"),
         }
     }
 }
@@ -1378,6 +1386,24 @@ pub enum ClaimMetadata {
         previous_anchor_id: Option<String>,
         /// When the anchor was submitted
         anchored_at: String,
+    },
+
+    /// Metadata for a pricing refresh action (API fetch or manual attestation).
+    PricingRefresh {
+        /// Provider host IDs that were refreshed (e.g., ["abacus", "openai"])
+        host_ids: Vec<String>,
+        /// How the refresh was performed: "fetch" or "manual"
+        method: String,
+        /// API endpoints that were queried (empty for manual attestation)
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        source_urls: Vec<String>,
+        /// Number of providers whose pricing changed
+        changed_count: u32,
+        /// Number of providers whose pricing was confirmed unchanged
+        unchanged_count: u32,
+        /// Human-readable diff lines for the changed entries
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        delta_lines: Vec<String>,
     },
 }
 

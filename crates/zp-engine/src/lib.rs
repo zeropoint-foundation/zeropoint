@@ -19,6 +19,7 @@
 pub mod capability;
 pub mod configure;
 pub mod discovery;
+pub mod pricing;
 pub mod providers;
 pub mod scan;
 pub mod tool_scan_security;
