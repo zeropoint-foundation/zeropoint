@@ -31,9 +31,150 @@ use axum::{
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 use tracing::{debug, error, info, warn};
+use zp_core::InferenceTier;
+use zp_engine::providers::ProviderProfile;
 
 use crate::AppState;
+
+// ============================================================================
+// Catalog — loaded once, shared across all proxy requests
+// ============================================================================
+
+static PROVIDER_CATALOG: OnceLock<Vec<ProviderProfile>> = OnceLock::new();
+
+fn get_catalog() -> &'static Vec<ProviderProfile> {
+    PROVIDER_CATALOG.get_or_init(|| zp_engine::providers::load_catalog())
+}
+
+/// Look up a provider profile by proxy provider name.
+/// Handles the proxy name → catalog id mapping for non-matching entries.
+fn catalog_lookup(proxy_provider: &str) -> Option<&'static ProviderProfile> {
+    let catalog_id = match proxy_provider {
+        "google" => "gemini",
+        other => other,
+    };
+    get_catalog().iter().find(|p| p.id == catalog_id)
+}
+
+/// Rates for a provider: (input_per_million_usd, output_per_million_usd).
+fn provider_rates(proxy_provider: &str) -> (f64, f64) {
+    catalog_lookup(proxy_provider)
+        .and_then(|p| p.input_per_million_usd.zip(p.output_per_million_usd))
+        .unwrap_or((1.0, 4.0))
+}
+
+// ============================================================================
+// Tier routing — resolves InferenceTier → (provider, model)
+// ============================================================================
+
+/// One tier entry from routing.toml.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TierRoute {
+    pub provider: String,
+    pub model: String,
+}
+
+/// Operator routing configuration loaded from ~/ZeroPoint/config/routing.toml.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct RoutingConfig {
+    #[serde(default)]
+    pub high_stakes: Option<TierRoute>,
+    #[serde(default)]
+    pub bulk: Option<TierRoute>,
+    #[serde(default)]
+    pub coding: Option<TierRoute>,
+    #[serde(default)]
+    pub local: Option<TierRoute>,
+    #[serde(default)]
+    pub experimental: Option<TierRoute>,
+}
+
+/// TOML wrapper for `[tiers.*]` table structure.
+#[derive(Debug, Deserialize, Default)]
+struct RoutingFile {
+    #[serde(default)]
+    tiers: RoutingConfig,
+}
+
+static ROUTING_CONFIG: OnceLock<RoutingConfig> = OnceLock::new();
+
+fn get_routing_config() -> &'static RoutingConfig {
+    ROUTING_CONFIG.get_or_init(|| {
+        // Compiled-in defaults matching the strategic memo's recommended split
+        let mut config = RoutingConfig {
+            high_stakes: Some(TierRoute {
+                provider: "anthropic".to_string(),
+                model: "claude-sonnet-4-6".to_string(),
+            }),
+            bulk: Some(TierRoute {
+                provider: "together".to_string(),
+                model: "meta-llama/Llama-3.3-70B-Instruct-Turbo".to_string(),
+            }),
+            coding: Some(TierRoute {
+                provider: "abacus".to_string(),
+                model: "kimi-2.6-thinking".to_string(),
+            }),
+            local: Some(TierRoute {
+                provider: "ollama".to_string(),
+                model: "mistral".to_string(),
+            }),
+            experimental: Some(TierRoute {
+                provider: "deepinfra".to_string(),
+                model: "Qwen/Qwen3-72B".to_string(),
+            }),
+        };
+
+        // Overlay with operator's routing.toml if present
+        if let Ok(zp_home) = zp_core::paths::home() {
+            let path = zp_home.join("config").join("routing.toml");
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                match toml::from_str::<RoutingFile>(&content) {
+                    Ok(f) => {
+                        if f.tiers.high_stakes.is_some() {
+                            config.high_stakes = f.tiers.high_stakes;
+                        }
+                        if f.tiers.bulk.is_some() {
+                            config.bulk = f.tiers.bulk;
+                        }
+                        if f.tiers.coding.is_some() {
+                            config.coding = f.tiers.coding;
+                        }
+                        if f.tiers.local.is_some() {
+                            config.local = f.tiers.local;
+                        }
+                        if f.tiers.experimental.is_some() {
+                            config.experimental = f.tiers.experimental;
+                        }
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Failed to parse routing.toml; using compiled-in defaults");
+                    }
+                }
+            }
+        }
+
+        config
+    })
+}
+
+/// Resolve an `InferenceTier` to a `(provider, model)` pair.
+/// Returns `None` if the tier has no route configured.
+pub fn resolve_tier(tier: &InferenceTier) -> Option<(&'static str, &'static str)> {
+    let config = get_routing_config();
+    let route = match tier {
+        InferenceTier::HighStakes => config.high_stakes.as_ref(),
+        InferenceTier::Bulk => config.bulk.as_ref(),
+        InferenceTier::Coding => config.coding.as_ref(),
+        InferenceTier::Local => config.local.as_ref(),
+        InferenceTier::Experimental => config.experimental.as_ref(),
+    }?;
+    // SAFETY: OnceLock contents live for 'static
+    let provider: &'static str = Box::leak(route.provider.clone().into_boxed_str());
+    let model: &'static str = Box::leak(route.model.clone().into_boxed_str());
+    Some((provider, model))
+}
 
 // ============================================================================
 // Provider Registry — maps provider names to real base URLs
@@ -54,6 +195,12 @@ pub fn provider_base_url(provider: &str) -> Option<&'static str> {
         "google" => Some("https://generativelanguage.googleapis.com"),
         "openrouter" => Some("https://openrouter.ai/api"),
         "siliconflow" => Some("https://api.siliconflow.cn"),
+        // DeepInfra: OpenAI-compatible. Base includes /v1/openai so the proxy
+        // path uses "chat/completions" (not the standard "v1/chat/completions").
+        "deepinfra" => Some("https://api.deepinfra.com/v1/openai"),
+        // Abacus RouteLLM: OpenAI-compatible at routellm subdomain.
+        // Base is the full v1 root so the proxy path is "chat/completions".
+        "abacus" => Some("https://routellm.abacus.ai/v1"),
         _ => None,
     }
 }
@@ -88,6 +235,10 @@ fn allowed_path_prefixes(provider: &str) -> &'static [&'static str] {
         "google" => &["v1beta/models", "v1/models"],
         "openrouter" => &["v1/chat/completions"],
         "siliconflow" => &["v1/chat/completions"],
+        // DeepInfra: base URL already includes /v1/openai, so path omits the v1 prefix.
+        "deepinfra" => &["chat/completions", "models"],
+        // Abacus RouteLLM: base URL already includes /v1, so path omits the v1 prefix.
+        "abacus" => &["chat/completions", "models"],
         _ => &[], // Unknown providers have no allowed paths
     }
 }
@@ -211,40 +362,54 @@ fn extract_anthropic_usage(body: &Value) -> UsageMetrics {
 pub fn extract_usage(provider: &str, body: &Value) -> UsageMetrics {
     match provider {
         "anthropic" => extract_anthropic_usage(body),
-        _ => extract_openai_usage(body), // Most providers use OpenAI format
+        // All other providers including deepinfra and abacus use OpenAI format
+        _ => extract_openai_usage(body),
     }
 }
 
 // ============================================================================
-// Cost estimation — per-provider token pricing
+// Provider-specific request transforms
 // ============================================================================
 
-/// Rough cost-per-token estimates (USD) for common models.
-/// These are approximations for governance/budgeting, not billing.
-pub fn estimate_cost_usd(provider: &str, model: Option<&str>, usage: &UsageMetrics) -> f64 {
-    let (input_per_m, output_per_m) = match (provider, model) {
-        // Anthropic
-        (_, Some(m)) if m.contains("claude-3-5-sonnet") || m.contains("claude-sonnet-4") => {
-            (3.0, 15.0)
-        }
-        (_, Some(m)) if m.contains("claude-3-5-haiku") || m.contains("claude-haiku-4") => {
-            (0.80, 4.0)
-        }
-        (_, Some(m)) if m.contains("claude-3-opus") || m.contains("claude-opus-4") => (15.0, 75.0),
-        // OpenAI
-        (_, Some(m)) if m.contains("gpt-4o-mini") => (0.15, 0.60),
-        (_, Some(m)) if m.contains("gpt-4o") => (2.50, 10.0),
-        (_, Some(m)) if m.contains("gpt-4-turbo") => (10.0, 30.0),
-        (_, Some(m)) if m.contains("o1") => (15.0, 60.0),
-        (_, Some(m)) if m.contains("o3") => (10.0, 40.0),
-        // Groq (heavily subsidized)
-        ("groq", _) => (0.05, 0.10),
-        // DeepSeek
-        (_, Some(m)) if m.contains("deepseek") => (0.27, 1.10),
-        // Fallback: conservative estimate
-        _ => (3.0, 15.0),
+/// Abacus RouteLLM rejects tool definitions that include `"strict": true`
+/// with HTTP 400. Strip the field from every function object in `tools`
+/// before forwarding. No-op if the body has no `tools` array or no `strict`
+/// fields — safe to call unconditionally for Abacus requests.
+pub fn strip_tool_strict(body_bytes: &[u8]) -> Vec<u8> {
+    let Ok(mut body) = serde_json::from_slice::<Value>(body_bytes) else {
+        return body_bytes.to_vec();
     };
 
+    if let Some(tools) = body.get_mut("tools").and_then(|t| t.as_array_mut()) {
+        for tool in tools.iter_mut() {
+            if let Some(func) = tool.get_mut("function").and_then(|f| f.as_object_mut()) {
+                func.remove("strict");
+            }
+        }
+    }
+
+    serde_json::to_vec(&body).unwrap_or_else(|_| body_bytes.to_vec())
+}
+
+// ============================================================================
+// Cost estimation — catalog-driven token pricing
+// ============================================================================
+
+/// Inject a model field into an OpenAI-format request body.
+/// Used by tier routing to ensure the tier-resolved model reaches the provider.
+fn inject_model_into_body(body_bytes: &[u8], model: &str) -> Vec<u8> {
+    let Ok(mut body) = serde_json::from_slice::<Value>(body_bytes) else {
+        return body_bytes.to_vec();
+    };
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("model".to_string(), json!(model));
+    }
+    serde_json::to_vec(&body).unwrap_or_else(|_| body_bytes.to_vec())
+}
+
+/// Compute cost in USD from per-million rates and token counts.
+/// Rates come from the provider catalog (see `provider_rates`).
+pub fn estimate_cost_usd(input_per_m: f64, output_per_m: f64, usage: &UsageMetrics) -> f64 {
     let input_cost = (usage.prompt_tokens as f64 / 1_000_000.0) * input_per_m;
     let output_cost = (usage.completion_tokens as f64 / 1_000_000.0) * output_per_m;
     input_cost + output_cost
@@ -289,6 +454,37 @@ pub async fn proxy_handler(
         None => (proxy_path.to_string(), String::new()),
     };
 
+    // Tier routing: X-ZP-Tier header overrides the URL provider + injects model.
+    let (provider, tier_model) = if let Some(tier_val) = headers
+        .get("x-zp-tier")
+        .and_then(|v| v.to_str().ok())
+    {
+        let tier = match tier_val {
+            "high_stakes" => Some(InferenceTier::HighStakes),
+            "bulk" => Some(InferenceTier::Bulk),
+            "coding" => Some(InferenceTier::Coding),
+            "local" => Some(InferenceTier::Local),
+            "experimental" => Some(InferenceTier::Experimental),
+            _ => {
+                warn!(tier = %tier_val, "Unknown X-ZP-Tier value; ignoring");
+                None
+            }
+        };
+        if let Some(t) = tier {
+            if let Some((tp, tm)) = resolve_tier(&t) {
+                debug!(tier = %tier_val, provider = %tp, model = %tm, "Tier routing resolved");
+                (tp.to_string(), Some(tm))
+            } else {
+                warn!(tier = %tier_val, "No route configured for tier; using URL provider");
+                (provider, None)
+            }
+        } else {
+            (provider, None)
+        }
+    } else {
+        (provider, None)
+    };
+
     // 1. Resolve provider base URL
     let base_url = match provider_base_url(&provider) {
         Some(url) => url,
@@ -299,7 +495,8 @@ pub async fn proxy_handler(
                     "error": format!("Unknown provider: {}", provider),
                     "known_providers": ["openai", "anthropic", "groq", "mistral", "together",
                                        "deepseek", "fireworks", "perplexity", "cohere",
-                                       "google", "openrouter", "siliconflow"]
+                                       "google", "openrouter", "siliconflow",
+                                       "deepinfra", "abacus"]
                 })),
             )
                 .into_response();
@@ -399,7 +596,18 @@ pub async fn proxy_handler(
         }
     }
 
-    req_builder = req_builder.body(body.to_vec());
+    // Provider-specific request transforms + tier model injection
+    let forwarded_body = {
+        let mut b = body.to_vec();
+        if let Some(model) = tier_model {
+            b = inject_model_into_body(&b, model);
+        }
+        if provider == "abacus" {
+            b = strip_tool_strict(&b);
+        }
+        b
+    };
+    req_builder = req_builder.body(forwarded_body);
 
     let response = match req_builder.send().await {
         Ok(resp) => resp,
@@ -435,7 +643,8 @@ pub async fn proxy_handler(
     // 4. Extract usage metrics from response
     let response_body: Value = serde_json::from_slice(&response_bytes).unwrap_or(Value::Null);
     let usage = extract_usage(&provider, &response_body);
-    let cost = estimate_cost_usd(&provider, usage.model.as_deref(), &usage);
+    let (input_per_m, output_per_m) = provider_rates(&provider);
+    let cost = estimate_cost_usd(input_per_m, output_per_m, &usage);
 
     // 5. Generate receipt
     let _receipt_id = format!("rcpt-proxy-{}", uuid::Uuid::now_v7());
@@ -555,7 +764,48 @@ mod tests {
             provider_base_url("groq"),
             Some("https://api.groq.com/openai")
         );
+        assert_eq!(
+            provider_base_url("deepinfra"),
+            Some("https://api.deepinfra.com/v1/openai")
+        );
+        assert_eq!(
+            provider_base_url("abacus"),
+            Some("https://routellm.abacus.ai/v1")
+        );
         assert_eq!(provider_base_url("unknown"), None);
+    }
+
+    #[test]
+    fn test_strip_tool_strict_removes_field() {
+        let body = serde_json::json!({
+            "model": "kimi-2.6-thinking",
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "parameters": {},
+                        "strict": true
+                    }
+                }
+            ]
+        });
+        let result = strip_tool_strict(&serde_json::to_vec(&body).unwrap());
+        let parsed: Value = serde_json::from_slice(&result).unwrap();
+        assert!(
+            parsed["tools"][0]["function"].get("strict").is_none(),
+            "strict field should be removed"
+        );
+        assert_eq!(parsed["tools"][0]["function"]["name"], "get_weather");
+    }
+
+    #[test]
+    fn test_strip_tool_strict_noop_without_tools() {
+        let body = serde_json::json!({"model": "kimi", "messages": []});
+        let bytes = serde_json::to_vec(&body).unwrap();
+        let result = strip_tool_strict(&bytes);
+        assert_eq!(result, bytes);
     }
 
     #[test]
@@ -608,12 +858,12 @@ mod tests {
             prompt_tokens: 1_000_000,
             completion_tokens: 500_000,
             total_tokens: 1_500_000,
-            model: Some("gpt-4o-mini".to_string()),
+            model: Some("gpt-4o".to_string()),
         };
-        let cost = estimate_cost_usd("openai", Some("gpt-4o-mini"), &usage);
-        // gpt-4o-mini: $0.15/M input + $0.60/M output
-        // 1M * 0.15 + 0.5M * 0.60 = 0.15 + 0.30 = 0.45
-        assert!((cost - 0.45).abs() < 0.001);
+        // openai catalog rate: $2.50/M input + $10.00/M output
+        // 1M * 2.50 + 0.5M * 10.00 = 2.50 + 5.00 = 7.50
+        let cost = estimate_cost_usd(2.50, 10.00, &usage);
+        assert!((cost - 7.50).abs() < 0.001);
     }
 
     #[test]
@@ -624,9 +874,9 @@ mod tests {
             total_tokens: 2_000_000,
             model: Some("claude-sonnet-4-20250514".to_string()),
         };
-        let cost = estimate_cost_usd("anthropic", Some("claude-sonnet-4-20250514"), &usage);
-        // claude-sonnet-4: $3/M input + $15/M output
+        // anthropic catalog rate: $3.00/M input + $15.00/M output
         // 1M * 3 + 1M * 15 = 18.0
+        let cost = estimate_cost_usd(3.00, 15.00, &usage);
         assert!((cost - 18.0).abs() < 0.001);
     }
 
@@ -638,9 +888,36 @@ mod tests {
             total_tokens: 15_000_000,
             model: Some("llama-3.1-70b".to_string()),
         };
-        let cost = estimate_cost_usd("groq", Some("llama-3.1-70b"), &usage);
-        // groq: $0.05/M input + $0.10/M output
+        // groq catalog rate: $0.05/M input + $0.10/M output
         // 10M * 0.05 + 5M * 0.10 = 0.50 + 0.50 = 1.0
+        let cost = estimate_cost_usd(0.05, 0.10, &usage);
         assert!((cost - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cost_estimation_together_accurate() {
+        let usage = UsageMetrics {
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+            total_tokens: 2_000_000,
+            model: Some("meta-llama/Llama-3.3-70B-Instruct-Turbo".to_string()),
+        };
+        // together catalog rate: $0.20/M input + $0.80/M output
+        // 1M * 0.20 + 1M * 0.80 = 1.00
+        let cost = estimate_cost_usd(0.20, 0.80, &usage);
+        assert!((cost - 1.00).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cost_estimation_fallback() {
+        let usage = UsageMetrics {
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+            total_tokens: 2_000_000,
+            model: None,
+        };
+        // fallback: $1.00/M input + $4.00/M output
+        let cost = estimate_cost_usd(1.00, 4.00, &usage);
+        assert!((cost - 5.00).abs() < 0.001);
     }
 }

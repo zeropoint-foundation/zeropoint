@@ -52,6 +52,14 @@ pub struct ProviderProfile {
     /// Routing strategy: "intelligent" (auto-selects model) or "explicit" (user picks)
     #[serde(default)]
     pub routing: Option<String>,
+
+    // ── Pricing fields ───────────────────────────────────────
+    /// Cost per million input tokens in USD (provider-level default).
+    #[serde(default)]
+    pub input_per_million_usd: Option<f64>,
+    /// Cost per million output tokens in USD (provider-level default).
+    #[serde(default)]
+    pub output_per_million_usd: Option<f64>,
 }
 
 impl ProviderProfile {

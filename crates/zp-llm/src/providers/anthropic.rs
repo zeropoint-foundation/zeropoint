@@ -1,4 +1,7 @@
-//! Anthropic API provider implementation.
+//! Anthropic API provider — direct integration (deprecated).
+//!
+//! Use `ProxyLlmProvider` instead. Direct calls to api.anthropic.com bypass
+//! the ZP inference proxy's receipt signing, cost tracking, and policy gate.
 
 use crate::provider::{
     ChatRole, CompletionRequest, CompletionResponse, LlmProvider, ToolCall, Usage,
@@ -9,7 +12,11 @@ use std::time::Instant;
 use tracing::{debug, error, warn};
 use zp_core::{ProviderCapabilities, ProviderHealth, ProviderId, ZpError};
 
-/// Anthropic API provider.
+/// Anthropic API provider — direct integration (deprecated).
+///
+/// **Use `ProxyLlmProvider` instead.** This struct bypasses the ZP inference
+/// proxy; calls do not produce signed receipts or cost tracking entries.
+#[deprecated(since = "0.1.0", note = "Use ProxyLlmProvider routed through the ZP proxy instead")]
 pub struct AnthropicProvider {
     id: ProviderId,
     api_key: String,
@@ -251,6 +258,7 @@ impl LlmProvider for AnthropicProvider {
                 prompt_tokens: anthropic_response.usage.input_tokens,
                 completion_tokens: anthropic_response.usage.output_tokens,
             },
+            cost_usd: None,
         })
     }
 

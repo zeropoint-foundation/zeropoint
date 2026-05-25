@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use zp_core::{ProviderCapabilities, ProviderHealth, ProviderId, ToolDefinition, ZpError};
+use zp_core::{InferenceTier, ProviderCapabilities, ProviderHealth, ProviderId, ToolDefinition, ZpError};
 
 /// Core trait that all LLM providers must implement.
 #[async_trait]
@@ -112,6 +112,11 @@ pub struct CompletionRequest {
     pub max_tokens: Option<u32>,
     /// Sampling temperature (0.0 to 2.0)
     pub temperature: Option<f32>,
+    /// Inference tier for proxy-side routing.
+    /// When set on a `ProxyLlmProvider` request, the proxy resolves
+    /// the tier to a (provider, model) pair from `routing.toml`.
+    #[serde(default)]
+    pub tier: Option<InferenceTier>,
 }
 
 impl CompletionRequest {
@@ -127,6 +132,7 @@ impl CompletionRequest {
             model: None,
             max_tokens: None,
             temperature: None,
+            tier: None,
         }
     }
 
@@ -157,6 +163,10 @@ pub struct CompletionResponse {
     pub model: String,
     /// Token usage statistics
     pub usage: Usage,
+    /// Cost in USD as reported by the proxy (via X-ZP-Cost-USD header).
+    /// None when the provider was called without going through the proxy.
+    #[serde(default)]
+    pub cost_usd: Option<f64>,
 }
 
 impl CompletionResponse {
@@ -166,11 +176,17 @@ impl CompletionResponse {
             tool_calls: vec![],
             model,
             usage,
+            cost_usd: None,
         }
     }
 
     pub fn with_tool_calls(mut self, tool_calls: Vec<ToolCall>) -> Self {
         self.tool_calls = tool_calls;
+        self
+    }
+
+    pub fn with_cost(mut self, cost_usd: f64) -> Self {
+        self.cost_usd = Some(cost_usd);
         self
     }
 }

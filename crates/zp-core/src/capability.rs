@@ -71,3 +71,25 @@ pub enum ModelClass {
     /// Specific model requested by user or policy
     Specific(String),
 }
+
+/// Operator-facing inference tier for routing requests to (model, host) pairs.
+///
+/// Operators configure tier → (provider, model) in `~/ZeroPoint/config/routing.toml`.
+/// The proxy resolves the tier to a concrete provider before forwarding.
+/// Tiers compose with `ModelClass`: `RequireStrong` maps to `HighStakes`;
+/// `LocalOnly` maps to `Local`; others use the routing config.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceTier {
+    /// High-stakes reasoning — ~20% of budget. Default: Claude Sonnet class.
+    HighStakes,
+    /// Bulk agent loops and summarisation — ~60% of budget. Default: open-weight via US hosts.
+    #[default]
+    Bulk,
+    /// Code generation and review — ~20% of budget. Default: Kimi K2.6 via Abacus.
+    Coding,
+    /// Local inference only — offline, privacy-sensitive. Default: Ollama.
+    Local,
+    /// New hosts under evaluation — receipts flagged as experimental.
+    Experimental,
+}

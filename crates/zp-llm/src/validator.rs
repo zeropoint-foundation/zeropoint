@@ -86,6 +86,7 @@ mod tests {
             model: None,
             max_tokens: Some(1000),
             temperature: Some(0.7),
+            tier: None,
         };
 
         assert!(RequestValidator::validate_request(&request).is_ok());
@@ -100,6 +101,7 @@ mod tests {
             model: None,
             max_tokens: None,
             temperature: None,
+            tier: None,
         };
 
         assert!(RequestValidator::validate_request(&request).is_err());
@@ -114,6 +116,7 @@ mod tests {
             model: None,
             max_tokens: None,
             temperature: None,
+            tier: None,
         };
 
         assert!(RequestValidator::validate_request(&request).is_err());
@@ -128,6 +131,7 @@ mod tests {
             model: None,
             max_tokens: None,
             temperature: Some(2.5),
+            tier: None,
         };
 
         assert!(RequestValidator::validate_request(&request).is_err());
@@ -143,6 +147,7 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 20,
             },
+            cost_usd: None,
         };
 
         assert!(RequestValidator::validate_response(&response).is_ok());
@@ -158,6 +163,7 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 0,
             },
+            cost_usd: None,
         };
 
         assert!(RequestValidator::validate_response(&response).is_err());

@@ -25,6 +25,8 @@
 #   openai_compatible — whether the provider exposes OpenAI-compatible /v1/chat/completions
 #   aggregator       — whether this is a multi-model routing service
 #   routing          — "intelligent" (auto-selects model) or "explicit" (user picks model)
+#   input_per_million_usd  — provider-level default cost per 1M input tokens (USD)
+#   output_per_million_usd — provider-level default cost per 1M output tokens (USD)
 # ─────────────────────────────────────────────────────────────
 
 # ── LLM / Foundation Model APIs ─────────────────────────────
@@ -43,6 +45,8 @@ source_url = "https://platform.openai.com/docs/api-reference/introduction"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "image_gen", "image_edit", "tts", "asr", "embedding", "video_gen"]
 openai_compatible = true
+input_per_million_usd = 2.50
+output_per_million_usd = 10.00
 
 [[providers]]
 id = "anthropic"
@@ -59,6 +63,8 @@ last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision"]
 openai_compatible = false
 openai_proxy = true
+input_per_million_usd = 3.00
+output_per_million_usd = 15.00
 
 [[providers]]
 id = "gemini"
@@ -74,6 +80,8 @@ source_url = "https://ai.google.dev/gemini-api/docs/api-key"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "embedding", "video_gen", "video_understanding"]
 openai_compatible = true
+input_per_million_usd = 1.25
+output_per_million_usd = 5.00
 
 [[providers]]
 id = "mistral"
@@ -89,6 +97,8 @@ source_url = "https://docs.mistral.ai/getting-started/quickstart"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "fast_llm", "code_llm", "vision", "embedding"]
 openai_compatible = true
+input_per_million_usd = 0.40
+output_per_million_usd = 1.20
 
 [[providers]]
 id = "cohere"
@@ -104,6 +114,8 @@ source_url = "https://docs.cohere.com"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "embedding", "reranking"]
 openai_compatible = true
+input_per_million_usd = 0.50
+output_per_million_usd = 1.50
 
 [[providers]]
 id = "xai"
@@ -134,6 +146,8 @@ source_url = "https://api-docs.deepseek.com"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "code_llm"]
 openai_compatible = true
+input_per_million_usd = 0.27
+output_per_million_usd = 1.10
 
 [[providers]]
 id = "perplexity"
@@ -149,6 +163,8 @@ source_url = "https://docs.perplexity.ai"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "web_search"]
 openai_compatible = true
+input_per_million_usd = 1.00
+output_per_million_usd = 1.00
 
 [[providers]]
 id = "groq"
@@ -164,6 +180,8 @@ source_url = "https://console.groq.com/docs/quickstart"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "fast_llm"]
 openai_compatible = true
+input_per_million_usd = 0.05
+output_per_million_usd = 0.10
 
 [[providers]]
 id = "together"
@@ -179,6 +197,8 @@ source_url = "https://docs.together.ai/docs/quickstart"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "fast_llm", "code_llm", "image_gen", "embedding"]
 openai_compatible = true
+input_per_million_usd = 0.20
+output_per_million_usd = 0.80
 
 [[providers]]
 id = "fireworks"
@@ -194,6 +214,8 @@ source_url = "https://docs.fireworks.ai/getting-started/quickstart"
 last_verified = "2026-03-22"
 capabilities = ["reasoning_llm", "fast_llm", "code_llm", "embedding"]
 openai_compatible = true
+input_per_million_usd = 0.20
+output_per_million_usd = 0.80
 
 [[providers]]
 id = "ai21"
@@ -216,17 +238,19 @@ name = "Abacus.ai"
 category = "aggregator"
 env_patterns = ["ABACUS_API_KEY"]
 key_hint = ""
-base_url = "https://api.abacus.ai/api/v0"
+base_url = "https://routellm.abacus.ai/v1"
 key_url = "https://abacus.ai/app/profile/apikey"
-docs_url = "https://abacus.ai/help/python-sdk"
+docs_url = "https://abacus.ai/help/developer-platform/route-llm/"
 supports_org = true
-source_url = "https://abacusai.github.io/api-python/"
-last_verified = "2026-03-22"
-coverage = "RouteLLM — intelligent routing across GPT-4o, Claude, Gemini, Llama, and more"
+source_url = "https://abacus.ai/help/developer-platform/route-llm/"
+last_verified = "2026-05-25"
+coverage = "RouteLLM — intelligent routing across GPT-4o, Claude, Gemini, Llama, Kimi, and 50+ models"
 capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vision", "image_gen", "embedding"]
 openai_compatible = true
 aggregator = true
 routing = "intelligent"
+input_per_million_usd = 0.90
+output_per_million_usd = 3.50
 
 # ── Embedding / Specialized ─────────────────────────────────
 
@@ -350,6 +374,25 @@ capabilities = ["reasoning_llm", "fast_llm", "code_llm", "long_context_llm", "vi
 openai_compatible = true
 aggregator = true
 routing = "explicit"
+input_per_million_usd = 1.00
+output_per_million_usd = 3.00
+
+[[providers]]
+id = "deepinfra"
+name = "DeepInfra"
+category = "llm"
+env_patterns = ["DEEPINFRA_API_KEY"]
+key_hint = ""
+base_url = "https://api.deepinfra.com/v1/openai"
+key_url = "https://deepinfra.com/dash/api_keys"
+docs_url = "https://deepinfra.com/docs"
+supports_org = false
+source_url = "https://deepinfra.com/docs/advanced/openai_api"
+last_verified = "2026-05-25"
+capabilities = ["reasoning_llm", "fast_llm", "code_llm"]
+openai_compatible = true
+input_per_million_usd = 0.20
+output_per_million_usd = 0.60
 
 # ── Search / Tool APIs ─────────────────────────────────────
 
@@ -475,6 +518,8 @@ capabilities = ["reasoning_llm", "embedding", "image_gen"]
 openai_compatible = true
 aggregator = true
 routing = "explicit"
+input_per_million_usd = 0.10
+output_per_million_usd = 0.30
 
 [[providers]]
 id = "doubao"

@@ -171,6 +171,7 @@ impl LlmProvider for OllamaProvider {
                 prompt_tokens,
                 completion_tokens,
             },
+            cost_usd: None,
         })
     }
 

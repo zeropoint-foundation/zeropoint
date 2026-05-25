@@ -51,7 +51,7 @@ pub use zp_receipt::canonical::{
 };
 pub use zp_receipt::signable::{signable_from_serialize, Signable};
 pub use zp_receipt::verify::{verify_signature, verify_signed, VerifyError};
-pub use capability::{Capability, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
+pub use capability::{Capability, InferenceTier, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
 pub use authority_ref::{AuthorityRef, AuthorityRefType};
 pub use capability_grant::{
     CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation, DelegationError,

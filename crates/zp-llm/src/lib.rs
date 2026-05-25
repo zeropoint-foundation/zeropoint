@@ -16,4 +16,5 @@ pub use prompt::PromptBuilder;
 pub use provider::{
     ChatMessage, ChatRole, CompletionRequest, CompletionResponse, LlmProvider, ToolCall, Usage,
 };
-pub use zp_core::{ProviderCapabilities, ProviderHealth, ProviderId, ZpError};
+pub use providers::ProxyLlmProvider;
+pub use zp_core::{InferenceTier, ProviderCapabilities, ProviderHealth, ProviderId, ZpError};

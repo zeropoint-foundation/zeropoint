@@ -7199,6 +7199,7 @@ dependencies = [
  "zp-engine",
  "zp-keys",
  "zp-mesh",
+ "zp-net",
  "zp-pipeline",
  "zp-policy",
  "zp-receipt",
@@ -7233,6 +7234,7 @@ dependencies = [
  "tokio",
  "tracing",
  "zp-engine",
+ "zp-net",
  "zp-trust",
 ]
 
