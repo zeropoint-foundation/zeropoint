@@ -1,0 +1,28 @@
+[package]
+name = "zp-content"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Content-addressed storage trait and local backends for ZeroPoint signed artifacts"
+publish = false
+
+[lib]
+name = "zp_content"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+blake3 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full"] }

@@ -38,6 +38,7 @@ members = [
     "crates/zp-cloudflare",
     "crates/zp-gate-envelope",
     "crates/zp-net",
+    "crates/zp-content",
 ]
 
 [workspace.package]
@@ -125,6 +126,7 @@ parking_lot = "0.12"
 
 # Encoding
 hex = "0.4"
+bytes = "1"
 base64 = "0.22"
 rmp-serde = "1.3"
 
