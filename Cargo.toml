@@ -39,6 +39,7 @@ members = [
     "crates/zp-gate-envelope",
     "crates/zp-net",
     "crates/zp-content",
+    "crates/zp-artifacts",
 ]
 
 [workspace.package]

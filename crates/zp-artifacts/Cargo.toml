@@ -1,0 +1,32 @@
+[package]
+name = "zp-artifacts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Artifact library — content-addressed, signed, lifecycle-managed renderings for ZeroPoint"
+publish = false
+
+[lib]
+name = "zp_artifacts"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+blake3 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+zp-content = { path = "../zp-content" }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
