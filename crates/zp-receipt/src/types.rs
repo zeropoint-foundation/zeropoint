@@ -580,6 +580,10 @@ pub enum ReceiptType {
     // --- Pricing ---
     /// Records a pricing refresh action (API fetch or manual attestation) for one or more hosts.
     PricingRefreshClaim,
+
+    // --- Artifact library ---
+    /// Records an operator signing an artifact candidate — promoting it from Candidate to Signed.
+    ArtifactSignedClaim,
 }
 
 impl ReceiptType {
@@ -612,6 +616,7 @@ impl ReceiptType {
             ReceiptType::PortAllocated => "port",
             ReceiptType::PortReleased => "port",
             ReceiptType::PricingRefreshClaim => "pric",
+            ReceiptType::ArtifactSignedClaim => "arsg",
         }
     }
 
@@ -656,6 +661,8 @@ impl ReceiptType {
             ReceiptType::PortAllocated | ReceiptType::PortReleased => None,
             // Pricing refresh claims are standalone
             ReceiptType::PricingRefreshClaim => None,
+            // Artifact signing claims are standalone
+            ReceiptType::ArtifactSignedClaim => None,
         }
     }
 
@@ -735,6 +742,7 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::PortAllocated => write!(f, "port_allocated"),
             ReceiptType::PortReleased => write!(f, "port_released"),
             ReceiptType::PricingRefreshClaim => write!(f, "pricing_refresh_claim"),
+            ReceiptType::ArtifactSignedClaim => write!(f, "artifact_signed_claim"),
         }
     }
 }
@@ -1142,6 +1150,27 @@ pub enum ClaimMetadata {
         synthesis_method: String,
         /// The agent that performed the synthesis
         synthesizer_id: String,
+        /// The artifact library ID for the rendered artifact, if one was generated.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        artifact_id: Option<String>,
+        /// Receipt IDs that were the direct source inputs for the artifact.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        source_receipt_ids: Vec<String>,
+        /// Inference tier used for synthesis (e.g., "local", "foundation").
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        inference_tier: Option<String>,
+    },
+
+    /// Metadata for an artifact signing event.
+    /// Emitted when an operator promotes an artifact from Candidate to Signed.
+    ArtifactSigned {
+        /// The artifact library ID that was signed.
+        artifact_id: String,
+        /// The artifact kind (e.g., "chain_narration").
+        kind: String,
+        /// The artifact this supersedes, if applicable.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        supersedes: Option<String>,
     },
 
     /// Metadata for a reflection (consolidation) claim.

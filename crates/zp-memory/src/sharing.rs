@@ -188,6 +188,9 @@ fn generate_merge_receipt(source_ids: &[String], context: &SharingContext) -> Re
             source_observation_ids: source_ids.to_vec(),
             synthesis_method: "cross_agent_merge".to_string(),
             synthesizer_id: context.receiver_id.clone(),
+            artifact_id: None,
+            source_receipt_ids: vec![],
+            inference_tier: None,
         })
         .extension(
             "zp.merge.sender_id",

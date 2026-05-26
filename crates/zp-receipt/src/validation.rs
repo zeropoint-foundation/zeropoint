@@ -249,6 +249,14 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+
+        // --- Artifact library ---
+        ReceiptType::ArtifactSignedClaim => TypeRules {
+            required_semantics: ClaimSemantics::AuthorizationGrant,
+            max_ttl_hours: None, // signing events persist indefinitely
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -298,6 +306,7 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::FinancialCapability { .. } => "FinancialCapability",
         ClaimMetadata::ExternalAnchor { .. } => "ExternalAnchor",
         ClaimMetadata::PricingRefresh { .. } => "PricingRefresh",
+        ClaimMetadata::ArtifactSigned { .. } => "ArtifactSigned",
     }
 }
 
@@ -327,6 +336,7 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::FinancialCapabilityGrant, ClaimMetadata::FinancialCapability { .. })
             | (ReceiptType::ExternalAnchor, ClaimMetadata::ExternalAnchor { .. })
             | (ReceiptType::PricingRefreshClaim, ClaimMetadata::PricingRefresh { .. })
+            | (ReceiptType::ArtifactSignedClaim, ClaimMetadata::ArtifactSigned { .. })
     )
 }
 
