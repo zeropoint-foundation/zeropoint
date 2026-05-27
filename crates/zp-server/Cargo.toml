@@ -34,6 +34,8 @@ zp-gate-envelope = { path = "../zp-gate-envelope" }
 zp-anchor = { path = "../zp-anchor" }
 zp-verbs = { path = "../zp-verbs" }
 zp-net = { path = "../zp-net" }
+zp-artifacts = { path = "../zp-artifacts" }
+zp-content = { path = "../zp-content" }
 mle-star-engine = { path = "../mle-star-engine" }
 monte-carlo-engine = { path = "../monte-carlo-engine" }
 

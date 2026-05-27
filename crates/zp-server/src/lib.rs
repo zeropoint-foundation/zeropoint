@@ -5,6 +5,7 @@
 
 pub mod analysis;
 pub mod anchor_pipeline;
+pub mod artifact_library;
 pub mod attestations;
 pub mod auth;
 pub mod envelope_state;
@@ -526,6 +527,11 @@ pub struct AppStateInner {
     /// The gate consults `halted`/`degraded` flags here on every tool-call
     /// decision so a heartbeat-failure mode is honoured immediately.
     pub lease_heartbeat: Option<Arc<lease_heartbeat::LeaseHeartbeatState>>,
+
+    /// Artifact library — content-addressed, signed, lifecycle-managed renderings.
+    /// Stores generated artifacts (chain narrations, etc.) as Candidates until
+    /// an operator signs them into canonical form.
+    pub artifact_library: Arc<zp_artifacts::LocalArtifactLibrary>,
 }
 
 #[derive(Clone)]
@@ -769,6 +775,23 @@ impl AppState {
             }
         };
 
+        // Artifact library — content store + lifecycle index under data_dir/artifacts/
+        let artifact_library = {
+            let content_dir = std::path::Path::new(&config.data_dir).join("artifacts/content");
+            let content_idx = std::path::Path::new(&config.data_dir).join("artifacts/cidx.db");
+            let artifact_idx = std::path::Path::new(&config.data_dir).join("artifacts/aidx.db");
+            let store = Arc::new(
+                zp_content::backends::LocalFsBackend::new(&content_dir, &content_idx)
+                    .await
+                    .expect("artifact content store"),
+            );
+            Arc::new(
+                zp_artifacts::LocalArtifactLibrary::new(store, &artifact_idx)
+                    .await
+                    .expect("artifact library index"),
+            )
+        };
+
         // Anchor pipeline (#176): event-driven Merkle epoch sealing.
         // Default backend is NoOpAnchor — the architecture is testable without
         // an external ledger, and HCS becomes a drop-in replacement when the
@@ -823,6 +846,7 @@ impl AppState {
             policy_distributor,
             anchor_pipeline,
             lease_heartbeat: lease_heartbeat_state,
+            artifact_library,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -1141,6 +1165,14 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/proxy/*proxy_path", post(proxy::proxy_handler))
         // Pricing freshness — live refresh of provider pricing data
         .route("/api/v1/pricing/refresh", post(proxy::pricing_refresh_handler))
+        // Artifact library
+        .route("/api/operator/me/library/chain-narration/compose", post(artifact_library::compose_handler))
+        .route("/api/operator/me/library/chain-narration/submit", post(artifact_library::submit_handler))
+        .route("/api/operator/me/library", get(artifact_library::list_handler))
+        .route("/api/operator/me/library/:id", get(artifact_library::get_handler))
+        .route("/api/operator/me/library/:id/sign", post(artifact_library::sign_handler))
+        .route("/api/operator/me/library/:id/reject", post(artifact_library::reject_handler))
+        .route("/api/operator/me/library/by-kind/:kind/canonical", get(artifact_library::canonical_handler))
         .layer(cors)
         // ── Request body size limit (Phase 1.1: strict input validation) ──
         // Cap request bodies at 1 MB to prevent denial-of-service via
