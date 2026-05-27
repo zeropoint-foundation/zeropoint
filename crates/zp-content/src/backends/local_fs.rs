@@ -170,9 +170,5 @@ pub async fn default_local_fs_backend() -> Result<LocalFsBackend, ContentError> 
 fn dirs_from_env() -> PathBuf {
     std::env::var("ZP_DATA_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::var("HOME")
-                .map(|h| PathBuf::from(h).join("ZeroPoint"))
-                .unwrap_or_else(|_| PathBuf::from("/tmp/ZeroPoint"))
-        })
+        .unwrap_or_else(|_| PathBuf::from("/tmp/ZeroPoint"))
 }

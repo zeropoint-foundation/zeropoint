@@ -36,15 +36,11 @@ impl LocalArtifactLibrary {
         Ok(Self { store, index })
     }
 
-    /// Convenience constructor using default paths under `$ZP_DATA_DIR` / `~/ZeroPoint/`.
+    /// Convenience constructor using default paths under `$ZP_DATA_DIR`.
     pub async fn default_local(store: Arc<dyn ContentStore>) -> Result<Self, LibraryError> {
         let base = std::env::var("ZP_DATA_DIR")
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| {
-                std::env::var("HOME")
-                    .map(|h| std::path::PathBuf::from(h).join("ZeroPoint"))
-                    .unwrap_or_else(|_| "/tmp/ZeroPoint".into())
-            });
+            .unwrap_or_else(|_| "/tmp/ZeroPoint".into());
         let index_path = std::env::var("ZP_ARTIFACT_INDEX")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| base.join("artifact-index.db"));
