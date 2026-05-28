@@ -252,6 +252,20 @@ enum Commands {
         /// Override for local wrangler dev: --foundation-url http://localhost:8787
         #[arg(long)]
         foundation_url: Option<String>,
+
+        /// Verify foundation-relayed receipts on the LOCAL audit chain.
+        /// Filters to AuditAction::SystemEvent entries with event prefix
+        /// "foundation_relay:" — receipts forwarded from the Foundation
+        /// Edge worker and signed by the operator's audit signer. Distinct
+        /// from --foundation, which does remote HTTPS verification against
+        /// a worker endpoint.
+        #[arg(long)]
+        foundation_receipts: bool,
+
+        /// Scope --foundation-receipts to a single operator_id. Defaults
+        /// to showing all operators' relayed receipts on this chain.
+        #[arg(long, requires = "foundation_receipts")]
+        operator: Option<String>,
     },
 
     /// #176 — Force an immediate Merkle epoch seal.
@@ -2273,11 +2287,22 @@ async fn main() -> anyhow::Result<()> {
         server,
         foundation,
         foundation_url,
+        foundation_receipts,
+        operator,
     }) = &args.command
     {
         // ── Foundation chain verification (remote HTTPS path) ──────────────
         if *foundation {
             let exit = verify_foundation_chain(foundation_url.as_deref(), *json).await;
+            std::process::exit(exit);
+        }
+        // ── Foundation-relayed receipts on the LOCAL chain ─────────────────
+        if *foundation_receipts {
+            let exit = verify_foundation_receipts_local(
+                audit_db.as_deref(),
+                operator.as_deref(),
+                *json,
+            );
             std::process::exit(exit);
         }
         // Resolve the target server address from topology config.
@@ -4448,6 +4473,272 @@ struct AnchorReport {
     entries_covered: usize,
     coverage_pct: f64,
     mismatches: Vec<AnchorMismatch>,
+}
+
+// ── Foundation-relayed receipts on the local chain ─────────────────────────
+//
+// `zp verify --foundation-receipts [--operator <id>] [--json]`
+//
+// Reads the operator's local audit chain, filters to entries emitted by the
+// foundation-relay path (AuditAction::SystemEvent with event prefix
+// "foundation_relay:"), and cross-references each entry against the per-entry
+// results returned by AuditStore::verify_with_report. Surfaces:
+//
+//   - count of foundation-relayed entries
+//   - signature validity per entry (delegated to zp-audit's verifier)
+//   - chain-link validity per entry
+//   - human-readable details: timestamp, operator, claim, subject, edge pubkey id
+//
+// Distinct from `--foundation` (remote HTTPS verification against the worker).
+// This is the verifier for what Cut B writes and Cut C forwards.
+
+fn verify_foundation_receipts_local(
+    audit_db: Option<&std::path::Path>,
+    operator_filter: Option<&str>,
+    emit_json: bool,
+) -> i32 {
+    use std::collections::HashMap;
+
+    // Resolve the audit.db path (CLI flag wins; otherwise data_dir/audit.db).
+    let db_path: std::path::PathBuf = match audit_db {
+        Some(p) => p.to_path_buf(),
+        None => match zp_core::paths::data_dir() {
+            Ok(d) => d.join("audit.db"),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m  Could not resolve data dir: {}", e);
+                return 2;
+            }
+        },
+    };
+
+    if !db_path.exists() {
+        eprintln!("\x1b[31m✗\x1b[0m  No audit store at {}", db_path.display());
+        eprintln!("    (Foundation-relay receipts land here after the worker forwards an intent.)");
+        return 2;
+    }
+
+    let store = match zp_audit::AuditStore::open_readonly(&db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m  Failed to open audit store: {}", e);
+            return 2;
+        }
+    };
+
+    // Run the chain-wide verifier once; we'll index per-entry results below.
+    let report = match store.verify_with_report() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m  Verification failed: {}", e);
+            return 2;
+        }
+    };
+    let entry_results: HashMap<String, &zp_audit::EntryVerification> = report
+        .entries
+        .iter()
+        .map(|e| (e.entry_id.clone(), e))
+        .collect();
+
+    // Pull the chain entries themselves. Generous limit; foundation-relay
+    // traffic is small in the current single-operator deployment.
+    let entries = match store.export_chain(100_000) {
+        Ok(es) => es,
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m  Failed to export chain: {}", e);
+            return 2;
+        }
+    };
+
+    // Filter to foundation-relay entries, optionally scoped to an operator.
+    let target_actor = operator_filter.map(|id| zp_core::ActorId::User(id.to_string()));
+    let relayed: Vec<_> = entries
+        .iter()
+        .filter(|e| {
+            matches!(
+                &e.action,
+                zp_core::AuditAction::SystemEvent { event } if event.starts_with("foundation_relay:")
+            )
+        })
+        .filter(|e| match &target_actor {
+            Some(want) => &e.actor == want,
+            None => true,
+        })
+        .collect();
+
+    // Aggregate per-entry verification outcomes.
+    let mut sig_valid = 0usize;
+    let mut sig_invalid = 0usize;
+    let mut sig_missing = 0usize;
+    let mut link_invalid = 0usize;
+    let mut hash_invalid = 0usize;
+    let mut anomalies: Vec<(String, String)> = Vec::new();
+
+    for entry in &relayed {
+        let id_str = entry.id.0.to_string();
+        match entry_results.get(&id_str) {
+            Some(v) => {
+                match v.signature_valid {
+                    Some(true) => sig_valid += 1,
+                    Some(false) => {
+                        sig_invalid += 1;
+                        anomalies.push((id_str.clone(), "signature failed verification".into()));
+                    }
+                    None => sig_missing += 1,
+                }
+                if !v.chain_link_valid {
+                    link_invalid += 1;
+                    anomalies.push((id_str.clone(), "prev_hash linkage broken".into()));
+                }
+                if !v.hash_valid {
+                    hash_invalid += 1;
+                    anomalies.push((id_str.clone(), "entry_hash recomputation mismatch".into()));
+                }
+                if let Some(issue) = &v.issue {
+                    anomalies.push((id_str.clone(), issue.clone()));
+                }
+            }
+            None => {
+                anomalies.push((id_str.clone(), "no per-entry verification record".into()));
+            }
+        }
+    }
+
+    if emit_json {
+        let payload = serde_json::json!({
+            "total": relayed.len(),
+            "signatures_valid": sig_valid,
+            "signatures_invalid": sig_invalid,
+            "signatures_missing": sig_missing,
+            "chain_links_invalid": link_invalid,
+            "entry_hashes_invalid": hash_invalid,
+            "operator_filter": operator_filter,
+            "anomalies": anomalies
+                .iter()
+                .map(|(id, msg)| serde_json::json!({ "entry_id": id, "issue": msg }))
+                .collect::<Vec<_>>(),
+            "entries": relayed.iter().map(|e| relayed_entry_json(e)).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+        return if anomalies.is_empty() { 0 } else { 1 };
+    }
+
+    // Human-readable output.
+    eprintln!();
+    eprintln!("  \x1b[1mFoundation-Relay Receipts (local chain)\x1b[0m");
+    eprintln!("  \x1b[2m─────────────────────────────────────────\x1b[0m");
+    eprintln!("  Audit store:        {}", db_path.display());
+    if let Some(op) = operator_filter {
+        eprintln!("  Operator filter:    \x1b[36m{}\x1b[0m", op);
+    }
+    eprintln!("  Total entries:      {}", relayed.len());
+    eprintln!(
+        "  Signatures valid:   {}{}",
+        sig_valid,
+        if sig_invalid > 0 || sig_missing > 0 {
+            format!(
+                "  \x1b[31m(invalid: {}, missing: {})\x1b[0m",
+                sig_invalid, sig_missing
+            )
+        } else {
+            String::new()
+        }
+    );
+    eprintln!(
+        "  Chain links:        {}{}",
+        relayed.len().saturating_sub(link_invalid),
+        if link_invalid > 0 {
+            format!("  \x1b[31m(broken: {})\x1b[0m", link_invalid)
+        } else {
+            String::new()
+        }
+    );
+
+    if !relayed.is_empty() {
+        eprintln!();
+        eprintln!("  \x1b[1mEntries:\x1b[0m");
+        for entry in &relayed {
+            let claim = match &entry.action {
+                zp_core::AuditAction::SystemEvent { event } => {
+                    event.strip_prefix("foundation_relay:").unwrap_or(event.as_str())
+                }
+                _ => "(unknown)",
+            };
+            let operator_str = match &entry.actor {
+                zp_core::ActorId::User(s) => s.as_str(),
+                zp_core::ActorId::Operator => "Operator",
+                zp_core::ActorId::System(s) => s.as_str(),
+                zp_core::ActorId::Skill(s) => s.as_str(),
+            };
+            let id_str = entry.id.0.to_string();
+            let sig_indicator = match entry_results.get(&id_str).and_then(|v| v.signature_valid) {
+                Some(true) => "\x1b[32m✓\x1b[0m",
+                Some(false) => "\x1b[31m✗\x1b[0m",
+                None => "\x1b[33m∅\x1b[0m",
+            };
+            let link_indicator = match entry_results.get(&id_str) {
+                Some(v) if v.chain_link_valid => "\x1b[32m✓\x1b[0m",
+                Some(_) => "\x1b[31m✗\x1b[0m",
+                None => "?",
+            };
+            eprintln!(
+                "    {} {} {} {}  {:.16}  {}",
+                entry.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                sig_indicator,
+                link_indicator,
+                operator_str,
+                id_str,
+                claim,
+            );
+        }
+    }
+
+    if !anomalies.is_empty() {
+        eprintln!();
+        eprintln!("  \x1b[31mAnomalies:\x1b[0m");
+        for (id, msg) in &anomalies {
+            eprintln!("    ✗ {:.16}  {}", id, msg);
+        }
+    }
+
+    eprintln!();
+    if anomalies.is_empty() {
+        if relayed.is_empty() {
+            eprintln!(
+                "  \x1b[2m(No foundation-relayed receipts on this chain yet.)\x1b[0m"
+            );
+        } else {
+            eprintln!("  \x1b[32m✓\x1b[0m  All foundation-relayed receipts verify cleanly.");
+        }
+        eprintln!();
+        0
+    } else {
+        eprintln!("  \x1b[31mForeign-edge receipts have integrity issues.\x1b[0m");
+        eprintln!("  Investigate the entries listed above before trusting this set.");
+        eprintln!();
+        1
+    }
+}
+
+fn relayed_entry_json(entry: &zp_core::AuditEntry) -> serde_json::Value {
+    let claim = match &entry.action {
+        zp_core::AuditAction::SystemEvent { event } => {
+            event.strip_prefix("foundation_relay:").unwrap_or(event.as_str())
+        }
+        _ => "",
+    };
+    let operator = match &entry.actor {
+        zp_core::ActorId::User(s) => s.clone(),
+        zp_core::ActorId::Operator => "Operator".to_string(),
+        zp_core::ActorId::System(s) => s.clone(),
+        zp_core::ActorId::Skill(s) => s.clone(),
+    };
+    serde_json::json!({
+        "entry_id": entry.id.0.to_string(),
+        "timestamp": entry.timestamp.to_rfc3339(),
+        "operator": operator,
+        "claim": claim,
+        "receipt": entry.receipt.as_ref().and_then(|r| serde_json::to_value(r).ok()),
+    })
 }
 
 // ── Foundation chain verification (zp verify --foundation) ───────────────────

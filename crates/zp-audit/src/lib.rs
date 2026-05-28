@@ -33,4 +33,6 @@ pub use recovery::{
 pub use revocation::RevocationIndex;
 pub use signer::AuditSigner;
 pub use store::{AuditStore, Result, StoreError};
-pub use verifier::{verify_linkage, verify_linkage_report, ChainVerifier, VerificationReport};
+pub use verifier::{
+    verify_linkage, verify_linkage_report, ChainVerifier, EntryVerification, VerificationReport,
+};
