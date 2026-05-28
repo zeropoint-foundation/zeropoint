@@ -445,18 +445,40 @@ async function handleApi(request, env) {
     }
 
     // GET /api/receipts — query audit trail (admin only)
+    //
+    // The worker holds no chain. This path proxies the chain query to
+    // the operator's zp-server via the Foundation Edge envelope-auth
+    // forward path, so the receipts returned are the canonical signed
+    // entries from the operator's audit chain rather than D1 rows.
     if (path === "/api/receipts" && method === "GET") {
       const gate = await governanceGate(request, env, "workspace:admin");
       if (!gate.ok) return gate.response;
 
       const limit = parseInt(url.searchParams.get("limit") || "100", 10);
-      const { results } = await env.DB.prepare(
-        `SELECT * FROM receipts ORDER BY created_at DESC LIMIT ?`
-      )
-        .bind(limit)
-        .all();
+      const claim = url.searchParams.get("claim") || undefined;
+      const after = url.searchParams.get("after") || undefined;
+      const before = url.searchParams.get("before") || undefined;
 
-      return json({ count: results.length, receipts: results });
+      try {
+        const { fetchReceipts } = await import("./auth/forward.js");
+        const result = await fetchReceipts(env, gate.operator.operatorId, {
+          limit,
+          claim,
+          after,
+          before,
+        });
+        return json(result);
+      } catch (e) {
+        const status =
+          e && typeof e.status === "number" ? e.status : 502;
+        return json(
+          {
+            error: "forward_failed",
+            reason: e?.message ?? String(e),
+          },
+          status,
+        );
+      }
     }
 
     // ── Document API (/api/docs/*) ──

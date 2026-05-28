@@ -10,9 +10,10 @@
     "db:migrate:remote": "wrangler d1 execute zpmail --remote --file=migrations/0001_email_schema.sql"
   },
   "dependencies": {
+    "@noble/ed25519": "^2.1.0",
     "postal-mime": "^2.4.1"
   },
   "devDependencies": {
-    "wrangler": "^4.14.0"
+    "wrangler": "^4.89.0"
   }
 }
