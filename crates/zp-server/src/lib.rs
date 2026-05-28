@@ -9,6 +9,7 @@ pub mod artifact_library;
 pub mod attestations;
 pub mod auth;
 pub mod envelope_state;
+pub mod foundation_relay;
 pub mod lease_heartbeat;
 pub mod channels;
 pub mod codebase;
@@ -532,6 +533,17 @@ pub struct AppStateInner {
     /// Stores generated artifacts (chain narrations, etc.) as Candidates until
     /// an operator signs them into canonical form.
     pub artifact_library: Arc<zp_artifacts::LocalArtifactLibrary>,
+
+    /// Foundation Edge pubkey registry — verifies envelopes on
+    /// `/v1/foundation-receipts`. `None` if `~/ZeroPoint/config/` doesn't
+    /// exist yet (pre-onboarding state); endpoints respond 503 in that
+    /// window. Reads `foundation-edge-keys.json` lazily with mtime-based
+    /// invalidation.
+    pub foundation_edge_registry: Option<foundation_relay::PubkeyRegistryArc>,
+
+    /// Recent intent_id dedupe cache for foundation-relay (24h TTL,
+    /// bounded). Idempotency guard against worker retries.
+    pub foundation_edge_seen_intents: foundation_relay::SeenIntentsArc,
 }
 
 #[derive(Clone)]
@@ -817,6 +829,17 @@ impl AppState {
             )));
         }
 
+        // Foundation Edge pubkey registry: lazy file-backed loader. None
+        // if the ZeroPoint home path isn't resolvable yet (the endpoints
+        // respond 503 in that pre-onboarding window).
+        let foundation_edge_registry: Option<foundation_relay::PubkeyRegistryArc> =
+            zp_paths::home()
+                .ok()
+                .map(|home| Arc::new(foundation_relay::PubkeyRegistry::at_zp_home(&home)));
+
+        let foundation_edge_seen_intents: foundation_relay::SeenIntentsArc =
+            Arc::new(std::sync::Mutex::new(foundation_relay::SeenIntents::new()));
+
         let state = AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -847,6 +870,8 @@ impl AppState {
             anchor_pipeline,
             lease_heartbeat: lease_heartbeat_state,
             artifact_library,
+            foundation_edge_registry,
+            foundation_edge_seen_intents,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -1087,6 +1112,13 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/audit/receipts", get(audit_receipts_handler))
         // Receipts
         .route("/api/v1/receipts/generate", post(receipt_generate_handler))
+        // Foundation Edge worker relay (canonical receipt issuance for
+        // workspace actions originating at the Cloudflare worker — see
+        // docs/handoffs/foundation-worker-edge-proxy-2026-05.md).
+        .route(
+            "/v1/foundation-receipts",
+            post(foundation_relay::post_handler).get(foundation_relay::get_handler),
+        )
         // Stats
         .route("/api/v1/stats", get(stats_handler))
         // Security posture + topology
