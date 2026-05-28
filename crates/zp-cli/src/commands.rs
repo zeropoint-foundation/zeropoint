@@ -26,15 +26,13 @@ use zp_policy::GovernanceGate;
 ///   ZP_HOME=/opt/zeropoint zp keys list   → /opt/zeropoint
 ///   (default)                             → ~/ZeroPoint
 pub fn resolve_zp_home() -> PathBuf {
-    zp_core::paths::home()
-        .unwrap_or_else(|_| zp_core::paths::user_home_or(".").join("ZeroPoint"))
+    zp_core::paths::home().unwrap_or_else(|_| zp_core::paths::user_home_or(".").join("ZeroPoint"))
 }
 
 /// Open a keyring using the resolved ZP home.
 pub fn open_keyring() -> Result<Keyring, zp_keys::error::KeyError> {
     Keyring::open(resolve_zp_home().join("keys"))
 }
-
 
 /// List all registered skills
 #[allow(dead_code)]
@@ -567,8 +565,7 @@ fn rotate_operator(
 
     // Save new operator key (encrypted under vault key derived from genesis)
     eprint!("  Saving new operator key...           ");
-    if let Err(e) =
-        keyring.save_operator_with_genesis_secret(&new_operator, &genesis.secret_key())
+    if let Err(e) = keyring.save_operator_with_genesis_secret(&new_operator, &genesis.secret_key())
     {
         eprintln!("\x1b[31m✗\x1b[0m");
         eprintln!("  Failed to save operator key: {}", e);
@@ -634,7 +631,10 @@ fn rotate_agent(keyring: &Keyring, name: &str, reason: Option<&str>) -> i32 {
 
     eprintln!();
     eprintln!("  \x1b[1mAgent Key Rotation: {}\x1b[0m", name);
-    eprintln!("  \x1b[2m─────────────────────{}\x1b[0m", "─".repeat(name.len()));
+    eprintln!(
+        "  \x1b[2m─────────────────────{}\x1b[0m",
+        "─".repeat(name.len())
+    );
 
     let old_pub_hex = hex::encode(old_agent.public_key());
     eprintln!(
@@ -722,7 +722,10 @@ fn rotate_agent(keyring: &Keyring, name: &str, reason: Option<&str>) -> i32 {
     eprintln!("\x1b[32m✓\x1b[0m rotations.json");
 
     eprintln!();
-    eprintln!("  \x1b[32m✓ Agent key '{}' rotated successfully.\x1b[0m", name);
+    eprintln!(
+        "  \x1b[32m✓ Agent key '{}' rotated successfully.\x1b[0m",
+        name
+    );
     eprintln!();
     eprintln!("  Old key: {}...", &old_pub_hex[..16]);
     eprintln!("  New key: {}...", &new_pub_hex[..16]);
@@ -730,6 +733,178 @@ fn rotate_agent(keyring: &Keyring, name: &str, reason: Option<&str>) -> i32 {
     eprintln!();
 
     0
+}
+
+// ── Foundation-edge key derivation ────────────────────────────────
+
+/// Derive the Foundation Edge envelope-signing keypair from the Genesis
+/// secret, register the public key in `~/ZeroPoint/config/foundation-edge-keys.json`,
+/// and print the secret material the operator needs to install on the
+/// Cloudflare Worker via `wrangler secret put`.
+///
+/// This is the one-time ceremony that bootstraps the worker's edge identity
+/// for forwarding receipt-intents to the operator's `zp-server`. The
+/// derivation is deterministic per Genesis + domain-separation context (per
+/// [`zp_keys::foundation_edge_signer`]), so a lost private key can be
+/// re-derived by re-running this command on the same Genesis-bearing host.
+///
+/// **Trust posture:** the *private* key crosses a trust boundary on its way
+/// to Cloudflare's secret store (`wrangler secret put FOUNDATION_EDGE_SIGNING_KEY`).
+/// That is the explicit, narrow exception to "never write secrets to disk"
+/// — it's printed once, copied once into the edge secret store, and the
+/// printed buffer should be cleared from the terminal afterward. The
+/// *public* key and key ID are stored on the operator's host (in the
+/// registry) and exported via wrangler secret put as well so the worker
+/// knows which pubkey ID to include in its envelope headers.
+///
+/// See `docs/handoffs/foundation-worker-edge-proxy-2026-05.md` for the
+/// architecture this command supports.
+pub fn keys_derive_foundation_edge() -> i32 {
+    use base64::Engine;
+    use ed25519_dalek::SigningKey;
+
+    let keyring = match open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("  Failed to open keyring: {}", e);
+            eprintln!("  Run `zp init` first to bootstrap your environment.");
+            return 1;
+        }
+    };
+
+    let genesis_secret = match keyring.genesis_secret() {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("  Failed to load Genesis secret: {}", e);
+            eprintln!("  The Foundation Edge key derives from Genesis; without it");
+            eprintln!("  this command cannot proceed.");
+            return 1;
+        }
+    };
+
+    // Derive the seed (deterministic per Genesis + domain context v1).
+    let seed = zp_keys::derive_foundation_edge_signer_seed(&genesis_secret);
+    let signing_key = SigningKey::from_bytes(&seed);
+    let verifying_key = signing_key.verifying_key();
+    let pubkey_bytes = verifying_key.to_bytes();
+    let pubkey_hex = hex::encode(pubkey_bytes);
+
+    // Build a human-readable, time-sortable key ID. Format:
+    //   fwed-YYYY-MM-DD-<first 8 hex of pubkey>
+    // — date for chronological reading, pubkey prefix for uniqueness across
+    // any future re-derivations under different domain contexts (v2, etc.).
+    let today = chrono::Utc::now().format("%Y-%m-%d");
+    let pubkey_id = format!("fwed-{}-{}", today, &pubkey_hex[..8]);
+
+    // Encode the private seed for transport into the Cloudflare secret store.
+    // This is the one exported copy; the seed itself stays Zeroizing in
+    // memory and drops at end of scope.
+    let private_b64 = base64::engine::general_purpose::STANDARD.encode(seed.as_slice());
+
+    // Update the on-host pubkey registry so the operator's zp-server can
+    // verify envelopes signed by this key.
+    let registry_path = resolve_zp_home().join("config").join("foundation-edge-keys.json");
+    if let Err(e) = upsert_foundation_edge_pubkey(&registry_path, &pubkey_id, &pubkey_hex) {
+        eprintln!("  \x1b[31m✗\x1b[0m Failed to update pubkey registry: {}", e);
+        eprintln!("  Registry path: {}", registry_path.display());
+        return 1;
+    }
+
+    eprintln!();
+    eprintln!("  \x1b[1mFoundation Edge keypair derived\x1b[0m");
+    eprintln!("  \x1b[2m──────────────────────────────────\x1b[0m");
+    eprintln!("  Derivation:   zp.foundation.edge.v1 (BLAKE3-keyed from Genesis)");
+    eprintln!("  Pubkey ID:    \x1b[36m{}\x1b[0m", pubkey_id);
+    eprintln!("  Pubkey (hex): \x1b[36m{}\x1b[0m", pubkey_hex);
+    eprintln!(
+        "  Registered:   \x1b[32m✓\x1b[0m {}",
+        registry_path.display()
+    );
+    eprintln!();
+    eprintln!("  \x1b[1mPrivate key (base64) — copy into wrangler secret\x1b[0m");
+    eprintln!("  \x1b[33m{}\x1b[0m", private_b64);
+    eprintln!();
+    eprintln!("  \x1b[1mNext steps (run from zeropoint.global/):\x1b[0m");
+    eprintln!("    1. \x1b[36mwrangler secret put FOUNDATION_EDGE_SIGNING_KEY\x1b[0m");
+    eprintln!("       (paste the base64 above when prompted)");
+    eprintln!("    2. \x1b[36mwrangler secret put FOUNDATION_EDGE_PUBKEY_ID\x1b[0m");
+    eprintln!("       (paste \x1b[36m{}\x1b[0m when prompted)", pubkey_id);
+    eprintln!("    3. Clear your terminal scrollback so the private key isn't recoverable:");
+    eprintln!("       \x1b[2mmacOS Terminal: Edit > Clear Scrollback\x1b[0m");
+    eprintln!();
+    eprintln!("  \x1b[2mThe seed is deterministic — losing the private key is recoverable\x1b[0m");
+    eprintln!("  \x1b[2mby re-running this command on a host that holds Genesis.\x1b[0m");
+    eprintln!();
+
+    0
+}
+
+/// Add or update an entry in the foundation-edge-keys.json registry.
+///
+/// File format:
+/// ```json
+/// {
+///   "keys": [
+///     {
+///       "id": "fwed-2026-05-26-a1b2c3d4",
+///       "pubkey": "<64 hex>",
+///       "added_at": "2026-05-26T...",
+///       "rotated_to": null
+///     }
+///   ]
+/// }
+/// ```
+///
+/// If an entry with the given `id` already exists, it is updated in place
+/// (so re-running the derive command is idempotent — same Genesis + same
+/// domain context + same date → same id → updated `added_at`).
+fn upsert_foundation_edge_pubkey(
+    registry_path: &std::path::Path,
+    id: &str,
+    pubkey_hex: &str,
+) -> Result<(), String> {
+    use serde_json::{json, Value};
+
+    // Ensure config directory exists.
+    if let Some(parent) = registry_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {:?}: {}", parent, e))?;
+    }
+
+    // Load existing or initialize fresh.
+    let mut registry: Value = if registry_path.exists() {
+        let bytes = std::fs::read(registry_path)
+            .map_err(|e| format!("read {:?}: {}", registry_path, e))?;
+        serde_json::from_slice(&bytes).map_err(|e| format!("parse: {}", e))?
+    } else {
+        json!({ "keys": [] })
+    };
+
+    let keys = registry
+        .get_mut("keys")
+        .and_then(|v| v.as_array_mut())
+        .ok_or_else(|| "registry missing 'keys' array".to_string())?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let new_entry = json!({
+        "id": id,
+        "pubkey": pubkey_hex,
+        "added_at": now,
+        "rotated_to": null,
+    });
+
+    // Upsert by id.
+    if let Some(existing) = keys.iter_mut().find(|k| k.get("id").and_then(|v| v.as_str()) == Some(id)) {
+        *existing = new_entry;
+    } else {
+        keys.push(new_entry);
+    }
+
+    let json_bytes =
+        serde_json::to_vec_pretty(&registry).map_err(|e| format!("serialize: {}", e))?;
+    zp_keys::write_secret_file(registry_path, &json_bytes)
+        .map_err(|e| format!("write {:?}: {}", registry_path, e))?;
+
+    Ok(())
 }
 
 // ── Rotation persistence helpers ──────────────────────────────────
@@ -786,22 +961,18 @@ fn load_rotation_certs(path: &std::path::Path) -> Vec<RotationCertificate> {
 }
 
 /// Append a rotation certificate to the JSON file.
-fn save_rotation_cert(
-    path: &std::path::Path,
-    cert: &RotationCertificate,
-) -> Result<(), String> {
+fn save_rotation_cert(path: &std::path::Path, cert: &RotationCertificate) -> Result<(), String> {
     let mut certs = load_rotation_certs(path);
     certs.push(cert.clone());
 
-    let json = serde_json::to_string_pretty(&certs)
-        .map_err(|e| format!("serialization error: {}", e))?;
+    let json =
+        serde_json::to_string_pretty(&certs).map_err(|e| format!("serialization error: {}", e))?;
 
     // CRIT-8: atomic mode-0600 write via the canonical helper. Closes
     // the chmod-after-write race that existed when this called
     // `fs::write` then `set_permissions`. The helper does tmpfile +
     // fsync + rename with mode 0600 from creation.
-    zp_keys::write_secret_file(path, json.as_bytes())
-        .map_err(|e| format!("write error: {}", e))?;
+    zp_keys::write_secret_file(path, json.as_bytes()).map_err(|e| format!("write error: {}", e))?;
 
     Ok(())
 }
@@ -945,7 +1116,10 @@ pub fn gate_eval(action: &str, resource: Option<&str>, agent: Option<&str>) -> i
     let policies_dir = match zp_core::paths::policies_dir() {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("  \x1b[33m⚠\x1b[0m  Failed to resolve policies directory: {}", e);
+            eprintln!(
+                "  \x1b[33m⚠\x1b[0m  Failed to resolve policies directory: {}",
+                e
+            );
             return 1;
         }
     };
@@ -1042,7 +1216,10 @@ pub fn operator_create(
 ) -> i32 {
     // Validate role
     if !["founder", "successor", "officer"].contains(&role) {
-        eprintln!("  Invalid role '{}'. Must be: founder, successor, or officer.", role);
+        eprintln!(
+            "  Invalid role '{}'. Must be: founder, successor, or officer.",
+            role
+        );
         return 1;
     }
 
@@ -1158,15 +1335,24 @@ pub fn operator_create(
         eprintln!("  Expires:      never");
     }
     eprintln!();
-    eprintln!("  Delegation chain: genesis → \x1b[1m{}\x1b[0m ({})", name, role);
+    eprintln!(
+        "  Delegation chain: genesis → \x1b[1m{}\x1b[0m ({})",
+        name, role
+    );
     eprintln!();
     eprintln!();
-    eprintln!("  \x1b[33mOPERATOR SECRET — TRANSFER SECURELY TO {}\x1b[0m", name.to_uppercase());
+    eprintln!(
+        "  \x1b[33mOPERATOR SECRET — TRANSFER SECURELY TO {}\x1b[0m",
+        name.to_uppercase()
+    );
     eprintln!("  \x1b[2m{}\x1b[0m", secret_hex);
     eprintln!("  \x1b[31mShown once. Hand-deliver or use a secure channel.\x1b[0m");
     eprintln!();
     eprintln!("  \x1b[33mNext:\x1b[0m Register with the workspace API:");
-    eprintln!("    zp operator register --name {} --token <admin-token>", name);
+    eprintln!(
+        "    zp operator register --name {} --token <admin-token>",
+        name
+    );
     eprintln!();
 
     0
@@ -1183,7 +1369,10 @@ pub async fn operator_register(name: &str, api_url: &str, token: &str) -> i32 {
     };
 
     // Load operator metadata
-    let meta_path = keyring.path().join("operators").join(format!("{}.json", name));
+    let meta_path = keyring
+        .path()
+        .join("operators")
+        .join(format!("{}.json", name));
     let metadata: serde_json::Value = match std::fs::read_to_string(&meta_path) {
         Ok(content) => match serde_json::from_str(&content) {
             Ok(v) => v,
@@ -1193,7 +1382,10 @@ pub async fn operator_register(name: &str, api_url: &str, token: &str) -> i32 {
             }
         },
         Err(_) => {
-            eprintln!("  Operator '{}' not found. Run `zp operator create` first.", name);
+            eprintln!(
+                "  Operator '{}' not found. Run `zp operator create` first.",
+                name
+            );
             return 1;
         }
     };
@@ -1201,8 +1393,13 @@ pub async fn operator_register(name: &str, api_url: &str, token: &str) -> i32 {
     let public_key_hex = metadata["public_key_hex"].as_str().unwrap_or("");
     let email = metadata["email"].as_str().unwrap_or("");
     let role = metadata["role"].as_str().unwrap_or("staff");
-    let capabilities = metadata["capabilities"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>())
+    let capabilities = metadata["capabilities"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
 
     eprintln!();
@@ -1211,7 +1408,10 @@ pub async fn operator_register(name: &str, api_url: &str, token: &str) -> i32 {
     eprintln!("  Name:       {}", name);
     eprintln!("  Email:      {}", email);
     eprintln!("  Role:       {}", role);
-    eprintln!("  Public key: {}...", &public_key_hex[..16.min(public_key_hex.len())]);
+    eprintln!(
+        "  Public key: {}...",
+        &public_key_hex[..16.min(public_key_hex.len())]
+    );
     eprintln!("  API:        {}", api_url);
 
     let payload = serde_json::json!({
@@ -1238,7 +1438,10 @@ pub async fn operator_register(name: &str, api_url: &str, token: &str) -> i32 {
             if resp.status().is_success() {
                 eprintln!("\x1b[32m✓\x1b[0m");
                 eprintln!();
-                eprintln!("  \x1b[32m✓ Operator '{}' registered with workspace.\x1b[0m", name);
+                eprintln!(
+                    "  \x1b[32m✓ Operator '{}' registered with workspace.\x1b[0m",
+                    name
+                );
                 eprintln!();
                 0
             } else {
@@ -1306,9 +1509,9 @@ pub fn operator_list() -> i32 {
                         };
 
                         let role_color = match role {
-                            "founder" => "\x1b[33m",    // yellow
-                            "successor" => "\x1b[35m",  // magenta
-                            "officer" => "\x1b[36m",    // cyan
+                            "founder" => "\x1b[33m",   // yellow
+                            "successor" => "\x1b[35m", // magenta
+                            "officer" => "\x1b[36m",   // cyan
                             _ => "\x1b[2m",
                         };
 
@@ -1316,10 +1519,7 @@ pub fn operator_list() -> i32 {
                             "  {} {}{:<12}\x1b[0m {:<30} \x1b[36m{}...\x1b[0m",
                             role_icon, role_color, role, email, short_key
                         );
-                        eprintln!(
-                            "    \x1b[2m{}\x1b[0m",
-                            name
-                        );
+                        eprintln!("    \x1b[2m{}\x1b[0m", name);
                         count += 1;
                     }
                 }
@@ -1408,7 +1608,10 @@ pub fn operator_succession(name: &str, email: &str) -> i32 {
     eprintln!("  Authority:  workspace:admin + succession:invoke");
     eprintln!();
     eprintln!("  \x1b[33m⚠  This ceremony will:\x1b[0m");
-    eprintln!("     1. Generate {}'s operator key (signed by genesis)", name);
+    eprintln!(
+        "     1. Generate {}'s operator key (signed by genesis)",
+        name
+    );
     eprintln!("     2. Grant full workspace:admin + succession:invoke");
     eprintln!("     3. Output the genesis recovery mnemonic (24 words)");
     eprintln!("     4. The mnemonic must be stored securely offline");
@@ -1521,9 +1724,18 @@ pub fn operator_succession(name: &str, email: &str) -> i32 {
     eprintln!();
     eprintln!("  \x1b[33mSuccessor onboarding steps:\x1b[0m");
     eprintln!("    1. Register {} with the workspace API:", name);
-    eprintln!("       zp operator register --name {} --token <admin-token>", name);
-    eprintln!("    2. Give {} the recovery mnemonic (in person, offline)", name);
-    eprintln!("    3. {} runs `zp recover` on their machine to restore genesis", name);
+    eprintln!(
+        "       zp operator register --name {} --token <admin-token>",
+        name
+    );
+    eprintln!(
+        "    2. Give {} the recovery mnemonic (in person, offline)",
+        name
+    );
+    eprintln!(
+        "    3. {} runs `zp recover` on their machine to restore genesis",
+        name
+    );
     eprintln!();
 
     0
@@ -1548,8 +1760,8 @@ pub fn gate_list() -> i32 {
     eprintln!();
 
     // Custom WASM gates
-    let policies_dir = zp_core::paths::policies_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let policies_dir =
+        zp_core::paths::policies_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut custom_count = 0;
     if policies_dir.exists() {
         if let Ok(entries) = std::fs::read_dir(&policies_dir) {

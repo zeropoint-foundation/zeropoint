@@ -20,6 +20,7 @@
 
 pub mod audit_signer;
 pub mod biometric;
+pub mod foundation_edge_signer;
 pub mod gate_signer;
 pub mod blast_radius;
 pub mod certificate;
@@ -102,6 +103,9 @@ pub use revocation::{
 };
 pub use rotation::{RotationCertificate, RotationChain};
 pub use audit_signer::derive_audit_signer_seed;
+pub use foundation_edge_signer::{
+    derive_foundation_edge_signer_seed, FOUNDATION_EDGE_SIGNER_CONTEXT,
+};
 pub use gate_signer::{derive_gate_signer_seed, GATE_SIGNER_CONTEXT};
 pub use secret_file::write_atomic as write_secret_file;
 pub use vault_key::{derive_vault_key, resolve_vault_key, ResolvedVaultKey, VaultKeySource};

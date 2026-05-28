@@ -670,6 +670,28 @@ enum KeysCmd {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Derive a subkey from the Genesis sovereign root.
+    ///
+    /// Each subkey serves a distinct trust role (envelope auth, audit signing,
+    /// gate signing, vault wrapping) and is derived deterministically via
+    /// BLAKE3-keyed hashing with a domain-separation context.
+    #[command(subcommand)]
+    Derive(DeriveCmd),
+}
+
+#[derive(Subcommand)]
+enum DeriveCmd {
+    /// Derive the Foundation Edge envelope-signing keypair from Genesis
+    /// for use by the Cloudflare Worker forwarding receipt-intents.
+    ///
+    /// One-time ceremony per deployment (idempotent on re-run — same
+    /// Genesis derives the same key). Registers the public key in
+    /// ~/ZeroPoint/config/foundation-edge-keys.json so the operator's
+    /// zp-server can verify envelopes from the worker. Prints the
+    /// private key (base64) and pubkey ID for `wrangler secret put`.
+    ///
+    /// See docs/handoffs/foundation-worker-edge-proxy-2026-05.md.
+    FoundationEdge,
 }
 
 #[derive(Subcommand)]
@@ -2179,6 +2201,7 @@ async fn main() -> anyhow::Result<()> {
             KeysCmd::List => commands::keys_list(),
             KeysCmd::Revoke { name } => commands::keys_revoke(name),
             KeysCmd::Rotate { target, reason } => commands::keys_rotate(target, reason.as_deref()),
+            KeysCmd::Derive(DeriveCmd::FoundationEdge) => commands::keys_derive_foundation_edge(),
         };
         std::process::exit(exit_code);
     }
