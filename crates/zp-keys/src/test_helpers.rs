@@ -210,6 +210,38 @@ pub fn install_mock_keyring() {
     // No keyring dep means no OS Keychain interaction means nothing to mock.
 }
 
+/// Seed a deterministic test genesis secret into the mock keyring and return it.
+///
+/// Installs the mock keyring (idempotent) then writes a fixed 32-byte secret
+/// under the test-namespace credential-store keys so that
+/// `load_genesis_from_credential_store()` succeeds in this process.
+///
+/// **Limitation**: seeding the genesis secret alone is not sufficient to boot
+/// `AppState::init` in signed (writable) mode. `load_or_create_identity` also
+/// requires `operator.json` and `operator.secret.enc` in the keys directory
+/// (the full Genesis→Operator hierarchy). Without those files, `AppState::init`
+/// falls through to bootstrap mode (`is_genesis = true`) and opens the audit
+/// store read-only regardless of whether the genesis secret is in the keyring.
+///
+/// Use this as a building block when constructing a full test hierarchy
+/// (write operator.json + operator.secret.enc + genesis.json alongside this
+/// call). Returns the 32-byte secret so callers can derive the vault key and
+/// encrypt the operator secret correctly.
+#[cfg(feature = "os-keychain")]
+pub fn seed_test_genesis() -> [u8; 32] {
+    install_mock_keyring();
+    let secret: [u8; 32] = [0x42u8; 32]; // deterministic — fine for tests
+    crate::keyring::save_genesis_to_credential_store(&secret)
+        .expect("seed_test_genesis: failed to write to mock keyring");
+    secret
+}
+
+/// No-op variant — returns the test secret when the keyring feature is off.
+#[cfg(not(feature = "os-keychain"))]
+pub fn seed_test_genesis() -> [u8; 32] {
+    [0x42u8; 32]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -20,6 +20,26 @@
 //     ├── OnlyKeyProvider       OnlyKey challenge-response
 //     ├── LoginPasswordProvider OS credential store (login password gate)
 //     └── FileProvider          Disk file (headless / CI)
+//
+// Blast radius — surfaces that must update together when a sovereignty
+// provider is added, renamed, or has its status changed:
+//   biometric.rs                       (legacy shim, re-exports)
+//   lib.rs                             (top-level re-exports)
+//   onboard/genesis.rs                 (Genesis ceremony)
+//   onboard/detect.rs                  (provider scan)
+//   onboard/state.rs                   (step machine)
+//   onboard.html                       (sovereignty cards)
+//   onboard.js                         (updatePlatformUI, selectSovereignty,
+//                                       showGenesisComplete, summary labels)
+//   narration/onboard/scripts.md       (narration mentions biometrics)
+//   dashboard.html                     (sovereignty badge display)
+//   security.rs                        (posture check)
+//
+// Feature flags (in `zp-keys/Cargo.toml`):
+//   os-keychain, face-enroll, hw-yubikey, hw-ledger, hw-trezor, hw-onlykey
+//
+// Design direction for M-of-N quorum sovereignty: see
+// `docs/design/quorum-sovereignty.md`.
 
 pub mod detection;
 pub mod face;

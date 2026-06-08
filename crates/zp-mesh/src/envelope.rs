@@ -369,6 +369,7 @@ impl CompactDelegation {
             last_renewed_at: None,
             renewal_count: 0,
             subject_public_key: None,
+            renews: None,
         }
     }
 
