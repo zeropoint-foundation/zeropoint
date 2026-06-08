@@ -136,7 +136,11 @@ fn split_at_top_level_operators(cmd: &str) -> Result<Vec<&str>, ShellParseError>
                 // Command substitution: $(...) or $((...)
                 if i + 1 < bytes.len() && bytes[i + 1] == b'(' {
                     i += 2;
-                    let open_paren_count = if i < bytes.len() && bytes[i] == b'(' { 1 } else { 0 };
+                    let open_paren_count = if i < bytes.len() && bytes[i] == b'(' {
+                        1
+                    } else {
+                        0
+                    };
                     let mut paren_depth = 1 + open_paren_count;
                     if open_paren_count > 0 {
                         i += 1;
@@ -415,7 +419,8 @@ fn read_token(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String
         }
 
         // If we have a complete token and didn't just read a quote, check for termination
-        if !token.is_empty() && !matches!(token.chars().next(), Some(ch) if ch == '\'' || ch == '"') {
+        if !token.is_empty() && !matches!(token.chars().next(), Some(ch) if ch == '\'' || ch == '"')
+        {
             if chars.peek().map_or(false, |c| c.is_whitespace()) {
                 break;
             }

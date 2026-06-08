@@ -1219,7 +1219,9 @@ fn launch_dashboard() {
 
         // Spawn detached — stdout/stderr go to a log file so the wizard
         // output stays clean.
-        let log_dir = zp_core::paths::home().unwrap_or_else(|_| dirs_home().join("ZeroPoint")).join("logs");
+        let log_dir = zp_core::paths::home()
+            .unwrap_or_else(|_| dirs_home().join("ZeroPoint"))
+            .join("logs");
         let _ = std::fs::create_dir_all(&log_dir);
         let log_file = log_dir.join("serve.log");
 
@@ -1388,7 +1390,10 @@ pub fn status() -> i32 {
     match &derived_role {
         zp_config::NodeRole::Genesis => ok("Node role: Genesis"),
         zp_config::NodeRole::Delegate { upstream_addr, .. } => {
-            eprintln!("  {YELLOW}●{NC} Node role: Delegate (upstream: {})", upstream_addr);
+            eprintln!(
+                "  {YELLOW}●{NC} Node role: Delegate (upstream: {})",
+                upstream_addr
+            );
         }
         zp_config::NodeRole::Standalone => ok("Node role: Standalone"),
     }
@@ -1412,8 +1417,8 @@ pub fn status() -> i32 {
     // joined `audit.db` directly onto `zp_home`, which omits the `data/`
     // subdir and made `zp status` report "not yet initialized" against a
     // chain that other commands could read fine (#151).
-    let audit_db = zp_core::paths::audit_db_path()
-        .unwrap_or_else(|_| zp_home.join("data").join("audit.db"));
+    let audit_db =
+        zp_core::paths::audit_db_path().unwrap_or_else(|_| zp_home.join("data").join("audit.db"));
     if audit_db.exists() {
         if let Ok(store) = zp_audit::AuditStore::open_readonly(&audit_db) {
             let store_arc = std::sync::Arc::new(std::sync::Mutex::new(store));
@@ -1424,16 +1429,19 @@ pub fn status() -> i32 {
 
             // Use the tool lifecycle conversation ID to query events
             let conv_id = zp_core::ConversationId(
-                uuid::Uuid::parse_str("00000000-0000-7000-8000-746f6f6c6c63").unwrap()
+                uuid::Uuid::parse_str("00000000-0000-7000-8000-746f6f6c6c63").unwrap(),
             );
-            let entries = store_arc.lock().ok()
+            let entries = store_arc
+                .lock()
+                .ok()
                 .and_then(|s| s.get_entries(&conv_id, 500).ok())
                 .unwrap_or_default();
 
             // Scan for canonicalization, configured, preflight, and launched events
             let mut system_anchor: Option<String> = None;
             let mut provider_anchors: Vec<(String, String)> = Vec::new();
-            let mut tool_states: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+            let mut tool_states: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
 
             for entry in &entries {
                 if let zp_core::AuditAction::SystemEvent { event } = &entry.action {
@@ -1447,7 +1455,9 @@ pub fn status() -> i32 {
                         let parts: Vec<&str> = event.splitn(4, ':').collect();
                         if parts.len() >= 3 {
                             let tool_name = match parts[1] {
-                                "canonicalized" | "configured" | "launched" | "stopped" => parts[2].to_string(),
+                                "canonicalized" | "configured" | "launched" | "stopped" => {
+                                    parts[2].to_string()
+                                }
                                 "preflight" if parts.len() >= 4 => parts[3].to_string(),
                                 "providers" if parts.len() >= 4 => parts[3].to_string(),
                                 "setup" if parts.len() >= 4 => parts[3].to_string(),
@@ -1481,15 +1491,21 @@ pub fn status() -> i32 {
                 dim("Tool wires — none canonicalized");
             } else {
                 for (tname, beads) in &tool_states {
-                    let bead_summary: Vec<&str> = beads.iter().map(|b| {
-                        b.split(':').next().unwrap_or("?")
-                    }).collect();
+                    let bead_summary: Vec<&str> = beads
+                        .iter()
+                        .map(|b| b.split(':').next().unwrap_or("?"))
+                        .collect();
                     let unique_stages: Vec<&str> = {
                         let mut s: Vec<&str> = bead_summary.clone();
                         s.dedup();
                         s
                     };
-                    ok(&format!("Tool wire [{}] — {} beads: {}", tname, beads.len(), unique_stages.join(" → ")));
+                    ok(&format!(
+                        "Tool wire [{}] — {} beads: {}",
+                        tname,
+                        beads.len(),
+                        unique_stages.join(" → ")
+                    ));
                 }
             }
 

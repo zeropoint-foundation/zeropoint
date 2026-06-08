@@ -19,7 +19,9 @@ pub fn run_cleanup(delete: bool) -> i32 {
         println!();
         println!("  \x1b[32m✓\x1b[0m  No orphan ZeroPoint Keychain entries found.");
         println!();
-        println!("  Only the legitimate \x1b[1mzeropoint-genesis\x1b[0m sovereign root is present.");
+        println!(
+            "  Only the legitimate \x1b[1mzeropoint-genesis\x1b[0m sovereign root is present."
+        );
         println!();
         return 0;
     }

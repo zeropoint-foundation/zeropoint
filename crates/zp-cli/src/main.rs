@@ -393,6 +393,18 @@ enum Commands {
         #[arg(long)]
         subject_public_key: Option<String>,
 
+        /// Smooth renewal: look up the most-recent active grant for
+        /// --subject and issue a fresh grant with identical capabilities,
+        /// trust tier, and lease window. Only --subject is required when
+        /// this flag is set; --capabilities, --tier-ceiling, --lease-duration
+        /// are filled from the prior grant (--lease-duration can still be
+        /// provided to override the prior window).
+        ///
+        /// The new grant carries `renews: <prior_grant_id>` in its chain
+        /// receipt, making renewal a first-class continuity event.
+        #[arg(long)]
+        renew: bool,
+
         /// Audit DB path. Defaults to <data-dir>/audit.db.
         #[arg(long)]
         audit_db: Option<PathBuf>,
@@ -2776,25 +2788,45 @@ async fn main() -> anyhow::Result<()> {
         max_depth,
         failure_mode,
         subject_public_key,
+        renew,
         audit_db,
         json,
     }) = &args.command
     {
-        let exit_code = run_delegate(
-            subject,
-            capabilities,
-            *tier_ceiling,
-            lease_duration,
-            renewal_interval,
-            renewal_authorities,
-            revocable_by,
-            *max_depth,
-            failure_mode,
-            subject_public_key.as_deref(),
-            audit_db.clone(),
-            &args.data_dir,
-            *json,
-        );
+        let exit_code = if *renew {
+            run_delegate_renew(
+                subject,
+                // --lease-duration is the only override the operator may
+                // supply; everything else is looked up from the prior grant.
+                // If the default "8h" came through it means the user didn't
+                // explicitly set it; we detect "user explicitly supplied it"
+                // by checking whether it differs from the clap default. We
+                // pass it through regardless — run_delegate_renew will use
+                // the prior grant's lease when this equals the default.
+                lease_duration,
+                subject_public_key.as_deref(),
+                audit_db.clone(),
+                &args.data_dir,
+                *json,
+            )
+        } else {
+            run_delegate(
+                subject,
+                capabilities,
+                *tier_ceiling,
+                lease_duration,
+                renewal_interval,
+                renewal_authorities,
+                revocable_by,
+                *max_depth,
+                failure_mode,
+                subject_public_key.as_deref(),
+                None, // renews: initial grant, no prior
+                audit_db.clone(),
+                &args.data_dir,
+                *json,
+            )
+        };
         std::process::exit(exit_code);
     }
     if let Some(Commands::Revoke {
@@ -5323,6 +5355,9 @@ fn run_delegate(
     max_depth: u32,
     failure_mode: &str,
     subject_public_key: Option<&str>,
+    // When Some, the new grant's `renews` field is set to this prior grant id,
+    // making smooth renewal a first-class continuity relation in the chain.
+    renews_id: Option<String>,
     audit_db: Option<PathBuf>,
     data_dir: &std::path::Path,
     json: bool,
@@ -5460,6 +5495,12 @@ fn run_delegate(
             value: serde_json::Value::Bool(true),
         });
     }
+    // Attach the prior-grant back-reference for smooth renewals. When
+    // `renews_id` is Some, this is a renewal; the chain receipt will carry
+    // `renews: <prior_grant_id>` so the continuity is structurally visible.
+    if let Some(ref prior_id) = renews_id {
+        grant.renews = Some(prior_id.clone());
+    }
 
     // Emit the chain receipt.
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
@@ -5493,7 +5534,7 @@ fn run_delegate(
     let store = Arc::new(Mutex::new(store));
 
     #[cfg(feature = "embedded-server")]
-    let entry_hash = zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant);
+    let entry_hash = zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None);
     #[cfg(not(feature = "embedded-server"))]
     let entry_hash: Option<String> = {
         eprintln!("error: zp delegate requires the 'embedded-server' feature");
@@ -5521,12 +5562,21 @@ fn run_delegate(
                 "expires_at": grant.expires_at,
                 "subject_public_key": subject_pk_hex,
                 "subject_secret_key": generated_secret_hex,
+                "renews": grant.renews,
                 "entry_hash": entry_hash,
             })
         );
     } else {
-        println!("\x1b[1mzp delegate — standing delegation issued\x1b[0m");
+        let title = if grant.renews.is_some() {
+            "\x1b[1mzp delegate --renew — smooth renewal issued\x1b[0m"
+        } else {
+            "\x1b[1mzp delegate — standing delegation issued\x1b[0m"
+        };
+        println!("{}", title);
         println!("grant_id:           {}", grant.id);
+        if let Some(ref prior) = grant.renews {
+            println!("renews:             {}", prior);
+        }
         println!("subject:            {}", grant.grantee);
         println!(
             "capabilities:       {}",
@@ -5571,6 +5621,177 @@ fn run_delegate(
         }
     }
     0
+}
+
+// ── Smooth renewal ────────────────────────────────────────────────────────────
+
+/// Walk the reconstructed grant table and return the most-recent non-revoked,
+/// non-expired active grant for `subject`. "Most-recent" is by `created_at`
+/// descending; `reconstruct_grants` returns grants in ascending created_at
+/// order, so we take the last non-revoked entry for this grantee.
+fn find_most_recent_active_grant_for_subject(
+    chain: &[zp_core::AuditEntry],
+    subject: &str,
+) -> Option<zp_core::CapabilityGrant> {
+    let snaps = reconstruct_grants(chain);
+    // `reconstruct_grants` returns sorted ascending by created_at; iterate
+    // in reverse to find the most-recent non-revoked grant for this subject.
+    snaps
+        .into_iter()
+        .rev()
+        .find(|s| !s.revoked && s.grant.grantee == subject)
+        .map(|s| s.grant)
+}
+
+/// `zp delegate --renew --subject <id> [--lease-duration <window>]`
+///
+/// Looks up the most-recent active grant for `subject`, copies its
+/// capabilities and trust tier, and issues a fresh grant.  The caller may
+/// supply `lease_duration_override` to use a different window; if it equals
+/// the CLI default ("8h") and the prior grant had a lease policy, we use
+/// the prior grant's lease duration instead so an unspecified flag does the
+/// intuitive thing (copy the prior window).
+fn run_delegate_renew(
+    subject: &str,
+    lease_duration_override: &str,
+    subject_public_key: Option<&str>,
+    audit_db: Option<PathBuf>,
+    data_dir: &std::path::Path,
+    json: bool,
+) -> i32 {
+    let db_path = audit_db.clone().unwrap_or_else(|| data_dir.join("audit.db"));
+
+    // Open the store read-only to look up the prior grant. We'll re-open
+    // it (signed) inside run_delegate for the write.
+    let ro_store = match zp_audit::AuditStore::open_readonly(&db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening audit store at {}: {}", db_path.display(), e);
+            return 2;
+        }
+    };
+    let chain = match ro_store.export_chain(i32::MAX as usize) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: export chain: {}", e);
+            return 2;
+        }
+    };
+
+    let prior = match find_most_recent_active_grant_for_subject(&chain, subject) {
+        Some(g) => g,
+        None => {
+            eprintln!(
+                "error: no active grant found for subject '{}'. \
+                 Use `zp delegate --subject {} --capabilities <list>` to issue an initial grant.",
+                subject, subject
+            );
+            return 2;
+        }
+    };
+
+    // Extract capabilities from the prior grant. The primary capability is
+    // the grant's main capability; extra ones are stored as `capability:*`
+    // constraints.
+    let mut all_caps: Vec<String> = vec![prior.capability.name().to_string()];
+    for c in &prior.constraints {
+        if let zp_core::Constraint::Custom { name, .. } = c {
+            if let Some(rest) = name.strip_prefix("capability:") {
+                all_caps.push(rest.to_string());
+            }
+        }
+    }
+    let capabilities_str = all_caps.join(",");
+
+    // Trust tier from prior grant.
+    let tier_ceiling = prior.trust_tier.as_u8();
+
+    // Lease duration: use override unless it's the CLI default ("8h") AND
+    // the prior grant has an explicit lease policy — in that case inherit
+    // the prior window so an unspecified `--lease-duration` doesn't
+    // silently change the window.
+    let effective_lease: String = if let Some(ref policy) = prior.lease_policy {
+        if lease_duration_override == "8h" {
+            // Operator did not override; copy the prior lease duration.
+            let prior_secs = policy.lease_duration.as_secs();
+            format!("{}s", prior_secs)
+        } else {
+            lease_duration_override.to_string()
+        }
+    } else {
+        lease_duration_override.to_string()
+    };
+
+    // Renewal interval: copy from prior grant if available.
+    let renewal_interval: String = prior
+        .lease_policy
+        .as_ref()
+        .map(|p| format!("{}s", p.renewal_interval.as_secs()))
+        .unwrap_or_else(|| "2h".to_string());
+
+    // Renewal authorities: reconstruct from prior grant's list.
+    // `parse_authorities` encoded each handle as
+    // `AuthorityRef::genesis("authority:<handle>")`, so we strip that prefix.
+    let authority_handle = |a: &zp_core::AuthorityRef| -> String {
+        let raw = a.capability_required.name();
+        raw.strip_prefix("authority:").unwrap_or(raw).to_string()
+    };
+    let renewal_authorities: String = if prior.renewal_authorities.is_empty() {
+        "genesis".to_string()
+    } else {
+        prior
+            .renewal_authorities
+            .iter()
+            .map(&authority_handle)
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+
+    // Revocable-by: copy from prior grant.
+    let revocable_by: String = if prior.revocable_by.is_empty() {
+        "genesis".to_string()
+    } else {
+        prior
+            .revocable_by
+            .iter()
+            .map(&authority_handle)
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+
+    // Redelegation depth: copy from prior grant.
+    let max_depth: u32 = match &prior.redelegation {
+        zp_core::RedelegationPolicy::Forbidden => 0,
+        zp_core::RedelegationPolicy::Allowed { max_subtree_depth } => *max_subtree_depth,
+    };
+
+    // Failure mode: copy from prior grant.
+    let failure_mode: String = prior
+        .lease_policy
+        .as_ref()
+        .map(|p| match &p.failure_mode {
+            zp_core::LeaseFailureMode::HaltOnExpiry => "halt".to_string(),
+            zp_core::LeaseFailureMode::DegradeOnExpiry => "degrade".to_string(),
+            zp_core::LeaseFailureMode::ContinueWithFlag => "flag".to_string(),
+        })
+        .unwrap_or_else(|| "halt".to_string());
+
+    run_delegate(
+        subject,
+        &capabilities_str,
+        tier_ceiling,
+        &effective_lease,
+        &renewal_interval,
+        &renewal_authorities,
+        &revocable_by,
+        max_depth,
+        &failure_mode,
+        subject_public_key,
+        Some(prior.id.clone()), // renews: this is the prior grant's id
+        audit_db,
+        data_dir,
+        json,
+    )
 }
 
 fn run_revoke(

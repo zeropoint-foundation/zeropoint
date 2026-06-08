@@ -16,10 +16,10 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
-use zp_audit::AuditStore;
 use zp_audit::chain::UnsealedEntry;
+use zp_audit::AuditStore;
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
 use zp_receipt::{Receipt, Signer, Status};
 
@@ -97,10 +97,7 @@ pub fn run_emit(
     // Add user-supplied key=value metadata
     for (key, value) in meta {
         let ext_key = format!("zp.orchestrator.meta.{}", key);
-        builder = builder.extension(
-            &ext_key,
-            serde_json::Value::String(value.clone()),
-        );
+        builder = builder.extension(&ext_key, serde_json::Value::String(value.clone()));
     }
 
     if let Some(parent) = parent_receipt_id {
@@ -113,14 +110,15 @@ pub fn run_emit(
     let receipt_id = receipt.id.clone();
 
     // Derive the audit signer from the Genesis secret
-    let genesis_secret = keyring.genesis_secret()
+    let genesis_secret = keyring
+        .genesis_secret()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
 
     // Open audit store and append
-    let mut store = AuditStore::open_signed(&db_path, audit_signer)
-        .context("Failed to open audit store")?;
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
 
     // Create a deterministic conversation ID from the issue ID so all receipts
     // for the same issue land in the same per-issue chain. Falls back to a

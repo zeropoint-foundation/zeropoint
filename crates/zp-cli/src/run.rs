@@ -22,8 +22,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
-use zp_audit::AuditStore;
 use zp_audit::chain::UnsealedEntry;
+use zp_audit::AuditStore;
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
 use zp_receipt::{Receipt, Signer, Status};
 use zp_trust::vault::CredentialVault;
@@ -72,7 +72,12 @@ pub const DEFAULT_WHITELIST: &[&str] = &[
 pub fn build_child_env(
     extra_inherit: &[String],
     vault_env: &HashMap<String, Vec<u8>>,
-) -> (HashMap<String, String>, Vec<String>, Vec<String>, Vec<String>) {
+) -> (
+    HashMap<String, String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+) {
     let mut child_env: HashMap<String, String> = HashMap::new();
     let mut inherited: Vec<String> = Vec::new();
     let mut extra_inherited: Vec<String> = Vec::new();
@@ -162,10 +167,7 @@ pub fn pin_manifest_hash(
         .unwrap_or_else(|_| manifest_path.to_path_buf());
 
     vault
-        .store(
-            &manifest_hash_vault_key(tool_name),
-            hash.as_bytes(),
-        )
+        .store(&manifest_hash_vault_key(tool_name), hash.as_bytes())
         .context("failed to store manifest hash in vault")?;
 
     vault
@@ -193,8 +195,8 @@ pub fn verify_manifest_hash(
     let stored_hash = String::from_utf8_lossy(&stored_hash_bytes).to_string();
 
     // Read current manifest bytes
-    let current_bytes =
-        std::fs::read(manifest_path).map_err(|e| ManifestHashError::Io(manifest_path.to_path_buf(), e))?;
+    let current_bytes = std::fs::read(manifest_path)
+        .map_err(|e| ManifestHashError::Io(manifest_path.to_path_buf(), e))?;
     let current_hash = blake3_hex(&current_bytes);
 
     if current_hash != stored_hash {
@@ -288,7 +290,8 @@ pub fn emit_launch_receipt(
     // Fallback still hits the process-scoped OnceLock; no new prompt either way.
     let genesis_secret = match fields.genesis_secret {
         Some(s) => s,
-        None => keyring.genesis_secret()
+        None => keyring
+            .genesis_secret()
             .context("Failed to load Genesis secret for audit signer")?,
     };
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
@@ -309,10 +312,7 @@ pub fn emit_launch_receipt(
             "zp.launch.command",
             serde_json::Value::String(fields.command.to_string()),
         )
-        .extension(
-            "zp.launch.args",
-            serde_json::json!(fields.args),
-        )
+        .extension("zp.launch.args", serde_json::json!(fields.args))
         .extension(
             "zp.launch.env.inherited",
             serde_json::json!(fields.inherited),
@@ -393,19 +393,18 @@ pub fn run(
     // Load manifest path from vault
     let manifest_path_key = manifest_path_vault_key(name);
     let manifest_path: PathBuf = match vault.retrieve(&manifest_path_key) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(s) => PathBuf::from(s),
-            Err(_) => {
-                eprintln!("\x1b[31m✗\x1b[0m  Manifest path is not valid UTF-8 in vault for tool '{}'.", name);
-                return 1;
+        Ok(bytes) => {
+            match String::from_utf8(bytes) {
+                Ok(s) => PathBuf::from(s),
+                Err(_) => {
+                    eprintln!("\x1b[31m✗\x1b[0m  Manifest path is not valid UTF-8 in vault for tool '{}'.", name);
+                    return 1;
+                }
             }
-        },
+        }
         Err(_) => {
             eprintln!();
-            eprintln!(
-                "  \x1b[31mTool '{}' is not configured.\x1b[0m",
-                name
-            );
+            eprintln!("  \x1b[31mTool '{}' is not configured.\x1b[0m", name);
             eprintln!();
             eprintln!(
                 "  Run `zp configure tool --path <dir> --name {}` first.",
@@ -418,10 +417,16 @@ pub fn run(
 
     if !manifest_path.exists() {
         eprintln!();
-        eprintln!("  \x1b[31mManifest file not found:\x1b[0m {}", manifest_path.display());
+        eprintln!(
+            "  \x1b[31mManifest file not found:\x1b[0m {}",
+            manifest_path.display()
+        );
         eprintln!();
         eprintln!("  The manifest was moved or deleted since last configure.");
-        eprintln!("  Run `zp configure tool --path <dir> --name {} --refresh` to update.", name);
+        eprintln!(
+            "  Run `zp configure tool --path <dir> --name {} --refresh` to update.",
+            name
+        );
         eprintln!();
         return 1;
     }
@@ -440,23 +445,28 @@ pub fn run(
     };
 
     // 3. Parse manifest with vault-ref rejection for [launch]
-    let manifest =
-        match zp_engine::capability::load_manifest_bytes_validated(&manifest_bytes) {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("\x1b[31m✗\x1b[0m  Manifest parse error: {}", e);
-                return 1;
-            }
-        };
+    let manifest = match zp_engine::capability::load_manifest_bytes_validated(&manifest_bytes) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("\x1b[31m✗\x1b[0m  Manifest parse error: {}", e);
+            return 1;
+        }
+    };
 
     // 4. Get [launch] section — abort if absent
     let launch = match manifest.launch {
         Some(ref l) => l,
         None => {
             eprintln!();
-            eprintln!("  \x1b[31mManifest for '{}' has no [launch] section.\x1b[0m", name);
+            eprintln!(
+                "  \x1b[31mManifest for '{}' has no [launch] section.\x1b[0m",
+                name
+            );
             eprintln!();
-            eprintln!("  Use `zp configure exec --name {} -- <cmd>` for ad-hoc exec,", name);
+            eprintln!(
+                "  Use `zp configure exec --name {} -- <cmd>` for ad-hoc exec,",
+                name
+            );
             eprintln!("  or add a [launch] section to .zp-configure.toml and re-run configure.");
             eprintln!();
             return 1;
@@ -467,7 +477,10 @@ pub fn run(
     let vault_env = match vault.resolve_tool_env(name) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("\x1b[31m✗\x1b[0m  Failed to resolve vault env for '{}': {}", name, e);
+            eprintln!(
+                "\x1b[31m✗\x1b[0m  Failed to resolve vault env for '{}': {}",
+                name, e
+            );
             return 1;
         }
     };
@@ -488,9 +501,7 @@ pub fn run(
 
     // Resolve working dir
     let working_dir: PathBuf = {
-        let base = manifest_path
-            .parent()
-            .unwrap_or_else(|| Path::new("."));
+        let base = manifest_path.parent().unwrap_or_else(|| Path::new("."));
         match &launch.working_dir {
             Some(wd) => {
                 let p = PathBuf::from(wd);
@@ -511,7 +522,10 @@ pub fn run(
     let keyring = match open_keyring() {
         Ok(kr) => kr,
         Err(e) => {
-            eprintln!("\x1b[31m✗\x1b[0m  Cannot open keyring for receipt signing: {}", e);
+            eprintln!(
+                "\x1b[31m✗\x1b[0m  Cannot open keyring for receipt signing: {}",
+                e
+            );
             return 1;
         }
     };
@@ -548,11 +562,7 @@ pub fn run(
     }
 
     // 8. exec() — replace process (or spawn on Windows)
-    eprintln!(
-        "launching: {} {}",
-        launch.command,
-        final_args.join(" ")
-    );
+    eprintln!("launching: {} {}", launch.command, final_args.join(" "));
 
     let mut cmd = std::process::Command::new(&launch.command);
     cmd.args(&final_args);
@@ -603,8 +613,7 @@ mod tests {
         let vault_env: HashMap<String, Vec<u8>> = HashMap::new();
         let extra_inherit: Vec<String> = Vec::new();
 
-        let (child_env, _inherited, _extra, _vault) =
-            build_child_env(&extra_inherit, &vault_env);
+        let (child_env, _inherited, _extra, _vault) = build_child_env(&extra_inherit, &vault_env);
 
         // PATH must be present (it's in the whitelist and almost always set)
         // Note: in CI/test environments PATH may be set; if not, that's fine.
@@ -637,7 +646,10 @@ mod tests {
         // We can't easily set process vars in unit tests without polluting other tests,
         // so we verify the whitelist coverage instead:
         if std::env::var("PATH").is_ok() {
-            assert!(child_env.contains_key("PATH"), "PATH must appear in child env");
+            assert!(
+                child_env.contains_key("PATH"),
+                "PATH must appear in child env"
+            );
         }
 
         // extra_inherited should be empty because PATH was already in whitelist
@@ -698,7 +710,9 @@ mod tests {
         pin_manifest_hash(&mut vault, "test-tool", &manifest_path, manifest_bytes).unwrap();
 
         // Vault must contain the hash
-        let stored_hash = vault.retrieve(&manifest_hash_vault_key("test-tool")).unwrap();
+        let stored_hash = vault
+            .retrieve(&manifest_hash_vault_key("test-tool"))
+            .unwrap();
         let expected_hash = blake3_hex(manifest_bytes);
         assert_eq!(
             String::from_utf8(stored_hash).unwrap(),
@@ -707,7 +721,9 @@ mod tests {
         );
 
         // Vault must contain the canonical path
-        let stored_path = vault.retrieve(&manifest_path_vault_key("test-tool")).unwrap();
+        let stored_path = vault
+            .retrieve(&manifest_path_vault_key("test-tool"))
+            .unwrap();
         assert!(
             !stored_path.is_empty(),
             "manifest path must be stored in vault"
@@ -739,7 +755,8 @@ mod tests {
         pin_manifest_hash(&mut vault, "mutated-tool", &manifest_path, original_bytes).unwrap();
 
         // Now mutate the manifest on disk
-        let mutated_bytes = b"[tool]\nname = \"test\"\nversion = \"0.2\"\ndescription = \"MODIFIED\"\n";
+        let mutated_bytes =
+            b"[tool]\nname = \"test\"\nversion = \"0.2\"\ndescription = \"MODIFIED\"\n";
         std::fs::File::create(&manifest_path)
             .unwrap()
             .write_all(mutated_bytes)
@@ -804,10 +821,7 @@ mod tests {
     fn test_manifest_hash_no_baseline_message() {
         let err = ManifestHashError::NoBaseline("ironclaw".to_string());
         let msg = err.to_string();
-        assert!(
-            msg.contains("ironclaw"),
-            "error must name the tool: {msg}"
-        );
+        assert!(msg.contains("ironclaw"), "error must name the tool: {msg}");
         assert!(
             msg.contains("zp configure tool"),
             "error must direct user to configure: {msg}"
@@ -818,7 +832,7 @@ mod tests {
 
     #[test]
     fn test_vault_ref_in_args_rejected_via_engine() {
-        use zp_engine::capability::{LaunchSpec, validate_launch_spec_no_vault_refs};
+        use zp_engine::capability::{validate_launch_spec_no_vault_refs, LaunchSpec};
 
         let spec = LaunchSpec {
             command: "cargo".to_string(),
@@ -849,7 +863,10 @@ mod tests {
 
         // If RUST_LOG is set in current env, it must appear in child
         if std::env::var("RUST_LOG").is_ok() {
-            assert!(child_env.contains_key("RUST_LOG"), "RUST_LOG must pass through");
+            assert!(
+                child_env.contains_key("RUST_LOG"),
+                "RUST_LOG must pass through"
+            );
         }
         // Always: RUST_NONEXISTENT_ZP should not appear
         assert!(!child_env.contains_key("RUST_NONEXISTENT_ZP"));
@@ -902,8 +919,14 @@ mod tests {
             )
             .extension("zp.launch.args", serde_json::json!(final_args))
             .extension("zp.launch.env.inherited", serde_json::json!(inherited))
-            .extension("zp.launch.env.extra_inherited", serde_json::json!(Vec::<String>::new()))
-            .extension("zp.launch.env.vault_resolved", serde_json::json!(vault_resolved))
+            .extension(
+                "zp.launch.env.extra_inherited",
+                serde_json::json!(Vec::<String>::new()),
+            )
+            .extension(
+                "zp.launch.env.vault_resolved",
+                serde_json::json!(vault_resolved),
+            )
             .finalize();
 
         signer.sign(&mut receipt);
@@ -923,7 +946,9 @@ mod tests {
         .with_receipt(receipt);
 
         let mut store = zp_audit::AuditStore::open_signed(&db_path, audit_signer).unwrap();
-        store.append(entry).expect("append must succeed before exec");
+        store
+            .append(entry)
+            .expect("append must succeed before exec");
 
         // Receipt ID must be non-empty (proof that a receipt was created)
         assert!(!receipt_id.is_empty(), "receipt ID must be non-empty");

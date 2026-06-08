@@ -324,38 +324,153 @@ const SECURITY_RULES: &[SecurityRule] = &[
 /// cat/head/tail intentionally excluded — they can read sensitive files.
 const SAFE_COMMANDS: &[&str] = &[
     // Shell builtins & navigation
-    "ls", "pwd", "cd", "echo", "printf", "less", "more", "clear", "reset",
-    "tput", "history", "alias", "unalias", "export", "set", "unset", "env",
-    "printenv", "true", "false", "exit", "logout", "return", "source", ".",
-    "eval", "fg", "bg", "jobs", "wait", "disown", "pushd", "popd", "dirs",
-    "help", "man", "info", "whatis", "apropos",
+    "ls",
+    "pwd",
+    "cd",
+    "echo",
+    "printf",
+    "less",
+    "more",
+    "clear",
+    "reset",
+    "tput",
+    "history",
+    "alias",
+    "unalias",
+    "export",
+    "set",
+    "unset",
+    "env",
+    "printenv",
+    "true",
+    "false",
+    "exit",
+    "logout",
+    "return",
+    "source",
+    ".",
+    "eval",
+    "fg",
+    "bg",
+    "jobs",
+    "wait",
+    "disown",
+    "pushd",
+    "popd",
+    "dirs",
+    "help",
+    "man",
+    "info",
+    "whatis",
+    "apropos",
     // File inspection (read-only)
-    "cat", "head", "tail", "grep", "rg", "find", "which", "whereis", "type",
-    "file", "stat", "wc", "date", "cal", "uptime", "whoami", "id", "groups",
-    "hostname", "uname", "tree", "diff", "md5", "shasum", "sha256sum",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "rg",
+    "find",
+    "which",
+    "whereis",
+    "type",
+    "file",
+    "stat",
+    "wc",
+    "date",
+    "cal",
+    "uptime",
+    "whoami",
+    "id",
+    "groups",
+    "hostname",
+    "uname",
+    "tree",
+    "diff",
+    "md5",
+    "shasum",
+    "sha256sum",
     // File manipulation (normal dev workflow)
-    "cp", "mv", "mkdir", "touch", "ln", "rm", "rmdir",
+    "cp",
+    "mv",
+    "mkdir",
+    "touch",
+    "ln",
+    "rm",
+    "rmdir",
     // Development tools
-    "cargo", "rustc", "rustup", "make", "cmake", "gcc", "clang",
-    "npm", "npx", "yarn", "pnpm", "node", "deno", "bun",
-    "python", "python3", "pip", "pip3", "uv", "poetry", "conda",
-    "go", "zig", "swift", "swiftc",
+    "cargo",
+    "rustc",
+    "rustup",
+    "make",
+    "cmake",
+    "gcc",
+    "clang",
+    "npm",
+    "npx",
+    "yarn",
+    "pnpm",
+    "node",
+    "deno",
+    "bun",
+    "python",
+    "python3",
+    "pip",
+    "pip3",
+    "uv",
+    "poetry",
+    "conda",
+    "go",
+    "zig",
+    "swift",
+    "swiftc",
     // Build & package
-    "docker", "docker-compose", "podman", "nix",
+    "docker",
+    "docker-compose",
+    "podman",
+    "nix",
     // Network & debugging
-    "curl", "wget", "httpie", "ssh", "scp", "rsync",
-    "lsof", "ps", "top", "htop", "kill", "pkill", "killall",
-    "nohup", "timeout", "time", "watch",
+    "curl",
+    "wget",
+    "httpie",
+    "ssh",
+    "scp",
+    "rsync",
+    "lsof",
+    "ps",
+    "top",
+    "htop",
+    "kill",
+    "pkill",
+    "killall",
+    "nohup",
+    "timeout",
+    "time",
+    "watch",
     // Text processing
-    "sed", "awk", "sort", "uniq", "cut", "tr", "jq", "yq", "xargs",
+    "sed",
+    "awk",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "jq",
+    "yq",
+    "xargs",
     // Editors
-    "vim", "nvim", "nano", "code", "emacs",
+    "vim",
+    "nvim",
+    "nano",
+    "code",
+    "emacs",
     // Version control (all git subcommands are safe for humans)
-    "git", "gh",
+    "git",
+    "gh",
     // Zsh/shell utilities
-    "autoload", "add-zsh-hook", "compinit", "rehash",
+    "autoload",
+    "add-zsh-hook",
+    "compinit",
+    "rehash",
 ];
-
 
 fn compiled_rules() -> &'static Vec<CompiledRule> {
     static RULES: OnceLock<Vec<CompiledRule>> = OnceLock::new();
@@ -374,7 +489,6 @@ fn compiled_rules() -> &'static Vec<CompiledRule> {
             .collect()
     })
 }
-
 
 /// Extract command pattern for approval caching.
 /// "rm -rf /tmp/test" → "rm -rf"
@@ -864,7 +978,6 @@ fn save_receipt(receipt: &zp_receipt::Receipt) -> std::io::Result<()> {
     std::fs::write(filepath, json)
 }
 
-
 // ============================================================================
 // Interactive Approval
 // ============================================================================
@@ -1117,7 +1230,9 @@ mod tests {
         let config = test_config();
         let result = evaluate(&config, "rm -rf /tmp/foo");
         assert_eq!(result.risk, RiskLevel::High);
-        assert!(result.matched_rules.contains(&"recursive_force_delete".to_string()));
+        assert!(result
+            .matched_rules
+            .contains(&"recursive_force_delete".to_string()));
         assert!(!result.allowed);
     }
 
@@ -1155,7 +1270,9 @@ mod tests {
         let result = evaluate(&config, "ls 'unclosed");
         assert!(!result.allowed);
         assert_eq!(result.risk, RiskLevel::High);
-        assert!(result.matched_rules.contains(&"unparseable_command".to_string()));
+        assert!(result
+            .matched_rules
+            .contains(&"unparseable_command".to_string()));
     }
 
     #[test]

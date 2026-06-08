@@ -68,7 +68,10 @@ pub fn run() -> i32 {
     let expected_pubkey = match ed25519_dalek::VerifyingKey::from_bytes(&pubkey_bytes) {
         Ok(k) => k,
         Err(e) => {
-            eprintln!("  \x1b[31m✗\x1b[0m Genesis certificate has invalid Ed25519 public key: {}", e);
+            eprintln!(
+                "  \x1b[31m✗\x1b[0m Genesis certificate has invalid Ed25519 public key: {}",
+                e
+            );
             return 1;
         }
     };
@@ -129,7 +132,9 @@ pub fn run() -> i32 {
         eprint!("  Overwrite with the recovered secret? [y/N] ");
         let _ = io::stdout().flush();
         let mut answer = String::new();
-        if io::stdin().lock().read_line(&mut answer).is_err() || !answer.trim().eq_ignore_ascii_case("y") {
+        if io::stdin().lock().read_line(&mut answer).is_err()
+            || !answer.trim().eq_ignore_ascii_case("y")
+        {
             eprintln!("  Aborted. The credential store was not modified.");
             return 0;
         }
