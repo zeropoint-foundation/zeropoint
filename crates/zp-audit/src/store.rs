@@ -818,6 +818,100 @@ impl AuditStore {
         Ok(result)
     }
 
+    /// Export `(rowid, AuditEntry)` pairs strictly after the given rowid,
+    /// in ascending rowid order, up to `limit` entries.
+    ///
+    /// `after_rowid = 0` means "from the beginning of the chain".
+    /// The returned rowid can be base64-encoded as an opaque cursor for
+    /// forward-pagination of the chain by consumers such as the foundation
+    /// relay SSE bridge.
+    pub fn export_entries_after_rowid(
+        &self,
+        after_rowid: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, AuditEntry)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT rowid, id, timestamp, prev_hash, entry_hash, actor, action,
+                        conversation_id, policy_decision, policy_module, receipt, signatures
+                 FROM audit_entries
+                 WHERE rowid > ?
+                 ORDER BY rowid ASC
+                 LIMIT ?",
+            )
+            .map_err(StoreError::Database)?;
+
+        let rows = stmt
+            .query_map(params![after_rowid, limit as i64], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                    row.get::<_, String>(11)?,
+                ))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        let mut result = Vec::new();
+        for (rowid, id_str, timestamp_str, prev_hash, entry_hash, actor_json, action_json,
+             conv_id_str, policy_decision_json, policy_module, receipt_json, signatures_json) in rows
+        {
+            let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
+            let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(chrono::Utc::now);
+            let actor = serde_json::from_str(&actor_json)
+                .unwrap_or_else(|_| zp_core::ActorId::System("unknown".to_string()));
+            let action = serde_json::from_str(&action_json).unwrap_or_else(|_| {
+                zp_core::AuditAction::SystemEvent {
+                    event: "unknown".to_string(),
+                }
+            });
+            let conversation_id = zp_core::ConversationId(
+                uuid::Uuid::parse_str(&conv_id_str).unwrap_or_else(|_| uuid::Uuid::nil()),
+            );
+            let policy_decision =
+                serde_json::from_str(&policy_decision_json).unwrap_or_else(|_| {
+                    zp_core::PolicyDecision::Block {
+                        reason: "unknown".to_string(),
+                        policy_module: "unknown".to_string(),
+                    }
+                });
+            let receipt = receipt_json
+                .as_ref()
+                .and_then(|json| serde_json::from_str(json).ok());
+            result.push((
+                rowid,
+                AuditEntry {
+                    id: zp_core::AuditId(id),
+                    timestamp,
+                    prev_hash,
+                    entry_hash,
+                    actor,
+                    action,
+                    conversation_id,
+                    policy_decision,
+                    policy_module,
+                    receipt,
+                    signatures: decode_signatures(&signatures_json),
+                },
+            ));
+        }
+        Ok(result)
+    }
+
     /// Verify chain linkage integrity with a detailed report.
     ///
     /// Checks that stored entry hashes form a valid chain (each entry's

@@ -469,18 +469,57 @@ pub struct GetQuery {
     pub operator_id: String,
     #[serde(default)]
     pub limit: Option<usize>,
+    /// ISO-8601 timestamp lower bound (exclusive). Ignored when `cursor` is set.
     #[serde(default)]
     pub after: Option<DateTime<Utc>>,
     #[serde(default)]
     pub before: Option<DateTime<Utc>>,
     #[serde(default)]
     pub claim: Option<String>,
+    /// Opaque forward-pagination cursor emitted by a prior response's
+    /// `next_cursor`. When present takes precedence over `after` — using
+    /// both in the same request returns HTTP 400.
+    #[serde(default)]
+    pub cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct GetResponse {
     pub receipts: Vec<Value>,
     pub count: usize,
+    /// Opaque cursor for the next page. Present only when more entries exist
+    /// beyond the current page. Clients pass this as `?cursor=<value>` on
+    /// the next request. The cursor is stable: re-requesting with the same
+    /// cursor returns the same next page even if new entries arrive.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+// ── Cursor helpers ────────────────────────────────────────────────────────────
+
+/// Encode a SQLite rowid as an opaque base64 cursor.
+///
+/// Encoding: big-endian i64 bytes, standard base64. Big-endian so that
+/// lexicographic order of raw bytes matches numeric order — a minor
+/// convenience if cursor values are ever inspected or compared.
+fn encode_cursor(rowid: i64) -> String {
+    base64::engine::general_purpose::STANDARD.encode(rowid.to_be_bytes())
+}
+
+/// Decode a cursor produced by `encode_cursor`. Returns `Err` on any
+/// malformed input so the caller can surface HTTP 400.
+fn decode_cursor(cursor: &str) -> Result<i64, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(cursor)
+        .map_err(|_| "cursor is not valid base64".to_string())?;
+    if bytes.len() != 8 {
+        return Err(format!(
+            "cursor must decode to 8 bytes, got {}",
+            bytes.len()
+        ));
+    }
+    let arr: [u8; 8] = bytes.try_into().unwrap();
+    Ok(i64::from_be_bytes(arr))
 }
 
 /// `GET /v1/foundation-receipts` — paginated chain query.
@@ -513,9 +552,42 @@ pub async fn get_handler(
         return auth_error(&reason);
     }
 
+    // Reject cursor + after together — pick one mode.
+    if params.cursor.is_some() && params.after.is_some() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "ambiguous_pagination",
+                "reason": "use either `cursor` or `after`, not both"
+            })),
+        )
+            .into_response();
+    }
+
     let limit = params.limit.unwrap_or(50).min(500);
 
-    let entries = {
+    // Decode cursor into a rowid lower-bound (exclusive). When no cursor is
+    // present we use 0 (= "from the beginning"), then apply the optional
+    // ISO-timestamp `after` filter in the post-query pass below.
+    let after_rowid: i64 = match &params.cursor {
+        Some(cur) => match decode_cursor(cur) {
+            Ok(rid) => rid,
+            Err(reason) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": "invalid_cursor", "reason": reason })),
+                )
+                    .into_response();
+            }
+        },
+        None => 0,
+    };
+
+    // Fetch limit+1 so we can tell whether a next page exists without a
+    // second COUNT query. The extra entry is never included in the response.
+    let fetch_limit = limit + 1;
+
+    let rows = {
         let store = match state.0.audit_store.lock() {
             Ok(s) => s,
             Err(_) => {
@@ -526,22 +598,29 @@ pub async fn get_handler(
                     .into_response();
             }
         };
-        // Pull a generous window; filtering happens below. For the
-        // current single-operator deployment this is fine; pagination
-        // refinement (cursor over rowid) is a follow-up if the chain
-        // grows large enough to need it.
-        store.export_chain(limit * 4).unwrap_or_default()
+        store
+            .export_entries_after_rowid(after_rowid, fetch_limit)
+            .unwrap_or_default()
     };
 
+    let has_more = rows.len() > limit;
+    let rows: Vec<(i64, _)> = rows.into_iter().take(limit).collect();
+
     let target_actor = ActorId::User(params.operator_id.clone());
-    let receipts: Vec<Value> = entries
+    let mut last_rowid: Option<i64> = None;
+    let receipts: Vec<Value> = rows
         .into_iter()
-        .filter(|e| matches!(&e.action, AuditAction::SystemEvent { event } if event.starts_with("foundation_relay:")))
-        .filter(|e| e.actor == target_actor)
-        .filter(|e| {
-            if let Some(after) = params.after {
-                if e.timestamp <= after {
-                    return false;
+        .filter(|(_, e)| {
+            matches!(&e.action, AuditAction::SystemEvent { event } if event.starts_with("foundation_relay:"))
+        })
+        .filter(|(_, e)| e.actor == target_actor)
+        .filter(|(_, e)| {
+            // ISO-timestamp `after` filter — only applied in non-cursor mode.
+            if params.cursor.is_none() {
+                if let Some(after) = params.after {
+                    if e.timestamp <= after {
+                        return false;
+                    }
                 }
             }
             if let Some(before) = params.before {
@@ -559,12 +638,22 @@ pub async fn get_handler(
             }
             true
         })
-        .take(limit)
-        .filter_map(|e| e.receipt.as_ref().and_then(|r| serde_json::to_value(r).ok()))
+        .filter_map(|(rowid, e)| {
+            let v = e.receipt.as_ref().and_then(|r| serde_json::to_value(r).ok())?;
+            last_rowid = Some(rowid);
+            Some(v)
+        })
         .collect();
 
+    // Emit next_cursor only when the store had more rows beyond this page.
+    let next_cursor = if has_more {
+        last_rowid.map(encode_cursor)
+    } else {
+        None
+    };
+
     let count = receipts.len();
-    (StatusCode::OK, Json(GetResponse { receipts, count })).into_response()
+    (StatusCode::OK, Json(GetResponse { receipts, count, next_cursor })).into_response()
 }
 
 // ── Intent dedup cache ────────────────────────────────────────────────────────
@@ -807,5 +896,183 @@ mod tests {
         assert!(seen.contains_recent("intn-1", now));
         assert!(seen.contains_recent("intn-1", now + Duration::hours(1)));
         assert!(!seen.contains_recent("intn-1", now + Duration::hours(25)));
+    }
+
+    // ── Cursor helpers ────────────────────────────────────────────────────
+
+    #[test]
+    fn cursor_round_trips() {
+        for rowid in [0_i64, 1, 42, i64::MAX, -1] {
+            let encoded = encode_cursor(rowid);
+            let decoded = decode_cursor(&encoded).expect("round-trip must succeed");
+            assert_eq!(decoded, rowid, "rowid {rowid} failed round-trip");
+        }
+    }
+
+    #[test]
+    fn cursor_rejects_malformed_input() {
+        assert!(decode_cursor("not-base64!").is_err());
+        // Valid base64 but wrong byte length (4 bytes instead of 8).
+        let short = base64::engine::general_purpose::STANDARD.encode([0u8; 4]);
+        assert!(decode_cursor(&short).is_err());
+    }
+
+    // ── Pagination across in-memory chain ────────────────────────────────
+
+    /// Build an in-memory AuditStore with `n` foundation_relay entries for
+    /// `operator_id` and return it together with the tempdir it lives in
+    /// (must be kept alive for the store's lifetime).
+    fn store_with_entries(
+        n: usize,
+        operator_id: &str,
+    ) -> (tempfile::TempDir, zp_audit::AuditStore) {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("audit.db");
+        let mut store = zp_audit::AuditStore::open_unsigned(&path).unwrap();
+        for i in 0..n {
+            let unsealed = zp_audit::UnsealedEntry::new(
+                zp_core::ActorId::User(operator_id.to_string()),
+                zp_core::AuditAction::SystemEvent {
+                    event: format!("foundation_relay:test.event.{i}"),
+                },
+                zp_core::ConversationId(uuid::Uuid::now_v7()),
+                zp_core::PolicyDecision::Allow { conditions: vec![] },
+                "test",
+            );
+            store.append(unsealed).unwrap();
+        }
+        (dir, store)
+    }
+
+    #[test]
+    fn cursor_pagination_advances_monotonically() {
+        let (_dir, store) = store_with_entries(10, "op-ken");
+
+        // Page through 10 entries in pages of 3. Collect cursors and entry
+        // counts along the way.
+        let page_size = 3_usize;
+        let mut cursors: Vec<Option<String>> = Vec::new();
+        let mut after_rowid = 0_i64;
+
+        loop {
+            // fetch page_size+1 to detect "has more".
+            let rows = store
+                .export_entries_after_rowid(after_rowid, page_size + 1)
+                .unwrap();
+            let has_more = rows.len() > page_size;
+            let page: Vec<(i64, _)> = rows.into_iter().take(page_size).collect();
+
+            let last_rid = page.last().map(|(r, _)| *r);
+            let next_cursor = if has_more { last_rid.map(encode_cursor) } else { None };
+            cursors.push(next_cursor.clone());
+
+            if let Some(rid) = last_rid {
+                // rowid must be strictly greater than the previous lower bound.
+                assert!(rid > after_rowid, "cursor must advance");
+                after_rowid = rid;
+            }
+
+            if next_cursor.is_none() {
+                break;
+            }
+        }
+
+        // 10 entries / 3 per page → pages: [3, 3, 3, 1].
+        // Pages 0–2 should carry a cursor; page 3 should not.
+        assert_eq!(cursors.len(), 4, "expected 4 pages for 10 entries at page_size=3");
+        assert!(cursors[0].is_some());
+        assert!(cursors[1].is_some());
+        assert!(cursors[2].is_some());
+        assert!(cursors[3].is_none(), "last page must have no next_cursor");
+    }
+
+    #[test]
+    fn same_cursor_returns_same_next_page() {
+        let (_dir, store) = store_with_entries(6, "op-replay");
+
+        // Fetch the first page of 2 and note the cursor.
+        let first_page = store.export_entries_after_rowid(0, 3).unwrap();
+        assert!(first_page.len() > 2, "need >2 entries for this test");
+        let cursor_rowid = first_page[1].0; // rowid of 2nd entry → cursor after page 1
+        let cursor = encode_cursor(cursor_rowid);
+
+        // Fetch page 2 twice with the same cursor; both must match.
+        let page2a = store
+            .export_entries_after_rowid(decode_cursor(&cursor).unwrap(), 2)
+            .unwrap();
+        let page2b = store
+            .export_entries_after_rowid(decode_cursor(&cursor).unwrap(), 2)
+            .unwrap();
+
+        let ids_a: Vec<_> = page2a.iter().map(|(r, _)| *r).collect();
+        let ids_b: Vec<_> = page2b.iter().map(|(r, _)| *r).collect();
+        assert_eq!(ids_a, ids_b, "same cursor must return identical rowids");
+    }
+
+    #[test]
+    fn empty_chain_returns_no_cursor() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("audit.db");
+        let store = zp_audit::AuditStore::open_unsigned(&path).unwrap();
+
+        let rows = store.export_entries_after_rowid(0, 10).unwrap();
+        assert!(rows.is_empty());
+        // No rows → no cursor.
+        let last_rid = rows.last().map(|(r, _)| *r);
+        let next_cursor: Option<String> = last_rid.map(encode_cursor);
+        assert!(next_cursor.is_none());
+    }
+
+    #[test]
+    fn single_entry_chain_exhausts_on_first_page() {
+        let (_dir, store) = store_with_entries(1, "op-solo");
+
+        // Fetch up to 5; chain has 1. has_more = (returned > limit) = false.
+        let rows = store.export_entries_after_rowid(0, 6).unwrap(); // fetch limit+1=6, limit=5
+        let has_more = rows.len() > 5;
+        assert!(!has_more, "single-entry chain must not produce next_cursor");
+        assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn stale_cursor_still_returns_correct_next_page() {
+        // A cursor pointing to rowid N is unconditionally valid as long as N
+        // still exists — even if entries beyond N were added after the cursor
+        // was issued. The response is whatever comes after rowid N at read
+        // time.
+        let (_dir, mut store) = store_with_entries(3, "op-stale");
+
+        // Cursor after entry 2 (rowid 2).
+        let first_rows = store.export_entries_after_rowid(0, 4).unwrap();
+        assert!(first_rows.len() >= 2);
+        let cursor_rowid = first_rows[1].0;
+
+        // Add 3 more entries AFTER the cursor was "issued".
+        for i in 3..6_usize {
+            let unsealed = zp_audit::UnsealedEntry::new(
+                zp_core::ActorId::User("op-stale".to_string()),
+                zp_core::AuditAction::SystemEvent {
+                    event: format!("foundation_relay:late.{i}"),
+                },
+                zp_core::ConversationId(uuid::Uuid::now_v7()),
+                zp_core::PolicyDecision::Allow { conditions: vec![] },
+                "test",
+            );
+            store.append(unsealed).unwrap();
+        }
+
+        // Replay the cursor — should now see entries after rowid cursor_rowid
+        // (originally 1 entry, now 4 entries are visible beyond it).
+        let after_rows = store.export_entries_after_rowid(cursor_rowid, 10).unwrap();
+        assert!(
+            after_rows.len() > 1,
+            "new entries appended after cursor was issued must appear on replay"
+        );
+        for (rid, _) in &after_rows {
+            assert!(
+                *rid > cursor_rowid,
+                "all returned rowids must be strictly after the cursor rowid"
+            );
+        }
     }
 }
