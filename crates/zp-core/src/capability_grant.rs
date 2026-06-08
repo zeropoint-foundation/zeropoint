@@ -140,6 +140,19 @@ pub struct CapabilityGrant {
     /// CLI / dashboard path).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject_public_key: Option<String>,
+
+    /// If this grant was issued via `zp delegate --renew`, the grant_id of
+    /// the prior active grant it replaces. This makes smooth renewal a
+    /// first-class continuity relation in the chain: the receipt carrying
+    /// `renews` points back to the prior grant so verifiers can reconstruct
+    /// the full renewal lineage without a separate lookup.
+    ///
+    /// `None` for initial grants, `Some(prior_grant_id)` for renewals issued
+    /// through the CLI renewal path. Distinct from `delegation:renewed:*`
+    /// receipts (which represent lease heartbeat extensions by a running
+    /// node); this field represents an operator-directed smooth renewal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renews: Option<String>,
 }
 
 fn is_zero_u32(n: &u32) -> bool {
@@ -292,6 +305,7 @@ impl CapabilityGrant {
             last_renewed_at: None,
             renewal_count: 0,
             subject_public_key: None,
+            renews: None,
         }
     }
 
