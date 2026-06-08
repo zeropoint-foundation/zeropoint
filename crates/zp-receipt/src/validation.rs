@@ -257,6 +257,25 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+        // Memory index receipts (Cache-not-canon, SCC §6)
+        ReceiptType::MemoryIndexed => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::MemoryRetrievedByAgent => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::MemoryRevokedFromIndex => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -307,6 +326,9 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::ExternalAnchor { .. } => "ExternalAnchor",
         ClaimMetadata::PricingRefresh { .. } => "PricingRefresh",
         ClaimMetadata::ArtifactSigned { .. } => "ArtifactSigned",
+        ClaimMetadata::MemoryIndexed { .. } => "MemoryIndexed",
+        ClaimMetadata::MemoryRetrievedByAgent { .. } => "MemoryRetrievedByAgent",
+        ClaimMetadata::MemoryRevokedFromIndex { .. } => "MemoryRevokedFromIndex",
     }
 }
 
@@ -337,6 +359,9 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::ExternalAnchor, ClaimMetadata::ExternalAnchor { .. })
             | (ReceiptType::PricingRefreshClaim, ClaimMetadata::PricingRefresh { .. })
             | (ReceiptType::ArtifactSignedClaim, ClaimMetadata::ArtifactSigned { .. })
+            | (ReceiptType::MemoryIndexed, ClaimMetadata::MemoryIndexed { .. })
+            | (ReceiptType::MemoryRetrievedByAgent, ClaimMetadata::MemoryRetrievedByAgent { .. })
+            | (ReceiptType::MemoryRevokedFromIndex, ClaimMetadata::MemoryRevokedFromIndex { .. })
     )
 }
 
