@@ -1,0 +1,34 @@
+[workspace]
+
+[package]
+name = "gate-ping"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# One-shot verification tool for the ZP-Sig envelope migration. Loads
+# Genesis via the canonical sovereign-root loader, derives the gate
+# signer, signs an envelope for POST /api/v1/gate/tool-call, and posts
+# it. Prints the derived kid (so it can be compared against the gate's
+# `envelope verifier ready: kid=…` log line) and the response status +
+# `X-Auth-Reason` header on rejection.
+#
+# Not part of the workspace — intended as an ad-hoc verification script.
+
+[dependencies]
+zp-keys = { path = "../../crates/zp-keys", default-features = false, features = ["os-keychain"] }
+zp-gate-envelope = { path = "../../crates/zp-gate-envelope" }
+zp-receipt = { path = "../../crates/zp-receipt" }
+zp-core = { path = "../../crates/zp-core" }
+
+ed25519-dalek = { version = "2", features = ["std"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+chrono = "0.4"
+hex = "0.4"
+anyhow = "1"
+
+[[bin]]
+name = "gate-ping"
+path = "src/main.rs"
