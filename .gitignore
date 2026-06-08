@@ -157,3 +157,5 @@ graphify-out/
 webui-next/dist*
 zeropointfoundation.org/
 zeropointfoundation.org/
+docs/handoffs/
+.understand-anything/
