@@ -16,6 +16,9 @@ path = "src/lib.rs"
 # Server under test — we call build_app() directly
 zp-server = { path = "../zp-server" }
 zp-config = { path = "../zp-config" }
+# Core types and audit store for receipt_lifecycle tests
+zp-core = { path = "../zp-core" }
+zp-audit = { path = "../zp-audit", features = ["test-support"] }
 # Loopback bind helpers + CancellationToken — exercised by the
 # singular-loopback shutdown integration test.
 zp-net = { path = "../zp-net" }
