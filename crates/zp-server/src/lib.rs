@@ -2224,6 +2224,18 @@ async fn grant_handler(
     let receipt_id = grant.receipt_id.clone();
     let grant_json = serde_json::to_value(&grant).unwrap_or_default();
 
+    // Boundary 1→2: emit delegation:granted:<grantee> to the chain so the
+    // gate's P4 prereq check can see this grant. Without this entry the
+    // gate reads the chain and finds nothing, denying the grantee's tool
+    // calls even though the grant exists in-memory. Pass the signing key
+    // so the entry carries a typed, signed DelegationClaim receipt.
+    tool_chain::emit_delegation_receipt(
+        &state.0.audit_store,
+        "granted",
+        &grant,
+        Some(&state.0.identity.signing_key),
+    );
+
     // Store
     state.0.grants.lock().unwrap().push(grant);
 
@@ -2357,6 +2369,15 @@ async fn delegate_handler(
 
     // Verify the chain (parent + child) — AUTHZ-VULN-17: signatures MUST be verified.
     let chain_valid = DelegationChain::verify(vec![parent, child.clone()], true).is_ok();
+
+    // Boundary 1→2: emit delegation:granted:<grantee> so the gate's P4 prereq
+    // check sees this delegated grant on the chain. Pass signing key for typed receipt.
+    tool_chain::emit_delegation_receipt(
+        &state.0.audit_store,
+        "granted",
+        &child,
+        Some(&state.0.identity.signing_key),
+    );
 
     state.0.grants.lock().unwrap().push(child);
 
@@ -3646,32 +3667,21 @@ async fn gate_tool_call_handler(
         }
     }
 
-    // Issue #196 — dual-write the gate decision into the signed audit
-    // chain. The jsonl journal above is the lightweight observability
-    // projection; the chain is the source of truth. ZP IS the authority
-    // making the allow/deny call, so it can sign its own decision under
-    // the node identity (cf. updated comment on receipts_external_handler).
-    let chain_event = if allow {
-        format!("gate:allowed:{}", req.tool_name)
-    } else {
-        format!("gate:denied:{}", req.tool_name)
-    };
-    let chain_detail = serde_json::json!({
-        "tool_name": req.tool_name,
-        "args_hash": req.args_hash,
-        "thread_id": req.thread_id,
-        "run_id": req.run_id,
-        "agent": req.agent,
-        "allowed": allow,
-        "reason": if reason.is_empty() { None } else { Some(reason.clone()) },
-        "policy_source": "gate-policy.json",
-        "external_receipt_id": receipt_id,
-    })
-    .to_string();
-    let chain_entry_hash = tool_chain::emit_tool_receipt(
+    // Issue #196 — dual-write the gate decision into the signed audit chain.
+    // The jsonl journal above is the lightweight observability projection;
+    // the chain is the source of truth. emit_gate_decision_receipt attaches a
+    // typed, signed AuthorizationClaim receipt — replacing the old
+    // emit_tool_receipt call that only stored a SystemEvent string.
+    // Use emit_gate_decision_receipt instead of the generic emit_tool_receipt so
+    // the chain entry carries a typed, signed AuthorizationClaim receipt — making
+    // the gate decision independently verifiable by any chain reader.
+    let chain_entry_hash = tool_chain::emit_gate_decision_receipt(
         &state.0.audit_store,
-        &chain_event,
-        Some(&chain_detail),
+        &req.tool_name,
+        allow,
+        req.agent.as_deref(),
+        if reason.is_empty() { None } else { Some(&reason) },
+        Some(&state.0.identity.signing_key),
     );
 
     info!(
@@ -3900,6 +3910,7 @@ async fn lease_renew_handler(
         &state.0.audit_store,
         "renewed",
         &grant,
+        Some(&state.0.identity.signing_key),
     );
 
     info!(
@@ -4233,7 +4244,7 @@ mod p4_phase2_tests {
     fn p4_2d_t1_renewal_succeeds_for_valid_grant() {
         let (_d, store) = make_store();
         let grant = standing_grant("artemis");
-        crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant)
+        crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None)
             .expect("granted receipt");
 
         // The "renewal" path locally reads the grant out, calls renew(),
@@ -4241,7 +4252,7 @@ mod p4_phase2_tests {
         let mut g = grant.clone();
         let new_expiry = g.renew().unwrap();
         let h =
-            crate::tool_chain::emit_delegation_receipt(&store, "renewed", &g).expect("renewed");
+            crate::tool_chain::emit_delegation_receipt(&store, "renewed", &g, None).expect("renewed");
         assert!(!h.is_empty());
         // Reconstruction picks up the new expiry / count.
         assert_eq!(g.renewal_count, 1);
@@ -4261,7 +4272,7 @@ mod p4_phase2_tests {
     fn p4_2d_t3_renewal_rejected_for_revoked_grant() {
         let (_d, store) = make_store();
         let grant = standing_grant("artemis");
-        crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant).unwrap();
+        crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None).unwrap();
 
         let claim = RevocationClaim::new(
             grant.id.clone(),
@@ -4304,7 +4315,7 @@ mod p4_phase2_tests {
     fn p4_2d_t5b_gate_allows_tool_call_with_alive_delegation() {
         let (_d, store) = make_store();
         let grant = standing_grant("artemis");
-        crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant).unwrap();
+        crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None).unwrap();
         assert_eq!(lease_prereq_for_agent(&store, "artemis"), None);
     }
 

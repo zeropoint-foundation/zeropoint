@@ -207,16 +207,54 @@ pub fn emit_tool_receipts(
 /// emitted via `emit_revocation_receipt` because a revocation requires a
 /// signed `RevocationClaim` body, not just a CapabilityGrant snapshot.
 ///
-/// The grant's canonical JSON is stored as `policy_decision::Allow.conditions[0]`
-/// so verifiers can reconstitute the grant body without needing to re-fetch
-/// from anywhere. Returns the entry_hash on success.
+/// When `signing_key` is `Some`, a typed `DelegationClaim` receipt is built,
+/// signed, and embedded in the chain entry. This makes the delegation
+/// independently verifiable without re-fetching the in-memory grant store —
+/// the receipt carries grantor, grantee, and capability in canonical form.
+/// When `None`, the entry carries only the grant's raw JSON in the
+/// `policy_decision` conditions field (legacy behavior, no typed receipt).
+///
+/// The grant's canonical JSON is always stored as
+/// `policy_decision::Allow.conditions[0]` so the P4 prereq check
+/// (`lease_prereq_for_agent`) can read it without a typed-receipt parser.
+/// Returns the entry_hash on success.
 pub fn emit_delegation_receipt(
     audit_store: &Arc<Mutex<AuditStore>>,
     lifecycle: &str,
     grant: &zp_core::CapabilityGrant,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
 ) -> Option<String> {
     let event = format!("delegation:{}:{}", lifecycle, grant.grantee);
     let body = serde_json::to_string(grant).ok()?;
+
+    // Build a typed DelegationClaim receipt when a signing key is available.
+    // Callers without a key (tests, CLI) pass None — same behavior as before.
+    let typed_receipt = signing_key.map(|key| {
+        let cap_scope = match &grant.capability {
+            zp_core::GrantedCapability::Read { scope } => scope.join(","),
+            zp_core::GrantedCapability::Write { scope } => scope.join(","),
+            zp_core::GrantedCapability::Execute { languages } => languages.join(","),
+            zp_core::GrantedCapability::ApiCall { endpoints } => endpoints.join(","),
+            zp_core::GrantedCapability::ConfigChange { settings } => settings.join(","),
+            zp_core::GrantedCapability::CredentialAccess { credential_refs } => {
+                credential_refs.join(",")
+            }
+            _ => "*".to_string(),
+        };
+        let mut receipt = Receipt::delegation(&grant.grantor)
+            .status(ReceiptStatus::Success)
+            .claim_semantics(ClaimSemantics::AuthorizationGrant)
+            .claim_metadata(zp_receipt::ClaimMetadata::Delegation {
+                capability_id: cap_scope,
+                delegator_id: grant.grantor.clone(),
+                delegate_id: grant.grantee.clone(),
+                max_depth: grant.max_delegation_depth as u32,
+            })
+            .finalize();
+        let signer = Signer::from_secret(&key.to_bytes());
+        signer.sign(&mut receipt);
+        receipt
+    });
 
     let mut store = audit_store.lock().ok()?;
 
@@ -231,6 +269,106 @@ pub fn emit_delegation_receipt(
         policy_decision,
         "delegation",
     );
+    let unsealed = match typed_receipt {
+        Some(r) => unsealed.with_receipt(r),
+        None => unsealed,
+    };
+    store.append(unsealed).ok().map(|sealed| sealed.entry_hash)
+}
+
+/// Append a `gate:{allowed|denied}:{tool}` receipt to the chain.
+///
+/// Unlike `emit_tool_receipt` (which stores only a SystemEvent string),
+/// this function attaches a typed `AuthorizationClaim` receipt so the gate
+/// decision is independently verifiable: the receipt carries the tool name,
+/// the agent, and the decision in canonical form, signed by the server key.
+///
+/// Used by `gate_tool_call_handler` instead of the generic `emit_tool_receipt`.
+/// Returns the entry_hash on success.
+pub fn emit_gate_decision_receipt(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    tool_name: &str,
+    allowed: bool,
+    agent: Option<&str>,
+    reason: Option<&str>,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Option<String> {
+    let event = if allowed {
+        format!("gate:allowed:{}", tool_name)
+    } else {
+        format!("gate:denied:{}", tool_name)
+    };
+
+    let detail = {
+        let mut m = serde_json::Map::new();
+        m.insert("tool_name".into(), serde_json::json!(tool_name));
+        m.insert("allowed".into(), serde_json::json!(allowed));
+        if let Some(a) = agent {
+            m.insert("agent".into(), serde_json::json!(a));
+        }
+        if let Some(r) = reason {
+            m.insert("reason".into(), serde_json::json!(r));
+        }
+        serde_json::to_string(&serde_json::Value::Object(m)).unwrap_or_default()
+    };
+
+    let typed_receipt = signing_key.map(|key| {
+        let scope = format!("gate:tool:{}", tool_name);
+        let status = if allowed {
+            ReceiptStatus::Success
+        } else {
+            ReceiptStatus::Denied
+        };
+        let semantics = if allowed {
+            ClaimSemantics::AuthorizationGrant
+        } else {
+            ClaimSemantics::IntegrityAttestation
+        };
+        let mut constraints = std::collections::HashMap::new();
+        if let Some(a) = agent {
+            constraints.insert("agent".to_string(), serde_json::json!(a));
+        }
+        if let Some(r) = reason {
+            constraints.insert("reason".to_string(), serde_json::json!(r));
+        }
+        let mut receipt = Receipt::authorization("zp-gate")
+            .status(status)
+            .claim_semantics(semantics)
+            .claim_metadata(zp_receipt::ClaimMetadata::Authorization {
+                scope,
+                grantor_id: "zp-gate".to_string(),
+                constraints,
+            })
+            .finalize();
+        let signer = Signer::from_secret(&key.to_bytes());
+        signer.sign(&mut receipt);
+        receipt
+    });
+
+    let mut store = audit_store.lock().ok()?;
+
+    let action = AuditAction::SystemEvent { event };
+    let policy_decision = if allowed {
+        PolicyDecision::Allow {
+            conditions: vec![detail],
+        }
+    } else {
+        PolicyDecision::Block {
+            reason: detail,
+            policy_module: "gate-policy".to_string(),
+        }
+    };
+    let unsealed = UnsealedEntry::new(
+        ActorId::System("zp-gate".to_string()),
+        action,
+        tool_lifecycle_conv_id().clone(),
+        policy_decision,
+        "gate",
+    );
+    let unsealed = match typed_receipt {
+        Some(r) => unsealed.with_receipt(r),
+        None => unsealed,
+    };
     store.append(unsealed).ok().map(|sealed| sealed.entry_hash)
 }
 
