@@ -244,14 +244,23 @@ impl ChainVerifier {
             return false;
         };
 
-        // The signed material is the entry_hash (a hex string).
-        let message = entry.entry_hash.as_bytes();
+        // Reconstruct the signed preimage per the block's preimage_version:
+        //   v1 (legacy): entry_hash hex string bytes (non-standard)
+        //   v2 (current): raw 32-byte blake3 hash decoded from the hex string
+        // Absent version field on old entries defaults to 1 via serde default.
+        let message: Vec<u8> = match block.preimage_version {
+            2 => match hex::decode(&entry.entry_hash) {
+                Ok(b) => b,
+                Err(_) => return false, // entry_hash must be valid hex
+            },
+            _ => entry.entry_hash.as_bytes().to_vec(),
+        };
 
         // Try each known key. We could optimize by matching block.key_id
         // against a known-keys index, but the linear scan is fine for
         // chain sizes the verifier handles in practice.
         for (key_bytes, _label) in &self.known_keys {
-            if zp_receipt::verify::verify_signature(key_bytes, message, &sig_array).is_ok() {
+            if zp_receipt::verify::verify_signature(key_bytes, &message, &sig_array).is_ok() {
                 return true;
             }
         }

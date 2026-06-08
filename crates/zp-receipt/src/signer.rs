@@ -65,15 +65,22 @@ impl Signer {
             receipt.content_hash = crate::canonical_hash(receipt);
         }
 
-        let sig = self.signing_key.sign(receipt.content_hash.as_bytes());
+        // Preimage version 2: sign the raw 32-byte blake3 hash rather than its
+        // hex encoding. This is the standard hash-then-sign convention and allows
+        // external verifiers to reconstruct the signed bytes without knowing that
+        // ZP previously hex-encoded before signing (the v1 non-standard path).
+        let raw_hash = hex::decode(&receipt.content_hash)
+            .expect("content_hash is always valid hex from canonical_hash");
+        let sig = self.signing_key.sign(&raw_hash);
         let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
         let pk_hex = self.public_key_hex();
 
         // F8 path — append to the typed vec and keep it canonically ordered.
+        // Use ed25519_v2 so verifiers know which preimage convention was used.
         let was_empty = receipt.signatures.is_empty();
         receipt
             .signatures
-            .push(crate::SignatureBlock::ed25519(&pk_hex, &sig_b64));
+            .push(crate::SignatureBlock::ed25519_v2(&pk_hex, &sig_b64));
         receipt
             .signatures
             .sort_by(|a, b| a.canonical_sort_key().cmp(&b.canonical_sort_key()));
@@ -95,15 +102,27 @@ impl Signer {
     /// present at all; experimental algorithms are ignored here (the
     /// chain verifier in `zp-verify` is the right place to surface
     /// them).
+    ///
+    /// Version-aware: checks `preimage_version` on the `SignatureBlock`
+    /// (absent on legacy entries → defaults to 1) and reconstructs the
+    /// signed bytes accordingly:
+    ///   v1 — `content_hash.as_bytes()` (legacy hex-string)
+    ///   v2 — `hex::decode(content_hash)` (raw 32-byte blake3 hash)
     pub fn verify_receipt(receipt: &Receipt, public_key: &[u8; 32]) -> Result<bool, String> {
         // Prefer the F8 vec; fall back to the legacy single field.
-        let sig_b64: String = receipt
+        let sig_block = receipt
             .signatures
             .iter()
-            .find(|b| b.algorithm == crate::SignatureAlgorithm::Ed25519)
-            .map(|b| b.signature_b64.clone())
-            .or_else(|| receipt.signature.clone())
-            .ok_or("Receipt has no Ed25519 signature")?;
+            .find(|b| b.algorithm == crate::SignatureAlgorithm::Ed25519);
+
+        let (sig_b64, preimage_version): (String, u8) = if let Some(block) = sig_block {
+            (block.signature_b64.clone(), block.preimage_version)
+        } else if let Some(ref legacy_sig) = receipt.signature {
+            // Pre-F8 entries carry no SignatureBlock; treat as v1.
+            (legacy_sig.clone(), 1)
+        } else {
+            return Err("Receipt has no Ed25519 signature".to_string());
+        };
 
         let sig_bytes = base64::engine::general_purpose::STANDARD
             .decode(&sig_b64)
@@ -114,16 +133,20 @@ impl Signer {
             .try_into()
             .map_err(|_| "signature must be 64 bytes".to_string())?;
 
+        // Reconstruct the signed preimage per the version flag.
+        // For v2, a non-hex content_hash means the receipt has been tampered
+        // with — treat as verification failure (Ok(false)), not a system error.
+        let preimage: Vec<u8> = match preimage_version {
+            2 => match hex::decode(&receipt.content_hash) {
+                Ok(b) => b,
+                Err(_) => return Ok(false),
+            },
+            // v1 and unknown versions fall back to the legacy hex-string path.
+            _ => receipt.content_hash.as_bytes().to_vec(),
+        };
+
         // Routes through the single canonical verify primitive (Seam 5).
-        // The helper enforces verify_strict; the pairing with `Signer::sign`
-        // always produces canonical signatures, so anything the malleable
-        // form would accept but verify_strict rejects is structurally invalid.
-        Ok(crate::verify::verify_signature(
-            public_key,
-            receipt.content_hash.as_bytes(),
-            &sig_arr,
-        )
-        .is_ok())
+        Ok(crate::verify::verify_signature(public_key, &preimage, &sig_arr).is_ok())
     }
 }
 

@@ -236,6 +236,24 @@ impl Receipt {
         crate::ReceiptBuilder::new(ReceiptType::CanonicalizedClaim, executor_id)
     }
 
+    /// Start building a `memory:indexed:turbovec` receipt.
+    /// Emitted after a TurboVec index build or rebuild.
+    pub fn memory_indexed(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::MemoryIndexed, executor_id)
+    }
+
+    /// Start building a `memory:retrieved:by-agent` receipt.
+    /// Emitted for every gate-allowed retrieval.
+    pub fn memory_retrieved(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::MemoryRetrievedByAgent, executor_id)
+    }
+
+    /// Start building a `memory:revoked:from-turbovec` receipt.
+    /// Emitted when a chain-level revocation propagates into the index.
+    pub fn memory_revoked_from_index(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::MemoryRevokedFromIndex, executor_id)
+    }
+
     /// Verify the content_hash matches the receipt body.
     pub fn verify_hash(&self) -> bool {
         let computed = crate::canonical_hash(self);
@@ -322,6 +340,7 @@ impl Receipt {
                 algorithm: SignatureAlgorithm::Ed25519,
                 key_id: pk_hex.clone(),
                 signature_b64: sig_b64.clone(),
+                preimage_version: 1, // legacy pre-F8 receipts used the hex-string path
             }],
             (Some(sig_b64), None) => vec![SignatureBlock {
                 algorithm: SignatureAlgorithm::Ed25519,
@@ -330,6 +349,7 @@ impl Receipt {
                 // and let verifiers discover the missing key separately.
                 key_id: String::new(),
                 signature_b64: sig_b64.clone(),
+                preimage_version: 1,
             }],
             _ => Vec::new(),
         }
@@ -398,17 +418,65 @@ pub struct SignatureBlock {
     /// for tools that round-trip via plain text.
     #[serde(rename = "signature")]
     pub signature_b64: String,
+
+    /// Signing preimage version — specifies what bytes were fed to the
+    /// Ed25519 signer.
+    ///
+    /// | version | preimage for receipts         | preimage for audit entries   |
+    /// |---------|-------------------------------|------------------------------|
+    /// | 1       | `content_hash.as_bytes()`     | `entry_hash.as_bytes()`      |
+    ///            (hex string, non-standard)      (hex string, non-standard)
+    /// | 2       | `hex::decode(content_hash)`   | `hex::decode(entry_hash)`    |
+    ///            (raw 32-byte blake3 hash)       (raw 32-byte blake3 hash)
+    ///
+    /// Version 1 is the legacy convention — it signs the hex-encoded hash
+    /// string rather than the raw hash bytes. This is internally consistent
+    /// but non-standard: an external verifier who computes `blake3(preimage)`
+    /// and verifies directly will fail unless they know to hex-encode first.
+    ///
+    /// Version 2 signs the raw 32-byte blake3 hash, which is the standard
+    /// hash-then-sign convention. All new signatures produced by this crate
+    /// use version 2. Existing on-disk entries keep version 1 and remain
+    /// verifiable via the versioned verification path.
+    ///
+    /// Absent on entries written before this field was introduced; defaults
+    /// to 1 (legacy behavior) so existing chains round-trip without error.
+    #[serde(default = "default_preimage_version", skip_serializing_if = "is_preimage_v1")]
+    pub preimage_version: u8,
+}
+
+fn default_preimage_version() -> u8 {
+    1
+}
+
+fn is_preimage_v1(v: &u8) -> bool {
+    *v == 1
 }
 
 impl SignatureBlock {
     /// Convenience: build an Ed25519 block from a hex-encoded public
     /// key and a base64-encoded signature, the formats produced by the
     /// existing [`crate::Signer`].
+    ///
+    /// Sets `preimage_version = 1` (legacy hex-string preimage). Prefer
+    /// [`SignatureBlock::ed25519_v2`] for new signatures.
     pub fn ed25519(public_key_hex: &str, signature_b64: &str) -> Self {
         Self {
             algorithm: SignatureAlgorithm::Ed25519,
             key_id: public_key_hex.to_string(),
             signature_b64: signature_b64.to_string(),
+            preimage_version: 1,
+        }
+    }
+
+    /// Build an Ed25519 block with the standard preimage (version 2):
+    /// the signer received the raw 32-byte blake3 hash, not its hex encoding.
+    pub fn ed25519_v2(public_key_hex: &str, signature_b64: &str) -> Self {
+        Self {
+            algorithm: SignatureAlgorithm::Ed25519,
+            key_id: public_key_hex.to_string(),
+            signature_b64: signature_b64.to_string(),
+            preimage_version: 2,
         }
     }
 
@@ -421,6 +489,7 @@ impl SignatureBlock {
             algorithm: SignatureAlgorithm::experimental("ML-DSA-65"),
             key_id: verifying_key_hex.to_string(),
             signature_b64: signature_b64.to_string(),
+            preimage_version: 2, // PQ signatures were introduced post-v1
         }
     }
 
@@ -584,6 +653,18 @@ pub enum ReceiptType {
     // --- Artifact library ---
     /// Records an operator signing an artifact candidate — promoting it from Candidate to Signed.
     ArtifactSignedClaim,
+
+    // --- TurboVec memory index (Cache-not-canon, SCC §6) ---
+    /// Records that the substrate indexed N memory entries into a TurboVec
+    /// index at a given catalog version and embedding model. Emitted on
+    /// initial build and on every rebuild.
+    MemoryIndexed,
+    /// Records that an agent retrieved memory candidates from a policy-filtered
+    /// TurboVec search. Emitted for every retrieval that the gate allows.
+    MemoryRetrievedByAgent,
+    /// Records that an operator revoked a specific memory ID from the TurboVec
+    /// index, propagating a chain-level revocation into the cache.
+    MemoryRevokedFromIndex,
 }
 
 impl ReceiptType {
@@ -617,6 +698,9 @@ impl ReceiptType {
             ReceiptType::PortReleased => "port",
             ReceiptType::PricingRefreshClaim => "pric",
             ReceiptType::ArtifactSignedClaim => "arsg",
+            ReceiptType::MemoryIndexed => "midx",
+            ReceiptType::MemoryRetrievedByAgent => "mret",
+            ReceiptType::MemoryRevokedFromIndex => "mrvk",
         }
     }
 
@@ -663,6 +747,10 @@ impl ReceiptType {
             ReceiptType::PricingRefreshClaim => None,
             // Artifact signing claims are standalone
             ReceiptType::ArtifactSignedClaim => None,
+            // Memory index receipts have no TTL — they are permanent chain records
+            ReceiptType::MemoryIndexed => None,
+            ReceiptType::MemoryRetrievedByAgent => None,
+            ReceiptType::MemoryRevokedFromIndex => None,
         }
     }
 
@@ -743,6 +831,9 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::PortReleased => write!(f, "port_released"),
             ReceiptType::PricingRefreshClaim => write!(f, "pricing_refresh_claim"),
             ReceiptType::ArtifactSignedClaim => write!(f, "artifact_signed_claim"),
+            ReceiptType::MemoryIndexed => write!(f, "memory_indexed"),
+            ReceiptType::MemoryRetrievedByAgent => write!(f, "memory_retrieved_by_agent"),
+            ReceiptType::MemoryRevokedFromIndex => write!(f, "memory_revoked_from_index"),
         }
     }
 }
@@ -1433,6 +1524,72 @@ pub enum ClaimMetadata {
         /// Human-readable diff lines for the changed entries
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         delta_lines: Vec<String>,
+    },
+
+    // --- TurboVec memory index (Cache-not-canon, SCC §6) ---
+
+    /// Metadata for `memory:indexed:turbovec`.
+    ///
+    /// Emitted when the substrate builds or rebuilds a TurboVec index over
+    /// canonical chain memory entries. The `index_hash` is a content-addressed
+    /// hash of the serialized index file so a verifier can confirm which index
+    /// version served a given retrieval.
+    MemoryIndexed {
+        /// Opaque identifier for this index instance (e.g., a UUIDv7).
+        /// Stable across searches until the next rebuild.
+        index_id: String,
+        /// Number of memory entries indexed.
+        record_count: u64,
+        /// Catalog grammar version at build time.
+        catalog_version: String,
+        /// Embedding model identifier (e.g., "text-embedding-3-small").
+        embedding_model: String,
+        /// Embedding model version or commit hash.
+        embedding_model_version: String,
+        /// Blake3 hash of the serialized `.tvim` index file. Content-addresses
+        /// the specific index instance so retrievals can cite which build served them.
+        index_hash: String,
+        /// What triggered this build: "initial", "catalog_change",
+        /// "embedding_model_change", "corruption_detected",
+        /// "revocation_backlog", "scheduled", "operator_initiated".
+        build_trigger: String,
+    },
+
+    /// Metadata for `memory:retrieved:by-agent`.
+    ///
+    /// Emitted for every retrieval that the gate allows. The
+    /// `policy_decision_id` links back to the gate's `gate:allowed:*` chain
+    /// entry so the retrieval is traceable to a specific authorization event.
+    MemoryRetrievedByAgent {
+        /// The agent subject ID that performed the retrieval.
+        agent_subject_id: String,
+        /// Blake3 hash of the canonicalized query embedding (and any literal
+        /// query text). Content-addresses the query for replay analysis.
+        query_hash: String,
+        /// Number of IDs in the gate-produced allowlist that constrained search.
+        allowlist_size: u64,
+        /// Number of candidate IDs returned (≤ min(k, allowlist_size)).
+        candidates_returned: u64,
+        /// Which index instance served this retrieval.
+        index_id: String,
+        /// Chain entry hash (`entry_hash`) of the gate's `gate:allowed:*`
+        /// receipt that authorized this retrieval. Links the retrieval to
+        /// its authorization event on the chain.
+        policy_decision_id: String,
+    },
+
+    /// Metadata for `memory:revoked:from-turbovec`.
+    ///
+    /// Emitted when a chain-level revocation propagates into the TurboVec
+    /// index, removing the corresponding vector from search results.
+    MemoryRevokedFromIndex {
+        /// The canonical memory ID removed from the index.
+        revoked_memory_id: u64,
+        /// Human-readable reason for revocation.
+        revocation_reason: String,
+        /// Receipt ID of the underlying chain-level revocation that triggered
+        /// this propagation.
+        chain_revocation_id: String,
     },
 }
 

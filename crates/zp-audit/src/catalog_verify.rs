@@ -123,6 +123,7 @@ impl<'a> VerifiableEntry for AuditVerifiableEntry<'a> {
                 algorithm: b.algorithm.as_str(),
                 key_id: b.key_id.as_str(),
                 signature_b64: b.signature_b64.as_str(),
+                preimage_version: b.preimage_version,
             })
             .collect()
     }

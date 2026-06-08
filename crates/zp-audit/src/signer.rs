@@ -82,14 +82,22 @@ impl AuditSigner {
     /// Sign an entry hash, returning a populated Ed25519 [`SignatureBlock`].
     ///
     /// `entry_hash` is the hex string returned by
-    /// [`crate::chain::seal_entry`] — the bytes of that string (not the
-    /// hex-decoded raw hash) are what get signed. This matches the
-    /// verifier's `entry.entry_hash.as_bytes()` convention.
+    /// [`crate::chain::seal_entry`] — always `hex(blake3(...))`.
+    ///
+    /// Produces preimage version 2: signs the raw 32-byte blake3 hash rather
+    /// than the hex string. This is the standard hash-then-sign convention.
+    /// The chain verifier reads `block.preimage_version` to reconstruct the
+    /// correct preimage — v1 entries (hex string) and v2 entries (raw bytes)
+    /// are both verifiable.
     pub fn sign_entry(&self, entry_hash: &str) -> SignatureBlock {
         use base64::Engine;
-        let signature = self.signing_key.sign(entry_hash.as_bytes());
+        // Decode hex → raw 32 bytes. entry_hash is always valid hex from
+        // compute_entry_hash (blake3::hash(...).to_hex()).
+        let raw_hash = hex::decode(entry_hash)
+            .expect("entry_hash is always valid hex from compute_entry_hash");
+        let signature = self.signing_key.sign(&raw_hash);
         let signature_b64 = base64::engine::general_purpose::STANDARD.encode(signature.to_bytes());
-        SignatureBlock::ed25519(&self.public_key_hex, &signature_b64)
+        SignatureBlock::ed25519_v2(&self.public_key_hex, &signature_b64)
     }
 }
 
@@ -130,18 +138,17 @@ mod tests {
             .expect("signature_b64 is base64");
         let sig_array: [u8; 64] = sig_bytes.try_into().unwrap();
 
-        // Same primitive the chain verifier uses.
-        zp_receipt::verify::verify_signature(&pk_array, entry_hash.as_bytes(), &sig_array)
+        // Block is preimage_version 2 — signed bytes are raw hash, not hex string.
+        assert_eq!(block.preimage_version, 2);
+        let raw_hash = hex::decode(&entry_hash).expect("entry_hash is valid hex");
+        zp_receipt::verify::verify_signature(&pk_array, &raw_hash, &sig_array)
             .expect("signature must verify under the signer's own pk");
 
-        // Sanity: a malformed entry_hash must NOT verify under the same sig.
-        let wrong_hash = "ff".repeat(32);
-        assert!(zp_receipt::verify::verify_signature(
-            &pk_array,
-            wrong_hash.as_bytes(),
-            &sig_array
-        )
-        .is_err());
+        // Sanity: a different hash must NOT verify under the same sig.
+        let wrong_hash = hex::decode("ff".repeat(32)).unwrap();
+        assert!(
+            zp_receipt::verify::verify_signature(&pk_array, &wrong_hash, &sig_array).is_err()
+        );
     }
 
     #[test]

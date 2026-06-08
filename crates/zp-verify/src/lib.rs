@@ -97,6 +97,11 @@ pub struct SignatureBlockView<'a> {
     pub key_id: &'a str,
     /// Base64-encoded signature bytes.
     pub signature_b64: &'a str,
+    /// Signing preimage convention (mirrors `SignatureBlock::preimage_version`).
+    /// 1 = legacy hex-string bytes (default, absent on old entries).
+    /// 2 = raw 32-byte blake3 hash decoded from the hex string.
+    /// Absent on entries written before this field was introduced; defaults to 1.
+    pub preimage_version: u8,
 }
 
 /// A single finding from the verification process.
@@ -328,11 +333,28 @@ fn check_signature<E: VerifiableEntry>(entry: &E, report: &mut VerifyReport) {
     for block in &blocks {
         if block.algorithm == "ed25519" {
             ed25519_seen += 1;
+            // Reconstruct the signed preimage per the block's version flag.
+            // `payload` is always content_hash.as_bytes() (v1 hex-string bytes).
+            // For v2, hex-decode those bytes to get the raw 32-byte blake3 hash.
+            let preimage_owned: Vec<u8>;
+            let block_payload: &[u8] = if block.preimage_version == 2 {
+                // payload is ASCII hex; decode to raw bytes.
+                // If decode fails the signature can't possibly verify.
+                match hex::decode(std::str::from_utf8(payload).unwrap_or("")) {
+                    Ok(raw) => {
+                        preimage_owned = raw;
+                        &preimage_owned
+                    }
+                    Err(_) => payload, // fall back to v1; will fail to verify
+                }
+            } else {
+                payload
+            };
             verify_one_ed25519(
                 entry,
                 block.signature_b64,
                 block.key_id,
-                payload,
+                block_payload,
                 report,
             );
         } else {
