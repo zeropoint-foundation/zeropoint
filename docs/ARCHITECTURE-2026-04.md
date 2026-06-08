@@ -1,6 +1,6 @@
 # ZeroPoint Architecture — April 2026
 
-**Document type:** Canonical Architecture Record. Referenced in `CLAUDE.md` as the north star for all structural decisions. Every session reads the six design principles and four claims from this document as binding constraints.
+**Document type:** Canonical Architecture Record. Referenced in `CLAUDE.md` as the north star for all structural decisions. Every session reads the eight design principles and four claims from this document as binding constraints.
 **Author:** Ken Romero, with synthesis assistance from Claude.
 **Date:** 2026-04-06. Last updated: 2026-04-22.
 **Status:** Active. This document is revised after every major adversarial test cycle and every architectural commitment. Code that contradicts it is wrong.
@@ -83,6 +83,24 @@ One more consequence of the grammar reframe deserves to be stated as a structura
 This is not "we will be behind schedule indefinitely." It is "the project's success criterion is *the loop closing repeatedly*, not *the loop terminating*." Phase 0 through Phase 3 are not the path to a finished ZeroPoint. They are the path to ZeroPoint becoming the kind of system that *can* keep absorbing what reality reveals, on a cadence that matches reality's pace of revealing it. After Phase 3, there is Phase 4, which is whatever the first three phases made visible. The document that names Phase 4 is `ARCHITECTURE-2026-XX.md`, conditioned on what the first three phases revealed — exactly the same way the catalog's v1 is conditioned on v0.
 
 This is the project's autoregressive structure at the *meta* layer: not just receipts conditioned on prior receipts, but architectural decisions conditioned on prior architectural decisions, conditioned on what running the prior decisions taught you. The substrate is autoregressive. The catalog is autoregressive. So is this document.
+
+### 4b. The cockpit-OS framing
+
+ZeroPoint is a *cockpit-OS*. The category distinguishes the substrate from things it is routinely confused with: agent platforms run agents, governance frameworks decree rules, audit logs record after the fact, identity providers issue tokens. ZeroPoint does none of those things primarily. It is the operator's runtime for coherent agent authority — the seat from which the operator's own delegation, gate-enforced authority, and chain-anchored history are simultaneously legible, durable, and projectable into whatever control surface the operator inhabits.
+
+The word *cockpit* names a control surface — CLI, conversational agent (Sage), visual panel — through which the operator acts. ZeroPoint's commitment is that each cockpit is a **pure projection of chain-anchored state into a native interaction mode**, not a seat of authority unto itself. The chain decides what the operator can currently do; the cockpit renders that decision as flags, tools, buttons, or affordances. The same authority surfaces in every cockpit because there is one source of truth — the chain — and many rendering modes. Affordances appear when the chain grants them and disappear when the chain withdraws them. There is no menu cache. There is no static declaration to keep in sync. The cockpit-projection heuristic in `CLAUDE.md` is the day-to-day expression of this commitment; the cockpit-OS framing is the category-level claim it derives from.
+
+This shape is not the one that produced the recent OSS sustainability crises — single maintainers holding registry-publishing authority, single repositories holding install-time trust, single platforms claiming downstream ecosystems. Those failures share concentrated trust authority in fragile nodes. The cockpit-OS framing pushes the opposite direction: every operator holds their own chain-anchored authority; the substrate is the operator's, not the platform's; verifiability flows from cryptographic lineage rooted in the operator's Genesis key, not from a central registry that could be compromised, abandoned, or weaponized. The structural alternative to concentrated trust is per-operator chain authority that other operators can verify independently — which is exactly the substrate's shape.
+
+The category implies a working test for architectural decisions: any feature whose only home is a cockpit is wrong-shaped. The feature belongs in the chain (where any cockpit can project it) or it does not exist (because there is no chain-anchored state for it to project). This composes with Principle 3 ("there is no center" — the chain is local, not central) and Principle 6 ("a tool is intent, crystallized" — the cockpit is the rendering of intent, not its origin) without subsuming either. Cockpit-OS is the category; the principles are the operational filters that keep code aligned with the category.
+
+### 4c. Edge capability split — why the gateway is incomplete by design
+
+Conventional edge taxonomies — reverse proxy, load balancer, API gateway — describe layered capabilities a system can compose: TLS termination, traffic distribution, request authentication, routing, transformation, rate limiting, policy enforcement. ZeroPoint composes most of these at the Cloudflare edge and the Foundation Worker. One it deliberately refuses to compose there: policy enforcement. The gate cannot live at the edge, because the chain it signs against does not live at the edge. P1 ("signing is gravity") and P3 ("there is no center") together force the split: the foundation worker authenticates, routes, transforms, and forwards; the operator's zp-server signs receipts and runs the gate. Any feature that would push policy decisions into the worker is structurally the same failure as the foundation-canonical-v1 edge chain we already corrected — a center forming at the edge.
+
+The misfit with the standard load-balancer category is informative in the same direction. Load balancing distributes traffic across identical replicas. ZeroPoint's per-operator substrates aren't replicas — they are distinct sovereign roots holding distinct chains. The foundation worker does *identity routing*, not load distribution: given an inbound request, find the right operator's substrate and forward to it. That puts the worker closer to an identity-aware proxy or a service-mesh directory than to a load balancer. The cockpit-OS framing in §4b names what each operator's substrate is; the identity-routing role names how external traffic finds the right one. The gateway is necessarily a thin authenticator-router-directory; the authority lives at the sovereign root. The architecture's correctness depends on holding that line, both at design time and against the gravitational pull every "let's just add this small bit of policy at the edge" temptation will exert.
+
+Operational complement: `docs/EDGE-TIER-CONTRACT-2026-06.md` names the specific affordances the worker must, may, and must not have — the partition that turns "can we put X at the edge?" into a one-document lookup instead of a re-derivation from principles. This contract is one expression of a broader pattern; `docs/SUBSTRATE-CONFORMANCE-CONTRACT-2026-06.md` is the foundational hub that generalizes the template across all integration tiers of the substrate.
 
 ---
 
@@ -524,9 +542,21 @@ The integration sentence, in operational form:
 
 This principle was discovered during the Phase 4 Hermes integration analysis. It is the reason the Governed Agent Runtime distinguishes between dispatch-time gates (which govern *use*) and artifact-creation gates (which govern *becoming*). Receipts are the substrate's membrane. Events reach it; the substrate decides what passes through.
 
+### Principle 8 — One canonical path per substrate concern
+
+In Reticulum, address resolution has one mechanism, not two. There is no "fast path" alongside a "slow path" that could disagree. The cryptographic identity hash IS the address; alternative identity schemes don't compose, they conflict.
+
+In ZeroPoint, every substrate concern — identity, signing, auth, ports, state binding, credentials, resource ownership, skill visibility — resolves through exactly one canonical implementation. Multiple paths for the same concern produce **half-state**: the failure mode where two reasonable approaches drift apart and the substrate breaks differently every restart. Restart cycles surface inconsistent state, not because either approach is wrong individually, but because the substrate has no single authority to consult.
+
+This principle is the operational fixpoint of the others. Identity-is-a-key (Principle 2) says the key is the identity — not key OR location; pick one. There-is-no-center (Principle 3) says trust is local, not local-with-a-remote-fallback. Every-bit-counts (Principle 4) catches duplicate data paths because each duplicate is a bit that doesn't earn its place. Without one canonical path, the other principles admit "well, mostly" implementations that drift; with it, the principles become conservation laws.
+
+Concrete instances already in the substrate: singular sovereign root (one credential loader, not three — `crates/zp-keys::load_sovereign_root`), the audit chain (one canonical signed record, not chain-plus-separate-log), the PortRegistry (one chain-anchored allocation authority, not registry-plus-config-file-plus-lsof-guess), skill visibility (one parsed frontmatter field with one enforcement point, not behavior scattered across dispatch and menu surfaces). When new work introduces a second path for an existing concern, the principle requires either retiring the first or explicitly designing the migration that re-collapses to one.
+
+The half-state heuristic in `CLAUDE.md` is the runtime diagnostic: when restart cycles produce different failures each time, two reasonable approaches are drifting apart, and the substrate is structurally honest by surfacing it as friction rather than masking it as silent degradation.
+
 ### The design test
 
-When evaluating any architectural decision, apply the seven principles as a filter:
+When evaluating any architectural decision, apply the eight principles as a filter:
 
 1. Does this require signing to function, or does it work without? (If it works without, signing is decorative, not gravitational.)
 2. Is identity derived from cryptographic lineage, or from deployment coordinates? (If coordinates, it's fragile.)
@@ -535,6 +565,7 @@ When evaluating any architectural decision, apply the seven principles as a filt
 5. Does this survive an outage, or does it require live connectivity? (If live, it's brittle.)
 6. Are the semantics in the structure, or in the comments? (If comments, the intent isn't crystallized.)
 7. Does contact produce a commit, or is the commit a separate, signed decision? (If contact commits, the substrate is transcribing, not governing.)
+8. Is there exactly one canonical path for this concern, or are there multiple implementations that could disagree? (If multiple, one is wrong, and the failure mode is half-state.)
 
 Code that fails any of these tests should be revised until it passes. The principles are not aspirational; they are operational.
 
@@ -590,4 +621,74 @@ Eight capabilities observed in AGT that ZeroPoint should adapt. Ordered by prior
 
 ---
 
-*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Phase 4 (Governed Agent Runtime) added April 21, 2026 following the Hermes Agent integration analysis. Part V½ (Design Philosophy) added April 22, 2026 following the Zen of Reticulum alignment pass — inspired by Mark Qvist's articulation of uncentralizable networking principles, mapped to ZeroPoint's trust layer. Elevated to Canonical Architecture Record on April 22, 2026 — wired into CLAUDE.md as binding constraint for all sessions. Part VII (Competitive Landscape Adaptations) added April 25, 2026 following Microsoft AGT comparative analysis. Next revision expected after Phase 1 exit.*
+## Part VIII — Compute Surface Awareness
+
+**Strategic direction reserved 2026-05-19, design pass pending. This part captures the architectural intent; implementation scope is deferred to a dedicated design brief when prioritized.**
+
+### Framing
+
+The substrate must be aware of the entire compute surface and help monitor its health and security — *not by becoming a SIEM or EDR replacement, but by absorbing enough host-awareness that the operator has one coherent view of what's running, what the substrate sanctioned, and what's unexplained.* The key architectural distinction is **observability vs control**: the substrate observes everything on the machine, but governs only what was launched through it. Visibility is universal; authority remains scoped.
+
+This direction surfaced during the May 2026 substrate-readiness arc, when operator verification sessions consistently required manual `lsof`/`pgrep`/`ps` archaeology to distinguish substrate-managed processes from orphans, zombies, and unrelated dev tools. The substrate had no view of its own footprint relative to the host's; the operator was doing the steward's work by eye.
+
+### Why it belongs in the substrate (composition with existing principles)
+
+- **Signing is gravity (Principle 1)** — every substrate-launched process already traces to a launch receipt. Unknown processes get a new kind of receipt: a *discovery claim* signed by the substrate observer ("at time T, I noticed a process with attributes X that I didn't launch"). The chain records what the substrate sees, not just what it does.
+- **There is no center (Principle 3)** — host awareness is local-first by construction. The substrate samples local `ps`, `lsof`, `netstat`. No remote SIEM dependency. The audit chain becomes the host's security log; queryable, signed, operator-owned.
+- **Contact does not commit (Principle 7)** — an unknown process firing on a port is a *contact event* (observation). It does not make that process trusted. Promoting an unknown process to "operator-sanctioned" requires an explicit signing ceremony, the same shape as skill promotion.
+- **One canonical path (Principle 8)** — the substrate becomes the single authority for "what's the trust posture of this machine right now?" Replaces the operator manually reading lsof and inferring. The substrate IS the posture report.
+
+### Stages of the arc
+
+**Stage 1 — Inventory.** Periodic process sampling. Every running process either has a substrate receipt (launched via `zp configure exec`, signed at spawn) or does not. `zp ps` surfaces the partition. Maturity metric: percentage of LISTEN processes that trace to receipts. Connects to existing task #111 (Process-awareness Stage 1).
+
+**Stage 2 — Attribution.** For unknown processes, the substrate attempts attribution: known macOS service (rapportd, ARDAgent, com.docker), brew-installed binary, operator-launched dev tool, unrecognized. Each category receives a different posture treatment. Composes with the existing `zp discover` subcommand (M11 violations — entities executing without canonicalization); discovery surfaces entities lacking provenance.
+
+**Stage 3 — Surface.** Listening ports, outbound connections, file integrity for substrate-critical paths (`~/ZeroPoint/`, `~/.ironclaw/`, vault, audit chain DB). Each snapshot is a signed receipt. Operator can query "show me everything that has been listening on port 3000 in the last week" and receive a chain-walk answer with timestamps and attribution. Composes with task #97 (restore drill / L3 hardening).
+
+**Stage 4 — Integrity.** For substrate-critical paths, watch for unauthorized modification. Receipt-emitting file integrity. The Genesis seed, the audit chain, the vault, the canonical config — modifications must trace to receipts or surface as anomalies.
+
+**Stage 5 — Recommendation, never autonomous action.** When the substrate notices something anomalous (unknown process holding a substrate-allocated port, credential entry with zp-prefix that the substrate did not create, modification to genesis.json), surface as an operator notification with suggested investigation. The substrate proposes; the operator signs. Consistent with the artifact-library heuristic — the substrate produces candidates at scale; operators promote candidates to canonical via signature.
+
+### Maturity gate — the lsof test
+
+The arc has a single legibility test that determines readiness:
+
+> When `lsof -iTCP -sTCP:LISTEN` (or any similar host introspection command) shows a list the operator cannot immediately partition into substrate-managed / deliberately-running / unknown, the substrate is not yet steward of the machine — it is a tenant alongside others, and the operator is doing the steward's work manually.
+
+Maturity is reached when every listening process, every credential, every persistent file on the host either traces to a substrate receipt or is explicitly out-of-scope (system services the operator acknowledges, deliberately-running tools the operator deployed). The operator should be able to read the lsof output as a substrate posture statement, not as a forensics exercise. This heuristic is also captured in `CLAUDE.md` as a workflow rule.
+
+### Composition with existing component pieces
+
+Several pieces already exist or are queued; this arc gives them a unifying frame rather than building from scratch:
+
+- **`zp doctor`** — already exists; runs post-install diagnostics. Extended in this arc to report substrate posture: % of LISTEN processes attributed, count of unknowns, file-integrity status of substrate-critical paths.
+- **`zp ps`** (planned, task #113) — direct surface for the inventory + attribution stages.
+- **`zp discover`** — existing subcommand, M11 invariant violation detector. Stage 2 attribution layer composes here.
+- **`zp scan`** — existing MCP tool content scanner (F3 from Part VII). Same shape applied to other artifacts: scan-then-canonicalize.
+- **Audit chain** — already the substrate's signed record. Discovery claims and surface snapshots become new receipt kinds.
+- **Port registry** (shipped May 2026) — Stage 1 already partially in production for ZP-launched tools.
+
+### Out of scope
+
+- Becoming a SIEM/EDR replacement. Other tooling (osquery, Falco, commercial EDR) does this better; the substrate does not compete with those.
+- Autonomous remediation. The substrate observes and recommends; it does not kill processes, quarantine files, or block network connections without operator authorization.
+- Cross-machine fleet inventory. Single-host scope. Multi-host comes through the existing mesh layer (Part IV) and is a separate design surface.
+- Real-time kernel-level instrumentation. macOS specifically constrains this (SIP, no auditd equivalent). The substrate samples at user-level, accepting the gap that highly-evasive processes could escape detection.
+
+### Design pass deliverables
+
+When prioritized, this arc gets a dedicated design brief covering:
+
+1. Receipt schemas for discovery claims, surface snapshots, integrity events
+2. Sampling cadence and CPU/memory budget for the observer
+3. Attribution heuristics (which substring matches in process names map to which categories)
+4. Operator-facing surfaces (`zp ps` output format, `zp doctor` posture report, notification mechanism for anomalies)
+5. Sensitivity tuning — what surfaces immediately vs accumulates silently in the chain vs is ignored
+6. Composition with the existing process-awareness arc (#111–#114), which becomes Stage 1 of this larger arc
+
+This is a multi-month arc comparable in scope to the Governed Agent Runtime (Phase 4) or the Skill Governance work. Worth its own design pass and phased implementation rather than being collapsed into smaller commits.
+
+---
+
+*ZeroPoint Architecture document — April 2026 — drafted in /docs/ alongside whitepaper-v2.md following the pentest synthesis pass. Phase 4 (Governed Agent Runtime) added April 21, 2026 following the Hermes Agent integration analysis. Part V½ (Design Philosophy) added April 22, 2026 following the Zen of Reticulum alignment pass — inspired by Mark Qvist's articulation of uncentralizable networking principles, mapped to ZeroPoint's trust layer. Elevated to Canonical Architecture Record on April 22, 2026 — wired into CLAUDE.md as binding constraint for all sessions. Part VII (Competitive Landscape Adaptations) added April 25, 2026 following Microsoft AGT comparative analysis. Principle 8 (One canonical path per substrate concern) added May 18, 2026 following two shipped applications in the same session — skill visibility gates and PortRegistry — that both instantiate the same shape and made the implicit principle worth canonizing. Part VIII (Compute Surface Awareness) reserved May 19, 2026 as strategic direction; design pass deferred to dedicated brief when prioritized. Next revision expected after Phase 1 exit.*

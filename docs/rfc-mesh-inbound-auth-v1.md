@@ -111,6 +111,45 @@ versions during link negotiation. v1↔v2 peers fall back to v1 (unsigned
 delegations, optional receipt signatures unchecked) but log a `warn` so
 operators can track upgrade status.
 
+### 3.5 Replay protection — `ts` + dedup-by-id at the substrate layer
+
+Signatures do not expire. An attacker who captures a signed mesh
+envelope can re-send it later and the signature will still verify. The
+substrate's replay defense rests on three structural primitives rather
+than on a new wire-protocol mechanism.
+
+**Content-derived receipt IDs.** Every receipt's id is `blake3` over
+its canonical body. A replayed envelope carries the same canonical
+body and therefore the same id. The chain's append-only,
+content-addressed insertion path refuses duplicates by construction.
+
+**Bounded freshness via `ts`.** Inbound envelopes carrying a `ts`
+field outside a configurable tolerance window are rejected before any
+further processing. The default tolerance is 5 minutes; deployments
+that need wider tolerance for known store-and-forward intervals can
+configure it. The tolerance must be bounded and finite; "no time
+check" is not a conformant configuration.
+
+**Idempotent chain-mediated side effects.** All side effects triggered
+by inbound peer messages MUST compose through chain insertion. Chain
+insertion is itself idempotent (dedup-by-id, append-only,
+content-addressed), so any side effect downstream of chain insertion
+is replay-safe by construction. The reverse — side effects that fire
+on envelope arrival without going through chain insertion — would be
+replay-vulnerable within the `ts` tolerance window.
+
+The structural commitment is the third point. It is enforced by the
+`peer_arrival_chain_mediated_only` discipline pin (see
+`docs/handoffs/discipline-pin-audit-2026-06.md`). Implementations that
+add nonces or sequence numbers to the wire protocol gain little, and
+add new failure modes (sequence desync, nonce-window exhaustion). The
+substrate explicitly does not use either at the mesh layer.
+
+The dedup window for in-memory caches must outlive the `ts` tolerance,
+so that an envelope that arrives at the freshness boundary is still
+recognized as a duplicate if it arrives a second time before the
+freshness boundary passes.
+
 ## 4. Test plan
 
 - Unit: `CompactReceipt::verify_signature` with valid, tampered, wrong-key,
@@ -133,15 +172,27 @@ operators can track upgrade status.
   link is established.
 - Sweep 8: remove v0 fallback after one release cycle.
 
-## 6. Open questions
+## 6. Open questions — resolved
 
-- How does the keystore get bootstrapped before the first peer link is
-  fully established? (Likely: trust-on-first-use with the link's
-  ephemeral key, then pin.)
-- Should `unverified` inbound receipts contribute to reputation at all,
-  or only the audited portion? Current proposal: yes, but at half weight.
-- Do we need replay protection on top of signatures? (Existing `ts` field
-  + dedup-by-id may be sufficient; document explicitly.)
+- **Keystore bootstrap.** Resolved via TOFU+C; see
+  `docs/handoffs/tofu-peer-bootstrap-2026-06.md`. First contact emits
+  a `peer:identity:candidate` receipt; operator confirmation promotes
+  it to a `peer:identity:confirmed` receipt; the keystore is a
+  chain-derived projection rather than a network-derived cache.
+- **Reputation weight for `unverified` receipts.** Deferred. The
+  substrate does not yet have a reputation primitive; the question of
+  unverified-receipt weight is downstream of that primitive's design.
+  The earlier proposal of "yes, at half weight" was forward-looking
+  against a system that doesn't yet exist. When and if a reputation
+  primitive is designed, the unverified-receipt weight becomes a
+  parameter of that primitive; until then, "reputation" is not a
+  load-bearing concept in the substrate and the cross-substrate peer
+  contract does not encode it.
+- **Replay protection.** Resolved via §3.5 above. The substrate uses
+  content-derived ids + bounded `ts` + chain-mediated idempotency
+  rather than nonces or sequence numbers, with the structural
+  commitment enforced by the `peer_arrival_chain_mediated_only`
+  discipline pin.
 
 ## 7. Out of scope
 
