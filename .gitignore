@@ -154,3 +154,4 @@ generate-foundations-audio.sh
 zp-artemis-relay/
 .DS_Store
 graphify-out/
+webui-next/dist*
