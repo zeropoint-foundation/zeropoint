@@ -3,7 +3,6 @@
 use crate::types::*;
 use chrono::Utc;
 use std::collections::HashMap;
-use uuid::Uuid;
 
 /// Builder for constructing a Receipt step by step.
 pub struct ReceiptBuilder {
@@ -323,12 +322,19 @@ impl ReceiptBuilder {
     }
 
     /// Shared receipt construction — called by both `finalize()` and `try_finalize()`.
+    ///
+    /// **Content-addressed ID.** The receipt `id` is derived as
+    /// `type_prefix + content_hash` after the canonical hash is computed.
+    /// This makes `parent_receipt_id` a verifiable Merkle link: any party
+    /// holding a receipt body can locally confirm it matches the id its
+    /// child references, with no external lookup required.
     fn finalize_inner(
         self,
         created_at: chrono::DateTime<Utc>,
         expires_at: Option<chrono::DateTime<Utc>>,
     ) -> Receipt {
-        let id = generate_receipt_id(self.receipt_type);
+        // `id` starts empty; it is derived from `content_hash` below.
+        let receipt_type = self.receipt_type;
 
         let executor = Some(Executor {
             id: self.executor_id,
@@ -355,9 +361,9 @@ impl ReceiptBuilder {
         };
 
         let mut receipt = Receipt {
-            id,
+            id: String::new(), // Derived from content_hash below; excluded from preimage
             version: RECEIPT_SCHEMA_VERSION.to_string(),
-            receipt_type: self.receipt_type,
+            receipt_type,
             parent_receipt_id: self.parent_receipt_id,
             status: self.status,
             content_hash: String::new(), // Computed below
@@ -386,18 +392,16 @@ impl ReceiptBuilder {
             revoked_at: None,
         };
 
-        receipt.content_hash = crate::canonical_hash(&receipt);
+        // Step 1: compute content hash over the body (id is excluded from preimage).
+        let content_hash = crate::canonical_hash(&receipt);
+        // Step 2: derive the content-addressed id from the hash.
+        // `parent_receipt_id` in child receipts references this value, making
+        // the provenance link locally verifiable without a substrate lookup.
+        let id = format!("{}-{}", receipt_type.id_prefix(), content_hash);
+        receipt.content_hash = content_hash;
+        receipt.id = id;
         receipt
     }
-}
-
-/// Generate a receipt ID with the appropriate prefix.
-fn generate_receipt_id(receipt_type: ReceiptType) -> String {
-    let uuid = Uuid::now_v7();
-    let hex = format!("{:x}", uuid.as_u128());
-    // Take the last 12 hex chars for readability
-    let suffix = &hex[hex.len().saturating_sub(12)..];
-    format!("{}-{}", receipt_type.id_prefix(), suffix)
 }
 
 #[cfg(test)]

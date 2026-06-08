@@ -1,18 +1,26 @@
 //! Canonical hashing for receipt integrity verification.
 //!
 //! The canonical hash is computed over a deterministic JSON representation
-//! of the receipt body (all fields except `content_hash`, `signature`, and
-//! `signer_public_key`). This ensures that the hash is stable regardless of
-//! field ordering or whitespace.
+//! of the receipt body. The `id` field is **excluded** from the preimage
+//! because `id` is *derived from* the hash (`id = type_prefix + content_hash`).
+//! Including `id` in the preimage would create a circular dependency.
+//!
+//! Fields excluded from the preimage:
+//!   - `id`            — derived from the hash; not a content field
+//!   - `content_hash`  — the hash itself; set after preimage is computed
+//!   - `signature`, `signer_public_key`, `signatures` — set after signing
 
 use crate::Receipt;
 
 /// Build the canonical preimage of a receipt — bytes-to-be-signed.
 ///
-/// Excludes `content_hash`, `signature`, `signer_public_key`, and
-/// `signatures` from the preimage — those are set *after* the body
-/// is finalized, and hash-then-sign discipline requires the preimage
-/// to be well-defined before any signature exists.
+/// **`id` is excluded** — it is derived as `type_prefix + content_hash`
+/// and must not be part of the preimage it is derived from.
+///
+/// Also excludes `content_hash`, `signature`, `signer_public_key`, and
+/// `signatures` — those are set *after* the body is finalized, and
+/// hash-then-sign discipline requires the preimage to be well-defined
+/// before any of them exist.
 ///
 /// Goes through [`zp_core::canonical_bytes`] (Seam 17) so the byte form
 /// is identical to every other canonical-form site in the workspace.
@@ -22,7 +30,7 @@ use crate::Receipt;
 /// the [`zp_core::Signable`] impl on [`Receipt`] go through this.
 pub fn canonical_preimage(receipt: &Receipt) -> Vec<u8> {
     let hash_input = serde_json::json!({
-        "id": receipt.id,
+        // `id` intentionally omitted — it is derived from content_hash.
         "version": receipt.version,
         "receipt_type": receipt.receipt_type,
         "parent_receipt_id": receipt.parent_receipt_id,

@@ -15,7 +15,7 @@
 
 use base64::Engine;
 use zp_receipt::{
-    canonical_hash, Action, Receipt, ReceiptType, SignatureAlgorithm, SignatureBlock,
+    canonical_hash, Action, Receipt, SignatureAlgorithm, SignatureBlock,
     Signer, Status,
 };
 use zp_verify::{FindingSeverity, SignatureBlockView, VerifiableEntry, Verifier};
@@ -70,6 +70,7 @@ impl VerifiableEntry for ReceiptEntry {
                 algorithm: b.algorithm.as_str(),
                 key_id: b.key_id.as_str(),
                 signature_b64: b.signature_b64.as_str(),
+                preimage_version: b.preimage_version,
             })
             .collect()
     }
@@ -191,6 +192,7 @@ fn experimental_block_is_warned_and_skipped() {
         algorithm: SignatureAlgorithm::experimental("ML-DSA-65"),
         key_id: "pq-key-fingerprint".to_string(),
         signature_b64: fake_pq,
+        preimage_version: 2,
     });
     // Re-sort to keep canonical order.
     receipt
@@ -230,6 +232,7 @@ fn receipt_with_only_experimental_signatures_fails() {
         algorithm: SignatureAlgorithm::experimental("SLH-DSA-SHA2-128s"),
         key_id: "pq-only-key".to_string(),
         signature_b64: base64::engine::general_purpose::STANDARD.encode(b"x"),
+        preimage_version: 2,
     });
 
     let entry = ReceiptEntry::new(receipt, None);
@@ -259,11 +262,13 @@ fn signature_serialization_is_canonical_regardless_of_insertion_order() {
         algorithm: SignatureAlgorithm::experimental("aaa-alg"),
         key_id: "k-aaa".to_string(),
         signature_b64: "AAAA".to_string(),
+        preimage_version: 2,
     };
     let block_y = SignatureBlock {
         algorithm: SignatureAlgorithm::experimental("zzz-alg"),
         key_id: "k-zzz".to_string(),
         signature_b64: "BBBB".to_string(),
+        preimage_version: 2,
     };
     a.signatures.push(block_x.clone());
     a.signatures.push(block_y.clone());
@@ -302,16 +307,19 @@ fn algorithm_ids_and_has_algorithm() {
         algorithm: SignatureAlgorithm::experimental("ML-DSA-65"),
         key_id: "k1".to_string(),
         signature_b64: "AAAA".to_string(),
+        preimage_version: 2,
     });
     receipt.signatures.push(SignatureBlock {
         algorithm: SignatureAlgorithm::experimental("ML-DSA-65"), // dup alg, different key
         key_id: "k2".to_string(),
         signature_b64: "BBBB".to_string(),
+        preimage_version: 2,
     });
     receipt.signatures.push(SignatureBlock {
         algorithm: SignatureAlgorithm::experimental("SLH-DSA-SHA2-128s"),
         key_id: "k3".to_string(),
         signature_b64: "CCCC".to_string(),
+        preimage_version: 2,
     });
 
     let ids = receipt.algorithm_ids();
