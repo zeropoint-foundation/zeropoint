@@ -1604,6 +1604,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "zp-host",
 ]
 
 [[package]]
@@ -7758,6 +7759,7 @@ dependencies = [
  "zp-configure",
  "zp-core",
  "zp-engine",
+ "zp-host",
  "zp-keys",
  "zp-mesh",
  "zp-net",
@@ -8115,6 +8117,7 @@ dependencies = [
  "tracing",
  "zp-audit",
  "zp-core",
+ "zp-host",
  "zp-learning",
  "zp-llm",
  "zp-mesh",

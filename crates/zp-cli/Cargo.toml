@@ -33,6 +33,7 @@ zp-trust = { path = "../zp-trust" }
 zp-configure = { path = "../zp-configure" }
 zp-receipt = { path = "../zp-receipt" }
 zp-anchor = { path = "../zp-anchor" }
+zp-host = { path = "../zp-host" }
 zp-policy = { path = "../zp-policy" }
 zp-audit = { path = "../zp-audit" }
 zp-verify = { path = "../zp-verify" }

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 zp-core = { path = "../zp-core" }
+zp-host = { path = "../zp-host" }
 zp-policy = { path = "../zp-policy" }
 zp-skills = { path = "../zp-skills" }
 zp-audit = { path = "../zp-audit" }

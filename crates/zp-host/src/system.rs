@@ -94,13 +94,23 @@ impl HostContext for SystemHostContext {
         // ── Stage 4: spawn — no shell, no re-parsing ──────────────────────
         // argv-form only: program + args.  stdin closed; stdout/stderr piped
         // so the caller can stream output back to the client.
-        let child = Command::new(&req.program)
-            .args(&req.args)
+        let mut cmd = Command::new(&req.program);
+        cmd.args(&req.args)
             .current_dir(&req.cwd)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .stdin(std::process::Stdio::null())
-            .spawn()?; // maps std::io::Error → HostError::Io via From
+            .stdin(std::process::Stdio::null());
+
+        // Apply isolated environment if requested (used by execution-engine
+        // sandbox: env_clear() then set only the listed vars).
+        if let Some(ref vars) = req.env_vars {
+            cmd.env_clear();
+            for (k, v) in vars {
+                cmd.env(k, v);
+            }
+        }
+
+        let child = cmd.spawn()?; // maps std::io::Error → HostError::Io via From
 
         Ok(SpawnResult { child, gate_receipt_hash })
     }

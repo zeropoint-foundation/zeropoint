@@ -10,6 +10,9 @@ description = "ZeroPoint Deterministic Execution Engine — sandboxed polyglot c
 path = "src/lib.rs"
 
 [dependencies]
+# Host-function boundary (governance gate + receipts for spawn/write/http)
+zp-host = { path = "../zp-host" }
+
 # Async runtime
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "process", "io-util", "time", "fs"] }
 futures = { workspace = true }

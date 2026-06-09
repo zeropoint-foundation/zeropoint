@@ -14,6 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use execution_engine::{ExecutionEngine, ExecutionRequest as ExecRequest, Runtime};
+use zp_host::HostContext;
 use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::policy::PolicyContext;
 use zp_core::{
@@ -126,8 +127,14 @@ impl Pipeline {
     }
 
     /// Initialize the execution engine (async — detects runtimes).
-    pub async fn init_execution_engine(&mut self) -> Result<(), PipelineError> {
-        let engine = ExecutionEngine::new().await.map_err(|e| {
+    ///
+    /// Requires a `HostContext` so that every sandboxed file write and process
+    /// spawn passes through the governance gate and emits an audit receipt.
+    pub async fn init_execution_engine(
+        &mut self,
+        host: Arc<dyn HostContext>,
+    ) -> Result<(), PipelineError> {
+        let engine = ExecutionEngine::with_host(host).await.map_err(|e| {
             PipelineError::ExecutionError(format!("Failed to init execution engine: {}", e))
         })?;
         info!(

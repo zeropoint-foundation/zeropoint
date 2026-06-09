@@ -4077,11 +4077,18 @@ async fn main() -> anyhow::Result<()> {
         zp_audit::AuditStore::open_signed(&audit_db, audit_signer)
             .map_err(|e| anyhow::anyhow!("audit store open: {}", e))?,
     ));
-    let mut pipeline = Pipeline::new(config, audit_store)?;
+    let mut pipeline = Pipeline::new(config, audit_store.clone())?;
 
-    // Initialize execution engine (detect available runtimes)
-    if let Err(e) = pipeline.init_execution_engine().await {
-        eprintln!("Warning: execution engine unavailable: {}", e);
+    // Initialize execution engine — governed via HostContext so every sandboxed
+    // file write and process spawn passes through the governance gate.
+    {
+        let exec_gate = std::sync::Arc::new(zp_policy::GovernanceGate::new("cli-exec"));
+        let exec_host: std::sync::Arc<dyn zp_host::HostContext> = std::sync::Arc::new(
+            zp_host::SystemHostContext::new(exec_gate, audit_store.clone()),
+        );
+        if let Err(e) = pipeline.init_execution_engine(exec_host).await {
+            eprintln!("Warning: execution engine unavailable: {}", e);
+        }
     }
 
     // Initialize mesh if needed
@@ -5763,6 +5770,10 @@ fn run_delegate_renew(
     let max_depth: u32 = match &prior.redelegation {
         zp_core::RedelegationPolicy::Forbidden => 0,
         zp_core::RedelegationPolicy::Allowed { max_subtree_depth } => *max_subtree_depth,
+        // RequiresApproval: sub-delegation is permitted but subject to operator
+        // approval.  Use depth 1 as a conservative default; the operator can
+        // override when they approve the grant.
+        zp_core::RedelegationPolicy::RequiresApproval => 1,
     };
 
     // Failure mode: copy from prior grant.

@@ -11,6 +11,7 @@ use crate::sandbox::SandboxConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use zp_host::HostContext;
 
 /// Supported execution runtimes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -151,87 +152,96 @@ pub async fn detect_runtimes() -> Vec<(Runtime, String, PathBuf)> {
 /// Execute code in a sandboxed subprocess.
 ///
 /// This is the core execution function. It:
-/// 1. Creates a temp directory as the sandbox root
-/// 2. Writes the code to a file in the sandbox
-/// 3. Builds the sandbox command wrapper (OS isolation)
-/// 4. Spawns the process with restricted env
-/// 5. Captures stdout/stderr with output limits
-/// 6. Enforces timeout via tokio::time::timeout
-/// 7. Returns ExecOutput with timing
+/// 1. Writes the code to a file in the sandbox via `host.write_file()`
+/// 2. Builds the full argv (sandbox wrapper + interpreter + runtime args)
+/// 3. Spawns the process via `host.spawn_process()` with isolated env
+/// 4. Captures stdout/stderr with output limits
+/// 5. Enforces timeout via tokio::time::timeout
+/// 6. Returns ExecOutput with timing
+///
+/// Both file write and process spawn pass through the governance gate and
+/// emit audit receipts before any side effect executes (Commitment A).
 pub async fn execute_sandboxed(
     runtime: Runtime,
     code: &str,
     sandbox_dir: &Path,
     interpreter_path: &Path,
     config: &SandboxConfig,
+    host: &dyn HostContext,
 ) -> ExecutionResult<ExecOutput> {
     let start = Instant::now();
 
-    // Write code to a file in the sandbox
+    // ── Stage 1: write code to sandbox via governed host boundary ─────────
     let code_file = sandbox_dir.join(format!("exec.{}", runtime.extension()));
-    tokio::fs::write(&code_file, code).await?;
+    host.write_file(zp_host::WriteRequest::new(
+        &code_file,
+        code.as_bytes().to_vec(),
+        zp_host::WriteMode::Create,
+        "execution-engine",
+        format!("sandbox/{}.{}", runtime.as_str(), runtime.extension()),
+    ))
+    .await
+    .map_err(|e| ExecutionError::SpawnFailed(format!("write code file: {}", e)))?;
 
-    // Build the command
+    // ── Stage 2: build argv (sandbox wrapper + interpreter + runtime args) ─
     let sandbox_wrapper = crate::sandbox::build_sandbox_wrapper(config, sandbox_dir);
 
-    let mut cmd = tokio::process::Command::new(if sandbox_wrapper.is_empty() {
-        interpreter_path.to_string_lossy().to_string()
+    let (program, mut args) = if sandbox_wrapper.is_empty() {
+        (interpreter_path.to_string_lossy().to_string(), vec![])
     } else {
-        sandbox_wrapper[0].clone()
-    });
+        (
+            sandbox_wrapper[0].clone(),
+            sandbox_wrapper[1..].to_vec(),
+        )
+    };
 
-    // Add sandbox wrapper args
+    // If using a wrapper, the interpreter is an arg to the wrapper.
     if !sandbox_wrapper.is_empty() {
-        for arg in &sandbox_wrapper[1..] {
-            cmd.arg(arg);
-        }
-        cmd.arg(interpreter_path);
+        args.push(interpreter_path.to_string_lossy().to_string());
     }
 
     // Runtime-specific args
     match runtime {
         Runtime::Python => {
-            cmd.arg("-u"); // Unbuffered
-            cmd.arg(&code_file);
+            args.push("-u".to_string()); // Unbuffered
+            args.push(code_file.to_string_lossy().to_string());
         }
         Runtime::NodeJs => {
-            cmd.arg("--max-old-space-size=256"); // Limit V8 heap
-            cmd.arg(&code_file);
+            args.push("--max-old-space-size=256".to_string()); // Limit V8 heap
+            args.push(code_file.to_string_lossy().to_string());
         }
         Runtime::Shell => {
-            cmd.arg(&code_file);
+            args.push(code_file.to_string_lossy().to_string());
         }
     }
 
-    // Restricted environment
-    cmd.env_clear();
-    cmd.env("HOME", sandbox_dir);
-    cmd.env("TMPDIR", sandbox_dir);
-    cmd.env("PATH", minimal_path());
-    cmd.env("LANG", "en_US.UTF-8");
-
-    // Add any policy-granted env vars
+    // ── Stage 3: build isolated env (env_clear + minimal set) ─────────────
+    let mut env_vars = vec![
+        ("HOME".to_string(), sandbox_dir.to_string_lossy().to_string()),
+        ("TMPDIR".to_string(), sandbox_dir.to_string_lossy().to_string()),
+        ("PATH".to_string(), minimal_path()),
+        ("LANG".to_string(), "en_US.UTF-8".to_string()),
+    ];
     for (key, value) in &config.env_vars {
-        cmd.env(key, value);
+        env_vars.push((key.clone(), value.clone()));
     }
 
-    // Working directory is the sandbox
-    cmd.current_dir(sandbox_dir);
+    // ── Stage 4: spawn via governed host boundary ──────────────────────────
+    let spawn_req = zp_host::SpawnRequest::new(
+        program,
+        args,
+        sandbox_dir.to_string_lossy().to_string(),
+        "execution-engine",
+        format!("exec/{}", runtime.as_str()),
+    )
+    .with_env_vars(env_vars);
 
-    // Pipe everything
-    cmd.stdin(std::process::Stdio::null());
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
+    let spawn_result = host
+        .spawn_process(spawn_req)
+        .await
+        .map_err(|e| ExecutionError::SpawnFailed(format!("{}", e)))?;
 
-    // Spawn
-    let mut child = cmd.spawn().map_err(|e| {
-        ExecutionError::SpawnFailed(format!(
-            "Failed to spawn {} at {}: {}",
-            runtime.as_str(),
-            interpreter_path.display(),
-            e
-        ))
-    })?;
+    let mut child = spawn_result.child;
 
     // Take stdout/stderr handles before waiting so we can still kill on timeout.
     // `wait_with_output()` consumes `child`, preventing a later `kill()`.

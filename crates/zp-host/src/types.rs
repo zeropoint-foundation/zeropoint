@@ -37,11 +37,19 @@ pub struct SpawnRequest {
     /// Tool name reported to the gate context (`tool_names` field).
     /// Convention: `"exec/<program_name>"`.
     pub tool_name: String,
+
+    /// Environment variables for the spawned process.
+    ///
+    /// - `None` (default): inherit the current process environment.
+    /// - `Some(vars)`: clear the environment completely, then set only these
+    ///   variables.  Used by execution-engine to enforce sandbox isolation
+    ///   (`env_clear()` + minimal PATH/HOME/TMPDIR/LANG).
+    pub env_vars: Option<Vec<(String, String)>>,
 }
 
 impl SpawnRequest {
     /// Convenience constructor for exec_ws-style callers that already have a
-    /// parsed, validated program + args.
+    /// parsed, validated program + args.  Environment is inherited (None).
     pub fn new(
         program: impl Into<String>,
         args: Vec<String>,
@@ -55,7 +63,15 @@ impl SpawnRequest {
             cwd: cwd.into(),
             actor_label: actor_label.into(),
             tool_name: tool_name.into(),
+            env_vars: None,
         }
+    }
+
+    /// Set an explicit, isolated environment (env_clear + these vars only).
+    /// Used by execution-engine to enforce sandbox isolation.
+    pub fn with_env_vars(mut self, vars: Vec<(String, String)>) -> Self {
+        self.env_vars = Some(vars);
+        self
     }
 }
 
@@ -151,16 +167,20 @@ pub enum HttpMethod {
     Put,
     Delete,
     Patch,
+    Head,
+    Options,
 }
 
 impl std::fmt::Display for HttpMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            HttpMethod::Get    => "GET",
-            HttpMethod::Post   => "POST",
-            HttpMethod::Put    => "PUT",
-            HttpMethod::Delete => "DELETE",
-            HttpMethod::Patch  => "PATCH",
+            HttpMethod::Get     => "GET",
+            HttpMethod::Post    => "POST",
+            HttpMethod::Put     => "PUT",
+            HttpMethod::Delete  => "DELETE",
+            HttpMethod::Patch   => "PATCH",
+            HttpMethod::Head    => "HEAD",
+            HttpMethod::Options => "OPTIONS",
         };
         write!(f, "{}", s)
     }
@@ -168,8 +188,8 @@ impl std::fmt::Display for HttpMethod {
 
 /// A request to make an outbound HTTP call through the governed host boundary.
 ///
-/// The response body is fully buffered — this is not a streaming interface.
-/// For streaming LLM responses, the proxy layer handles that separately.
+/// Use `HttpRequest::new` for standard (buffered) calls or
+/// `HttpRequest::for_streaming` for SSE / long-lived connections.
 #[derive(Debug, Clone)]
 pub struct HttpRequest {
     /// Full target URL (scheme + host + path + query).
@@ -189,9 +209,19 @@ pub struct HttpRequest {
 
     /// Short description for audit receipts (e.g. "anthropic/messages proxy").
     pub description: String,
+
+    /// Request timeout in milliseconds.
+    /// - `Some(ms)`: applies a timeout to the outbound request.
+    /// - `None`: no timeout (use for SSE / streaming responses).
+    pub timeout_ms: Option<u64>,
+
+    /// When true, disables system proxy settings.
+    /// Use for requests to loopback / LAN tool processes.
+    pub no_proxy: bool,
 }
 
 impl HttpRequest {
+    /// Standard buffered request — 30 s timeout, system proxy enabled.
     pub fn new(
         url: impl Into<String>,
         method: HttpMethod,
@@ -207,6 +237,30 @@ impl HttpRequest {
             body: body.into(),
             actor_label: actor_label.into(),
             description: description.into(),
+            timeout_ms: Some(30_000),
+            no_proxy: false,
+        }
+    }
+
+    /// Streaming request — no timeout, proxy disabled.
+    /// Use for SSE and long-lived connections to local tool processes.
+    pub fn for_streaming(
+        url: impl Into<String>,
+        method: HttpMethod,
+        headers: Vec<(String, String)>,
+        body: impl Into<Vec<u8>>,
+        actor_label: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        Self {
+            url: url.into(),
+            method,
+            headers,
+            body: body.into(),
+            actor_label: actor_label.into(),
+            description: description.into(),
+            timeout_ms: None,
+            no_proxy: true,
         }
     }
 }

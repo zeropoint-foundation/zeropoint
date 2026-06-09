@@ -23,6 +23,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+use zp_host::HostContext;
 
 /// A request to execute code.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +89,10 @@ struct RuntimeInfo {
 ///
 /// This replaces Docker as the execution boundary for agentic frameworks.
 /// It manages runtime detection, sandbox lifecycle, and receipt generation.
+///
+/// Governed execution requires a `HostContext` (see `with_host`).  Calling
+/// `execute()` without one returns `ExecutionError::SpawnFailed` — there is
+/// no ambient-authority fallback path.
 pub struct ExecutionEngine {
     /// Detected runtimes on this host
     runtimes: HashMap<Runtime, RuntimeInfo>,
@@ -97,6 +102,8 @@ pub struct ExecutionEngine {
     execution_count: Arc<Mutex<u64>>,
     /// Execution history (for debugging, bounded)
     recent_receipts: Arc<Mutex<Vec<ExecutionReceipt>>>,
+    /// Governance gate + audit boundary.  Required for `execute()`.
+    host: Option<Arc<dyn HostContext>>,
 }
 
 impl ExecutionEngine {
@@ -132,7 +139,19 @@ impl ExecutionEngine {
             default_config: SandboxConfig::default(),
             execution_count: Arc::new(Mutex::new(0)),
             recent_receipts: Arc::new(Mutex::new(Vec::new())),
+            host: None,
         })
+    }
+
+    /// Create with a governed HostContext.
+    ///
+    /// This is the production constructor.  `execute()` requires a host and
+    /// returns an error if none is set.  The host enforces the governance gate
+    /// and emits audit receipts for every file write and process spawn.
+    pub async fn with_host(host: Arc<dyn HostContext>) -> ExecutionResult<Self> {
+        let mut engine = Self::new().await?;
+        engine.host = Some(host);
+        Ok(engine)
     }
 
     /// Create with a custom default sandbox config.
@@ -156,11 +175,20 @@ impl ExecutionEngine {
     ///
     /// This is the primary entry point. It:
     /// 1. Validates the runtime is available
-    /// 2. Creates a sandbox directory
-    /// 3. Executes the code
-    /// 4. Generates a receipt
-    /// 5. Cleans up the sandbox
+    /// 2. Requires a governed HostContext (set via `with_host`)
+    /// 3. Creates a sandbox directory
+    /// 4. Executes the code through the host boundary (gate + receipts)
+    /// 5. Generates an execution receipt
+    /// 6. Cleans up the sandbox
     pub async fn execute(&self, request: ExecutionRequest) -> ExecutionResult<ExecOutcome> {
+        // Require a governed host — no ambient-authority fallback.
+        let host = self.host.as_deref().ok_or_else(|| {
+            ExecutionError::SpawnFailed(
+                "ExecutionEngine: no HostContext — call with_host() to enable governed execution"
+                    .to_string(),
+            )
+        })?;
+
         let runtime_info = self
             .runtimes
             .get(&request.runtime)
@@ -195,13 +223,14 @@ impl ExecutionEngine {
 
         let queue_start = std::time::Instant::now();
 
-        // Execute
+        // Execute through the governed host boundary
         let exec_result = executor::execute_sandboxed(
             request.runtime,
             &request.code,
             sandbox.path(),
             &runtime_info.path,
             config,
+            host,
         )
         .await;
 
