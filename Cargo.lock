@@ -7896,12 +7896,14 @@ dependencies = [
  "tokio-tungstenite",
  "tower 0.4.13",
  "tower-http 0.5.2",
+ "uuid",
  "zp-audit",
  "zp-config",
  "zp-core",
  "zp-keys",
  "zp-net",
  "zp-server",
+ "zp-verify",
 ]
 
 [[package]]
