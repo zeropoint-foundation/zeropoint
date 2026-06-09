@@ -642,29 +642,26 @@ pub async fn proxy_handler(
         }
     }
 
-    // 3. Forward request to real provider
-    let client = reqwest::Client::new();
-    let mut req_builder = client.post(&target_url);
-
-    // Forward relevant headers (auth, content-type, provider-specific)
-    for (key, value) in headers.iter() {
-        let name = key.as_str().to_lowercase();
-        match name.as_str() {
-            "authorization"
-            | "x-api-key"
-            | "anthropic-version"
-            | "anthropic-beta"
-            | "content-type"
-            | "accept"
-            | "openai-organization"
-            | "openai-project" => {
-                if let Ok(v) = value.to_str() {
-                    req_builder = req_builder.header(key.clone(), v);
-                }
+    // 3. Forward request to real provider via governed host boundary (Commitment A)
+    //
+    // Collect only the headers the provider needs; drop host, connection, etc.
+    let forward_headers: Vec<(String, String)> = headers
+        .iter()
+        .filter_map(|(key, value)| {
+            let name = key.as_str().to_lowercase();
+            match name.as_str() {
+                "authorization"
+                | "x-api-key"
+                | "anthropic-version"
+                | "anthropic-beta"
+                | "content-type"
+                | "accept"
+                | "openai-organization"
+                | "openai-project" => value.to_str().ok().map(|v| (name, v.to_string())),
+                _ => None,
             }
-            _ => {} // Drop internal headers (host, connection, etc.)
-        }
-    }
+        })
+        .collect();
 
     // Provider-specific request transforms + tier model injection
     let forwarded_body = {
@@ -677,10 +674,30 @@ pub async fn proxy_handler(
         }
         b
     };
-    req_builder = req_builder.body(forwarded_body);
 
-    let response = match req_builder.send().await {
-        Ok(resp) => resp,
+    let http_req = zp_host::HttpRequest::new(
+        &target_url,
+        zp_host::HttpMethod::Post,
+        forward_headers,
+        forwarded_body,
+        "proxy",
+        format!("{}/{}", provider, path),
+    );
+    let http_result = match state.0.host.http_request(http_req).await {
+        Ok(r) => r,
+        Err(zp_host::HostError::GateDenied { reason }) => {
+            // Gate inside host denied — already on chain from the host function.
+            warn!(provider = %provider, reason = %reason, "Host gate denied proxy request");
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({
+                    "error": "Request blocked by ZeroPoint governance policy",
+                    "reason": reason,
+                    "provider": provider,
+                })),
+            )
+                .into_response();
+        }
         Err(e) => {
             error!(provider = %provider, error = %e, "Failed to forward request");
             return (
@@ -695,18 +712,8 @@ pub async fn proxy_handler(
         }
     };
 
-    let status = response.status();
-    let response_bytes = match response.bytes().await {
-        Ok(b) => b,
-        Err(e) => {
-            error!(provider = %provider, error = %e, "Failed to read provider response");
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": "Failed to read provider response" })),
-            )
-                .into_response();
-        }
-    };
+    let status = http_result.status;
+    let response_bytes = http_result.body;
 
     let end = Utc::now();
 
@@ -735,7 +742,7 @@ pub async fn proxy_handler(
     let _receipt_id = format!("rcpt-proxy-{}", uuid::Uuid::now_v7());
 
     let mut receipt_builder = zp_receipt::Receipt::execution("zp-proxy")
-        .status(if status.is_success() {
+        .status(if (200..300).contains(&status) {
             zp_receipt::Status::Success
         } else {
             zp_receipt::Status::Failed
@@ -746,7 +753,7 @@ pub async fn proxy_handler(
             name: Some(format!("proxy/{}/{}", provider, path)),
             input_hash: None,
             output_hash: None,
-            exit_code: Some(status.as_u16() as i32),
+            exit_code: Some(status as i32),
             detail: Some(json!({
                 "provider": provider,
                 "model": usage.model,
@@ -796,7 +803,7 @@ pub async fn proxy_handler(
         tokens_in = usage.prompt_tokens,
         tokens_out = usage.completion_tokens,
         cost_usd = cost,
-        status = %status,
+        status = status,
         "Proxied API request"
     );
 
@@ -846,9 +853,9 @@ pub async fn proxy_handler(
     }
 
     (
-        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK),
+        StatusCode::from_u16(status).unwrap_or(StatusCode::OK),
         response_headers,
-        response_bytes.to_vec(),
+        response_bytes,
     )
         .into_response()
 }

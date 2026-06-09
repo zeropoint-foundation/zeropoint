@@ -1142,10 +1142,11 @@ pub async fn discover_proxy_port_with_retry(
 /// This file is sourced before the tool starts, overriding its default
 /// port and setting the auth token so the proxy can authenticate
 /// transparently.  The user's `.env` is never touched.
-pub fn write_env_zp(
+pub async fn write_env_zp(
     tool_path: &Path,
     tool_name: &str,
     assignment: &ToolBinding,
+    host: &dyn zp_host::HostContext,
 ) -> std::io::Result<()> {
     let zp_env = tool_path.join(".env.zp");
 
@@ -1173,7 +1174,15 @@ pub fn write_env_zp(
     // Signal to the tool that ZP is managing it
     content.push_str("ZP_MANAGED=1\n");
 
-    std::fs::write(&zp_env, &content)?;
+    host.write_file(zp_host::WriteRequest::new(
+        &zp_env,
+        content.as_bytes().to_vec(),
+        zp_host::WriteMode::Create,
+        "write_env_zp",
+        format!("{}/env.zp", tool_name),
+    ))
+    .await
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     debug!(
         "Wrote .env.zp for {} → {}={}{}, {}=<redacted>",
         tool_path.display(),
@@ -1230,7 +1239,15 @@ pub fn write_env_zp(
                     } else {
                         new_contents
                     };
-                std::fs::write(&dot_env, &final_contents)?;
+                host.write_file(zp_host::WriteRequest::new(
+                    &dot_env,
+                    final_contents.as_bytes().to_vec(),
+                    zp_host::WriteMode::Create,
+                    "write_env_zp",
+                    format!("{}/env.cleanup", tool_name),
+                ))
+                .await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
                 info!(
                     "Removed ZP-managed vars ({}) from {}.env to prevent shadow conflicts",
                     zp_owned.join(", "),

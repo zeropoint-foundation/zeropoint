@@ -206,82 +206,70 @@ async fn execute_and_stream(
         }
     };
 
-    // ── Governance gate (P3 — Claim 3 invariant) ─────────────────────
-    // Every side effect must pass through the GovernanceGate. The input
-    // validation above (safe_path, metachar, allowlist) is defense-in-depth;
-    // the gate is the formal policy decision point.
-    let gate_context = zp_core::PolicyContext {
-        action: zp_core::ActionType::Execute {
-            language: cmd.to_string(),
-        },
-        trust_tier: zp_core::TrustTier::Tier1,
-        channel: zp_core::Channel::Api,
-        conversation_id: zp_core::ConversationId::new(),
-        skill_ids: vec![],
-        tool_names: vec![format!("exec/{}", validated_cmd.program())],
-        mesh_context: None,
-    };
-    let actor = zp_core::ActorId::System("exec_ws".to_string());
-
-    let gate_result = app_state.0.gate.evaluate(&gate_context, actor);
-
-    if gate_result.is_blocked() {
-        let reason = match &gate_result.decision {
-            zp_core::PolicyDecision::Block { reason, .. } => reason.clone(),
-            _ => "Policy denied".to_string(),
-        };
-        tracing::warn!("exec_ws: BLOCKED by governance gate — {}", reason);
-        let _ = tx
-            .send(WsMessage::Text(
-                serde_json::json!({
-                    "type": "error",
-                    "message": format!("🛡 Governance gate blocked execution: {}", reason)
-                })
-                .to_string(),
-            ))
-            .await;
-        tool_chain::emit_tool_receipt(
-            &app_state.0.audit_store,
-            "tool:cmd:gate_blocked",
-            Some(&format!(
-                "reason={}, cmd_program={}",
-                reason,
-                validated_cmd.program()
-            )),
-        );
-        return None;
-    }
-
-    if gate_result.needs_interaction() {
-        tracing::info!("exec_ws: command flagged for review — allowing");
-    }
-
-    // Append the gate's audit entry to the chain so the gate decision is
-    // recorded even when the action is allowed.
-    if let Ok(mut audit) = app_state.0.audit_store.lock() {
-        if let Err(e) = audit.append(gate_result.unsealed.clone()) {
-            tracing::warn!("exec_ws: failed to append gate audit entry: {}", e);
-        }
-    }
-
-    tracing::info!(
-        "exec_ws: running {:?} in '{}'",
-        validated_cmd,
-        resolved_cwd
+    // ── Governance gate + spawn via host-function boundary (Commitment A) ─
+    // SystemHostContext handles gate evaluation, receipt emission, and the
+    // actual spawn atomically.  Callers cannot bypass the gate or omit the
+    // receipt — the invariant is structural, not conventional.
+    // Input validation above (safe_path, metachar, allowlist) is
+    // defense-in-depth; the gate inside the host is the formal policy point.
+    let spawn_req = zp_host::SpawnRequest::new(
+        validated_cmd.program(),
+        validated_cmd.args().to_vec(),
+        &resolved_cwd,
+        "exec_ws",
+        format!("exec/{}", validated_cmd.program()),
     );
 
-    // Spawn directly from the ValidatedCommand — no shell, no re-parsing.
-    // The program + args were locked in by validate_command(); spawn()
-    // uses Command::new(program).args(args) with stdin closed.
-    let mut child = match validated_cmd.spawn(&resolved_cwd) {
-        Ok(c) => c,
-        Err(e) => {
+    let spawn_result = match app_state.0.host.spawn_process(spawn_req).await {
+        Ok(r) => r,
+        Err(zp_host::HostError::GateDenied { reason }) => {
+            tracing::warn!("exec_ws: BLOCKED by governance gate — {}", reason);
+            let _ = tx
+                .send(WsMessage::Text(
+                    serde_json::json!({
+                        "type": "error",
+                        "message": format!("🛡 Governance gate blocked execution: {}", reason)
+                    })
+                    .to_string(),
+                ))
+                .await;
+            return None;
+        }
+        Err(zp_host::HostError::Io(e)) => {
             let _ = tx.send(WsMessage::Text(
-                serde_json::json!({ "type": "error", "message": format!("Spawn failed: {}", e) }).to_string()
+                serde_json::json!({ "type": "error", "message": format!("Spawn failed: {}", e) })
+                    .to_string(),
+            )).await;
+            return None;
+        }
+        Err(zp_host::HostError::AuditError(e)) => {
+            tracing::error!("exec_ws: audit rejected receipt — refusing spawn: {}", e);
+            let _ = tx.send(WsMessage::Text(
+                serde_json::json!({ "type": "error", "message": "Internal audit error" })
+                    .to_string(),
+            )).await;
+            return None;
+        }
+        Err(zp_host::HostError::Http(e)) => {
+            // spawn_process never makes HTTP calls; this arm exists only for
+            // exhaustiveness since HostError is shared across all host functions.
+            tracing::error!("exec_ws: unexpected HTTP error in spawn: {}", e);
+            let _ = tx.send(WsMessage::Text(
+                serde_json::json!({ "type": "error", "message": "Internal error" })
+                    .to_string(),
             )).await;
             return None;
         }
     };
+
+    tracing::info!(
+        "exec_ws: running {:?} in '{}' (gate_receipt={:?})",
+        validated_cmd,
+        resolved_cwd,
+        spawn_result.gate_receipt_hash,
+    );
+
+    let mut child = spawn_result.child;
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();

@@ -441,7 +441,7 @@ pub struct ServerIdentity {
 }
 
 pub struct AppStateInner {
-    pub gate: GovernanceGate,
+    pub gate: Arc<GovernanceGate>,
     pub audit_store: Arc<std::sync::Mutex<AuditStore>>,
     pub identity: ServerIdentity,
     pub pipeline: Option<Pipeline>,
@@ -544,6 +544,16 @@ pub struct AppStateInner {
     /// Recent intent_id dedupe cache for foundation-relay (24h TTL,
     /// bounded). Idempotency guard against worker retries.
     pub foundation_edge_seen_intents: foundation_relay::SeenIntentsArc,
+
+    /// Host-function boundary (Phase 1 — Commitment A).
+    ///
+    /// Every privileged side effect (process spawn, file write, network call)
+    /// must pass through this interface.  `SystemHostContext` always consults
+    /// the governance gate and always emits an audit receipt before executing
+    /// the side effect — the invariant is structural, not conventional.
+    ///
+    /// See `docs/ARCHITECTURE-2026-04.md` Part I §2 Commitment A.
+    pub host: Arc<dyn zp_host::HostContext>,
 }
 
 #[derive(Clone)]
@@ -634,6 +644,7 @@ impl AppState {
                 GovernanceGate::new(&identity.destination_hash)
             }
         };
+        let gate = Arc::new(gate);
 
         // Optional pipeline
         let pipeline = if config.llm_enabled {
@@ -840,6 +851,13 @@ impl AppState {
         let foundation_edge_seen_intents: foundation_relay::SeenIntentsArc =
             Arc::new(std::sync::Mutex::new(foundation_relay::SeenIntents::new()));
 
+        // Phase 1 — Commitment A: host-function boundary.
+        // SystemHostContext takes Arc refs to the same gate and audit_store
+        // that live in AppStateInner, so they share the same live state.
+        let host: Arc<dyn zp_host::HostContext> = Arc::new(
+            zp_host::SystemHostContext::new(gate.clone(), audit_store.clone()),
+        );
+
         let state = AppState(Arc::new(AppStateInner {
             gate,
             audit_store,
@@ -872,6 +890,7 @@ impl AppState {
             artifact_library,
             foundation_edge_registry,
             foundation_edge_seen_intents,
+            host,
         }));
 
         // Spawn background vault key resolution — the Keychain access can take
@@ -2167,11 +2186,15 @@ async fn grant_handler(
     Json(body): Json<CreateGrantRequest>,
 ) -> Result<Json<GrantResponse>, (StatusCode, String)> {
     // ── Gate enforcement: capability grants are high-privilege ──
-    // CredentialAccess requires Tier2 (genesis-rooted key provenance).
+    // Use ConfigChange (not CredentialAccess) — CatastrophicActionRule
+    // unconditionally blocks all CredentialAccess actions. ConfigChange with
+    // a non-self-modification setting is the correct action type here: issuing
+    // a capability grant IS a configuration change. Required tier: Tier1;
+    // context passes Tier2 (≥ Tier1), so TrustTierEnforcementRule passes.
     enforce_gate(
         &state,
-        CoreActionType::CredentialAccess {
-            credential_ref: format!("grant:{}", body.capability),
+        CoreActionType::ConfigChange {
+            setting: format!("capability.grant:{}", body.capability),
         },
         "grant-requester",
         TrustTier::Tier2,

@@ -7903,6 +7903,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-host"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "futures",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "zp-audit",
+ "zp-core",
+ "zp-policy",
+]
+
+[[package]]
 name = "zp-introduction"
 version = "0.1.0"
 dependencies = [
@@ -8198,6 +8216,7 @@ dependencies = [
  "zp-core",
  "zp-engine",
  "zp-gate-envelope",
+ "zp-host",
  "zp-keys",
  "zp-memory",
  "zp-mesh",

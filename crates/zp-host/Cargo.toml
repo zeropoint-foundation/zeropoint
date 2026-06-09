@@ -1,0 +1,39 @@
+[package]
+name = "zp-host"
+version = "0.1.0"
+edition = "2021"
+description = "Host-function boundary — the typed contract through which all privileged side effects must pass."
+
+# See also: docs/ARCHITECTURE-2026-04.md Part I §2 Commitment A, Part II §Phase 1
+#
+# This crate is Phase 1's load-bearing piece: every privileged action (process
+# spawn, file write, network call) is reachable only through a HostContext
+# implementation. The type system makes ambient authority unrepresentable in
+# production call paths.
+
+[dependencies]
+# Workspace crates
+zp-core   = { path = "../zp-core" }
+zp-audit  = { path = "../zp-audit" }
+zp-policy = { path = "../zp-policy" }
+
+# Async
+tokio        = { workspace = true }
+async-trait  = { workspace = true }
+futures      = { workspace = true }
+
+# Serialization
+serde      = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Hashing (for audit detail fingerprints)
+blake3 = { workspace = true }
+
+# HTTP client (for http_request host function)
+reqwest = { workspace = true }
+
+# Logging
+tracing = { workspace = true }

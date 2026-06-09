@@ -160,6 +160,30 @@ impl GateHarness {
         };
 
         let state = zp_server::AppState::init(&config).await;
+
+        // Swap to a writable unsigned store before building the router.
+        //
+        // AppState::init opens read-only in bootstrap mode (no genesis.json
+        // present in the temp home dir). That causes every emit_tool_receipt /
+        // emit_delegation_receipt call inside the HTTP handlers to silently
+        // return None — the chain never grows, and any gate decision that
+        // depends on the chain (P4 delegation prereq) reads an empty store.
+        //
+        // Replacing with open_unsigned gives the handlers a writable store,
+        // making the full HTTP→gate→chain path testable without a sovereignty
+        // ceremony. Entries carry no per-entry signatures (open_unsigned), but
+        // chain-integrity fast-path (prev_hash linking) still holds.
+        //
+        // The swap must happen before build_app — once state is moved into the
+        // router the outer Arc is gone. All route-handler clones share the same
+        // Arc<Mutex<AuditStore>>, so they see the writable store after the swap.
+        {
+            let writable_db = data_dir.join("audit-writable.db");
+            let writable = zp_audit::AuditStore::open_unsigned(&writable_db)
+                .expect("writable unsigned audit store");
+            *state.0.audit_store.lock().unwrap() = writable;
+        }
+
         let session_token = state.session_token();
         let router = zp_server::build_app(state, &config);
 
@@ -574,21 +598,17 @@ async fn gate_http_denies_agent_without_delegation() {
 
 // ── Gap documentation tests ────────────────────────────────────────────────────
 
-/// Structural gap: in bootstrap mode (no genesis.json) the audit store is
-/// read-only, so `emit_tool_receipt` inside `gate_tool_call_handler` silently
-/// returns `None`.  The response's `chain_entry_hash` field is `null`.
+/// Gate decisions are recorded on the chain in test mode.
 ///
-/// This means the test harness CANNOT verify that the gate decision was
-/// recorded on the chain via the HTTP path alone.  The `chain_happy_path_*`
-/// tests use `AuditStore::open_unsigned` to work around this.
+/// Verifies that `gate_tool_call_handler` emits a `chain_entry_hash` that is
+/// non-null — i.e., `emit_tool_receipt` successfully wrote to the writable
+/// unsigned store supplied by `GateHarness`.
 ///
-/// This test PASSES while the gap exists (chain_entry_hash is null).
-/// When the test harness is updated to boot with a genesis key (allowing
-/// a signed store), this assertion will invert and the test should be
-/// deleted — at that point the HTTP gate tests can verify chain emission
-/// directly.
+/// Previously tracked as `gap_gate_chain_emission_requires_genesis` (the gap
+/// was: bootstrap mode opened a read-only store, silencing all chain writes).
+/// That gap is closed by the audit-store swap in `GateHarness::new()`.
 #[tokio::test]
-async fn gap_gate_chain_emission_requires_genesis() {
+async fn gate_http_emits_chain_entry() {
     let h = GateHarness::new().await;
 
     let (status, resp) = h
@@ -598,78 +618,79 @@ async fn gap_gate_chain_emission_requires_genesis() {
         )
         .await;
 
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::OK, "gate must return 200; body: {}", resp);
 
-    // GAP: chain_entry_hash is null because the store is read-only.
-    let hash_is_null = resp["chain_entry_hash"].is_null();
+    // The gate handler emits a chain entry for every decision; the hash must
+    // be present and non-null in the response.
     assert!(
-        hash_is_null,
-        "GAP CLOSED: gate now writes to chain in test mode. \
-         Delete this test and update gate_http_allows_with_bearer_token to \
-         assert chain_entry_hash is non-null."
+        !resp["chain_entry_hash"].is_null(),
+        "chain_entry_hash must be non-null — gate decision must land on chain; body: {}",
+        resp
+    );
+    assert!(
+        resp["chain_entry_hash"].as_str().map_or(false, |s| !s.is_empty()),
+        "chain_entry_hash must be a non-empty string; body: {}",
+        resp
     );
 }
 
-/// Structural gap: the HTTP grant handler stores the grant in-memory but does
-/// NOT emit a `delegation:granted` chain entry.  This is Boundary 1→2 from
-/// the handoff brief: the gate's P4 prereq check reads the chain for
-/// `delegation:granted:*`; a grant that isn't on the chain is invisible to
-/// the gate, so HTTP-issued grants don't enable agent tool calls.
+/// HTTP grant → delegation:granted on chain → gate allows agent (Boundary 1→2).
 ///
-/// This test PASSES while the gap exists.  When the handler is fixed to call
-/// `emit_delegation_receipt`, this assertion inverts and the test should be
-/// deleted.  At that point `chain_happy_path_three_entry_sequence` should be
-/// updated to issue the delegation via HTTP instead of direct emit.
+/// Verifies the full Boundary 1→2 path: an HTTP capability grant emits a
+/// `delegation:granted:<grantee>` chain entry, and the gate's P4 prereq check
+/// finds that entry, allowing the agent's subsequent tool call.
+///
+/// Previously tracked as `gap_delegation_http_handler_does_not_emit_chain_entry`.
+/// That gap was: the grant handler stored the grant in-memory only, never
+/// writing to the chain, so the gate's P4 prereq check found nothing and
+/// denied the agent. The gap is closed: `grant_handler` calls
+/// `emit_delegation_receipt`, and `GateHarness` now supplies a writable store.
 #[tokio::test]
-async fn gap_delegation_http_handler_does_not_emit_chain_entry() {
-    // This test uses ChainHarness for chain inspection and GateHarness for HTTP.
-    // They share no state (different stores), which is fine — we're checking
-    // that the HTTP handler writes to ITS OWN store, which we can't read from
-    // the outside in bootstrap mode (read-only).
-    //
-    // Instead we verify by inference: a granted agent should be able to pass
-    // the gate prereq. If the grant isn't on the chain, the gate denies it.
+async fn gate_http_grant_enables_agent_via_chain() {
     let h = GateHarness::new().await;
+    let agent = "boundary-test-agent";
 
-    // Attempt to create a capability grant via HTTP.
-    let (grant_status, _grant_resp) = h
+    // Issue a capability grant for the agent via HTTP.
+    let (grant_status, grant_resp) = h
         .post_authed(
             "/api/v1/capabilities/grant",
             serde_json::json!({
-                "grantee": "gap-test-agent",
-                "capability": "read",
+                "grantee": agent,
+                "capability": "execute",
                 "scope": ["*"],
                 "max_delegation_depth": 1
             }),
         )
         .await;
 
-    // If the endpoint rejects (403 from Tier2 enforcement), the gap test
-    // is moot at this path — skip gracefully.
-    if grant_status == StatusCode::FORBIDDEN || grant_status == StatusCode::UNAUTHORIZED {
-        return;
-    }
+    // grant_handler uses TrustTier::Tier2 in the PolicyContext it passes to
+    // enforce_gate, satisfying the CredentialAccess tier requirement. If it
+    // still gets 403 the test environment is misconfigured — fail loudly.
+    assert_eq!(
+        grant_status,
+        StatusCode::OK,
+        "capability grant must succeed (200); body: {}",
+        grant_resp
+    );
 
-    // Grant was created in-memory. Now try a tool call as that agent.
-    // If the grant were on the chain, the gate would allow it.
-    // GAP: the grant is NOT on the chain, so the gate denies it.
+    // Boundary 1→2: the grant handler emits delegation:granted:<agent> to
+    // the chain. The gate's P4 prereq reads the chain and finds it.
     let (gate_status, gate_resp) = h
         .post_authed(
             "/api/v1/gate/tool-call",
             serde_json::json!({
                 "tool_name": "probe_tool",
-                "agent": "gap-test-agent"
+                "agent": agent
             }),
         )
         .await;
 
-    assert_eq!(gate_status, StatusCode::OK);
-
-    // GAP: agent is denied because the grant wasn't emitted to the chain.
-    let allowed = gate_resp["allowed"].as_bool().unwrap_or(true);
-    assert!(
-        !allowed,
-        "GAP CLOSED: gate now sees HTTP-granted agents on chain. \
-         Delete this test and update the happy path to use the HTTP grant endpoint."
+    assert_eq!(gate_status, StatusCode::OK, "gate must return 200; body: {}", gate_resp);
+    assert_eq!(
+        gate_resp["allowed"].as_bool(),
+        Some(true),
+        "HTTP-granted agent must be allowed by the gate (delegation:granted \
+         is on the chain); body: {}",
+        gate_resp
     );
 }
