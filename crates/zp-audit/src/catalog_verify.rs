@@ -84,39 +84,29 @@ impl<'a> VerifiableEntry for AuditVerifiableEntry<'a> {
         self.0.timestamp
     }
 
-    fn signature_b64(&self) -> Option<&str> {
-        // F8: this legacy accessor only fires when `signature_blocks`
-        // returns empty. Only return the value if the receipt has *no*
-        // F8 vec — otherwise the verifier prefers the vec.
-        let receipt = self.0.receipt.as_ref()?;
-        if !receipt.signatures.is_empty() {
-            return None;
-        }
-        receipt.signature.as_deref()
-    }
-
-    fn signer_public_key_hex(&self) -> Option<&str> {
-        let receipt = self.0.receipt.as_ref()?;
-        if !receipt.signatures.is_empty() {
-            return None;
-        }
-        receipt.signer_public_key.as_deref()
-    }
-
     fn signed_payload(&self) -> Option<&[u8]> {
-        // Signatures in zp-receipt are computed over the receipt's
-        // content_hash bytes (see Signer::sign in zp-receipt/src/signer.rs).
-        Some(self.0.receipt.as_ref()?.content_hash.as_bytes())
+        // Entry-level signing (Claim 1): AuditSigner::sign_entry signs the
+        // raw 32-byte blake3 hash of entry_hash (preimage_version=2). The
+        // verifier's F8 path hex-decodes these ASCII bytes to get the raw
+        // preimage before verifying. entry_hash is always present on a
+        // sealed entry — None is structurally impossible here.
+        Some(self.0.entry_hash.as_bytes())
     }
 
     fn signature_blocks(&self) -> Vec<zp_verify::SignatureBlockView<'_>> {
-        // F8: expose every block on the receipt to the verifier so it
-        // can iterate, count Ed25519 signatures, and warn-skip any
-        // experimental algorithms it doesn't recognize.
-        let Some(receipt) = self.0.receipt.as_ref() else {
-            return Vec::new();
-        };
-        receipt
+        // Entry-level signatures: AuditSigner writes one Ed25519 block into
+        // entry.signatures on every AuditStore::append. These are the
+        // per-row chain attestations that S1 must verify for Claim 1
+        // (chain integrity). Receipt-level signatures (receipt.signatures)
+        // are a separate concern verified by verify_receipt_status — they
+        // are NOT the signatures S1 should be checking here.
+        //
+        // Note: the legacy signature_b64 / signer_public_key_hex accessors
+        // are intentionally not overridden — they default to None from the
+        // trait, so S1 takes the F8 vec path whenever entry.signatures is
+        // non-empty (signed store) and skips cleanly when it is empty
+        // (read-only / test store opened via open_unsigned).
+        self.0
             .signatures
             .iter()
             .map(|b| zp_verify::SignatureBlockView {

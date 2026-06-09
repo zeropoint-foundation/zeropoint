@@ -621,6 +621,45 @@ impl AppState {
 
             (store, Some(Arc::new(verifier)))
         };
+
+        // Claim 1: startup chain integrity verification (zp-verify catalog rules).
+        // Non-fatal — a corrupt chain is logged loudly but does not prevent startup,
+        // so an operator can still run `zp verify` to inspect the damage. The check
+        // runs on `audit_store_inner` before it is Arc-wrapped, so there is no lock
+        // contention risk here.
+        {
+            match audit_store_inner.verify_with_catalog() {
+                Ok(report) if report.passed => {
+                    info!(
+                        entries = report.entries_checked,
+                        sig_checks = report.signature_checks,
+                        "Chain integrity: passed",
+                    );
+                }
+                Ok(report) => {
+                    let errors = report.error_count();
+                    error!(
+                        entries = report.entries_checked,
+                        errors = errors,
+                        sig_failures = report.signature_failures,
+                        "Chain integrity: {} error(s) — chain may be corrupt; run `zp verify` for details",
+                        errors,
+                    );
+                    for finding in report.violations() {
+                        error!(
+                            rule = %finding.rule,
+                            entry = %finding.entry_id,
+                            "Chain finding: {}",
+                            finding.description,
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!("Chain integrity check failed to run: {}", e);
+                }
+            }
+        }
+
         let audit_store = Arc::new(std::sync::Mutex::new(audit_store_inner));
 
         // Governance gate — with optional WASM policy runtime (P6-4)

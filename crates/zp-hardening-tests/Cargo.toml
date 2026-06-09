@@ -54,3 +54,9 @@ tempfile = { workspace = true }
 # HTTP client — used by the singular-loopback-shutdown test to probe
 # the v4 listener before triggering token cancel.
 reqwest = { workspace = true }
+
+# Claim 1 chain integrity tests — verify_with_catalog + VerifyReport.
+zp-verify = { path = "../zp-verify" }
+
+# UUID for ConversationId construction in chain_integrity tests.
+uuid = { workspace = true }

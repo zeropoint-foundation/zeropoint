@@ -232,6 +232,20 @@ impl Verifier {
             report.passed = false;
         }
 
+        // P2: Content hash integrity — genesis is not exempt.
+        // An open_signed store writes every entry through seal_entry, so the
+        // genesis row carries the same content hash guarantee as all later rows.
+        if !entries[0].content_hash_valid() {
+            report.findings.push(VerifyFinding {
+                rule: "P2".to_string(),
+                entry_id: entries[0].entry_id().to_string(),
+                description: "Genesis entry content hash mismatch — possible tampering"
+                    .to_string(),
+                severity: FindingSeverity::Error,
+            });
+            report.passed = false;
+        }
+
         // S1 on genesis too — sign-everything-or-nothing, the genesis is no exception.
         check_signature(&entries[0], &mut report);
 
