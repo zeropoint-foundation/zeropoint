@@ -29,9 +29,14 @@
 //!
 //! Historical entries (written by the legacy `ChainBuilder::build_entry`
 //! path) used the Debug-format layout and will not match this hash function.
-//! The catalog verifier (`crate::catalog_verify`) currently leaves the
-//! content-hash check disabled because of this; re-enabling it requires
-//! either a fresh database or a one-time hash-rebuild migration.
+//! This is not a concern in practice: `AuditStore::init` enforces
+//! `SCHEMA_VERSION = 3`, rejecting any DB not stamped with v3 via
+//! `StoreError::SchemaMismatch`. There is no in-place migration — callers
+//! must drop and recreate (see the forensic-dump script referenced in that
+//! error). Every entry in an openable DB was therefore written via
+//! `AuditStore::append` → `seal_entry` with JSON serialization, and the
+//! catalog verifier's P2 content-hash check (rule P2 in `crate::catalog_verify`)
+//! is enabled and correct on all such entries.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
