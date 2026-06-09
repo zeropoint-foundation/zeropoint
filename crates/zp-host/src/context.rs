@@ -84,7 +84,19 @@ pub trait HostContext: Send + Sync {
     /// 4. If the gate allows: sends the HTTP request and buffers the response body.
     /// 5. Returns `Ok(HttpResult { status, body, gate_receipt_hash })`.
     ///
-    /// Note: the response body is fully buffered.  Streaming LLM responses
-    /// are handled at the proxy layer; this method is for synchronous calls.
+    /// Note: the response body is fully buffered.  Use `http_request_streaming`
+    /// for SSE or any response that must be consumed incrementally.
     async fn http_request(&self, req: HttpRequest) -> Result<HttpResult, HostError>;
+
+    /// Like `http_request` but returns the raw `reqwest::Response` for streaming.
+    ///
+    /// Gate evaluation and receipt emission are identical to `http_request`.
+    /// The difference is in stage 4: the response is not buffered — the caller
+    /// receives the live `Response` and can stream it (e.g. via `bytes_stream()`).
+    ///
+    /// Use this for SSE connections and long-lived tool-proxy streams.
+    async fn http_request_streaming(
+        &self,
+        req: HttpRequest,
+    ) -> Result<reqwest::Response, HostError>;
 }

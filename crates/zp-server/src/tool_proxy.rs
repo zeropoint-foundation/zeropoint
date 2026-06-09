@@ -199,177 +199,173 @@ pub(crate) async fn proxy_inner(
         .map(|v| v.contains("text/event-stream"))
         .unwrap_or(false);
 
-    // Build the outbound request.
-    // We strip Accept-Encoding so the upstream tool sends uncompressed
-    // responses — simplifies the proxy pipeline.  The ZP→browser leg
-    // can use its own compression via tower-http if needed.
-    let client = if accepts_sse {
-        reqwest::Client::builder()
-            .no_proxy()
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    } else {
-        reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
-
+    // ── Port through governed host boundary ─────────────────────────
+    // Build headers, convert method, read body — then dispatch through
+    // state.0.host.http_request_streaming() which enforces gate evaluation
+    // and receipt emission before any network call leaves the process.
     let method = req.method().clone();
-    let mut builder = client.request(method.clone(), &target_url);
-
-    // Forward relevant headers (skip hop-by-hop).
+    let mut fwd_headers: Vec<(String, String)> = vec![];
     for (key, value) in req.headers() {
         let k = key.as_str().to_lowercase();
         if k == "host" || k == "connection" || k == "transfer-encoding" || k == "accept-encoding" {
             continue;
         }
         if let Ok(v) = value.to_str() {
-            builder = builder.header(key.as_str(), v);
+            fwd_headers.push((key.as_str().to_string(), v.to_string()));
         }
     }
+    fwd_headers.push(("X-ZeroPoint-Governed".to_string(), "true".to_string()));
+    fwd_headers.push(("X-ZeroPoint-Tool".to_string(), tool_name.to_string()));
+    fwd_headers.push(("Authorization".to_string(), format!("Bearer {}", assignment.auth_token)));
 
-    // Inject governance headers so tools know they're governed
-    builder = builder.header("X-ZeroPoint-Governed", "true");
-    builder = builder.header("X-ZeroPoint-Tool", tool_name);
-
-    // Inject auth token — ZP owns the trust boundary, so the user
-    // never needs to see a login screen for governed tools.
-    builder = builder.header("Authorization", format!("Bearer {}", assignment.auth_token));
-
-    // Forward the body
-    let body_bytes = axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024) // 10 MB limit
+    let body_bytes = axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024)
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    if !body_bytes.is_empty() {
-        builder = builder.body(body_bytes.to_vec());
-    }
+    let http_method = match &method {
+        m if m == axum::http::Method::GET     => zp_host::HttpMethod::Get,
+        m if m == axum::http::Method::POST    => zp_host::HttpMethod::Post,
+        m if m == axum::http::Method::PUT     => zp_host::HttpMethod::Put,
+        m if m == axum::http::Method::DELETE  => zp_host::HttpMethod::Delete,
+        m if m == axum::http::Method::PATCH   => zp_host::HttpMethod::Patch,
+        m if m == axum::http::Method::HEAD    => zp_host::HttpMethod::Head,
+        m if m == axum::http::Method::OPTIONS => zp_host::HttpMethod::Options,
+        _ => zp_host::HttpMethod::Post,
+    };
 
-    // ── Send to tool ────────────────────────────────────────────────
-    match builder.send().await {
-        Ok(resp) => {
-            let resp_status = resp.status().as_u16();
+    let http_req = if accepts_sse {
+        zp_host::HttpRequest::for_streaming(
+            &target_url, http_method, fwd_headers, body_bytes.to_vec(),
+            "tool_proxy", format!("{}/{}", tool_name, path),
+        )
+    } else {
+        zp_host::HttpRequest::new(
+            &target_url, http_method, fwd_headers, body_bytes.to_vec(),
+            "tool_proxy", format!("{}/{}", tool_name, path),
+        )
+    };
 
-            // ── Emit health receipt based on response ───────────────
-            let health_kind = if (200..400).contains(&resp_status) {
-                HealthKind::Up
-            } else if resp_status >= 500 {
-                HealthKind::Degraded
-            } else {
-                HealthKind::Up // 4xx is still "tool is responding"
-            };
-
-            if sampler().should_emit(tool_name, health_kind) {
-                let event = match health_kind {
-                    HealthKind::Up => events::for_tool(events::HEALTH_UP, tool_name),
-                    HealthKind::Degraded => events::for_tool(events::HEALTH_DEGRADED, tool_name),
-                    HealthKind::Down => events::for_tool(events::HEALTH_DOWN, tool_name),
-                };
-                let detail = format!("status={} method={} path=/{}", resp_status, method, path);
-                let audit_store = state.0.audit_store.lock().ok();
-                drop(audit_store);
-                tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
-            }
-
-            emit_traffic_receipt(state, tool_name, resp_status);
-
-            // ── Build the axum response ─────────────────────────────
-            let status =
-                StatusCode::from_u16(resp_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-
-            // ── SSE streaming fast-path ──────────────────────────────
-            let is_sse = resp
-                .headers()
-                .get("content-type")
-                .and_then(|v| v.to_str().ok())
-                .map(|v| v.contains("text/event-stream"))
-                .unwrap_or(false);
-
-            if is_sse {
-                let mut response = Response::builder().status(status);
-                for (key, value) in resp.headers() {
-                    let k = key.as_str().to_lowercase();
-                    if k == "transfer-encoding" || k == "connection" || k == "content-length" {
-                        continue;
-                    }
-                    if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
-                        response = response.header(key.as_str(), v);
-                    }
-                }
-                let byte_stream = resp.bytes_stream();
-                let body = Body::from_stream(byte_stream);
-                return response
-                    .body(body)
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
-            }
-
-            // ── Standard response — pass through unchanged ──────────
-            let mut response = Response::builder().status(status);
-
-            let is_html = resp
-                .headers()
-                .get("content-type")
-                .and_then(|v| v.to_str().ok())
-                .map(|v| v.contains("text/html"))
-                .unwrap_or(false);
-
-            for (key, value) in resp.headers() {
-                let k = key.as_str().to_lowercase();
-                if k == "transfer-encoding" || k == "connection" || k == "content-length" {
-                    continue;
-                }
-                // Strip encoding headers — we asked upstream not to compress
-                if k == "content-encoding" {
-                    continue;
-                }
-                if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
-                    response = response.header(key.as_str(), v);
-                }
-            }
-
-            let resp_bytes = resp.bytes().await.map_err(|e| {
-                warn!(
-                    "Proxy: failed to read response body from {}: {}",
-                    tool_name, e
-                );
-                StatusCode::BAD_GATEWAY
-            })?;
-
-            // For HTML responses: inject a minimal governance script.
-            // No path rewriting — just auth token auto-inject so the tool
-            // recognizes the user without a login screen.
-            let final_body = if is_html {
-                let html = String::from_utf8_lossy(&resp_bytes);
-                let injected = inject_governance_script(&html, &assignment.auth_token);
-                response = response
-                    .header("Content-Encoding", "identity")
-                    .header("Cache-Control", "no-store");
-                Body::from(injected)
-            } else {
-                Body::from(resp_bytes)
-            };
-
-            response
-                .body(final_body)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    // ── Send to tool via governed host boundary ──────────────────────
+    let resp = match state.0.host.http_request_streaming(http_req).await {
+        Ok(r) => r,
+        Err(zp_host::HostError::GateDenied { reason }) => {
+            return Ok((StatusCode::TOO_MANY_REQUESTS, format!("gate denied: {}", reason))
+                .into_response());
         }
-
         Err(e) => {
-            warn!(
-                "Proxy: failed to reach {} at {}: {}",
-                tool_name, target_url, e
-            );
-
+            warn!("Proxy: failed to reach {} at {}: {}", tool_name, target_url, e);
             if sampler().should_emit(tool_name, HealthKind::Down) {
                 let event = events::for_tool(events::HEALTH_DOWN, tool_name);
                 let detail = format!("error={} target={}", e, target_url);
                 tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
             }
+            return Err(StatusCode::BAD_GATEWAY);
+        }
+    };
+    let resp_status = resp.status().as_u16();
 
-            Err(StatusCode::BAD_GATEWAY)
+    // ── Emit health receipt based on response ────────────────────────
+    let health_kind = if (200..400).contains(&resp_status) {
+        HealthKind::Up
+    } else if resp_status >= 500 {
+        HealthKind::Degraded
+    } else {
+        HealthKind::Up // 4xx is still "tool is responding"
+    };
+
+    if sampler().should_emit(tool_name, health_kind) {
+        let event = match health_kind {
+            HealthKind::Up => events::for_tool(events::HEALTH_UP, tool_name),
+            HealthKind::Degraded => events::for_tool(events::HEALTH_DEGRADED, tool_name),
+            HealthKind::Down => events::for_tool(events::HEALTH_DOWN, tool_name),
+        };
+        let detail = format!("status={} method={} path=/{}", resp_status, method, path);
+        let audit_store = state.0.audit_store.lock().ok();
+        drop(audit_store);
+        tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
+    }
+
+    emit_traffic_receipt(state, tool_name, resp_status);
+
+    // ── Build the axum response ──────────────────────────────────────
+    let status =
+        StatusCode::from_u16(resp_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+    // ── SSE streaming fast-path ──────────────────────────────────────
+    let is_sse = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("text/event-stream"))
+        .unwrap_or(false);
+
+    if is_sse {
+        let mut response = Response::builder().status(status);
+        for (key, value) in resp.headers() {
+            let k = key.as_str().to_lowercase();
+            if k == "transfer-encoding" || k == "connection" || k == "content-length" {
+                continue;
+            }
+            if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
+                response = response.header(key.as_str(), v);
+            }
+        }
+        let byte_stream = resp.bytes_stream();
+        let body = Body::from_stream(byte_stream);
+        return response
+            .body(body)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // ── Standard response — pass through unchanged ───────────────────
+    let mut response = Response::builder().status(status);
+
+    let is_html = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("text/html"))
+        .unwrap_or(false);
+
+    for (key, value) in resp.headers() {
+        let k = key.as_str().to_lowercase();
+        if k == "transfer-encoding" || k == "connection" || k == "content-length" {
+            continue;
+        }
+        // Strip encoding headers — we asked upstream not to compress
+        if k == "content-encoding" {
+            continue;
+        }
+        if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
+            response = response.header(key.as_str(), v);
         }
     }
+
+    let resp_bytes = resp.bytes().await.map_err(|e| {
+        warn!(
+            "Proxy: failed to read response body from {}: {}",
+            tool_name, e
+        );
+        StatusCode::BAD_GATEWAY
+    })?;
+
+    // For HTML responses: inject a minimal governance script.
+    // No path rewriting — just auth token auto-inject so the tool
+    // recognizes the user without a login screen.
+    let final_body = if is_html {
+        let html = String::from_utf8_lossy(&resp_bytes);
+        let injected = inject_governance_script(&html, &assignment.auth_token);
+        response = response
+            .header("Content-Encoding", "identity")
+            .header("Cache-Control", "no-store");
+        Body::from(injected)
+    } else {
+        Body::from(resp_bytes)
+    };
+
+    response
+        .body(final_body)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 // ── Governance script injection ─────────────────────────────────────────

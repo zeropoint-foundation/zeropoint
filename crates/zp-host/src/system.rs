@@ -223,13 +223,78 @@ impl HostContext for SystemHostContext {
         }
 
         // ── Stage 4: execute HTTP request ─────────────────────────────────
-        let client = reqwest::Client::new();
+        let response = Self::send_http(&req).await?;
+        let status = response.status().as_u16();
+        let body = response.bytes().await?.to_vec();
+
+        Ok(HttpResult { status, body, gate_receipt_hash })
+    }
+
+    async fn http_request_streaming(
+        &self,
+        req: HttpRequest,
+    ) -> Result<reqwest::Response, HostError> {
+        // Stages 1–3: identical gate/receipt pattern as http_request.
+        let context = PolicyContext {
+            action: ActionType::ApiCall {
+                endpoint: req.url.clone(),
+            },
+            trust_tier: TrustTier::Tier1,
+            channel: Channel::Api,
+            conversation_id: ConversationId::new(),
+            skill_ids: vec![],
+            tool_names: vec![format!("http/{}", req.description)],
+            mesh_context: None,
+        };
+        let actor = ActorId::System(req.actor_label.clone());
+        let gate_result = self.gate.evaluate(&context, actor);
+
+        match self.audit_store.lock() {
+            Ok(mut store) => {
+                if let Err(e) = store.append(gate_result.unsealed.clone()) {
+                    warn!("zp-host: failed to append gate receipt for http_request_streaming: {}", e);
+                }
+            }
+            Err(e) => {
+                warn!("zp-host: audit store lock poisoned in http_request_streaming: {}", e);
+            }
+        }
+
+        if gate_result.is_blocked() {
+            let reason = match &gate_result.decision {
+                PolicyDecision::Block { reason, .. } => reason.clone(),
+                _ => "policy denied".to_string(),
+            };
+            return Err(HostError::GateDenied { reason });
+        }
+
+        // Stage 4: send — return raw Response for caller to stream.
+        Self::send_http(&req).await
+    }
+}
+
+impl SystemHostContext {
+    /// Build a reqwest client from request options and send, returning the
+    /// raw Response.  Used by both `http_request` and `http_request_streaming`.
+    async fn send_http(req: &HttpRequest) -> Result<reqwest::Response, HostError> {
+        let mut client_builder = reqwest::Client::builder();
+        if req.no_proxy {
+            client_builder = client_builder.no_proxy();
+        }
+        if let Some(ms) = req.timeout_ms {
+            client_builder =
+                client_builder.timeout(std::time::Duration::from_millis(ms));
+        }
+        let client = client_builder.build().unwrap_or_else(|_| reqwest::Client::new());
+
         let method = match req.method {
-            HttpMethod::Get    => reqwest::Method::GET,
-            HttpMethod::Post   => reqwest::Method::POST,
-            HttpMethod::Put    => reqwest::Method::PUT,
-            HttpMethod::Delete => reqwest::Method::DELETE,
-            HttpMethod::Patch  => reqwest::Method::PATCH,
+            HttpMethod::Get     => reqwest::Method::GET,
+            HttpMethod::Post    => reqwest::Method::POST,
+            HttpMethod::Put     => reqwest::Method::PUT,
+            HttpMethod::Delete  => reqwest::Method::DELETE,
+            HttpMethod::Patch   => reqwest::Method::PATCH,
+            HttpMethod::Head    => reqwest::Method::HEAD,
+            HttpMethod::Options => reqwest::Method::OPTIONS,
         };
 
         let mut builder = client.request(method, &req.url);
@@ -242,13 +307,9 @@ impl HostContext for SystemHostContext {
             }
         }
         if !req.body.is_empty() {
-            builder = builder.body(req.body);
+            builder = builder.body(req.body.clone());
         }
 
-        let response = builder.send().await?; // maps reqwest::Error → HostError::Http via From
-        let status = response.status().as_u16();
-        let body = response.bytes().await?.to_vec();
-
-        Ok(HttpResult { status, body, gate_receipt_hash })
+        Ok(builder.send().await?) // maps reqwest::Error → HostError::Http via From
     }
 }
