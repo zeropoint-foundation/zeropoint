@@ -3627,7 +3627,7 @@ async fn gate_tool_call_handler(
     // tightening that to "agent always required" is a deployment-time
     // policy switch, not an architectural one.
     if let Some(agent_id) = req.agent.as_deref() {
-        if let Some(deny_reason) = lease_prereq_for_agent(&state, agent_id) {
+        if let Some(deny_reason) = lease_prereq_for_agent(&state, agent_id, &req.tool_name) {
             let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
             let chain_event = format!("gate:denied:{}", req.tool_name);
             let chain_detail = serde_json::json!({
@@ -4002,8 +4002,16 @@ async fn lease_renew_handler(
 ///
 /// Walks the chain looking for `delegation:{granted,renewed,revoked}:{agent_id}`
 /// and reconstructs the agent's most-recent grant state. Multiple grants for
-/// the same agent are tolerated — at least one must be alive.
-fn lease_prereq_for_agent(state: &AppState, agent_id: &str) -> Option<&'static str> {
+/// the same agent are tolerated — at least one must be alive AND must cover
+/// `tool_name` via a `GrantedCapability::ToolCall` scope.
+///
+/// # Claim 4 enforcement
+///
+/// The scope check enforces delegation narrowing: a live grant that does not
+/// carry a `ToolCall` capability covering `tool_name` is not sufficient. The
+/// deny reason `"capability_scope_exceeded"` is returned when an alive grant
+/// exists but none of them cover the requested tool.
+fn lease_prereq_for_agent(state: &AppState, agent_id: &str, tool_name: &str) -> Option<&'static str> {
     let chain = state
         .0
         .audit_store
@@ -4037,11 +4045,21 @@ fn lease_prereq_for_agent(state: &AppState, agent_id: &str) -> Option<&'static s
         }
     }
 
-    let any_alive = grants
+    // Collect grants that are not revoked and not past their grace period.
+    let live: Vec<&zp_core::CapabilityGrant> = grants
         .values()
-        .any(|g| !revoked.contains(&g.id) && !g.is_past_grace());
-    if any_alive {
-        None
+        .filter(|g| !revoked.contains(&g.id) && !g.is_past_grace())
+        .collect();
+
+    if !live.is_empty() {
+        // Claim 4: at least one live grant must cover this specific tool.
+        let tool_action = CoreActionType::ToolCall { name: tool_name.to_string() };
+        let scope_ok = live.iter().any(|g| g.matches_action(&tool_action));
+        if scope_ok {
+            None
+        } else {
+            Some("capability_scope_exceeded")
+        }
     } else if grants.is_empty() {
         Some("no_valid_delegation")
     } else if grants.values().all(|g| revoked.contains(&g.id)) {
@@ -4224,7 +4242,10 @@ mod p4_phase2_tests {
     use std::sync::{Arc, Mutex};
 
     use zp_audit::AuditStore;
-    use zp_core::{AuthorityRef, CapabilityGrant, GrantedCapability, LeasePolicy, RevocationClaim};
+    use zp_core::{
+        ActionType as CoreActionType, AuthorityRef, CapabilityGrant, GrantedCapability,
+        LeasePolicy, RevocationClaim,
+    };
 
     fn make_store() -> (tempfile::TempDir, Arc<Mutex<AuditStore>>) {
         let dir = tempfile::tempdir().unwrap();
@@ -4234,12 +4255,14 @@ mod p4_phase2_tests {
     }
 
     fn standing_grant(subject: &str) -> CapabilityGrant {
+        // Wildcard ToolCall grant — authorises the subject to call any tool.
+        // This replaces the former Custom { name: "tool-execution" } grant now
+        // that Claim 4 scope enforcement requires a ToolCall capability kind.
         CapabilityGrant::new(
             "genesis".to_string(),
             subject.to_string(),
-            GrantedCapability::Custom {
-                name: "tool-execution".to_string(),
-                parameters: serde_json::Value::Null,
+            GrantedCapability::ToolCall {
+                tools: vec!["*".to_string()],
             },
             format!("rcpt-{}", uuid::Uuid::now_v7()),
         )
@@ -4253,9 +4276,12 @@ mod p4_phase2_tests {
     /// call the real function because it requires `AppState` (which pulls
     /// in genesis, ports, vault, etc.). The chain-walking logic is the same
     /// — pasting it into the test module keeps the contract visible.
+    ///
+    /// `tool_name` is the MCP tool being checked (Claim 4 scope enforcement).
     fn lease_prereq_for_agent(
         store: &Arc<Mutex<AuditStore>>,
         agent_id: &str,
+        tool_name: &str,
     ) -> Option<&'static str> {
         let chain = store
             .lock()
@@ -4288,11 +4314,15 @@ mod p4_phase2_tests {
                 }
             }
         }
-        let any_alive = grants
+        let live: Vec<&CapabilityGrant> = grants
             .values()
-            .any(|g| !revoked.contains(&g.id) && !g.is_past_grace());
-        if any_alive {
-            None
+            .filter(|g| !revoked.contains(&g.id) && !g.is_past_grace())
+            .collect();
+        if !live.is_empty() {
+            // Claim 4: scope check — at least one live grant must cover the tool.
+            let tool_action = CoreActionType::ToolCall { name: tool_name.to_string() };
+            let scope_ok = live.iter().any(|g| g.matches_action(&tool_action));
+            if scope_ok { None } else { Some("capability_scope_exceeded") }
         } else if grants.is_empty() {
             Some("no_valid_delegation")
         } else if grants.values().all(|g| revoked.contains(&g.id)) {
@@ -4345,9 +4375,10 @@ mod p4_phase2_tests {
         );
         crate::tool_chain::emit_revocation_receipt(&store, "artemis", &claim).unwrap();
 
-        // After revocation, the gate prereq must surface delegation_revoked.
+        // After revocation, the gate prereq must surface delegation_revoked
+        // regardless of tool_name — lifecycle checks precede scope checks.
         assert_eq!(
-            lease_prereq_for_agent(&store, "artemis"),
+            lease_prereq_for_agent(&store, "artemis", "bash"),
             Some("delegation_revoked")
         );
     }
@@ -4368,17 +4399,49 @@ mod p4_phase2_tests {
         let (_d, store) = make_store();
         // Empty chain — agent has no grant.
         assert_eq!(
-            lease_prereq_for_agent(&store, "artemis"),
+            lease_prereq_for_agent(&store, "artemis", "bash"),
             Some("no_valid_delegation")
         );
     }
 
     #[test]
-    fn p4_2d_t5b_gate_allows_tool_call_with_alive_delegation() {
+    fn p4_2d_t5b_gate_allows_tool_call_with_alive_wildcard_delegation() {
+        // standing_grant produces ToolCall { tools: ["*"] } — wildcard covers any tool.
         let (_d, store) = make_store();
         let grant = standing_grant("artemis");
         crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None).unwrap();
-        assert_eq!(lease_prereq_for_agent(&store, "artemis"), None);
+        assert_eq!(lease_prereq_for_agent(&store, "artemis", "bash"), None);
+    }
+
+    #[test]
+    fn p4_2d_t5c_gate_denies_out_of_scope_tool_despite_live_delegation() {
+        // Claim 4: narrow grant covers ["read"] — calling "bash" must be denied.
+        let (_d, store) = make_store();
+        let narrow_grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "artemis".to_string(),
+            GrantedCapability::ToolCall {
+                tools: vec!["read".to_string()],
+            },
+            format!("rcpt-{}", uuid::Uuid::now_v7()),
+        )
+        .with_lease_policy(LeasePolicy::standard_8h())
+        .as_standing("genesis-key");
+
+        crate::tool_chain::emit_delegation_receipt(&store, "granted", &narrow_grant, None).unwrap();
+
+        // In-scope tool: allowed.
+        assert_eq!(
+            lease_prereq_for_agent(&store, "artemis", "read"),
+            None,
+            "in-scope tool should be allowed"
+        );
+        // Out-of-scope tool: denied with capability_scope_exceeded.
+        assert_eq!(
+            lease_prereq_for_agent(&store, "artemis", "bash"),
+            Some("capability_scope_exceeded"),
+            "out-of-scope tool must be denied even with a live grant"
+        );
     }
 
     #[test]

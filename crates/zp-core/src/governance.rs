@@ -796,6 +796,11 @@ impl ActionContext {
                 Some(peer_address.clone()),
                 if *same_genesis { "High" } else { "Critical" }.to_string(),
             ),
+            CoreActionType::ToolCall { name } => (
+                "ToolCall".to_string(),
+                Some(name.clone()),
+                "High".to_string(),
+            ),
         };
 
         Self {

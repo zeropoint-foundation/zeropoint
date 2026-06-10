@@ -241,6 +241,7 @@ impl PolicyRule for HarmPrincipleRule {
             ActionType::CredentialAccess { credential_ref } => Some(credential_ref.as_str()),
             ActionType::KeyDelegation { target_subject, .. } => Some(target_subject.as_str()),
             ActionType::PeerIntroduction { peer_address, .. } => Some(peer_address.as_str()),
+            ActionType::ToolCall { name } => Some(name.as_str()),
         };
 
         if let Some(t) = target {
@@ -563,6 +564,9 @@ impl TrustTierEnforcementRule {
             ActionType::CredentialAccess { .. }
             | ActionType::KeyDelegation { .. }
             | ActionType::PeerIntroduction { .. } => TrustTier::Tier2,
+
+            // ToolCall is equivalent to Execute for trust-tier purposes.
+            ActionType::ToolCall { .. } => TrustTier::Tier0,
         }
     }
 }

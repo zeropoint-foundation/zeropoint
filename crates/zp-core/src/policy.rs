@@ -187,6 +187,17 @@ pub enum ActionType {
         /// Whether the peer's genesis matches our own.
         same_genesis: bool,
     },
+    /// Named tool invocation — calling a specific MCP tool by name.
+    ///
+    /// This is the `ActionType` used by `lease_prereq_for_agent` to enforce
+    /// Claim 4 (delegation narrowing): a live grant must carry a
+    /// `GrantedCapability::ToolCall` scope that covers `name` before the
+    /// gate allows the tool call. Wildcard `"*"` in the grant's tools list
+    /// authorises any tool name.
+    ToolCall {
+        /// The tool being invoked (e.g., "bash", "read", "slack.send_message").
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -323,6 +334,9 @@ impl RiskLevel {
                 same_genesis: false,
                 ..
             } => RiskLevel::Critical,
+            // ToolCall risk is equivalent to Execute — invoking a named tool
+            // has the same blast-radius profile as executing code.
+            ActionType::ToolCall { .. } => RiskLevel::High,
         }
     }
 }

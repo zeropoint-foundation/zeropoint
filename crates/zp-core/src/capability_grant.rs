@@ -761,6 +761,12 @@ impl CapabilityGrant {
                 false
             }
 
+            // ToolCall grant matches ToolCall actions (Claim 4 enforcement).
+            // Wildcard "*" in the tools list authorises any tool name.
+            (GrantedCapability::ToolCall { tools }, ActionType::ToolCall { name }) => {
+                tools.contains(name) || tools.contains(&"*".to_string())
+            }
+
             // All other combinations don't match
             _ => false,
         }
@@ -937,6 +943,15 @@ pub enum GrantedCapability {
         name: String,
         parameters: serde_json::Value,
     },
+    /// Named tool invocation — the Claim 4 capability kind.
+    ///
+    /// Grants the right to invoke specific MCP tools by name. Wildcard
+    /// `"*"` authorises any tool. This is the only `GrantedCapability`
+    /// variant that the gate's `lease_prereq_for_agent` checks at call time.
+    ToolCall {
+        /// Tool names this grant authorises, e.g. `["bash", "read"]` or `["*"]`.
+        tools: Vec<String>,
+    },
 }
 
 impl GrantedCapability {
@@ -951,6 +966,7 @@ impl GrantedCapability {
             GrantedCapability::ConfigChange { .. } => "config_change",
             GrantedCapability::MeshSend { .. } => "mesh_send",
             GrantedCapability::Custom { name, .. } => name,
+            GrantedCapability::ToolCall { .. } => "tool_call",
         }
     }
 
@@ -1000,6 +1016,12 @@ impl GrantedCapability {
                 GrantedCapability::Custom { name: pn, .. },
                 GrantedCapability::Custom { name: cn, .. },
             ) => pn == cn, // Custom capabilities must match by name; parameters not checked
+            // ToolCall scope subsetting — used at delegation time to ensure a
+            // child ToolCall grant doesn't exceed the parent's tool set.
+            (
+                GrantedCapability::ToolCall { tools: parent },
+                GrantedCapability::ToolCall { tools: child },
+            ) => set_contains(parent, child),
             _ => false, // Different capability types are never subsets
         }
     }

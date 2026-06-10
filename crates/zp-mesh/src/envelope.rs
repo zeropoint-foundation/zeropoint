@@ -266,6 +266,9 @@ impl CompactDelegation {
                 vec![name.clone()],
                 vec![parameters.to_string()],
             ),
+            zp_core::GrantedCapability::ToolCall { tools } => {
+                ("tc".to_string(), tools.clone(), vec![])
+            }
         };
 
         let tt = grant.trust_tier.as_u8();
