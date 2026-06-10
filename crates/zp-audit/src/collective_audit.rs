@@ -272,6 +272,42 @@ pub fn verify_peer_chain(peer: &str, entries: &[CompactAuditEntry]) -> PeerAudit
     }
 }
 
+/// Check that an `AuditResponse`'s `chain_tip` is consistent with its entries.
+///
+/// # Claim 2 invariant
+///
+/// A malicious peer can send a response whose `prev_hash` links are internally
+/// consistent while claiming a fabricated `chain_tip`. This check catches that
+/// class of forgery: the `chain_tip` field MUST equal the last entry's `eh`.
+///
+/// An empty entries list with a non-empty `chain_tip` is also rejected — the
+/// tip cannot be asserted without at least one entry to anchor it.
+pub fn response_tip_consistent(response: &AuditResponse) -> bool {
+    match response.entries.last() {
+        Some(last) => last.eh == response.chain_tip,
+        // No entries: tip must be empty (no chain state to anchor the claim).
+        None => response.chain_tip.is_empty(),
+    }
+}
+
+/// Verify a full `AuditResponse` end-to-end and produce an attestation.
+///
+/// Composes two checks:
+/// 1. `response_tip_consistent` — the claimed `chain_tip` matches the last
+///    entry's `eh` (Claim 2 invariant).
+/// 2. `verify_peer_chain` — the `prev_hash` links are internally consistent
+///    across all entries (P1 continuity).
+///
+/// If either check fails, `chain_valid` is `false` in the returned attestation.
+pub fn verify_response(peer: &str, response: &AuditResponse) -> PeerAuditAttestation {
+    let tip_ok = response_tip_consistent(response);
+    let mut att = verify_peer_chain(peer, &response.entries);
+    if !tip_ok {
+        att.chain_valid = false;
+    }
+    att
+}
+
 /// Compact policy decision for wire transmission.
 fn compact_decision(decision: &zp_core::PolicyDecision) -> String {
     match decision {

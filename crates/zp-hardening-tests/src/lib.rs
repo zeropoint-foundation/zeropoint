@@ -25,6 +25,7 @@
 //! Example: `test_auth_vuln_01_unauth_access`
 
 pub mod chain_integrity;
+pub mod claim2_collective_audit;
 pub mod delegation_narrowing;
 pub mod harness;
 pub mod payloads;
