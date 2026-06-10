@@ -300,6 +300,17 @@ enum Commands {
         json: bool,
     },
 
+    /// Show all TCP-LISTEN processes with substrate attribution (Part VIII Stage 1)
+    ///
+    /// Samples the OS for listening ports, attributes each process as
+    /// substrate-managed, known-system, or unknown, and prints a table.
+    /// Unknown processes are the ones that need operator attention.
+    Ps {
+        /// Output as JSON (machine-readable)
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Memory lifecycle management (G5-2: review gate)
     #[command(subcommand)]
     Memory(MemoryCmd),
@@ -2931,6 +2942,109 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    // Ps — Part VIII Stage 1 compute surface snapshot.
+    // Samples lsof system-wide, attributes via PortRegistry, prints table.
+    if let Some(Commands::Ps { json }) = &args.command {
+        use zp_server::tool_ports::{
+            ProcessAttribution, lsof_all_listen, PostureSnapshot, PortRegistry,
+        };
+
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
+        let data_dir = cfg.data_dir.value.clone();
+        let registry = PortRegistry::new(&data_dir);
+
+        let procs = lsof_all_listen();
+        let snapshot = PostureSnapshot::from_processes(&registry, procs);
+
+        if *json {
+            let to_obj = |ap: &zp_server::tool_ports::AttributedProcess| {
+                let (kind, detail) = match &ap.attribution {
+                    ProcessAttribution::SubstrateManaged { tool_name, allocated_receipt_id } => (
+                        "substrate_managed",
+                        serde_json::json!({
+                            "tool_name": tool_name,
+                            "allocated_receipt_id": allocated_receipt_id
+                        }),
+                    ),
+                    ProcessAttribution::KnownSystem { category } => (
+                        "known_system",
+                        serde_json::json!({ "category": category }),
+                    ),
+                    ProcessAttribution::Unknown => (
+                        "unknown",
+                        serde_json::json!({}),
+                    ),
+                };
+                serde_json::json!({
+                    "pid": ap.process.pid,
+                    "name": ap.process.name,
+                    "port": ap.process.port,
+                    "attribution": kind,
+                    "detail": detail,
+                })
+            };
+
+            let out = serde_json::json!({
+                "total": snapshot.total(),
+                "substrate_managed": snapshot.substrate_managed.iter().map(to_obj).collect::<Vec<_>>(),
+                "known_system": snapshot.known_system.iter().map(to_obj).collect::<Vec<_>>(),
+                "unknown": snapshot.unknown.iter().map(to_obj).collect::<Vec<_>>(),
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+        } else {
+            let total = snapshot.total();
+            println!("\x1b[1mCompute Surface Snapshot\x1b[0m  ({total} processes listening)");
+            println!();
+
+            // ── Substrate-managed ──────────────────────────────────────────
+            if !snapshot.substrate_managed.is_empty() {
+                println!("\x1b[32m● Substrate-managed\x1b[0m");
+                for ap in &snapshot.substrate_managed {
+                    if let ProcessAttribution::SubstrateManaged { tool_name, .. } = &ap.attribution {
+                        println!(
+                            "  {:5}  {:20}  :{:<6}  → {}",
+                            ap.process.pid, ap.process.name, ap.process.port, tool_name
+                        );
+                    }
+                }
+                println!();
+            }
+
+            // ── Known system ───────────────────────────────────────────────
+            if !snapshot.known_system.is_empty() {
+                println!("\x1b[34m◌ Known system\x1b[0m");
+                for ap in &snapshot.known_system {
+                    if let ProcessAttribution::KnownSystem { category } = &ap.attribution {
+                        println!(
+                            "  {:5}  {:20}  :{:<6}  ({})",
+                            ap.process.pid, ap.process.name, ap.process.port, category
+                        );
+                    }
+                }
+                println!();
+            }
+
+            // ── Unknown ────────────────────────────────────────────────────
+            if !snapshot.unknown.is_empty() {
+                println!("\x1b[33m? Unknown — review required\x1b[0m");
+                for ap in &snapshot.unknown {
+                    println!(
+                        "  {:5}  {:20}  :{}",
+                        ap.process.pid, ap.process.name, ap.process.port
+                    );
+                }
+                println!();
+                println!(
+                    "  \x1b[33m{} unknown process(es)\x1b[0m — run `lsof -p <pid>` to investigate",
+                    snapshot.unknown.len()
+                );
+            } else {
+                println!("\x1b[32m✓ All processes attributed\x1b[0m");
+            }
+        }
+        std::process::exit(0);
+    }
+
     // Config subcommand — unified configuration management
     if let Some(Commands::Cfg(cmd)) = &args.command {
         match cmd {
@@ -3908,6 +4022,51 @@ async fn main() -> anyhow::Result<()> {
             fix: String::new(),
         });
 
+        // ── Part VIII Stage 1: Compute surface posture ──────────────────
+        // Run lsof, attribute against PortRegistry. Warn if unknown
+        // processes are listening — the lsof test (heuristic #11).
+        {
+            let registry = zp_server::tool_ports::PortRegistry::new(data);
+            let snapshot = zp_server::tool_ports::PostureSnapshot::build(&registry);
+            let unknown_count = snapshot.unknown.len();
+            let total = snapshot.total();
+            if total == 0 {
+                // lsof unavailable or no listeners yet — informational only
+                checks.push(Check {
+                    label: "Compute surface".into(),
+                    status: "info",
+                    detail: "No TCP listeners detected (lsof may be unavailable)".into(),
+                    fix: String::new(),
+                });
+            } else if unknown_count == 0 {
+                checks.push(Check {
+                    label: "Compute surface".into(),
+                    status: "pass",
+                    detail: format!(
+                        "{total} process(es) listening — all attributed (substrate={}, system={})",
+                        snapshot.substrate_managed.len(),
+                        snapshot.known_system.len()
+                    ),
+                    fix: String::new(),
+                });
+            } else {
+                let names: Vec<String> = snapshot
+                    .unknown
+                    .iter()
+                    .map(|ap| format!("{}:{}", ap.process.name, ap.process.port))
+                    .collect();
+                checks.push(Check {
+                    label: "Compute surface".into(),
+                    status: "warn",
+                    detail: format!(
+                        "{unknown_count} unknown listener(s): {}",
+                        names.join(", ")
+                    ),
+                    fix: "Run `zp ps` to review. Investigate with `lsof -p <pid>`.".into(),
+                });
+            }
+        }
+
         // ── Output ──
         let fail_count = checks.iter().filter(|c| c.status == "fail").count();
         let warn_count = checks.iter().filter(|c| c.status == "warn").count();
@@ -4127,6 +4286,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Grants { .. }) => unreachable!(), // handled above
         Some(Commands::Cfg(_)) => unreachable!(),       // handled above
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
+        Some(Commands::Ps { .. }) => unreachable!(),    // handled above
         Some(Commands::Memory(_)) => unreachable!(),    // handled above
         Some(Commands::Discover { .. }) => unreachable!(), // handled above
         Some(Commands::Adapt { .. }) => unreachable!(), // handled above

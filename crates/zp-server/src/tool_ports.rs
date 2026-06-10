@@ -1363,6 +1363,260 @@ pub fn detect_all_port_vars(tool_path: &Path) -> Vec<String> {
     found.into_iter().map(|(_, v)| v).collect()
 }
 
+// ── Part VIII Stage 1: Compute Surface Awareness ───────────────────────
+//
+// Three types + two functions form the inventory layer:
+//
+//   lsof_all_listen()     → Vec<ListenProcess>    (system-wide snapshot)
+//   PostureSnapshot::build(registry, procs)        (attributed view)
+//
+// Attribution hierarchy (per process):
+//   1. PortRegistry port match    → SubstrateManaged
+//   2. known_system_category()    → KnownSystem
+//   3. Otherwise                  → Unknown
+//
+// Design brief: docs/handoffs/part-viii-stage1-design-2026-06.md
+
+/// A single TCP-LISTEN process as observed from the OS.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListenProcess {
+    pub pid: u32,
+    /// Process name as reported by lsof (COMMAND column).
+    pub name: String,
+    pub port: u16,
+}
+
+/// How a listening process relates to the substrate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcessAttribution {
+    /// Port is registered in PortRegistry — ZP launched this process.
+    SubstrateManaged {
+        tool_name: String,
+        allocated_receipt_id: String,
+    },
+    /// Matches a known macOS/Linux system service pattern.
+    KnownSystem { category: &'static str },
+    /// No attribution — operator should review.
+    Unknown,
+}
+
+/// A listening process paired with its attribution.
+#[derive(Debug, Clone)]
+pub struct AttributedProcess {
+    pub process: ListenProcess,
+    pub attribution: ProcessAttribution,
+}
+
+/// A point-in-time snapshot of all TCP-LISTEN processes, attributed.
+///
+/// Build one via `PostureSnapshot::build(&registry)`. The snapshot is
+/// immutable after construction; call `build` again to refresh.
+#[derive(Debug, Default, Clone)]
+pub struct PostureSnapshot {
+    /// Processes ZP directly governs (port in PortRegistry).
+    pub substrate_managed: Vec<AttributedProcess>,
+    /// Processes matching known macOS/Linux service patterns.
+    pub known_system: Vec<AttributedProcess>,
+    /// Processes with no attribution — operator review required.
+    pub unknown: Vec<AttributedProcess>,
+}
+
+impl PostureSnapshot {
+    /// Build a snapshot by sampling the OS and attributing each process
+    /// against the given PortRegistry.
+    pub fn build(registry: &PortRegistry) -> Self {
+        let procs = lsof_all_listen();
+        Self::from_processes(registry, procs)
+    }
+
+    /// Build from a pre-sampled process list (allows injection in tests).
+    pub fn from_processes(registry: &PortRegistry, procs: Vec<ListenProcess>) -> Self {
+        // Build a port → ToolBinding reverse map once.
+        let bindings = registry.list_map();
+        let port_map: HashMap<u16, &ToolBinding> = bindings
+            .values()
+            .map(|b| (b.port, b))
+            .collect();
+
+        let mut snapshot = Self::default();
+        for proc in procs {
+            let attribution = if let Some(binding) = port_map.get(&proc.port) {
+                ProcessAttribution::SubstrateManaged {
+                    tool_name: binding.tool.clone(),
+                    allocated_receipt_id: binding.allocated_receipt_id.clone(),
+                }
+            } else if let Some(category) = known_system_category(&proc.name) {
+                ProcessAttribution::KnownSystem { category }
+            } else {
+                ProcessAttribution::Unknown
+            };
+
+            let attributed = AttributedProcess {
+                process: proc,
+                attribution: attribution.clone(),
+            };
+
+            match attribution {
+                ProcessAttribution::SubstrateManaged { .. } => {
+                    snapshot.substrate_managed.push(attributed)
+                }
+                ProcessAttribution::KnownSystem { .. } => snapshot.known_system.push(attributed),
+                ProcessAttribution::Unknown => snapshot.unknown.push(attributed),
+            }
+        }
+        snapshot
+    }
+
+    /// Total process count across all categories.
+    pub fn total(&self) -> usize {
+        self.substrate_managed.len() + self.known_system.len() + self.unknown.len()
+    }
+
+    /// True if there are unknown processes that need operator review.
+    pub fn has_unknowns(&self) -> bool {
+        !self.unknown.is_empty()
+    }
+}
+
+/// Sample all TCP-LISTEN processes system-wide using `lsof`.
+///
+/// Returns an empty Vec on non-Unix platforms or if lsof is unavailable.
+/// Each `(pid, port)` pair appears at most once (duplicates are deduplicated).
+pub fn lsof_all_listen() -> Vec<ListenProcess> {
+    #[cfg(unix)]
+    {
+        // No -p / -a filter: all processes. No PID AND needed.
+        // -n -P: numeric host + port (skip DNS/service-name resolution).
+        let output = std::process::Command::new("lsof")
+            .args(["-iTCP", "-sTCP:LISTEN", "-n", "-P"])
+            .output();
+        match output {
+            Ok(o) if o.status.success() || !o.stdout.is_empty() => {
+                parse_lsof_all_listen(&String::from_utf8_lossy(&o.stdout))
+            }
+            _ => Vec::new(),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        Vec::new()
+    }
+}
+
+/// Parse system-wide lsof output into `ListenProcess` records.
+///
+/// Handles the standard lsof column layout:
+/// ```text
+/// COMMAND    PID   USER   FD   TYPE  DEVICE  SIZE/OFF  NODE  NAME
+/// node      1234   ken    17u  IPv4  0x...   0t0       TCP   *:3000 (LISTEN)
+/// rapportd   567   ken    7u   IPv4  0x...   0t0       TCP   *:49197 (LISTEN)
+/// ```
+pub fn parse_lsof_all_listen(lsof_output: &str) -> Vec<ListenProcess> {
+    let mut results = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for line in lsof_output.lines() {
+        if !line.contains("(LISTEN)") {
+            continue;
+        }
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+        // Need at least: COMMAND PID ... (LISTEN)
+        if tokens.len() < 3 {
+            continue;
+        }
+        // col[0] = COMMAND, col[1] = PID (always numeric in lsof output)
+        let proc_name = tokens[0].to_string();
+        let pid = match tokens[1].parse::<u32>() {
+            Ok(p) => p,
+            Err(_) => continue, // skip header row ("PID" parses as Err)
+        };
+        // Port: token immediately before "(LISTEN)", after the final ":"
+        let port = tokens.iter().enumerate().find_map(|(i, tok)| {
+            if *tok == "(LISTEN)" && i > 0 {
+                tokens[i - 1].rsplit(':').next()?.parse::<u16>().ok()
+            } else {
+                None
+            }
+        });
+        if let Some(port) = port {
+            if seen.insert((pid, port)) {
+                results.push(ListenProcess {
+                    pid,
+                    name: proc_name,
+                    port,
+                });
+            }
+        }
+    }
+    results
+}
+
+/// Map a process name to a known macOS/Linux system service category.
+///
+/// Returns `Some(category)` for well-known daemons; `None` for unrecognised
+/// processes (which become `Unknown` in the posture snapshot).
+///
+/// This is a best-effort heuristic, not a security boundary. The list will
+/// grow as new patterns are encountered. Only processes the operator would
+/// plausibly recognise as "not mine" belong here.
+pub fn known_system_category(name: &str) -> Option<&'static str> {
+    // Exact-name matches first (fast path, no allocation).
+    let known_exact: &[(&str, &str)] = &[
+        // ── macOS system daemons ─────────────────────────────────────────
+        ("rapportd", "macOS system"),
+        ("ARDAgent", "macOS system"),
+        ("ControlCenter", "macOS system"),
+        ("launchd", "macOS system"),
+        ("UserEventAgent", "macOS system"),
+        ("distnoted", "macOS system"),
+        ("loginwindow", "macOS system"),
+        ("SystemUIServer", "macOS system"),
+        ("sharingd", "macOS system"),
+        ("RemoteManagement", "macOS system"),
+        ("screensharingd", "macOS system"),
+        // ── Virtualisation / containers ──────────────────────────────────
+        ("com.docker.backend", "container runtime"),
+        ("dockerd", "container runtime"),
+        ("vpnkit", "container runtime"),
+        // ── Common developer runtimes (known, not substrate) ────────────
+        ("node", "developer runtime"),
+        ("python3", "developer runtime"),
+        ("python", "developer runtime"),
+        ("ruby", "developer runtime"),
+        ("deno", "developer runtime"),
+        ("bun", "developer runtime"),
+        // ── Databases ────────────────────────────────────────────────────
+        ("postgres", "database"),
+        ("mysqld", "database"),
+        ("redis-server", "database"),
+        ("mongod", "database"),
+        ("sqlite3", "database"),
+        // ── Linux system daemons ─────────────────────────────────────────
+        ("systemd", "Linux system"),
+        ("sshd", "Linux system"),
+        ("dbus-daemon", "Linux system"),
+    ];
+
+    for (exact, category) in known_exact {
+        if name == *exact {
+            return Some(category);
+        }
+    }
+
+    // Prefix / substring matches for families that use bundle-style names.
+    let known_prefix: &[(&str, &str)] = &[
+        ("com.apple.", "macOS system"),
+        ("com.docker.", "container runtime"),
+    ];
+    for (prefix, category) in known_prefix {
+        if name.starts_with(prefix) {
+            return Some(category);
+        }
+    }
+
+    None
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
