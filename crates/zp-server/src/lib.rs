@@ -2247,11 +2247,14 @@ async fn grant_handler(
         "execute" => GrantedCapability::Execute { languages: scope },
         "api" => GrantedCapability::ApiCall { endpoints: scope },
         "config" => GrantedCapability::ConfigChange { settings: scope },
+        // Claim 4: ToolCall grants allow agents to call specific MCP tools.
+        // `scope` carries the tool list (e.g., ["bash", "read"] or ["*"]).
+        "tool_call" => GrantedCapability::ToolCall { tools: scope },
         other => {
             return Err((
                 StatusCode::BAD_REQUEST,
                 format!(
-                    "Unknown capability type: {}. Use read, write, execute, api, or config.",
+                    "Unknown capability type: {}. Use read, write, execute, api, config, or tool_call.",
                     other
                 ),
             ))
@@ -2384,6 +2387,9 @@ async fn delegate_handler(
         GrantedCapability::Execute { languages } => languages.clone(),
         GrantedCapability::ApiCall { endpoints } => endpoints.clone(),
         GrantedCapability::ConfigChange { settings } => settings.clone(),
+        // Claim 4: inherit the parent's tool set when delegating a ToolCall grant.
+        // The child may further restrict it via body.scope.
+        GrantedCapability::ToolCall { tools } => tools.clone(),
         _ => vec!["*".to_string()],
     });
 
@@ -2393,6 +2399,8 @@ async fn delegate_handler(
         "execute" => GrantedCapability::Execute { languages: scope },
         "api" => GrantedCapability::ApiCall { endpoints: scope },
         "config" => GrantedCapability::ConfigChange { settings: scope },
+        // Claim 4: ToolCall delegation — child scope must be ⊆ parent tool set.
+        "tool_call" => GrantedCapability::ToolCall { tools: scope },
         other => {
             return Err((
                 StatusCode::BAD_REQUEST,

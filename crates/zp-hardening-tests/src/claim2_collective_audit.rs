@@ -14,7 +14,6 @@
 //! cargo test -p zp-hardening-tests claim2
 //! ```
 
-#[cfg(test)]
 use tempfile::tempdir;
 #[cfg(test)]
 use uuid::Uuid;

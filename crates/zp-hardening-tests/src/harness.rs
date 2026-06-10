@@ -72,6 +72,21 @@ impl TestApp {
         };
 
         let state = zp_server::AppState::init(&config).await;
+
+        // Bootstrap mode: AppState::init opens the audit store read-only when
+        // no genesis.json is present in the temp home dir. HTTP handlers call
+        // emit_tool_receipt / emit_delegation_receipt which silently return None
+        // on a read-only store — chain never grows and gate prereq checks see an
+        // empty store. Swap to a writable unsigned store here so the full HTTP
+        // → gate → chain path is exercisable without a sovereignty ceremony.
+        // Same pattern as GateHarness in tests/receipt_lifecycle.rs.
+        {
+            let writable_db = data_dir.join("audit-writable.db");
+            let writable = zp_audit::AuditStore::open_unsigned(&writable_db)
+                .expect("writable unsigned audit store");
+            *state.0.audit_store.lock().unwrap() = writable;
+        }
+
         let session_token = state.session_token();
         let router = zp_server::build_app(state, &config);
 

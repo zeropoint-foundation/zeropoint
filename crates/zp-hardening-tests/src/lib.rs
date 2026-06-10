@@ -29,3 +29,4 @@ pub mod claim2_collective_audit;
 pub mod delegation_narrowing;
 pub mod harness;
 pub mod payloads;
+pub mod receipt_chain_stress;
