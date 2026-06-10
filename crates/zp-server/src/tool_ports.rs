@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use chrono;
 use tracing::{debug, info, warn};
 use zp_audit::chain::UnsealedEntry;
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
@@ -81,6 +82,36 @@ pub struct StoredLaunchCommand {
     pub command: String,
     #[serde(default)]
     pub args: Vec<String>,
+    /// Working directory at spawn time — used for git-based version capture
+    /// and for `zp restart` / `zp update` to replay the launch in context.
+    #[serde(default)]
+    pub working_dir: Option<String>,
+}
+
+// ── ToolVersionInfo ─────────────────────────────────────────────────────
+
+/// Version provenance captured when a tool is launched via `zp configure exec`.
+///
+/// Fields are all `Option` — capture is best-effort. A tool without a git
+/// working directory yields `source_commit: None`; a PATH-resolved binary
+/// where the path can't be resolved yields `binary_hash: None`.  The
+/// `captured_at` timestamp is always present.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ToolVersionInfo {
+    /// Git commit hash (HEAD) in the tool's working directory.
+    #[serde(default)]
+    pub source_commit: Option<String>,
+    /// `true` if the working tree had uncommitted changes at launch time.
+    #[serde(default)]
+    pub source_dirty: Option<bool>,
+    /// Blake3 hex digest of the resolved binary at launch time.
+    #[serde(default)]
+    pub binary_hash: Option<String>,
+    /// Filesystem path of the binary that was launched.
+    #[serde(default)]
+    pub binary_path: Option<String>,
+    /// RFC3339 timestamp of when this version snapshot was taken.
+    pub captured_at: String,
 }
 
 // ── ToolBinding (replaces PortAssignment) ───────────────────────────────
@@ -125,6 +156,10 @@ pub struct ToolBinding {
     /// Where the port preference originated.
     #[serde(default)]
     pub preference_source: PreferenceSource,
+    /// Version provenance captured at the most recent launch. Updated each
+    /// time `zp configure exec` spawns or `zp update` relaunches the tool.
+    #[serde(default)]
+    pub last_version: Option<ToolVersionInfo>,
     /// IP stacks the listener bound on. `Some(["ipv4"])` for
     /// single-stack, `Some(["ipv4", "ipv6"])` for dual-stack via
     /// `zp_net::bind_loopback`. `None` means the stacks weren't
@@ -232,6 +267,7 @@ impl PortRegistry {
                                         pid: None,
                                         allocated_receipt_id: "legacy".to_string(),
                                         preference_source: PreferenceSource::Default,
+                                        last_version: None,
                                         bound_stacks: None,
                                     },
                                 ))
@@ -434,6 +470,7 @@ impl PortRegistry {
             pid: Some(pid),
             allocated_receipt_id: receipt_id,
             preference_source,
+            last_version: None,
             bound_stacks: bound_stacks
                 .map(|s| s.iter().map(|x| x.to_string()).collect()),
         };
@@ -795,6 +832,7 @@ impl PortRegistry {
         tool: &str,
         command: &str,
         args: &[String],
+        working_dir: Option<&str>,
     ) -> Result<(), RegistryError> {
         let mut map = self.bindings.lock().unwrap();
         match map.get_mut(tool) {
@@ -802,7 +840,29 @@ impl PortRegistry {
                 binding.launch_command = Some(StoredLaunchCommand {
                     command: command.to_string(),
                     args: args.to_vec(),
+                    working_dir: working_dir.map(|s| s.to_string()),
                 });
+                drop(map);
+                self.persist();
+                Ok(())
+            }
+            None => Err(RegistryError::NotAssigned(tool.to_string())),
+        }
+    }
+
+    /// Store version provenance captured at tool launch time.
+    ///
+    /// Updates `ToolBinding.last_version` and persists the registry.
+    /// Returns `NotAssigned` if the tool has no binding.
+    pub fn store_tool_version(
+        &self,
+        tool: &str,
+        version: ToolVersionInfo,
+    ) -> Result<(), RegistryError> {
+        let mut map = self.bindings.lock().unwrap();
+        match map.get_mut(tool) {
+            Some(binding) => {
+                binding.last_version = Some(version);
                 drop(map);
                 self.persist();
                 Ok(())
@@ -1617,6 +1677,84 @@ pub fn known_system_category(name: &str) -> Option<&'static str> {
     None
 }
 
+// ── Tool version capture ─────────────────────────────────────────────────
+
+/// Capture version provenance for a tool at launch time.
+///
+/// Runs `git rev-parse HEAD` and `git status --porcelain` in `working_dir`
+/// (if provided), and computes a Blake3 hex digest of the file at
+/// `binary_path` (if provided and readable).
+///
+/// All fields are best-effort — failures populate the corresponding field
+/// with `None` rather than returning an error. `captured_at` is always set.
+pub fn capture_tool_version(
+    working_dir: Option<&std::path::Path>,
+    binary_path: Option<&std::path::Path>,
+) -> ToolVersionInfo {
+    use std::process::Command;
+
+    let source_commit = working_dir.and_then(|dir| {
+        Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty())
+    });
+
+    let source_dirty = working_dir.and_then(|dir| {
+        Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| !o.stdout.is_empty())
+    });
+
+    let binary_hash = binary_path.and_then(|p| {
+        std::fs::read(p)
+            .ok()
+            .map(|bytes| blake3::hash(&bytes).to_hex().to_string())
+    });
+
+    let binary_path_str = binary_path.map(|p| p.to_string_lossy().to_string());
+    let captured_at = chrono::Utc::now().to_rfc3339();
+
+    ToolVersionInfo {
+        source_commit,
+        source_dirty,
+        binary_hash,
+        binary_path: binary_path_str,
+        captured_at,
+    }
+}
+
+/// Attempt to resolve the absolute path of a command (like `which`).
+///
+/// Returns `None` if the binary cannot be found on PATH.  Used to locate
+/// the binary to hash when the launch command is PATH-relative (e.g. `cargo`).
+pub fn resolve_binary_path(command: &str) -> Option<std::path::PathBuf> {
+    // Absolute path: take as-is if it exists.
+    let p = std::path::Path::new(command);
+    if p.is_absolute() && p.exists() {
+        return Some(p.to_path_buf());
+    }
+    // PATH search.
+    std::env::var_os("PATH").and_then(|path_var| {
+        std::env::split_paths(&path_var).find_map(|dir| {
+            let candidate = dir.join(command);
+            if candidate.exists() {
+                Some(candidate)
+            } else {
+                None
+            }
+        })
+    })
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1642,6 +1780,7 @@ mod tests {
             pid: None,
             allocated_receipt_id: String::new(),
             preference_source: PreferenceSource::Default,
+            last_version: None,
             bound_stacks: None,
         }
     }
@@ -1706,6 +1845,7 @@ mod tests {
             pid: Some(12345),
             allocated_receipt_id: "port-abc123".to_string(),
             preference_source: PreferenceSource::Manifest,
+            last_version: None,
             bound_stacks: None,
         };
         let json = serde_json::to_string(&binding).unwrap();
@@ -1949,7 +2089,7 @@ mod tests {
         let (reg, _dir) = make_registry();
         reg.allocate_or_existing("lc-tool", 1, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
-        reg.store_launch_command("lc-tool", "ironclaw", &["--port".to_string(), "9100".to_string()])
+        reg.store_launch_command("lc-tool", "ironclaw", &["--port".to_string(), "9100".to_string()], None)
             .expect("store");
         let lc = reg.get_assigned("lc-tool").unwrap().launch_command.unwrap();
         assert_eq!(lc.command, "ironclaw");
@@ -1960,7 +2100,7 @@ mod tests {
     fn store_launch_command_unknown_tool_err() {
         let (reg, _dir) = make_registry();
         let err = reg
-            .store_launch_command("ghost", "cmd", &[])
+            .store_launch_command("ghost", "cmd", &[], None)
             .unwrap_err();
         assert!(matches!(err, RegistryError::NotAssigned(_)));
     }
@@ -1970,7 +2110,7 @@ mod tests {
         let (reg, _dir) = make_registry();
         reg.allocate_or_existing("persist-lc", 2, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
-        reg.store_launch_command("persist-lc", "mytool", &[]).expect("store");
+        reg.store_launch_command("persist-lc", "mytool", &[], None).expect("store");
         reg.clear_binding("persist-lc", ReleaseReason::GracefulExit);
         // Allocation-side data survives runtime clear
         let lc = reg

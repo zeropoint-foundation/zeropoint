@@ -168,3 +168,84 @@ pub fn run_emit(
 
     Ok(())
 }
+
+/// Emit a `tool:launched:<name>` chain receipt at tool spawn time.
+///
+/// This is the chain entry that makes the tool versioning system governance
+/// rather than just metadata — every launch is a signed, chain-anchored event.
+///
+/// Tries to write a signed entry (deriving the audit key from the keyring).
+/// Falls back to unsigned on keyring error.  Failures are always non-fatal —
+/// warnings are printed but the caller (spawn path) is never blocked.
+///
+/// Only compiled when the `embedded-server` feature is enabled (the type
+/// `ToolVersionInfo` lives in `zp-server`).
+#[cfg(feature = "embedded-server")]
+pub fn emit_tool_launch_receipt(
+    tool_name: &str,
+    version: &zp_server::tool_ports::ToolVersionInfo,
+    data_dir: &std::path::Path,
+) {
+    let detail = serde_json::json!({
+        "tool": tool_name,
+        "source_commit": version.source_commit,
+        "source_dirty": version.source_dirty,
+        "binary_hash": version.binary_hash.as_deref()
+            .map(|h| &h[..h.len().min(16)]),
+        "binary_path": version.binary_path,
+        "captured_at": version.captured_at,
+    });
+    let event = format!("tool:launched:{}", tool_name);
+    let db_path = data_dir.join("audit.db");
+
+    // Attempt signed write — derive audit key from keyring.
+    let signed_result: anyhow::Result<String> = (|| {
+        let keyring = open_keyring().context("open keyring")?;
+        let genesis_secret = keyring.genesis_secret().context("genesis secret")?;
+        let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+        let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+        let mut store = AuditStore::open_signed(&db_path, audit_signer)
+            .context("open signed store")?;
+        let entry = UnsealedEntry::new(
+            ActorId::System("zp-configure-exec".to_string()),
+            AuditAction::SystemEvent {
+                event: event.clone(),
+            },
+            ConversationId::new(),
+            PolicyDecision::Allow {
+                conditions: vec![detail.to_string()],
+            },
+            "zp-configure-exec",
+        );
+        store.append(entry).context("append")?;
+        Ok(event.clone())
+    })();
+
+    match signed_result {
+        Ok(label) => eprintln!("  receipt  {}", label),
+        Err(e) => {
+            // Fall back to unsigned — best effort.
+            let fallback: anyhow::Result<()> = (|| {
+                let mut store = AuditStore::open_unsigned(&db_path)
+                    .context("open unsigned store")?;
+                let entry = UnsealedEntry::new(
+                    ActorId::System("zp-configure-exec".to_string()),
+                    AuditAction::SystemEvent {
+                        event: event.clone(),
+                    },
+                    ConversationId::new(),
+                    PolicyDecision::Allow {
+                        conditions: vec![detail.to_string()],
+                    },
+                    "zp-configure-exec",
+                );
+                store.append(entry).context("append unsigned")?;
+                Ok(())
+            })();
+            match fallback {
+                Ok(()) => eprintln!("  receipt  {} (unsigned — keyring unavailable: {})", event, e),
+                Err(e2) => eprintln!("  ⚠  launch receipt not written: signed failed ({e}), unsigned failed ({e2})"),
+            }
+        }
+    }
+}

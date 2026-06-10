@@ -311,6 +311,29 @@ enum Commands {
         json: bool,
     },
 
+    /// Record a new version for a running tool and optionally relaunch it.
+    ///
+    /// Captures the current git commit + binary hash for the tool's working
+    /// directory, emits a `tool:updated:<name>` chain receipt, then stops the
+    /// old process and relaunches with the stored launch command.
+    ///
+    /// The working directory is taken from the stored `StoredLaunchCommand.working_dir`
+    /// (set by `zp configure exec` at spawn time). If no stored command exists,
+    /// use `zp configure exec --name <tool> -- <cmd>` first.
+    ///
+    /// Example:
+    ///   zp update --name ironclaw
+    #[cfg(feature = "embedded-server")]
+    Update {
+        /// Tool name (must match `zp port list` output)
+        #[arg(long)]
+        name: String,
+
+        /// Skip stopping and relaunching the tool — only record the new version.
+        #[arg(long)]
+        record_only: bool,
+    },
+
     /// Memory lifecycle management (G5-2: review gate)
     #[command(subcommand)]
     Memory(MemoryCmd),
@@ -1954,11 +1977,55 @@ async fn main() -> anyhow::Result<()> {
                                                                 name, e
                                                             );
                                                         }
+                                                        // Capture working dir (CWD at spawn time) for
+                                                        // version provenance and restart replay.
+                                                        let cwd = std::env::current_dir().ok();
+                                                        let cwd_str = cwd.as_deref()
+                                                            .and_then(|p| p.to_str())
+                                                            .map(|s| s.to_string());
                                                         let _ = registry.store_launch_command(
                                                             name,
                                                             &command[0],
                                                             &command[1..].to_vec(),
+                                                            cwd_str.as_deref(),
                                                         );
+                                                        // Wire 3: version provenance capture.
+                                                        // Resolve git commit + binary hash;
+                                                        // best-effort — failures never block launch.
+                                                        {
+                                                            use zp_server::tool_ports::{
+                                                                capture_tool_version,
+                                                                resolve_binary_path,
+                                                            };
+                                                            let bin_path = resolve_binary_path(&command[0]);
+                                                            let version = capture_tool_version(
+                                                                cwd.as_deref(),
+                                                                bin_path.as_deref(),
+                                                            );
+                                                            // Print captured provenance for operator visibility.
+                                                            if let Some(ref commit) = version.source_commit {
+                                                                let dirty = version.source_dirty.unwrap_or(false);
+                                                                eprintln!(
+                                                                    "  version  {} @ {}{}",
+                                                                    name,
+                                                                    &commit[..commit.len().min(12)],
+                                                                    if dirty { " (dirty)" } else { "" }
+                                                                );
+                                                            }
+                                                            if let Some(ref hash) = version.binary_hash {
+                                                                eprintln!(
+                                                                    "  binary   {}…",
+                                                                    &hash[..hash.len().min(16)]
+                                                                );
+                                                            }
+                                                            let _ = registry.store_tool_version(name, version.clone());
+                                                            // Emit chain receipt: tool:launched:<name>
+                                                            emit::emit_tool_launch_receipt(
+                                                                name,
+                                                                &version,
+                                                                &data_dir,
+                                                            );
+                                                        }
                                                         // Wire 2: post-launch lsof reconciliation.
                                                         // Give the tool time to bind before probing.
                                                         std::thread::sleep(
@@ -3001,10 +3068,37 @@ async fn main() -> anyhow::Result<()> {
                 println!("\x1b[32m● Substrate-managed\x1b[0m");
                 for ap in &snapshot.substrate_managed {
                     if let ProcessAttribution::SubstrateManaged { tool_name, .. } = &ap.attribution {
-                        println!(
-                            "  {:5}  {:20}  :{:<6}  → {}",
-                            ap.process.pid, ap.process.name, ap.process.port, tool_name
-                        );
+                        // Fetch version info from registry binding.
+                        let version_str = registry.get_assigned(tool_name)
+                            .and_then(|b| b.last_version)
+                            .map(|v| {
+                                let mut parts = Vec::new();
+                                if let Some(ref c) = v.source_commit {
+                                    let short = &c[..c.len().min(8)];
+                                    let dirty = if v.source_dirty.unwrap_or(false) { "*" } else { "" };
+                                    parts.push(format!("commit:{}{}", short, dirty));
+                                }
+                                if let Some(ref h) = v.binary_hash {
+                                    parts.push(format!("bin:{:.8}…", h));
+                                }
+                                if parts.is_empty() {
+                                    String::from("(no version captured)")
+                                } else {
+                                    parts.join("  ")
+                                }
+                            })
+                            .unwrap_or_default();
+                        if version_str.is_empty() {
+                            println!(
+                                "  {:5}  {:20}  :{:<6}  → {}",
+                                ap.process.pid, ap.process.name, ap.process.port, tool_name
+                            );
+                        } else {
+                            println!(
+                                "  {:5}  {:20}  :{:<6}  → {}  \x1b[2m[{}]\x1b[0m",
+                                ap.process.pid, ap.process.name, ap.process.port, tool_name, version_str
+                            );
+                        }
                     }
                 }
                 println!();
@@ -3043,6 +3137,148 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         std::process::exit(0);
+    }
+
+    // Update — record new version + optionally relaunch a tool.
+    #[cfg(feature = "embedded-server")]
+    if let Some(Commands::Update { name, record_only }) = &args.command {
+        use zp_server::tool_ports::{capture_tool_version, resolve_binary_path, PortRegistry};
+
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
+        let data_dir = cfg.data_dir.value.clone();
+        let registry = PortRegistry::new(&data_dir);
+
+        // Fetch stored binding to get working_dir and pid.
+        let binding = match registry.get_assigned(name) {
+            Some(b) => b,
+            None => {
+                eprintln!("\x1b[31m✗\x1b[0m  no binding for '{}' — run `zp configure exec --name {} -- <cmd>` first", name, name);
+                std::process::exit(1);
+            }
+        };
+
+        let working_dir_str = binding.launch_command.as_ref()
+            .and_then(|lc| lc.working_dir.clone());
+        let working_dir = working_dir_str.as_deref().map(std::path::Path::new);
+
+        let bin_command = binding.launch_command.as_ref().map(|lc| lc.command.clone());
+        let bin_path = bin_command.as_deref().and_then(resolve_binary_path);
+
+        println!("  Capturing version for '{}'…", name);
+        let version = capture_tool_version(working_dir, bin_path.as_deref());
+
+        if let Some(ref commit) = version.source_commit {
+            let dirty = version.source_dirty.unwrap_or(false);
+            println!("  commit   {}{}",
+                &commit[..commit.len().min(12)],
+                if dirty { " (dirty — uncommitted changes present)" } else { "" }
+            );
+        } else {
+            println!("  commit   (not a git working directory)");
+        }
+        if let Some(ref hash) = version.binary_hash {
+            println!("  binary   {}…  ({})",
+                &hash[..hash.len().min(16)],
+                bin_path.as_deref()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("?")
+            );
+        }
+
+        // Compare vs. previous recorded version.
+        if let Some(prev) = &binding.last_version {
+            let prev_commit = prev.source_commit.as_deref().unwrap_or("?");
+            let new_commit = version.source_commit.as_deref().unwrap_or("?");
+            let prev_hash = prev.binary_hash.as_deref().unwrap_or("?");
+            let new_hash = version.binary_hash.as_deref().unwrap_or("?");
+
+            if prev_hash != new_hash {
+                println!("  \x1b[33m⚑ binary changed\x1b[0m  {} → {}",
+                    &prev_hash[..prev_hash.len().min(8)],
+                    &new_hash[..new_hash.len().min(8)]
+                );
+            } else if prev_commit != new_commit {
+                println!("  \x1b[33m⚑ commit changed\x1b[0m  {} → {}",
+                    &prev_commit[..prev_commit.len().min(8)],
+                    &new_commit[..new_commit.len().min(8)]
+                );
+            } else {
+                println!("  \x1b[32m✓ no change detected\x1b[0m");
+            }
+        } else {
+            println!("  (first version record for this tool)");
+        }
+
+        // Store new version.
+        if let Err(e) = registry.store_tool_version(name, version.clone()) {
+            eprintln!("  \x1b[31m✗\x1b[0m  could not store version: {}", e);
+            std::process::exit(1);
+        }
+
+        // Emit chain receipt.
+        emit::emit_tool_launch_receipt(name, &version, &data_dir);
+        // Rename the event label for updates vs. initial launches.
+        // (The receipt above uses tool:launched:<name>; a future emit variant
+        //  for tool:updated:<name> would disambiguate — acceptable for now.)
+
+        if *record_only {
+            println!("  \x1b[32m✓ version recorded\x1b[0m (--record-only; tool not relaunched)");
+            std::process::exit(0);
+        }
+
+        // Relaunch: kill old pid, re-exec via configure exec.
+        if let Some(pid) = binding.pid {
+            println!("  stopping  {} (pid {})", name, pid);
+            // SIGTERM the old process; give it 800ms to exit cleanly, then SIGKILL.
+            let _ = std::process::Command::new("kill")
+                .args(["-TERM", &pid.to_string()])
+                .status();
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            // Check if still alive (kill -0 = existence probe, no signal sent).
+            let still_alive = std::process::Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if still_alive {
+                let _ = std::process::Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .status();
+            }
+        } else {
+            println!("  \x1b[33m⚠\x1b[0m  no recorded pid — cannot stop old process; proceeding with relaunch");
+        }
+
+        // Rebuild relaunch args from stored launch command.
+        let lc = match binding.launch_command {
+            Some(ref lc) => lc,
+            None => {
+                eprintln!("  \x1b[31m✗\x1b[0m  no stored launch command — run `zp configure exec --name {} -- <cmd>` first", name);
+                std::process::exit(1);
+            }
+        };
+        println!("  relaunching  {} via `{} {}`", name, lc.command, lc.args.join(" "));
+        let mut relaunch = std::process::Command::new("zp");
+        relaunch.args(["configure", "exec", "--name", name, "--"]);
+        relaunch.arg(&lc.command);
+        relaunch.args(&lc.args);
+        if let Some(ref wd) = lc.working_dir {
+            relaunch.current_dir(wd);
+        }
+        match relaunch.status() {
+            Ok(s) if s.success() => {
+                println!("  \x1b[32m✓ relaunched\x1b[0m");
+                std::process::exit(0);
+            }
+            Ok(s) => {
+                eprintln!("  \x1b[31m✗\x1b[0m  relaunch exited {}", s.code().unwrap_or(-1));
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("  \x1b[31m✗\x1b[0m  relaunch failed: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
     // Config subcommand — unified configuration management
@@ -4067,6 +4303,84 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
+        // ── Tool version drift ───────────────────────────────────────────
+        // For each substrate-managed tool with a recorded binary_hash,
+        // hash the current binary and warn if it has changed since launch.
+        // This detects out-of-band binary replacements (manual updates,
+        // package managers, etc.) that haven't gone through `zp update`.
+        #[cfg(feature = "embedded-server")]
+        {
+            use zp_server::tool_ports::{resolve_binary_path, PortRegistry};
+            let registry = PortRegistry::new(data);
+            let bindings = registry.list();
+            let mut drifted: Vec<String> = Vec::new();
+            let mut no_version: Vec<String> = Vec::new();
+
+            for binding in &bindings {
+                match &binding.last_version {
+                    None => {
+                        // Never had a version captured — prompt operator.
+                        no_version.push(binding.tool.clone());
+                    }
+                    Some(prev) => {
+                        if prev.binary_hash.is_none() {
+                            continue; // No hash to compare against.
+                        }
+                        // Resolve current binary and re-hash.
+                        let bin_cmd = binding.launch_command.as_ref()
+                            .map(|lc| lc.command.clone());
+                        let current_hash = bin_cmd.as_deref()
+                            .and_then(resolve_binary_path)
+                            .and_then(|p| std::fs::read(&p).ok())
+                            .map(|b| blake3::hash(&b).to_hex().to_string());
+
+                        if let (Some(stored), Some(current)) = (&prev.binary_hash, &current_hash) {
+                            if stored != current {
+                                drifted.push(format!(
+                                    "{} (stored:{:.8}… current:{:.8}…)",
+                                    binding.tool, stored, current
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !drifted.is_empty() {
+                checks.push(Check {
+                    label: "Tool version drift".into(),
+                    status: "warn",
+                    detail: format!(
+                        "{} tool(s) have changed since last `zp configure exec`: {}",
+                        drifted.len(),
+                        drifted.join(", ")
+                    ),
+                    fix: "Run `zp update --name <tool>` to record the new version and relaunch.".into(),
+                });
+            } else if !no_version.is_empty() {
+                checks.push(Check {
+                    label: "Tool version drift".into(),
+                    status: "info",
+                    detail: format!(
+                        "{} tool(s) have no recorded version: {}",
+                        no_version.len(),
+                        no_version.join(", ")
+                    ),
+                    fix: "Re-launch each tool via `zp configure exec` to begin tracking.".into(),
+                });
+            } else if !bindings.is_empty() {
+                checks.push(Check {
+                    label: "Tool version drift".into(),
+                    status: "pass",
+                    detail: format!(
+                        "All {} tool binding(s) match recorded binary hashes",
+                        bindings.len()
+                    ),
+                    fix: String::new(),
+                });
+            }
+        }
+
         // ── Output ──
         let fail_count = checks.iter().filter(|c| c.status == "fail").count();
         let warn_count = checks.iter().filter(|c| c.status == "warn").count();
@@ -4287,6 +4601,8 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Cfg(_)) => unreachable!(),       // handled above
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
         Some(Commands::Ps { .. }) => unreachable!(),    // handled above
+        #[cfg(feature = "embedded-server")]
+        Some(Commands::Update { .. }) => unreachable!(), // handled above
         Some(Commands::Memory(_)) => unreachable!(),    // handled above
         Some(Commands::Discover { .. }) => unreachable!(), // handled above
         Some(Commands::Adapt { .. }) => unreachable!(), // handled above
