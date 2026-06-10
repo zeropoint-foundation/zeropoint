@@ -2203,6 +2203,253 @@ tool 1 u  TCP *:9100 (LISTEN)\n";
         assert!(ports.is_empty(), "ESTABLISHED not included");
     }
 
+    // ── Part VIII Stage 1: parse_lsof_all_listen tests ───────────────
+
+    #[test]
+    fn parse_lsof_all_listen_extracts_pid_name_port() {
+        let sample = "\
+COMMAND    PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\n\
+node      1234   ken    17u  IPv4 0xabc       0t0  TCP *:3000 (LISTEN)\n\
+rapportd   567   ken     7u  IPv4 0xdef       0t0  TCP *:49197 (LISTEN)\n";
+        let procs = parse_lsof_all_listen(sample);
+        assert_eq!(procs.len(), 2);
+        assert_eq!(procs[0].pid, 1234);
+        assert_eq!(procs[0].name, "node");
+        assert_eq!(procs[0].port, 3000);
+        assert_eq!(procs[1].pid, 567);
+        assert_eq!(procs[1].name, "rapportd");
+        assert_eq!(procs[1].port, 49197);
+    }
+
+    #[test]
+    fn parse_lsof_all_listen_skips_header_row() {
+        // "PID" doesn't parse as u32 → header row is silently skipped.
+        let sample = "\
+COMMAND    PID   USER   FD   TYPE DEVICE SIZE/OFF NODE NAME\n\
+node      1234   ken    17u  IPv4 0x1    0t0  TCP *:3000 (LISTEN)\n";
+        let procs = parse_lsof_all_listen(sample);
+        assert_eq!(procs.len(), 1, "header must be skipped");
+    }
+
+    #[test]
+    fn parse_lsof_all_listen_skips_non_listen_lines() {
+        let sample = "\
+node      1234   ken    17u  IPv4 0x1    0t0  TCP *:3000 (LISTEN)\n\
+node      1234   ken    18u  IPv4 0x2    0t0  TCP 1.2.3.4:443 (ESTABLISHED)\n";
+        let procs = parse_lsof_all_listen(sample);
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].port, 3000);
+    }
+
+    #[test]
+    fn parse_lsof_all_listen_deduplicates_pid_port() {
+        // Same (pid, port) pair appearing twice (dual-stack IPv4/IPv6 lsof rows)
+        // must be collapsed to one entry.
+        let sample = "\
+node      1234   ken    17u  IPv4 0x1    0t0  TCP *:3000 (LISTEN)\n\
+node      1234   ken    18u  IPv6 0x2    0t0  TCP *:3000 (LISTEN)\n";
+        let procs = parse_lsof_all_listen(sample);
+        assert_eq!(procs.len(), 1, "dual-stack rows must be deduplicated");
+        assert_eq!(procs[0].port, 3000);
+    }
+
+    #[test]
+    fn parse_lsof_all_listen_different_pids_same_port_kept() {
+        // Two different processes may listen on the same port in different
+        // namespaces (rare but valid). Each unique (pid, port) survives.
+        let sample = "\
+python3   100    ken    5u   IPv4 0x1    0t0  TCP *:8000 (LISTEN)\n\
+python3   200    ken    5u   IPv4 0x2    0t0  TCP *:8000 (LISTEN)\n";
+        let procs = parse_lsof_all_listen(sample);
+        assert_eq!(procs.len(), 2, "different PIDs on same port must both appear");
+    }
+
+    #[test]
+    fn parse_lsof_all_listen_handles_localhost_address() {
+        let sample = "\
+ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
+        let procs = parse_lsof_all_listen(sample);
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].port, 17770);
+        assert_eq!(procs[0].name, "ironclaw");
+    }
+
+    #[test]
+    fn parse_lsof_all_listen_empty_input() {
+        assert!(parse_lsof_all_listen("").is_empty());
+    }
+
+    // ── Part VIII Stage 1: known_system_category tests ────────────────
+
+    #[test]
+    fn known_system_category_exact_macos_daemons() {
+        for name in &["rapportd", "ARDAgent", "ControlCenter", "launchd",
+                      "UserEventAgent", "sharingd", "screensharingd"] {
+            assert_eq!(
+                known_system_category(name),
+                Some("macOS system"),
+                "{name} must be macOS system"
+            );
+        }
+    }
+
+    #[test]
+    fn known_system_category_docker() {
+        assert_eq!(known_system_category("dockerd"), Some("container runtime"));
+        assert_eq!(known_system_category("com.docker.backend"), Some("container runtime"));
+    }
+
+    #[test]
+    fn known_system_category_apple_prefix() {
+        // com.apple.* catches all bundle-style Apple daemons.
+        assert_eq!(
+            known_system_category("com.apple.NSSomeRandomDaemon"),
+            Some("macOS system")
+        );
+    }
+
+    #[test]
+    fn known_system_category_com_docker_prefix() {
+        assert_eq!(
+            known_system_category("com.docker.vpnkit"),
+            Some("container runtime")
+        );
+    }
+
+    #[test]
+    fn known_system_category_developer_runtimes() {
+        for name in &["node", "python3", "python", "ruby", "deno", "bun"] {
+            assert_eq!(
+                known_system_category(name),
+                Some("developer runtime"),
+                "{name} must be developer runtime"
+            );
+        }
+    }
+
+    #[test]
+    fn known_system_category_databases() {
+        for name in &["postgres", "mysqld", "redis-server", "mongod"] {
+            assert_eq!(
+                known_system_category(name),
+                Some("database"),
+                "{name} must be database"
+            );
+        }
+    }
+
+    #[test]
+    fn known_system_category_linux_system() {
+        assert_eq!(known_system_category("sshd"), Some("Linux system"));
+        assert_eq!(known_system_category("systemd"), Some("Linux system"));
+    }
+
+    #[test]
+    fn known_system_category_unknown_returns_none() {
+        assert!(known_system_category("").is_none());
+        assert!(known_system_category("ironclaw").is_none());
+        assert!(known_system_category("my-custom-service").is_none());
+        // Prefix must match exactly — "com.apple" without trailing dot must not match.
+        assert!(known_system_category("com.apple").is_none());
+    }
+
+    // ── Part VIII Stage 1: PostureSnapshot attribution tests ─────────
+
+    #[test]
+    fn posture_snapshot_attributes_substrate_managed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = PortRegistry::new(dir.path());
+        // Allocate a port so the registry knows about it.
+        reg.allocate_or_existing("my-tool", 9100, "PORT")
+            .expect("allocate");
+
+        let procs = vec![ListenProcess {
+            pid: 42,
+            name: "my-tool".to_string(),
+            port: 9100,
+        }];
+        let snap = PostureSnapshot::from_processes(&reg, procs);
+
+        assert_eq!(snap.substrate_managed.len(), 1);
+        assert!(snap.known_system.is_empty());
+        assert!(snap.unknown.is_empty());
+        assert!(!snap.has_unknowns());
+
+        let ap = &snap.substrate_managed[0];
+        assert_eq!(ap.process.port, 9100);
+        match &ap.attribution {
+            ProcessAttribution::SubstrateManaged { tool_name, .. } => {
+                assert_eq!(tool_name, "my-tool");
+            }
+            other => panic!("expected SubstrateManaged, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn posture_snapshot_attributes_known_system() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = PortRegistry::new(dir.path());
+
+        let procs = vec![ListenProcess {
+            pid: 567,
+            name: "rapportd".to_string(),
+            port: 49197,
+        }];
+        let snap = PostureSnapshot::from_processes(&reg, procs);
+
+        assert!(snap.substrate_managed.is_empty());
+        assert_eq!(snap.known_system.len(), 1);
+        assert!(snap.unknown.is_empty());
+    }
+
+    #[test]
+    fn posture_snapshot_attributes_unknown() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = PortRegistry::new(dir.path());
+
+        let procs = vec![ListenProcess {
+            pid: 999,
+            name: "mystery-daemon".to_string(),
+            port: 12345,
+        }];
+        let snap = PostureSnapshot::from_processes(&reg, procs);
+
+        assert!(snap.substrate_managed.is_empty());
+        assert!(snap.known_system.is_empty());
+        assert_eq!(snap.unknown.len(), 1);
+        assert!(snap.has_unknowns());
+    }
+
+    #[test]
+    fn posture_snapshot_mixed_attribution() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = PortRegistry::new(dir.path());
+        reg.allocate_or_existing("zp-tool", 9100, "PORT")
+            .expect("allocate");
+
+        let procs = vec![
+            ListenProcess { pid: 1, name: "zp-tool".to_string(), port: 9100 },
+            ListenProcess { pid: 2, name: "rapportd".to_string(), port: 49197 },
+            ListenProcess { pid: 3, name: "mystery".to_string(), port: 7777 },
+        ];
+        let snap = PostureSnapshot::from_processes(&reg, procs);
+
+        assert_eq!(snap.substrate_managed.len(), 1);
+        assert_eq!(snap.known_system.len(), 1);
+        assert_eq!(snap.unknown.len(), 1);
+        assert_eq!(snap.total(), 3);
+        assert!(snap.has_unknowns());
+    }
+
+    #[test]
+    fn posture_snapshot_empty_is_valid() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = PortRegistry::new(dir.path());
+        let snap = PostureSnapshot::from_processes(&reg, vec![]);
+        assert_eq!(snap.total(), 0);
+        assert!(!snap.has_unknowns());
+    }
+
     // ── Phase 4: bound_stacks round-trip ──────────────────────────────
 
     /// `allocate_or_existing_with_stacks` records the stacks on the
