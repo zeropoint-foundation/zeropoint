@@ -2360,7 +2360,7 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         let dir = tempfile::tempdir().expect("tempdir");
         let reg = PortRegistry::new(dir.path());
         // Allocate a port so the registry knows about it.
-        reg.allocate_or_existing("my-tool", 9100, "PORT")
+        reg.allocate_or_existing("my-tool", 0, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
 
         let procs = vec![ListenProcess {
@@ -2424,7 +2424,7 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     fn posture_snapshot_mixed_attribution() {
         let dir = tempfile::tempdir().expect("tempdir");
         let reg = PortRegistry::new(dir.path());
-        reg.allocate_or_existing("zp-tool", 9100, "PORT")
+        reg.allocate_or_existing("zp-tool", 0, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
 
         let procs = vec![

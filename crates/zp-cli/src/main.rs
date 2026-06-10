@@ -6633,7 +6633,7 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
     use zp_audit::AuditStore;
     use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
     use zp_engine::pricing::{refresh_hosts, PricingRefreshResult};
-    use zp_engine::providers::{load_catalog, PricingSource, ProviderProfile};
+    use zp_engine::providers::{load_catalog, PricingSource};
     use zp_receipt::{ClaimMetadata, ReceiptBuilder, ReceiptType, Signer, Status};
 
     let (host_ids, audit_db, json, method) = match cmd {
