@@ -3,6 +3,12 @@
 //! Use `ProxyLlmProvider` instead. Direct calls to api.anthropic.com bypass
 //! the ZP inference proxy's receipt signing, cost tracking, and policy gate.
 
+// The impl blocks below operate on the deprecated `AnthropicProvider` struct
+// itself. Suppressing the lint here so the deprecation notice fires for external
+// callers (who should migrate to ProxyLlmProvider) but not for the internals
+// that must keep compiling during the migration window.
+#![allow(deprecated)]
+
 use crate::provider::{
     ChatRole, CompletionRequest, CompletionResponse, LlmProvider, ToolCall, Usage,
 };
