@@ -31,6 +31,29 @@ for stale in "${STALE_LOCATIONS[@]}"; do
     fi
 done
 
+# ── SYSTEM SYMLINK ───────────────────────────────────────────────────
+# /usr/local/bin/zp must be a SYMLINK into target/, not a copy.
+# Copies trigger Gatekeeper (zsh: killed). Symlinks inherit the
+# original binary's trust — Gatekeeper sees target/debug/zp, not /usr/local/bin/zp.
+SYSTEM_BIN="/usr/local/bin/$CLI_NAME"
+
+install_symlink() {
+    local target="$1"
+    # Already correct symlink — nothing to do.
+    if [ -L "$SYSTEM_BIN" ] && [ "$(readlink "$SYSTEM_BIN")" = "$target" ]; then
+        return 0
+    fi
+    # Remove whatever is there (stale copy or wrong symlink).
+    if [ -e "$SYSTEM_BIN" ] || [ -L "$SYSTEM_BIN" ]; then
+        rm -f "$SYSTEM_BIN" 2>/dev/null || sudo rm -f "$SYSTEM_BIN" 2>/dev/null || true
+    fi
+    if ln -sf "$target" "$SYSTEM_BIN" 2>/dev/null || sudo ln -sf "$target" "$SYSTEM_BIN" 2>/dev/null; then
+        echo "✓ Symlinked: $SYSTEM_BIN → $target"
+    else
+        echo "⚠ Could not symlink $SYSTEM_BIN — run: sudo ln -sf $target $SYSTEM_BIN"
+    fi
+}
+
 kill_server() {
     local pids
     pids=$(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null || true)
@@ -109,6 +132,7 @@ case "${1:-dev}" in
     BIN="$TARGET_DIR/debug/$CLI_NAME"
     [ -f "$BIN" ] || { echo "✗ Binary not found: $BIN"; exit 1; }
     echo "✓ Built: $BIN (debug)"
+    install_symlink "$BIN"
     start_server "$BIN"
     ;;
   release|rel|r)
@@ -121,6 +145,7 @@ case "${1:-dev}" in
     BIN="$TARGET_DIR/release/$CLI_NAME"
     [ -f "$BIN" ] || { echo "✗ Binary not found: $BIN"; exit 1; }
     echo "✓ Built: $BIN (release)"
+    install_symlink "$BIN"
     start_server "$BIN"
     ;;
   kill|stop|k)

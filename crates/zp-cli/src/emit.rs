@@ -224,28 +224,9 @@ pub fn emit_tool_launch_receipt(
     match signed_result {
         Ok(label) => eprintln!("  receipt  {}", label),
         Err(e) => {
-            // Fall back to unsigned — best effort.
-            let fallback: anyhow::Result<()> = (|| {
-                let mut store = AuditStore::open_unsigned(&db_path)
-                    .context("open unsigned store")?;
-                let entry = UnsealedEntry::new(
-                    ActorId::System("zp-configure-exec".to_string()),
-                    AuditAction::SystemEvent {
-                        event: event.clone(),
-                    },
-                    ConversationId::new(),
-                    PolicyDecision::Allow {
-                        conditions: vec![detail.to_string()],
-                    },
-                    "zp-configure-exec",
-                );
-                store.append(entry).context("append unsigned")?;
-                Ok(())
-            })();
-            match fallback {
-                Ok(()) => eprintln!("  receipt  {} (unsigned — keyring unavailable: {})", event, e),
-                Err(e2) => eprintln!("  ⚠  launch receipt not written: signed failed ({e}), unsigned failed ({e2})"),
-            }
+            // Unsigned receipts are structurally meaningless (signing is gravity).
+            // Print a warning but never block the spawn path.
+            eprintln!("  ⚠  launch receipt not written: {}", e);
         }
     }
 }

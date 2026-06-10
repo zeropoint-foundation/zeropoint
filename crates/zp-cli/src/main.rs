@@ -1971,11 +1971,61 @@ async fn main() -> anyhow::Result<()> {
                                                         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                                                         let data_dir = cfg.data_dir.value.clone();
                                                         let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
-                                                        if let Err(e) = registry.update_pid(name, child_pid) {
-                                                            eprintln!(
-                                                                "  \u{26a0}  port registry: no binding for '{}' ({})",
-                                                                name, e
-                                                            );
+                                                        if let Err(_) = registry.update_pid(name, child_pid) {
+                                                            // No binding yet — auto-allocate from the resolved
+                                                            // env_map. Scan for PORT-like vars; the vault values
+                                                            // already carry the operator's intended port numbers,
+                                                            // so pass them as preferred hints.
+                                                            use zp_server::tool_ports::PreferenceSource;
+                                                            let mut port_vars: Vec<(String, Option<u16>)> = env_map
+                                                                .iter()
+                                                                .filter(|(k, _)| *k == "PORT" || k.ends_with("_PORT"))
+                                                                .map(|(k, v)| {
+                                                                    let preferred = std::str::from_utf8(v)
+                                                                        .ok()
+                                                                        .and_then(|s| s.trim().parse::<u16>().ok());
+                                                                    (k.clone(), preferred)
+                                                                })
+                                                                .collect();
+                                                            // Sort deterministically; prefer HTTP_PORT, then PORT.
+                                                            port_vars.sort_by_key(|(k, _)| {
+                                                                if k == "HTTP_PORT" { 0u8 }
+                                                                else if k == "PORT" { 1 }
+                                                                else { 2 }
+                                                            });
+                                                            let primary_var = port_vars
+                                                                .first()
+                                                                .map(|(k, _)| k.as_str())
+                                                                .unwrap_or("PORT");
+                                                            let preferred_port = port_vars
+                                                                .first()
+                                                                .and_then(|(_, p)| *p);
+                                                            let extra_vars: Vec<String> = port_vars
+                                                                .iter()
+                                                                .skip(1)
+                                                                .map(|(k, _)| k.clone())
+                                                                .collect();
+                                                            match registry.allocate_or_existing(
+                                                                name,
+                                                                child_pid,
+                                                                primary_var,
+                                                                &extra_vars,
+                                                                preferred_port,
+                                                                PreferenceSource::Manifest,
+                                                            ) {
+                                                                Ok(binding) => {
+                                                                    eprintln!(
+                                                                        "  registered {}  port {} ({})",
+                                                                        name, binding.port, primary_var
+                                                                    );
+                                                                }
+                                                                Err(e) => {
+                                                                    eprintln!(
+                                                                        "  \u{26a0}  port registry: could not allocate binding for '{}': {}",
+                                                                        name, e
+                                                                    );
+                                                                }
+                                                            }
                                                         }
                                                         // Capture working dir (CWD at spawn time) for
                                                         // version provenance and restart replay.
