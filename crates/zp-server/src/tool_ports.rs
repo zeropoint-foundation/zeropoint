@@ -1622,6 +1622,11 @@ pub fn parse_lsof_all_listen(lsof_output: &str) -> Vec<ListenProcess> {
 pub fn known_system_category(name: &str) -> Option<&'static str> {
     // Exact-name matches first (fast path, no allocation).
     let known_exact: &[(&str, &str)] = &[
+        // ── ZeroPoint substrate ──────────────────────────────────────────
+        // The substrate's own processes are self-attributing: they are
+        // always known and intentional, so they belong in the known-system
+        // tier rather than the unknown tier that requires operator review.
+        ("zp", "substrate"),
         // ── macOS system daemons ─────────────────────────────────────────
         ("rapportd", "macOS system"),
         ("ARDAgent", "macOS system"),

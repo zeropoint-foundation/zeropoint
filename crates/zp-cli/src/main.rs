@@ -2078,8 +2078,10 @@ async fn main() -> anyhow::Result<()> {
                                                         }
                                                         // Wire 2: post-launch lsof reconciliation.
                                                         // Give the tool time to bind before probing.
+                                                        // 3500ms covers cargo-compiled tools: ~1s
+                                                        // compile + ~1.5s startup leaves margin.
                                                         std::thread::sleep(
-                                                            std::time::Duration::from_millis(1500),
+                                                            std::time::Duration::from_millis(3500),
                                                         );
                                                         let actual_ports =
                                                             zp_server::tool_ports::lsof_tcp_listen_ports(child_pid);
@@ -3595,17 +3597,34 @@ async fn main() -> anyhow::Result<()> {
         let git_dirty = env!("ZP_GIT_DIRTY");
         let binary_version = format!("zp {ver} ({git_hash}{git_dirty})");
 
-        // Check if the installed binary matches the repo HEAD
-        let head_hash = std::process::Command::new("git")
-            .args(["rev-parse", "--short", "HEAD"])
-            .output()
+        // Check if the installed binary matches the repo HEAD.
+        // Run git from the ZP repo root — two levels up from the canonical
+        // binary path (target/debug/zp → target/ → repo/).
+        // This resolves symlinks first so /usr/local/bin/zp → target/debug/zp
+        // → ../../ = the ZP repo, regardless of the operator's CWD.
+        let repo_dir = std::env::current_exe()
             .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    String::from_utf8(o.stdout).ok()
-                } else {
-                    None
-                }
+            .and_then(|p| std::fs::canonicalize(p).ok())
+            .and_then(|p| {
+                p.parent()                         // target/debug/
+                    .and_then(|p| p.parent())      // target/
+                    .and_then(|p| p.parent())      // repo root
+                    .map(|p| p.to_path_buf())
+            });
+        let head_hash = repo_dir
+            .as_deref()
+            .and_then(|dir| {
+                std::process::Command::new("git")
+                    .args(["-C", dir.to_str().unwrap_or("."), "rev-parse", "--short", "HEAD"])
+                    .output()
+                    .ok()
+                    .and_then(|o| {
+                        if o.status.success() {
+                            String::from_utf8(o.stdout).ok()
+                        } else {
+                            None
+                        }
+                    })
             })
             .unwrap_or_default();
         let head_hash = head_hash.trim();
