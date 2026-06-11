@@ -1697,6 +1697,10 @@ pub fn known_system_category(name: &str) -> Option<&'static str> {
         ("com.docker.backend", "container runtime"),
         ("dockerd", "container runtime"),
         ("vpnkit", "container runtime"),
+        // ── Local LLM runtimes ────────────────────────────────────────────
+        // Ollama: macOS app wrapper (Ollama) + server process (ollama serve).
+        ("Ollama", "LLM runtime"),
+        ("ollama", "LLM runtime"),
         // ── Common developer runtimes (known, not substrate) ────────────
         ("node", "developer runtime"),
         ("python3", "developer runtime"),
@@ -1722,10 +1726,31 @@ pub fn known_system_category(name: &str) -> Option<&'static str> {
         }
     }
 
-    // Prefix / substring matches for families that use bundle-style names.
+    // Prefix / substring matches for families that use bundle-style names,
+    // and for processes whose names lsof truncates to a recognisable prefix.
+    //
+    // lsof truncates COMMAND to ~15 chars; the patterns below are chosen to
+    // be long enough to be unambiguous but short enough to survive truncation:
+    //   ControlCenter  → ControlCe   (8 chars shown, prefix "ControlC")
+    //   cloudflared    → cloudflar   (9 chars shown, prefix "cloudfl")
+    //   com.docker.*   → com.docke   (9 chars shown, prefix "com.dock")
+    //   python3.12     → python3.1   (9 chars shown, prefix "python")
+    //   Google Drive   → Google      (prefix "Google")
     let known_prefix: &[(&str, &str)] = &[
         ("com.apple.", "macOS system"),
+        // macOS ControlCenter (exact "ControlCenter" handled above;
+        // truncated form "ControlCe" caught here).
+        ("ControlC", "macOS system"),
+        // Cloudflare tunnel daemon (cloudflared → cloudflar under lsof).
+        ("cloudfl", "cloudflare tunnel"),
+        // Docker: bundle-id prefix and lsof-truncated form.
         ("com.docker.", "container runtime"),
+        ("com.dock", "container runtime"),
+        // Python: catches python3, python3.1, python3.12, etc.
+        ("python", "developer runtime"),
+        // Google apps (Drive, Chrome) — prefix is conservative but
+        // unambiguous on a macOS development machine.
+        ("Google", "developer tool"),
     ];
     for (prefix, category) in known_prefix {
         if name.starts_with(prefix) {
@@ -2623,6 +2648,8 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     fn known_system_category_docker() {
         assert_eq!(known_system_category("dockerd"), Some("container runtime"));
         assert_eq!(known_system_category("com.docker.backend"), Some("container runtime"));
+        // lsof truncates com.docker.backend → com.docke on macOS.
+        assert_eq!(known_system_category("com.docke"), Some("container runtime"));
     }
 
     #[test]
@@ -2643,6 +2670,34 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     }
 
     #[test]
+    fn known_system_category_lsof_truncated_macos() {
+        // lsof truncates ControlCenter → ControlCe on macOS.
+        assert_eq!(known_system_category("ControlCe"), Some("macOS system"));
+        assert_eq!(known_system_category("ControlCenter"), Some("macOS system"));
+    }
+
+    #[test]
+    fn known_system_category_cloudflare_tunnel() {
+        // cloudflared → cloudflar under lsof truncation.
+        assert_eq!(known_system_category("cloudflared"), Some("cloudflare tunnel"));
+        assert_eq!(known_system_category("cloudflar"), Some("cloudflare tunnel"));
+    }
+
+    #[test]
+    fn known_system_category_ollama() {
+        // Both the macOS app launcher (Ollama) and the server process (ollama serve).
+        assert_eq!(known_system_category("Ollama"), Some("LLM runtime"));
+        assert_eq!(known_system_category("ollama"), Some("LLM runtime"));
+    }
+
+    #[test]
+    fn known_system_category_google_apps() {
+        // Google Drive, Chrome — lsof shows "Google" (truncated).
+        assert_eq!(known_system_category("Google"), Some("developer tool"));
+        assert_eq!(known_system_category("Google Drive"), Some("developer tool"));
+    }
+
+    #[test]
     fn known_system_category_developer_runtimes() {
         for name in &["node", "python3", "python", "ruby", "deno", "bun"] {
             assert_eq!(
@@ -2651,6 +2706,9 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
                 "{name} must be developer runtime"
             );
         }
+        // lsof often shows versioned names like python3.1, python3.12 — prefix match.
+        assert_eq!(known_system_category("python3.1"), Some("developer runtime"));
+        assert_eq!(known_system_category("python3.12"), Some("developer runtime"));
     }
 
     #[test]
