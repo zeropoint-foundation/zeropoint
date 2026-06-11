@@ -1187,7 +1187,21 @@ fn spawn_serve_daemon(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let mut args = Args::parse();
+
+    // If --data-dir was not explicitly set (still the clap default "./data/zeropoint"),
+    // resolve from ZP_HOME / ~/ZeroPoint/data so commands work without flags.
+    // Resolution order:  ZP_HOME env var  →  ~/ZeroPoint/data  →  clap default.
+    // We only promote when the resolved directory exists, so dev environments that
+    // haven't initialized ~/ZeroPoint/ yet keep falling back to the relative path.
+    if args.data_dir == std::path::PathBuf::from("./data/zeropoint") {
+        if let Ok(zp_home) = zp_core::paths::home() {
+            let zp_data = zp_home.join("data");
+            if zp_data.exists() {
+                args.data_dir = zp_data;
+            }
+        }
+    }
 
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -1888,18 +1902,9 @@ async fn main() -> anyhow::Result<()> {
                                         let receipt_keyring = crate::commands::open_keyring();
                                         // Architecture II.0: same canonical resolver `zp doctor`
                                         // and `zp status` use. The clap default for `args.data_dir`
-                                        // is `./data/zeropoint` (relative against CWD), which is
-                                        // broken for the foundation deployment shape — production
-                                        // audit chains live at `~/ZeroPoint/data/audit.db`. The
-                                        // canonical resolver respects `ZP_HOME` / `ZP_DATA_DIR`
-                                        // and falls back to the home-resolved path; if the user
-                                        // explicitly passed `--data-dir`, honor that as override.
-                                        let db_path =
-                                            if args.data_dir == PathBuf::from("./data/zeropoint") {
-                                                dirs_fallback_audit_db()
-                                            } else {
-                                                args.data_dir.join("audit.db")
-                                            };
+                                        // args.data_dir is already resolved from ZP_HOME / ~/ZeroPoint/data
+                                        // at startup; no inline fallback needed here.
+                                        let db_path = args.data_dir.join("audit.db");
                                         match receipt_keyring {
                                             Ok(kr) => {
                                                 // genesis_secret is an OnceLock cache hit —
@@ -2067,6 +2072,59 @@ async fn main() -> anyhow::Result<()> {
                                                             &command[1..].to_vec(),
                                                             cwd_str.as_deref(),
                                                         );
+                                                        // Wire 1b: auto-canonicalize.
+                                                        // If this tool has no bead-zero on the chain,
+                                                        // emit one now. This makes the first
+                                                        // `configure exec` the canonical registration
+                                                        // act — operators don't need a separate
+                                                        // `zp canonicalize` step.
+                                                        // Best-effort: failures never block launch.
+                                                        {
+                                                            let db_path = data_dir.join("audit.db");
+                                                            let auto_canon: anyhow::Result<()> = (|| {
+                                                                use std::sync::{Arc, Mutex};
+                                                                let keyring = crate::commands::open_keyring()
+                                                                    .context("open keyring")?;
+                                                                let genesis_secret = keyring
+                                                                    .genesis_secret()
+                                                                    .context("genesis secret")?;
+                                                                let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+                                                                let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+                                                                let store = Arc::new(Mutex::new(
+                                                                    zp_audit::AuditStore::open_signed(&db_path, audit_signer)
+                                                                        .context("open audit store")?,
+                                                                ));
+                                                                // Idempotent: returns None if already canonicalized.
+                                                                let bead_zeros = zp_server::tool_chain::query_bead_zeros(&store);
+                                                                if bead_zeros.contains_key(&format!("tool:{}", name)) {
+                                                                    return Ok(()); // already on chain
+                                                                }
+                                                                let operator_secret: [u8; 32] = keyring
+                                                                    .load_operator()
+                                                                    .context("operator key")?
+                                                                    .secret_key();
+                                                                let signing_key = ed25519_dalek::SigningKey::from_bytes(&operator_secret);
+                                                                let initial_state = serde_json::json!({
+                                                                    "tool": name,
+                                                                    "path": cwd_str,
+                                                                    "canonicalized_at": chrono::Utc::now().to_rfc3339(),
+                                                                });
+                                                                zp_server::tool_chain::emit_signed_canonicalization_receipt(
+                                                                    &store,
+                                                                    "tool",
+                                                                    name,
+                                                                    &initial_state,
+                                                                    None,
+                                                                    "zp-configure-exec",
+                                                                    Some(&signing_key),
+                                                                );
+                                                                eprintln!("  canon    tool:{} (bead-zero emitted)", name);
+                                                                Ok(())
+                                                            })();
+                                                            if let Err(e) = auto_canon {
+                                                                eprintln!("  \u{26a0}  auto-canonicalize skipped: {}", e);
+                                                            }
+                                                        }
                                                         // Wire 3: version provenance capture.
                                                         // Resolve git commit + binary hash;
                                                         // best-effort — failures never block launch.
@@ -2104,26 +2162,59 @@ async fn main() -> anyhow::Result<()> {
                                                                 &data_dir,
                                                             );
                                                         }
-                                                        // Wire 2: post-launch lsof reconciliation.
-                                                        // Give the tool time to bind before probing.
-                                                        // 3500ms covers cargo-compiled tools: ~1s
-                                                        // compile + ~1.5s startup leaves margin.
+                                                        // Wire 2: post-launch port reconciliation.
+                                                        //
+                                                        // Query by allocated port, not by launcher
+                                                        // PID. When the launch command is a meta-
+                                                        // launcher (cargo run, npx, …), the launcher
+                                                        // exits after spawning the real binary. Its
+                                                        // child owns the listening port but has a
+                                                        // different PID. Querying by port is
+                                                        // launcher-chain agnostic.
+                                                        //
+                                                        // Steps:
+                                                        //   a) sleep to let the binary bind
+                                                        //   b) get allocated port from registry
+                                                        //   c) lsof by port → actual PID
+                                                        //   d) update registry with actual PID
+                                                        //   e) lsof by actual PID → all ports
+                                                        //   f) reconcile_ports with full port set
                                                         std::thread::sleep(
                                                             std::time::Duration::from_millis(3500),
                                                         );
-                                                        let actual_ports =
-                                                            zp_server::tool_ports::lsof_tcp_listen_ports(child_pid);
-                                                        if !actual_ports.is_empty() {
-                                                            let n = registry.reconcile_ports(
-                                                                name,
-                                                                child_pid,
-                                                                &actual_ports,
-                                                            );
-                                                            if n > 0 {
+                                                        // (b) read allocated port
+                                                        let allocated_port = registry
+                                                            .get_assigned(name)
+                                                            .map(|b| b.port);
+                                                        if let Some(port) = allocated_port {
+                                                            // (c) discover actual PID via port
+                                                            let actual_pid =
+                                                                zp_server::tool_ports::lsof_pid_for_port(port)
+                                                                    .unwrap_or(child_pid);
+                                                            // (d) update registry with real PID
+                                                            if actual_pid != child_pid {
+                                                                let _ = registry.update_pid(name, actual_pid);
                                                                 eprintln!(
-                                                                    "  reconciled {} receipt(s) for '{}' \u{2192} actual ports {:?}",
-                                                                    n, name, actual_ports
+                                                                    "  pid      {} launcher={} actual={}",
+                                                                    name, child_pid, actual_pid
                                                                 );
+                                                            }
+                                                            // (e) all ports owned by actual process
+                                                            let actual_ports =
+                                                                zp_server::tool_ports::lsof_tcp_listen_ports(actual_pid);
+                                                            // (f) reconcile
+                                                            if !actual_ports.is_empty() {
+                                                                let n = registry.reconcile_ports(
+                                                                    name,
+                                                                    actual_pid,
+                                                                    &actual_ports,
+                                                                );
+                                                                if n > 0 {
+                                                                    eprintln!(
+                                                                        "  reconciled {} receipt(s) for '{}' \u{2192} actual ports {:?}",
+                                                                        n, name, actual_ports
+                                                                    );
+                                                                }
                                                             }
                                                         }
                                                         // Tool runs as detached daemon; dropping
@@ -2643,16 +2734,8 @@ async fn main() -> anyhow::Result<()> {
         }
 
         // Fallback: direct DB access (server not running).
-        // Resolve data_dir: prefer ~/ZeroPoint if it contains an audit.db,
-        // otherwise use --data-dir (defaults to ./data/zeropoint).
-        let db_path = audit_db.clone().unwrap_or_else(|| {
-            let home_zp = dirs_fallback_audit_db();
-            if home_zp.exists() {
-                home_zp
-            } else {
-                args.data_dir.join("audit.db")
-            }
-        });
+        // args.data_dir is already resolved from ZP_HOME / ~/ZeroPoint/data at startup.
+        let db_path = audit_db.clone().unwrap_or_else(|| args.data_dir.join("audit.db"));
         let store = match zp_audit::AuditStore::open_readonly(&db_path) {
             Ok(s) => s,
             Err(e) => {
@@ -5648,12 +5731,6 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
 /// Used as smart fallback when the server is down and no --data-dir given.
 ///
 /// Seam 19: thin delegate to the canonical resolver `zp_core::paths::audit_db_path`.
-/// Kept as a local helper so the existing fallback shape (relative path on
-/// resolver error) stays available to the audit-DB-targeting commands that
-/// were built around it (Verify, Anchor, Grants, Discover, Adapt, Emit, Scan).
-fn dirs_fallback_audit_db() -> PathBuf {
-    zp_core::paths::audit_db_path().unwrap_or_else(|_| PathBuf::from("ZeroPoint/data/audit.db"))
-}
 
 /// Read the ZP session token from `~/ZeroPoint/session.json`.
 ///

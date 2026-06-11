@@ -1030,6 +1030,49 @@ pub fn lsof_tcp_listen_ports(pid: u32) -> Vec<u16> {
     }
 }
 
+/// Find the PID of the process listening on a specific TCP port.
+///
+/// Used by Wire 2 to recover the actual tool binary PID after a
+/// meta-launcher (e.g. `cargo run`) has exited and its child has
+/// taken ownership of the port. Query by port rather than by the
+/// launcher's PID so the result is launcher-chain agnostic.
+pub fn lsof_pid_for_port(port: u16) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        let addr = format!("TCP:{}", port);
+        let output = std::process::Command::new("lsof")
+            .args(["-i", &addr, "-sTCP:LISTEN", "-n", "-P", "-F", "p"])
+            .output()
+            .ok()?;
+        parse_lsof_pid_field(&String::from_utf8_lossy(&output.stdout))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = port;
+        None
+    }
+}
+
+/// Parse the first PID from `lsof -F p` field-format output.
+///
+/// `-F p` produces lines prefixed with 'p' for each PID:
+///   `p12345`
+///
+/// Returns the first non-zero PID found, or `None` if the output
+/// contains no valid PID line (process not found, port not listening).
+pub(crate) fn parse_lsof_pid_field(lsof_output: &str) -> Option<u32> {
+    for line in lsof_output.lines() {
+        if let Some(rest) = line.strip_prefix('p') {
+            if let Ok(pid) = rest.trim().parse::<u32>() {
+                if pid > 0 {
+                    return Some(pid);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Parse TCP LISTEN port numbers from `lsof -i -n -P` output.
 ///
 /// Expects lines like:
@@ -1491,12 +1534,23 @@ impl PostureSnapshot {
 
     /// Build from a pre-sampled process list (allows injection in tests).
     pub fn from_processes(registry: &PortRegistry, procs: Vec<ListenProcess>) -> Self {
-        // Build a port → ToolBinding reverse map once.
+        // Build a port → ToolBinding reverse map covering ALL ports each tool
+        // may be listening on: primary, actual (if overridden post-launch),
+        // declared extras, and post-reconciliation actual extras.
         let bindings = registry.list_map();
-        let port_map: HashMap<u16, &ToolBinding> = bindings
-            .values()
-            .map(|b| (b.port, b))
-            .collect();
+        let mut port_map: HashMap<u16, &ToolBinding> = HashMap::new();
+        for b in bindings.values() {
+            port_map.entry(b.port).or_insert(b);
+            if let Some(ap) = b.actual_port {
+                port_map.entry(ap).or_insert(b);
+            }
+            for &p in b.extra_ports.values() {
+                port_map.entry(p).or_insert(b);
+            }
+            for &p in b.actual_extra_ports.values() {
+                port_map.entry(p).or_insert(b);
+            }
+        }
 
         let mut snapshot = Self::default();
         for proc in procs {
@@ -2422,6 +2476,133 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     #[test]
     fn parse_lsof_all_listen_empty_input() {
         assert!(parse_lsof_all_listen("").is_empty());
+    }
+
+    // ── parse_lsof_pid_field tests ────────────────────────────────────
+    // `lsof -F p` emits field-format lines starting with 'p' for each PID.
+    // These tests cover the parser that Wire 2 uses to resolve the actual
+    // listening PID by port number, bypassing the launcher-chain PID gap.
+
+    #[test]
+    fn parse_lsof_pid_field_normal() {
+        let output = "p12345\n";
+        assert_eq!(parse_lsof_pid_field(output), Some(12345));
+    }
+
+    #[test]
+    fn parse_lsof_pid_field_with_header_lines() {
+        // lsof -F p typically emits 'p<PID>' with a preceding 'f<FD>' line.
+        let output = "p98765\nf17\n";
+        assert_eq!(parse_lsof_pid_field(output), Some(98765));
+    }
+
+    #[test]
+    fn parse_lsof_pid_field_takes_first_valid_pid() {
+        // Multiple PIDs → first non-zero wins.
+        let output = "p111\np222\np333\n";
+        assert_eq!(parse_lsof_pid_field(output), Some(111));
+    }
+
+    #[test]
+    fn parse_lsof_pid_field_skips_p0() {
+        // pid=0 is the kernel/system pseudo-process; never a real listener.
+        let output = "p0\np42\n";
+        assert_eq!(parse_lsof_pid_field(output), Some(42));
+    }
+
+    #[test]
+    fn parse_lsof_pid_field_skips_non_p_lines() {
+        // Lines that don't start with 'p' (e.g. 'f' for file-descriptor) are ignored.
+        let output = "f17\nf18\np7777\n";
+        assert_eq!(parse_lsof_pid_field(output), Some(7777));
+    }
+
+    #[test]
+    fn parse_lsof_pid_field_empty_input() {
+        assert_eq!(parse_lsof_pid_field(""), None, "empty input must yield None");
+    }
+
+    #[test]
+    fn parse_lsof_pid_field_no_valid_pid_line() {
+        // Lines present but none match the 'p<digits>' pattern.
+        let output = "f17\nf18\n";
+        assert_eq!(parse_lsof_pid_field(output), None);
+    }
+
+    #[test]
+    fn parse_lsof_pid_field_whitespace_trimmed() {
+        // The impl calls `.trim()` before parsing; trailing spaces/CR must not break it.
+        let output = "p  55555  \n";
+        assert_eq!(parse_lsof_pid_field(output), Some(55555));
+    }
+
+    // ── PostureSnapshot extra-port attribution tests ──────────────────
+    // Regression tests for the fix that extends port_map to include
+    // extra_ports and actual_extra_ports, so Wire-2-reconciled ports
+    // (e.g. ironclaw :3000 and :50051) appear as SubstrateManaged
+    // rather than Unknown in `zp ps`.
+
+    #[test]
+    fn posture_snapshot_attributes_extra_ports_as_substrate_managed() {
+        let (reg, _dir) = make_registry();
+        // Allocate primary port for ironclaw.
+        let _b = reg
+            .allocate_or_existing("ironclaw", 8090, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
+        // Inject actual extra ports the way Wire 2 / reconcile_ports does.
+        {
+            let mut map = reg.bindings.lock().unwrap();
+            let b = map.get_mut("ironclaw").unwrap();
+            b.actual_extra_ports.insert("GRPC_PORT".into(), 50051);
+            b.actual_extra_ports.insert("GATEWAY_PORT".into(), 3000);
+        }
+        // Build snapshot from synthetic lsof output showing all three ports.
+        let procs = vec![
+            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 8090 },
+            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 50051 },
+            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 3000 },
+        ];
+        let snap = PostureSnapshot::from_processes(&reg, procs);
+        assert_eq!(snap.substrate_managed.len(), 3, "all three ports must be SubstrateManaged");
+        assert_eq!(snap.unknown.len(), 0, "no ports should be Unknown");
+        for ap in &snap.substrate_managed {
+            match &ap.attribution {
+                ProcessAttribution::SubstrateManaged { tool_name, .. } => {
+                    assert_eq!(tool_name, "ironclaw");
+                }
+                other => panic!("expected SubstrateManaged, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn posture_snapshot_attributes_declared_extra_ports() {
+        // extra_ports (allocated by PortRegistry for named extra vars) must
+        // also appear in port_map. Inject via extra_ports directly.
+        let (reg, _dir) = make_registry();
+        reg.allocate_or_existing(
+            "mytool",
+            42,
+            "PORT",
+            &["METRICS_PORT".to_string()],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
+        // The registry assigned a port for METRICS_PORT; find out what it is.
+        let metrics_port = {
+            let map = reg.bindings.lock().unwrap();
+            let b = map.get("mytool").unwrap();
+            *b.extra_ports.get("METRICS_PORT").expect("METRICS_PORT must be allocated")
+        };
+        let primary_port = reg.get_assigned("mytool").unwrap().port;
+        let procs = vec![
+            ListenProcess { pid: 42, name: "mytool".into(), port: primary_port },
+            ListenProcess { pid: 42, name: "mytool".into(), port: metrics_port },
+        ];
+        let snap = PostureSnapshot::from_processes(&reg, procs);
+        assert_eq!(snap.substrate_managed.len(), 2, "primary + extra must both be SubstrateManaged");
+        assert_eq!(snap.unknown.len(), 0);
     }
 
     // ── Part VIII Stage 1: known_system_category tests ────────────────

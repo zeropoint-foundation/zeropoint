@@ -82,7 +82,7 @@ Drop, unless Ken just used the same frame:
 
 **`docs/ARCHITECTURE-2026-04.md`** is the north star. Read it before making any structural decision. It is not a reference document — it is the operating spec. Code that contradicts it is wrong.
 
-**The four claims** (Part I §2) are the substrate's acceptance criteria. Two are currently false (Claim 1: chain integrity, Claim 3: gate enforcement). Every phase of work should move at least one claim closer to true. If proposed work doesn't advance a claim, question whether it belongs.
+**The four claims** (Part I §2) are the substrate's acceptance criteria. All four are currently true: Claim 1 (chain integrity) fixed by AUDIT-01 transactional append; Claim 3 (gate enforcement) fixed by EXEC-01..04. Claim 2 (collective audit mechanism exists but untested under adversarial pressure). Claim 4 (delegation narrowing implemented but not adversarially tested). Every phase of work should keep claims true and push the untested ones toward empirically verified. If proposed work doesn't advance a claim, question whether it belongs.
 
 **The six design principles** (Part V½) are a mandatory filter for every architectural decision:
 
