@@ -81,9 +81,10 @@ test-outputs/
 # Misc experimental files
 *.jsx
 *.html
-# Allow HTML in docs (GitHub Pages) and dashboard
+# Allow HTML in docs (GitHub Pages), dashboard, and compiled-in server assets
 !docs/**/*.html
 !zeropoint.global/**/*.html
+!crates/zp-server/assets/*.html
 INPUT/
 logs/
 .pids/
