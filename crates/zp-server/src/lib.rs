@@ -42,7 +42,7 @@ use axum::{
         Path as AxumPath, Query, State,
     },
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -1146,6 +1146,12 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     };
 
     let mut router = Router::new()
+        // HTML pages
+        .route("/", get(root_handler))
+        .route("/dashboard", get(dashboard_handler))
+        .route("/onboard", get(onboard_page_handler))
+        .route("/speak", get(speak_page_handler))
+        .route("/ecosystem", get(ecosystem_page_handler))
         // Health
         .route("/api/v1/health", get(health_handler))
         .route("/api/v1/version", get(version_handler))
@@ -1214,6 +1220,7 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/gate/tool-call", post(gate_tool_call_handler))
         // P4 (#197) — standing delegation lease renewal.
         .route("/api/v1/lease/renew", post(lease_renew_handler))
+        .route("/api/v1/tools", get(tools_list_handler))
         .route("/api/v1/tools/receipt", post(tools_receipt_handler))
         // Real-time event stream — SSE for dashboard and channel adapters (P4-1)
         .route("/api/v1/events/stream", get(events::event_stream_handler))
@@ -4116,6 +4123,74 @@ fn verify_ed25519_signature(pubkey_hex: &str, signature_hex: &str, payload: &[u8
 ///
 /// Tools call this to announce their own state transitions:
 ///   { "name": "IronClaw", "event": "setup:complete", "detail": "Admin created" }
+// ─── GET /api/v1/tools — cockpit tile data ──────────────────────────────────
+
+#[derive(Serialize)]
+struct CockpitTool {
+    name: String,
+    path: String,
+    status: String,
+    governance: String,
+    ready: bool,
+    preflight_issues: Vec<String>,
+    launch: CockpitLaunch,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    running_pid: Option<u32>,
+}
+
+#[derive(Serialize)]
+struct CockpitLaunch {
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cmd: Option<String>,
+}
+
+/// GET /api/v1/tools — list governed tools from the port registry for the cockpit.
+async fn tools_list_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let bindings = state.0.port_registry.list();
+
+    let mut tools: Vec<CockpitTool> = bindings
+        .into_iter()
+        .map(|b| {
+            let live_pid = b.pid.filter(|&pid| tool_ports::is_pid_alive(pid));
+            let port = b.proxy_target();
+            let path = b
+                .launch_command
+                .as_ref()
+                .and_then(|lc| lc.working_dir.clone())
+                .unwrap_or_else(|| format!("~/projects/{}", b.tool));
+
+            CockpitTool {
+                name: b.tool.clone(),
+                path,
+                status: "governed".to_string(),
+                governance: "genesis-bound".to_string(),
+                ready: true,
+                preflight_issues: vec![],
+                launch: CockpitLaunch {
+                    kind: "web".to_string(),
+                    url: Some(format!("http://localhost:{}/", port)),
+                    port: Some(port),
+                    cmd: None,
+                },
+                running_pid: live_pid,
+            }
+        })
+        .collect();
+
+    // Stable sort: alphabetical by name so the cockpit order is deterministic.
+    tools.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Json(serde_json::json!({
+        "tools": tools,
+        "chain_receipts": true,
+    }))
+}
+
 ///
 /// The receipt is emitted into the audit chain under the tool lifecycle
 /// namespace, signed with ZeroPoint's identity. This is how tools
@@ -4151,6 +4226,12 @@ async fn tools_receipt_handler(
 // ─── Compiled-in assets ─────────────────────────────────────────────────────
 // Everything below is baked into the binary at compile time.  No filesystem
 // pipeline, no bootstrap, no staleness.  `cargo build && zp serve` just works.
+
+// HTML pages — compiled-in fallbacks; override at runtime via ZP_ASSETS_DIR.
+const DASHBOARD_HTML: &str = include_str!("../assets/dashboard.html");
+const ONBOARD_HTML: &str = include_str!("../assets/onboard.html");
+const SPEAK_HTML: &str = include_str!("../assets/speak.html");
+const ECOSYSTEM_HTML: &str = include_str!("../assets/ecosystem.html");
 
 const ONBOARD_CSS: &str = include_str!("../assets/onboard.css");
 const ONBOARD_JS: &str = include_str!("../assets/onboard.js");
@@ -4199,7 +4280,138 @@ fn embedded_assets_router() -> axum::Router {
         .route("/fonts/jetbrainsmono-latin.woff2", get(|| async { binary_response(FONT_JETBRAINS, "font/woff2") }))
 }
 
+/// Resolve an HTML asset: check $ZP_ASSETS_DIR first (hot-reload override),
+/// then fall back to the compiled-in copy.
+fn resolve_html_asset(name: &str, fallback: &'static str) -> String {
+    if let Ok(dir) = std::env::var("ZP_ASSETS_DIR") {
+        let path = std::path::PathBuf::from(&dir).join(name);
+        if let Ok(contents) = std::fs::read_to_string(&path) {
+            return contents;
+        }
+    }
+    fallback.to_string()
+}
 
+/// Root handler: serve dashboard post-genesis, redirect to /onboard pre-genesis.
+async fn root_handler(State(state): State<AppState>) -> Response {
+    let genesis_path = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("genesis.json");
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = if genesis_path.exists() {
+        Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML)).into_response()
+    } else {
+        Redirect::temporary("/onboard").into_response()
+    };
+    if let Ok(hv) = cookie.parse() {
+        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+    }
+    resp
+}
+
+async fn dashboard_handler(State(state): State<AppState>) -> Response {
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML)).into_response();
+    if let Ok(hv) = cookie.parse() {
+        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+    }
+    resp
+}
+
+#[derive(Debug, Deserialize)]
+struct OnboardQuery {
+    token: Option<String>,
+}
+
+async fn onboard_page_handler(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Query(query): Query<OnboardQuery>,
+) -> Response {
+    // Post-genesis: redirect to dashboard.
+    let genesis_path = zp_paths::home()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("genesis.json");
+    if genesis_path.exists() {
+        return Redirect::to("/dashboard").into_response();
+    }
+
+    // AUTH-VULN-06: one-time setup token for network-facing deployments.
+    // On localhost the token is None — no gate.
+    if let Some(ref expected) = state.0.onboard_token {
+        let client_ip = client_ip_from_headers(&headers);
+        if let Some(_retry_after) = state.0.rate_limiter.is_blocked(client_ip) {
+            return (StatusCode::TOO_MANY_REQUESTS, "Too many attempts").into_response();
+        }
+        let from_query = query
+            .token
+            .as_deref()
+            .map(|t| constant_time_eq(t, expected))
+            .unwrap_or(false);
+        let from_cookie = extract_onboard_cookie(&headers)
+            .map(|t| constant_time_eq(&t, expected))
+            .unwrap_or(false);
+
+        if from_query {
+            let cookie_val = format!(
+                "zp_onboard={}; HttpOnly; SameSite=Strict; Path=/",
+                expected
+            );
+            let mut resp = Redirect::temporary("/onboard").into_response();
+            if let Ok(hv) = cookie_val.parse() {
+                resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+            }
+            return resp;
+        } else if !from_cookie {
+            let _ = state.0.rate_limiter.record_failure(client_ip);
+            return (
+                StatusCode::FORBIDDEN,
+                "Setup token required. Check the server console for the onboard URL with token.",
+            )
+                .into_response();
+        }
+    }
+
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset("onboard.html", ONBOARD_HTML)).into_response();
+    if let Ok(hv) = cookie.parse() {
+        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+    }
+    resp
+}
+
+async fn speak_page_handler(State(state): State<AppState>) -> Response {
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset("speak.html", SPEAK_HTML)).into_response();
+    if let Ok(hv) = cookie.parse() {
+        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+    }
+    resp
+}
+
+async fn ecosystem_page_handler(State(state): State<AppState>) -> Response {
+    let cookie = auth::build_session_cookie(
+        &state.0.session_auth.current_token(),
+        state.0.session_auth.max_age_secs(),
+    );
+    let mut resp = Html(resolve_html_asset("ecosystem.html", ECOSYSTEM_HTML)).into_response();
+    if let Ok(hv) = cookie.parse() {
+        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+    }
+    resp
+}
 
 // ============================================================================
 // Genesis Record Handler
