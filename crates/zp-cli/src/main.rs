@@ -373,6 +373,34 @@ enum Commands {
         json: bool,
     },
 
+    /// Emit a bead-zero CanonicalizedClaim receipt for a tool (M11 remediation).
+    ///
+    /// This is the operator act of recognising a tool as a first-class entity
+    /// in the substrate. It must be run once per tool before any `zp adapt`
+    /// or chain-grounded reasoning about that tool can proceed.
+    ///
+    /// Example:
+    ///   zp canonicalize --name ironclaw --path ~/projects/ironclaw
+    #[cfg(feature = "embedded-server")]
+    Canonicalize {
+        /// Tool name (must match `zp port list` / `zp discover` output)
+        #[arg(long)]
+        name: String,
+
+        /// Tool project directory — used to capture the git commit as initial state.
+        /// If omitted, initial_state records name and timestamp only.
+        #[arg(long)]
+        path: Option<PathBuf>,
+
+        /// Path to audit store (default: <data-dir>/audit.db)
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// P4 (#197) — Issue a standing delegation grant.
     ///
     /// Creates a new `CapabilityGrant` with a lease policy, signs it with
@@ -2998,6 +3026,20 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
+    // Canonicalize — emit bead-zero CanonicalizedClaim for a tool (M11 remediation).
+    #[cfg(feature = "embedded-server")]
+    if let Some(Commands::Canonicalize {
+        name,
+        path,
+        audit_db,
+        json,
+    }) = &args.command
+    {
+        let exit_code =
+            run_canonicalize(name, path.as_deref(), audit_db.as_deref(), &args.data_dir, *json);
+        std::process::exit(exit_code);
+    }
+
     // Scan — F3 content-scan MCP tool definitions before canon.
     // V6 — Adapt: refresh a canon'd tool's bead-zero metadata to current schema.
     if let Some(Commands::Adapt {
@@ -4674,6 +4716,8 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Update { .. }) => unreachable!(), // handled above
         Some(Commands::Memory(_)) => unreachable!(),    // handled above
         Some(Commands::Discover { .. }) => unreachable!(), // handled above
+        #[cfg(feature = "embedded-server")]
+        Some(Commands::Canonicalize { .. }) => unreachable!(), // handled above
         Some(Commands::Adapt { .. }) => unreachable!(), // handled above
         Some(Commands::Pricing(_)) => unreachable!(),  // handled above
         Some(Commands::Scan { .. }) => unreachable!(),  // handled above
@@ -4871,6 +4915,114 @@ struct ScanSummary {
 // values on top of the bead-zero claim, so post-adapt the F3/F5 doctor
 // counts reflect disk truth. Pre-F3 / pre-F5 tools whose bead-zero
 // predates those features now have a remediation primitive.
+
+// ── zp canonicalize ────────────────────────────────────────────────────────
+// Emit a bead-zero CanonicalizedClaim receipt for a tool that has no canon
+// (M11 remediation). This is the operator act of recognising a tool as a
+// first-class entity. Idempotent: a second call is a no-op if the receipt
+// already exists.
+#[cfg(feature = "embedded-server")]
+fn run_canonicalize(
+    name: &str,
+    path: Option<&std::path::Path>,
+    audit_db: Option<&std::path::Path>,
+    data_dir: &std::path::Path,
+    json: bool,
+) -> i32 {
+    use std::sync::{Arc, Mutex};
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    // Capture git commit from the tool's working directory (best-effort).
+    let source_commit: Option<String> = path.and_then(|dir| {
+        std::process::Command::new("git")
+            .args(["-C", dir.to_str().unwrap_or("."), "rev-parse", "--short", "HEAD"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                } else {
+                    None
+                }
+            })
+    });
+
+    let initial_state = serde_json::json!({
+        "tool": name,
+        "path": path.map(|p| p.display().to_string()),
+        "source_commit": source_commit,
+        "canonicalized_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    // Open keyring → derive audit signer → open signed store.
+    let keyring: zp_keys::Keyring = match crate::commands::open_keyring() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("\x1b[31merror\x1b[0m: keyring: {e}");
+            return 1;
+        }
+    };
+    let genesis_secret = match keyring.genesis_secret() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("\x1b[31merror\x1b[0m: genesis secret: {e}");
+            return 1;
+        }
+    };
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+
+    let store = match zp_audit::AuditStore::open_signed(&db_path, audit_signer) {
+        Ok(s) => Arc::new(Mutex::new(s)),
+        Err(e) => {
+            eprintln!(
+                "\x1b[31merror\x1b[0m: cannot open audit store at {}: {e}",
+                db_path.display()
+            );
+            return 1;
+        }
+    };
+
+    // Derive operator signing key for the receipt itself.
+    let operator_secret: [u8; 32] = match keyring.load_operator() {
+        Ok(k) => k.secret_key(),
+        Err(e) => {
+            eprintln!("\x1b[31merror\x1b[0m: operator key: {e}");
+            return 1;
+        }
+    };
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&operator_secret);
+
+    let result = zp_server::tool_chain::emit_signed_canonicalization_receipt(
+        &store,
+        "tool",
+        name,
+        &initial_state,
+        None, // tools are first-class entities — no parent
+        "zp-cli:canonicalize",
+        Some(&signing_key),
+    );
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "tool": name,
+                "entry_hash": result,
+                "idempotent": result.is_none(),
+            })
+        );
+    } else if let Some(hash) = result {
+        println!("✓ canonicalized  tool:{}  ({})", name, &hash[..hash.len().min(16)]);
+    } else {
+        println!("✓ already canonicalized  tool:{}", name);
+    }
+
+    0
+}
 
 fn run_adapt(
     tool: &str,
