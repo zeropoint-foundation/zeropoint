@@ -111,6 +111,19 @@ jobs:
       - name: "Check: ${{ matrix.profile.name }}"
         run: cargo check --workspace ${{ matrix.profile.flags }}
 
+  # ── Security Audit ───────────────────────────────────────────
+  security-audit:
+    name: Cargo security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   # ── Sentinel (Python) ──────────────────────────────────────
   sentinel:
     name: Sentinel (Python syntax + shell lint)
