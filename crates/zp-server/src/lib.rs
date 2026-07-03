@@ -4399,6 +4399,9 @@ async fn tool_stop_handler(
 
     kill_tool_process(&lower, pid);
 
+    // Unregister PID from sensor layer — no point watching a process we killed.
+    state.0.sensor_handle.unwatch_pid(pid).await;
+
     // Kill any orphaned process still holding the tool's known ports.
     // cargo-as-launcher leaves the actual binary reparented to init after
     // cargo exits — kill -0 returns true for it, but the PID file has
@@ -4891,6 +4894,12 @@ async fn tool_launch_handler(
             // Write PID file so cleanup_launched_tools() finds it on shutdown.
             let pid_file = pid_dir().join(format!("{}.pid", body.name.to_lowercase()));
             let _ = std::fs::write(&pid_file, pid.to_string());
+
+            // Register PID with sensor layer — kqueue EVFILT_PROC will fire
+            // immediately on exit/fork/exec, triggering a Forge sweep.
+            if pid > 0 {
+                state.0.sensor_handle.watch_pid(pid, body.name.to_lowercase()).await;
+            }
 
             // Re-issue delegation grant on every cockpit launch. This makes
             // cockpit launch the renewal ceremony — expiry can never surface
