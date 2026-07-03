@@ -20,6 +20,7 @@ pub mod governance_posture;
 pub mod narration;
 pub mod officer;
 pub mod posture;
+pub mod proposal;
 pub mod sentinel;
 pub mod steward;
 pub mod sweep;

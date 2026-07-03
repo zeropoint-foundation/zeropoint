@@ -355,6 +355,144 @@ fn extract_tool_from_event(event: &str) -> Option<&str> {
     None
 }
 
+impl Forge {
+    /// Generate structured proposals from chain evidence (Band 2).
+    ///
+    /// Proposals are derived from the same patterns as findings, but carry
+    /// actionable mutations the operator can review and sign. Only emitted
+    /// for conditions where an automated fix is well-defined.
+    pub fn propose(&self, chain: &ChainReader<'_>) -> Vec<crate::proposal::Proposal> {
+        use crate::proposal::{Proposal, ProposedMutation};
+
+        let entries = match chain.recent_entries(1000) {
+            Ok(e) => e,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut proposals = Vec::new();
+
+        // ── Crash loops → RestartTool ─────────────────────────────────
+        // If a tool has been crash-looping, propose a governed restart
+        // (clean stop + relaunch through `zp configure exec`).
+        let mut launches_per_tool: std::collections::HashMap<String, Vec<chrono::DateTime<chrono::Utc>>> =
+            std::collections::HashMap::new();
+
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if let Some(tool) = event.strip_prefix("tool:launched:")
+                    .or_else(|| event.strip_prefix("tool:started:"))
+                    .or_else(|| event.strip_prefix("tool:restarted:"))
+                {
+                    launches_per_tool
+                        .entry(tool.to_string())
+                        .or_default()
+                        .push(entry.timestamp);
+                }
+            }
+        }
+
+        for (tool, mut timestamps) in launches_per_tool {
+            timestamps.sort();
+            if timestamps.len() < 3 {
+                continue;
+            }
+            for i in 2..timestamps.len() {
+                let window = timestamps[i] - timestamps[i - 2];
+                if window.num_minutes() <= 30 {
+                    let finding = Finding {
+                        officer: self.name(),
+                        domain: self.domain(),
+                        finding_type: "crash_loop_detected".into(),
+                        severity: Severity::Warning,
+                        summary: format!(
+                            "Tool '{}' launched {} times in {} min",
+                            tool, timestamps.len(), window.num_minutes()
+                        ),
+                        detail: json!({
+                            "tool": tool,
+                            "launch_count": timestamps.len(),
+                            "window_minutes": window.num_minutes(),
+                        }),
+                        timestamp: Utc::now(),
+                        cross_domain_depth: 0,
+                    };
+                    proposals.push(Proposal::new(
+                        finding,
+                        ProposedMutation::RestartTool {
+                            tool: tool.clone(),
+                            rationale: format!(
+                                "crash loop: {} launches in {} min",
+                                timestamps.len(),
+                                window.num_minutes()
+                            ),
+                        },
+                        self.name(),
+                    ));
+                    break;
+                }
+            }
+        }
+
+        // ── Tool down → RestartTool ───────────────────────────────────
+        // If a tool has been down for >30 min, propose restart.
+        let mut last_states: std::collections::HashMap<String, (&str, chrono::DateTime<chrono::Utc>)> =
+            std::collections::HashMap::new();
+
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if let Some(tool) = event.strip_prefix("tool:health:down:") {
+                    last_states.insert(tool.to_string(), ("down", entry.timestamp));
+                } else if let Some(tool) = event.strip_prefix("tool:failed:") {
+                    last_states.insert(tool.to_string(), ("failed", entry.timestamp));
+                } else if let Some(tool) = event.strip_prefix("tool:health:up:") {
+                    last_states.insert(tool.to_string(), ("up", entry.timestamp));
+                } else if let Some(tool) = event.strip_prefix("tool:launched:")
+                    .or_else(|| event.strip_prefix("tool:started:"))
+                {
+                    last_states.insert(tool.to_string(), ("up", entry.timestamp));
+                }
+            }
+        }
+
+        let now = Utc::now();
+        for (tool, (state, since)) in &last_states {
+            if (*state == "down" || *state == "failed") && (now - *since).num_minutes() > 30 {
+                let finding = Finding {
+                    officer: self.name(),
+                    domain: self.domain(),
+                    finding_type: "tool_down".into(),
+                    severity: Severity::Error,
+                    summary: format!(
+                        "Tool '{}' has been {} for {} min",
+                        tool, state, (now - *since).num_minutes()
+                    ),
+                    detail: json!({
+                        "tool": tool,
+                        "state": state,
+                        "since": since.to_rfc3339(),
+                    }),
+                    timestamp: Utc::now(),
+                    cross_domain_depth: 0,
+                };
+                proposals.push(Proposal::new(
+                    finding,
+                    ProposedMutation::RestartTool {
+                        tool: tool.clone(),
+                        rationale: format!(
+                            "{} for {} min",
+                            state,
+                            (now - *since).num_minutes()
+                        ),
+                    },
+                    self.name(),
+                ));
+            }
+        }
+
+        proposals
+    }
+}
+
 impl Officer for Forge {
     fn name(&self) -> &'static str {
         "forge"
@@ -451,5 +589,40 @@ mod tests {
         };
 
         assert_eq!(f.event_key(), "officer:forge:operations:crash_loop_detected");
+    }
+
+    #[test]
+    fn propose_empty_chain() {
+        let store = test_store();
+        let chain = ChainReader::new(&store);
+        let forge = Forge::new();
+
+        let proposals = forge.propose(&chain);
+        assert!(proposals.is_empty());
+    }
+
+    #[test]
+    fn proposal_event_key_format() {
+        use crate::proposal::{Proposal, ProposedMutation};
+
+        let finding = Finding {
+            officer: "forge",
+            domain: "operations",
+            finding_type: "crash_loop_detected".into(),
+            severity: Severity::Warning,
+            summary: "test".into(),
+            detail: json!({}),
+            timestamp: Utc::now(),
+            cross_domain_depth: 0,
+        };
+        let p = Proposal::new(
+            finding,
+            ProposedMutation::RestartTool {
+                tool: "ironclaw".into(),
+                rationale: "crash loop".into(),
+            },
+            "forge",
+        );
+        assert_eq!(p.event_key(), "proposal:forge:restart_tool:ironclaw");
     }
 }
