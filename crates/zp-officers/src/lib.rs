@@ -16,6 +16,7 @@
 pub mod cleo;
 pub mod finding;
 pub mod forge;
+pub mod governance_posture;
 pub mod narration;
 pub mod officer;
 pub mod posture;
