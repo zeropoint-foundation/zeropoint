@@ -5135,6 +5135,80 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
+        // ── Tool governance posture ─────────────────────────────────────
+        // Per-tool facet computation from chain evidence + port registry.
+        {
+            use zp_officers::governance_posture::{
+                compute_postures, GovernanceFacet, RegisteredToolInfo,
+                ToolRegistrySnapshot, UnregisteredTools,
+            };
+
+            let registry = zp_server::tool_ports::PortRegistry::new(data);
+            let bindings = registry.list();
+
+            // Build snapshot from port registry.
+            let mut snapshot = ToolRegistrySnapshot::default();
+            for b in &bindings {
+                snapshot.registered_tools.insert(
+                    b.tool.clone(),
+                    RegisteredToolInfo {
+                        port: b.port,
+                        pid: b.pid,
+                        has_launch_command: b.launch_command.is_some(),
+                    },
+                );
+            }
+
+            let unregistered = UnregisteredTools::new();
+
+            // Open audit store for chain evidence. Fall back to in-memory
+            // empty store when the DB doesn't exist or can't open.
+            let store = if audit_db.exists() {
+                zp_audit::AuditStore::open_readonly(&audit_db).ok()
+            } else {
+                None
+            };
+            let fallback = zp_audit::AuditStore::open_readonly(":memory:").unwrap();
+            let chain = zp_officers::officer::ChainReader::new(
+                store.as_ref().unwrap_or(&fallback),
+            );
+            let postures = compute_postures(&chain, &snapshot, &unregistered);
+
+            if postures.is_empty() {
+                checks.push(Check {
+                    label: "Tool governance".into(),
+                    status: "info",
+                    detail: "No tools registered or discovered".into(),
+                    fix: String::new(),
+                });
+            } else {
+                for p in &postures {
+                    let status = if p.has(GovernanceFacet::Hardened) || p.has(GovernanceFacet::Governed) {
+                        "pass"
+                    } else if p.has(GovernanceFacet::Registered) || p.has(GovernanceFacet::Unregistered) {
+                        "warn"
+                    } else {
+                        "info"
+                    };
+
+                    let fix = if p.has(GovernanceFacet::Unregistered) {
+                        "Run: zp configure <tool> to register".into()
+                    } else if p.has(GovernanceFacet::Registered) && !p.has(GovernanceFacet::Governed) {
+                        "Launch via: zp configure exec <tool>".into()
+                    } else {
+                        String::new()
+                    };
+
+                    checks.push(Check {
+                        label: format!("Governance: {}", p.tool_name),
+                        status,
+                        detail: p.summary(),
+                        fix,
+                    });
+                }
+            }
+        }
+
         // ── Output ──
         let fail_count = checks.iter().filter(|c| c.status == "fail").count();
         let warn_count = checks.iter().filter(|c| c.status == "warn").count();
