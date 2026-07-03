@@ -41,6 +41,8 @@ members = [
     "crates/zp-content",
     "crates/zp-artifacts", "crates/zp-memory-index",
     "crates/zp-host",
+    "crates/zp-officers",
+    "crates/zp-sensors",
 ]
 
 [workspace.package]
