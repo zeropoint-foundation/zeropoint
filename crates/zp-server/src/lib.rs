@@ -6,6 +6,7 @@
 pub mod analysis;
 pub mod anchor_pipeline;
 pub mod artifact_library;
+pub mod officers;
 pub mod attestations;
 pub mod auth;
 pub mod envelope_state;
@@ -87,6 +88,14 @@ pub struct ServerConfig {
     /// Optional path to the Bridge UI dist directory.
     /// When set, serves the Bridge at /bridge.
     pub bridge_dir: Option<std::path::PathBuf>,
+
+    // ── Officers ──
+    pub officers_enabled: bool,
+    pub officers_sweep_interval_secs: u64,
+    pub officers_steward_enabled: bool,
+    pub officers_sentinel_enabled: bool,
+    pub officers_forge_enabled: bool,
+    pub officers_cleo_enabled: bool,
 }
 
 impl Default for ServerConfig {
@@ -112,6 +121,12 @@ impl Default for ServerConfig {
             bridge_dir: std::env::var("ZP_BRIDGE_DIR")
                 .ok()
                 .map(std::path::PathBuf::from),
+            officers_enabled: false,
+            officers_sweep_interval_secs: 900,
+            officers_steward_enabled: true,
+            officers_sentinel_enabled: true,
+            officers_forge_enabled: true,
+            officers_cleo_enabled: true,
         }
     }
 }
@@ -130,6 +145,12 @@ impl ServerConfig {
             bridge_dir: std::env::var("ZP_BRIDGE_DIR")
                 .ok()
                 .map(std::path::PathBuf::from),
+            officers_enabled: cfg.officers_enabled.value,
+            officers_sweep_interval_secs: cfg.officers_sweep_interval_secs.value,
+            officers_steward_enabled: cfg.officers_steward_enabled.value,
+            officers_sentinel_enabled: cfg.officers_sentinel_enabled.value,
+            officers_forge_enabled: cfg.officers_forge_enabled.value,
+            officers_cleo_enabled: cfg.officers_cleo_enabled.value,
         }
     }
 }
@@ -453,6 +474,12 @@ pub struct AppStateInner {
     pub vault_key: std::sync::OnceLock<Option<zp_keys::ResolvedVaultKey>>,
     /// Manages port assignments for governed tools so they don't collide.
     pub port_registry: tool_ports::PortRegistry,
+    /// Sensor layer handle — register/unregister file watches and PID watches.
+    /// Forge subscribes to sensor events for immune-system-style activation.
+    pub sensor_handle: zp_sensors::SensorLayerHandle,
+    /// Sensor event receiver — taken once by `spawn_sensor_forge_task`.
+    /// `None` after first take; wrapped in Mutex for interior mutability.
+    pub sensor_event_rx: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<zp_sensors::SensorEvent>>>,
     /// MLE STAR + Monte Carlo analysis engines fed by receipt chain data.
     pub analysis: analysis::AnalysisEngines,
     /// Server port — needed by proxy for subdomain URL generation.
@@ -723,6 +750,20 @@ impl AppState {
             identity.destination_hash.clone(),
         );
 
+        // Sensor layer — event-driven governance sensors (kqueue + port discovery).
+        // Watches tool-ports.json for changes and discovers new listening processes.
+        // Forge subscribes to sensor events for immune-system-style activation.
+        let tool_ports_path = std::path::Path::new(&config.data_dir).join("tool-ports.json");
+        let sensor_config = zp_sensors::SensorLayerConfig {
+            initial_files: if tool_ports_path.exists() {
+                vec![tool_ports_path]
+            } else {
+                Vec::new()
+            },
+            ..Default::default()
+        };
+        let (sensor_handle, sensor_event_rx) = zp_sensors::SensorLayer::start(sensor_config);
+
         // Session auth — derives HMAC key from the signing key, mints first token.
         // AUTH-VULN-01: this is the foundation for protecting all API endpoints.
         let session_auth = Arc::new(auth::SessionAuth::new(&identity.signing_key.to_bytes()));
@@ -906,6 +947,8 @@ impl AppState {
             data_dir: config.data_dir.clone(),
             vault_key,
             port_registry,
+            sensor_handle,
+            sensor_event_rx: std::sync::Mutex::new(Some(sensor_event_rx)),
             analysis: analysis::AnalysisEngines::new(),
             config_port: config.port,
             session_auth,
@@ -1221,7 +1264,16 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // P4 (#197) — standing delegation lease renewal.
         .route("/api/v1/lease/renew", post(lease_renew_handler))
         .route("/api/v1/tools", get(tools_list_handler))
+        .route("/api/v1/tools/launch", post(tool_launch_handler))
+        .route("/api/v1/tools/:name/stop", post(tool_stop_handler))
+        .route("/api/v1/tools/:name/probe", get(tool_probe_handler))
+        .route("/api/v1/tools/:name/register-agent", post(register_agent_handler))
         .route("/api/v1/tools/receipt", post(tools_receipt_handler))
+        // Model governance — operator preference + routing observation
+        .route("/api/v1/preference/model", post(model_preference_handler))
+        .route("/api/v1/cognition/model-routed", post(model_routed_handler))
+        // Governed exec WebSocket — cockpit terminal output streaming
+        .route("/ws/exec", get(exec_ws::exec_ws_handler))
         // Real-time event stream — SSE for dashboard and channel adapters (P4-1)
         .route("/api/v1/events/stream", get(events::event_stream_handler))
         // Channel adapters — Slack/Discord integration (P4-2)
@@ -1470,6 +1522,32 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
                     );
                 }
             }
+        }
+    }
+
+    // ── Officer cadre sweep task ──────────────────────────────────────────
+    // Spawned after AppState::init so vault_key resolution is already
+    // underway in its background thread. The sweep task handles
+    // vault_key not yet being set (returns empty VaultKeyLister).
+    officers::spawn_sweep_task(
+        officers::OfficersConfig {
+            enabled: config.officers_enabled,
+            sweep_interval_secs: config.officers_sweep_interval_secs,
+            steward_enabled: config.officers_steward_enabled,
+            sentinel_enabled: config.officers_sentinel_enabled,
+            forge_enabled: config.officers_forge_enabled,
+            cleo_enabled: config.officers_cleo_enabled,
+        },
+        state.0.clone(),
+    );
+
+    // ── Sensor-driven Forge activation ──────────────────────────────────
+    // Separate from the periodic sweep: sensor events trigger Forge
+    // immediately (immune-system model). The periodic sweep still runs
+    // all officers on its timer.
+    if config.officers_enabled && config.officers_forge_enabled {
+        if let Some(rx) = state.0.sensor_event_rx.lock().ok().and_then(|mut g| g.take()) {
+            officers::spawn_sensor_forge_task(rx, state.0.clone());
         }
     }
 
@@ -2748,12 +2826,30 @@ async fn audit_receipts_handler(
     State(state): State<AppState>,
     Query(params): Query<AuditReceiptsQuery>,
 ) -> Json<AuditReceiptsResponse> {
-    let limit = params.limit.unwrap_or(100);
+    let limit = params.limit.unwrap_or(1000);
     let pattern = params.claim_pattern.as_deref().unwrap_or("*");
 
+    // When a specific pattern is provided, use a SQL-level keyword search so
+    // we never miss entries that fall beyond the first N rows of a large chain.
+    // For wildcard "*" we still export the most-recent N entries (chain tail).
     let entries = {
         let store = state.0.audit_store.lock().unwrap();
-        store.export_chain(limit).unwrap_or_default()
+        if pattern == "*" || pattern.is_empty() {
+            store.export_chain(limit).unwrap_or_default()
+        } else {
+            // Extract the raw keyword (strip trailing glob '*' if present).
+            let keyword = pattern.trim_end_matches('*');
+            match store.search_chain_by_action_keyword(keyword, limit) {
+                Ok(entries) => {
+                    tracing::debug!(keyword = %keyword, found = entries.len(), "audit search by keyword");
+                    entries
+                }
+                Err(e) => {
+                    tracing::warn!(keyword = %keyword, error = %e, "audit keyword search failed, returning empty");
+                    vec![]
+                }
+            }
+        }
     };
 
     let receipts: Vec<serde_json::Value> = entries
@@ -3642,7 +3738,18 @@ async fn gate_tool_call_handler(
     // tightening that to "agent always required" is a deployment-time
     // policy switch, not an architectural one.
     if let Some(agent_id) = req.agent.as_deref() {
-        if let Some(deny_reason) = lease_prereq_for_agent(&state, agent_id, &req.tool_name) {
+        // Resolve agent name → registered agent key. Gate requests may
+        // carry the tool's human-readable name ("ironclaw") while the
+        // delegation chain uses the hex public key the tool registered
+        // via POST /api/v1/tools/:name/register-agent. Try the port
+        // registry first; fall through to the raw value when no mapping
+        // exists (the caller may already be sending a hex key).
+        let resolved_agent_id = state
+            .0
+            .port_registry
+            .get_agent_key(agent_id)
+            .unwrap_or_else(|| agent_id.to_string());
+        if let Some(deny_reason) = lease_prereq_for_agent(&state, &resolved_agent_id, &req.tool_name) {
             let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
             let chain_event = format!("gate:denied:{}", req.tool_name);
             let chain_detail = serde_json::json!({
@@ -4156,8 +4263,14 @@ async fn tools_list_handler(State(state): State<AppState>) -> Json<serde_json::V
     let mut tools: Vec<CockpitTool> = bindings
         .into_iter()
         .map(|b| {
-            let live_pid = b.pid.filter(|&pid| tool_ports::is_pid_alive(pid));
-            let port = b.proxy_target();
+            let ui_port = b.web_ui_port();
+            // Prefer the registry PID (set on cockpit-launch); fall back to
+            // port-based discovery so tools started outside the cockpit also
+            // get a Stop button.
+            let live_pid = b
+                .pid
+                .filter(|&pid| tool_ports::is_pid_alive(pid))
+                .or_else(|| tool_ports::lsof_pid_for_port(ui_port));
             let path = b
                 .launch_command
                 .as_ref()
@@ -4172,9 +4285,25 @@ async fn tools_list_handler(State(state): State<AppState>) -> Json<serde_json::V
                 ready: true,
                 preflight_issues: vec![],
                 launch: CockpitLaunch {
-                    kind: "web".to_string(),
-                    url: Some(format!("http://localhost:{}/", port)),
-                    port: Some(port),
+                    // No direct url — the JS uses its proxyUrl
+                    // (http://{name}.localhost:{zp_port}/) so requests
+                    // route through ZP's subdomain proxy, which injects
+                    // the Authorization header before forwarding.
+                    //
+                    // kind is derived from the stored launch command so the
+                    // cockpit uses the right wait strategy: native cargo tools
+                    // get a 600s wait with indeterminate progress bar; web/
+                    // script tools get 30s. Must match tool_launch_handler's
+                    // kind derivation exactly.
+                    kind: b.launch_command.as_ref().map_or("web", |lc| {
+                        if lc.command == "cargo" || lc.command.ends_with("/cargo") {
+                            "native"
+                        } else {
+                            "web"
+                        }
+                    }).to_string(),
+                    url: None,
+                    port: Some(ui_port),
                     cmd: None,
                 },
                 running_pid: live_pid,
@@ -4189,6 +4318,625 @@ async fn tools_list_handler(State(state): State<AppState>) -> Json<serde_json::V
         "tools": tools,
         "chain_receipts": true,
     }))
+}
+
+/// GET /api/v1/tools/:name/probe — server-side TCP probe.
+///
+/// The browser can't probe cross-origin ports directly (CSP `connect-src 'self'`
+/// blocks it), so the cockpit asks ZP to probe on its behalf.  Returns whether
+/// the tool's allocated port is currently accepting connections.
+async fn tool_probe_handler(
+    State(state): State<AppState>,
+    AxumPath(name): AxumPath<String>,
+) -> Json<serde_json::Value> {
+    let Some(binding) = state.0.port_registry.get_assigned(&name) else {
+        return Json(serde_json::json!({
+            "listening": false,
+            "error": format!("Tool '{}' is not registered", name),
+        }));
+    };
+
+    // Probe whether the tool's primary listener is up.  We do NOT return a
+    // direct `gateway_url` — the JS falls back to its `proxyUrl` shape
+    // (http://{name}.localhost:{zp_port}/) which routes through ZP's
+    // subdomain proxy.  The proxy injects `Authorization: Bearer <auth_token>`
+    // before forwarding, so tools that gate on that header (IronClaw, etc.)
+    // never show a login page to the operator.
+    //
+    // Probing: check web_ui_port() first (the actual web UI — may differ from
+    // proxy_target which can point at a webhook/gRPC listener).  If the web UI
+    // port is different from the proxy_target, probe both.
+    let proxy_port = binding.proxy_target();
+    let ui_port = binding.web_ui_port();
+
+    let probe_one = |port: u16| async move {
+        tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)),
+        )
+        .await
+        .map(|r| r.is_ok())
+        .unwrap_or(false)
+    };
+
+    let listening = if ui_port == proxy_port {
+        probe_one(proxy_port).await
+    } else {
+        // Probe the web UI port; fall back to the proxy_target so the JS
+        // can still open the subdomain proxy URL even if only the webhook
+        // (proxy_target) is up.
+        probe_one(ui_port).await || probe_one(proxy_port).await
+    };
+
+    Json(serde_json::json!({
+        "listening": listening,
+        "port": ui_port,
+        // No gateway_url — JS uses its proxyUrl (subdomain) which injects auth.
+    }))
+}
+
+/// POST /api/v1/tools/:name/stop — stop a running governed tool.
+///
+/// Reads the PID file, sends SIGTERM (then SIGKILL if needed), removes the PID
+/// file, and emits a `tool:stopped:<name>` receipt into the audit chain.
+async fn tool_stop_handler(
+    State(state): State<AppState>,
+    AxumPath(name): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let lower = name.to_lowercase();
+
+    let pid = match read_live_pid(&lower) {
+        Some(p) => p,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": format!("No running process found for '{}'", lower),
+                })),
+            ));
+        }
+    };
+
+    kill_tool_process(&lower, pid);
+
+    // Kill any orphaned process still holding the tool's known ports.
+    // cargo-as-launcher leaves the actual binary reparented to init after
+    // cargo exits — kill -0 returns true for it, but the PID file has
+    // cargo's PID (now dead). Kill by port instead to catch all cases.
+    // Also clears the registry so the next launch gets a fresh proxy_port.
+    if let Some(ref binding) = state.0.port_registry.get_assigned(&lower) {
+        let ports: Vec<u16> = [Some(binding.port), binding.actual_port, binding.proxy_port]
+            .into_iter()
+            .flatten()
+            .chain(binding.extra_ports.values().copied())
+            .collect::<std::collections::HashSet<u16>>()
+            .into_iter()
+            .collect();
+        for port in ports {
+            if let Some(orphan_pid) = tool_ports::lsof_pid_for_port(port) {
+                if orphan_pid != pid {
+                    let _ = std::process::Command::new("kill")
+                        .args(["-9", &orphan_pid.to_string()])
+                        .status();
+                    info!(
+                        tool = %lower,
+                        port = port,
+                        orphan_pid = orphan_pid,
+                        "Killed orphaned tool process found by port scan"
+                    );
+                }
+            }
+        }
+        state.0.port_registry.clear_binding(&lower, tool_ports::ReleaseReason::OperatorKill);
+        state.0.port_registry.clear_proxy_port(&lower);
+    }
+
+    // Emit tool:stopped receipt into the audit chain.
+    tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        &format!("tool:stopped:{}", lower),
+        Some(&format!("pid={} operator=cockpit", pid)),
+    );
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "name": lower,
+        "pid": pid,
+    })))
+}
+
+#[derive(Deserialize)]
+struct ToolLaunchRequest {
+    name: String,
+}
+
+/// POST /api/v1/tools/launch — spawn a governed tool from its StoredLaunchCommand.
+///
+/// Replays the exact command that was recorded when the tool was first registered
+/// via `zp configure exec`. The process is detached (new process group) so it
+/// survives if the operator navigates away from the dashboard. A PID file is
+/// written to ~/ZeroPoint/pids/{name}.pid for shutdown cleanup.
+async fn tool_launch_handler(
+    State(state): State<AppState>,
+    Json(body): Json<ToolLaunchRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let Some(binding) = state.0.port_registry.get_assigned(&body.name) else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("Tool '{}' is not registered", body.name),
+                "hint": "Run `zp configure exec` to register this tool.",
+            })),
+        ));
+    };
+
+    let Some(lc) = binding.launch_command.clone() else {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({
+                "error": format!("No launch command recorded for '{}'", body.name),
+                "hint": format!("Run `zp configure exec ~/projects/{}` to record the launch.", body.name),
+                "cmd": format!("zp configure exec ~/projects/{}", body.name),
+            })),
+        ));
+    };
+
+    // Capture agent_key before borrowing binding further. Used after spawn
+    // to re-issue the delegation grant — making cockpit launch the renewal
+    // ceremony and keeping expiry from ever surfacing as an operator concern.
+    let agent_key_for_regrant = binding.agent_key.clone();
+
+    let ui_port = binding.web_ui_port();
+
+    // Infer tool kind from the recorded command (used by the cockpit to pick
+    // the right wait strategy — native cargo builds take minutes).
+    let kind = if lc.command == "cargo" || lc.command.ends_with("/cargo") {
+        "native"
+    } else {
+        "web"
+    };
+
+    // Resolve working directory — strip leading ~ if present.
+    let work_dir: std::path::PathBuf = match lc.working_dir.as_deref() {
+        Some(d) if d.starts_with("~/") => {
+            let home = zp_paths::user_home().unwrap_or_default();
+            home.join(&d[2..])
+        }
+        Some(d) => std::path::PathBuf::from(d),
+        None => {
+            // Fall back to ~/projects/{name} as a convention.
+            zp_paths::user_home()
+                .map(|h| h.join("projects").join(&body.name))
+                .unwrap_or_default()
+        }
+    };
+
+    // Log file for stdout/stderr — dashboard.js tails it via /ws/exec.
+    // Must live under ~/ZeroPoint/ (ZP's runtime dir) so safe_path() allows
+    // the tail; /var/folders and /tmp are blocked as system paths.
+    let log_path = {
+        let logs_dir = std::path::PathBuf::from(&state.0.data_dir).join("logs");
+        let _ = std::fs::create_dir_all(&logs_dir);
+        logs_dir.join(format!("{}.log", body.name.to_lowercase().replace(' ', "-")))
+    };
+
+    let auth_token = binding.auth_token.clone();
+    let proxy_port_for_launch = binding.proxy_target();
+    // GATEWAY_PORT must come from the registry's extra_ports allocation, not from
+    // proxy_target(). proxy_target() returns the primary allocated port (e.g. 8090),
+    // which some tools use for a separate HTTP channel — binding the gateway there
+    // causes "address already in use" and the web UI never starts.
+    // extra_ports["GATEWAY_PORT"] is the port ZP allocated specifically for the
+    // gateway process; the proxy will discover it via post-launch probing.
+    let gateway_port_for_launch = binding.extra_ports.get("GATEWAY_PORT")
+        .copied()
+        .unwrap_or(proxy_port_for_launch);
+    let mut cmd = tokio::process::Command::new(&lc.command);
+    cmd.args(&lc.args)
+        .current_dir(&work_dir)
+        .env("PORT", ui_port.to_string())
+        // Inject the tool's declared primary port var (e.g. HTTP_PORT for ironclaw,
+        // PORT for Node tools). This is authoritative — dotenvy never overwrites
+        // existing env vars, so this beats whatever the tool's .env file declares.
+        // Without this, tools that don't read `PORT` (e.g. ironclaw reads HTTP_PORT)
+        // silently fall back to their .env value, breaking ZP's port allocation.
+        .env(&binding.port_var, binding.port.to_string())
+        // Inject the ZP-allocated GATEWAY_PORT for this tool. Using extra_ports
+        // rather than proxy_target() ensures the gateway doesnds on its own port
+        // rather than colliding with any other channel the tool starts first.
+        // PORT and GATEWAY_PORT are ZP-owned routing vars — vault injection skips
+        // them so this value is never silently overridden by a vault-stored port.
+        .env("GATEWAY_PORT", gateway_port_for_launch.to_string())
+        // Inject the ZP proxy auth token so the tool's gateway validates the
+        // same token the proxy forwards. dotenvy never overwrites existing vars,
+        // so this takes priority over any value in .env / ~/.ironclaw/.env.
+        .env("GATEWAY_AUTH_TOKEN", &auth_token)
+        .env("ZP_MANAGED", "1")
+        // Signal that ZP owns process lifecycle for this tool — suppresses
+        // IronClaw's own singleton enforcement (PID lock) and any other
+        // self-management behaviors that belong to the governance layer.
+        .env("ZP_GOVERNED", "1")
+        // Enable ZP substrate integration so the tool can call back to
+        // this server for chain queries, gate calls, and cognition hooks.
+        // ZP_BASE_URL defaults to http://127.0.0.1:17010 in ZpConfig.
+        .env("IRONCLAW_ZP_ENABLED", "true");
+
+    // Inject vault-managed tool env vars (e.g. OPENAI_API_KEY, OPENAI_BASE_URL).
+    // Stored at tools/{tool}/* via `zp configure vault-set-tool-env`.
+    // These take priority over .env files because we set them before spawn;
+    // dotenvy never overwrites existing env vars in the child process.
+    let mut vault_default_model: Option<String> = None;
+    if let Some(vault_key) = state.0.vault_key.get().and_then(|k| k.as_ref()) {
+        let vault_path = zp_paths::vault_path()
+            .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+        match zp_trust::CredentialVault::load_or_create(&vault_key.key, &vault_path) {
+            Ok(vault) => match vault.resolve_tool_env(&body.name.to_lowercase()) {
+                Ok(tool_env) => {
+                    // Capture vault default model before injecting (tier 2 fallback).
+                    if let Some(m) = tool_env.get("ZP_DEFAULT_MODEL") {
+                        vault_default_model = std::str::from_utf8(m).ok().map(str::to_string);
+                    }
+
+                    // ── Vault schema validation (mandatory, pre-injection) ──
+                    //
+                    // Load the tool's manifest and validate resolved env vars
+                    // against its vault_schema constraints. Violations are logged
+                    // at error! and emitted as preflight:failed receipts.
+                    //
+                    // Search order: tool working dir → ZP source tools/{name}/.
+                    {
+                        let tool_lower = body.name.to_lowercase();
+                        let manifest_candidates = [
+                            work_dir.join(".zp-configure.toml"),
+                            std::path::PathBuf::from(
+                                std::env::var("ZP_SOURCE_DIR")
+                                    .unwrap_or_else(|_| {
+                                        zp_paths::user_home()
+                                            .map(|h| h.join("projects/zeropoint").display().to_string())
+                                            .unwrap_or_default()
+                                    })
+                            ).join("tools").join(&tool_lower).join(".zp-configure.toml"),
+                        ];
+
+                        let mut manifest_loaded = None;
+                        for candidate in &manifest_candidates {
+                            if candidate.exists() {
+                                match zp_engine::capability::load_manifest(candidate) {
+                                    Ok(m) => {
+                                        info!(
+                                            tool = %tool_lower,
+                                            path = %candidate.display(),
+                                            schema_count = m.vault_schema.len(),
+                                            "Loaded vault schema from manifest"
+                                        );
+                                        manifest_loaded = Some(m);
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            tool = %tool_lower,
+                                            path = %candidate.display(),
+                                            error = %e,
+                                            "Failed to parse manifest — skipping vault validation"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(ref manifest) = manifest_loaded {
+                            if !manifest.vault_schema.is_empty() {
+                                let violations = zp_engine::capability::validate_tool_env(
+                                    &manifest.vault_schema,
+                                    &tool_env,
+                                );
+
+                                for v in &violations {
+                                    if v.severity == "error" {
+                                        error!(
+                                            tool = %tool_lower,
+                                            var = %v.var,
+                                            "Vault schema violation: {}",
+                                            v.message
+                                        );
+                                    } else {
+                                        warn!(
+                                            tool = %tool_lower,
+                                            var = %v.var,
+                                            "Vault schema warning: {}",
+                                            v.message
+                                        );
+                                    }
+                                }
+
+                                let error_count = violations.iter()
+                                    .filter(|v| v.severity == "error")
+                                    .count();
+
+                                if error_count > 0 {
+                                    error!(
+                                        tool = %tool_lower,
+                                        errors = error_count,
+                                        total = violations.len(),
+                                        "Tool vault validation FAILED — launching with broken credentials. \
+                                         Run `zp configure vault-set-tool-env` to fix."
+                                    );
+
+                                    // Emit preflight:failed receipt to audit chain.
+                                    {
+                                        let violation_summary: Vec<String> = violations.iter()
+                                            .filter(|v| v.severity == "error")
+                                            .map(|v| format!("{}: {}", v.var, v.message))
+                                            .collect();
+                                        let detail_str = format!(
+                                            "tool={} errors={} violations=[{}]",
+                                            tool_lower,
+                                            error_count,
+                                            violation_summary.join("; ")
+                                        );
+                                        let _ = crate::tool_chain::emit_tool_receipt(
+                                            &state.0.audit_store,
+                                            &format!("tool:preflight:vault_validation_failed:{}", tool_lower),
+                                            Some(&detail_str),
+                                        );
+                                    }
+                                } else if !violations.is_empty() {
+                                    info!(
+                                        tool = %tool_lower,
+                                        warnings = violations.len(),
+                                        "Vault schema validation passed with warnings"
+                                    );
+                                } else {
+                                    info!(
+                                        tool = %tool_lower,
+                                        checked = manifest.vault_schema.iter()
+                                            .filter(|s| !s.substrate_owned).count(),
+                                        "Vault schema validation passed"
+                                    );
+                                }
+                            }
+                        }
+
+                        // Run vault hygiene audit on key names (no decryption needed).
+                        if manifest_loaded.is_some() {
+                            let all_keys: Vec<String> = vault.list()
+                                .into_iter()
+                                .filter(|k| k.contains(&tool_lower))
+                                .collect();
+
+                            if !all_keys.is_empty() {
+                                let findings = zp_engine::capability::audit_vault_keys(
+                                    &tool_lower,
+                                    &all_keys,
+                                );
+                                for f in &findings {
+                                    if f.severity == "error" {
+                                        error!(
+                                            tool = %tool_lower,
+                                            category = f.category,
+                                            key = %f.key,
+                                            "Vault hygiene: {}",
+                                            f.message
+                                        );
+                                    } else {
+                                        warn!(
+                                            tool = %tool_lower,
+                                            category = f.category,
+                                            key = %f.key,
+                                            "Vault hygiene: {}",
+                                            f.message
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ZP-owned routing vars — port allocation belongs to the
+                    // substrate, not the vault. Skip any vault-stored value so
+                    // the port we assigned above is never silently overridden.
+                    // ZP_MANAGED, ZP_GOVERNED, IRONCLAW_ZP_ENABLED, and
+                    // GATEWAY_AUTH_TOKEN are substrate-controlled operational
+                    // flags. The vault must not override them — the substrate
+                    // is the authority on whether governance is active.
+                    // All port-class vars are owned by ZP's PortRegistry.
+                    // Vault must never override port allocation — ZP is the
+                    // single authority for what port a governed tool binds to.
+                    // Matches PORT_VAR_PRIORITY in tool_ports.rs plus gateway
+                    // and substrate operational flags.
+                    const ZP_OWNED_VARS: &[&str] = &[
+                        "PORT",
+                        "HTTP_PORT",
+                        "WEBUI_PORT",
+                        "APP_PORT",
+                        "SERVER_PORT",
+                        "LISTEN_PORT",
+                        "API_PORT",
+                        "GATEWAY_PORT",
+                        "GATEWAY_AUTH_TOKEN",
+                        "ZP_MANAGED",
+                        "ZP_GOVERNED",
+                        "IRONCLAW_ZP_ENABLED",
+                    ];
+                    for (var, val_bytes) in &tool_env {
+                        if ZP_OWNED_VARS.contains(&var.as_str()) {
+                            continue;
+                        }
+                        if let Ok(s) = std::str::from_utf8(val_bytes) {
+                            cmd.env(var, s);
+                        }
+                    }
+                    if !tool_env.is_empty() {
+                        info!(
+                            tool = %body.name,
+                            count = tool_env.len(),
+                            "Injected vault tool env vars into child process"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!("Could not resolve vault env for {}: {}", body.name, e);
+                }
+            },
+            Err(e) => {
+                warn!("Could not load vault for tool launch: {}", e);
+            }
+        }
+    }
+
+    // Three-tier model resolution: chain preference > vault default > tool default (no injection).
+    //
+    // Tier 1: operator recorded a `preference:model:selected` receipt via
+    //         POST /api/v1/preference/model — chain is the source of truth.
+    // Tier 2: operator stored ZP_DEFAULT_MODEL in vault via
+    //         `zp configure vault-set-tool-env --var ZP_DEFAULT_MODEL`.
+    // Tier 3: substrate injects nothing; tool uses its own internal default.
+    {
+        let tool_lower = body.name.to_lowercase();
+        let chain_model =
+            tool_chain::query_chain_model_preference(&state.0.audit_store, &tool_lower);
+
+        let (resolved_model, resolution_source) = if let Some(m) = chain_model {
+            (Some(m), "chain_preference")
+        } else if let Some(m) = vault_default_model {
+            (Some(m), "vault_default")
+        } else {
+            (None, "tool_default")
+        };
+
+        if let Some(ref model_id) = resolved_model {
+            cmd.env("ZP_MODEL_ID", model_id);
+            info!(
+                tool = %body.name,
+                model_id = %model_id,
+                source = %resolution_source,
+                "Injecting ZP_MODEL_ID from {} tier",
+                resolution_source
+            );
+        }
+
+        // Emit preference:model:resolved — always, even for tool_default (model_id = None).
+        let signing_key = Some(&state.0.identity.signing_key);
+        tool_chain::emit_model_resolved_receipt(
+            &state.0.audit_store,
+            &tool_lower,
+            resolved_model.as_deref(),
+            resolution_source,
+            signing_key,
+        );
+    }
+
+    // Detach: new process group so the child outlives the ZP server if needed.
+    #[cfg(unix)]
+    cmd.process_group(0);
+
+    // Capture stdout + stderr to the log file (best-effort).
+    if let Ok(log_file) = std::fs::File::create(&log_path) {
+        if let Ok(log_file2) = log_file.try_clone() {
+            cmd.stdout(log_file);
+            cmd.stderr(log_file2);
+        } else {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
+    } else {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+    }
+
+    match cmd.spawn() {
+        Ok(mut child) => {
+            let pid = child.id().unwrap_or(0);
+            // Detach — let the child run independently under its own session.
+            tokio::spawn(async move {
+                let _ = child.wait().await;
+            });
+
+            // Background: discover actual proxy port after the tool binds its
+            // sockets. Clears the stale proxy_port from the last session first
+            // so proxy_target() falls back to allocated port while probing.
+            // Updates the registry once the tool is live so subsequent proxy
+            // requests forward to the right port without a full reconfigure.
+            {
+                let state_for_probe = state.clone();
+                let tool_name_for_probe = body.name.to_lowercase();
+                tokio::spawn(async move {
+                    // Give the tool a few seconds to bind before probing.
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    if let Some(binding) = state_for_probe.0.port_registry.get_assigned(&tool_name_for_probe) {
+                        match tool_ports::discover_proxy_port_with_retry(
+                            &binding,
+                            30,
+                            std::time::Duration::from_secs(2),
+                        ).await {
+                            Some(discovered) => {
+                                info!(
+                                    tool = %tool_name_for_probe,
+                                    port = discovered,
+                                    "Post-launch probe: proxy_port discovered"
+                                );
+                                state_for_probe.0.port_registry.set_proxy_port(&tool_name_for_probe, discovered);
+                            }
+                            None => {
+                                warn!(
+                                    tool = %tool_name_for_probe,
+                                    "Post-launch probe: no port responded after 30 attempts"
+                                );
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Write PID file so cleanup_launched_tools() finds it on shutdown.
+            let pid_file = pid_dir().join(format!("{}.pid", body.name.to_lowercase()));
+            let _ = std::fs::write(&pid_file, pid.to_string());
+
+            // Re-issue delegation grant on every cockpit launch. This makes
+            // cockpit launch the renewal ceremony — expiry can never surface
+            // as an operator concern for tools that call register-agent at
+            // startup. CapabilityGrant::new defaults to expires_at: None
+            // (no hard expiry), so the standing grant is perennial; the
+            // chain entry is the durable record that the ceremony occurred.
+            if let Some(ref agent_key) = agent_key_for_regrant {
+                let grantor = state.0.identity.destination_hash.clone();
+                let mut grant = CapabilityGrant::new(
+                    grantor,
+                    agent_key.clone(),
+                    GrantedCapability::ToolCall { tools: vec!["*".to_string()] },
+                    format!("rcpt-{}", uuid::Uuid::now_v7()),
+                );
+                grant.sign(&state.0.identity.signing_key);
+                tool_chain::emit_delegation_receipt(
+                    &state.0.audit_store,
+                    "granted",
+                    &grant,
+                    Some(&state.0.identity.signing_key),
+                );
+                state.0.grants.lock().unwrap().push(grant);
+                info!(
+                    tool = %body.name,
+                    agent_key = %agent_key,
+                    "Delegation re-granted on cockpit launch"
+                );
+            }
+
+            Ok(Json(serde_json::json!({
+                "pid": pid,
+                "port": ui_port,
+                // No url — JS uses proxyUrl (subdomain) so ZP proxy injects auth.
+                "kind": kind,
+                "log_path": log_path.display().to_string(),
+            })))
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("Failed to spawn '{}': {}", lc.command, e),
+                "cmd": format!("cd '{}' && {} {}", work_dir.display(), lc.command, lc.args.join(" ")),
+            })),
+        )),
+    }
 }
 
 ///
@@ -4218,6 +4966,179 @@ async fn tools_receipt_handler(
     }
 }
 
+
+// ============================================================================
+// Agent Registration + Delegation Auto-Renewal
+// ============================================================================
+
+/// Body for POST /api/v1/tools/:name/register-agent
+#[derive(Deserialize)]
+struct RegisterAgentRequest {
+    /// The ZP agent identifier for this tool (its canonical bead-zero hash or
+    /// a stable string identity the tool consistently self-reports).
+    agent_key: String,
+}
+
+/// POST /api/v1/tools/:name/register-agent — register a tool's agent identity
+/// and immediately issue a fresh `delegation:granted` receipt.
+///
+/// Called by tools at startup. Stores `agent_key` on the `ToolBinding` so
+/// subsequent cockpit launches can re-grant without waiting for the tool to
+/// re-register. The grant uses `ToolCall { tools: ["*"] }` with no expiry,
+/// making the chain entry the durable record rather than a TTL clock.
+async fn register_agent_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    Json(body): Json<RegisterAgentRequest>,
+) -> Json<serde_json::Value> {
+    // Persist the agent_key on the binding so tool_launch_handler can
+    // re-grant on every cockpit launch without the tool needing to re-register.
+    state.0.port_registry.set_agent_key(&name, &body.agent_key);
+
+    // Issue a fresh CapabilityGrant — no expiry, full tool-call scope.
+    let grantor = state.0.identity.destination_hash.clone();
+    let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
+    let mut grant = CapabilityGrant::new(
+        grantor,
+        body.agent_key.clone(),
+        GrantedCapability::ToolCall { tools: vec!["*".to_string()] },
+        receipt_id,
+    );
+    grant.sign(&state.0.identity.signing_key);
+
+    let entry_hash = tool_chain::emit_delegation_receipt(
+        &state.0.audit_store,
+        "granted",
+        &grant,
+        Some(&state.0.identity.signing_key),
+    );
+
+    state.0.grants.lock().unwrap().push(grant);
+
+    info!(
+        tool = %name,
+        agent_key = %body.agent_key,
+        "Agent registered; delegation:granted emitted"
+    );
+
+    Json(serde_json::json!({
+        "ok": true,
+        "tool": name,
+        "agent_key": body.agent_key,
+        "entry_hash": entry_hash,
+    }))
+}
+
+// ============================================================================
+// Model Governance Handlers
+// ============================================================================
+
+/// Body for POST /api/v1/preference/model
+#[derive(Deserialize)]
+struct ModelPreferenceRequest {
+    /// Tool name (case-insensitive, e.g. "ironclaw").
+    tool: String,
+    /// Model identifier to record as the operator's preference (e.g. "route-llm").
+    model_id: String,
+}
+
+/// POST /api/v1/preference/model — record the operator's model preference for a tool.
+///
+/// Emits a `preference:model:selected` receipt into the chain. The substrate
+/// reads this receipt at tool-launch time (tier 1 of three-tier model resolution)
+/// and injects `ZP_MODEL_ID` accordingly. No gate required — this route uses
+/// ZP-Sig auth at the router level like all /api/v1/* routes.
+async fn model_preference_handler(
+    State(state): State<AppState>,
+    Json(body): Json<ModelPreferenceRequest>,
+) -> Json<serde_json::Value> {
+    let tool = body.tool.to_lowercase();
+    let signing_key = Some(&state.0.identity.signing_key);
+
+    match tool_chain::emit_model_preference_receipt(
+        &state.0.audit_store,
+        &tool,
+        &body.model_id,
+        signing_key,
+    ) {
+        Some(entry_hash) => {
+            info!(tool = %tool, model_id = %body.model_id, "Recorded model preference");
+            Json(serde_json::json!({
+                "ok": true,
+                "tool": tool,
+                "model_id": body.model_id,
+                "entry_hash": entry_hash,
+            }))
+        }
+        None => {
+            warn!(tool = %tool, "Failed to record model preference receipt");
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "Failed to append preference receipt to chain",
+            }))
+        }
+    }
+}
+
+/// Body for POST /api/v1/cognition/model-routed
+#[derive(Deserialize)]
+struct ModelRoutedRequest {
+    /// Tool name (e.g. "ironclaw").
+    tool: String,
+    /// Model the tool requested (e.g. "route-llm").
+    requested_model: String,
+    /// Model Abacus's router actually chose (e.g. "claude-3-5-sonnet-20241022").
+    actual_model: String,
+    /// Optional task/request identifier for cross-referencing.
+    task_id: Option<String>,
+}
+
+/// POST /api/v1/cognition/model-routed — record what route-llm actually chose.
+///
+/// IronClaw calls this after each LLM completion when the requested model is a
+/// routing alias (e.g. "route-llm"). The response body's `model` field reveals
+/// the actual model Abacus selected. Recording this gives the chain full
+/// visibility into routing decisions without requiring the substrate to be in
+/// the hot path of every completion call.
+async fn model_routed_handler(
+    State(state): State<AppState>,
+    Json(body): Json<ModelRoutedRequest>,
+) -> Json<serde_json::Value> {
+    let tool = body.tool.to_lowercase();
+    let signing_key = Some(&state.0.identity.signing_key);
+
+    match tool_chain::emit_model_routed_receipt(
+        &state.0.audit_store,
+        &tool,
+        &body.requested_model,
+        &body.actual_model,
+        body.task_id.as_deref(),
+        signing_key,
+    ) {
+        Some(entry_hash) => {
+            info!(
+                tool = %tool,
+                requested = %body.requested_model,
+                actual = %body.actual_model,
+                "Recorded model routing observation"
+            );
+            Json(serde_json::json!({
+                "ok": true,
+                "tool": tool,
+                "requested_model": body.requested_model,
+                "actual_model": body.actual_model,
+                "entry_hash": entry_hash,
+            }))
+        }
+        None => {
+            warn!(tool = %tool, "Failed to record model-routed receipt");
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "Failed to append routing receipt to chain",
+            }))
+        }
+    }
+}
 
 // ============================================================================
 // Dashboard Handler (Verification Surface)
@@ -4684,5 +5605,130 @@ mod p4_phase2_tests {
             &sig_hex,
             b"different"
         ));
+    }
+
+    // ── Typed-receipt round-trip tests ───────────────────────────────────────
+    //
+    // These tests verify the structural correctness of the `receipt: null` gap
+    // fix: gate decisions and delegation grants emitted with a signing key must
+    // produce an AuditEntry whose `receipt` field survives the DB round-trip
+    // (store → SQLite → export_chain) as a non-null signed Receipt.
+    //
+    // The tests use `open_unsigned` (test-safe, no AuditSigner needed) and
+    // an ephemeral SigningKey — enough to exercise the typed-receipt path
+    // without requiring Genesis.
+
+    #[test]
+    fn typed_receipt_gate_decision_survives_db_round_trip() {
+        use ed25519_dalek::SigningKey;
+
+        let (_dir, store) = make_store();
+        let key = SigningKey::from_bytes(&[0xAA_u8; 32]);
+
+        // Emit a gate:allowed entry with a signing key — should attach a typed receipt.
+        let hash = crate::tool_chain::emit_gate_decision_receipt(
+            &store,
+            "test-tool",
+            true,
+            Some("agent-artemis"),
+            None,
+            Some(&key),
+        );
+        assert!(hash.is_some(), "emit_gate_decision_receipt must return entry_hash");
+
+        // Reload via export_chain and verify the receipt is non-null.
+        let entries = store.lock().unwrap().export_chain(10).unwrap();
+        let entry = entries
+            .iter()
+            .find(|e| {
+                matches!(
+                    &e.action,
+                    zp_core::AuditAction::SystemEvent { event } if event.contains("gate:allowed")
+                )
+            })
+            .expect("gate:allowed entry must be present in chain");
+
+        assert!(
+            entry.receipt.is_some(),
+            "gate decision emitted with signing key must have non-null receipt after DB round-trip"
+        );
+        // Receipt must carry the signed authorization claim.
+        let r = entry.receipt.as_ref().unwrap();
+        assert!(
+            !r.signatures.is_empty(),
+            "receipt must carry at least one signature block"
+        );
+    }
+
+    #[test]
+    fn typed_receipt_delegation_grant_survives_db_round_trip() {
+        use ed25519_dalek::SigningKey;
+
+        let (_dir, store) = make_store();
+        let key = SigningKey::from_bytes(&[0xBB_u8; 32]);
+        let grant = standing_grant("artemis");
+
+        let hash = crate::tool_chain::emit_delegation_receipt(
+            &store,
+            "granted",
+            &grant,
+            Some(&key),
+        );
+        assert!(hash.is_some(), "emit_delegation_receipt must return entry_hash");
+
+        let entries = store.lock().unwrap().export_chain(10).unwrap();
+        let entry = entries
+            .iter()
+            .find(|e| {
+                matches!(
+                    &e.action,
+                    zp_core::AuditAction::SystemEvent { event } if event.contains("delegation:granted")
+                )
+            })
+            .expect("delegation:granted entry must be present in chain");
+
+        assert!(
+            entry.receipt.is_some(),
+            "delegation grant emitted with signing key must have non-null receipt after DB round-trip"
+        );
+        let r = entry.receipt.as_ref().unwrap();
+        assert!(
+            !r.signatures.is_empty(),
+            "delegation receipt must carry at least one signature block"
+        );
+    }
+
+    #[test]
+    fn typed_receipt_gate_denied_survives_db_round_trip() {
+        use ed25519_dalek::SigningKey;
+
+        let (_dir, store) = make_store();
+        let key = SigningKey::from_bytes(&[0xCC_u8; 32]);
+
+        let hash = crate::tool_chain::emit_gate_decision_receipt(
+            &store,
+            "blocked-tool",
+            false,
+            Some("agent-x"),
+            Some("scope_mismatch"),
+            Some(&key),
+        );
+        assert!(hash.is_some());
+
+        let entries = store.lock().unwrap().export_chain(10).unwrap();
+        let entry = entries
+            .iter()
+            .find(|e| {
+                matches!(
+                    &e.action,
+                    zp_core::AuditAction::SystemEvent { event } if event.contains("gate:denied")
+                )
+            })
+            .expect("gate:denied entry must be present");
+
+        assert!(
+            entry.receipt.is_some(),
+            "gate:denied emitted with signing key must have non-null receipt"
+        );
     }
 }

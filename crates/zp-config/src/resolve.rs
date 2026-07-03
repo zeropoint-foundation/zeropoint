@@ -101,6 +101,20 @@ impl ConfigResolver {
                 .node_upstream
                 .override_with(Some(v), Source::EnvVar("ZP_NODE_UPSTREAM".into()));
         }
+        if let Ok(v) = std::env::var("ZP_OFFICERS_ENABLED") {
+            self.config.officers_enabled.override_with(
+                v == "true" || v == "1",
+                Source::EnvVar("ZP_OFFICERS_ENABLED".into()),
+            );
+        }
+        if let Ok(v) = std::env::var("ZP_OFFICERS_SWEEP_INTERVAL") {
+            if let Ok(secs) = v.parse::<u64>() {
+                self.config.officers_sweep_interval_secs.override_with(
+                    secs,
+                    Source::EnvVar("ZP_OFFICERS_SWEEP_INTERVAL".into()),
+                );
+            }
+        }
         self
     }
 
@@ -205,6 +219,25 @@ impl ConfigResolver {
             self.config
                 .node_upstream
                 .override_with(Some(v), source.clone());
+        }
+        // Officers
+        if let Some(v) = file.officers.enabled {
+            self.config.officers_enabled.override_with(v, source.clone());
+        }
+        if let Some(v) = file.officers.sweep_interval_secs {
+            self.config.officers_sweep_interval_secs.override_with(v, source.clone());
+        }
+        if let Some(v) = file.officers.steward_enabled {
+            self.config.officers_steward_enabled.override_with(v, source.clone());
+        }
+        if let Some(v) = file.officers.sentinel_enabled {
+            self.config.officers_sentinel_enabled.override_with(v, source.clone());
+        }
+        if let Some(v) = file.officers.forge_enabled {
+            self.config.officers_forge_enabled.override_with(v, source.clone());
+        }
+        if let Some(v) = file.officers.cleo_enabled {
+            self.config.officers_cleo_enabled.override_with(v, source.clone());
         }
     }
 }
@@ -330,6 +363,34 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
         }
         "node.upstream" => {
             file.node.upstream = Some(value.into());
+        }
+        "officers.enabled" => {
+            let b = parse_bool(value).ok_or(ConfigError::InvalidValue {
+                key: key.into(),
+                reason: "must be true or false".into(),
+            })?;
+            file.officers.enabled = Some(b);
+        }
+        "officers.sweep_interval_secs" => {
+            let n: u64 = value.parse().map_err(|_| ConfigError::InvalidValue {
+                key: key.into(),
+                reason: "must be a positive integer (seconds)".into(),
+            })?;
+            file.officers.sweep_interval_secs = Some(n);
+        }
+        "officers.steward_enabled" => {
+            let b = parse_bool(value).ok_or(ConfigError::InvalidValue {
+                key: key.into(),
+                reason: "must be true or false".into(),
+            })?;
+            file.officers.steward_enabled = Some(b);
+        }
+        "officers.cleo_enabled" => {
+            let b = parse_bool(value).ok_or(ConfigError::InvalidValue {
+                key: key.into(),
+                reason: "must be true or false".into(),
+            })?;
+            file.officers.cleo_enabled = Some(b);
         }
         _ => {
             return Err(ConfigError::InvalidValue {

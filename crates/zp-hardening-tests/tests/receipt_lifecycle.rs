@@ -157,6 +157,9 @@ impl GateHarness {
             llm_enabled: false,
             operator_name: "lifecycle-gate-test".to_string(),
             bridge_dir: None,
+            officers_enabled: false,
+            officers_sweep_interval_secs: 900,
+            officers_steward_enabled: true,
         };
 
         let state = zp_server::AppState::init(&config).await;

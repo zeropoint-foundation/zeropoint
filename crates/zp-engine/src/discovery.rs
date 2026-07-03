@@ -487,6 +487,7 @@ fn infer_from_env_template(tool_path: &Path, tool_name: &str) -> DiscoveryResult
         provider_overrides: Vec::new(),
         verification: None,
         configurable: Vec::new(),
+        vault_schema: Vec::new(),
         capabilities: Default::default(),
         launch: None,
     };

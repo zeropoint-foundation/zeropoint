@@ -1,0 +1,31 @@
+[package]
+name = "zp-officers"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "System Officer Cadre — dormant integrity/security/operations monitors for ZeroPoint"
+
+[dependencies]
+# Workspace
+zp-core = { path = "../zp-core" }
+zp-receipt = { path = "../zp-receipt" }
+zp-audit = { path = "../zp-audit" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }

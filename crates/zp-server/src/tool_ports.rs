@@ -168,6 +168,13 @@ pub struct ToolBinding {
     /// the bind both read as None.
     #[serde(default)]
     pub bound_stacks: Option<Vec<String>>,
+    /// ZP agent identifier registered by this tool at startup via
+    /// `POST /api/v1/tools/:name/register-agent`. Persisted so the
+    /// substrate can re-grant the delegation on every cockpit launch
+    /// without waiting for the tool to re-register after a zp-server
+    /// restart. `None` until the tool first calls register-agent.
+    #[serde(default)]
+    pub agent_key: Option<String>,
 }
 
 // Backward compat alias
@@ -181,6 +188,42 @@ impl ToolBinding {
         self.proxy_port
             .or(self.actual_port)
             .unwrap_or(self.port)
+    }
+
+    /// Return the port that hosts the tool's web UI.
+    ///
+    /// Priority:
+    ///   1. `extra_ports["PORT"]` — explicit Node/web convention.
+    ///   2. Any `actual_extra_ports["UNMATCHED_PORT_*"]` — ports the lsof
+    ///      reconciler observed that don't correspond to any declared env var.
+    ///      This is how IronClaw's web UI (port 3000) surfaces: it binds to
+    ///      3000 without exposing it via an env var, so the reconciler stores
+    ///      it as "UNMATCHED_PORT_0".  The lowest-numbered unmatched port is
+    ///      the most likely web UI candidate.
+    ///   3. `proxy_target()` — the observed primary listener (webhook, gRPC,
+    ///      etc.) which may not be the web UI but is the best fallback.
+    pub fn web_ui_port(&self) -> u16 {
+        // 1. Explicit "PORT" env var declared in the tool's configuration.
+        if let Some(&p) = self.extra_ports.get("PORT") {
+            return p;
+        }
+        // 2. Reconciler-observed ports that didn't match any declared var.
+        //    Pick the numerically smallest index (UNMATCHED_PORT_0 first).
+        let mut unmatched: Vec<(u32, u16)> = self
+            .actual_extra_ports
+            .iter()
+            .filter_map(|(k, &v)| {
+                k.strip_prefix("UNMATCHED_PORT_")
+                    .and_then(|n| n.parse::<u32>().ok())
+                    .map(|n| (n, v))
+            })
+            .collect();
+        if !unmatched.is_empty() {
+            unmatched.sort_by_key(|(n, _)| *n);
+            return unmatched[0].1;
+        }
+        // 3. Proxy target: proxy_port → actual_port → allocated port.
+        self.proxy_target()
     }
 }
 
@@ -227,7 +270,11 @@ impl PortRegistry {
                 Ok(data) => {
                     // Try new format (has "tool" field)
                     if let Ok(map) = serde_json::from_str::<HashMap<String, ToolBinding>>(&data) {
-                        map
+                        // Normalize keys to lowercase — subdomain routing is
+                        // case-insensitive and get_assigned() uses exact lookup.
+                        map.into_iter()
+                            .map(|(k, v)| (k.to_lowercase(), v))
+                            .collect()
                     } else {
                         // Fall back to old PortAssignment — migrate in place
                         serde_json::from_str::<HashMap<String, serde_json::Value>>(&data)
@@ -269,6 +316,7 @@ impl PortRegistry {
                                         preference_source: PreferenceSource::Default,
                                         last_version: None,
                                         bound_stacks: None,
+                                        agent_key: None,
                                     },
                                 ))
                             })
@@ -354,6 +402,10 @@ impl PortRegistry {
         preference_source: PreferenceSource,
         bound_stacks: Option<&[&str]>,
     ) -> Result<ToolBinding, RegistryError> {
+        // Normalize to lowercase so subdomain routing (case-insensitive) always
+        // finds the binding via get_assigned("ironclaw") regardless of how the
+        // tool name was stored (e.g. "IronClaw" in tool-ports.json).
+        let tool = &tool.to_lowercase();
         let mut map = self.bindings.lock().unwrap();
 
         // Already assigned — reconcile extra_ports / update pid.
@@ -473,6 +525,7 @@ impl PortRegistry {
             last_version: None,
             bound_stacks: bound_stacks
                 .map(|s| s.iter().map(|x| x.to_string()).collect()),
+            agent_key: None,
         };
         info!("Port registry: {} → :{} ({})", tool, primary_port, primary_var);
         map.insert(tool.to_string(), binding.clone());
@@ -653,6 +706,26 @@ impl PortRegistry {
                 self.persist();
             }
         }
+    }
+
+    /// Store the ZP agent identifier registered by a tool at startup.
+    /// Persists so the substrate can re-grant the delegation across server
+    /// restarts without waiting for the tool to re-register.
+    pub fn set_agent_key(&self, tool_name: &str, key: &str) {
+        let mut map = self.bindings.lock().unwrap();
+        if let Some(binding) = map.get_mut(tool_name) {
+            if binding.agent_key.as_deref() != Some(key) {
+                binding.agent_key = Some(key.to_string());
+                drop(map);
+                self.persist();
+            }
+        }
+    }
+
+    /// Look up the registered agent key for a tool by name.
+    pub fn get_agent_key(&self, tool_name: &str) -> Option<String> {
+        let map = self.bindings.lock().unwrap();
+        map.get(tool_name).and_then(|b| b.agent_key.clone())
     }
 
     /// Clear a previously discovered proxy port for re-discovery after relaunch.
@@ -1866,6 +1939,7 @@ mod tests {
             preference_source: PreferenceSource::Default,
             last_version: None,
             bound_stacks: None,
+            agent_key: None,
         }
     }
 
@@ -1931,6 +2005,7 @@ mod tests {
             preference_source: PreferenceSource::Manifest,
             last_version: None,
             bound_stacks: None,
+            agent_key: None,
         };
         let json = serde_json::to_string(&binding).unwrap();
         let deserialized: ToolBinding = serde_json::from_str(&json).unwrap();
@@ -2570,10 +2645,11 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     #[test]
     fn posture_snapshot_attributes_extra_ports_as_substrate_managed() {
         let (reg, _dir) = make_registry();
-        // Allocate primary port for ironclaw.
-        let _b = reg
-            .allocate_or_existing("ironclaw", 8090, "PORT", &[], None, PreferenceSource::Default)
+        // Allocate primary port for ironclaw (pid=0, no preferred port — registry picks).
+        let b_alloc = reg
+            .allocate_or_existing("ironclaw", 0, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
+        let primary_port = b_alloc.port;
         // Inject actual extra ports the way Wire 2 / reconcile_ports does.
         {
             let mut map = reg.bindings.lock().unwrap();
@@ -2582,8 +2658,10 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
             b.actual_extra_ports.insert("GATEWAY_PORT".into(), 3000);
         }
         // Build snapshot from synthetic lsof output showing all three ports.
+        // Use the actually-allocated primary_port (not a hardcoded value) so the
+        // proc matches what's in port_map.
         let procs = vec![
-            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 8090 },
+            ListenProcess { pid: 93290, name: "ironclaw".into(), port: primary_port },
             ListenProcess { pid: 93290, name: "ironclaw".into(), port: 50051 },
             ListenProcess { pid: 93290, name: "ironclaw".into(), port: 3000 },
         ];

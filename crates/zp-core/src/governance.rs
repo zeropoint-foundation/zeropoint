@@ -801,6 +801,15 @@ impl ActionContext {
                 Some(name.clone()),
                 "High".to_string(),
             ),
+            CoreActionType::InferenceRequest {
+                model,
+                tool_names,
+                session_id,
+            } => (
+                "InferenceRequest".to_string(),
+                Some(format!("{}@{}", model, session_id)),
+                if tool_names.is_empty() { "Medium" } else { "High" }.to_string(),
+            ),
         };
 
         Self {

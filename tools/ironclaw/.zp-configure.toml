@@ -1,0 +1,310 @@
+# .zp-configure.toml — IronClaw
+# Governed agent runtime with multi-provider LLM, Slack/Telegram, and ZP substrate integration.
+#
+# This manifest is the canonical schema for IronClaw's vault requirements.
+# Validation runs automatically on every vault-set and every launch.
+
+[tool]
+name = "ironclaw"
+version = "0.29.1"
+description = "Agent runtime with ZP governance integration, multi-provider LLM routing, and team chat"
+
+# ── Required capabilities ──────────────────────────────────
+
+[[required]]
+capability = "reasoning_llm"
+env_vars = ["ANTHROPIC_API_KEY", "LLM_API_KEY", "LLM_BACKEND", "LLM_BASE_URL"]
+prefer = ["anthropic"]
+notes = "Primary LLM provider. ZP governance routes through ANTHROPIC_API_KEY; inner failover uses LLM_API_KEY."
+
+[[required]]
+capability = "database"
+env_vars = ["DATABASE_URL", "DATABASE_POOL_SIZE"]
+prefer = ["postgres"]
+notes = "PostgreSQL for agent state, conversation history, and job tracking"
+
+# ── Optional capabilities ──────────────────────────────────
+
+[[optional]]
+capability = "slack"
+env_vars = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_SIGNING_SECRET"]
+notes = "Slack integration for team communication"
+
+[[optional]]
+capability = "telegram"
+env_vars = ["TELEGRAM_BOT_TOKEN"]
+notes = "Telegram bot integration"
+
+[[optional]]
+capability = "nearai_failover"
+env_vars = ["NEARAI_AUTH_URL", "NEARAI_MODEL"]
+notes = "NEAR AI as last-resort LLM failover — requires NEARAI_SESSION_TOKEN or NEARAI_API_KEY at runtime"
+
+[[optional]]
+capability = "gateway_oidc"
+env_vars = [
+    "GATEWAY_OIDC_ENABLED", "GATEWAY_OIDC_ISSUER", "GATEWAY_OIDC_HEADER",
+    "GATEWAY_OIDC_AUDIENCE", "GATEWAY_OIDC_JWKS_URL",
+]
+notes = "OIDC authentication for the gateway (Cloudflare Access integration)"
+
+[[optional]]
+capability = "gateway_session"
+env_vars = [
+    "GATEWAY_SUBSTRATE_SESSION_ENABLED", "GATEWAY_SUBSTRATE_SESSION_KEY",
+    "GATEWAY_SUBSTRATE_SESSION_COOKIE_NAME",
+]
+notes = "Substrate session bridge — HMAC-based session verification"
+
+[[optional]]
+capability = "heartbeat"
+env_vars = [
+    "HEARTBEAT_ENABLED", "HEARTBEAT_INTERVAL_SECS",
+    "HEARTBEAT_NOTIFY_CHANNEL", "HEARTBEAT_NOTIFY_USER",
+]
+notes = "Periodic health heartbeat to Slack"
+
+[[optional]]
+capability = "google_llm"
+env_vars = ["GEMINI_API_KEY"]
+prefer = ["gemini"]
+notes = "Google Gemini as additional LLM provider"
+
+# ── Vault schema — per-var format constraints ──────────────
+#
+# Validation runs on every vault-set-tool-env AND on every tool launch.
+# Violations are loud: error! log + preflight:failed receipt.
+
+# --- LLM keys (the critical path) ---
+
+[[vault_schema]]
+var = "ANTHROPIC_API_KEY"
+field_type = "api_key"
+required = true
+min_length = 90
+max_length = 120
+prefix = "sk-ant-"
+notes = "Used by ZpGovernedLlmProvider for the ZP routing path"
+recommend_ref = "providers/anthropic/api_key"
+
+[[vault_schema]]
+var = "LLM_API_KEY"
+field_type = "api_key"
+required = true
+min_length = 90
+max_length = 120
+prefix = "sk-ant-"
+notes = "Used by inner FailoverProvider chain. Should be same key as ANTHROPIC_API_KEY."
+recommend_ref = "providers/anthropic/api_key"
+
+[[vault_schema]]
+var = "LLM_BACKEND"
+field_type = "config"
+required = true
+allowed_values = ["anthropic", "openai"]
+notes = "Which LLM provider backend to use"
+
+[[vault_schema]]
+var = "LLM_BASE_URL"
+field_type = "url"
+required = false
+max_length = 200
+notes = "Override base URL for LLM API. Empty = provider default."
+
+# --- Database ---
+
+[[vault_schema]]
+var = "DATABASE_URL"
+field_type = "connection_string"
+required = true
+min_length = 20
+prefix = "postgres"
+recommend_ref = "providers/postgres/database_url"
+
+[[vault_schema]]
+var = "DATABASE_POOL_SIZE"
+field_type = "config"
+required = false
+allowed_values = ["1", "2", "3", "4", "5", "8", "10", "16", "20", "32"]
+
+# --- Gateway auth ---
+
+[[vault_schema]]
+var = "GATEWAY_AUTH_TOKEN"
+field_type = "secret"
+substrate_owned = true
+notes = "Set by substrate at launch — vault value is skipped (ZP_OWNED_VARS)"
+
+[[vault_schema]]
+var = "GATEWAY_SUBSTRATE_SESSION_KEY"
+field_type = "secret"
+required = false
+min_length = 32
+max_length = 128
+notes = "HMAC key for substrate session verification"
+
+# --- OIDC ---
+
+[[vault_schema]]
+var = "GATEWAY_OIDC_ISSUER"
+field_type = "url"
+required = false
+prefix = "https://"
+
+[[vault_schema]]
+var = "GATEWAY_OIDC_AUDIENCE"
+field_type = "secret"
+required = false
+min_length = 10
+
+[[vault_schema]]
+var = "GATEWAY_OIDC_JWKS_URL"
+field_type = "url"
+required = false
+prefix = "https://"
+
+# --- Slack ---
+
+[[vault_schema]]
+var = "SLACK_BOT_TOKEN"
+field_type = "api_key"
+required = false
+prefix = "xoxb-"
+min_length = 30
+
+[[vault_schema]]
+var = "SLACK_APP_TOKEN"
+field_type = "api_key"
+required = false
+prefix = "xapp-"
+min_length = 30
+
+# --- Other credentials ---
+
+[[vault_schema]]
+var = "IRONCLAW_BEARER_TOKEN"
+field_type = "secret"
+required = false
+min_length = 32
+
+[[vault_schema]]
+var = "HTTP_WEBHOOK_SECRET"
+field_type = "secret"
+required = false
+min_length = 10
+
+# --- Substrate-owned vars (documented, not validated from vault) ---
+
+[[vault_schema]]
+var = "IRONCLAW_ZP_ENABLED"
+field_type = "toggle"
+substrate_owned = true
+notes = "Set unconditionally by substrate at line 4476 of tool_launch_handler"
+
+[[vault_schema]]
+var = "ZP_MANAGED"
+field_type = "toggle"
+substrate_owned = true
+
+[[vault_schema]]
+var = "ZP_GOVERNED"
+field_type = "toggle"
+substrate_owned = true
+
+[[vault_schema]]
+var = "PORT"
+field_type = "config"
+substrate_owned = true
+
+[[vault_schema]]
+var = "GATEWAY_PORT"
+field_type = "config"
+substrate_owned = true
+
+# ── Configurable parameters ───────────────────────────────
+
+[[configurable]]
+name = "default_model"
+description = "Default LLM model for agent requests"
+default = "claude-sonnet-4-6"
+env_var = "ZP_DEFAULT_MODEL"
+
+[[configurable]]
+name = "rust_log"
+description = "Tracing filter for IronClaw logs"
+default = "warn"
+env_var = "RUST_LOG"
+
+[[configurable]]
+name = "agent_name"
+description = "Display name for the agent"
+default = "ironclaw"
+env_var = "AGENT_NAME"
+
+[[configurable]]
+name = "max_parallel_jobs"
+description = "Maximum concurrent agent jobs"
+default = "1"
+env_var = "AGENT_MAX_PARALLEL_JOBS"
+
+[[configurable]]
+name = "job_timeout_secs"
+description = "Timeout for a single agent job"
+default = "3600"
+env_var = "AGENT_JOB_TIMEOUT_SECS"
+
+[[configurable]]
+name = "stuck_threshold_secs"
+description = "Seconds before an agent is considered stuck"
+default = "300"
+env_var = "AGENT_STUCK_THRESHOLD_SECS"
+
+[[configurable]]
+name = "use_planning"
+description = "Enable agent planning mode"
+default = "true"
+env_var = "AGENT_USE_PLANNING"
+
+[[configurable]]
+name = "safety_max_output_length"
+description = "Maximum output length safety limit"
+default = "100000"
+env_var = "SAFETY_MAX_OUTPUT_LENGTH"
+
+[[configurable]]
+name = "safety_injection_check"
+description = "Enable prompt injection safety check"
+default = "true"
+env_var = "SAFETY_INJECTION_CHECK_ENABLED"
+
+[[configurable]]
+name = "self_repair_max_attempts"
+description = "Max self-repair attempts on failure"
+default = "3"
+env_var = "SELF_REPAIR_MAX_ATTEMPTS"
+
+[[configurable]]
+name = "self_repair_check_interval"
+description = "Seconds between self-repair checks"
+default = "60"
+env_var = "SELF_REPAIR_CHECK_INTERVAL_SECS"
+
+# ── Runtime verification ──────────────────────────────────
+
+[verification]
+delay_secs = 10
+retries = 3
+
+[verification.endpoints]
+reasoning_llm = "/api/server-providers"
+
+# ── Launch spec ───────────────────────────────────────────
+
+[launch]
+command = "target/release/ironclaw"
+working_dir = "/Users/kenrom/projects/ironclaw"
+
+# ── F5 capability envelope ────────────────────────────────
+
+[capabilities]
+reversibility = "mixed"

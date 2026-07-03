@@ -748,6 +748,25 @@
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // ── Stop logic ────────────────────────────────────────────
+    async function stopTool(name) {
+      try {
+        const resp = await zpFetch(`/api/v1/tools/${encodeURIComponent(name)}/stop`, {
+          method: 'POST',
+        });
+        const result = await resp.json();
+        if (resp.ok) {
+          showToast(`<strong>${escapeHtml(name)}</strong> stopped`, 4000);
+          // Refresh tile data so running_pid clears and Stop button disappears
+          setTimeout(refreshAll, 800);
+        } else {
+          showToast(`Stop failed: ${result.error || 'unknown error'}`, 6000);
+        }
+      } catch (err) {
+        showToast(`Stop failed: ${err.message}`, 6000);
+      }
+    }
+
     // ── Launch logic ─────────────────────────────────────────
     const launching = new Set();
 
@@ -1432,8 +1451,13 @@
           issuesHtml = `<div class="tile-preflight-issues">${shown}${more}</div>`;
         }
 
+        const stopBtn = tool.running_pid
+          ? `<button class="tile-stop" title="Stop process (PID ${tool.running_pid})" data-action="stop-tool" data-tool-name="${escapeHtml(tool.name)}">&#9632;</button>`
+          : '';
+
         tile.innerHTML = `
           <button class="tile-remove" title="Remove from governance" data-action="remove-tool" data-tool-name="${escapeHtml(tool.name)}">&times;</button>
+          ${stopBtn}
           <div class="tile-health ${healthClass}"></div>
           <div class="tile-icon">${icon}</div>
           <div class="tile-name">${escapeHtml(tool.name)}</div>
@@ -1709,6 +1733,12 @@ document.addEventListener('click', function(e) {
       const cmd = target.getAttribute('data-cmd') || '';
       const cwd = target.getAttribute('data-cwd') || '';
       execInTerminal(cmd, cwd);
+      break;
+    }
+    case 'stop-tool': {
+      e.stopPropagation();
+      const name = target.getAttribute('data-tool-name') || '';
+      if (name) stopTool(name);
       break;
     }
     case 'remove-tool': {

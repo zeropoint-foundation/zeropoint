@@ -116,7 +116,7 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
         .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
 
     let entries = store
-        .export_chain(limit)
+        .recent_entries(limit)
         .map_err(|e| anyhow::anyhow!("Failed to read audit chain: {}", e))?;
 
     eprintln!();
@@ -135,10 +135,13 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
         return Ok(());
     }
 
+    let total = store
+        .entry_count()
+        .unwrap_or(entries.len());
     eprintln!(
-        "  Showing {} of {} entries",
-        entries.len().min(limit),
-        entries.len()
+        "  Showing last {} of {} entries",
+        entries.len(),
+        total
     );
     eprintln!();
 
@@ -164,6 +167,110 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
     }
 
     eprintln!();
+    Ok(())
+}
+
+/// Narrate the chain as a human-readable story.
+///
+/// Reads the last `limit` entries, runs them through `ChainStory::from_entries`,
+/// and renders text or JSON. Deterministic: same chain → same story.
+pub async fn chain_story(
+    _pipeline: &Pipeline,
+    limit: usize,
+    domain: Option<&str>,
+    summary: bool,
+    json: bool,
+) -> Result<()> {
+    use zp_officers::narration::ChainStory;
+
+    let db_path = zp_core::paths::data_dir()
+        .map_err(|e| anyhow::anyhow!("Failed to resolve data directory: {}", e))?
+        .join("audit.db");
+
+    if !db_path.exists() {
+        eprintln!();
+        eprintln!("  \x1b[1mChain Story\x1b[0m");
+        eprintln!("  \x1b[2m───────────\x1b[0m");
+        eprintln!();
+        eprintln!("  \x1b[2mNo audit entries yet.\x1b[0m");
+        eprintln!();
+        return Ok(());
+    }
+
+    let store = AuditStore::open_readonly(&db_path)
+        .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
+
+    let entries = store
+        .recent_entries(limit)
+        .map_err(|e| anyhow::anyhow!("Failed to read audit chain: {}", e))?;
+
+    if entries.is_empty() {
+        eprintln!();
+        eprintln!("  \x1b[1mChain Story\x1b[0m");
+        eprintln!("  \x1b[2m───────────\x1b[0m");
+        eprintln!();
+        eprintln!("  \x1b[2mNo audit entries yet.\x1b[0m");
+        eprintln!();
+        return Ok(());
+    }
+
+    let mut story = ChainStory::from_entries(&entries);
+
+    // Apply domain filter if requested
+    if let Some(d) = domain {
+        story = story.filter_domain(d);
+    }
+
+    if json {
+        // JSON output for cockpit consumption
+        if summary {
+            let segments = story.summarize();
+            let output = serde_json::json!({
+                "segments": segments,
+                "entry_count": story.entry_count,
+                "time_range": story.time_range,
+                "summary": true,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            println!("{}", serde_json::to_string_pretty(&story)?);
+        }
+    } else {
+        // Human-readable text output
+        eprintln!();
+        if summary {
+            let segments = story.summarize();
+            if let Some((start, end)) = story.time_range {
+                eprintln!(
+                    "  \x1b[1mChain Story (summary)\x1b[0m — {} entries, {} → {}",
+                    story.entry_count,
+                    start.format("%Y-%m-%d %H:%M"),
+                    end.format("%H:%M"),
+                );
+            }
+            if let Some(d) = domain {
+                eprintln!("  Filter: {}", d);
+            }
+            eprintln!();
+            for seg in &segments {
+                let time = seg.span.0.format("%H:%M");
+                eprintln!("  \x1b[2m{}\x1b[0m  {}", time, seg.text);
+            }
+            if segments.is_empty() {
+                eprintln!("  \x1b[2m(no matching events)\x1b[0m");
+            }
+        } else {
+            if let Some(d) = domain {
+                eprintln!("  Filter: {}", d);
+            }
+            eprint!("{}", story.render_text());
+            if story.segments.is_empty() {
+                eprintln!("  \x1b[2m(no matching events)\x1b[0m");
+            }
+        }
+        eprintln!();
+    }
+
     Ok(())
 }
 

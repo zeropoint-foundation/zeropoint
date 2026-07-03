@@ -112,9 +112,10 @@ else
   FAIL=1
 fi
 
-# Confirm Set-Cookie landed in the jar
-if grep -q '^\.zeropointfoundation\.org.*zp_session' "$COOKIE_JAR" 2>/dev/null \
-   || grep -q '^zeropointfoundation\.org.*zp_session' "$COOKIE_JAR" 2>/dev/null; then
+# Confirm Set-Cookie landed in the jar.
+# curl's Netscape jar prefixes HttpOnly cookies with "#HttpOnly_", so match
+# both the plain and HttpOnly-prefixed forms.
+if grep -q '\.zeropointfoundation\.org.*zp_session' "$COOKIE_JAR" 2>/dev/null; then
   echo "  ✓ Set-Cookie: zp_session received (domain-scoped)"
 else
   echo "  ✗ Set-Cookie: zp_session NOT received or wrong scope"

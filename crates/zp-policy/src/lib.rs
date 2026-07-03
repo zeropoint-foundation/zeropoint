@@ -21,7 +21,7 @@ pub mod wasm_runtime;
 // Re-export commonly used types — always available
 pub use downgrade::{DowngradeError, DowngradeGuard, PolicyVersion};
 pub use engine::PolicyEngine;
-pub use gate::{GateResult, GovernanceGate};
+pub use gate::{GateResult, GovernanceGate, InferenceGateResult, InferencePolicyState};
 pub use rules::{PolicyRule, ReputationGateRule, ReputationThresholds, TrustTierEnforcementRule};
 
 // WASM types — only available with policy-wasm feature

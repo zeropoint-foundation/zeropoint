@@ -198,6 +198,23 @@ pub enum ActionType {
         /// The tool being invoked (e.g., "bash", "read", "slack.send_message").
         name: String,
     },
+    /// LLM inference request — dispatching a prompt through a governed backend.
+    ///
+    /// This is the GAR Phase 4 action type. The gate applies:
+    /// - Layer 1: model allowlist check against the current policy receipt
+    /// - Layer 2: circuit-breaker check (consecutive failure count vs threshold)
+    ///
+    /// Schema compat requirements (e.g., Gemini type constraints) are returned
+    /// to the caller; actual normalization happens in `ZpGovernedLlmProvider`.
+    InferenceRequest {
+        /// Model being requested (e.g., "route-llm", "gpt-4o").
+        model: String,
+        /// Tool names attached to this inference request. Empty = no tools.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tool_names: Vec<String>,
+        /// Session ID for correlation with inference receipts.
+        session_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -337,6 +354,15 @@ impl RiskLevel {
             // ToolCall risk is equivalent to Execute — invoking a named tool
             // has the same blast-radius profile as executing code.
             ActionType::ToolCall { .. } => RiskLevel::High,
+            // InferenceRequest: Medium without tools (controlled external call),
+            // High with tools (tool-augmented inference has Execute-class blast radius).
+            ActionType::InferenceRequest { tool_names, .. } => {
+                if tool_names.is_empty() {
+                    RiskLevel::Medium
+                } else {
+                    RiskLevel::High
+                }
+            }
         }
     }
 }

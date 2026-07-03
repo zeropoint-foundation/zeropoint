@@ -1,0 +1,68 @@
+# ZeroPoint Officer Inference Configuration
+#
+# Consumed by: bench-local-models.py (now), Cartographer (future).
+# Validated by: full bench matrix — A/B prompts, format/think modes,
+#   5 candidate models (2026-07-01).
+#
+# Resolution: script-local override → ~/ZeroPoint/officer-inference.toml → repo default.
+#
+# Two-model config: gemma4 (fast path) + qwen3.6 (reasoning path).
+# Candidates tested and eliminated: nemotron-3-nano (no advantage at 24GB),
+#   granite4.1:8b (HTTP 400 on think), qwen3:4b (timeout-inflated scores),
+#   qwen3:8b (strong on severity/pattern but added complexity not justified),
+#   mistral-small3.2:24b (HTTP 400 on think, 17 tok/s, no task wins).
+
+[models]
+# Tier 2 default — handles classify, severity, summarize, pattern.
+# gemma4:26b-mlx — 70 tok/s, 0.93-1.00 on fast-path tasks with native format.
+default = "gemma4:26b-mlx"
+
+# Tier 3 escalation — handles boundary detection (only task requiring it).
+# qwen3.6:35b-a3b — 55 tok/s, 1.00 on boundary with think mode.
+escalation = "qwen3.6:35b-a3b"
+
+[prompts]
+# "strict" constrains output to JSON-only; reasoning stays in thinking field.
+# Bench delta: qwen3.6 +0.16 accuracy with strict, gemma4 +0.03.
+mode = "strict"
+
+[format]
+# Ollama native structured output (format parameter with JSON schema).
+# Constrains output at the grammar/engine level — guaranteed valid JSON.
+#
+# Fast-path tasks: format ON + think OFF → sub-second, highest accuracy.
+# Reasoning tasks: format OFF + think ON → needs CoT for accuracy.
+# WARNING: format ON + think ON is the worst combination (18 timeouts, 0.58).
+default = true
+trajectory_boundary = false
+pattern_detect = false
+
+[think]
+# Ollama think mode (chain-of-thought in separate field).
+# Only enabled for tasks that need reasoning over temporal sequences.
+default = false
+trajectory_boundary = true
+pattern_detect = true
+
+[timeout]
+# Fast-path tasks complete in <2s; 30s is generous.
+# Reasoning tasks need longer — gemma4 takes ~19s on pattern with think,
+# qwen3.6 takes 20-35s on boundary with think.
+default_s = 30
+trajectory_boundary = 120
+pattern_detect = 120
+
+# Timeout action: "escalation" retries with escalation model.
+fallback = "escalation"
+
+[routing]
+# Only boundary detection routes to escalation (qwen3.6).
+# All other tasks stay on default (gemma4).
+#
+# Final validated scores (routed config):
+#   receipt_classify:     gemma4  F·  0.94 @ 0.3s
+#   severity_assess:      gemma4  F·  0.93 @ 0.8s
+#   receipt_summarize:    gemma4  F·  1.00 @ 1.9s
+#   pattern_detect:       gemma4  PT  0.80 @ 18.8s
+#   trajectory_boundary:  qwen3.6 PT  1.00 @ 22.3s
+trajectory_boundary = "escalation"

@@ -153,6 +153,31 @@ pub struct CapabilityGrant {
     /// node); this field represents an operator-directed smooth renewal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub renews: Option<String>,
+
+    // --- Officer cadre gap-closing fields ----------------------------------
+
+    /// What kind of entity holds this grant (operator, officer, agent,
+    /// external tool). Identity is always a key (Principle 2), but knowing
+    /// the *kind* behind the key lets Sentinel scope audit queries and lets
+    /// cockpits render grants with appropriate context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grantee_type: Option<GranteeType>,
+
+    /// Human-readable summary of what this delegation is *for*.
+    /// Not a constraint — purely for operator legibility in chain viewers
+    /// and cockpit surfaces. Officers and agents can set this when
+    /// requesting a grant so the operator sees intent, not just scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_description: Option<String>,
+
+    /// Receipt IDs that provide context for why this grant was issued.
+    /// E.g., a `gate:denied` receipt + an operator decision receipt that
+    /// together motivated granting this capability. Distinct from
+    /// `receipt_id` (the receipt that *carried* this grant) and
+    /// `parent_grant_id` (the grant it chains from). Strengthens the
+    /// audit narrative by linking the causal chain of events.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_receipts: Vec<String>,
 }
 
 fn is_zero_u32(n: &u32) -> bool {
@@ -222,6 +247,25 @@ impl GrantProvenance {
     pub fn is_standing(&self) -> bool {
         matches!(self, GrantProvenance::Standing { .. })
     }
+}
+
+/// What kind of entity holds this grant.
+///
+/// Grantees are always identified by cryptographic key (`grantee` field),
+/// but knowing the *kind* of entity behind the key lets Sentinel scope
+/// audit queries and lets cockpits render grants with appropriate context.
+/// Optional for backward compatibility — pre-officer grants have no type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GranteeType {
+    /// A human operator (CLI, dashboard, cockpit).
+    Operator,
+    /// A ZP-native system officer (Steward, Sentinel, Forge).
+    Officer,
+    /// An external agent running under the Governed Agent Runtime.
+    Agent,
+    /// An external tool (MCP server, WASM module, webhook).
+    ExternalTool,
 }
 
 /// Policy for re-delegating a grant downstream (#197).
@@ -306,6 +350,11 @@ impl CapabilityGrant {
             renewal_count: 0,
             subject_public_key: None,
             renews: None,
+            // Officer cadre gap-closing fields default to absent so
+            // pre-officer grants are byte-identical.
+            grantee_type: None,
+            task_description: None,
+            context_receipts: Vec::new(),
         }
     }
 
@@ -471,6 +520,24 @@ impl CapabilityGrant {
     /// secret key, no session cookie required.
     pub fn with_subject_public_key(mut self, pubkey_hex: impl Into<String>) -> Self {
         self.subject_public_key = Some(pubkey_hex.into());
+        self
+    }
+
+    /// Set the grantee type (operator, officer, agent, external tool).
+    pub fn with_grantee_type(mut self, grantee_type: GranteeType) -> Self {
+        self.grantee_type = Some(grantee_type);
+        self
+    }
+
+    /// Set a human-readable description of what this delegation is for.
+    pub fn with_task_description(mut self, description: impl Into<String>) -> Self {
+        self.task_description = Some(description.into());
+        self
+    }
+
+    /// Set the context receipts — receipt IDs that motivated this grant.
+    pub fn with_context_receipts(mut self, receipts: Vec<String>) -> Self {
+        self.context_receipts = receipts;
         self
     }
 
@@ -817,6 +884,9 @@ impl CapabilityGrant {
             last_renewed_at: self.last_renewed_at,
             renewal_count: self.renewal_count,
             subject_public_key: self.subject_public_key.clone(),
+            grantee_type: self.grantee_type.clone(),
+            task_description: self.task_description.clone(),
+            context_receipts: self.context_receipts.clone(),
         };
 
         // Seam 17: route through the canonical helper so the byte form
@@ -1458,6 +1528,14 @@ struct CanonicalForm {
     renewal_count: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     subject_public_key: Option<String>,
+
+    // ---- Officer cadre gap-closing fields ----------------------------------
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    grantee_type: Option<GranteeType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    task_description: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    context_receipts: Vec<String>,
 }
 
 fn is_default_redelegation(p: &RedelegationPolicy) -> bool {

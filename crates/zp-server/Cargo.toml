@@ -18,6 +18,8 @@ full = ["policy-wasm", "os-keychain", "hw-trezor"]
 
 [dependencies]
 zp-config = { path = "../zp-config" }
+zp-officers = { path = "../zp-officers" }
+zp-sensors = { path = "../zp-sensors" }
 zp-core = { path = "../zp-core" }
 zp-host = { path = "../zp-host" }
 zp-engine = { path = "../zp-engine" }

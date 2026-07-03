@@ -711,6 +711,13 @@ impl AuditStore {
         Ok(rows)
     }
 
+    /// Total number of entries in the chain.
+    pub fn entry_count(&self) -> Result<usize> {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
+            .map_err(StoreError::Database)
+    }
+
     /// Export a chain segment for peer verification.
     ///
     /// Returns entries in chronological order (oldest first), suitable for
@@ -815,6 +822,212 @@ impl AuditStore {
             });
         }
 
+        Ok(result)
+    }
+
+    /// Return the most recent `limit` entries in chronological order.
+    ///
+    /// Like `export_chain` but reads the tail of the chain instead of the
+    /// head. Useful for CLI commands like `zp audit log` where the operator
+    /// wants to see what happened recently.
+    pub fn recent_entries(&self, limit: usize) -> Result<Vec<AuditEntry>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                        conversation_id, policy_decision, policy_module, receipt, signatures
+                 FROM audit_entries
+                 ORDER BY rowid DESC
+                 LIMIT ?",
+            )
+            .map_err(StoreError::Database)?;
+
+        let entries = stmt
+            .query_map(params![limit], |row| {
+                let id_str: String = row.get(0)?;
+                let timestamp_str: String = row.get(1)?;
+                let prev_hash: String = row.get(2)?;
+                let entry_hash: String = row.get(3)?;
+                let actor_json: String = row.get(4)?;
+                let action_json: String = row.get(5)?;
+                let conv_id_str: String = row.get(6)?;
+                let policy_decision_json: String = row.get(7)?;
+                let policy_module: String = row.get(8)?;
+                let receipt_json: Option<String> = row.get(9)?;
+                let signatures_json: String = row.get(10)?;
+
+                Ok((
+                    id_str,
+                    timestamp_str,
+                    prev_hash,
+                    entry_hash,
+                    actor_json,
+                    action_json,
+                    conv_id_str,
+                    policy_decision_json,
+                    policy_module,
+                    receipt_json,
+                    signatures_json,
+                ))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        let mut result = Vec::new();
+        for (
+            id_str,
+            timestamp_str,
+            prev_hash,
+            entry_hash,
+            actor_json,
+            action_json,
+            conv_id_str,
+            policy_decision_json,
+            policy_module,
+            receipt_json,
+            signatures_json,
+        ) in entries
+        {
+            let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
+            let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(chrono::Utc::now);
+            let actor = serde_json::from_str(&actor_json)
+                .unwrap_or_else(|_| zp_core::ActorId::System("unknown".to_string()));
+            let action = serde_json::from_str(&action_json).unwrap_or_else(|_| {
+                zp_core::AuditAction::SystemEvent {
+                    event: "unknown".to_string(),
+                }
+            });
+            let conversation_id = zp_core::ConversationId(
+                uuid::Uuid::parse_str(&conv_id_str).unwrap_or_else(|_| uuid::Uuid::nil()),
+            );
+            let policy_decision =
+                serde_json::from_str(&policy_decision_json).unwrap_or_else(|_| {
+                    zp_core::PolicyDecision::Block {
+                        reason: "unknown".to_string(),
+                        policy_module: "unknown".to_string(),
+                    }
+                });
+            let receipt = receipt_json
+                .as_ref()
+                .and_then(|json| serde_json::from_str(json).ok());
+
+            result.push(AuditEntry {
+                id: zp_core::AuditId(id),
+                timestamp,
+                prev_hash,
+                entry_hash,
+                actor,
+                action,
+                conversation_id,
+                policy_decision,
+                policy_module,
+                receipt,
+                signatures: decode_signatures(&signatures_json),
+            });
+        }
+
+        // Reverse: query fetched newest-first, restore chronological order.
+        result.reverse();
+
+        Ok(result)
+    }
+
+    /// Search chain entries whose serialized `action` JSON contains `keyword`.
+    ///
+    /// Uses a SQL `LIKE '%keyword%'` pre-filter so the full chain is never
+    /// loaded into memory.  The caller is still responsible for exact matching
+    /// after deserialization; this method is intentionally permissive to keep
+    /// the SQL simple and fast.  Returns up to `limit` results in ascending
+    /// rowid order so recent registrations are always reachable regardless of
+    /// chain length.
+    pub fn search_chain_by_action_keyword(
+        &self,
+        keyword: &str,
+        limit: usize,
+    ) -> Result<Vec<AuditEntry>> {
+        // Simple LIKE with no ESCAPE clause — the keyword never contains SQL LIKE
+        // metacharacters (% or _), so no escaping is needed.  The sqlite3 CLI
+        // confirmed that `WHERE action LIKE '%model:registered%'` (no ESCAPE)
+        // returns the expected rows; the ESCAPE '|' variant returned 0 on the
+        // same DB, suggesting a SQLite build quirk with '|' as escape char.
+        let like_pattern = format!("%{}%", keyword);
+
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                        conversation_id, policy_decision, policy_module, receipt, signatures
+                 FROM audit_entries
+                 WHERE action LIKE ?
+                 ORDER BY rowid ASC
+                 LIMIT ?",
+            )
+            .map_err(StoreError::Database)?;
+
+        let rows = stmt
+            .query_map(params![like_pattern, limit], |row| {
+                let id_str: String = row.get(0)?;
+                let timestamp_str: String = row.get(1)?;
+                let prev_hash: String = row.get(2)?;
+                let entry_hash: String = row.get(3)?;
+                let actor_json: String = row.get(4)?;
+                let action_json: String = row.get(5)?;
+                let conv_id_str: String = row.get(6)?;
+                let policy_decision_json: String = row.get(7)?;
+                let policy_module: String = row.get(8)?;
+                let receipt_json: Option<String> = row.get(9)?;
+                let signatures_json: String = row.get(10)?;
+                Ok((
+                    id_str, timestamp_str, prev_hash, entry_hash,
+                    actor_json, action_json, conv_id_str,
+                    policy_decision_json, policy_module, receipt_json, signatures_json,
+                ))
+            })
+            .map_err(StoreError::Database)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+
+        let mut result = Vec::new();
+        for (id_str, timestamp_str, prev_hash, entry_hash, actor_json, action_json,
+             conv_id_str, policy_decision_json, policy_module, receipt_json, signatures_json) in rows
+        {
+            let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
+            let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(chrono::Utc::now);
+            let actor = serde_json::from_str(&actor_json)
+                .unwrap_or_else(|_| zp_core::ActorId::System("unknown".to_string()));
+            let action = serde_json::from_str(&action_json).unwrap_or_else(|_| {
+                zp_core::AuditAction::SystemEvent { event: "unknown".to_string() }
+            });
+            let conversation_id = zp_core::ConversationId(
+                uuid::Uuid::parse_str(&conv_id_str).unwrap_or_else(|_| uuid::Uuid::nil()),
+            );
+            let policy_decision = serde_json::from_str(&policy_decision_json)
+                .unwrap_or_else(|_| zp_core::PolicyDecision::Block {
+                    reason: "unknown".to_string(),
+                    policy_module: "unknown".to_string(),
+                });
+            let receipt = receipt_json.as_ref().and_then(|json| serde_json::from_str(json).ok());
+            result.push(AuditEntry {
+                id: zp_core::AuditId(id),
+                timestamp,
+                prev_hash,
+                entry_hash,
+                actor,
+                action,
+                conversation_id,
+                policy_decision,
+                policy_module,
+                receipt,
+                signatures: decode_signatures(&signatures_json),
+            });
+        }
         Ok(result)
     }
 

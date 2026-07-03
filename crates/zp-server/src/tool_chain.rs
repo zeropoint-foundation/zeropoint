@@ -1980,6 +1980,196 @@ pub fn emit_and_broadcast(
     entry_hash
 }
 
+// ── Model preference governance receipts ─────────────────────────────────
+
+/// Emit `preference:model:selected` — operator explicitly chose a model for a tool.
+///
+/// Gate-checked upstream; this function only writes to the chain. Returns the
+/// entry hash of the new chain entry, or None if the store is unavailable.
+pub fn emit_model_preference_receipt(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    tool: &str,
+    model_id: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Option<String> {
+    let event = format!("preference:model:selected:{}", tool);
+    let detail = serde_json::to_string(&serde_json::json!({
+        "tool": tool,
+        "model_id": model_id,
+    }))
+    .unwrap_or_default();
+
+    let typed_receipt = signing_key.map(|key| {
+        let mut receipt = Receipt::authorization("zp-preference")
+            .status(ReceiptStatus::Success)
+            .claim_semantics(ClaimSemantics::AuthorizationGrant)
+            .claim_metadata(ClaimMetadata::ModelPreferenceSelected {
+                tool: tool.to_string(),
+                model_id: model_id.to_string(),
+            })
+            .finalize();
+        let signer = Signer::from_secret(&key.to_bytes());
+        signer.sign(&mut receipt);
+        receipt
+    });
+
+    let mut store = audit_store.lock().ok()?;
+    let action = AuditAction::SystemEvent { event };
+    let policy_decision = PolicyDecision::Allow {
+        conditions: vec![detail],
+    };
+    let unsealed = UnsealedEntry::new(
+        ActorId::System("zp-preference".to_string()),
+        action,
+        tool_lifecycle_conv_id().clone(),
+        policy_decision,
+        "preference",
+    );
+    let unsealed = match typed_receipt {
+        Some(r) => unsealed.with_receipt(r),
+        None => unsealed,
+    };
+    store.append(unsealed).ok().map(|sealed| sealed.entry_hash)
+}
+
+/// Emit `preference:model:resolved` — records which tier provided ZP_MODEL_ID at launch.
+///
+/// source is one of: "chain_preference", "vault_default", "tool_default".
+/// model_id is None when source == "tool_default" (substrate didn't inject).
+pub fn emit_model_resolved_receipt(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    tool: &str,
+    model_id: Option<&str>,
+    source: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Option<String> {
+    let event = format!("preference:model:resolved:{}", tool);
+    let detail = serde_json::to_string(&serde_json::json!({
+        "tool": tool,
+        "model_id": model_id,
+        "source": source,
+    }))
+    .unwrap_or_default();
+
+    let typed_receipt = signing_key.map(|key| {
+        let mut receipt = Receipt::authorization("zp-preference")
+            .status(ReceiptStatus::Success)
+            .claim_semantics(ClaimSemantics::IntegrityAttestation)
+            .claim_metadata(ClaimMetadata::ModelPreferenceResolved {
+                tool: tool.to_string(),
+                model_id: model_id.map(str::to_string),
+                source: source.to_string(),
+            })
+            .finalize();
+        let signer = Signer::from_secret(&key.to_bytes());
+        signer.sign(&mut receipt);
+        receipt
+    });
+
+    let mut store = audit_store.lock().ok()?;
+    let action = AuditAction::SystemEvent { event };
+    let policy_decision = PolicyDecision::Allow {
+        conditions: vec![detail],
+    };
+    let unsealed = UnsealedEntry::new(
+        ActorId::System("zp-preference".to_string()),
+        action,
+        tool_lifecycle_conv_id().clone(),
+        policy_decision,
+        "preference",
+    );
+    let unsealed = match typed_receipt {
+        Some(r) => unsealed.with_receipt(r),
+        None => unsealed,
+    };
+    store.append(unsealed).ok().map(|sealed| sealed.entry_hash)
+}
+
+/// Emit `cognition:model:routed` — records what route-llm actually chose.
+///
+/// Called by the tool (via POST /api/v1/cognition/model-routed) after a
+/// completion where the requested model was a routing alias. Gives the
+/// chain full visibility into Abacus's routing decisions.
+pub fn emit_model_routed_receipt(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    tool: &str,
+    requested_model: &str,
+    actual_model: &str,
+    task_id: Option<&str>,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Option<String> {
+    let event = format!("cognition:model:routed:{}", tool);
+    let detail = serde_json::to_string(&serde_json::json!({
+        "tool": tool,
+        "requested_model": requested_model,
+        "actual_model": actual_model,
+        "task_id": task_id,
+    }))
+    .unwrap_or_default();
+
+    let typed_receipt = signing_key.map(|key| {
+        let mut receipt = Receipt::authorization("zp-cognition")
+            .status(ReceiptStatus::Success)
+            .claim_semantics(ClaimSemantics::IntegrityAttestation)
+            .claim_metadata(ClaimMetadata::ModelRouted {
+                tool: tool.to_string(),
+                requested_model: requested_model.to_string(),
+                actual_model: actual_model.to_string(),
+                task_id: task_id.map(str::to_string),
+            })
+            .finalize();
+        let signer = Signer::from_secret(&key.to_bytes());
+        signer.sign(&mut receipt);
+        receipt
+    });
+
+    let mut store = audit_store.lock().ok()?;
+    let action = AuditAction::SystemEvent { event };
+    let policy_decision = PolicyDecision::Allow {
+        conditions: vec![detail],
+    };
+    let unsealed = UnsealedEntry::new(
+        ActorId::System("zp-cognition".to_string()),
+        action,
+        tool_lifecycle_conv_id().clone(),
+        policy_decision,
+        "cognition",
+    );
+    let unsealed = match typed_receipt {
+        Some(r) => unsealed.with_receipt(r),
+        None => unsealed,
+    };
+    store.append(unsealed).ok().map(|sealed| sealed.entry_hash)
+}
+
+/// Query the chain for the most recent model preference for a given tool.
+///
+/// Searches `ModelPreferenceSelected` receipts (emitted by POST /api/v1/preference/model)
+/// and returns the `model_id` from the most recent one matching `tool`. Returns None
+/// if no preference has been recorded for this tool.
+pub fn query_chain_model_preference(
+    audit_store: &Arc<Mutex<AuditStore>>,
+    tool: &str,
+) -> Option<String> {
+    let store = audit_store.lock().ok()?;
+    let entries = store.query_by_claim_type("model_preference_selected", 20).ok()?;
+    let tool_lower = tool.to_lowercase();
+    entries.into_iter().find_map(|e| {
+        if let Some(receipt) = e.receipt {
+            if let Some(ClaimMetadata::ModelPreferenceSelected {
+                tool: t,
+                model_id,
+            }) = receipt.claim_metadata
+            {
+                if t == tool_lower {
+                    return Some(model_id);
+                }
+            }
+        }
+        None
+    })
+}
+
 // ── F5 tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]

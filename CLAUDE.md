@@ -18,6 +18,14 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 | Playground | zeropoint.global/playground — interactive governance demo |
 | APOLLO | Ken's primary dev machine. Both dev environment and ZP runtime. |
 | ARTEMIS | Portable system, also used as clean environment for installation and workflow testing |
+| Cartographer | Background subprocess that reads the receipt chain and maintains the ontology — turns raw receipts into structured objects (Trajectories, Decisions, Insights, Artifacts, Frictions) and their relationships. Replaces "Dreaming" as the canonical name. |
+| Trajectory | Central primitive of the ontology. A living arc of work/thinking that emerges from activity — not declared top-down like a project. Can nest, fork, go dormant, resume. Spans sessions and projects. |
+| Decision | Ontology object: a meaningful choice made within a Trajectory, with pros/cons, confidence, and outcome tracking. Can be superseded by later Decisions. |
+| Insight | Ontology object: a key realization or observation within a Trajectory, with implications and confidence score. |
+| Artifact | Ontology object: created work (code, documents, designs, specs) linked to the Trajectory and Decision that produced it. |
+| Friction | Ontology object: a blocker or recurring problem within a Trajectory, with severity, occurrence count, and resolution status. Enables pattern detection across time. |
+| Ontology | The structured layer of typed objects and relationships derived from the receipt chain by the Cartographer. Officers query the ontology, not raw receipts. Chain is truth; ontology is understanding. |
+| Officer Cadre | The four system officers: Steward (integrity), Sentinel (security), Forge (operations), Cleo (governance). Sweep the ontology on schedule, emit findings as chain receipts. |
 
 ## Machines
 | Name | Role |
@@ -52,8 +60,17 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 - zeropoint.global files are gitignored — must use `git add -f zeropoint.global/`
 - Dark theme design system: --bg: #0a0a0c, accent: #7eb8da, Inter + JetBrains Mono
 - **Browser**: Uses Comet browser (NOT Chrome). Claude MCP is available via Comet tabs. Do NOT use Claude in Chrome MCP tools — they don't exist here.
-- **Dev workflow**: `./zp-dev.sh` (dev build), `./zp-dev.sh html` (instant HTML reload), `./zp-dev.sh release` (ship)
+- **Dev workflow**: `./zp-dev.sh` (dev build), `./zp-dev.sh release` (ship). Note: `./zp-dev.sh html` arg does NOT exist — valid args are `dev|release|kill|log|verify`.
 - **TTS**: native Cowork TTS handles spoken output. Do NOT invoke `piper_tts_synthesize` — the Piper MCP detour is retired.
+
+## IronClaw Build
+| Thing | Detail |
+|-------|--------|
+| **Source** | `~/projects/ironclaw/` — separate Cargo workspace from ZeroPoint |
+| **Tile binary** | Runs `target/release/ironclaw` — always `cargo build --release`, never plain `cargo build` |
+| **Verify running binary** | `ps aux \| grep ironclaw` — confirms path and build variant before debugging frontend changes |
+| **JS assets** | Baked in via `include_str!()` at compile time — no asset override dir. Changes require rebuild + tile restart. |
+| **Frontend served** | `crates/ironclaw_gateway/static/js/core/` — NOT `crates/ironclaw_webui_v2_static/` |
 
 ## Tone preferences
 
@@ -93,7 +110,7 @@ Drop, unless Ken just used the same frame:
 5. **Store-and-forward is primary** — the chain survives outages. Derived state, not live state.
 6. **A tool is intent, crystallized** — semantics in structure, not in comments. Constitutional rules are conservation laws.
 
-**Companion documents**: `whitepaper-v2.md` (public thesis), `design/governed-agent-runtime.md` (GAR spec), `future-work/cognitive-accountability.md` (Layer 3 trace vision), `design/quorum-sovereignty.md` (M-of-N sovereignty direction + HW wallet implementation notes), `intellectual-context.md` (adjacent thinkers: autoregressive theory, LARQL, MEDS, Nate Jones), `EDGE-TIER-CONTRACT-2026-06.md` (runtime-neutral required/optional/forbidden affordances for the worker tier; operational complement to ARCHITECTURE §4c), `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06.md` (hub-only meta-contract — 11-tier taxonomy + reusable contract template; the seed from which any ZP integration's per-tier contracts derive).
+**Companion documents**: `whitepaper-v2.md` (public thesis), `design/governed-agent-runtime.md` (GAR spec), `future-work/cognitive-accountability.md` (Layer 3 trace vision), `design/quorum-sovereignty.md` (M-of-N sovereignty direction + HW wallet implementation notes), `intellectual-context.md` (adjacent thinkers: autoregressive theory, LARQL, MEDS, Nate Jones), `EDGE-TIER-CONTRACT-2026-06.md` (runtime-neutral required/optional/forbidden affordances for the worker tier; operational complement to ARCHITECTURE §4c), `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06.md` (hub-only meta-contract — 11-tier taxonomy + reusable contract template; the seed from which any ZP integration's per-tier contracts derive), `GOVERNANCE-IMPLEMENTATION-PRINCIPLES-2026-06.md` (five implementation heuristics for building governance correctly — the operational complement to the eight design principles, grounded in the inference governance arc).
 
 ## Working principles (Karpathy-style)
 
@@ -301,6 +318,26 @@ Two implications worth pinning later:
 Connects to *a tool is intent, crystallized* (Principle 6 — the verb is the crystallized intent; cockpits are the rendering surface, not the seat of truth), *the substrate proposes; operators sign* (proposals and signed artifacts both surface in the cockpit by projection, not by declaration), and *every bit counts* (Principle 4 — no decorative affordances). The lsof test has a cockpit-side counterpart: the substrate is mature when an operator can read any cockpit's affordance list and trace each entry to a chain receipt that authorizes it.
 
 When this principle is in tension with a third-party convention (e.g., a tool's expected CLI shape includes commands the operator's chain doesn't authorize), default to the chain. The substrate is the source of truth; conventions accommodate it, not the other way around.
+
+### Operational configuration with multiple write paths is structural drift waiting to happen.
+
+When the same fact — a port number, an auth token, a process state — can be written by more than one independent code path, those paths will diverge. Not sometimes; always, eventually. The substrate will be coherent within each path's frame and incoherent across them, and the failure mode will look like a config problem when it is actually an ownership problem.
+
+The diagnostic signature: you're editing two files to fix one thing, or you're restarting two processes to clear one inconsistency, or you're getting different answers depending on which path you entered the system through. That's the structural tell.
+
+The fix is never to synchronize the paths more carefully. It is to eliminate all but one: pick one owner per surface, and make every other path delegate to that owner. For ZeroPoint specifically, "owner" almost always means the chain — every other surface (JSON files, env sidecars, in-process caches) is a projection or cache of chain state, never an independent source.
+
+Three corollaries that matter in practice:
+
+1. **Any write to operational configuration must be atomic across all consumers.** If `tool-ports.json` and `.env.zp` both encode port/auth state, they must be written together in one operation or not at all. A write path that updates one without the other introduces drift at the moment it runs.
+
+2. **Process lifecycle events are configuration writes.** When a tool stops and restarts, its port binding, auth token, and PID all change. If the restart path doesn't go through the same governed exec flow that wrote the original configuration, those fields become stale. The stop button is a configuration event; it must be treated as one.
+
+3. **Liveness checks must match the failure mode they're guarding against.** A `kill -0` check confirms a PID exists — it returns true for suspended (SIGSTOP) processes that are holding ports but not answering requests. If the failure mode is "port held by unresponsive process," the check must verify process state, not just existence.
+
+Example (2026-06-28): ZP's port registry (`tool-ports.json`) and IronClaw's env sidecar (`.env.zp`) both encode the tool's port and auth token, written by separate allocation events at separate times. After a ZP restart and tile-based relaunch cycle, they diverged: the registry had port 8090 and token `eb7e46dc…`; `.env.zp` had port 9101 and token `zp-58ceaf72…`. The proxy forwarded to 9101 (from a stale `proxy_port` cache), IronClaw was running on 9101 (from `.env.zp`), but the proxy injected the wrong auth token (from the registry). Separately, the stop button had sent SIGSTOP not SIGTERM, leaving the old process suspended on port 9101 — alive to `kill -0`, dead to HTTP. Three independent drifts, one causal chain: multiple write paths, no single owner.
+
+Connects to *when two reasonable architectural models conflict over the same surface, half-state is the failure mode* (same diagnostic shape applied to configuration rather than deployment models), *store-and-forward is primary* (the chain is the one owner; all other surfaces derive), and *every bit counts* (duplicate data paths are the anti-pattern Principle 4 is named for).
 
 ## graphify
 

@@ -1,0 +1,10 @@
+[package]
+name = "listeners-test"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+listeners = "0.6"
+libc = "0.2"

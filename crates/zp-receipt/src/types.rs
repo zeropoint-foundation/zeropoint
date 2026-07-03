@@ -254,6 +254,48 @@ impl Receipt {
         crate::ReceiptBuilder::new(ReceiptType::MemoryRevokedFromIndex, executor_id)
     }
 
+    /// Start building a `preference:llm:policy:set` receipt.
+    /// Emitted when the operator declares LLM inference policy.
+    pub fn preference_llm_policy(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::PreferenceLlmPolicySet, executor_id)
+    }
+
+    /// Start building an `inference:dispatched` receipt.
+    /// Emitted immediately before the LLM HTTP request is sent.
+    pub fn inference_dispatched(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::InferenceDispatched, executor_id)
+    }
+
+    /// Start building an `inference:completed` receipt.
+    /// Emitted after the LLM response returns.
+    pub fn inference_completed(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::InferenceCompleted, executor_id)
+    }
+
+    /// Start building an `inference:failed` receipt.
+    /// Emitted when an inference call is blocked by the gate or rejected by the provider.
+    pub fn inference_failed(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::InferenceFailed, executor_id)
+    }
+
+    /// Start building a `model:registered` receipt.
+    /// Emitted when the operator registers a model with its capabilities and pricing.
+    pub fn model_registered(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::ModelRegistered, executor_id)
+    }
+
+    /// Start building a `model:capability:updated` receipt.
+    /// Emitted when a registered model's capability or pricing data changes.
+    pub fn model_capability_updated(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::ModelCapabilityUpdated, executor_id)
+    }
+
+    /// Start building an `inference:routed` receipt.
+    /// Emitted after the router selects a model, before HTTP dispatch.
+    pub fn inference_routed(executor_id: &str) -> crate::ReceiptBuilder {
+        crate::ReceiptBuilder::new(ReceiptType::InferenceRouted, executor_id)
+    }
+
     /// Verify the content_hash matches the receipt body.
     pub fn verify_hash(&self) -> bool {
         let computed = crate::canonical_hash(self);
@@ -665,6 +707,47 @@ pub enum ReceiptType {
     /// Records that an operator revoked a specific memory ID from the TurboVec
     /// index, propagating a chain-level revocation into the cache.
     MemoryRevokedFromIndex,
+
+    // --- Model preference governance ---
+    /// Operator explicitly selected a model for a tool.
+    /// Produced by POST /api/v1/preference/model.
+    ModelPreferenceSelected,
+    /// Substrate resolved the model to inject at tool launch time.
+    /// Records which tier (chain_preference, vault_default, tool_default) won.
+    ModelPreferenceResolved,
+    /// Route-LLM routing observation — records what model Abacus actually chose
+    /// when the requested model was a routing alias (e.g. "route-llm").
+    /// Produced by the tool via POST /api/v1/cognition/model-routed.
+    ModelRouted,
+
+    // --- Inference governance (GAR Phase 4) ---
+    /// Operator-declared LLM inference policy: backend URL, routing strategy,
+    /// model allowlist, cost ceiling. Chain-anchored replacement for
+    /// `selected_model` in config. IronClaw reads this at startup via ZpClient.
+    PreferenceLlmPolicySet,
+    /// Emitted immediately before an LLM HTTP request is dispatched.
+    /// A `gate:allowed:inference` receipt must precede this on the chain.
+    InferenceDispatched,
+    /// Emitted after the LLM response returns. Captures the actual model used —
+    /// the auditable fact when `route-llm` auto-routing may select a different
+    /// model than was requested.
+    InferenceCompleted,
+    /// Emitted when an inference call fails — blocked by the gate before dispatch,
+    /// or rejected by the provider. Separate from `InferenceCompleted` so the gate
+    /// can accumulate lightweight failure counts for circuit-breaking.
+    InferenceFailed,
+
+    // --- Model registry (chain-native routing) ---
+    /// Operator registers a model with its capabilities, costs, and schema format.
+    /// The chain IS the registry — no external model DB required.
+    ModelRegistered,
+    /// Records a capability or metadata update for a registered model.
+    /// Emitted when pricing, context window, or other capability data changes.
+    ModelCapabilityUpdated,
+    /// Emitted after the router selects a model but before HTTP dispatch.
+    /// Carries the routing decision with full auditability: why this model,
+    /// what candidates were considered, estimated cost, and which policy governed.
+    InferenceRouted,
 }
 
 impl ReceiptType {
@@ -701,6 +784,16 @@ impl ReceiptType {
             ReceiptType::MemoryIndexed => "midx",
             ReceiptType::MemoryRetrievedByAgent => "mret",
             ReceiptType::MemoryRevokedFromIndex => "mrvk",
+            ReceiptType::ModelPreferenceSelected => "mpsel",
+            ReceiptType::ModelPreferenceResolved => "mpres",
+            ReceiptType::ModelRouted => "mrouted",
+            ReceiptType::PreferenceLlmPolicySet => "llmpol",
+            ReceiptType::InferenceDispatched => "infd",
+            ReceiptType::InferenceCompleted => "infc",
+            ReceiptType::InferenceFailed => "inff",
+            ReceiptType::ModelRegistered => "mreg",
+            ReceiptType::ModelCapabilityUpdated => "mcap",
+            ReceiptType::InferenceRouted => "infr",
         }
     }
 
@@ -751,6 +844,16 @@ impl ReceiptType {
             ReceiptType::MemoryIndexed => None,
             ReceiptType::MemoryRetrievedByAgent => None,
             ReceiptType::MemoryRevokedFromIndex => None,
+            ReceiptType::ModelPreferenceSelected => None,
+            ReceiptType::ModelPreferenceResolved => None,
+            ReceiptType::ModelRouted => None,
+            ReceiptType::PreferenceLlmPolicySet => None,
+            ReceiptType::InferenceDispatched => None,
+            ReceiptType::InferenceCompleted => None,
+            ReceiptType::InferenceFailed => None,
+            ReceiptType::ModelRegistered => None,
+            ReceiptType::ModelCapabilityUpdated => None,
+            ReceiptType::InferenceRouted => None,
         }
     }
 
@@ -834,6 +937,16 @@ impl std::fmt::Display for ReceiptType {
             ReceiptType::MemoryIndexed => write!(f, "memory_indexed"),
             ReceiptType::MemoryRetrievedByAgent => write!(f, "memory_retrieved_by_agent"),
             ReceiptType::MemoryRevokedFromIndex => write!(f, "memory_revoked_from_index"),
+            ReceiptType::ModelPreferenceSelected => write!(f, "model_preference_selected"),
+            ReceiptType::ModelPreferenceResolved => write!(f, "model_preference_resolved"),
+            ReceiptType::ModelRouted => write!(f, "model_routed"),
+            ReceiptType::PreferenceLlmPolicySet => write!(f, "preference_llm_policy_set"),
+            ReceiptType::InferenceDispatched => write!(f, "inference_dispatched"),
+            ReceiptType::InferenceCompleted => write!(f, "inference_completed"),
+            ReceiptType::InferenceFailed => write!(f, "inference_failed"),
+            ReceiptType::ModelRegistered => write!(f, "model_registered"),
+            ReceiptType::ModelCapabilityUpdated => write!(f, "model_capability_updated"),
+            ReceiptType::InferenceRouted => write!(f, "inference_routed"),
         }
     }
 }
@@ -860,6 +973,10 @@ pub enum ClaimSemantics {
 
 fn default_claim_semantics() -> ClaimSemantics {
     ClaimSemantics::default()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Outcome status.
@@ -1159,6 +1276,31 @@ pub struct ChainMetadata {
 // ============================================================================
 // Phase 2.1: Typed Claim Metadata
 // ============================================================================
+
+/// Structural classification of an inference failure.
+///
+/// Carried in [`ClaimMetadata::InferenceFailed`]. Distinct variants let the
+/// gate pattern-match failure classes for circuit-breaking without parsing
+/// free-form error strings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InferenceFailureClass {
+    /// Gate denied the inference request before any HTTP call was made.
+    GateBlocked,
+    /// HTTP error from the LLM provider (400, 401, 429, 500, etc.).
+    ProviderError {
+        /// The HTTP status code returned by the provider.
+        status: u16,
+    },
+    /// Network-level failure — connection refused, DNS failure, or similar.
+    NetworkError,
+    /// Provider-side schema validation error.
+    /// Canonical case: `route-llm` routed to Gemini, which rejects tool parameter
+    /// types outside its enum. The verbatim error lands in `error_detail`.
+    SchemaRejected,
+    /// Request timed out waiting for provider response.
+    Timeout,
+}
 
 /// Type-specific metadata carried by claim receipts.
 ///
@@ -1591,6 +1733,293 @@ pub enum ClaimMetadata {
         /// this propagation.
         chain_revocation_id: String,
     },
+
+    // --- Model preference governance ---
+
+    /// Metadata for `preference:model:selected`.
+    ///
+    /// Emitted when an operator explicitly selects a model for a tool via
+    /// POST /api/v1/preference/model. This is the chain-recorded operator
+    /// intent — the source of truth for what model the tool should use.
+    ModelPreferenceSelected {
+        /// The tool this preference applies to (lowercase, e.g. "ironclaw").
+        tool: String,
+        /// The model ID the operator selected (e.g. "claude-sonnet-4-6", "route-llm").
+        model_id: String,
+    },
+
+    /// Metadata for `preference:model:resolved`.
+    ///
+    /// Emitted by the cockpit launch handler each time a tool is spawned.
+    /// Records which tier of the three-tier resolution produced the model ID
+    /// that was injected as ZP_MODEL_ID into the child process.
+    ModelPreferenceResolved {
+        /// The tool that was launched.
+        tool: String,
+        /// The model ID injected as ZP_MODEL_ID, or None if the substrate
+        /// did not inject a model (tool_default tier).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_id: Option<String>,
+        /// Which tier resolved the model:
+        ///   "chain_preference" — from the operator's preference:model:selected receipt
+        ///   "vault_default"    — from tools/{tool}/ZP_DEFAULT_MODEL in vault
+        ///   "tool_default"     — substrate did not inject; tool uses its own default
+        source: String,
+    },
+
+    /// Metadata for `cognition:model:routed`.
+    ///
+    /// Emitted by the tool (via POST /api/v1/cognition/model-routed) after
+    /// receiving a completion response where the requested model was a routing
+    /// alias (e.g. "route-llm"). Records what the router actually chose, giving
+    /// the chain visibility into Abacus's routing decisions.
+    ModelRouted {
+        /// The tool that made the LLM request.
+        tool: String,
+        /// The model identifier that was requested (e.g. "route-llm").
+        requested_model: String,
+        /// The actual model the router selected (e.g. "claude-sonnet-4-6").
+        actual_model: String,
+        /// Optional task context for correlating the routing decision with
+        /// the operator action that triggered the LLM call.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        task_id: Option<String>,
+    },
+
+    // --- Inference governance (GAR Phase 4) ---
+
+    /// Metadata for `preference:llm:policy:set`.
+    ///
+    /// Operator-declared LLM inference policy. Chain-anchored replacement for
+    /// `selected_model` in `~/.ironclaw/config.toml`. IronClaw reads this at
+    /// startup via ZpClient — chain state is the single source of inference policy.
+    PreferenceLlmPolicySet {
+        /// LLM backend endpoint (e.g., `"https://routellm.abacus.ai/v1"`).
+        backend_url: String,
+        /// Routing strategy: `"route-llm"` for Abacus auto-routing, or any
+        /// named model ID (e.g. `"claude-sonnet-4-6"`) to pin a specific model.
+        routing_strategy: String,
+        /// Allowed model IDs or glob patterns (e.g. `["claude-*", "gpt-*"]`).
+        /// Empty vec means unrestricted — gate passes any model through.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        model_allowlist: Vec<String>,
+        /// Daily cost ceiling in USD. Gate accumulates `cost_usd` from
+        /// `InferenceCompleted` receipts and denies once the ceiling is reached.
+        /// `None` means no cap.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cost_cap_daily_usd: Option<f64>,
+        /// Provider names whose schema constraints the gate must pre-validate
+        /// before dispatch (e.g. `["gemini"]`). Empty = no schema pre-validation.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        schema_compat: Vec<String>,
+        /// Max consecutive `SchemaRejected` failures per `(agent, model_requested)`
+        /// pair within a session window before the gate opens the circuit and issues
+        /// `gate:denied:inference:circuit_open`. `None` or `0` disables circuit-breaking.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        circuit_breaker_threshold: Option<u32>,
+    },
+
+    /// Metadata for `inference:dispatched`.
+    ///
+    /// Emitted immediately before the LLM HTTP request leaves the agent wrapper.
+    /// A preceding `gate:allowed:inference` entry must exist on the chain.
+    InferenceDispatched {
+        /// Correlation ID linking dispatched → completed/failed. UUIDv7.
+        request_id: String,
+        /// The `model` field sent in the HTTP request to the LLM backend.
+        model_requested: String,
+        /// Names of tools declared in the request's `tools` array, if any.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tool_names: Vec<String>,
+        /// Estimated prompt token count before the call (from local tokenizer or
+        /// provider estimate; exact count arrives in `InferenceCompleted`).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prompt_tokens_estimated: Option<u32>,
+        /// Agent session ID — links this dispatch to the operator's active session.
+        session_id: String,
+        /// Receipt ID of the `preference:llm:policy:set` receipt active at dispatch time.
+        /// Links each inference to the policy it operated under.
+        policy_receipt_id: String,
+    },
+
+    /// Metadata for `inference:completed`.
+    ///
+    /// Emitted after an inference call finishes (success or provider-level failure).
+    /// Pairs with `inference:routed` via `request_id` — together they give full
+    /// cost-per-successful-task visibility: estimated cost at routing time,
+    /// actual cost at completion time.
+    InferenceCompleted {
+        /// Correlation ID — matches `InferenceRouted::request_id` (and the legacy
+        /// `InferenceDispatched::request_id` for receipts from the RouteLLM era).
+        request_id: String,
+        /// Actual model used, as reported by the provider in the response.
+        model_used: String,
+        /// Whether the inference call succeeded.
+        /// `false` when the provider returned an error after HTTP dispatch.
+        #[serde(default = "default_true")]
+        success: bool,
+        /// Semantic task type — mirrors `InferenceRouted::task_type`.
+        /// Populated on new receipts; absent on legacy receipts from the RouteLLM era.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        task_type: Option<String>,
+        /// Input (prompt) tokens consumed. Alias for `prompt_tokens` — prefer this
+        /// field in new code; `prompt_tokens` is kept for backward compatibility.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        input_tokens: Option<u32>,
+        /// Output (completion) tokens generated. Alias for `completion_tokens` —
+        /// prefer this field in new code.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        output_tokens: Option<u32>,
+        /// Actual cost in USD, computed from `input_tokens + output_tokens` and the
+        /// model's registered per-token pricing. Distinct from the estimated cost in
+        /// `InferenceRouted` — together they give variance data for routing calibration.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        actual_cost_usd: Option<f64>,
+        /// Wall-clock latency from dispatch to response, in milliseconds.
+        latency_ms: u64,
+        /// Number of agent iterations (tool-call → response cycles) required to
+        /// complete the task. `1` = single LLM call, no tool use.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        iterations_required: Option<u32>,
+        /// Whether the task required human intervention (operator unblocked a
+        /// gate denial, overrode a routing decision, or stepped in mid-task).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        human_intervention: Option<bool>,
+        /// Error type when `success == false` (e.g. `"provider_error"`,
+        /// `"schema_rejected"`, `"timeout"`). Structured complement to `error_code`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error_type: Option<String>,
+        /// Optional link to a successful MLES-style pattern used for this task.
+        /// Populated when the Monte Carlo engine matched a prior solution.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pattern_id: Option<String>,
+
+        // -- Legacy fields kept for backward compatibility with RouteLLM-era receipts --
+
+        /// Prompt tokens consumed (legacy name). Prefer `input_tokens` in new code.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prompt_tokens: Option<u32>,
+        /// Completion tokens generated (legacy name). Prefer `output_tokens` in new code.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        completion_tokens: Option<u32>,
+        /// Why generation stopped (legacy field): `"stop"` | `"tool_calls"` | `"error"` | `"length"`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        finish_reason: Option<String>,
+        /// Provider error code when `finish_reason == "error"` (legacy field).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error_code: Option<String>,
+        /// Estimated cost in USD (legacy field). Prefer `actual_cost_usd` in new code.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cost_usd: Option<f64>,
+    },
+
+    /// Metadata for `inference:failed`.
+    ///
+    /// Emitted when an inference call fails — blocked by the gate before HTTP
+    /// dispatch, or rejected by the provider after dispatch. Separate from
+    /// `InferenceCompleted` so the gate can accumulate lightweight failure
+    /// counts for circuit-breaking without parsing completion payloads.
+    ///
+    /// `error_detail` carries the verbatim provider error message — load-bearing
+    /// for X3 pattern analysis (e.g. identifying Gemini schema incompatibilities
+    /// from the receipt chain without re-running the call).
+    InferenceFailed {
+        /// Correlation ID — matches `InferenceDispatched::request_id` if dispatch
+        /// occurred, or a new ID if the gate blocked before dispatch.
+        request_id: String,
+        /// The model that was requested.
+        model_requested: String,
+        /// Structural classification of the failure. Enables gate circuit-breaking
+        /// on `SchemaRejected` without parsing free-form error strings.
+        failure_class: InferenceFailureClass,
+        /// Verbatim error message from the gate or provider.
+        /// The Gemini schema validation message lands here for X3 analysis.
+        error_detail: String,
+        /// Tool names from the failed request.
+        /// Populated when `failure_class == SchemaRejected` to identify which
+        /// tool schemas triggered the provider's validation error.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tool_names: Vec<String>,
+        /// Agent session ID.
+        session_id: String,
+    },
+
+    // --- Model registry (chain-native routing) ---
+
+    /// Metadata for `model:registered`.
+    ///
+    /// Operator registers a model with its capabilities, costs, and schema format.
+    /// The chain IS the registry. Every governed routing decision traces back to
+    /// a `model:registered` receipt for each candidate considered.
+    ModelRegistered {
+        /// Canonical model identifier (e.g. `"anthropic/claude-sonnet-4-6"`).
+        /// Format: `"{provider}/{model_name}"` for unambiguous registry lookup.
+        model_id: String,
+        /// Short provider name (e.g. `"anthropic"`, `"google"`, `"openai"`).
+        provider: String,
+        /// Provider API endpoint for this model (e.g. `"https://api.anthropic.com/v1"`).
+        provider_url: String,
+        /// Maximum context window in tokens.
+        context_window: u32,
+        /// Whether this model supports tool/function calling.
+        supports_tools: bool,
+        /// JSON Schema type format required by this provider's API.
+        /// Used by the routing layer to apply the correct schema normalization
+        /// before dispatch — replaces the old `model_routes_to_gemini()` heuristic.
+        schema_format: SchemaFormat,
+        /// Input token cost in USD per million tokens.
+        input_cost_per_m_usd: f64,
+        /// Output token cost in USD per million tokens.
+        output_cost_per_m_usd: f64,
+        /// Maximum output tokens this model supports.
+        max_output_tokens: u32,
+    },
+
+    /// Metadata for `model:capability:updated`.
+    ///
+    /// Records a capability or metadata change for a registered model.
+    /// The chain accumulates updates; the latest `model:capability:updated`
+    /// for a given `(model_id, field_updated)` pair supersedes earlier ones.
+    ModelCapabilityUpdated {
+        /// The model ID being updated (matches a prior `model:registered` receipt).
+        model_id: String,
+        /// Which field was updated (e.g. `"pricing"`, `"supports_tools"`,
+        /// `"context_window"`, `"known_issues"`).
+        field_updated: String,
+        /// The new value, serialized as JSON.
+        new_value: serde_json::Value,
+        /// Why the update was made (e.g. `"provider announcement"`,
+        /// `"observed from 50 completions"`, `"manual correction"`).
+        reason: String,
+    },
+
+    /// Metadata for `inference:routed`.
+    ///
+    /// Emitted after the router selects a model but before the HTTP request is
+    /// dispatched. The routing decision is fully auditable: why this model,
+    /// what alternatives were considered, estimated cost, and which policy governed.
+    ///
+    /// Pairs with `inference:completed` via `request_id`.
+    InferenceRouted {
+        /// Correlation ID linking this to the matching `inference:completed`. UUIDv7.
+        request_id: String,
+        /// Semantic task type guiding routing (e.g. `"code_generation"`,
+        /// `"tool_heavy_reasoning"`, `"simple_chat"`).
+        task_type: String,
+        /// The model selected by the router.
+        selected_model: String,
+        /// Why this model was chosen.
+        routing_reason: RoutingReason,
+        /// All model IDs the router considered before selecting.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        candidates_considered: Vec<String>,
+        /// Estimated cost for this request in USD, computed from the model's
+        /// registered pricing and the estimated prompt token count.
+        estimated_cost_usd: f64,
+        /// Receipt ID of the active `preference:llm:policy:set` receipt at routing time.
+        /// Links every routing decision back to the policy that governed it.
+        policy_receipt_id: String,
+    },
 }
 
 /// Source of a configuration value.
@@ -1619,4 +2048,46 @@ pub enum CanonicalDomain {
     Tool,
     /// A fleet node in a multi-node deployment
     Node,
+}
+
+/// JSON Schema type format required by a model provider's API.
+///
+/// Carried in [`ClaimMetadata::ModelRegistered`]. The routing layer reads
+/// this at dispatch time to decide whether schema normalization is needed,
+/// eliminating the `model_routes_to_gemini()` heuristic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchemaFormat {
+    /// Lowercase type values (`"object"`, `"string"`, …). OpenAI-compatible.
+    /// Anthropic, OpenAI, Mistral, and most OpenAI-compat proxies.
+    OpenAi,
+    /// Uppercase type values (`"OBJECT"`, `"STRING"`, …). Gemini native API.
+    Gemini,
+    /// Provider-specific format not covered by the above variants.
+    Other,
+}
+
+/// Why the router selected a particular model for an inference request.
+///
+/// Carried in [`ClaimMetadata::InferenceRouted`]. Named variants are
+/// pattern-matchable by the gate and Monte Carlo engine without parsing
+/// free-form strings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RoutingReason {
+    /// The active inference policy explicitly pins a specific model.
+    ExplicitPolicy,
+    /// The router selected the lowest-cost model adequate for the task type.
+    LowestCostForTask,
+    /// The router selected the model with the best tool-calling support.
+    BestToolSupport,
+    /// The router sampled over registered models via Monte Carlo.
+    MonteCarloSample,
+    /// The operator allowlist had exactly one viable candidate.
+    SingleCandidate,
+    /// A reason not covered by the above variants.
+    Other {
+        /// Free-form detail string.
+        detail: String,
+    },
 }

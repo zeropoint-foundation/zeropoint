@@ -55,7 +55,8 @@ pub use capability::{Capability, InferenceTier, ModelClass, ModelPreference, Pip
 pub use authority_ref::{AuthorityRef, AuthorityRefType};
 pub use capability_grant::{
     CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation, DelegationError,
-    GrantProvenance, GrantedCapability, IssuanceError, RedelegationPolicy, RenewalError,
+    GrantProvenance, GrantedCapability, GranteeType, IssuanceError, RedelegationPolicy,
+    RenewalError,
 };
 pub use delegation_chain::{ChainError, DelegationChain};
 pub use lease::{LeaseFailureMode, LeasePolicy};

@@ -354,6 +354,12 @@ pub struct ToolManifest {
     #[serde(default)]
     pub verification: Option<VerificationConfig>,
 
+    /// Vault schema — per-var format constraints for launch-time validation.
+    /// Validation runs automatically on every vault-set-tool-env AND every
+    /// tool launch. Violations are loud: error! log + preflight:failed receipt.
+    #[serde(default)]
+    pub vault_schema: Vec<VaultVarSchema>,
+
     /// Configurable parameters with defaults (P6-1: capability-configured receipts).
     /// When present, the configure path emits a ConfigurationClaim receipt for each
     /// parameter, recording the value applied (default or override).
@@ -572,6 +578,383 @@ pub struct ConfigurableParam {
     /// The env var this maps to (e.g., "MAX_TOKENS")
     #[serde(default)]
     pub env_var: Option<String>,
+}
+
+// ── Vault Variable Schema ─────────────────────────────────────────────
+
+/// Per-variable format constraint declared in the tool manifest.
+///
+/// Validation runs at two points:
+///   1. `vault-set-tool-env` — post-write verification.
+///   2. `tool_launch_handler` — pre-injection validation.
+///
+/// Violations at either point are loud: `error!` log, and at launch time,
+/// a `tool:preflight:failed` receipt is emitted to the audit chain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultVarSchema {
+    /// Env var name (e.g., "ANTHROPIC_API_KEY")
+    pub var: String,
+
+    /// Semantic field type — determines default validation behavior.
+    #[serde(default = "default_field_type")]
+    pub field_type: VaultFieldType,
+
+    /// Whether this var must be present and non-empty for the tool to function.
+    #[serde(default)]
+    pub required: bool,
+
+    /// Minimum plaintext length (bytes). Violations are errors.
+    #[serde(default)]
+    pub min_length: Option<usize>,
+
+    /// Maximum plaintext length (bytes). Violations are errors.
+    #[serde(default)]
+    pub max_length: Option<usize>,
+
+    /// Required prefix (e.g., "sk-ant-"). Case-sensitive.
+    #[serde(default)]
+    pub prefix: Option<String>,
+
+    /// Exhaustive list of allowed values. Empty = any value.
+    #[serde(default)]
+    pub allowed_values: Vec<String>,
+
+    /// If true, this var is set by the substrate at launch time —
+    /// vault-stored values are skipped (ZP_OWNED_VARS). Documented here
+    /// so the audit knows not to flag it as missing from the vault.
+    #[serde(default)]
+    pub substrate_owned: bool,
+
+    /// Suggested vault ref path. If set, `vault-audit` will recommend
+    /// converting a direct value to a ref for credential rotation safety.
+    #[serde(default)]
+    pub recommend_ref: Option<String>,
+
+    /// Human-readable notes for operators.
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+fn default_field_type() -> VaultFieldType {
+    VaultFieldType::Config
+}
+
+/// Semantic type for vault variables — drives default validation rules.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultFieldType {
+    /// API key or token — must be non-empty when required.
+    ApiKey,
+    /// Service URL — should start with http:// or https://.
+    Url,
+    /// Database connection string — should start with postgres://, mysql://, etc.
+    ConnectionString,
+    /// Cryptographic secret (HMAC key, signing salt) — must be non-empty when required.
+    Secret,
+    /// Boolean toggle — "true" or "false".
+    Toggle,
+    /// Non-secret configuration value — no default validation.
+    Config,
+}
+
+/// A single validation violation found during vault schema checking.
+#[derive(Debug, Clone, Serialize)]
+pub struct VaultVarViolation {
+    /// The env var name that failed validation.
+    pub var: String,
+    /// Severity: "error" (blocks readiness) or "warning" (logged but not blocking).
+    pub severity: &'static str,
+    /// Human-readable description of the violation.
+    pub message: String,
+}
+
+impl std::fmt::Display for VaultVarViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}: {}", self.severity, self.var, self.message)
+    }
+}
+
+/// Validate resolved tool env vars against the manifest's vault schema.
+///
+/// Returns a list of violations. An empty list means all checks passed.
+/// Called by `tool_launch_handler` before injection and by
+/// `vault-set-tool-env` after storage.
+pub fn validate_tool_env(
+    schema: &[VaultVarSchema],
+    env: &std::collections::HashMap<String, Vec<u8>>,
+) -> Vec<VaultVarViolation> {
+    let mut violations = Vec::new();
+
+    for rule in schema {
+        // Skip substrate-owned vars — they aren't in the vault.
+        if rule.substrate_owned {
+            continue;
+        }
+
+        let value = env.get(&rule.var);
+
+        // --- Presence check ---
+        match value {
+            None if rule.required => {
+                violations.push(VaultVarViolation {
+                    var: rule.var.clone(),
+                    severity: "error",
+                    message: "required but missing from vault".to_string(),
+                });
+                continue;
+            }
+            None => continue, // Optional and absent — fine.
+            Some(_) => {}
+        }
+
+        let bytes = value.unwrap();
+        let len = bytes.len();
+
+        // --- Empty check ---
+        if len == 0 && rule.required {
+            violations.push(VaultVarViolation {
+                var: rule.var.clone(),
+                severity: "error",
+                message: "required but vault value is empty (0 bytes)".to_string(),
+            });
+            continue;
+        }
+
+        if len == 0 {
+            // Optional and empty — warn but don't block.
+            violations.push(VaultVarViolation {
+                var: rule.var.clone(),
+                severity: "warning",
+                message: "vault value is empty (0 bytes)".to_string(),
+            });
+            continue;
+        }
+
+        let text = match std::str::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                violations.push(VaultVarViolation {
+                    var: rule.var.clone(),
+                    severity: "error",
+                    message: "vault value is not valid UTF-8".to_string(),
+                });
+                continue;
+            }
+        };
+
+        // --- Length checks ---
+        if let Some(min) = rule.min_length {
+            if len < min {
+                violations.push(VaultVarViolation {
+                    var: rule.var.clone(),
+                    severity: "error",
+                    message: format!(
+                        "too short: {} bytes (minimum {})",
+                        len, min
+                    ),
+                });
+            }
+        }
+
+        if let Some(max) = rule.max_length {
+            if len > max {
+                violations.push(VaultVarViolation {
+                    var: rule.var.clone(),
+                    severity: "error",
+                    message: format!(
+                        "too long: {} bytes (maximum {})",
+                        len, max
+                    ),
+                });
+            }
+        }
+
+        // --- Prefix check ---
+        if let Some(ref prefix) = rule.prefix {
+            if !text.starts_with(prefix.as_str()) {
+                violations.push(VaultVarViolation {
+                    var: rule.var.clone(),
+                    severity: "error",
+                    message: format!(
+                        "expected prefix '{}', got '{}'",
+                        prefix,
+                        &text[..text.len().min(prefix.len() + 4)]
+                    ),
+                });
+            }
+        }
+
+        // --- Allowed values check ---
+        if !rule.allowed_values.is_empty() && !rule.allowed_values.contains(&text.to_string()) {
+            violations.push(VaultVarViolation {
+                var: rule.var.clone(),
+                severity: "error",
+                message: format!(
+                    "value '{}' not in allowed set: {:?}",
+                    text, rule.allowed_values
+                ),
+            });
+        }
+
+        // --- Field-type-specific checks ---
+        match rule.field_type {
+            VaultFieldType::Url => {
+                if !text.starts_with("http://") && !text.starts_with("https://") && !text.is_empty() {
+                    violations.push(VaultVarViolation {
+                        var: rule.var.clone(),
+                        severity: "warning",
+                        message: format!(
+                            "URL field doesn't start with http:// or https:// (got '{}')",
+                            &text[..text.len().min(30)]
+                        ),
+                    });
+                }
+            }
+            VaultFieldType::ConnectionString => {
+                if !text.contains("://") {
+                    violations.push(VaultVarViolation {
+                        var: rule.var.clone(),
+                        severity: "warning",
+                        message: "connection string missing :// scheme separator".to_string(),
+                    });
+                }
+            }
+            VaultFieldType::Toggle => {
+                if text != "true" && text != "false" && text != "1" && text != "0" {
+                    violations.push(VaultVarViolation {
+                        var: rule.var.clone(),
+                        severity: "warning",
+                        message: format!(
+                            "toggle should be true/false/1/0, got '{}'",
+                            text
+                        ),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    violations
+}
+
+/// Validate a single variable against the manifest's vault schema.
+///
+/// Used by `vault-set-tool-env` for post-write verification of a single var.
+/// Returns violations for just the named var, or empty if no schema rule exists.
+pub fn validate_single_var(
+    schema: &[VaultVarSchema],
+    var: &str,
+    value: &[u8],
+) -> Vec<VaultVarViolation> {
+    let mut env = std::collections::HashMap::new();
+    env.insert(var.to_string(), value.to_vec());
+    validate_tool_env(schema, &env)
+}
+
+// ── Vault Hygiene Audit ──────────────────────────────────────────────
+
+/// A finding from the vault hygiene audit.
+#[derive(Debug, Clone, Serialize)]
+pub struct VaultAuditFinding {
+    /// The vault key that has a problem.
+    pub key: String,
+    /// Severity: "error", "warning", or "info".
+    pub severity: &'static str,
+    /// Category of finding.
+    pub category: &'static str,
+    /// Human-readable description.
+    pub message: String,
+}
+
+impl std::fmt::Display for VaultAuditFinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}: {} ({})", self.severity, self.category, self.message, self.key)
+    }
+}
+
+/// Audit a tool's vault keys for hygiene issues.
+///
+/// Checks for problems that `validate_tool_env` can't catch because they
+/// exist at the vault structure level, not the value level:
+///   - Orphaned keys in wrong namespace
+///   - Malformed key names
+///   - Leaked secrets in key names
+///   - Duplicate keys across namespaces
+///
+/// `all_keys` should be the full set of vault key names (not values —
+/// the audit checks names only, so no decryption needed).
+pub fn audit_vault_keys(tool: &str, all_keys: &[String]) -> Vec<VaultAuditFinding> {
+    let mut findings = Vec::new();
+    let canonical_prefix = format!("tools/{}/", tool);
+    let orphan_prefix = format!("providers/tools/{}/", tool);
+
+    // Known API key prefixes that should never appear in key NAMES.
+    let secret_patterns = [
+        "sk-ant-", "sk-", "ghp_", "gho_", "xoxb-", "xapp-", "xoxp-",
+        "AIza", "AKIA", "tvly-",
+    ];
+
+    for key in all_keys {
+        // --- Malformed key names: contains '=' ---
+        if key.contains('=') {
+            findings.push(VaultAuditFinding {
+                key: key.clone(),
+                severity: "error",
+                category: "malformed_key",
+                message: "key name contains '=' — likely a value was concatenated into the key name".to_string(),
+            });
+        }
+
+        // --- Leaked secrets in key names ---
+        for pattern in &secret_patterns {
+            // Only flag if the pattern appears in the key's leaf segment
+            // (after the last '/'), not in namespace prefixes.
+            if let Some(leaf) = key.rsplit('/').next() {
+                if leaf.contains(pattern) && leaf.len() > 20 {
+                    findings.push(VaultAuditFinding {
+                        key: key.clone(),
+                        severity: "error",
+                        category: "leaked_secret",
+                        message: format!(
+                            "key name contains what looks like a secret (matches '{}'). \
+                             The secret is in plaintext in vault.json. Rotate it.",
+                            pattern
+                        ),
+                    });
+                    break; // One finding per key is enough.
+                }
+            }
+        }
+
+        // --- Orphaned namespace ---
+        if key.starts_with(&orphan_prefix) {
+            let var = &key[orphan_prefix.len()..];
+            let canonical = format!("{}{}", canonical_prefix, var);
+            let has_canonical = all_keys.iter().any(|k| k == &canonical);
+
+            findings.push(VaultAuditFinding {
+                key: key.clone(),
+                severity: if has_canonical { "warning" } else { "error" },
+                category: "orphaned_namespace",
+                message: if has_canonical {
+                    format!(
+                        "duplicate in orphaned namespace — canonical key '{}' exists. \
+                         This key is never injected (resolve_tool_env only reads tools/{{tool}}/).",
+                        canonical
+                    )
+                } else {
+                    format!(
+                        "key in orphaned namespace — resolve_tool_env only reads '{}*'. \
+                         This key is never injected.",
+                        canonical_prefix
+                    )
+                },
+            });
+        }
+    }
+
+    findings
 }
 
 // ── Capability Verification ────────────────────────────────────────────

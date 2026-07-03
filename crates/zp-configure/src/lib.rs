@@ -2027,6 +2027,166 @@ pub fn run_vault_add(
     }
 }
 
+/// Run `zp configure vault-set-tool-env` — store a tool-specific env var in the vault.
+///
+/// Writes at `tools/{tool}/{var}`. The cockpit launch handler calls
+/// `vault.resolve_tool_env(tool)` to inject these into the spawned process, so keys
+/// are never written to .env files or shell history.
+pub fn run_vault_set_tool_env(
+    vault: &mut CredentialVault,
+    tool: &str,
+    var: &str,
+    value: &str,
+    vault_path: &Path,
+) -> i32 {
+    let vault_ref = format!("tools/{}/{}", tool, var);
+    match vault.store_tool_env(tool, var, value.as_bytes()) {
+        Ok(_) => {
+            if let Err(e) = vault.save(vault_path) {
+                eprintln!(
+                    "Warning: credential stored in memory but failed to persist: {}",
+                    e
+                );
+                eprintln!("Vault path: {}", vault_path.display());
+                return 1;
+            }
+
+            // ── Post-write verification (mandatory) ──
+            //
+            // Read the value back from the in-memory vault after store+save
+            // to verify round-trip integrity. Catches truncation,
+            // double-paste, and encryption corruption.
+            match vault.retrieve(&vault_ref) {
+                Ok(readback) => {
+                    if readback.len() != value.len() {
+                        eprintln!(
+                            "ERROR: Round-trip verification FAILED for {}",
+                            vault_ref
+                        );
+                        eprintln!(
+                            "  Wrote {} bytes, read back {} bytes",
+                            value.len(),
+                            readback.len()
+                        );
+                        eprintln!(
+                            "  The vault may have corrupted this value. \
+                             Re-run the command."
+                        );
+                        return 1;
+                    }
+                    println!(
+                        "Stored tool env var: {} ({} bytes, verified)",
+                        vault_ref,
+                        value.len()
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "WARNING: Stored but could not read back {}: {}",
+                        vault_ref, e
+                    );
+                    println!(
+                        "Stored tool env var: {} ({} bytes, UNVERIFIED)",
+                        vault_ref,
+                        value.len()
+                    );
+                }
+            }
+
+            // ── Manifest-based validation (if manifest exists) ──
+            //
+            // Search for .zp-configure.toml in standard locations and
+            // validate the stored value against the var's schema constraints.
+            let manifest_candidates = manifest_search_paths(tool);
+            for candidate in &manifest_candidates {
+                if candidate.exists() {
+                    if let Ok(manifest) = zp_engine::capability::load_manifest(candidate) {
+                        if !manifest.vault_schema.is_empty() {
+                            let violations = zp_engine::capability::validate_single_var(
+                                &manifest.vault_schema,
+                                var,
+                                value.as_bytes(),
+                            );
+                            for v in &violations {
+                                if v.severity == "error" {
+                                    eprintln!(
+                                        "  SCHEMA ERROR: {} — {}",
+                                        v.var, v.message
+                                    );
+                                } else {
+                                    eprintln!(
+                                        "  schema warning: {} — {}",
+                                        v.var, v.message
+                                    );
+                                }
+                            }
+                            let errors = violations.iter()
+                                .filter(|v| v.severity == "error")
+                                .count();
+                            if errors > 0 {
+                                eprintln!(
+                                    "  {} schema error(s). The value was stored but \
+                                     will fail validation at launch.",
+                                    errors
+                                );
+                            } else if violations.is_empty() {
+                                // Only print if we found a matching rule for this var.
+                                let has_rule = manifest.vault_schema.iter()
+                                    .any(|s| s.var == var);
+                                if has_rule {
+                                    println!("  Schema validation: PASSED");
+                                }
+                            }
+                        }
+                    }
+                    break; // Use first found manifest.
+                }
+            }
+
+            info!(vault_ref = vault_ref, "Tool env var stored in vault (tools tier)");
+            0
+        }
+        Err(e) => {
+            eprintln!("Error storing tool env var: {}", e);
+            1
+        }
+    }
+}
+
+/// Standard search paths for a tool's `.zp-configure.toml` manifest.
+///
+/// Returns candidates in priority order:
+///   1. ZP source tree: ~/projects/zeropoint/tools/{tool}/
+///   2. Tool project dir: ~/projects/{tool}/
+fn manifest_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    // ZP_SOURCE_DIR override takes priority
+    if let Ok(src) = std::env::var("ZP_SOURCE_DIR") {
+        paths.push(
+            std::path::PathBuf::from(src)
+                .join("tools")
+                .join(tool)
+                .join(".zp-configure.toml"),
+        );
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let home = std::path::PathBuf::from(home);
+        // ZP source tree (where IronClaw's manifest lives)
+        paths.push(
+            home.join("projects/zeropoint/tools")
+                .join(tool)
+                .join(".zp-configure.toml"),
+        );
+        // Tool's own project dir
+        paths.push(
+            home.join("projects")
+                .join(tool)
+                .join(".zp-configure.toml"),
+        );
+    }
+    paths
+}
+
 /// Run `zp configure rotate` — rotate a provider credential and verify propagation.
 ///
 /// When a provider key is compromised or rotated upstream, the user stores the

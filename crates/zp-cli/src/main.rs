@@ -96,6 +96,9 @@ enum Commands {
     /// Audit trail operations
     #[command(subcommand)]
     Audit(AuditCmd),
+    /// Chain narration and storytelling
+    #[command(subcommand)]
+    Chain(ChainCmd),
     /// Mesh networking operations
     #[command(subcommand)]
     Mesh(MeshCmd),
@@ -143,6 +146,11 @@ enum Commands {
     /// Manage WASM policy modules
     #[command(subcommand)]
     Policy(PolicyCmd),
+
+    /// Model registry — register, inspect, and update LLM model capabilities.
+    /// The audit chain is the registry; no external model database required.
+    #[command(subcommand)]
+    Model(ModelCmd),
 
     /// Configure tools from vault (Semantic Sed)
     #[command(subcommand)]
@@ -305,10 +313,18 @@ enum Commands {
     /// Samples the OS for listening ports, attributes each process as
     /// substrate-managed, known-system, or unknown, and prints a table.
     /// Unknown processes are the ones that need operator attention.
+    ///
+    /// With --tools: also run per-tool health checks — proxy reachability,
+    /// port assignment verification, and auth round-trip. This is the
+    /// 10-second diagnostic that replaces manual Scooby-Doo debugging.
     Ps {
         /// Output as JSON (machine-readable)
         #[arg(long)]
         json: bool,
+        /// Also check governed tool health: proxy reachability, port
+        /// assignment, and auth round-trip for each registered tool.
+        #[arg(long)]
+        tools: bool,
     },
 
     /// Record a new version for a running tool and optionally relaunch it.
@@ -607,6 +623,7 @@ enum Commands {
     /// Pricing freshness — fetch live pricing data or manually attest pricing.
     #[command(subcommand)]
     Pricing(PricingCmd),
+
 }
 
 #[derive(Subcommand)]
@@ -672,6 +689,200 @@ enum PolicyCmd {
     },
     /// Show current policy version and transition history (R6-4: downgrade resistance)
     Version,
+    /// Set a governed policy value on the audit chain
+    #[command(subcommand)]
+    Set(PolicySetCmd),
+    /// Show the current value of a governed policy from the audit chain
+    #[command(subcommand)]
+    Show(PolicyShowCmd),
+}
+
+#[derive(Subcommand)]
+enum PolicySetCmd {
+    /// Set the LLM inference policy — backend, routing strategy, allowlist, and cost cap.
+    ///
+    /// Emits a signed `preference:llm:policy:set` receipt to the audit chain.
+    /// IronClaw reads this receipt at startup; `selected_model` in config.toml
+    /// becomes a true fallback only when no receipt exists yet.
+    ///
+    /// Examples:
+    ///   zp policy set inference --backend https://routellm.abacus.ai/v1 --strategy route-llm
+    ///   zp policy set inference --backend https://routellm.abacus.ai/v1 --strategy claude-sonnet-4-6
+    ///   zp policy set inference --strategy route-llm --allowlist 'claude-*,gpt-*,o1-*'
+    Inference {
+        /// LLM backend base URL (e.g., "https://routellm.abacus.ai/v1").
+        #[arg(long)]
+        backend: String,
+
+        /// Routing strategy: "route-llm" for auto-routing, or a named model ID
+        /// (e.g. "claude-sonnet-4-6") to pin a specific model. No default —
+        /// must be explicit so the operator's intent is always on chain.
+        #[arg(long)]
+        strategy: String,
+
+        /// Comma-separated model ID patterns that are allowed.
+        /// Empty (default) means unrestricted. Example: "claude-*,gpt-*"
+        #[arg(long, default_value = "")]
+        allowlist: String,
+
+        /// Daily cost ceiling in USD. Gate enforces against accumulated costs.
+        /// Omit to set no cap.
+        #[arg(long)]
+        cost_cap_daily_usd: Option<f64>,
+
+        /// Provider schema constraints the gate pre-validates before dispatch.
+        /// Comma-separated provider names (e.g., "gemini").
+        #[arg(long, default_value = "")]
+        schema_compat: String,
+
+        /// Max consecutive SchemaRejected failures before the gate opens the circuit.
+        /// 0 = no circuit-breaker (default).
+        #[arg(long, default_value = "0")]
+        circuit_breaker_threshold: u32,
+
+        /// Path to audit store (default: <data-dir>/audit.db).
+        #[arg(long)]
+        audit_db: Option<std::path::PathBuf>,
+
+        /// Emit JSON instead of formatted text.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum PolicyShowCmd {
+    /// Show the current LLM inference policy from the audit chain.
+    Inference {
+        /// Path to audit store (default: <data-dir>/audit.db).
+        #[arg(long)]
+        audit_db: Option<std::path::PathBuf>,
+
+        /// Emit JSON instead of formatted text.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+// ============================================================================
+// Model registry subcommands
+// ============================================================================
+
+#[derive(Subcommand)]
+enum ModelCmd {
+    /// Register an LLM model with its capabilities, pricing, and schema format.
+    ///
+    /// Emits a signed `model:registered` receipt to the audit chain.
+    /// The chain IS the registry — no external model database required.
+    ///
+    /// Examples:
+    ///   zp model register --model-id anthropic/claude-sonnet-4-6 \
+    ///       --provider anthropic \
+    ///       --provider-url https://api.anthropic.com/v1 \
+    ///       --context-window 200000 --supports-tools \
+    ///       --schema-format openai \
+    ///       --input-cost-per-m 3.0 --output-cost-per-m 15.0 \
+    ///       --max-output-tokens 8192
+    Register {
+        /// Canonical model ID (e.g. "anthropic/claude-sonnet-4-6").
+        /// Format: "{provider}/{model_name}" for unambiguous registry lookup.
+        #[arg(long)]
+        model_id: String,
+
+        /// Provider name (e.g. "anthropic", "google", "openai").
+        #[arg(long)]
+        provider: String,
+
+        /// Provider API base URL (e.g. "https://api.anthropic.com/v1").
+        #[arg(long)]
+        provider_url: String,
+
+        /// Maximum context window in tokens.
+        #[arg(long)]
+        context_window: u32,
+
+        /// Whether this model supports tool/function calling.
+        #[arg(long, default_value = "false")]
+        supports_tools: bool,
+
+        /// JSON Schema type format: "openai" (lowercase) or "gemini" (uppercase).
+        /// "openai" for Anthropic, OpenAI, Mistral. "gemini" for Google Vertex AI.
+        #[arg(long, default_value = "openai")]
+        schema_format: String,
+
+        /// Input token cost in USD per million tokens.
+        #[arg(long)]
+        input_cost_per_m: f64,
+
+        /// Output token cost in USD per million tokens.
+        #[arg(long)]
+        output_cost_per_m: f64,
+
+        /// Maximum output tokens this model supports.
+        #[arg(long)]
+        max_output_tokens: u32,
+
+        /// Path to audit store (default: <data-dir>/audit.db).
+        #[arg(long)]
+        audit_db: Option<std::path::PathBuf>,
+
+        /// Emit JSON instead of formatted text.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List all registered models from the audit chain.
+    ///
+    /// Walks the chain and collects the most recent `model:registered` receipt
+    /// for each model ID, then applies any `model:capability:updated` patches
+    /// on top. Superseded registrations are excluded.
+    List {
+        /// Path to audit store (default: <data-dir>/audit.db).
+        #[arg(long)]
+        audit_db: Option<std::path::PathBuf>,
+
+        /// Emit JSON instead of formatted text.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Update a registered model's capability or pricing data.
+    ///
+    /// Emits a signed `model:capability:updated` receipt to the audit chain.
+    /// The update does not replace the original `model:registered` receipt —
+    /// both remain on chain for audit continuity.
+    ///
+    /// Examples:
+    ///   zp model update --model-id anthropic/claude-sonnet-4-6 \
+    ///       --field pricing \
+    ///       --value '{"input_cost_per_m_usd": 3.0, "output_cost_per_m_usd": 15.0}' \
+    ///       --reason "provider price reduction announced 2026-06"
+    Update {
+        /// The model ID to update (must match a prior model:registered receipt).
+        #[arg(long)]
+        model_id: String,
+
+        /// Which field to update (e.g. "pricing", "supports_tools",
+        /// "context_window", "max_output_tokens", "known_issues").
+        #[arg(long)]
+        field: String,
+
+        /// The new value as a JSON literal (e.g. "true", "200000", '"openai"').
+        #[arg(long)]
+        value: String,
+
+        /// Reason for the update (e.g. "provider announcement", "observed behavior").
+        #[arg(long)]
+        reason: String,
+
+        /// Path to audit store (default: <data-dir>/audit.db).
+        #[arg(long)]
+        audit_db: Option<std::path::PathBuf>,
+
+        /// Emit JSON instead of formatted text.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -688,6 +899,28 @@ enum AuditCmd {
     },
     /// Verify audit chain integrity
     Verify,
+}
+
+#[derive(Subcommand)]
+enum ChainCmd {
+    /// Narrate the chain as a human-readable story
+    Story {
+        /// Number of entries to narrate (default: 50)
+        #[arg(long, default_value = "50")]
+        limit: usize,
+
+        /// Filter to a posture domain (governance, integrity, operations, system)
+        #[arg(long)]
+        domain: Option<String>,
+
+        /// Show compressed arcs instead of individual events
+        #[arg(long)]
+        summary: bool,
+
+        /// Emit JSON instead of formatted text
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -890,6 +1123,25 @@ enum ConfigureCmd {
         field: String,
 
         /// Credential value (omit to read from stdin)
+        #[arg(long)]
+        value: Option<String>,
+    },
+    /// Store a tool-specific env var in the vault (e.g. OPENAI_API_KEY for ironclaw).
+    /// The cockpit launch handler reads these via tools/{tool}/{VAR} and injects them
+    /// into the process env at launch time — no .env files, no key pasting.
+    ///
+    ///   zp configure vault-set-tool-env --tool ironclaw --var OPENAI_API_KEY
+    ///   zp configure vault-set-tool-env --tool ironclaw --var OPENAI_BASE_URL --value https://api.venice.ai/api/v1
+    VaultSetToolEnv {
+        /// Tool name (e.g., ironclaw, ember)
+        #[arg(long)]
+        tool: String,
+
+        /// Environment variable name to inject (e.g., OPENAI_API_KEY)
+        #[arg(long)]
+        var: String,
+
+        /// Value to store (omit to read securely from stdin)
         #[arg(long)]
         value: Option<String>,
     },
@@ -1266,7 +1518,7 @@ async fn main() -> anyhow::Result<()> {
                 bind_addr: resolved_bind,
                 port: resolved_port,
                 open_dashboard: resolved_open,
-                ..zp_server::ServerConfig::default()
+                ..zp_server::ServerConfig::from_zp_config(&cfg)
             };
             if let Err(e) = zp_server::run_server(config).await {
                 eprintln!("Server error: {}", e);
@@ -1760,6 +2012,25 @@ async fn main() -> anyhow::Result<()> {
                     1
                 }
             },
+            ConfigureCmd::VaultSetToolEnv { tool, var, value } => {
+                match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
+                    Ok(mut vault) => {
+                        let val = value.clone().unwrap_or_else(|| {
+                            eprint!("Enter value for {}/{} (input hidden by terminal): ", tool, var);
+                            // Use rpassword-style stdin read so key bytes don't echo.
+                            // Fall back to plain readline if rpassword isn't available.
+                            let mut input = String::new();
+                            std::io::stdin().read_line(&mut input).unwrap_or(0);
+                            input.trim().to_string()
+                        });
+                        configure::run_vault_set_tool_env(&mut vault, tool, var, &val, &vault_path)
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading vault: {}", e);
+                        1
+                    }
+                }
+            }
             ConfigureCmd::Scan { path, depth } => {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(vault) => configure::run_scan(path, &vault, *depth),
@@ -3146,6 +3417,126 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    if let Some(Commands::Policy(PolicyCmd::Set(PolicySetCmd::Inference {
+        backend,
+        strategy,
+        allowlist,
+        cost_cap_daily_usd,
+        schema_compat,
+        circuit_breaker_threshold,
+        audit_db,
+        json,
+    }))) = &args.command
+    {
+        match run_policy_set_inference(
+            backend,
+            strategy,
+            allowlist,
+            *cost_cap_daily_usd,
+            schema_compat,
+            *circuit_breaker_threshold,
+            audit_db.as_deref(),
+            *json,
+            &args.data_dir,
+        )
+        .await
+        {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m policy set inference failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(Commands::Policy(PolicyCmd::Show(PolicyShowCmd::Inference { audit_db, json }))) =
+        &args.command
+    {
+        match run_policy_show_inference(audit_db.as_deref(), *json, &args.data_dir).await {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m policy show inference failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(Commands::Model(ModelCmd::Register {
+        model_id,
+        provider,
+        provider_url,
+        context_window,
+        supports_tools,
+        schema_format,
+        input_cost_per_m,
+        output_cost_per_m,
+        max_output_tokens,
+        audit_db,
+        json,
+    })) = &args.command
+    {
+        match run_model_register(
+            model_id,
+            provider,
+            provider_url,
+            *context_window,
+            *supports_tools,
+            schema_format,
+            *input_cost_per_m,
+            *output_cost_per_m,
+            *max_output_tokens,
+            audit_db.as_deref(),
+            *json,
+            &args.data_dir,
+        )
+        .await
+        {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m model register failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(Commands::Model(ModelCmd::List { audit_db, json })) = &args.command {
+        match run_model_list(audit_db.as_deref(), *json, &args.data_dir).await {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m model list failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(Commands::Model(ModelCmd::Update {
+        model_id,
+        field,
+        value,
+        reason,
+        audit_db,
+        json,
+    })) = &args.command
+    {
+        match run_model_update(
+            model_id,
+            field,
+            value,
+            reason,
+            audit_db.as_deref(),
+            *json,
+            &args.data_dir,
+        )
+        .await
+        {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\x1b[31m✗\x1b[0m model update failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     if let Some(Commands::Emit {
         label,
         issue,
@@ -3188,7 +3579,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Ps — Part VIII Stage 1 compute surface snapshot.
     // Samples lsof system-wide, attributes via PortRegistry, prints table.
-    if let Some(Commands::Ps { json }) = &args.command {
+    if let Some(Commands::Ps { json, tools }) = &args.command {
         use zp_server::tool_ports::{
             ProcessAttribution, lsof_all_listen, PostureSnapshot, PortRegistry,
         };
@@ -3313,6 +3704,175 @@ async fn main() -> anyhow::Result<()> {
                 println!("\x1b[32m✓ All processes attributed\x1b[0m");
             }
         }
+
+        // ── Governed tool health (--tools) ────────────────────────────────
+        if *tools {
+            let bindings = registry.list();
+            if bindings.is_empty() {
+                println!();
+                println!("No governed tools registered.");
+            } else {
+                println!();
+                println!("\x1b[1mGoverned Tool Health\x1b[0m");
+                println!();
+
+                let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+
+                for binding in &bindings {
+                    // ── Collect all ports this tool should have bound ──────
+                    let mut port_checks: Vec<(String, u16)> = vec![
+                        (binding.port_var.clone(), binding.port),
+                    ];
+                    for (var, &port) in &binding.extra_ports {
+                        port_checks.push((var.clone(), port));
+                    }
+                    let proxy_target = binding.proxy_target();
+
+                    // ── lsof: which ports are actually listening ───────────
+                    let mut port_status: Vec<(String, u16, Option<u32>)> = Vec::new();
+                    for (var, port) in &port_checks {
+                        let pid = zp_server::tool_ports::lsof_pid_for_port(*port);
+                        port_status.push((var.clone(), *port, pid));
+                    }
+
+                    // Also check proxy_target if different from all allocated ports
+                    let allocated_ports: Vec<u16> = port_checks.iter().map(|(_, p)| *p).collect();
+                    if !allocated_ports.contains(&proxy_target) {
+                        let pid = zp_server::tool_ports::lsof_pid_for_port(proxy_target);
+                        port_status.push(("proxy_target".to_string(), proxy_target, pid));
+                    }
+
+                    // ── HTTP probe: proxy_target with auth ─────────────────
+                    let probe_url = format!("http://127.0.0.1:{}/", proxy_target);
+                    let auth_token = binding.auth_token.clone();
+                    let (authed_status, authed_ct, unauthed_status) = rt.block_on(async {
+                        let client = reqwest::Client::builder()
+                            .timeout(std::time::Duration::from_secs(3))
+                            .build()
+                            .unwrap_or_else(|_| reqwest::Client::new());
+
+                        // Authed probe
+                        let authed = client
+                            .get(&probe_url)
+                            .header("Authorization", format!("Bearer {}", &auth_token))
+                            .send()
+                            .await;
+                        let (status, ct) = match authed {
+                            Ok(r) => {
+                                let s = r.status().as_u16();
+                                let c = r.headers()
+                                    .get("content-type")
+                                    .and_then(|v| v.to_str().ok())
+                                    .map(|s| s.split(';').next().unwrap_or(s).trim().to_string());
+                                (Some(s), c)
+                            }
+                            Err(_) => (None, None),
+                        };
+
+                        // Unauthed probe (expect 401 or redirect, not 200 — check auth is enforced)
+                        let unauthed = client.get(&probe_url).send().await;
+                        let unauthed_s = match unauthed {
+                            Ok(r) => Some(r.status().as_u16()),
+                            Err(_) => None,
+                        };
+
+                        (status, ct, unauthed_s)
+                    });
+
+                    // ── Classify issues ───────────────────────────────────
+                    let mut issues: Vec<String> = Vec::new();
+
+                    // All allocated ports must be listening
+                    for (var, port, pid) in &port_status {
+                        if pid.is_none() && var != "proxy_target" {
+                            issues.push(format!(
+                                "\x1b[31m[CRIT]\x1b[0m :{} ({}) not listening — process did not start or failed to bind",
+                                port, var
+                            ));
+                        }
+                    }
+
+                    // proxy_target must return 200 with HTML
+                    match authed_status {
+                        None => issues.push(format!(
+                            "\x1b[31m[CRIT]\x1b[0m proxy_target :{} not reachable — connection refused",
+                            proxy_target
+                        )),
+                        Some(404) => issues.push(format!(
+                            "\x1b[31m[CRIT]\x1b[0m proxy_target :{} → 404 — wrong port (web UI not here)",
+                            proxy_target
+                        )),
+                        Some(401) | Some(403) => issues.push(format!(
+                            "\x1b[33m[WARN]\x1b[0m proxy_target :{} → {} with correct token — auth gate active on static routes",
+                            proxy_target, authed_status.unwrap()
+                        )),
+                        Some(s) if s >= 500 => issues.push(format!(
+                            "\x1b[31m[CRIT]\x1b[0m proxy_target :{} → {} — server error",
+                            proxy_target, s
+                        )),
+                        _ => {}
+                    }
+
+                    // proxy_port registry divergence
+                    if let Some(rp) = binding.proxy_port {
+                        if rp != proxy_target {
+                            issues.push(format!(
+                                "\x1b[33m[WARN]\x1b[0m registry proxy_port={} but proxy_target()={} — stale value",
+                                rp, proxy_target
+                            ));
+                        }
+                    }
+
+                    // ── Print ─────────────────────────────────────────────
+                    let healthy = issues.is_empty();
+                    let status_icon = if healthy {
+                        "\x1b[32m✓\x1b[0m"
+                    } else {
+                        "\x1b[31m✗\x1b[0m"
+                    };
+                    println!("  {} \x1b[1m{}\x1b[0m", status_icon, binding.tool);
+
+                    // Ports line
+                    let ports_str: Vec<String> = port_status.iter().map(|(var, port, pid)| {
+                        match pid {
+                            Some(p) => format!("  :{} {} pid={}", port, var, p),
+                            None if var == "proxy_target" => format!("  :{} proxy_target", port),
+                            None => format!("  :{} {} \x1b[31m✗ not listening\x1b[0m", port, var),
+                        }
+                    }).collect();
+                    println!("    Ports:{}", ports_str.join("  "));
+
+                    // Probe line
+                    let probe_str = match (authed_status, &authed_ct) {
+                        (Some(200), Some(ct)) => format!(
+                            ":{} GET / → \x1b[32m200 {}\x1b[0m \x1b[32m✓\x1b[0m", proxy_target, ct
+                        ),
+                        (Some(s), _) => format!(
+                            ":{} GET / → \x1b[31m{}\x1b[0m", proxy_target, s
+                        ),
+                        (None, _) => format!(
+                            ":{} GET / → \x1b[31mno response\x1b[0m", proxy_target
+                        ),
+                    };
+                    let unauthed_str = match unauthed_status {
+                        Some(200) => " \x1b[33m(unauthed also 200 — no auth gate)\x1b[0m".to_string(),
+                        Some(s) => format!(" (unauthed→{})", s),
+                        None => String::new(),
+                    };
+                    println!("    Proxy:  {}{}", probe_str, unauthed_str);
+
+                    // Issues
+                    if !issues.is_empty() {
+                        println!("    Issues ({}):", issues.len());
+                        for issue in &issues {
+                            println!("      {}", issue);
+                        }
+                    }
+                    println!();
+                }
+            }
+        }
+
         std::process::exit(0);
     }
 
@@ -4684,7 +5244,9 @@ async fn main() -> anyhow::Result<()> {
             PolicyCmd::Status => policy_commands::status(),
             PolicyCmd::Verify => policy_commands::verify(),
             PolicyCmd::Remove { identifier } => policy_commands::remove(identifier),
-            PolicyCmd::Version => unreachable!(), // handled above
+            PolicyCmd::Version => unreachable!(),   // handled above
+            PolicyCmd::Set(_) => unreachable!(),    // handled above (async path)
+            PolicyCmd::Show(_) => unreachable!(),   // handled above (async path)
         };
         #[cfg(not(feature = "policy-wasm"))]
         let exit_code = {
@@ -4773,6 +5335,9 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Audit(AuditCmd::Log { limit, category })) => {
             commands::audit_log(&pipeline, limit, category.as_deref()).await?
         }
+        Some(Commands::Chain(ChainCmd::Story { limit, domain, summary, json })) => {
+            commands::chain_story(&pipeline, limit, domain.as_deref(), summary, json).await?
+        }
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Restart { .. }) => unreachable!(), // handled above
@@ -4807,6 +5372,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Operator(_)) => unreachable!(),  // handled above
         Some(Commands::Emit { .. }) => unreachable!(),  // handled above
         Some(Commands::Run { .. }) => unreachable!(),   // handled above
+        Some(Commands::Model(_)) => unreachable!(),     // handled above
         Some(Commands::Mesh(cmd)) => match cmd {
             MeshCmd::Status => mesh_commands::status(&pipeline).await?,
             MeshCmd::Peers => mesh_commands::peers(&pipeline).await?,
@@ -7518,4 +8084,502 @@ mod tests {
             "malformed JSON must return Err"
         );
     }
+}
+
+// ============================================================================
+// zp policy set inference / zp policy show inference
+// ============================================================================
+
+#[allow(clippy::too_many_arguments)]
+async fn run_policy_set_inference(
+    backend: &str,
+    strategy: &str,
+    allowlist: &str,
+    cost_cap_daily_usd: Option<f64>,
+    schema_compat: &str,
+    circuit_breaker_threshold: u32,
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::chain::UnsealedEntry;
+    use zp_audit::AuditStore;
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, Signer, Status};
+
+    // Parse comma-separated allowlist / schema_compat, stripping blanks
+    let model_allowlist: Vec<String> = allowlist
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let schema_compat_vec: Vec<String> = schema_compat
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let circuit_breaker = if circuit_breaker_threshold == 0 {
+        None
+    } else {
+        Some(circuit_breaker_threshold)
+    };
+
+    // Signing keys
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let secret = keyring
+        .load_operator()
+        .context("No operator key available — run `zp init` first")?
+        .secret_key();
+    let signer = Signer::from_secret(&secret);
+
+    // Build and sign the receipt
+    let mut receipt = ReceiptBuilder::new(ReceiptType::PreferenceLlmPolicySet, "zp-cli")
+        .status(Status::Success)
+        .claim_semantics(ClaimSemantics::AuthorizationGrant)
+        .claim_metadata(ClaimMetadata::PreferenceLlmPolicySet {
+            backend_url: backend.to_string(),
+            routing_strategy: strategy.to_string(),
+            model_allowlist: model_allowlist.clone(),
+            cost_cap_daily_usd,
+            schema_compat: schema_compat_vec.clone(),
+            circuit_breaker_threshold: circuit_breaker,
+        })
+        .finalize();
+    signer.sign(&mut receipt);
+    let receipt_id = receipt.id.clone();
+
+    // Append to audit chain
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    let genesis_secret = keyring
+        .genesis_secret()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+    let mut store = AuditStore::open_signed(&db_path, audit_signer)
+        .context("Failed to open audit store")?;
+    let entry = UnsealedEntry::new(
+        ActorId::System("zp-policy".to_string()),
+        AuditAction::SystemEvent {
+            event: "preference:llm:policy:set".to_string(),
+        },
+        ConversationId::new(),
+        PolicyDecision::Allow { conditions: vec![] },
+        "zp-policy",
+    )
+    .with_receipt(receipt);
+    store.append(entry).context("Failed to append to chain")?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "receipt_id": receipt_id,
+                "backend_url": backend,
+                "routing_strategy": strategy,
+                "model_allowlist": model_allowlist,
+                "cost_cap_daily_usd": cost_cap_daily_usd,
+                "schema_compat": schema_compat_vec,
+                "circuit_breaker_threshold": circuit_breaker,
+            })
+        );
+    } else {
+        println!("\x1b[32m✓\x1b[0m  Inference policy set");
+        println!("  Receipt:  {}", receipt_id);
+        println!("  Backend:  {}", backend);
+        println!("  Strategy: {}", strategy);
+        if model_allowlist.is_empty() {
+            println!("  Allowlist: (unrestricted)");
+        } else {
+            println!("  Allowlist: {}", model_allowlist.join(", "));
+        }
+        if let Some(cap) = cost_cap_daily_usd {
+            println!("  Cost cap: ${:.2}/day", cap);
+        }
+        if !schema_compat_vec.is_empty() {
+            println!("  Schema compat: {}", schema_compat_vec.join(", "));
+        }
+        if let Some(threshold) = circuit_breaker {
+            println!("  Circuit breaker: {} consecutive failures", threshold);
+        }
+        println!();
+        println!("  Restart IronClaw for the new policy to take effect.");
+    }
+
+    Ok(())
+}
+
+async fn run_policy_show_inference(
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::AuditStore;
+    use zp_receipt::{ClaimMetadata, ReceiptType};
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    if !db_path.exists() {
+        if json {
+            println!("{{\"error\": \"no audit chain found\"}}");
+        } else {
+            eprintln!("No audit chain found. Run `zp policy set inference` first.");
+        }
+        return Ok(());
+    }
+
+    let store = AuditStore::open_readonly(&db_path).context("Failed to open audit store")?;
+    let entries = store.export_chain(10_000).context("Failed to read chain")?;
+
+    // Walk chain in reverse to find the most recent PreferenceLlmPolicySet
+    let policy = entries.iter().rev().find_map(|e| {
+        e.receipt.as_ref().and_then(|r| {
+            if r.receipt_type == ReceiptType::PreferenceLlmPolicySet {
+                r.claim_metadata.as_ref()
+            } else {
+                None
+            }
+        })
+    });
+
+    match policy {
+        None => {
+            if json {
+                println!("{{\"error\": \"no preference:llm:policy:set receipt on chain\"}}");
+            } else {
+                eprintln!(
+                    "No inference policy receipt on chain. Run `zp policy set inference` to set one."
+                );
+            }
+        }
+        Some(ClaimMetadata::PreferenceLlmPolicySet {
+            backend_url,
+            routing_strategy,
+            model_allowlist,
+            cost_cap_daily_usd,
+            schema_compat,
+            circuit_breaker_threshold,
+        }) => {
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "backend_url": backend_url,
+                        "routing_strategy": routing_strategy,
+                        "model_allowlist": model_allowlist,
+                        "cost_cap_daily_usd": cost_cap_daily_usd,
+                        "schema_compat": schema_compat,
+                        "circuit_breaker_threshold": circuit_breaker_threshold,
+                    })
+                );
+            } else {
+                println!("\x1b[1mCurrent inference policy\x1b[0m");
+                println!("  Backend:   {}", backend_url);
+                println!("  Strategy:  {}", routing_strategy);
+                if model_allowlist.is_empty() {
+                    println!("  Allowlist: (unrestricted)");
+                } else {
+                    println!("  Allowlist: {}", model_allowlist.join(", "));
+                }
+                if let Some(cap) = cost_cap_daily_usd {
+                    println!("  Cost cap:  ${:.2}/day", cap);
+                } else {
+                    println!("  Cost cap:  (none)");
+                }
+                if schema_compat.is_empty() {
+                    println!("  Schema compat: (none)");
+                } else {
+                    println!("  Schema compat: {}", schema_compat.join(", "));
+                }
+                if let Some(t) = circuit_breaker_threshold {
+                    println!("  Circuit breaker: {} failures", t);
+                }
+            }
+        }
+        Some(_) => unreachable!("receipt_type filter guarantees PreferenceLlmPolicySet"),
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Model registry helpers
+// ============================================================================
+
+#[allow(clippy::too_many_arguments)]
+async fn run_model_register(
+    model_id: &str,
+    provider: &str,
+    provider_url: &str,
+    context_window: u32,
+    supports_tools: bool,
+    schema_format_str: &str,
+    input_cost_per_m: f64,
+    output_cost_per_m: f64,
+    max_output_tokens: u32,
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::chain::UnsealedEntry;
+    use zp_audit::AuditStore;
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, SchemaFormat, Signer, Status};
+
+    let schema_format = match schema_format_str.to_lowercase().as_str() {
+        "gemini" => SchemaFormat::Gemini,
+        "other" => SchemaFormat::Other,
+        _ => SchemaFormat::OpenAi,
+    };
+
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let secret = keyring
+        .load_operator()
+        .context("No operator key available — run `zp init` first")?
+        .secret_key();
+    let signer = Signer::from_secret(&secret);
+
+    let mut receipt = ReceiptBuilder::new(ReceiptType::ModelRegistered, "zp-model")
+        .status(Status::Success)
+        .claim_semantics(ClaimSemantics::AuthorshipProof)
+        .claim_metadata(ClaimMetadata::ModelRegistered {
+            model_id: model_id.to_string(),
+            provider: provider.to_string(),
+            provider_url: provider_url.to_string(),
+            context_window,
+            supports_tools,
+            schema_format,
+            input_cost_per_m_usd: input_cost_per_m,
+            output_cost_per_m_usd: output_cost_per_m,
+            max_output_tokens,
+        })
+        .finalize();
+    signer.sign(&mut receipt);
+    let receipt_id = receipt.id.clone();
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+    let genesis_secret = keyring
+        .genesis_secret()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+    let mut store = AuditStore::open_signed(&db_path, audit_signer)
+        .context("Failed to open audit store")?;
+    let entry = UnsealedEntry::new(
+        ActorId::System("zp-model".to_string()),
+        AuditAction::SystemEvent {
+            event: "model:registered".to_string(),
+        },
+        ConversationId::new(),
+        PolicyDecision::Allow { conditions: vec![] },
+        "zp-model",
+    )
+    .with_receipt(receipt);
+    store.append(entry).context("Failed to append to chain")?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "receipt_id": receipt_id,
+                "model_id": model_id,
+                "provider": provider,
+                "schema_format": schema_format_str,
+            })
+        );
+    } else {
+        println!("\x1b[32m✓\x1b[0m Model registered: \x1b[1m{model_id}\x1b[0m");
+        println!("  Provider:       {provider}");
+        println!("  Endpoint:       {provider_url}");
+        println!("  Context window: {} tokens", context_window);
+        println!("  Tool support:   {supports_tools}");
+        println!("  Schema format:  {schema_format_str}");
+        println!("  Pricing:        ${input_cost_per_m}/M in · ${output_cost_per_m}/M out");
+        println!("  Max output:     {} tokens", max_output_tokens);
+        println!("  Receipt:        {receipt_id}");
+    }
+
+    Ok(())
+}
+
+async fn run_model_list(
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use std::collections::HashMap;
+    use zp_audit::AuditStore;
+    use zp_receipt::{ClaimMetadata, ReceiptType};
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    if !db_path.exists() {
+        if json {
+            println!("[]");
+        } else {
+            eprintln!("No audit chain found. Run `zp model register` to add models.");
+        }
+        return Ok(());
+    }
+
+    let store = AuditStore::open_readonly(&db_path).context("Failed to open audit store")?;
+    let entries = store.export_chain(100_000).context("Failed to read chain")?;
+
+    // Collect the latest model:registered receipt per model_id
+    let mut models: HashMap<String, serde_json::Value> = HashMap::new();
+
+    for entry in &entries {
+        let Some(receipt) = entry.receipt.as_ref() else { continue };
+        let Some(meta) = receipt.claim_metadata.as_ref() else { continue };
+
+        match (receipt.receipt_type, meta) {
+            (ReceiptType::ModelRegistered, ClaimMetadata::ModelRegistered {
+                model_id, provider, provider_url, context_window,
+                supports_tools, schema_format, input_cost_per_m_usd,
+                output_cost_per_m_usd, max_output_tokens,
+            }) => {
+                models.insert(model_id.clone(), serde_json::json!({
+                    "model_id": model_id,
+                    "provider": provider,
+                    "provider_url": provider_url,
+                    "context_window": context_window,
+                    "supports_tools": supports_tools,
+                    "schema_format": schema_format,
+                    "input_cost_per_m_usd": input_cost_per_m_usd,
+                    "output_cost_per_m_usd": output_cost_per_m_usd,
+                    "max_output_tokens": max_output_tokens,
+                    "receipt_id": receipt.id,
+                }));
+            }
+            (ReceiptType::ModelCapabilityUpdated, ClaimMetadata::ModelCapabilityUpdated {
+                model_id, field_updated, new_value, ..
+            }) => {
+                if let Some(entry) = models.get_mut(model_id) {
+                    // Patch the registered entry in-place so `list` always shows current state
+                    if let Some(obj) = entry.as_object_mut() {
+                        obj.insert(field_updated.clone(), new_value.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if json {
+        let list: Vec<_> = models.values().collect();
+        println!("{}", serde_json::to_string_pretty(&list)?);
+    } else if models.is_empty() {
+        println!("No models registered. Run `zp model register` to add one.");
+    } else {
+        println!("\x1b[1mRegistered models ({}):\x1b[0m\n", models.len());
+        let mut sorted: Vec<_> = models.values().collect();
+        sorted.sort_by(|a, b| {
+            a["model_id"].as_str().unwrap_or("").cmp(b["model_id"].as_str().unwrap_or(""))
+        });
+        for m in sorted {
+            println!("  \x1b[1m{}\x1b[0m", m["model_id"].as_str().unwrap_or("?"));
+            println!("    Provider:  {} · {}", m["provider"].as_str().unwrap_or("?"), m["provider_url"].as_str().unwrap_or("?"));
+            println!("    Context:   {} tokens  max_out: {}", m["context_window"], m["max_output_tokens"]);
+            println!("    Tools:     {}  schema: {}", m["supports_tools"], m["schema_format"]);
+            println!("    Pricing:   ${}/M in · ${}/M out",
+                m["input_cost_per_m_usd"], m["output_cost_per_m_usd"]);
+            println!();
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_model_update(
+    model_id: &str,
+    field: &str,
+    value_str: &str,
+    reason: &str,
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::chain::UnsealedEntry;
+    use zp_audit::AuditStore;
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, Signer, Status};
+
+    let new_value: serde_json::Value =
+        serde_json::from_str(value_str).context("--value must be valid JSON")?;
+
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let secret = keyring
+        .load_operator()
+        .context("No operator key available — run `zp init` first")?
+        .secret_key();
+    let signer = Signer::from_secret(&secret);
+
+    let mut receipt = ReceiptBuilder::new(ReceiptType::ModelCapabilityUpdated, "zp-model")
+        .status(Status::Success)
+        .claim_semantics(ClaimSemantics::AuthorshipProof)
+        .claim_metadata(ClaimMetadata::ModelCapabilityUpdated {
+            model_id: model_id.to_string(),
+            field_updated: field.to_string(),
+            new_value: new_value.clone(),
+            reason: reason.to_string(),
+        })
+        .finalize();
+    signer.sign(&mut receipt);
+    let receipt_id = receipt.id.clone();
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+    let genesis_secret = keyring
+        .genesis_secret()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+    let mut store = AuditStore::open_signed(&db_path, audit_signer)
+        .context("Failed to open audit store")?;
+    let entry = UnsealedEntry::new(
+        ActorId::System("zp-model".to_string()),
+        AuditAction::SystemEvent {
+            event: "model:capability:updated".to_string(),
+        },
+        ConversationId::new(),
+        PolicyDecision::Allow { conditions: vec![] },
+        "zp-model",
+    )
+    .with_receipt(receipt);
+    store.append(entry).context("Failed to append to chain")?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "receipt_id": receipt_id,
+                "model_id": model_id,
+                "field_updated": field,
+                "new_value": new_value,
+                "reason": reason,
+            })
+        );
+    } else {
+        println!("\x1b[32m✓\x1b[0m Model updated: \x1b[1m{model_id}\x1b[0m");
+        println!("  Field:   {field}");
+        println!("  Value:   {new_value}");
+        println!("  Reason:  {reason}");
+        println!("  Receipt: {receipt_id}");
+    }
+
+    Ok(())
 }

@@ -276,6 +276,76 @@ pub fn rules_for(rt: ReceiptType) -> TypeRules {
             requires_human_review: false,
             requires_claim_metadata: true,
         },
+
+        // --- Model governance receipts ---
+        ReceiptType::ModelPreferenceSelected => TypeRules {
+            required_semantics: ClaimSemantics::AuthorizationGrant,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::ModelPreferenceResolved => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::ModelRouted => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+
+        // --- Inference governance (GAR Phase 4) ---
+        ReceiptType::PreferenceLlmPolicySet => TypeRules {
+            // Operator assertion of inference policy — AuthorizationGrant because it
+            // controls what models agents may use (same tier as DelegationClaim).
+            required_semantics: ClaimSemantics::AuthorizationGrant,
+            max_ttl_hours: None, // policy persists until superseded
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::InferenceDispatched => TypeRules {
+            required_semantics: ClaimSemantics::AuthorshipProof,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::InferenceCompleted => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::InferenceFailed => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+
+        // --- Chain-native model registry + routing (LLM management arc) ---
+        ReceiptType::ModelRegistered => TypeRules {
+            // Operator assertion that a model is available for routing.
+            required_semantics: ClaimSemantics::AuthorizationGrant,
+            max_ttl_hours: None, // registry entries persist until superseded
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::ModelCapabilityUpdated => TypeRules {
+            required_semantics: ClaimSemantics::IntegrityAttestation,
+            max_ttl_hours: None, // capability patches persist indefinitely
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
+        ReceiptType::InferenceRouted => TypeRules {
+            // Routing decision receipt emitted before each HTTP dispatch.
+            required_semantics: ClaimSemantics::AuthorshipProof,
+            max_ttl_hours: None,
+            requires_human_review: false,
+            requires_claim_metadata: true,
+        },
     }
 }
 
@@ -329,6 +399,16 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
         ClaimMetadata::MemoryIndexed { .. } => "MemoryIndexed",
         ClaimMetadata::MemoryRetrievedByAgent { .. } => "MemoryRetrievedByAgent",
         ClaimMetadata::MemoryRevokedFromIndex { .. } => "MemoryRevokedFromIndex",
+        ClaimMetadata::ModelPreferenceSelected { .. } => "ModelPreferenceSelected",
+        ClaimMetadata::ModelPreferenceResolved { .. } => "ModelPreferenceResolved",
+        ClaimMetadata::ModelRouted { .. } => "ModelRouted",
+        ClaimMetadata::PreferenceLlmPolicySet { .. } => "PreferenceLlmPolicySet",
+        ClaimMetadata::InferenceDispatched { .. } => "InferenceDispatched",
+        ClaimMetadata::InferenceCompleted { .. } => "InferenceCompleted",
+        ClaimMetadata::InferenceFailed { .. } => "InferenceFailed",
+        ClaimMetadata::ModelRegistered { .. } => "ModelRegistered",
+        ClaimMetadata::ModelCapabilityUpdated { .. } => "ModelCapabilityUpdated",
+        ClaimMetadata::InferenceRouted { .. } => "InferenceRouted",
     }
 }
 
@@ -362,6 +442,25 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
             | (ReceiptType::MemoryIndexed, ClaimMetadata::MemoryIndexed { .. })
             | (ReceiptType::MemoryRetrievedByAgent, ClaimMetadata::MemoryRetrievedByAgent { .. })
             | (ReceiptType::MemoryRevokedFromIndex, ClaimMetadata::MemoryRevokedFromIndex { .. })
+            | (
+                ReceiptType::ModelPreferenceSelected,
+                ClaimMetadata::ModelPreferenceSelected { .. },
+            )
+            | (
+                ReceiptType::ModelPreferenceResolved,
+                ClaimMetadata::ModelPreferenceResolved { .. },
+            )
+            | (ReceiptType::ModelRouted, ClaimMetadata::ModelRouted { .. })
+            | (
+                ReceiptType::PreferenceLlmPolicySet,
+                ClaimMetadata::PreferenceLlmPolicySet { .. },
+            )
+            | (ReceiptType::InferenceDispatched, ClaimMetadata::InferenceDispatched { .. })
+            | (ReceiptType::InferenceCompleted, ClaimMetadata::InferenceCompleted { .. })
+            | (ReceiptType::InferenceFailed, ClaimMetadata::InferenceFailed { .. })
+            | (ReceiptType::ModelRegistered, ClaimMetadata::ModelRegistered { .. })
+            | (ReceiptType::ModelCapabilityUpdated, ClaimMetadata::ModelCapabilityUpdated { .. })
+            | (ReceiptType::InferenceRouted, ClaimMetadata::InferenceRouted { .. })
     )
 }
 

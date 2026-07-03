@@ -77,6 +77,14 @@ pub struct ZpConfig {
     /// Ignored when node_role is "genesis".
     pub node_upstream: Sourced<Option<String>>,
 
+    // ── Officers ──
+    pub officers_enabled: Sourced<bool>,
+    pub officers_sweep_interval_secs: Sourced<u64>,
+    pub officers_steward_enabled: Sourced<bool>,
+    pub officers_sentinel_enabled: Sourced<bool>,
+    pub officers_forge_enabled: Sourced<bool>,
+    pub officers_cleo_enabled: Sourced<bool>,
+
     // ── Server runtime paths (Seam 12-B) ──
     /// Optional override directory for HTML/CSS/JS assets the server
     /// serves. When set and present, takes precedence over the
@@ -110,6 +118,13 @@ impl Default for ZpConfig {
 
             node_role: Sourced::default_value("genesis".into()),
             node_upstream: Sourced::default_value(None),
+
+            officers_enabled: Sourced::default_value(false),
+            officers_sweep_interval_secs: Sourced::default_value(900),
+            officers_steward_enabled: Sourced::default_value(true),
+            officers_sentinel_enabled: Sourced::default_value(true),
+            officers_forge_enabled: Sourced::default_value(true),
+            officers_cleo_enabled: Sourced::default_value(true),
 
             assets_dir: Sourced::default_value(None),
             bridge_dir: Sourced::default_value(None),
@@ -187,6 +202,33 @@ impl ZpConfig {
             ));
         }
 
+        lines.push(String::new());
+        lines.push("[officers]".into());
+        lines.push(format!(
+            "  enabled = {}  # {}",
+            self.officers_enabled.value, self.officers_enabled.source
+        ));
+        lines.push(format!(
+            "  sweep_interval_secs = {}  # {}",
+            self.officers_sweep_interval_secs.value, self.officers_sweep_interval_secs.source
+        ));
+        lines.push(format!(
+            "  steward_enabled = {}  # {}",
+            self.officers_steward_enabled.value, self.officers_steward_enabled.source
+        ));
+        lines.push(format!(
+            "  sentinel_enabled = {}  # {}",
+            self.officers_sentinel_enabled.value, self.officers_sentinel_enabled.source
+        ));
+        lines.push(format!(
+            "  forge_enabled = {}  # {}",
+            self.officers_forge_enabled.value, self.officers_forge_enabled.source
+        ));
+        lines.push(format!(
+            "  cleo_enabled = {}  # {}",
+            self.officers_cleo_enabled.value, self.officers_cleo_enabled.source
+        ));
+
         lines.join("\n")
     }
 
@@ -213,6 +255,8 @@ pub struct ConfigFile {
     pub llm: LlmSection,
     #[serde(default)]
     pub node: NodeSection,
+    #[serde(default)]
+    pub officers: OfficersSection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -250,6 +294,23 @@ pub struct NodeSection {
     pub upstream: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct OfficersSection {
+    /// Master switch for the officer cadre.
+    pub enabled: Option<bool>,
+    /// Seconds between sweep cycles (default: 900 = 15 minutes).
+    pub sweep_interval_secs: Option<u64>,
+    /// Enable the Steward (integrity) officer.
+    pub steward_enabled: Option<bool>,
+    /// Enable the Sentinel (security) officer.
+    pub sentinel_enabled: Option<bool>,
+    /// Enable the Forge (operations) officer.
+    pub forge_enabled: Option<bool>,
+    /// Enable the Cleo (governance) officer.
+    pub cleo_enabled: Option<bool>,
+}
+
 impl From<&ZpConfig> for ConfigFile {
     fn from(cfg: &ZpConfig) -> Self {
         Self {
@@ -270,6 +331,14 @@ impl From<&ZpConfig> for ConfigFile {
             node: NodeSection {
                 role: Some(cfg.node_role.value.clone()),
                 upstream: cfg.node_upstream.value.clone(),
+            },
+            officers: OfficersSection {
+                enabled: Some(cfg.officers_enabled.value),
+                sweep_interval_secs: Some(cfg.officers_sweep_interval_secs.value),
+                steward_enabled: Some(cfg.officers_steward_enabled.value),
+                sentinel_enabled: Some(cfg.officers_sentinel_enabled.value),
+                forge_enabled: Some(cfg.officers_forge_enabled.value),
+                cleo_enabled: Some(cfg.officers_cleo_enabled.value),
             },
         }
     }

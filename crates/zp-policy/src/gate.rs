@@ -213,6 +213,52 @@ impl GateResult {
     }
 }
 
+/// Policy state pre-fetched from the operator's chain for an inference request.
+///
+/// The caller (e.g., `ZpGovernedLlmProvider`) reads the current
+/// `preference:llm:policy:set` receipt from chain state and passes it here,
+/// keeping `GovernanceGate` stateless.
+#[derive(Debug, Clone)]
+pub struct InferencePolicyState {
+    /// Receipt ID of the current `preference:llm:policy:set` receipt.
+    pub policy_receipt_id: String,
+    /// Allowlisted model IDs. Empty = any model permitted.
+    pub model_allowlist: Vec<String>,
+    /// Schema compat providers (e.g., `["gemini"]`). The caller must normalize
+    /// tool schemas for each listed provider before dispatching.
+    pub schema_compat: Vec<String>,
+    /// Circuit-breaker threshold: consecutive failures before blocking.
+    /// 0 = circuit breaking disabled.
+    pub circuit_breaker_threshold: u32,
+    /// Current consecutive failure count from chain state.
+    pub consecutive_failures: u32,
+}
+
+/// Result of `GovernanceGate::evaluate_inference()`.
+///
+/// Wraps the standard `GateResult` with inference-specific outputs:
+/// - `required_schema_compat`: providers the caller must apply compat for
+/// - `policy_receipt_id`: links the allowed dispatch to its authorizing receipt
+pub struct InferenceGateResult {
+    /// Standard gate result (Guard + Policy pipeline + inference-specific checks).
+    pub gate: GateResult,
+    /// Schema compat providers the caller must apply before dispatch.
+    /// Empty if the gate blocked.
+    pub required_schema_compat: Vec<String>,
+    /// Policy receipt ID that authorized this request (for `InferenceDispatched` claim).
+    pub policy_receipt_id: String,
+}
+
+impl InferenceGateResult {
+    pub fn is_allowed(&self) -> bool {
+        self.gate.is_allowed()
+    }
+
+    pub fn is_blocked(&self) -> bool {
+        self.gate.is_blocked()
+    }
+}
+
 /// The GovernanceGate — wires Guard and Policy into one pipeline.
 ///
 /// Unlike the pre-recanonicalization version, this gate does **not** own
@@ -298,6 +344,117 @@ impl GovernanceGate {
             unsealed,
             receipt_id: None,
             applied_rules,
+        }
+    }
+
+    /// Evaluate an inference request through the governance pipeline with
+    /// inference-specific two-layer checks.
+    ///
+    /// Runs the standard Guard + PolicyEngine pipeline, then applies:
+    /// - **Layer 1 — model allowlist**: blocks if `policy.model_allowlist` is
+    ///   non-empty and `model` is not in it.
+    /// - **Layer 2 — circuit breaker**: blocks if `policy.consecutive_failures`
+    ///   meets or exceeds `policy.circuit_breaker_threshold` (when non-zero).
+    ///
+    /// Schema compat requirements are returned in
+    /// `InferenceGateResult::required_schema_compat` for the caller to apply
+    /// before dispatching. Schema normalization itself happens in
+    /// `ZpGovernedLlmProvider` (Step 4), not here.
+    ///
+    /// The `context.action` should be `ActionType::InferenceRequest` so that
+    /// `RiskLevel::from_action` reflects the inference-specific risk profile.
+    ///
+    /// Produces exactly one `UnsealedEntry` representing the final decision.
+    pub fn evaluate_inference(
+        &self,
+        context: &PolicyContext,
+        actor: ActorId,
+        model: &str,
+        policy: &InferencePolicyState,
+    ) -> InferenceGateResult {
+        let risk_level = RiskLevel::from_action(&context.action);
+
+        // Stage 1: GUARD (fast pre-filter)
+        let decision = if let Some(guard_block) = self.guard.check(context, &actor) {
+            guard_block
+        } else {
+            // Stage 2: POLICY (graduated decision)
+            let policy_decision = self.policy_engine.evaluate(context);
+
+            if policy_decision.is_allowed() {
+                // Layer 1: model allowlist
+                if !policy.model_allowlist.is_empty()
+                    && !policy.model_allowlist.contains(&model.to_string())
+                {
+                    PolicyDecision::Block {
+                        reason: format!(
+                            "Model '{}' not in allowlist: [{}]",
+                            model,
+                            policy.model_allowlist.join(", ")
+                        ),
+                        policy_module: "InferenceGate::ModelAllowlist".to_string(),
+                    }
+                // Layer 2: circuit breaker
+                } else if policy.circuit_breaker_threshold > 0
+                    && policy.consecutive_failures >= policy.circuit_breaker_threshold
+                {
+                    PolicyDecision::Block {
+                        reason: format!(
+                            "Circuit breaker open: {} consecutive failures (threshold: {})",
+                            policy.consecutive_failures, policy.circuit_breaker_threshold
+                        ),
+                        policy_module: "InferenceGate::CircuitBreaker".to_string(),
+                    }
+                } else {
+                    policy_decision
+                }
+            } else {
+                policy_decision
+            }
+        };
+
+        let policy_module_name = match &decision {
+            PolicyDecision::Block { policy_module, .. } => policy_module.clone(),
+            _ => format!("{}::InferenceGate", self.gate_name),
+        };
+
+        let unsealed = UnsealedEntry::new(
+            actor,
+            AuditAction::PolicyInteraction {
+                decision_type: decision_type_name(&decision),
+                user_response: None,
+            },
+            context.conversation_id.clone(),
+            decision.clone(),
+            policy_module_name,
+        );
+
+        let (required_schema_compat, policy_receipt_id) = if decision.is_allowed() {
+            (
+                policy.schema_compat.clone(),
+                policy.policy_receipt_id.clone(),
+            )
+        } else {
+            (vec![], policy.policy_receipt_id.clone())
+        };
+
+        let gate = GateResult {
+            decision,
+            risk_level,
+            trust_tier: context.trust_tier,
+            unsealed,
+            receipt_id: None,
+            applied_rules: vec![
+                "Guard".to_string(),
+                "PolicyEngine".to_string(),
+                "InferenceGate".to_string(),
+            ],
+        };
+
+        InferenceGateResult {
+            gate,
+            required_schema_compat,
+            policy_receipt_id,
         }
     }
 

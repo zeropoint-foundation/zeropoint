@@ -242,6 +242,7 @@ impl PolicyRule for HarmPrincipleRule {
             ActionType::KeyDelegation { target_subject, .. } => Some(target_subject.as_str()),
             ActionType::PeerIntroduction { peer_address, .. } => Some(peer_address.as_str()),
             ActionType::ToolCall { name } => Some(name.as_str()),
+            ActionType::InferenceRequest { model, .. } => Some(model.as_str()),
         };
 
         if let Some(t) = target {
@@ -567,6 +568,9 @@ impl TrustTierEnforcementRule {
 
             // ToolCall is equivalent to Execute for trust-tier purposes.
             ActionType::ToolCall { .. } => TrustTier::Tier0,
+
+            // InferenceRequest is an outbound API call — Tier1.
+            ActionType::InferenceRequest { .. } => TrustTier::Tier1,
         }
     }
 }

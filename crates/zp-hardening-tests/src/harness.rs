@@ -69,6 +69,10 @@ impl TestApp {
             llm_enabled: false,
             operator_name: "hardening-test".to_string(),
             bridge_dir: None,
+            officers_enabled: false,
+            officers_sweep_interval_secs: 900,
+            officers_steward_enabled: true,
+            officers_cleo_enabled: true,
         };
 
         let state = zp_server::AppState::init(&config).await;
@@ -235,6 +239,10 @@ impl TestServer {
             llm_enabled: false,
             operator_name: "hardening-test".to_string(),
             bridge_dir: None,
+            officers_enabled: false,
+            officers_sweep_interval_secs: 900,
+            officers_steward_enabled: true,
+            officers_cleo_enabled: true,
         };
 
         let state = zp_server::AppState::init(&config).await;

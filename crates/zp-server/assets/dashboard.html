@@ -64,6 +64,15 @@
     }
     .cockpit-tile:hover .tile-remove { opacity: 1; }
     .cockpit-tile .tile-remove:hover { color: #FF4444; background: rgba(255, 68, 68, 0.1); }
+    .cockpit-tile .tile-stop {
+      position: absolute; top: 6px; right: 32px;
+      background: none; border: none; color: #E05252; font-size: 11px;
+      cursor: pointer; padding: 2px 5px; line-height: 1; border-radius: 2px;
+      opacity: 0; transition: opacity 0.15s, background 0.15s;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .cockpit-tile:hover .tile-stop { opacity: 1; }
+    .cockpit-tile .tile-stop:hover { background: rgba(224, 82, 82, 0.12); }
     .cockpit-tile.governed:hover { border-color: #00C896; }
 
     /* Health indicator — top-left dot */

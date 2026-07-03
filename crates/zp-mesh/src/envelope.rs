@@ -373,6 +373,9 @@ impl CompactDelegation {
             renewal_count: 0,
             subject_public_key: None,
             renews: None,
+            grantee_type: None,
+            task_description: None,
+            context_receipts: Vec::new(),
         }
     }
 
