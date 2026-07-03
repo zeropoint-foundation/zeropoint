@@ -419,21 +419,53 @@ pub fn spawn_sweep_task(
 /// rather than waiting for the next periodic cycle. Only Forge runs here —
 /// Steward, Sentinel, and Cleo stay on their periodic timer.
 ///
-/// Each sensor event triggers a full Forge sweep. This is correct (same output
-/// as the periodic path) and avoids adding targeted check methods to Forge yet.
-/// The design doc's optimization of event-specific checks can come later.
+/// **Deactivation (step 5).** After each sweep, governance posture is computed
+/// for all tools. Hardened tools are marked dormant — subsequent sensor events
+/// for those tools are skipped (zero compute). Any sensor fire that names a
+/// dormant tool reactivates it: dormancy drops, sweep runs, posture recomputed.
+/// Events without a tool name (e.g. `FileChanged` on `tool-ports.json`) always
+/// trigger a sweep and clear all dormancy (the file could affect any tool).
+/// Sensors stay registered regardless of dormancy (cheap kqueue watches).
 pub fn spawn_sensor_forge_task(
     mut sensor_rx: tokio::sync::mpsc::Receiver<zp_sensors::SensorEvent>,
     state: std::sync::Arc<crate::AppStateInner>,
 ) {
     tokio::spawn(async move {
         let forge = Forge::new();
+        let mut dormant: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         info!("Sensor-driven Forge activation started");
 
         while let Some(event) = sensor_rx.recv().await {
+            // ── Dormancy gate ────────────────────────────────────────────
+            // Tool-specific events: if the tool is dormant, reactivate it.
+            // Non-tool events (FileChanged, NewListenerDiscovered): clear
+            // all dormancy since any tool could be affected.
+            match event.tool_name() {
+                Some(name) => {
+                    if dormant.contains(name) {
+                        info!(tool = name, "Reactivating dormant tool (sensor fire)");
+                        dormant.remove(name);
+                        emit_forge_lifecycle(&state.audit_store, name, "reactivated");
+                    }
+                }
+                None => {
+                    // Broad event — any tool could be affected.
+                    if !dormant.is_empty() {
+                        debug!(
+                            count = dormant.len(),
+                            "Clearing all dormancy (broad sensor event)"
+                        );
+                        for tool in dormant.drain() {
+                            emit_forge_lifecycle(&state.audit_store, &tool, "reactivated");
+                        }
+                    }
+                }
+            }
+
             debug!(
                 kind = event.kind_label(),
+                dormant = dormant.len(),
                 "Sensor event → Forge activation"
             );
 
@@ -455,11 +487,6 @@ pub fn spawn_sensor_forge_task(
                 forge.sweep(&chain, &vault_keys)
             };
 
-            if findings.is_empty() {
-                debug!("Sensor Forge: no findings, returning to sleep");
-                continue;
-            }
-
             // Emit findings for Warning+ severity.
             let mut emitted = 0usize;
             for finding in &findings {
@@ -478,8 +505,80 @@ pub fn spawn_sensor_forge_task(
                     "Sensor-driven Forge sweep complete"
                 );
             }
+
+            // ── Post-sweep dormancy computation ──────────────────────────
+            // Compute governance posture. Tools that reach Hardened go dormant.
+            {
+                use zp_officers::governance_posture::{
+                    compute_postures, GovernanceFacet, RegisteredToolInfo,
+                    ToolRegistrySnapshot, UnregisteredTools,
+                };
+
+                let data_path = std::path::Path::new(&state.data_dir);
+                let registry = crate::tool_ports::PortRegistry::new(data_path);
+                let bindings = registry.list();
+
+                let mut snapshot = ToolRegistrySnapshot::default();
+                for b in &bindings {
+                    snapshot.registered_tools.insert(
+                        b.tool.clone(),
+                        RegisteredToolInfo {
+                            port: b.port,
+                            pid: b.pid,
+                            has_launch_command: b.launch_command.is_some(),
+                        },
+                    );
+                }
+
+                let unregistered = UnregisteredTools::new();
+
+                let postures = {
+                    let store = match state.audit_store.lock() {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
+                    let chain = ChainReader::new(&store);
+                    compute_postures(&chain, &snapshot, &unregistered)
+                };
+
+                for p in &postures {
+                    if p.has(GovernanceFacet::Hardened) && !dormant.contains(&p.tool_name) {
+                        info!(tool = %p.tool_name, "Tool hardened — Forge deactivating");
+                        dormant.insert(p.tool_name.clone());
+                        emit_forge_lifecycle(&state.audit_store, &p.tool_name, "deactivated");
+                    }
+                }
+            }
+
+            if !dormant.is_empty() {
+                debug!(dormant = ?dormant, "Forge dormancy state");
+            }
         }
 
         debug!("Sensor event channel closed, Forge sensor task exiting");
     });
+}
+
+/// Emit a Forge lifecycle receipt (deactivated/reactivated).
+fn emit_forge_lifecycle(
+    audit_store: &std::sync::Arc<Mutex<AuditStore>>,
+    tool_name: &str,
+    action: &str,
+) {
+    let mut store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let unsealed = UnsealedEntry::new(
+        ActorId::System("officer:forge".to_string()),
+        AuditAction::SystemEvent {
+            event: format!("forge:{}:{}", action, tool_name),
+        },
+        officer_conv_id().clone(),
+        PolicyDecision::Allow {
+            conditions: vec![format!("tool={}", tool_name)],
+        },
+        "forge-lifecycle",
+    );
+    store.append(unsealed).ok();
 }

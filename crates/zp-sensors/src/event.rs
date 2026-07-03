@@ -97,4 +97,19 @@ impl SensorEvent {
             Self::RegistryStale { .. } => "registry_stale",
         }
     }
+
+    /// Extract the tool name associated with this event, if known.
+    ///
+    /// Returns `None` for events that aren't tool-specific (e.g.
+    /// `FileChanged` on `tool-ports.json` affects all tools).
+    /// Used by the Forge deactivation logic to decide whether a
+    /// dormant tool should be reactivated.
+    pub fn tool_name(&self) -> Option<&str> {
+        match self {
+            Self::ProcessEvent { tool_name, .. } => Some(tool_name.as_str()),
+            Self::PortMismatch { tool_name, .. } => Some(tool_name.as_str()),
+            Self::RegistryStale { tool_name, .. } => Some(tool_name.as_str()),
+            Self::FileChanged { .. } | Self::NewListenerDiscovered { .. } => None,
+        }
+    }
 }
