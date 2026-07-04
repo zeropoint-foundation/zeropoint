@@ -53,7 +53,7 @@ impl GovernanceFacet {
             Self::Registered => "Port allocated, manifest known",
             Self::Provisioned => "Vault schema validated",
             Self::Governed => "Launched via ZP, delegation active",
-            Self::Hardened => "All officers clean",
+            Self::Hardened => "Officers attested, no warnings",
         }
     }
 }
@@ -181,8 +181,11 @@ pub fn compute_postures(
             facets.insert(GovernanceFacet::Governed);
         }
 
-        // Hardened: governed AND no Warning+ officer findings for this tool.
+        // Hardened: governed AND at least one officer attestation AND
+        // no Warning+ officer findings. Silence is not approval —
+        // an officer must explicitly sign off via chain receipt.
         if facets.contains(&GovernanceFacet::Governed)
+            && evidence.map_or(false, |e| !e.officer_attestations.is_empty())
             && evidence.map_or(true, |e| !e.has_officer_warnings)
         {
             facets.insert(GovernanceFacet::Hardened);
@@ -211,49 +214,123 @@ struct ToolChainEvidence {
     has_launched: bool,
     has_delegation: bool,
     has_officer_warnings: bool,
+    /// Officers that have explicitly attested this tool (clean sweep).
+    /// Key: officer name (e.g. "steward", "forge", "sentinel").
+    officer_attestations: HashSet<String>,
 }
 
-/// Scan recent chain entries and extract per-tool evidence.
+/// Scan chain for per-tool governance evidence using targeted keyword searches.
+///
+/// Uses `search_by_keyword` for each event category instead of scanning
+/// a fixed tail window. This scales regardless of chain size — a chain
+/// with 400K entries won't push lifecycle events outside the search window.
 fn scan_chain_evidence(chain: &ChainReader<'_>) -> HashMap<String, ToolChainEvidence> {
-    let entries = match chain.recent_entries(2000) {
-        Ok(e) => e,
-        Err(_) => return HashMap::new(),
-    };
-
     let mut evidence: HashMap<String, ToolChainEvidence> = HashMap::new();
 
-    for entry in &entries {
-        match &entry.action {
-            AuditAction::SystemEvent { event } => {
-                // Tool lifecycle events.
+    // Tool lifecycle: configured
+    if let Ok(entries) = chain.search_by_keyword("tool:configured:", 200) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
                 if let Some(tool) = event.strip_prefix("tool:configured:") {
                     evidence.entry(tool.to_string()).or_default().has_configured = true;
-                } else if let Some(tool) = event.strip_prefix("tool:port:assigned:") {
-                    // Format: tool:port:assigned:name:port — extract name.
-                    if let Some(name) = tool.split(':').next() {
+                }
+            }
+        }
+    }
+
+    // Tool lifecycle: port assigned
+    if let Ok(entries) = chain.search_by_keyword("tool:port:assigned:", 200) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if let Some(rest) = event.strip_prefix("tool:port:assigned:") {
+                    if let Some(name) = rest.split(':').next() {
                         evidence.entry(name.to_string()).or_default().has_port_assigned = true;
                     }
-                } else if let Some(tool) = event.strip_prefix("tool:preflight:passed:") {
+                }
+            }
+        }
+    }
+
+    // Tool lifecycle: preflight passed
+    if let Ok(entries) = chain.search_by_keyword("tool:preflight:passed:", 200) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if let Some(tool) = event.strip_prefix("tool:preflight:passed:") {
                     evidence.entry(tool.to_string()).or_default().has_preflight_passed = true;
-                } else if let Some(tool) = event.strip_prefix("tool:launched:") {
-                    evidence.entry(tool.to_string()).or_default().has_launched = true;
-                } else if let Some(tool) = event.strip_prefix("tool:started:") {
+                }
+            }
+        }
+    }
+
+    // Tool lifecycle: launched
+    if let Ok(entries) = chain.search_by_keyword("tool:launched:", 200) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if let Some(tool) = event.strip_prefix("tool:launched:") {
                     evidence.entry(tool.to_string()).or_default().has_launched = true;
                 }
+            }
+        }
+    }
 
-                // Delegation events.
+    // Tool lifecycle: started (alternate event name)
+    if let Ok(entries) = chain.search_by_keyword("tool:started:", 200) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if let Some(tool) = event.strip_prefix("tool:started:") {
+                    evidence.entry(tool.to_string()).or_default().has_launched = true;
+                }
+            }
+        }
+    }
+
+    // Delegation events — tool delegations only.
+    // Skip officer delegations (delegation:granted:officer:*) and any
+    // delegation target that looks like a raw hash (64 hex chars) rather
+    // than a tool name.
+    if let Ok(entries) = chain.search_by_keyword("delegation:granted:", 200) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
                 if let Some(rest) = event.strip_prefix("delegation:granted:") {
-                    evidence.entry(rest.to_string()).or_default().has_delegation = true;
+                    if !rest.is_empty()
+                        && !rest.starts_with("officer:")
+                        && !(rest.len() == 64 && rest.chars().all(|c| c.is_ascii_hexdigit()))
+                    {
+                        evidence.entry(rest.to_string()).or_default().has_delegation = true;
+                    }
                 }
+            }
+        }
+    }
 
-                // Officer findings that reference a tool (Warning+).
-                // Format: officer:forge:operations:crash_loop_detected
-                // The finding's detail JSON contains the tool name, but we can't
-                // parse JSON from the chain event string. Instead, check for
-                // officer findings at Warning+ severity by looking at the
-                // policy_decision conditions.
-                if event.starts_with("officer:") && event.contains(":operations:") {
-                    // Check conditions for tool references.
+    // Officer attestations: officer:<name>:attested:<tool>
+    if let Ok(entries) = chain.search_by_keyword("attested:", 500) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if let Some(rest) = event.strip_prefix("officer:") {
+                    if let Some(pos) = rest.find(":attested:") {
+                        let officer_name = &rest[..pos];
+                        let tool_name = &rest[pos + ":attested:".len()..];
+                        if !tool_name.is_empty() {
+                            evidence
+                                .entry(tool_name.to_string())
+                                .or_default()
+                                .officer_attestations
+                                .insert(officer_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Officer findings with tool references (Warning+).
+    // Recent warnings only — a tool's hardened status should degrade
+    // if officers recently flagged it, not if they flagged it months ago.
+    if let Ok(entries) = chain.search_by_keyword(":operations:", 2000) {
+        for entry in &entries {
+            if let AuditAction::SystemEvent { event } = &entry.action {
+                if event.starts_with("officer:") {
                     if let zp_core::PolicyDecision::Allow { conditions } = &entry.policy_decision {
                         for condition in conditions {
                             if let Some(tool_ref) = condition.strip_prefix("tool=") {
@@ -266,7 +343,6 @@ fn scan_chain_evidence(chain: &ChainReader<'_>) -> HashMap<String, ToolChainEvid
                     }
                 }
             }
-            _ => {}
         }
     }
 
@@ -349,5 +425,53 @@ mod tests {
         };
         assert_eq!(posture.summary(), "unknown");
         assert_eq!(posture.level(), 0);
+    }
+
+    #[test]
+    fn governed_without_attestation_is_not_hardened() {
+        // Governed tool with no officer attestations should NOT be hardened.
+        // Silence is not approval — signing is gravity.
+        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
+            .expect("open in-memory store");
+        let chain = ChainReader::new(&store);
+
+        let mut registry = ToolRegistrySnapshot::default();
+        registry.registered_tools.insert(
+            "ironclaw".to_string(),
+            RegisteredToolInfo {
+                port: 9101,
+                pid: Some(12345),
+                has_launch_command: true,
+            },
+        );
+        let unregistered = UnregisteredTools::new();
+
+        // With an empty chain, compute_postures won't find launch/delegation
+        // evidence, so the tool will be Registered but not Governed or Hardened.
+        let postures = compute_postures(&chain, &registry, &unregistered);
+        assert_eq!(postures.len(), 1);
+        assert!(postures[0].has(GovernanceFacet::Registered));
+        assert!(!postures[0].has(GovernanceFacet::Governed));
+        assert!(!postures[0].has(GovernanceFacet::Hardened));
+    }
+
+    #[test]
+    fn hardened_requires_attestation_evidence() {
+        // Direct test of the facet logic: a ToolChainEvidence with
+        // has_launched + has_delegation but empty attestations should
+        // produce Governed but NOT Hardened.
+        let mut evidence = ToolChainEvidence::default();
+        evidence.has_launched = true;
+        evidence.has_delegation = true;
+        assert!(evidence.officer_attestations.is_empty());
+
+        // With attestation added, Hardened should be reachable.
+        evidence.officer_attestations.insert("steward".to_string());
+        assert!(!evidence.officer_attestations.is_empty());
+        assert!(!evidence.has_officer_warnings);
+
+        // And with a warning, Hardened is blocked even with attestation.
+        evidence.has_officer_warnings = true;
+        assert!(evidence.has_officer_warnings);
     }
 }

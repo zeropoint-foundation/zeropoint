@@ -22,13 +22,20 @@ impl<'a> ChainReader<'a> {
         Self { store }
     }
 
-    /// Get the most recent N entries from the chain (newest first).
+    /// Get the most recent N entries from the chain, in chronological order
+    /// (oldest of the N first, newest last). Reads the *tail* of the chain,
+    /// not the head — so on a 5000-entry chain with limit=1000, you get
+    /// entries 4001–5000 in ascending order.
     pub fn recent_entries(&self, limit: usize) -> Result<Vec<AuditEntry>, ChainReadError> {
-        // export_chain returns oldest-first, up to limit.
-        // For "recent", we want them but that's fine — caller can reverse.
-        self.store
-            .export_chain(limit)
-            .map_err(|e| ChainReadError::StoreError(e.to_string()))
+        let mut entries = self
+            .store
+            .recent_entries(limit)
+            .map_err(|e| ChainReadError::StoreError(e.to_string()))?;
+        // AuditStore::recent_entries returns newest-first (DESC).
+        // Callers expect chronological (oldest-first within the window),
+        // matching the old export_chain contract but reading the tail.
+        entries.reverse();
+        Ok(entries)
     }
 
     /// Get the latest hash in the chain.

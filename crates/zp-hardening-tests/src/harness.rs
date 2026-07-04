@@ -73,6 +73,8 @@ impl TestApp {
             officers_sweep_interval_secs: 900,
             officers_steward_enabled: true,
             officers_cleo_enabled: true,
+            officers_forge_enabled: false,
+            officers_sentinel_enabled: false,
         };
 
         let state = zp_server::AppState::init(&config).await;
@@ -243,6 +245,8 @@ impl TestServer {
             officers_sweep_interval_secs: 900,
             officers_steward_enabled: true,
             officers_cleo_enabled: true,
+            officers_forge_enabled: false,
+            officers_sentinel_enabled: false,
         };
 
         let state = zp_server::AppState::init(&config).await;

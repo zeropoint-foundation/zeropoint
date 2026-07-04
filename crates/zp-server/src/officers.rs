@@ -36,6 +36,8 @@ use zp_officers::{
     sweep::OfficerSweepResult,
     officer::{ChainReader, VaultKeyLister},
     posture::PostureScore,
+    proposal::OfficerDelegation,
+    request::{consolidate, GovernanceRequest},
     sentinel::Sentinel,
     steward::Steward,
     sweep::run_sweep,
@@ -221,6 +223,207 @@ fn emit_posture_receipt(
     store.append(unsealed).ok();
 }
 
+// ── Proposal emission ────────────────────────────────────────────────────────
+
+/// Emit a proposal as a chain receipt.
+///
+/// Event format: `proposal:{officer}:{mutation_kind}:{tool}` (from `Proposal::event_key()`).
+/// The full proposal is serialized into the receipt body for downstream consumers.
+fn emit_proposal(
+    audit_store: &std::sync::Arc<Mutex<AuditStore>>,
+    proposal: &zp_officers::proposal::Proposal,
+) -> bool {
+    let mut store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let action = AuditAction::SystemEvent {
+        event: proposal.event_key(),
+    };
+    let policy_decision = PolicyDecision::Allow {
+        conditions: vec![
+            format!("tool={}", proposal.mutation.tool_name()),
+            format!("mutation={}", proposal.mutation.kind_label()),
+            format!("summary={}", proposal.mutation.summary()),
+        ],
+    };
+    let unsealed = UnsealedEntry::new(
+        ActorId::System(format!("officer:{}", proposal.proposed_by)),
+        action,
+        officer_conv_id().clone(),
+        policy_decision,
+        "officer-proposal",
+    );
+    store.append(unsealed).is_ok()
+}
+
+// ── Governance request emission ──────────────────────────────────────────────
+
+/// Emit a consolidated governance request as a chain receipt.
+///
+/// Governance requests merge findings from multiple officers about the same
+/// subject into one operator-facing decision point. The receipt carries the
+/// full serialized request for downstream cockpit consumption.
+///
+/// Event format: `governance_request:{severity}:{subject_key}` (from `GovernanceRequest::event_key()`).
+fn emit_governance_request(
+    audit_store: &std::sync::Arc<Mutex<AuditStore>>,
+    request: &GovernanceRequest,
+) -> bool {
+    let mut store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let action = AuditAction::SystemEvent {
+        event: request.event_key(),
+    };
+
+    // Conditions carry the operator-facing summary and concern count
+    // for quick chain scanning without deserializing the full request.
+    let policy_decision = PolicyDecision::Allow {
+        conditions: vec![
+            format!("subject={}", request.subject.display_label()),
+            format!("concerns={}", request.concerns.len()),
+            format!("actions={}", request.recommended_actions.len()),
+            format!("severity={:?}", request.severity),
+        ],
+    };
+
+    let unsealed = UnsealedEntry::new(
+        ActorId::System("officer-cadre".to_string()),
+        action,
+        officer_conv_id().clone(),
+        policy_decision,
+        "governance-request",
+    );
+    store.append(unsealed).is_ok()
+}
+
+// ── Officer attestation emission ────────────────────────────────────────────
+
+/// Emit an officer attestation for a governed tool.
+///
+/// An attestation is an officer's explicit sign-off: "I swept this tool and
+/// found no Warning+ issues." Required for the Hardened facet — silence is
+/// not approval. Each enabled officer attests independently; the chain
+/// records who said what.
+///
+/// Event format: `officer:{name}:attested:{tool}`
+fn emit_attestation(
+    audit_store: &std::sync::Arc<Mutex<AuditStore>>,
+    officer_name: &str,
+    tool_name: &str,
+) -> bool {
+    let mut store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let action = AuditAction::SystemEvent {
+        event: format!("officer:{}:attested:{}", officer_name, tool_name),
+    };
+    let policy_decision = PolicyDecision::Allow {
+        conditions: vec![
+            format!("tool={}", tool_name),
+            format!("officer={}", officer_name),
+            "sweep_clean=true".to_string(),
+        ],
+    };
+    let unsealed = UnsealedEntry::new(
+        ActorId::System(format!("officer:{}", officer_name)),
+        action,
+        officer_conv_id().clone(),
+        policy_decision,
+        "officer-attestation",
+    );
+    store.append(unsealed).is_ok()
+}
+
+// ── Officer delegation scanning ─────────────────────────────────────────────
+
+/// Scan the chain for governance:propose delegation receipts targeting officers.
+///
+/// Delegation receipts have event format `delegation:granted:officer:{name}`
+/// and serialize a `CapabilityGrant` in the receipt body. This function
+/// reconstructs per-officer delegations from those receipts.
+///
+/// Returns a map of officer name → OfficerDelegation.
+fn collect_officer_delegations(
+    chain: &ChainReader<'_>,
+) -> std::collections::HashMap<&'static str, OfficerDelegation> {
+    use zp_officers::proposal::GOVERNANCE_PROPOSE_CAPABILITY;
+
+    let mut delegations = std::collections::HashMap::new();
+
+    // Scan recent chain for delegation:granted:officer:* entries.
+    let entries = match chain.search_by_keyword("delegation:granted:officer:", 500) {
+        Ok(e) => e,
+        Err(_) => return delegations,
+    };
+
+    // Group grants by officer name.
+    let mut grants_by_officer: std::collections::HashMap<String, Vec<zp_core::CapabilityGrant>> =
+        std::collections::HashMap::new();
+
+    for entry in &entries {
+        if let AuditAction::SystemEvent { event } = &entry.action {
+            if let Some(officer_name) = event.strip_prefix("delegation:granted:officer:") {
+                // Try to deserialize the grant from the receipt body.
+                // The body is in the receipt's extensions or in the policy decision conditions.
+                // For now, check receipt extensions for the serialized grant.
+                if let Some(receipt) = &entry.receipt {
+                    if let Some(exts) = &receipt.extensions {
+                        if let Some(grant_json) = exts.get("grant") {
+                            if let Ok(grant) = serde_json::from_value::<zp_core::CapabilityGrant>(
+                                grant_json.clone(),
+                            ) {
+                                // Only keep governance:propose grants.
+                                if let zp_core::GrantedCapability::Custom { name, .. } =
+                                    &grant.capability
+                                {
+                                    if name == GOVERNANCE_PROPOSE_CAPABILITY {
+                                        grants_by_officer
+                                            .entry(officer_name.to_string())
+                                            .or_default()
+                                            .push(grant);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Build OfficerDelegation for each known officer.
+    for (name, officer_name_static) in [
+        ("std", "std"),
+        ("sen", "sen"),
+        ("forge", "forge"),
+        ("cleo", "cleo"),
+    ] {
+        if let Some(grants) = grants_by_officer.get(name) {
+            delegations.insert(officer_name_static, OfficerDelegation::from_grants(grants));
+        }
+    }
+
+    delegations
+}
+
+/// Get the delegation for a specific officer, falling back to no delegation.
+fn get_officer_delegation(
+    delegations: &std::collections::HashMap<&'static str, OfficerDelegation>,
+    officer_name: &str,
+) -> OfficerDelegation {
+    delegations
+        .get(officer_name)
+        .cloned()
+        .unwrap_or_else(OfficerDelegation::none)
+}
+
 // ── Vault key listing ─────────────────────────────────────────────────────────
 
 /// Collect vault key names for the sweep.
@@ -393,6 +596,161 @@ pub fn spawn_sweep_task(
                 n
             };
 
+            // Step 5: Band 2 proposals — delegation-gated.
+            // Only officers with governance:propose delegation can emit proposals.
+            // Currently only Forge has a propose() method; other officers will
+            // gain it as their domains mature.
+            let (authorized_proposals, proposals_emitted) = if config.forge_enabled {
+                let authorized: Vec<zp_officers::proposal::Proposal> = {
+                    let store = match state.audit_store.lock() {
+                        Ok(s) => s,
+                        Err(_) => {
+                            warn!("Officer proposals: audit store lock poisoned");
+                            continue;
+                        }
+                    };
+                    let chain = ChainReader::new(&store);
+                    let delegations = collect_officer_delegations(&chain);
+                    let delegation = get_officer_delegation(&delegations, "forge");
+                    let forge = Forge::new();
+                    let mut proposals = forge.propose(&chain);
+                    proposals.extend(forge.propose_from_findings(&result.findings));
+                    delegation.filter_proposals(proposals)
+                }; // lock released
+
+                let mut n = 0usize;
+                for proposal in &authorized {
+                    if emit_proposal(&state.audit_store, proposal) {
+                        n += 1;
+                    }
+                }
+                if n > 0 {
+                    debug!(proposals = n, "Forge proposals emitted (Band 2)");
+                }
+
+                (authorized, n)
+            } else {
+                (Vec::new(), 0usize)
+            };
+
+            // Step 5b: consolidate findings + proposals into governance requests.
+            // One request per subject — the cockpit's operator-facing decision surface.
+            let governance_requests = consolidate(&result.findings, &authorized_proposals);
+            let mut governance_emitted = 0usize;
+            for req in &governance_requests {
+                // Only emit requests with Warning+ severity — Info-level
+                // consolidations are captured in posture but don't need
+                // their own chain entry (same quiet-sweep principle as Step 4).
+                if req.severity > Severity::Info {
+                    if emit_governance_request(&state.audit_store, req) {
+                        governance_emitted += 1;
+                    }
+                }
+            }
+
+            // Step 5c: officer attestations for governed tools.
+            // Each officer that found no Warning+ issues for a governed tool
+            // emits an attestation receipt. Required for Hardened facet —
+            // silence is not approval; the chain must carry explicit sign-off.
+            {
+                use zp_officers::governance_posture::{
+                    compute_postures, GovernanceFacet, RegisteredToolInfo,
+                    ToolRegistrySnapshot, UnregisteredTools,
+                };
+
+                // Build port registry snapshot.
+                let bindings = state.port_registry.list();
+                let mut snapshot = ToolRegistrySnapshot::default();
+                for b in &bindings {
+                    snapshot.registered_tools.insert(
+                        b.tool.clone(),
+                        RegisteredToolInfo {
+                            port: b.port,
+                            pid: b.pid,
+                            has_launch_command: b.launch_command.is_some(),
+                        },
+                    );
+                }
+                let unregistered = UnregisteredTools::new();
+
+                // Compute postures to find governed tools.
+                let postures = {
+                    let store = match state.audit_store.lock() {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
+                    let chain = ChainReader::new(&store);
+                    compute_postures(&chain, &snapshot, &unregistered)
+                };
+
+                let governed_tools: Vec<&str> = postures
+                    .iter()
+                    .filter(|p| p.has(GovernanceFacet::Governed))
+                    .map(|p| p.tool_name.as_str())
+                    .collect();
+
+                if !governed_tools.is_empty() {
+                    // Build set of (officer, tool) pairs with Warning+ findings.
+                    let mut warned: std::collections::HashSet<(String, String)> =
+                        std::collections::HashSet::new();
+                    for finding in &result.findings {
+                        if finding.severity > Severity::Info {
+                            if let Some(tool) = finding.detail.get("tool").and_then(|v| v.as_str()) {
+                                warned.insert((finding.officer.to_string(), tool.to_string()));
+                            }
+                        }
+                    }
+
+                    // Dedup: find existing attestations on chain so we don't
+                    // re-emit every sweep. Only emit when (officer, tool) pair
+                    // has no prior attestation, or when a warning was found
+                    // (which clears the prior attestation's validity — but we
+                    // skip emission in that case via the warned set above).
+                    let mut already_attested: std::collections::HashSet<(String, String)> =
+                        std::collections::HashSet::new();
+                    {
+                        let store = match state.audit_store.lock() {
+                            Ok(s) => s,
+                            Err(_) => continue,
+                        };
+                        let chain = ChainReader::new(&store);
+                        if let Ok(entries) = chain.search_by_keyword("attested:", 500) {
+                            for entry in &entries {
+                                if let zp_core::AuditAction::SystemEvent { event } = &entry.action {
+                                    if let Some(rest) = event.strip_prefix("officer:") {
+                                        if let Some(pos) = rest.find(":attested:") {
+                                            let officer_name = &rest[..pos];
+                                            let tool_name = &rest[pos + ":attested:".len()..];
+                                            if !tool_name.is_empty() {
+                                                already_attested.insert((
+                                                    officer_name.to_string(),
+                                                    tool_name.to_string(),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let mut attestations = 0usize;
+                    for officer in &officers {
+                        for tool in &governed_tools {
+                            let pair = (officer.name().to_string(), tool.to_string());
+                            if !warned.contains(&pair) && !already_attested.contains(&pair) {
+                                if emit_attestation(&state.audit_store, officer.name(), tool) {
+                                    attestations += 1;
+                                }
+                            }
+                        }
+                    }
+                    if attestations > 0 {
+                        debug!(attestations, tools = governed_tools.len(), "Officer attestations emitted");
+                    }
+                }
+            }
+
             // Step 6: posture receipt — always, every sweep.
             emit_posture_receipt(&state.audit_store, &posture);
 
@@ -400,6 +758,9 @@ pub fn spawn_sweep_task(
                 officers = officers.len(),
                 findings_total = result.findings.len(),
                 findings_emitted = emitted,
+                proposals_emitted,
+                governance_requests = governance_requests.len(),
+                governance_emitted,
                 posture = format!("{:.2}", posture.composite),
                 trend = format!("{:?}", posture.trend),
                 "Officer sweep complete",
@@ -475,7 +836,7 @@ pub fn spawn_sensor_forge_task(
             let vault_keys = VaultKeyLister::new(vault_key_names);
 
             // Run Forge sweep under audit store lock.
-            let findings = {
+            let mut findings = {
                 let store = match state.audit_store.lock() {
                     Ok(s) => s,
                     Err(e) => {
@@ -487,6 +848,39 @@ pub fn spawn_sensor_forge_task(
                 forge.sweep(&chain, &vault_keys)
             };
 
+            // ── NewListenerDiscovered: run Sentinel + Forge assessments ────
+            // The sweep reads the chain; these assessments evaluate the
+            // specific process the sensor just discovered.
+            if let zp_sensors::SensorEvent::NewListenerDiscovered {
+                pid, process_name, ports, context, ..
+            } = &event {
+                let ports_json: Vec<serde_json::Value> = ports
+                    .iter()
+                    .map(|p| serde_json::json!({
+                        "port": p.port,
+                        "protocol": &p.protocol,
+                        "socket": &p.socket,
+                    }))
+                    .collect();
+                let context_json = serde_json::to_value(context)
+                    .unwrap_or(serde_json::Value::Null);
+
+                // Sentinel: security assessment (root? network-exposed? unusual parent?)
+                let sentinel = Sentinel::new();
+                findings.extend(
+                    sentinel.assess_unauthorized_listener(
+                        *pid, process_name, &ports_json, &context_json,
+                    )
+                );
+
+                // Forge: operations assessment (should this be governed?)
+                findings.extend(
+                    forge.assess_unregistered_listener(
+                        *pid, process_name, &ports_json, &context_json,
+                    )
+                );
+            }
+
             // Emit findings for Warning+ severity.
             let mut emitted = 0usize;
             for finding in &findings {
@@ -497,11 +891,52 @@ pub fn spawn_sensor_forge_task(
                 }
             }
 
-            if emitted > 0 {
+            // ── Band 2 proposals (delegation-gated) ─────────────────────
+            let authorized_proposals = {
+                let store = match state.audit_store.lock() {
+                    Ok(s) => s,
+                    Err(_) => {
+                        if emitted > 0 {
+                            info!(trigger = event.kind_label(), findings = findings.len(), emitted, "Sensor Forge sweep complete");
+                        }
+                        continue;
+                    }
+                };
+                let chain = ChainReader::new(&store);
+                let delegations = collect_officer_delegations(&chain);
+                let delegation = get_officer_delegation(&delegations, "forge");
+                // Merge chain-reading proposals with findings-based proposals.
+                let mut proposals = forge.propose(&chain);
+                proposals.extend(forge.propose_from_findings(&findings));
+                delegation.filter_proposals(proposals)
+            }; // lock released
+
+            let mut proposals_emitted_count = 0usize;
+            for proposal in &authorized_proposals {
+                if emit_proposal(&state.audit_store, proposal) {
+                    proposals_emitted_count += 1;
+                }
+            }
+
+            // ── Consolidate into governance requests ────────────────────
+            let governance_requests = consolidate(&findings, &authorized_proposals);
+            let mut governance_emitted = 0usize;
+            for req in &governance_requests {
+                if req.severity > Severity::Info {
+                    if emit_governance_request(&state.audit_store, req) {
+                        governance_emitted += 1;
+                    }
+                }
+            }
+
+            if emitted > 0 || proposals_emitted_count > 0 || governance_emitted > 0 {
                 info!(
                     trigger = event.kind_label(),
                     findings = findings.len(),
                     emitted,
+                    proposals = proposals_emitted_count,
+                    governance_requests = governance_requests.len(),
+                    governance_emitted,
                     "Sensor-driven Forge sweep complete"
                 );
             }
