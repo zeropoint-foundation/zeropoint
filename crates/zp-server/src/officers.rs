@@ -30,6 +30,7 @@ use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
 
 use zp_officers::{
+    aegis::Aegis,
     cleo::Cleo,
     finding::Severity,
     forge::Forge,
@@ -69,6 +70,7 @@ pub struct OfficersConfig {
     pub sentinel_enabled: bool,
     pub forge_enabled: bool,
     pub cleo_enabled: bool,
+    pub aegis_enabled: bool,
 }
 
 // ── Emission helpers ──────────────────────────────────────────────────────────
@@ -404,6 +406,7 @@ fn collect_officer_delegations(
         ("sen", "sen"),
         ("forge", "forge"),
         ("cleo", "cleo"),
+        ("aegis", "aegis"),
     ] {
         if let Some(grants) = grants_by_officer.get(name) {
             delegations.insert(officer_name_static, OfficerDelegation::from_grants(grants));
@@ -505,8 +508,11 @@ pub fn spawn_sweep_task(
         ticker.tick().await;
 
         // ── Build officer roster ──────────────────────────────────────────
-        // Order matters for future staggering: Steward → Sentinel → Forge.
-        // Order matters for future staggering: Steward → Sentinel → Forge → Cleo.
+        // Order matters for future staggering: Steward → Sentinel → Forge → Cleo → Aegis.
+        // Aegis runs last in the cycle because it observes the *other* officers'
+        // heartbeats over time — running last doesn't affect what Aegis sees
+        // (heartbeats are emitted after all sweeps complete), but keeps the
+        // trajectory-scope observer at the end of the observational chain.
         let mut officers: Vec<Box<dyn zp_officers::officer::Officer>> = Vec::new();
         if config.steward_enabled {
             officers.push(Box::new(Steward::new()));
@@ -519,6 +525,9 @@ pub fn spawn_sweep_task(
         }
         if config.cleo_enabled {
             officers.push(Box::new(Cleo::new()));
+        }
+        if config.aegis_enabled {
+            officers.push(Box::new(Aegis::new()));
         }
 
         if officers.is_empty() {
@@ -754,6 +763,72 @@ pub fn spawn_sweep_task(
             // Step 6: posture receipt — always, every sweep.
             emit_posture_receipt(&state.audit_store, &posture);
 
+            // Step 7: forward findings to the Regent cognitive loop (if active).
+            // The Regent uses officer findings as sensory input — they become
+            // part of its CognitiveContext on the next cycle.
+            if let Some(regent_handle) = state.regent_handle.get() {
+                if !result.findings.is_empty() {
+                    let findings = result.findings.clone();
+                    let handle = regent_handle.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = handle.send_findings(findings).await {
+                            debug!("Failed to forward findings to Regent: {}", e);
+                        }
+                    });
+                }
+            }
+
+            // Step 8: memory lifecycle sweep — expire stale memories, flag review-due.
+            {
+                let mut engine = state.promotion_engine.lock().unwrap();
+
+                // Collect IDs first to avoid borrow conflicts.
+                let sweep_result = {
+                    let all_refs = engine.all_memories();
+                    zp_memory::sweep_lifecycle(&all_refs)
+                };
+
+                if !sweep_result.expired_ids.is_empty() {
+                    for id in &sweep_result.expired_ids {
+                        if let Some(entry) = engine.get_mut(id) {
+                            zp_memory::demote(entry);
+                        }
+                    }
+                    info!(
+                        expired = sweep_result.expired_ids.len(),
+                        "Memory lifecycle sweep: demoted expired memories"
+                    );
+                }
+
+                // Collect review-due info before dropping engine borrow.
+                let review_submissions: Vec<(String, zp_memory::MemoryStage, zp_memory::MemoryStage)> =
+                    sweep_result.review_due_ids.iter().filter_map(|id| {
+                        engine.get(id).and_then(|entry| {
+                            entry.stage.next().map(|next| (id.clone(), entry.stage, next))
+                        })
+                    }).collect();
+
+                // Submit to review queue (separate lock).
+                if !review_submissions.is_empty() {
+                    if let Some(ref rq) = state.review_queue {
+                        let mut queue = rq.lock().unwrap();
+                        for (id, current, target) in &review_submissions {
+                            queue.submit_for_review(
+                                id,
+                                *current,
+                                *target,
+                                "Lifecycle review: periodic reaffirmation due",
+                                "lifecycle-sweep",
+                            );
+                        }
+                        info!(
+                            review_due = review_submissions.len(),
+                            "Memory lifecycle sweep: submitted for review"
+                        );
+                    }
+                }
+            }
+
             info!(
                 officers = officers.len(),
                 findings_total = result.findings.len(),
@@ -787,6 +862,141 @@ pub fn spawn_sweep_task(
 /// Events without a tool name (e.g. `FileChanged` on `tool-ports.json`) always
 /// trigger a sweep and clear all dormancy (the file could affect any tool).
 /// Sensors stay registered regardless of dormancy (cheap kqueue watches).
+/// Convert the PortRegistry's current bindings into KnownBindings for the
+/// discovery scanner. This lets the Sentinel distinguish registered tools
+/// from genuinely unknown listeners.
+pub fn sync_known_bindings(state: &crate::AppStateInner) {
+    let bindings = state.port_registry.list();
+    let mut known: Vec<zp_sensors::KnownBinding> = bindings
+        .iter()
+        .map(|b| zp_sensors::KnownBinding {
+            tool_name: b.tool.clone(),
+            pid: b.pid,
+            port: b.actual_port.unwrap_or(b.port),
+            extra_ports: b.extra_ports.values().copied()
+                .chain(b.actual_extra_ports.values().copied())
+                .collect(),
+        })
+        .collect();
+
+    // Append operator-acknowledged external listeners from config.toml.
+    // These are tracked (flagged if they disappear), not ignored.
+    for ack in &state.acknowledged_listeners {
+        known.push(zp_sensors::KnownBinding {
+            tool_name: ack.name.clone(),
+            pid: None,   // PID discovered at scan time
+            port: ack.port,
+            extra_ports: Vec::new(),
+        });
+    }
+
+    debug!(
+        registered = bindings.len(),
+        acknowledged = state.acknowledged_listeners.len(),
+        "Syncing known bindings to sensor layer"
+    );
+    state.sensor_handle.update_known_bindings(known);
+}
+
+/// Run a one-shot officer sweep on demand (per `zp officer sweep` CLI verb
+/// and equivalent Regent diagnostic tool). Filtered by officer name if
+/// specified; otherwise runs the full enabled roster.
+///
+/// Unlike `spawn_sweep_task` which runs on periodic timer, this fires
+/// synchronously per operator/Regent request. Composes with OFFICER-ACTION-SURFACES
+/// discipline — sweep is one of the officer's action-surface capabilities
+/// though observation-driven per its canonical role.
+///
+/// Returns findings JSON-serializable per per-officer breakdown so the
+/// caller (dashboard, CLI, Regent) can present targeted diagnostic view.
+pub fn run_manual_sweep(
+    state: &crate::AppStateInner,
+    officer_filter: Option<&str>,
+) -> serde_json::Value {
+    // Build officer roster, optionally filtered by name. Manual sweep is
+    // diagnostic — operator or Regent explicitly requested it — so we run
+    // the requested officer regardless of scheduled-sweep config state.
+    let mut officers: Vec<Box<dyn zp_officers::officer::Officer>> = Vec::new();
+    let include = |name: &str| -> bool {
+        match officer_filter {
+            Some(f) => f.eq_ignore_ascii_case(name),
+            None => true,
+        }
+    };
+
+    if include("steward") {
+        officers.push(Box::new(Steward::new()));
+    }
+    if include("sentinel") || include("sen") {
+        officers.push(Box::new(Sentinel::new()));
+    }
+    if include("forge") {
+        officers.push(Box::new(Forge::new()));
+    }
+    if include("cleo") {
+        officers.push(Box::new(Cleo::new()));
+    }
+    if include("aegis") {
+        officers.push(Box::new(Aegis::new()));
+    }
+
+    if officers.is_empty() {
+        return serde_json::json!({
+            "error": "no matching officers enabled",
+            "filter": officer_filter,
+        });
+    }
+
+    let officer_names: Vec<&'static str> = officers.iter().map(|o| o.name()).collect();
+
+    // Collect vault key names outside the audit store lock (per spawn_sweep_task pattern).
+    let vault_key_names = collect_vault_key_names(&state.vault_key, &state.data_dir);
+    let vault_keys = VaultKeyLister::new(vault_key_names);
+
+    let result = {
+        let store = match state.audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                return serde_json::json!({
+                    "error": "audit store lock poisoned",
+                    "detail": e.to_string(),
+                });
+            }
+        };
+        let chain = ChainReader::new(&store);
+        run_sweep(&officers, &chain, &vault_keys)
+    };
+
+    // Per-officer breakdown for the caller's diagnostic view.
+    let per_officer: Vec<serde_json::Value> = result
+        .per_officer
+        .iter()
+        .map(|o| {
+            serde_json::json!({
+                "officer": o.officer_name,
+                "sweep_duration_ms": o.sweep_duration_ms,
+                "finding_count": o.findings.len(),
+                "findings": o.findings.iter().map(|f| serde_json::json!({
+                    "domain": f.domain,
+                    "finding_type": f.finding_type,
+                    "severity": format!("{:?}", f.severity),
+                    "summary": f.summary,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "sweep_type": "manual",
+        "officer_filter": officer_filter,
+        "officers_run": officer_names,
+        "total_findings": result.findings.len(),
+        "posture_composite": result.posture.composite,
+        "per_officer": per_officer,
+        "completed_at": result.completed_at.to_rfc3339(),
+    })
+}
+
 pub fn spawn_sensor_forge_task(
     mut sensor_rx: tokio::sync::mpsc::Receiver<zp_sensors::SensorEvent>,
     state: std::sync::Arc<crate::AppStateInner>,
@@ -824,11 +1034,21 @@ pub fn spawn_sensor_forge_task(
                 }
             }
 
+            // debug! — restored to debug after 2026-07-10 diagnostic identified
+            // the 11Hz feedback loop (PortRegistry::new persist-on-construct +
+            // kqueue watch on tool-ports.json). Root cause fixed in tool_ports.rs.
             debug!(
                 kind = event.kind_label(),
                 dormant = dormant.len(),
                 "Sensor event → Forge activation"
             );
+
+            // On FileChanged (tool-ports.json), re-sync the PortRegistry
+            // to the sensor layer so the discovery scanner knows which
+            // processes are registered.
+            if matches!(&event, zp_sensors::SensorEvent::FileChanged { .. }) {
+                sync_known_bindings(&state);
+            }
 
             // Collect vault key names.
             let vault_key_names =

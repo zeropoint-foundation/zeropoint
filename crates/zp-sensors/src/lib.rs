@@ -18,7 +18,9 @@ pub mod event;
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub mod kqueue;
 pub mod layer;
+pub mod process;
 
 pub use discovery::{DiscoveryConfig, KnownBinding};
 pub use event::{ProcessEventKind, SensorEvent};
 pub use layer::{SensorLayer, SensorLayerConfig, SensorLayerHandle};
+pub use process::{gather_process_context, ProcessContext};

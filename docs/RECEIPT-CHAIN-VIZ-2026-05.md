@@ -26,8 +26,8 @@ The same component serves multiple surfaces:
   receipt count, show the freshly-written chain. "Your ceremony just
   wrote these 9 receipts." Concretizes for the director the moment
   they finish.
-- **Sage chat surface** — when Sage answers "what happened?", the
-  chain view is the visual companion to Sage's prose.
+- **the Regent chat surface** — when the Regent answers "what happened?", the
+  chain view is the visual companion to the Regent's prose.
 
 ## Why this is the move
 
@@ -57,14 +57,14 @@ the concept of receipts. Needs the abstract concept *concretized*.
 Pedagogical mode. Verification interactions are first-class: this
 is where someone *experiences* tamper-evidence by trying to tamper,
 *experiences* cryptographic verification by running the math in
-their own browser. Sage's voice explains *what receipts ARE* and
+their own browser. the Regent's voice explains *what receipts ARE* and
 *why verification matters*.
 
 **Director** (FoundationTimeline, wizard handoff, internal surfaces)
 — operator of the system. Doesn't need to learn what receipts are;
 needs to *read what they say*. Operational legibility mode. The viz
 surfaces *what's happening / what happened*, filterable by time,
-operator, claim. Sage's voice explains *what the receipts mean* —
+operator, claim. the Regent's voice explains *what the receipts mean* —
 "this is your registration", "this is when you selected your
 voice", "this is the capability check that fired". Verification
 interactions exist as a power-user option but are off the primary
@@ -121,7 +121,7 @@ performs the cryptography themselves and leaves with a concept they
 
 ### Layer 3 — Narration (the interpreter)
 
-Each UI event is paired with pre-authored copy in Sage's voice:
+Each UI event is paired with pre-authored copy in the Regent's voice:
 
 - Visitor clicks verify → display: *"Your browser just computed the
   SHA-256 of this receipt and checked it against the signature. The
@@ -141,29 +141,29 @@ every interaction has a meaning attached.
 ### Narration is voice, not live agent
 
 Critical architectural distinction: **the narration layer is
-pre-authored copy in Sage's voice, bound to specific UI events.
+pre-authored copy in the Regent's voice, bound to specific UI events.
 It is NOT a live agent.**
 
 - No LLM call at narration time
 - No conversational surface
 - No authentication required for the visitor (it's static-shaped
   reactive copy, like a guided tour)
-- The visual treatment (Sage chat bubble) is shared with the wizard
+- The visual treatment (the Regent chat bubble) is shared with the wizard
   via the existing `sageHtml()` primitive
 
 This matches how the wizard ceremony already works: `sageHtml(...)`
-renders pre-written bubbles per phase. Sage *as a character* is
-present everywhere the foundation speaks; Sage *as a running agent*
+renders pre-written bubbles per phase. the Regent *as a character* is
+present everywhere the foundation speaks; the Regent *as a running agent*
 is gated behind authentication and stays on internal surfaces.
 
-The public chain viz exposes Sage's voice through carefully authored
+The public chain viz exposes the Regent's voice through carefully authored
 copy, just as the wizard does. It does not expose a live LLM agent
 to anonymous visitors. That boundary is intentional — direct agent
 exposure is an architectural commitment the foundation hasn't yet
 made and shouldn't make casually for a marketing exhibit.
 
-A live conversational Sage (operator asks Sage arbitrary questions,
-Sage queries the chain and answers) is a real future capability —
+A live conversational the Regent (operator asks the Regent arbitrary questions,
+the Regent queries the chain and answers) is a real future capability —
 but it lives behind authenticated surfaces only, with explicit
 authorization. It is not a v1 dependency of the chain viz on any
 surface. See v2 future-work notes below.
@@ -331,19 +331,19 @@ The production component must:
 
 ## v2 future work (not on the v1 critical path)
 
-### Live conversational Sage on internal surfaces
+### Live conversational the Regent on internal surfaces
 
-Today's Sage is character + copy: voice patterns rendered through
+Today's Regent is character + copy: voice patterns rendered through
 pre-authored bubbles bound to events. A future capability is
-*conversational* Sage — directors asking arbitrary questions, Sage
+*conversational* the Regent — directors asking arbitrary questions, the Regent
 querying the chain and answering. That's a real runtime surface
 that requires:
 
 - Authentication (no anonymous access)
 - Rate-limiting and abuse protections
-- A defined capability scope for Sage (what queries can Sage answer,
-  what data can Sage surface, what actions can Sage take)
-- Audit-chain receipts for every Sage query and answer (Sage's
+- A defined capability scope for the Regent (what queries can the Regent answer,
+  what data can the Regent surface, what actions can the Regent take)
+- Audit-chain receipts for every the Regent query and answer (the Regent's
   reasoning is itself a chain-recorded event)
 
 This belongs behind the same substrate-session authentication that
@@ -364,9 +364,9 @@ on the chain-viz v1 path.
 
 - `docs/handoffs/director-pilot-preflight-2026-05.md` — preflight
   surfaces that the chain wasn't a debugging surface today
-- `docs/AGENT-AS-UX-ARCHITECTURE-2026-05.md` — Sage's voice and
-  patterns; this spec extends Sage's *voice* to a new surface, not
-  Sage as a live agent
+- `docs/AGENT-AS-UX-ARCHITECTURE-2026-05.md` — the Regent's voice and
+  patterns; this spec extends the Regent's *voice* to a new surface, not
+  the Regent as a live agent
 - Task #102 — FoundationTimeline v1 (this artifact is the rendering
   layer)
 - Task #143 — Foundation receipt signing (the "trust" half of the

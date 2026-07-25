@@ -89,7 +89,7 @@ The design supports two operator postures, sequenced.
 The minimum viable posture and the one to ship first. Matches the substrate's
 existing observability-versus-control split: visibility is universal, authority
 remains scoped. The substrate observes the RF event, attests it via chain
-receipt, surfaces it to the operator through the Sage interface and the
+receipt, surfaces it to the operator through the Regent interface and the
 chain-anchored alert artifact. The operator decides whether to act. No
 physical-world emission, no operator authorization required beyond running
 the sensor mesh in the first place.
@@ -172,13 +172,13 @@ deserve its own claim line.
 
 Resolve when this thread becomes scheduled.
 
-## Sage's role
+## the Regent's role
 
 The operator-facing surface for RF awareness pairs a reference panel
 (visible RF environment, current sensor mesh status, alert history, threshold
-configuration) with Sage's conversational interface, per the conversational-
+configuration) with the Regent's conversational interface, per the conversational-
 interface-plus-reference-surface heuristic. Both surfaces read and write the
-same chain state; the panel makes the control space legible, Sage makes
+same chain state; the panel makes the control space legible, the Regent makes
 expression natural.
 
 Anomaly-detection alerts are exactly the kind of artifact-library candidate

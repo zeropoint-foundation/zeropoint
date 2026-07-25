@@ -55,10 +55,38 @@ install_symlink() {
 }
 
 kill_server() {
+    # Graceful shutdown: SIGTERM first, then poll for up to
+    # $GRACE_SECS for the server to actually flush chain state, close
+    # SQLite WAL, emit final officer/regent shutdown receipts, and
+    # release the listening port. Only escalate to SIGKILL if the
+    # grace window expires. Per BUILD-PROCESS-DESIGN-2026-07.md
+    # "graceful shutdown" phase.
+    local GRACE_SECS=8
     local pids
     pids=$(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null || true)
-    [ -n "$pids" ] && echo "$pids" | xargs kill 2>/dev/null || true
-    pkill -f "$CLI_NAME serve" 2>/dev/null || true
+    if [ -z "$pids" ]; then
+        pkill -TERM -f "$CLI_NAME serve" 2>/dev/null || true
+        return
+    fi
+
+    echo "$pids" | xargs kill -TERM 2>/dev/null || true
+    pkill -TERM -f "$CLI_NAME serve" 2>/dev/null || true
+
+    # Poll every 0.25s waiting for the port to be released. Exit
+    # early the moment lsof shows nothing listening — no need to
+    # burn the full grace window when shutdown is fast.
+    local waited=0
+    while [ "$waited" -lt "$((GRACE_SECS * 4))" ]; do
+        sleep 0.25
+        local still
+        still=$(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null || true)
+        [ -z "$still" ] && return
+        waited=$((waited + 1))
+    done
+
+    echo "⚠ SIGTERM did not release port $PORT within ${GRACE_SECS}s — escalating to SIGKILL"
+    lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null | xargs kill -9 2>/dev/null || true
+    pkill -KILL -f "$CLI_NAME serve" 2>/dev/null || true
     sleep 0.3
 }
 
@@ -84,9 +112,15 @@ start_server() {
     RUST_LOG=info nohup "$bin" serve --foreground --port "$PORT" > "$LOG" 2>&1 &
     local server_pid=$!
 
-    # Vault key resolution takes ~9 seconds; give the server up to 25 seconds
+    # Boot latency baselines:
+    #   - OS Keychain Genesis:  ~9s (vault key resolution + startup)
+    #   - Hardware Genesis (Trezor/YubiKey/Ledger/OnlyKey): operator confirmation
+    #     latency is unbounded — physical touch on device, typically 10–120s.
+    # Poll window sized for hardware-Genesis case; override via ZP_BOOT_WAIT_SECS.
+    local wait_secs="${ZP_BOOT_WAIT_SECS:-180}"
+    local max_tries=$((wait_secs * 2))
     local tries=0
-    while [ $tries -lt 50 ]; do
+    while [ $tries -lt $max_tries ]; do
         if lsof -i :$PORT -sTCP:LISTEN > /dev/null 2>&1; then
             echo "✓ localhost:$PORT (PID $server_pid, build $commit)"
             return 0
@@ -94,7 +128,8 @@ start_server() {
         sleep 0.5
         tries=$((tries + 1))
     done
-    echo "✗ Failed to start after 25s — check: ./zp-dev.sh log"
+    echo "✗ Failed to start after ${wait_secs}s — check: ./zp-dev.sh log"
+    echo "  (override wait with ZP_BOOT_WAIT_SECS=<seconds>)"
     tail -10 "$LOG"
     return 1
 }

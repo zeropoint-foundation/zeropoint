@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::process::ProcessContext;
+
 /// An event emitted by the sensor layer.
 ///
 /// Forge subscribes to these. Each event type maps to a specific Forge
@@ -38,11 +40,15 @@ pub enum SensorEvent {
     /// A new listening process was discovered that isn't in the port registry.
     ///
     /// Emitted by the periodic `listeners` scan when it finds a process
-    /// binding a port that no registered tool owns.
+    /// binding a port that no registered tool owns. Includes enriched
+    /// process context for human-readable identification.
     NewListenerDiscovered {
         pid: u32,
         process_name: String,
         ports: Vec<DiscoveredPort>,
+        /// Enriched process metadata — binary path, command line, user,
+        /// parent process, start time. Best-effort; fields may be `None`.
+        context: ProcessContext,
         timestamp: DateTime<Utc>,
     },
 

@@ -51,6 +51,7 @@ tracing-subscriber.workspace = true
 
 # HTTP client for server communication (zp memory review, etc.)
 reqwest.workspace = true
+futures.workspace = true
 
 # Additional dependencies
 ed25519-dalek.workspace = true

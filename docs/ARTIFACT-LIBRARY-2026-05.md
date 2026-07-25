@@ -21,7 +21,7 @@ What's missing across all three:
 
 - **Composition rules.** How receipts become narrative *structure* (opener, body, closer, complication-resolution pairing). Today the LLM invents structure on every call. Source of the closer-drift class.
 - **Caching.** Every read is a fresh LLM call. Burns tokens on re-reads. Slow.
-- **Citability.** "The calendar Sage showed Carlie on Tuesday" doesn't exist as a referenceable object — the LLM generated something and it's gone. No audit trail from prose back to receipts. No way for Sage to reference past renderings.
+- **Citability.** "The calendar the Regent showed Carlie on Tuesday" doesn't exist as a referenceable object — the LLM generated something and it's gone. No audit trail from prose back to receipts. No way for the Regent to reference past renderings.
 - **Verifiability.** No signature on rendered output. An operator can't prove what they saw matched the chain. A third party can't verify what an operator was shown.
 
 The Artifact Library is the substrate primitive that solves all four together.
@@ -215,7 +215,7 @@ All endpoints behind substrate-session auth. Operator-scoped — operators see o
 
 Artifact signing composes from #143 (foundation worker receipt signing). Same Genesis-rooted key signs receipts and artifacts. Same canonical-JSON-over-Ed25519 shape.
 
-Operator review surface (Sage chat, dashboard, or dedicated review panel) presents the candidate:
+Operator review surface (the Regent chat, dashboard, or dedicated review panel) presents the candidate:
 - The full rendered content
 - The source manifest (which receipts contributed)
 - The render config (anchor version, composition version)
@@ -233,20 +233,20 @@ Foundation-wide artifacts (timeline, foundation reports) are signed by the found
 
 ---
 
-## 9 · Sage integration boundaries
+## 9 · Regent integration boundaries
 
-**What Sage can do:**
-- Generate candidates (Sage invokes chain_render or its successors; new candidates appear in the library)
+**What the Regent can do:**
+- Generate candidates (the Regent invokes chain_render or its successors; new candidates appear in the library)
 - Show candidates awaiting review ("You have 3 unreviewed artifacts: this week's digest, the May calendar update, a chain-render candidate from yesterday")
 - Reference signed artifacts in conversation ("As shown in your signed May 14 calendar...")
 - Help operator decide ("Want to walk through what's in the candidate before signing?")
 
-**What Sage cannot do:**
-- Sign artifacts. Signing is an operator-authority act. Sage proposes; the operator decides. Same shape as #161's voice_set: the agent operates within scope, the operator signs.
+**What the Regent cannot do:**
+- Sign artifacts. Signing is an operator-authority act. the Regent proposes; the operator decides. Same shape as #161's voice_set: the agent operates within scope, the operator signs.
 - Modify signed artifacts. Signed = canonical = immutable.
 - Reject candidates without operator confirmation.
 
-The principle: **a candidate is a proposal; a signature is a decision.** Sage is great at proposals. Decisions stay with operators.
+The principle: **a candidate is a proposal; a signature is a decision.** the Regent is great at proposals. Decisions stay with operators.
 
 ---
 
@@ -257,8 +257,8 @@ The principle: **a candidate is a proposal; a signature is a decision.** Sage is
 | #102 FoundationTimeline v1 | "Curated chain view" | An artifact kind: timeline candidates auto-generate weekly, foundation signs to canonize |
 | #103 SharedCalendar v1 + iCal | "Calendar with iCal sync-out" | An artifact kind: calendar candidates auto-generate on event-receipt change, signed when reviewed; iCal is one of several render formats |
 | #145 zp-receipt-chain web component | "Legibility layer for the chain" | Consumes signed chain-narration artifacts rather than re-rendering on every embed |
-| #147 PoC chain narration | "Agent-rendered chain in chat" | Ephemeral artifact (today); can become candidate→signed if operator wants a canonical record of "what Sage said about my chain at this point" |
-| #160 Sage audio narration | "TTS for chain_render output" | Audio artifact kind, same lifecycle as text artifacts; signed audio is durable, citable, replayable |
+| #147 PoC chain narration | "Agent-rendered chain in chat" | Ephemeral artifact (today); can become candidate→signed if operator wants a canonical record of "what the Regent said about my chain at this point" |
+| #160 the Regent audio narration | "TTS for chain_render output" | Audio artifact kind, same lifecycle as text artifacts; signed audio is durable, citable, replayable |
 
 The pattern: every LLM-rendered substrate surface has an artifact-shape underneath. Some are ephemeral, some are candidates, some are signed. The Library is where they all live.
 
@@ -290,9 +290,9 @@ Workflows have all three artifact states plus a runtime dimension pure rendering
 
 ### Workflows currently latent in the system
 
-The Sage onboarding wizard is implicitly a workflow today but isn't yet a library artifact. So are the sign-in flow (#156), the biometric-enrollment ceremony (#157), the voice-tuning ceremony, future capability-grant flows, delegation-acceptance flows. Each becomes a workflow artifact under this model:
+The the Regent onboarding wizard is implicitly a workflow today but isn't yet a library artifact. So are the sign-in flow (#156), the biometric-enrollment ceremony (#157), the voice-tuning ceremony, future capability-grant flows, delegation-acceptance flows. Each becomes a workflow artifact under this model:
 
-- Drafted (possibly by Sage or another agent)
+- Drafted (possibly by the Regent or another agent)
 - Reviewed by an operator (or the foundation, for foundation-wide workflows)
 - Signed → executable
 - Each execution produces a citing chain of receipts
@@ -331,7 +331,7 @@ To land in CLAUDE.md after this design reviews cleanly and implementation begins
 - **Cross-operator visibility.** Foundation-wide artifacts (timeline, reports) need a different visibility model than per-operator ones. Composes with #105 (visibility receipt field + ACL enforcement).
 - **Re-signing after anchor or composition-rules version bump.** When the substrate updates its rendering machinery, all signed artifacts become "signed under an older version." Are they still canonical? Probably yes — signed at the time, audit trail intact, supersession via fresh candidate available. But worth being explicit.
 - **Verification by third parties.** Given a signed artifact + the chain, a third party should be able to recompute the artifact_id from source receipts + render config and verify the signature. The render config must be sufficiently versioned to make this reproducible. Round-trip verification is a discipline-pin candidate.
-- **Sage's role in editorial review.** Can Sage suggest "this candidate is consistent with the chain, you can sign with confidence"? Probably yes — Sage as a research assistant for review. But Sage cannot substitute for operator judgment.
+- **the Regent's role in editorial review.** Can the Regent suggest "this candidate is consistent with the chain, you can sign with confidence"? Probably yes — the Regent as a research assistant for review. But the Regent cannot substitute for operator judgment.
 
 ---
 
@@ -341,7 +341,7 @@ To land in CLAUDE.md after this design reviews cleanly and implementation begins
 2. **Composition rules first.** Implement endpoint-deterministic composition for chain_render (closes #147's closer-drift bug class as a side effect). Lightest weight; validates the composition concept.
 3. **Artifact data shape + library schema.** Define `Artifact`, `Library`, the content-addressing scheme. Land as types in Rust + storage in D1/R2.
 4. **First artifact kind: chain narration.** Migrate chain_render from ephemeral to candidate-producing. Library now has its first kind.
-5. **Signing protocol.** Wire artifact signing through #143's signing primitive. Operator review surface (initial: dashboard panel; later: Sage integration).
+5. **Signing protocol.** Wire artifact signing through #143's signing primitive. Operator review surface (initial: dashboard panel; later: Regent integration).
 6. **Additional artifact kinds.** Calendar, timeline, digest. Each is a new kind sharing the lifecycle machinery.
 7. **Workflow heuristic.** Lands in CLAUDE.md alongside the first signed artifact in production.
 8. **Fold into ARCHITECTURE-2026-05.md** as section II.22.

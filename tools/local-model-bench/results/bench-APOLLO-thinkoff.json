@@ -1,0 +1,204 @@
+{
+  "target": "APOLLO",
+  "stamp": "thinkoff",
+  "contexts": [
+    4096,
+    16384,
+    32768,
+    65536
+  ],
+  "results": [
+    {
+      "id": "qwen3-30b-a3b",
+      "repo": "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit",
+      "tier": "resident-general",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 3.6,
+      "decode_tps": 93.2,
+      "peak_memory_gb": 16.05,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4136,
+          "prefill_tps": 790.2,
+          "peak_gb": 17.06,
+          "synthesis_ok": true
+        },
+        "16384": {
+          "prompt_tokens": 16438,
+          "prefill_tps": 482.1,
+          "peak_gb": 18.16,
+          "synthesis_ok": true
+        },
+        "32768": {
+          "prompt_tokens": 32800,
+          "prefill_tps": 286.0,
+          "peak_gb": 19.63,
+          "synthesis_ok": true
+        },
+        "65536": {
+          "prompt_tokens": 65566,
+          "prefill_tps": 179.7,
+          "peak_gb": 22.59,
+          "synthesis_ok": true
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": true,
+        "uc1_synthesis": true
+      },
+      "structured_score": "4/4",
+      "samples": {
+        "uc1_ontology_extract": "{\n  \"trajectories\": [\n    \"Operator declared an inference envelope authorizing two models\",\n    \"Substrate recorded a served-model receipt\",\n    \"Router served a cheaper tier\",\n    \"Operator flagged the divergence for review\"\n  ],\n  \"decisions\": [\n    \"Operator declared an inference envelope authorizing two models\",\n    \"Operator flagged the divergence for review\"\n  ],\n  \"insights\": [\n    \"A divergence receipt fired when the router served a cheaper tier\",\n    \"Substrate recorded a served-model receipt\"\n  ]\n}",
+        "uc3_grounded_qa": "Sixty days' notice is required to terminate for convenience, as stated in Section 9.1."
+      }
+    },
+    {
+      "id": "qwen3-coder-30b-a3b",
+      "repo": "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+      "tier": "resident-coder",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 3.2,
+      "decode_tps": 86.5,
+      "peak_memory_gb": 16.05,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4136,
+          "prefill_tps": 711.5,
+          "peak_gb": 17.06,
+          "synthesis_ok": true
+        },
+        "16384": {
+          "prompt_tokens": 16438,
+          "prefill_tps": 451.3,
+          "peak_gb": 18.16,
+          "synthesis_ok": true
+        },
+        "32768": {
+          "prompt_tokens": 32800,
+          "prefill_tps": 304.3,
+          "peak_gb": 19.63,
+          "synthesis_ok": true
+        },
+        "65536": {
+          "prompt_tokens": 65566,
+          "prefill_tps": 182.4,
+          "peak_gb": 22.59,
+          "synthesis_ok": true
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": true,
+        "uc1_synthesis": true
+      },
+      "structured_score": "4/4",
+      "samples": {
+        "uc1_ontology_extract": "```json\n{\n  \"trajectories\": [\n    \"model selection\",\n    \"substrate recording\",\n    \"router serving\",\n    \"divergence detection\"\n  ],\n  \"decisions\": [\n    \"declare inference envelope\",\n    \"record served model\",\n    \"flag divergence\",\n    \"review divergence\"\n  ],\n  \"insights\": [\n    \"two models authorized\",\n    \"cheaper tier served\",\n    \"divergence detected\",\n    \"review required\"\n  ]\n}\n```",
+        "uc3_grounded_qa": "Section 9.1 states that either party may terminate for convenience with 60 days written notice."
+      }
+    },
+    {
+      "id": "qwen3-4b",
+      "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+      "tier": "fast-slm",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 0.9,
+      "decode_tps": 93.8,
+      "peak_memory_gb": 2.21,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4136,
+          "prefill_tps": 702.2,
+          "peak_gb": 3.41,
+          "synthesis_ok": true
+        },
+        "16384": {
+          "prompt_tokens": 16438,
+          "prefill_tps": 483.7,
+          "peak_gb": 4.94,
+          "synthesis_ok": true
+        },
+        "32768": {
+          "prompt_tokens": 32800,
+          "prefill_tps": 350.1,
+          "peak_gb": 7.22,
+          "synthesis_ok": true
+        },
+        "65536": {
+          "prompt_tokens": 65566,
+          "prefill_tps": 219.8,
+          "peak_gb": 11.94,
+          "synthesis_ok": true
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": true,
+        "uc1_synthesis": true
+      },
+      "structured_score": "4/4",
+      "samples": {
+        "uc1_ontology_extract": "{\n  \"trajectories\": [\n    \"Operator authorizes inference envelope for two models\",\n    \"Substrate records served-model receipt\",\n    \"Router serves cheaper tier, triggering divergence receipt\",\n    \"Operator flags divergence for review\"\n  ],\n  \"decisions\": [\n    \"Authorize inference envelope for two models\",\n    \"Flag divergence for review\"\n  ],\n  \"insights\": [\n    \"Inference envelope enables model selection flexibility\",\n    \"Served-model receipt confirms model deployment\",\n    \"Divergence detected when cheaper tier is served\",\n    \"Review process initiated for potential policy or routing issues\"\n  ]\n}",
+        "uc3_grounded_qa": "Sixty days' written notice is required to terminate for convenience, as specified in Section 9.1."
+      }
+    },
+    {
+      "id": "qwen3-1.7b",
+      "repo": "mlx-community/Qwen3-1.7B-4bit",
+      "tier": "classifier-edge",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 0.8,
+      "decode_tps": 206.0,
+      "peak_memory_gb": 1.03,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4140,
+          "prefill_tps": 1803.4,
+          "peak_gb": 2.07,
+          "synthesis_ok": false
+        },
+        "16384": {
+          "prompt_tokens": 16442,
+          "prefill_tps": 1260.1,
+          "peak_gb": 3.34,
+          "synthesis_ok": false
+        },
+        "32768": {
+          "prompt_tokens": 32804,
+          "prefill_tps": 908.1,
+          "peak_gb": 4.96,
+          "synthesis_ok": false
+        },
+        "65536": {
+          "prompt_tokens": 65570,
+          "prefill_tps": 558.5,
+          "peak_gb": 8.64,
+          "synthesis_ok": false
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": true,
+        "uc1_synthesis": true
+      },
+      "structured_score": "4/4",
+      "samples": {
+        "uc1_ontology_extract": "```json\n{\n  \"trajectories\": [\n    \"Operator declared an inference envelope authorizing two models\",\n    \"Substrate recorded a served-model receipt\",\n    \"A divergence receipt fired when the router served a cheaper tier\",\n    \"Operator flagged the divergence for review\"\n  ],\n  \"decisions\": [\n    \"Operator declared an inference envelope authorizing two models\",\n    \"Substrate recorded a served-model receipt\",\n    \"A divergence receipt fired when the router served a cheaper tier\",\n    \"Operator flagged the divergence for review\"\n  ],\n  \"insights\": [\n    \"Inference envelope authorized two models\",\n    \"Substrate recorded served-model receipt\",\n    \"Divergence occurred when cheaper tier was served\",\n    \"Divergence flagged for review\"\n  ]\n}\n```",
+        "uc3_grounded_qa": "60 days notice is required to terminate for convenience, under Section 9.1."
+      }
+    }
+  ]
+}

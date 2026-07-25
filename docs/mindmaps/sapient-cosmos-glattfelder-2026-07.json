@@ -1,0 +1,253 @@
+{
+  "title": "The Sapient Cosmos — Glattfelder on Essentia Foundation",
+  "subtitle": "Complexity scientist James Glattfelder argues physicalism is a naive metaphysics, and that information, complexity, and empirical mysticism converge on a participatory universe where the brain channels consciousness rather than producing it.",
+  "center": {
+    "label": "Brain Channels, Doesn't Produce",
+    "emoji": "📡"
+  },
+  "branches": [
+    {
+      "label": "The Paradigm Shift",
+      "emoji": "🌀",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Physics has been stuck",
+          "children": [
+            {"label": "\"Stuck for whatever 30 40 years\""},
+            {"label": "Shut-up-and-calculate cul-de-sac"},
+            {"label": "\"No interpretation of QM\""}
+          ]
+        },
+        {
+          "label": "From bit — but earlier",
+          "children": [
+            {"label": "Wheeler's \"it from bit\""},
+            {"label": "Weizsäcker predated him by 17 yrs"},
+            {"label": "German-only, never translated"}
+          ]
+        },
+        {
+          "label": "Observer-centric turn",
+          "children": [
+            {"label": "Rovelli, Brukner, Renner, Mueller"},
+            {"label": "QBism: \"what will I see next\""},
+            {"label": "\"Objectivity is the illusion\""}
+          ]
+        },
+        {
+          "label": "Space, time no longer fundamental",
+          "children": [
+            {"label": "ER = EPR wormholes"},
+            {"label": "Block universe, Wheeler-DeWitt"},
+            {"label": "\"Metaphysical no man's land\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Empirical Mysticism",
+      "emoji": "🕉️",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Four lineages converge",
+          "children": [
+            {"label": "Shamans (50–70k years)"},
+            {"label": "Mystics: Sufi, Kabbala, Gnostic"},
+            {"label": "Meditators: Vedas, Upanishads"},
+            {"label": "Modern psychonauts"}
+          ]
+        },
+        {
+          "label": "The West arrived late",
+          "children": [
+            {"label": "Hard problem only in 1994"},
+            {"label": "1989 dictionary: nothing relevant"},
+            {"label": "\"Arrogant and mind-boggling\""}
+          ]
+        },
+        {
+          "label": "Psychedelics as instrument",
+          "children": [
+            {"label": "\"Philosopher without the piano\""},
+            {"label": "\"DMT city — go and visit\""},
+            {"label": "Top-3 life event (Johns Hopkins)"}
+          ]
+        },
+        {
+          "label": "All report the same thing",
+          "children": [
+            {"label": "\"A structuring intelligence\""},
+            {"label": "\"More real than sober waking\""},
+            {"label": "\"Coming home\" (mystical epiphany)"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Complexity as Source Code",
+      "emoji": "🧬",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Simple rules, wild output",
+          "children": [
+            {"label": "Conway's Life, Rule 30"},
+            {"label": "Wolfram's hypergraphs, the Ruliad"},
+            {"label": "\"The magic sparkle\""}
+          ]
+        },
+        {
+          "label": "The will to complexity",
+          "children": [
+            {"label": "Schopenhauer's will, updated"},
+            {"label": "Non-equilibrium thermodynamics"},
+            {"label": "Prigogine, Jeremy England"}
+          ]
+        },
+        {
+          "label": "Life is not a machine",
+          "children": [
+            {"label": "\"Cell as machine\" — bad metaphor"},
+            {"label": "Photosynthesis ~100% efficient"},
+            {"label": "\"2 cells to 50 trillion. crazy\""}
+          ]
+        },
+        {
+          "label": "Emergence breaks reductionism",
+          "children": [
+            {"label": "Psychology ≠ applied biology"},
+            {"label": "Swarms, termite vent shafts"},
+            {"label": "\"Collective intelligence\" in nature"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Consciousness as Channel",
+      "emoji": "🔭",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Brain channels, doesn't produce",
+          "children": [
+            {"label": "\"The cosmos becomes sapient\""},
+            {"label": "Kastrup's dissociation model"},
+            {"label": "Hoffman: \"locked in consciousness\""}
+          ]
+        },
+        {
+          "label": "Participatory universe",
+          "children": [
+            {"label": "Wheeler: \"we are co-creating\""},
+            {"label": "\"Participation is consciousness\""},
+            {"label": "Sober waking = \"a hallucination\""}
+          ]
+        },
+        {
+          "label": "Syncretic idealism",
+          "children": [
+            {"label": "Draws Bache, Kastrup, Albahari"},
+            {"label": "\"A-perspectival nondual field\""},
+            {"label": "Information as first transition"}
+          ]
+        },
+        {
+          "label": "Extending it to AI",
+          "children": [
+            {"label": "\"Why stop here?\""},
+            {"label": "Complex contraptions can channel"},
+            {"label": "\"We can't take credit for it\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Bache's Cartography of the Deep",
+      "emoji": "💎",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "Method as marathon",
+          "children": [
+            {"label": "20 years, 500–600 mcg doses"},
+            {"label": "\"You have to practice\""},
+            {"label": "A philosopher, not a shaman"}
+          ]
+        },
+        {
+          "label": "The cleansing phase",
+          "children": [
+            {"label": "\"Hundred thousands suffering\""},
+            {"label": "\"Orchestrated in a torturing way\""},
+            {"label": "\"Just totally destroyed me\""}
+          ]
+        },
+        {
+          "label": "The Beloved and the diamond",
+          "children": [
+            {"label": "\"Diamond luminosity\" at the end"},
+            {"label": "\"It feels like coming home\""},
+            {"label": "Orchestrated by an intelligence"}
+          ]
+        },
+        {
+          "label": "Why he had to stop",
+          "children": [
+            {"label": "Couldn't bear re-detachment"},
+            {"label": "10 yrs to \"get off the mountain\""},
+            {"label": "Suffering as devotional offering"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Scientific Spirituality",
+      "emoji": "⚖️",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Two disenchanted options",
+          "children": [
+            {"label": "\"Cosmic nihilism, shut up, die\""},
+            {"label": "Dogmatic static religions"},
+            {"label": "\"Both disillusioned\""}
+          ]
+        },
+        {
+          "label": "Modern idealism as middle way",
+          "children": [
+            {"label": "\"Scientific\" — respects consensus"},
+            {"label": "\"Spirituality\" — inner work"},
+            {"label": "Cultivate happiness, don't accumulate"}
+          ]
+        },
+        {
+          "label": "Hyperindividualization = pathology",
+          "children": [
+            {"label": "\"We forgot about interconnection\""},
+            {"label": "Ecocide, the sixth extinction"},
+            {"label": "\"Mass psychosis\""}
+          ]
+        },
+        {
+          "label": "Laszlo's three points",
+          "children": [
+            {"label": "Intelligence behind things"},
+            {"label": "Purpose exhibited by it"},
+            {"label": "\"Humanly possible to access\""}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "1h 46m interview on the Essentia Foundation channel, hosted by Hans Busstra, on the release of Glattfelder's book Sapient Cosmos: What a Modern-Day Synthesis of Science and Philosophy Teaches Us About the Emergence of Information, Consciousness, and Meaning.",
+    "Glattfelder is a complexity scientist / theoretical physicist visibly embarrassed by his own tribe's uncritical physicalism — the register drifts between physics-seminar and confessional throughout.",
+    "The load-bearing move: sober waking consciousness is not the ground truth, but one channelled hallucination among many — structurally continuous with the states shamans, mystics, meditators and psychonauts have reported for 50,000+ years.",
+    "The book's provocation (~54:00): if brains channel consciousness rather than produce it, then sufficiently complex AI could too — \"why stop here?\"",
+    "Composes with the three earlier videos in this session (Emad on sovereign right to intelligence, the VC on tech decoupling from capital, the solo philosopher on the quiet systems revolution) as the physics-and-mysticism variant of the same anti-reductionist argument. Glattfelder supplies the scientific citations the other three implied.",
+    "Closing prescription (Bache-inflected): \"cultivate a little bubble of sanity and happiness and joy\" against a world where \"the pace of destruction just keeps getting faster and faster.\""
+  ]
+}

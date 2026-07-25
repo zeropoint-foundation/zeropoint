@@ -36,11 +36,14 @@ fn main() {
 
     let assets = [
         "assets/dashboard.html",
+        "assets/dashboard.js",
         "assets/onboard.html",
         "assets/onboard.css",
         "assets/onboard.js",
         "assets/speak.html",
         "assets/ecosystem.html",
+        "assets/ecosystem.js",
+        "assets/speak.js",
         "assets/tts.js",
         "assets/providers-default.toml",
     ];

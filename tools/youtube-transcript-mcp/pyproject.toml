@@ -1,0 +1,30 @@
+[project]
+name = "youtube-transcript-mcp"
+version = "0.1.0"
+description = "Resilient YouTube transcript retrieval as an MCP tool (cache -> api -> yt-dlp -> managed -> ASR)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ThinkStream Labs" }]
+dependencies = [
+    "mcp>=1.2.0",
+    "youtube-transcript-api>=1.2.0",
+    "yt-dlp>=2025.1.1",
+    "requests>=2.31.0",
+    "pydantic>=2.6.0",
+]
+
+[project.optional-dependencies]
+# Local ASR fallback (rung 4). Heavy; install only if you want caption-less coverage.
+asr = ["faster-whisper>=1.0.0"]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+youtube-transcript-mcp = "youtube_transcript_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["youtube_transcript_mcp"]

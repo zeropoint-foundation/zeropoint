@@ -1,6 +1,6 @@
 # ZeroPoint: Launch and Go-to-Market Strategy
 
-*Prepared February 2026 for ThinkStream Labs*
+*Prepared February 2026 for ZeroPoint Open Foundation*
 
 ---
 
@@ -42,7 +42,7 @@ As the WorldView project demonstrates, single developers can now build intellige
 
 ZeroPoint is currently dual-licensed MIT/Apache-2.0, which is the Rust ecosystem standard. This is the right choice for maximum adoption. It means anyone can use ZeroPoint in proprietary products without contributing back.
 
-If you want a commercial path, the standard approach is open-core: the protocol and core crates remain MIT/Apache-2.0, while enterprise features (hosted mesh infrastructure, management dashboards, compliance reporting, SLA-backed support) are proprietary under ThinkStream Labs.
+If you want a commercial path, the standard approach is open-core: the protocol and core crates remain MIT/Apache-2.0, while enterprise features (hosted mesh infrastructure, management dashboards, compliance reporting, SLA-backed support) are proprietary under ZeroPoint Open Foundation.
 
 **Do not change the license later.** Relicensing after building community trust is one of the most damaging things an open-source project can do. Decide your licensing strategy before launch and commit to it publicly.
 
@@ -108,7 +108,7 @@ Governments are actively seeking AI governance standards. If ZeroPoint gains tra
 
 1. **Make the repository public.** No press release, no blog post, no Twitter thread. Just flip the visibility. The Reticulum community members you've already contacted will be the first to see it.
 
-2. **Write one technical blog post.** Not a manifesto — a technical walkthrough. "Building a governed AI agent mesh in Rust" or similar. Show code, show the architecture, show the test results. Post it to your personal blog or ThinkStream Labs site. Share it in Reticulum community channels and on Hacker News.
+2. **Write one technical blog post.** Not a manifesto — a technical walkthrough. "Building a governed AI agent mesh in Rust" or similar. Show code, show the architecture, show the test results. Post it to your personal blog or ZeroPoint Open Foundation site. Share it in Reticulum community channels and on Hacker News.
 
 3. **Publish on crates.io.** Make each crate installable via `cargo add`. This is the Rust ecosystem's trust signal — if your crates compile cleanly, have good docs, and pass CI, Rust developers will take you seriously.
 
@@ -134,7 +134,7 @@ Governments are actively seeking AI governance standards. If ZeroPoint gains tra
 
 **Actions:**
 
-1. **Consulting.** ThinkStream Labs offers integration consulting for organizations that want to add ZeroPoint governance to their AI agent systems. This is the fastest path to revenue and doesn't require any proprietary code.
+1. **Consulting.** ZeroPoint Open Foundation offers integration consulting for organizations that want to add ZeroPoint governance to their AI agent systems. This is the fastest path to revenue and doesn't require any proprietary code.
 
 2. **Hosted mesh infrastructure.** Run Reticulum transport nodes and ZeroPoint mesh infrastructure as a service. Organizations that want governed agent communication without running their own mesh can subscribe. This is analogous to how companies pay for hosted Kubernetes even though Kubernetes is open source.
 

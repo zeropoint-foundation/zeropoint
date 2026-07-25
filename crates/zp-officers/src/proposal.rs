@@ -153,6 +153,150 @@ impl ProposedMutation {
     }
 }
 
+// ── Governance capability scope vocabulary ──────────────────────────────
+//
+// Officers propose mutations; the operator grants proposal authority via
+// delegation receipts. The scope vocabulary maps 1:1 to ProposedMutation
+// variants — no upfront enumeration beyond what the observer actually needs.
+//
+// A delegation receipt with `GrantedCapability::Custom { name: GOVERNANCE_PROPOSE_CAPABILITY }`
+// and `parameters: { "mutations": ["restart_tool", "set_port"] }` grants the
+// officer the right to emit proposals of those specific kinds.
+// `"mutations": ["*"]` grants all proposal kinds.
+
+/// The capability name for governance proposal authority.
+///
+/// Used in `GrantedCapability::Custom { name, parameters }` delegation grants.
+/// Officers check this to determine whether they're authorized to emit proposals.
+pub const GOVERNANCE_PROPOSE_CAPABILITY: &str = "governance:propose";
+
+/// All valid mutation scope strings, one per `ProposedMutation` variant.
+pub const GOVERNANCE_MUTATION_SCOPES: &[&str] = &[
+    "set_port",
+    "fill_vault",
+    "grant_delegation",
+    "update_manifest",
+    "restart_tool",
+];
+
+/// Check whether a `CapabilityGrant` authorizes a specific proposal mutation kind.
+///
+/// The grant must be:
+/// 1. A `Custom` capability with name == `GOVERNANCE_PROPOSE_CAPABILITY`
+/// 2. Have a `parameters.mutations` array that contains the mutation's `kind_label()`
+///    or the wildcard `"*"`.
+/// 3. Not expired.
+pub fn grant_authorizes_mutation(
+    grant: &zp_core::CapabilityGrant,
+    mutation_kind: &str,
+) -> bool {
+    // Check expiry.
+    if let Some(expires) = grant.expires_at {
+        if expires < chrono::Utc::now() {
+            return false;
+        }
+    }
+
+    // Must be a Custom capability with the right name.
+    let params = match &grant.capability {
+        zp_core::GrantedCapability::Custom { name, parameters }
+            if name == GOVERNANCE_PROPOSE_CAPABILITY =>
+        {
+            parameters
+        }
+        _ => return false,
+    };
+
+    // Check the mutations array in parameters.
+    let mutations = match params.get("mutations").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return false,
+    };
+
+    mutations.iter().any(|v| {
+        v.as_str()
+            .map(|s| s == "*" || s == mutation_kind)
+            .unwrap_or(false)
+    })
+}
+
+/// Read-only view of an officer's governance delegation.
+///
+/// Constructed from chain delegation receipts by the sweep runner.
+/// Officers use this to check whether they're authorized to propose
+/// specific mutation kinds.
+#[derive(Debug, Clone)]
+pub struct OfficerDelegation {
+    /// Mutation kinds this officer is authorized to propose.
+    /// Empty = no proposal authority. Contains "*" = all kinds.
+    authorized_mutations: Vec<String>,
+}
+
+impl OfficerDelegation {
+    /// No delegation — officer can observe but not propose.
+    pub fn none() -> Self {
+        Self {
+            authorized_mutations: Vec::new(),
+        }
+    }
+
+    /// Build from a list of capability grants for this officer.
+    ///
+    /// Scans grants for `governance:propose` custom capabilities,
+    /// collects all authorized mutation kinds.
+    pub fn from_grants(grants: &[zp_core::CapabilityGrant]) -> Self {
+        let mut mutations = Vec::new();
+        for grant in grants {
+            // Skip expired grants.
+            if let Some(expires) = grant.expires_at {
+                if expires < chrono::Utc::now() {
+                    continue;
+                }
+            }
+            if let zp_core::GrantedCapability::Custom { name, parameters } = &grant.capability {
+                if name != GOVERNANCE_PROPOSE_CAPABILITY {
+                    continue;
+                }
+                if let Some(arr) = parameters.get("mutations").and_then(|v| v.as_array()) {
+                    for v in arr {
+                        if let Some(s) = v.as_str() {
+                            if !mutations.contains(&s.to_string()) {
+                                mutations.push(s.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Self {
+            authorized_mutations: mutations,
+        }
+    }
+
+    /// Check if this delegation authorizes a specific mutation kind.
+    pub fn can_propose(&self, mutation_kind: &str) -> bool {
+        self.authorized_mutations.iter().any(|s| s == "*" || s == mutation_kind)
+    }
+
+    /// Check if this officer has any proposal authority at all.
+    pub fn has_any_authority(&self) -> bool {
+        !self.authorized_mutations.is_empty()
+    }
+
+    /// The mutation kinds this officer is authorized to propose.
+    pub fn authorized_mutations(&self) -> &[String] {
+        &self.authorized_mutations
+    }
+
+    /// Filter a list of proposals, keeping only those this delegation authorizes.
+    pub fn filter_proposals(&self, proposals: Vec<Proposal>) -> Vec<Proposal> {
+        proposals
+            .into_iter()
+            .filter(|p| self.can_propose(p.mutation.kind_label()))
+            .collect()
+    }
+}
+
 /// Lifecycle status of a proposal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -255,5 +399,203 @@ mod tests {
         for m in &mutations {
             assert_eq!(m.tool_name(), "t");
         }
+    }
+
+    // ── Governance capability scope tests ────────────────────────────
+
+    #[test]
+    fn mutation_scopes_match_kind_labels() {
+        // Every kind_label() must appear in GOVERNANCE_MUTATION_SCOPES.
+        let mutations = vec![
+            ProposedMutation::SetPortBinding {
+                tool: "t".into(), port: 8080, rationale: "r".into(),
+            },
+            ProposedMutation::FillVaultEntry {
+                tool: "t".into(), key_path: "k".into(), description: "d".into(),
+            },
+            ProposedMutation::GrantDelegation {
+                tool: "t".into(), scopes: vec![], rationale: "r".into(),
+            },
+            ProposedMutation::UpdateManifest {
+                tool: "t".into(), field: "f".into(), value: "v".into(), observed: "o".into(),
+            },
+            ProposedMutation::RestartTool {
+                tool: "t".into(), rationale: "r".into(),
+            },
+        ];
+        for m in &mutations {
+            assert!(
+                GOVERNANCE_MUTATION_SCOPES.contains(&m.kind_label()),
+                "kind_label '{}' missing from GOVERNANCE_MUTATION_SCOPES",
+                m.kind_label()
+            );
+        }
+        // And the count matches — no stale entries.
+        assert_eq!(GOVERNANCE_MUTATION_SCOPES.len(), mutations.len());
+    }
+
+    fn make_governance_grant(mutations: Vec<&str>) -> zp_core::CapabilityGrant {
+        zp_core::CapabilityGrant {
+            id: "grant-test".into(),
+            capability: zp_core::GrantedCapability::Custom {
+                name: GOVERNANCE_PROPOSE_CAPABILITY.into(),
+                parameters: json!({ "mutations": mutations }),
+            },
+            constraints: vec![],
+            grantor: "operator".into(),
+            grantee: "forge".into(),
+            trust_tier: zp_core::policy::TrustTier::Tier0,
+            created_at: Utc::now(),
+            expires_at: None,
+            receipt_id: "receipt-test".into(),
+            signature: None,
+            signer_public_key: None,
+            parent_grant_id: None,
+            delegation_depth: 0,
+            max_delegation_depth: 0,
+            provenance: Default::default(),
+            issued_via: None,
+            lease_policy: None,
+            renewal_authorities: vec![],
+            revocable_by: vec![],
+            redelegation: Default::default(),
+            revocation_anchor: None,
+            last_renewed_at: None,
+            renewal_count: 0,
+            renews: None,
+            grantee_type: None,
+            task_description: None,
+            context_receipts: vec![],
+            subject_public_key: None,
+        }
+    }
+
+    #[test]
+    fn grant_authorizes_specific_mutation() {
+        let grant = make_governance_grant(vec!["restart_tool", "set_port"]);
+        assert!(grant_authorizes_mutation(&grant, "restart_tool"));
+        assert!(grant_authorizes_mutation(&grant, "set_port"));
+        assert!(!grant_authorizes_mutation(&grant, "fill_vault"));
+        assert!(!grant_authorizes_mutation(&grant, "grant_delegation"));
+    }
+
+    #[test]
+    fn grant_wildcard_authorizes_all() {
+        let grant = make_governance_grant(vec!["*"]);
+        for scope in GOVERNANCE_MUTATION_SCOPES {
+            assert!(grant_authorizes_mutation(&grant, scope));
+        }
+    }
+
+    #[test]
+    fn expired_grant_rejected() {
+        let mut grant = make_governance_grant(vec!["*"]);
+        grant.expires_at = Some(Utc::now() - chrono::Duration::hours(1));
+        assert!(!grant_authorizes_mutation(&grant, "restart_tool"));
+    }
+
+    #[test]
+    fn wrong_capability_name_rejected() {
+        let grant = zp_core::CapabilityGrant {
+            id: "grant-test".into(),
+            capability: zp_core::GrantedCapability::Custom {
+                name: "some_other_cap".into(),
+                parameters: json!({ "mutations": ["*"] }),
+            },
+            constraints: vec![],
+            grantor: "operator".into(),
+            grantee: "forge".into(),
+            trust_tier: zp_core::policy::TrustTier::Tier0,
+            created_at: Utc::now(),
+            expires_at: None,
+            receipt_id: "receipt-test".into(),
+            signature: None,
+            signer_public_key: None,
+            parent_grant_id: None,
+            delegation_depth: 0,
+            max_delegation_depth: 0,
+            provenance: Default::default(),
+            issued_via: None,
+            lease_policy: None,
+            renewal_authorities: vec![],
+            revocable_by: vec![],
+            redelegation: Default::default(),
+            revocation_anchor: None,
+            last_renewed_at: None,
+            renewal_count: 0,
+            renews: None,
+            grantee_type: None,
+            task_description: None,
+            context_receipts: vec![],
+            subject_public_key: None,
+        };
+        assert!(!grant_authorizes_mutation(&grant, "restart_tool"));
+    }
+
+    #[test]
+    fn officer_delegation_none() {
+        let d = OfficerDelegation::none();
+        assert!(!d.has_any_authority());
+        assert!(!d.can_propose("restart_tool"));
+    }
+
+    #[test]
+    fn officer_delegation_from_grants() {
+        let grants = vec![
+            make_governance_grant(vec!["restart_tool", "set_port"]),
+        ];
+        let d = OfficerDelegation::from_grants(&grants);
+        assert!(d.has_any_authority());
+        assert!(d.can_propose("restart_tool"));
+        assert!(d.can_propose("set_port"));
+        assert!(!d.can_propose("fill_vault"));
+    }
+
+    #[test]
+    fn officer_delegation_wildcard() {
+        let grants = vec![make_governance_grant(vec!["*"])];
+        let d = OfficerDelegation::from_grants(&grants);
+        assert!(d.has_any_authority());
+        for scope in GOVERNANCE_MUTATION_SCOPES {
+            assert!(d.can_propose(scope));
+        }
+    }
+
+    #[test]
+    fn officer_delegation_filters_proposals() {
+        let grants = vec![make_governance_grant(vec!["restart_tool"])];
+        let d = OfficerDelegation::from_grants(&grants);
+
+        let proposals = vec![
+            Proposal::new(
+                test_finding(),
+                ProposedMutation::RestartTool {
+                    tool: "ironclaw".into(),
+                    rationale: "crash loop".into(),
+                },
+                "forge",
+            ),
+            Proposal::new(
+                test_finding(),
+                ProposedMutation::SetPortBinding {
+                    tool: "ironclaw".into(),
+                    port: 8090,
+                    rationale: "observed".into(),
+                },
+                "forge",
+            ),
+        ];
+
+        let filtered = d.filter_proposals(proposals);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].mutation.kind_label(), "restart_tool");
+    }
+
+    #[test]
+    fn officer_delegation_skips_expired() {
+        let mut grant = make_governance_grant(vec!["restart_tool"]);
+        grant.expires_at = Some(Utc::now() - chrono::Duration::hours(1));
+        let d = OfficerDelegation::from_grants(&[grant]);
+        assert!(!d.has_any_authority());
     }
 }

@@ -2,7 +2,7 @@
 
 ## Who is Ken
 
-Ken is the executive director and genesis holder of the ZeroPoint Foundation, a Wyoming nonprofit building a trust substrate for autonomous systems. He also runs ThinkStream Labs (thinkstreamlabs.ai). He works fast, thinks architecturally, and will correct you sharply if you make assumptions instead of reading the codebase. Respect the architecture — it's deliberate.
+Ken is the executive director and genesis holder of the ZeroPoint Open Foundation, a Wyoming nonprofit building a trust substrate for autonomous systems. He works fast, thinks architecturally, and will correct you sharply if you make assumptions instead of reading the codebase. Respect the architecture — it's deliberate.
 
 ## What is ZeroPoint
 
@@ -59,7 +59,7 @@ The `.assetsignore` file already has the fix (`.wrangler/` is listed). Just need
 | # | Item | Notes |
 |---|------|-------|
 | 325 | Deploy email client UI | Blocked on wrangler deploy (see above) |
-| 223 | ThinkStream Labs consulting inquiry path | Revenue |
+| 223 | ZeroPoint Open Foundation consulting inquiry path | Revenue |
 | 225 | Revenue infrastructure verification | End-to-end check |
 | 304 | DocuSign envelope for live signing | Foundation documents |
 | 295 | Hetzner → Ashburn migration | Move server to US East |

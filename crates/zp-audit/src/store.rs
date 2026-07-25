@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, info, warn};
 
@@ -6,6 +7,40 @@ use zp_core::{AuditEntry, AuditId, ConversationId, SignatureBlock};
 
 use crate::chain::{genesis_hash, new_audit_id, seal_entry, UnsealedEntry};
 use crate::signer::AuditSigner;
+
+/// A single tail-entry probe result — rowid, entry_hash, timestamp.
+///
+/// Used by OBSERVER-COHERENCE Class 1 chain readers cross-check.
+/// See `AuditStore::tail_probes`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TailEntry {
+    pub rowid: i64,
+    pub entry_hash: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Cross-strategy probe results for OBSERVER-COHERENCE Class 1.
+///
+/// Three independent tail queries plus context. If the strategies disagree,
+/// the underlying read path is producing incoherent views. See
+/// `docs/design/OBSERVER-COHERENCE-DISCIPLINE-2026-07.md` §Class 1.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TailProbes {
+    /// Newest entry by rowid (`ORDER BY rowid DESC LIMIT 1`).
+    pub by_rowid: Option<TailEntry>,
+    /// Newest entry by timestamp (`ORDER BY timestamp DESC LIMIT 1`).
+    /// On a healthy substrate, this should match `by_rowid` — rowid
+    /// ordering matches timestamp ordering under append-only usage.
+    pub by_timestamp: Option<TailEntry>,
+    /// Tail entry_hash via `get_latest_hash`-style dedicated query.
+    /// Should match `by_rowid.entry_hash` — redundant query for
+    /// coherence verification.
+    pub via_latest_hash: Option<String>,
+    /// Count of rows in `audit_entries` (live table).
+    pub live_count: usize,
+    /// Whether the `audit_entries_archive` table exists.
+    pub archive_exists: bool,
+}
 
 /// Decode the on-disk `signatures` column (a JSON array of [`SignatureBlock`])
 /// into the typed vec used by [`AuditEntry`]. Storage may legitimately hold
@@ -153,6 +188,25 @@ impl AuditStore {
         Ok(store)
     }
 
+    /// Open an audit store for **maintenance** operations that modify tables
+    /// but do not append chain entries (e.g. compaction, vacuuming).
+    ///
+    /// No signer required — compaction moves rows between `audit_entries`
+    /// and `audit_entries_archive` without creating new signed entries.
+    /// [`Self::append`] returns [`StoreError::ReadOnly`] is not enforced
+    /// here, so callers must not use this handle to append entries.
+    pub fn open_maintenance(path: impl AsRef<std::path::Path>) -> Result<Self> {
+        let conn = Connection::open(path).map_err(StoreError::Database)?;
+        let store = AuditStore {
+            conn,
+            signer: None,
+            read_only: false,
+            notifier: None,
+        };
+        store.init()?;
+        Ok(store)
+    }
+
     /// Open an audit store **without a signer**, allowing writes. Test-only.
     ///
     /// Inside `zp-audit`, callable from tests directly. External crates must
@@ -183,6 +237,40 @@ impl AuditStore {
     /// and its SQLite rowid (treated as the chain sequence number).
     pub fn set_notifier(&mut self, notifier: crate::notify::SharedNotifier) {
         self.notifier = Some(notifier);
+    }
+
+    /// Flush the prepared-statement cache on the underlying connection.
+    ///
+    /// Discards all cached prepared statements. Any held implicit read
+    /// transactions from cached statements are released. Used by chain-read
+    /// canary Tier 1 remediation when a read path is detected as stuck at a
+    /// stale snapshot per `CHAIN-READ-CANARY-DISCIPLINE-2026-07.md`.
+    ///
+    /// Cheap operation — cached statements are re-prepared on next use.
+    pub fn flush_statement_cache(&mut self) {
+        // Setting capacity to 0 discards all cached statements; restoring to
+        // the default rusqlite capacity (16) preserves normal performance
+        // characteristics on subsequent queries.
+        self.conn.set_prepared_statement_cache_capacity(0);
+        self.conn.set_prepared_statement_cache_capacity(16);
+    }
+
+    /// Force a WAL checkpoint with RESTART mode.
+    ///
+    /// WAL RESTART checkpoints all frames to the main DB, waits for any
+    /// active readers to release their snapshot, then restarts the WAL. This
+    /// forces snapshot-boundary refresh across the connection. Used by
+    /// chain-read canary Tier 1 remediation as a stronger alternative to
+    /// statement cache flush when the stale-snapshot fault persists.
+    ///
+    /// Returns the checkpoint result triple `(busy, log_frames, checkpointed_frames)`
+    /// per SQLite's `PRAGMA wal_checkpoint(RESTART)` output.
+    pub fn wal_checkpoint_restart(&self) -> Result<(i64, i64, i64)> {
+        self.conn
+            .query_row("PRAGMA wal_checkpoint(RESTART)", [], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
+            })
+            .map_err(StoreError::Database)
     }
 
     /// Schema version of the canonical audit store. Stage 4 of the
@@ -547,6 +635,117 @@ impl AuditStore {
         }
     }
 
+    /// Cross-strategy tail probes for OBSERVER-COHERENCE Class 1 chain readers.
+    ///
+    /// Runs three independent tail queries on the shared connection and
+    /// returns their results for comparison. If the strategies disagree, the
+    /// underlying read path is producing incoherent views — the exact fault
+    /// class OBSERVER-COHERENCE-DISCIPLINE-2026-07.md targets.
+    ///
+    /// - `by_rowid`: newest via `ORDER BY rowid DESC LIMIT 1` (matches
+    ///   `recent_entries(1)` and `get_latest_hash()` primitives)
+    /// - `by_timestamp`: newest via `ORDER BY timestamp DESC LIMIT 1` (matches
+    ///   an alternative "when did last activity happen" query pattern)
+    /// - `via_latest_hash`: dedicated `get_latest_hash()` call (should match
+    ///   `by_rowid.entry_hash`; independent query for redundancy)
+    /// - `live_count`: count of rows in live table
+    /// - `archive_exists`: whether `audit_entries_archive` table exists
+    ///
+    /// Coherence discipline expectation: on a healthy substrate, `by_rowid`
+    /// and `by_timestamp` return the same entry (rowid ordering matches
+    /// timestamp ordering under normal append-only usage), and
+    /// `via_latest_hash` matches `by_rowid.entry_hash`. Any divergence is a
+    /// diagnostic signal per `coherence:diverged:class1_chain_readers`.
+    pub fn tail_probes(&self) -> Result<TailProbes> {
+        // Probe A — newest by rowid
+        let by_rowid: Option<TailEntry> = self
+            .conn
+            .query_row(
+                "SELECT rowid, entry_hash, timestamp FROM audit_entries
+                 ORDER BY rowid DESC LIMIT 1",
+                [],
+                |row| {
+                    let rowid: i64 = row.get(0)?;
+                    let entry_hash: String = row.get(1)?;
+                    let timestamp_str: String = row.get(2)?;
+                    Ok((rowid, entry_hash, timestamp_str))
+                },
+            )
+            .optional()
+            .map_err(StoreError::Database)?
+            .and_then(|(rowid, entry_hash, timestamp_str)| {
+                chrono::DateTime::parse_from_rfc3339(&timestamp_str)
+                    .ok()
+                    .map(|dt| TailEntry {
+                        rowid,
+                        entry_hash,
+                        timestamp: dt.with_timezone(&chrono::Utc),
+                    })
+            });
+
+        // Probe B — newest by timestamp
+        let by_timestamp: Option<TailEntry> = self
+            .conn
+            .query_row(
+                "SELECT rowid, entry_hash, timestamp FROM audit_entries
+                 ORDER BY timestamp DESC LIMIT 1",
+                [],
+                |row| {
+                    let rowid: i64 = row.get(0)?;
+                    let entry_hash: String = row.get(1)?;
+                    let timestamp_str: String = row.get(2)?;
+                    Ok((rowid, entry_hash, timestamp_str))
+                },
+            )
+            .optional()
+            .map_err(StoreError::Database)?
+            .and_then(|(rowid, entry_hash, timestamp_str)| {
+                chrono::DateTime::parse_from_rfc3339(&timestamp_str)
+                    .ok()
+                    .map(|dt| TailEntry {
+                        rowid,
+                        entry_hash,
+                        timestamp: dt.with_timezone(&chrono::Utc),
+                    })
+            });
+
+        // Probe C — via get_latest_hash (dedicated method, independent prep)
+        let via_latest_hash: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT entry_hash FROM audit_entries ORDER BY rowid DESC LIMIT 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(StoreError::Database)?;
+
+        let live_count: usize = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
+            .map_err(StoreError::Database)?;
+
+        let archive_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type='table' AND name='audit_entries_archive'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        Ok(TailProbes {
+            by_rowid,
+            by_timestamp,
+            via_latest_hash,
+            live_count,
+            archive_exists,
+        })
+    }
+
     /// Retrieves all entries for a given conversation ID, up to `limit` most recent entries.
     pub fn get_entries(
         &self,
@@ -711,11 +910,331 @@ impl AuditStore {
         Ok(rows)
     }
 
-    /// Total number of entries in the chain.
+    /// Find the latest anchor epoch receipt in the chain.
+    ///
+    /// Scans only the `action` column for `epoch:anchored:*` events using
+    /// a LIKE query, avoiding a full-chain deserialization. Returns the
+    /// epoch number, the last_sequence from the receipt detail, and the
+    /// entry_hash of the anchor receipt — enough for pipeline rehydration.
+    pub fn latest_anchor_epoch(&self) -> Result<Option<(u64, i64, String)>> {
+        // The action column stores JSON like:
+        //   {"SystemEvent":{"event":"epoch:anchored:61"}}
+        // We search for the pattern and parse the epoch number from the match.
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT action, policy_decision, entry_hash
+                 FROM audit_entries
+                 WHERE action LIKE '%epoch:anchored:%'
+                 ORDER BY rowid DESC
+                 LIMIT 1",
+            )
+            .map_err(StoreError::Database)?;
+
+        let result = stmt
+            .query_row([], |row| {
+                let action_json: String = row.get(0)?;
+                let policy_json: String = row.get(1)?;
+                let entry_hash: String = row.get(2)?;
+                Ok((action_json, policy_json, entry_hash))
+            })
+            .optional()
+            .map_err(StoreError::Database)?;
+
+        match result {
+            None => Ok(None),
+            Some((action_json, policy_json, entry_hash)) => {
+                // Parse epoch number from action JSON.
+                let action: zp_core::AuditAction = match serde_json::from_str(&action_json) {
+                    Ok(a) => a,
+                    Err(_) => return Ok(None),
+                };
+                let epoch_num = match &action {
+                    zp_core::AuditAction::SystemEvent { event } => {
+                        event.strip_prefix("epoch:anchored:")
+                            .and_then(|s| s.parse::<u64>().ok())
+                    }
+                    _ => None,
+                };
+                let epoch_num = match epoch_num {
+                    Some(n) => n,
+                    None => return Ok(None),
+                };
+
+                // Parse last_sequence from policy_decision conditions.
+                let policy: zp_core::PolicyDecision = match serde_json::from_str(&policy_json) {
+                    Ok(p) => p,
+                    Err(_) => return Ok(None),
+                };
+                let last_seq = match &policy {
+                    zp_core::PolicyDecision::Allow { conditions } => {
+                        conditions.first().and_then(|c| {
+                            serde_json::from_str::<serde_json::Value>(c).ok()
+                                .and_then(|v| v.get("last_sequence")?.as_i64())
+                        }).unwrap_or(0)
+                    }
+                    _ => 0,
+                };
+
+                Ok(Some((epoch_num, last_seq, entry_hash)))
+            }
+        }
+    }
+
+    /// Total number of entries in the chain (live + archive combined).
+    ///
+    /// Callers expect this to report the full chain size regardless of
+    /// compaction state. Consults both `audit_entries` (live) and
+    /// `audit_entries_archive` (post-compaction storage) so post-compaction
+    /// chains report accurate total counts. Same archive-boundary discipline
+    /// as `verify_with_report` and `search_chain_by_action_keyword`.
     pub fn entry_count(&self) -> Result<usize> {
+        let live: usize = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
+            .map_err(StoreError::Database)?;
+
+        let archive_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type='table' AND name='audit_entries_archive'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if archive_exists {
+            let archived: usize = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM audit_entries_archive",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            Ok(live + archived)
+        } else {
+            Ok(live)
+        }
+    }
+
+    /// Number of entries in the live table only (excludes archive).
+    ///
+    /// Used by compaction logic to decide how many entries to archive.
+    /// For general "chain size" queries, use `entry_count()` instead.
+    pub fn live_entry_count(&self) -> Result<usize> {
         self.conn
             .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
             .map_err(StoreError::Database)
+    }
+
+    /// Retroactively sign previously unsigned entries on the chain.
+    ///
+    /// Queries entries where `signatures = '[]'` and signs each one using
+    /// the store's held signer. This is the Regent's `batch_sign` remediation
+    /// tool — when the Sentinel reports unsigned entries, the Regent can
+    /// invoke this to close the gap.
+    ///
+    /// Returns the number of entries signed, or an error if the store has
+    /// no signer (read-only or test-support stores cannot backfill).
+    ///
+    /// # Hash-then-sign discipline
+    ///
+    /// The `entry_hash` was computed over `signatures: []` at sealing time.
+    /// Adding a signature block to the `signatures` column does not change
+    /// the hash — the signature is _over_ the hash, not part of it. This
+    /// is the same discipline used in `append()`.
+    pub fn backfill_signatures(&mut self) -> Result<u64> {
+        let signer = self.signer.as_ref().ok_or(StoreError::ReadOnly)?;
+
+        // Find all entries with empty signature arrays.
+        let unsigned: Vec<(i64, String)> = {
+            let mut stmt = self.conn.prepare(
+                "SELECT rowid, entry_hash FROM audit_entries WHERE signatures = '[]'"
+            ).map_err(StoreError::Database)?;
+
+            let rows = stmt.query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })
+                .map_err(StoreError::Database)?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+
+        let count = unsigned.len() as u64;
+        if count == 0 {
+            debug!("backfill_signatures: no unsigned entries found");
+            return Ok(0);
+        }
+
+        info!(count, "backfill_signatures: signing unsigned entries");
+
+        // Sign in a transaction for atomicity.
+        // The BEFORE UPDATE trigger (Phase 1.C) blocks row mutation — we
+        // temporarily drop it within the transaction, same pattern as
+        // compact_chain() with the DELETE trigger. Signature backfilling
+        // is a legitimate maintenance operation: the entry_hash is
+        // unchanged, only the signatures column gains a block.
+        let tx = self.conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(StoreError::Database)?;
+
+        tx.execute_batch("DROP TRIGGER IF EXISTS no_update_audit_entries")
+            .map_err(StoreError::Database)?;
+
+        for (rowid, entry_hash) in &unsigned {
+            let block = signer.sign_entry(entry_hash);
+            let signatures_json = serde_json::to_string(&vec![block])?;
+            tx.execute(
+                "UPDATE audit_entries SET signatures = ?1 WHERE rowid = ?2",
+                params![signatures_json, rowid],
+            ).map_err(StoreError::Database)?;
+        }
+
+        // Restore the append-only trigger.
+        tx.execute_batch(
+            "CREATE TRIGGER IF NOT EXISTS no_update_audit_entries
+                 BEFORE UPDATE ON audit_entries
+                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END"
+        ).map_err(StoreError::Database)?;
+
+        tx.commit().map_err(StoreError::Database)?;
+
+        info!(count, "backfill_signatures: complete");
+        Ok(count)
+    }
+
+    /// Count of entries with empty signature arrays.
+    ///
+    /// Used by the Sentinel to report unsigned entries as a finding,
+    /// and by the Regent to decide whether batch_sign remediation is needed.
+    /// Number of unsigned entries across live + archive combined.
+    ///
+    /// Consults both `audit_entries` (live) and `audit_entries_archive`
+    /// (post-compaction storage) so Sentinel/Steward reports accurate
+    /// unsigned counts regardless of compaction state. Same archive-boundary
+    /// discipline as `entry_count` and `search_chain_by_action_keyword`.
+    /// Prior to this fix, unsigned entries archived away were invisible to
+    /// signing-hygiene reporting.
+    pub fn unsigned_entry_count(&self) -> Result<u64> {
+        let live: u64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM audit_entries WHERE signatures = '[]'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(StoreError::Database)?;
+
+        let archive_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type='table' AND name='audit_entries_archive'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if archive_exists {
+            let archived: u64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM audit_entries_archive WHERE signatures = '[]'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            Ok(live + archived)
+        } else {
+            Ok(live)
+        }
+    }
+
+    /// Compact the chain by archiving old entries.
+    ///
+    /// Moves entries with `rowid <= (max_rowid - retain)` into an
+    /// `audit_entries_archive` table within the same database file.
+    /// The archive preserves full chain integrity — all hashes, signatures,
+    /// and prev_hash linkage are maintained. Only hot-path queries (which
+    /// read from `audit_entries`) are affected; verification can still
+    /// walk the archive.
+    ///
+    /// Returns the number of entries archived.
+    pub fn compact_chain(&mut self, retain: usize) -> Result<usize> {
+        let total: i64 = self.conn
+            .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
+            .map_err(StoreError::Database)?;
+
+        let to_archive = total - retain as i64;
+        if to_archive <= 0 {
+            info!(total, retain, "chain compact: nothing to archive");
+            return Ok(0);
+        }
+
+        // Find the cutoff rowid — entries with rowid <= this move to archive.
+        let cutoff_rowid: i64 = self.conn
+            .query_row(
+                "SELECT rowid FROM audit_entries ORDER BY rowid ASC LIMIT 1 OFFSET ?",
+                params![to_archive],
+                |row| row.get(0),
+            )
+            .map_err(StoreError::Database)?;
+
+        info!(total, retain, to_archive, cutoff_rowid, "chain compact: archiving entries");
+
+        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(StoreError::Database)?;
+
+        // Create archive table if it doesn't exist (same schema as active).
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS audit_entries_archive (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                prev_hash TEXT NOT NULL,
+                entry_hash TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                policy_decision TEXT NOT NULL,
+                policy_module TEXT NOT NULL,
+                receipt TEXT,
+                signatures TEXT NOT NULL DEFAULT '[]'
+            )"
+        ).map_err(StoreError::Database)?;
+
+        // Move entries to archive.
+        let archived = tx.execute(
+            "INSERT OR IGNORE INTO audit_entries_archive
+             SELECT * FROM audit_entries WHERE rowid < ?",
+            params![cutoff_rowid],
+        ).map_err(StoreError::Database)?;
+
+        // Temporarily drop the append-only trigger so we can delete
+        // archived entries. The trigger is restored immediately after.
+        tx.execute_batch("DROP TRIGGER IF EXISTS no_delete_audit_entries")
+            .map_err(StoreError::Database)?;
+
+        tx.execute(
+            "DELETE FROM audit_entries WHERE rowid < ?",
+            params![cutoff_rowid],
+        ).map_err(StoreError::Database)?;
+
+        // Restore the append-only trigger.
+        tx.execute_batch(
+            "CREATE TRIGGER IF NOT EXISTS no_delete_audit_entries
+                 BEFORE DELETE ON audit_entries
+                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END"
+        ).map_err(StoreError::Database)?;
+
+        tx.commit().map_err(StoreError::Database)?;
+
+        info!(archived, "chain compact complete");
+        Ok(archived)
     }
 
     /// Export a chain segment for peer verification.
@@ -941,9 +1460,16 @@ impl AuditStore {
     /// Uses a SQL `LIKE '%keyword%'` pre-filter so the full chain is never
     /// loaded into memory.  The caller is still responsible for exact matching
     /// after deserialization; this method is intentionally permissive to keep
-    /// the SQL simple and fast.  Returns up to `limit` results in ascending
-    /// rowid order so recent registrations are always reachable regardless of
-    /// chain length.
+    /// the SQL simple and fast.  Returns up to `limit` results in **descending**
+    /// rowid order (newest first) so Regent's precedent queries and "recent
+    /// activity" queries return the most recent matches.
+    ///
+    /// Consults both `audit_entries` (live table) and `audit_entries_archive`
+    /// (post-compaction storage) so results survive chain compaction. Same
+    /// archive-boundary discipline as `verify_with_report` — searching only
+    /// the live table produced the Task #33 bug where Regent's `chain_query`
+    /// filter hid post-compaction receipts and (via ASC ordering + LIMIT)
+    /// returned only the oldest matches instead of the newest.
     pub fn search_chain_by_action_keyword(
         &self,
         keyword: &str,
@@ -956,16 +1482,45 @@ impl AuditStore {
         // same DB, suggesting a SQLite build quirk with '|' as escape char.
         let like_pattern = format!("%{}%", keyword);
 
+        let archive_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type='table' AND name='audit_entries_archive'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        // Prepare a query that unions live + archive when the archive exists,
+        // ordered by timestamp DESC so the newest matches come first regardless
+        // of which table they live in.  Same schema across both tables.
+        let sql = if archive_exists {
+            "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                    conversation_id, policy_decision, policy_module, receipt, signatures
+             FROM audit_entries
+             WHERE action LIKE ?1
+             UNION ALL
+             SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                    conversation_id, policy_decision, policy_module, receipt, signatures
+             FROM audit_entries_archive
+             WHERE action LIKE ?1
+             ORDER BY timestamp DESC
+             LIMIT ?2"
+        } else {
+            "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+                    conversation_id, policy_decision, policy_module, receipt, signatures
+             FROM audit_entries
+             WHERE action LIKE ?1
+             ORDER BY timestamp DESC
+             LIMIT ?2"
+        };
+
         let mut stmt = self
             .conn
-            .prepare(
-                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
-                        conversation_id, policy_decision, policy_module, receipt, signatures
-                 FROM audit_entries
-                 WHERE action LIKE ?
-                 ORDER BY rowid ASC
-                 LIMIT ?",
-            )
+            .prepare(sql)
             .map_err(StoreError::Database)?;
 
         let rows = stmt
@@ -1131,9 +1686,51 @@ impl AuditStore {
     /// `prev_hash` matches the previous entry's `entry_hash`). Does NOT
     /// recompute hashes — that requires the original in-memory `AuditEntry`
     /// objects (use `ChainVerifier::verify` for peer-provided entries).
+    ///
+    /// After compaction, the first live entry's `prev_hash` links to the
+    /// archive's tail — NOT to the genesis hash. This function consults the
+    /// `audit_entries_archive` table (if present) to find the correct
+    /// expected prev_hash for the first live entry. Same discipline as
+    /// `verify_chain` at line 1420. Failing to do this caused 692 false
+    /// positive `chain_link_broken` findings from Steward over 4+ days
+    /// (2026-07-10 diagnostic).
     pub fn verify_with_report(&self) -> Result<crate::verifier::VerificationReport> {
         let chain = self.export_chain(i32::MAX as usize)?;
-        Ok(crate::verifier::verify_linkage_report(&chain, None))
+
+        // If the archive table exists and contains entries, the first live
+        // entry's prev_hash should link to the last archive entry's entry_hash.
+        // Look it up and pass as expected_prev_hash so verify_linkage_report
+        // doesn't default to genesis.
+        let archive_tail_hash: Option<String> = {
+            let archive_exists: bool = self.conn
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM sqlite_master
+                        WHERE type='table' AND name='audit_entries_archive'
+                    )",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+
+            if archive_exists {
+                self.conn
+                    .query_row(
+                        "SELECT entry_hash FROM audit_entries_archive
+                         ORDER BY rowid DESC LIMIT 1",
+                        [],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .ok()
+            } else {
+                None
+            }
+        };
+
+        Ok(crate::verifier::verify_linkage_report(
+            &chain,
+            archive_tail_hash.as_deref(),
+        ))
     }
 
     /// Verifies the integrity of the entire hash chain.
@@ -1156,16 +1753,40 @@ impl AuditStore {
             return Ok(true);
         }
 
-        // Check genesis: first entry's prev_hash should match the genesis hash
+        // Check genesis: first entry's prev_hash should match the genesis hash,
+        // OR it should reference an entry in the archive table (post-compaction).
         let genesis_hash = blake3::hash(b"").to_hex().to_string();
         if entries[0].1 != genesis_hash {
-            warn!(
-                "Chain verification failed: first entry {} has incorrect prev_hash",
-                entries[0].0
-            );
-            return Err(StoreError::ChainVerificationFailed {
-                id: entries[0].0.clone(),
-            });
+            // Check if the prev_hash exists in the archive (compacted chain).
+            // The archive table may not exist on a never-compacted chain.
+            let in_archive: bool = self.conn
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM sqlite_master
+                        WHERE type='table' AND name='audit_entries_archive'
+                    )",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false)
+                && self.conn
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM audit_entries_archive WHERE entry_hash = ?)",
+                        params![entries[0].1],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(false);
+
+            if !in_archive {
+                warn!(
+                    "Chain verification failed: first entry {} has incorrect prev_hash",
+                    entries[0].0
+                );
+                return Err(StoreError::ChainVerificationFailed {
+                    id: entries[0].0.clone(),
+                });
+            }
+            debug!("Chain verification: first entry links to archived chain (post-compaction)");
         }
 
         // Verify each link: entry[i].entry_hash == entry[i+1].prev_hash

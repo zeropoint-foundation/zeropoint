@@ -1,0 +1,243 @@
+{
+  "title": "The Quiet Systems Revolution",
+  "subtitle": "A cross-disciplinary paradigm shift replacing Cartesian-Newtonian reductionism with a systems-theoretical view of the world as one connected, self-organizing whole — with urgent ethical stakes.",
+  "center": {
+    "label": "One Connected Whole",
+    "emoji": "🌐"
+  },
+  "branches": [
+    {
+      "label": "Revolution Without a Name",
+      "emoji": "🤫",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Not the loud kind",
+          "children": [
+            {"label": "No manifesto, no headline"},
+            {"label": "No Copernicus, no year"},
+            {"label": "Just thousands finding same words"}
+          ]
+        },
+        {
+          "label": "Where it's showing up",
+          "children": [
+            {"label": "Systemic psychotherapy"},
+            {"label": "Holistic medicine"},
+            {"label": "Growing interdisciplinarity"}
+          ]
+        },
+        {
+          "label": "Cultural symptom",
+          "children": [
+            {"label": "Return of spirituality"},
+            {"label": "Same pull, different vocabulary"},
+            {"label": "Lateral spread, no hero-figure"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Reductionist Inheritance",
+      "emoji": "⚙️",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Descartes' fracture",
+          "children": [
+            {"label": "Res cogitans vs. res extensa"},
+            {"label": "Matter has no inner perspective"},
+            {"label": "So take it apart and measure it"}
+          ]
+        },
+        {
+          "label": "Newton's clockwork",
+          "children": [
+            {"label": "Universe as gigantic clockwork"},
+            {"label": "Precise, predictable, mechanical"},
+            {"label": "Whole equals sum of parts"}
+          ]
+        },
+        {
+          "label": "Real wins",
+          "children": [
+            {"label": "Decoded the human genome"},
+            {"label": "Built CERN's accelerator"},
+            {"label": "Raised skyscrapers"}
+          ]
+        },
+        {
+          "label": "The verdict",
+          "children": [
+            {"label": "Not wrong — incomplete"},
+            {"label": "Captures only one part of reality"},
+            {"label": "Successful, but the ceiling shows"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Two Riddles Reductionism Can't Solve",
+      "emoji": "🌪️",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "The tree cannot be traced",
+          "children": [
+            {"label": "Sun, fungi, wind, animals"},
+            {"label": "Cannot be described from itself alone"},
+            {"label": "Horizontal + vertical causal weave"}
+          ]
+        },
+        {
+          "label": "The hurricane emerges",
+          "children": [
+            {"label": "Nothing but air and water"},
+            {"label": "No molecule knows about the storm"},
+            {"label": "Order lives only in interplay"}
+          ]
+        },
+        {
+          "label": "The neuron problem",
+          "children": [
+            {"label": "Billions of neurons → a thought"},
+            {"label": "→ a memory, a musical goosebump"},
+            {"label": "Reductionism's first great riddle"}
+          ]
+        },
+        {
+          "label": "Alan Watts corroborates",
+          "children": [
+            {"label": "\"Universities inculcated us\""},
+            {"label": "Divided psychology from sociology"},
+            {"label": "\"The world I live in is not like that\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Vocabulary Mapped",
+      "emoji": "🗺️",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Umbrella",
+          "children": [
+            {"label": "The systems-theoretical perspective"},
+            {"label": "World as one connected system"},
+            {"label": "Everything else nests under this"}
+          ]
+        },
+        {
+          "label": "Hard science",
+          "children": [
+            {"label": "Systems theory itself"},
+            {"label": "Measurable, mathematical"},
+            {"label": "Still fragmented across fields"}
+          ]
+        },
+        {
+          "label": "Craft",
+          "children": [
+            {"label": "Systems thinking, applied"},
+            {"label": "Psychology, health, management"},
+            {"label": "Practitioner-facing surface"}
+          ]
+        },
+        {
+          "label": "Beyond hard science",
+          "children": [
+            {"label": "Systems philosophy / holism"},
+            {"label": "Whitehead's process philosophy"},
+            {"label": "Roots in Hegel's dialectic whole"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Funnel of Theories",
+      "emoji": "🔻",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Bottom (closed)",
+          "children": [
+            {"label": "Reductionism, atomism"},
+            {"label": "Classical physics"},
+            {"label": "Only-the-parts-are-real"}
+          ]
+        },
+        {
+          "label": "Middle (established)",
+          "children": [
+            {"label": "Dissipative structures (Nobel)"},
+            {"label": "Chaos theory, game theory"},
+            {"label": "Cybernetics"}
+          ]
+        },
+        {
+          "label": "Contested resonant tier",
+          "children": [
+            {"label": "Integrated Information Theory"},
+            {"label": "Panpsychism"},
+            {"label": "Process philosophy"}
+          ]
+        },
+        {
+          "label": "Top (mystical)",
+          "children": [
+            {"label": "Capra links physics + Taoism"},
+            {"label": "Mystical traditions as early systems view"},
+            {"label": "\"Always the human drive to grasp the whole\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Diagnosis to Ethical Fork",
+      "emoji": "🧭",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Capra's diagnosis",
+          "children": [
+            {"label": "\"Cartesian view is in our institutions\""},
+            {"label": "Fragmented tools, whole problems"},
+            {"label": "Prescription: ecological worldview"}
+          ]
+        },
+        {
+          "label": "Good reading",
+          "children": [
+            {"label": "We are part of the system"},
+            {"label": "Justice as system health"},
+            {"label": "Humility toward tipping points"}
+          ]
+        },
+        {
+          "label": "Evil reading",
+          "children": [
+            {"label": "Cybernetic control extended to humans"},
+            {"label": "Human as machine part, ruler as engineer"},
+            {"label": "Coined label: technofeudalism"}
+          ]
+        },
+        {
+          "label": "Escape hatch",
+          "children": [
+            {"label": "Complex systems ≠ machines"},
+            {"label": "Turning all knobs at once → chaos"},
+            {"label": "Slow the AI push, first understand"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "YouTube video Jhtya7E45BE (~20:35, auto-generated English captions). Solo narrator's first-video framing gives the piece an earnest, unpolished sincerity.",
+    "Two archival voices anchor the argument: Alan Watts on Cartesian inculcation (~08:30) and Fritjof Capra on ecological worldview (~15:30–15:50).",
+    "The narrator's coined label 'technofeudalism' targets Peter Thiel, Palantir, and the World Economic Forum as vectors of the evil reading.",
+    "Closing prescription (~19:50): before pushing further AI development, first work on understanding the world and our place in it.",
+    "Composes with earlier videos in this session — Emad Mostaque on sovereign right to intelligence, and the tech-decoupling-from-capital clip — as a philosophy-of-science variant of the same three-substrate-bypass argument."
+  ]
+}

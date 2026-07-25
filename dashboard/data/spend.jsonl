@@ -1,0 +1,14 @@
+# ZeroPoint inference spend log — JSONL, one call per line.
+# Lines starting with # are ignored by the dashboard.
+#
+# Expected per-call fields:
+#   ts              ISO 8601 timestamp
+#   provider        "anthropic" | "abacus" | "openai" | "local" | ...
+#   model           model identifier (e.g. "claude-sonnet-4-5", "glm-5.2")
+#   input_tokens    integer
+#   output_tokens   integer
+#   total_cost_usd  float (optional; dashboard computes from PRICES map if absent)
+#   context         string, optional short label describing the task
+#
+# Wrappers append one JSON line per completed inference call.
+# No entries yet — dashboard shows empty state until first call lands.

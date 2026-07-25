@@ -9,6 +9,7 @@ use tracing::info;
 
 use zp_receipt::{ClaimMetadata, ClaimSemantics, Receipt, Status};
 
+use crate::lifecycle::apply_lifecycle_rules;
 use crate::types::{
     MemoryEntry, MemoryStage, PromotionRequest, PromotionResult, PromotionThresholds,
 };
@@ -67,6 +68,10 @@ impl PromotionEngine {
             expires_at: None,
             review_due_at: None,
         };
+
+        // Set lifecycle timers for the Observed stage (24h expiry).
+        let mut entry = entry;
+        apply_lifecycle_rules(&mut entry);
 
         self.memories.insert(memory_id.clone(), entry);
         info!(memory_id = %memory_id, "Registered new memory from observation");
@@ -152,14 +157,22 @@ impl PromotionEngine {
                     };
                 }
             }
-            MemoryStage::IdentityBearing => {
-                if request.reviewer.is_none() {
-                    return PromotionResult::Denied {
-                        reason: "IdentityBearing stage requires human reviewer".to_string(),
-                    };
-                }
-            }
+            // IdentityBearing reviewer requirement handled by Gate 3 (review gate).
             _ => {}
+        }
+
+        // Gate 3: Review gate — Remembered and IdentityBearing require human review.
+        // If no reviewer is present, signal the caller to route through ReviewQueue.
+        if crate::review::ReviewQueue::requires_review(request.target_stage)
+            && request.reviewer.is_none()
+        {
+            return PromotionResult::RequiresReview {
+                memory_id: request.memory_id.clone(),
+                current_stage: entry.stage,
+                target_stage: request.target_stage,
+                evidence: request.evidence.clone(),
+                requestor: request.requestor.clone(),
+            };
         }
 
         // Generate the promotion receipt.
@@ -175,6 +188,9 @@ impl PromotionEngine {
             entry.reviewer = Some(reviewer.clone());
         }
 
+        // Set lifecycle timers (expiry + review schedule) for the new stage.
+        apply_lifecycle_rules(entry);
+
         info!(
             memory_id = %request.memory_id,
             new_stage = %request.target_stage,
@@ -188,6 +204,16 @@ impl PromotionEngine {
     /// Get a memory entry by ID.
     pub fn get(&self, memory_id: &str) -> Option<&MemoryEntry> {
         self.memories.get(memory_id)
+    }
+
+    /// Get a mutable reference to a memory entry by ID.
+    pub fn get_mut(&mut self, memory_id: &str) -> Option<&mut MemoryEntry> {
+        self.memories.get_mut(memory_id)
+    }
+
+    /// Get all tracked memories.
+    pub fn all_memories(&self) -> Vec<&MemoryEntry> {
+        self.memories.values().collect()
     }
 
     /// Get all memories at a specific stage.
@@ -368,12 +394,23 @@ mod tests {
         engine.reinforce(&mem_id, 0.9);
         engine.reinforce(&mem_id, 0.85);
 
+        // Without a reviewer, Remembered requires review gate.
         let result = engine.promote(&PromotionRequest {
             memory_id: mem_id.clone(),
             target_stage: MemoryStage::Remembered,
             evidence: "cross-context reinforcement confirmed".to_string(),
             requestor: "engine".to_string(),
             reviewer: None,
+        });
+        assert!(matches!(result, PromotionResult::RequiresReview { .. }));
+
+        // With a reviewer (post-review approval), promotion succeeds.
+        let result = engine.promote(&PromotionRequest {
+            memory_id: mem_id.clone(),
+            target_stage: MemoryStage::Remembered,
+            evidence: "cross-context reinforcement confirmed".to_string(),
+            requestor: "engine".to_string(),
+            reviewer: Some("operator-kenrom".to_string()),
         });
         assert!(matches!(result, PromotionResult::Promoted { .. }));
     }
@@ -403,10 +440,10 @@ mod tests {
             target_stage: MemoryStage::Remembered,
             evidence: "reinforced".to_string(),
             requestor: "engine".to_string(),
-            reviewer: None,
+            reviewer: Some("operator-kenrom".to_string()),
         });
 
-        // Try IdentityBearing without reviewer.
+        // Try IdentityBearing without reviewer — hits RequiresReview gate.
         let result = engine.promote(&PromotionRequest {
             memory_id: mem_id.clone(),
             target_stage: MemoryStage::IdentityBearing,
@@ -415,7 +452,7 @@ mod tests {
             reviewer: None,
         });
         assert!(
-            matches!(result, PromotionResult::Denied { reason } if reason.contains("human reviewer"))
+            matches!(result, PromotionResult::RequiresReview { .. })
         );
 
         // With reviewer — should succeed.

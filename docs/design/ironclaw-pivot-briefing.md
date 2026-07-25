@@ -2,10 +2,10 @@
 
 ## Context for CLIC — Strategic Redirection of GAR First Tenant
 
-**ThinkStream Labs** · April 2026
+**ZeroPoint Open Foundation** · April 2026
 **Document:** ZP-GAR-PIVOT-001 · **Classification:** Internal / Strategic
 **Supersedes:** Nothing — this document *supplements* ZP-GAR-SPEC-001 (governed-agent-runtime.md)
-**Decision maker:** Ken (ThinkStream Labs)
+**Decision maker:** Ken (ZeroPoint Open Foundation)
 **Decision:** IronClaw replaces Hermes as the first fully-governed tenant of the ZeroPoint GAR.
 
 ---

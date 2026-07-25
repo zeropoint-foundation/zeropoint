@@ -1,0 +1,170 @@
+[qwen3-30b-a3b] structured/receipt_json -> PASS
+{"receipt_type": "transcript:fetched", "video_id": "abc123XYZ01", "segments": 61, "source": "youtube_transcript_api"}
+
+[qwen3-30b-a3b] structured/tool_call_json -> PASS
+{"name": "youtube_get_transcript", "arguments": {"video": "dQw4w9WgXcQ"}}
+
+[qwen3-30b-a3b] structured/route_classifier -> PASS
+SLM
+
+[qwen3-30b-a3b] structured/uc1_synthesis -> PASS
+{"target": "DEPENDENCY-POSTURE", "relation": "updates", "why": "A frontier open model now runs locally on commodity hardware, making the local inference backend more feasible than previously assumed."}
+
+[qwen3-30b-a3b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+{
+  "trajectories": [
+    "Operator declared an inference envelope authorizing two models",
+    "Substrate recorded a served-model receipt",
+    "Router served a cheaper tier",
+    "Operator flagged the divergence for review"
+  ],
+  "decisions": [
+    "Operator declared an inference envelope authorizing two models",
+    "Operator flagged the divergence for review"
+  ],
+  "insights": [
+    "A divergence receipt fired when the router served a cheaper tier",
+    "Substrate recorded a served-model receipt"
+  ]
+}
+
+[qwen3-30b-a3b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+Sixty days' notice is required to terminate for convenience, as stated in Section 9.1.
+
+[qwen3-coder-30b-a3b] structured/receipt_json -> PASS
+{
+  "receipt_type": "transcript:fetched",
+  "video_id": "abc123XYZ01",
+  "segments": 61,
+ "source": "youtube_transcript_api"
+}
+
+[qwen3-coder-30b-a3b] structured/tool_call_json -> PASS
+{"name": "youtube_get_transcript", "arguments": {"video": "https://youtu.be/dQw4w9WgXcQ"}}
+```
+
+[qwen3-coder-30b-a3b] structured/route_classifier -> PASS
+SLM
+```
+
+[qwen3-coder-30b-a3b] structured/uc1_synthesis -> PASS
+{"target": "DEPENDENCY-POSTURE", "relation": "confirms", "why": "The new finding supports the strategic hedge approach by showing local inference is now practically feasible on commodity hardware"}
+
+[qwen3-coder-30b-a3b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+```json
+{
+  "trajectories": [
+    "model selection",
+    "substrate recording",
+    "router serving",
+    "divergence detection"
+  ],
+  "decisions": [
+    "declare inference envelope",
+    "record served model",
+    "flag divergence",
+    "review divergence"
+  ],
+  "insights": [
+    "two models authorized",
+    "cheaper tier served",
+    "divergence detected",
+    "review required"
+  ]
+}
+```
+
+[qwen3-coder-30b-a3b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+Section 9.1 states that either party may terminate for convenience with 60 days written notice.
+
+[qwen3-4b] structured/receipt_json -> PASS
+{
+  "receipt_type": "transcript:fetched",
+  "video_id": "abc123XYZ01",
+  "segments": 61,
+  "source": "youtube_transcript_api"
+}
+
+[qwen3-4b] structured/tool_call_json -> PASS
+{"name": "youtube_get_transcript", "arguments": {"video": "https://youtu.be/dQw4w9WgXcQ"}}
+
+[qwen3-4b] structured/route_classifier -> PASS
+SLM
+
+[qwen3-4b] structured/uc1_synthesis -> PASS
+{"target": "DEPENDENCY-POSTURE", "relation": "contradicts", "why": "local inference backend no longer a strategic hedge; now feasible on commodity hardware"}
+
+[qwen3-4b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+{
+  "trajectories": [
+    "Operator authorizes inference envelope for two models",
+    "Substrate records served-model receipt",
+    "Router serves cheaper tier, triggering divergence receipt",
+    "Operator flags divergence for review"
+  ],
+  "decisions": [
+    "Authorize inference envelope for two models",
+    "Flag divergence for review"
+  ],
+  "insights": [
+    "Inference envelope enables model selection flexibility",
+    "Served-model receipt confirms model deployment",
+    "Divergence detected when cheaper tier is served",
+    "Review process initiated for potential policy or routing issues"
+  ]
+}
+
+[qwen3-4b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+Sixty days' written notice is required to terminate for convenience, as specified in Section 9.1.
+
+[qwen3-1.7b] structured/receipt_json -> PASS
+{
+  "receipt_type": "transcript:fetched",
+  "video_id": "abc123XYZ01",
+  "segments": 61,
+  "source": "youtube_transcript_api"
+}
+
+[qwen3-1.7b] structured/tool_call_json -> PASS
+{"name": "youtube_get_transcript", "arguments": {"video": "https://youtu.be/dQw4w9WgXcQ"}}
+
+[qwen3-1.7b] structured/route_classifier -> PASS
+LLM
+
+[qwen3-1.7b] structured/uc1_synthesis -> PASS
+{"target": "DEPENDENCY-POSTURE — a local inference backend is a strategic hedge, not yet built.", "relation": "contradicts", "why": "a frontier open model now runs locally on commodity hardware"}
+
+[qwen3-1.7b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+```json
+{
+  "trajectories": [
+    "Operator declared an inference envelope authorizing two models",
+    "Substrate recorded a served-model receipt",
+    "A divergence receipt fired when the router served a cheaper tier",
+    "Operator flagged the divergence for review"
+  ],
+  "decisions": [
+    "Operator declared an inference envelope authorizing two models",
+    "Substrate recorded a served-model receipt",
+    "A divergence receipt fired when the router served a cheaper tier",
+    "Operator flagged the divergence for review"
+  ],
+  "insights": [
+    "Inference envelope authorized two models",
+    "Substrate recorded served-model receipt",
+    "Divergence occurred when cheaper tier was served",
+    "Divergence flagged for review"
+  ]
+}
+```
+
+[qwen3-1.7b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+60 days notice is required to terminate for convenience, under Section 9.1.

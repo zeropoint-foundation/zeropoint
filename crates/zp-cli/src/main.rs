@@ -93,6 +93,32 @@ enum Commands {
     Chat,
     /// System health check
     Health,
+    /// Officer cadre diagnostic operations
+    ///
+    /// Manual trigger for officer sweeps outside the periodic sweep timer.
+    /// Composes with OFFICER-ACTION-SURFACES + SUBSTRATE-COORDINATION-DISCIPLINE:
+    /// operator (or Regent via equivalent tool) explicitly requests diagnostic
+    /// visibility into current officer state.
+    #[command(subcommand)]
+    Officer(OfficerCmd),
+    /// Vault diagnostic and probe operations
+    ///
+    /// Composes with aligned blindness (KEEL III.24): credential values never
+    /// enter cognitive layer; probes return structural pass/fail signals only.
+    #[command(subcommand)]
+    Vault(VaultCmd),
+    /// Substrate diagnostic operations — deterministic validation primitives
+    ///
+    /// Runs canonical substrate validation checks against the running substrate.
+    /// Companion to Regent's substrate_validate tool (task #20); provides
+    /// operator direct-invocation path independent of Regent's dispatch choice.
+    #[command(subcommand)]
+    Substrate(SubstrateCmd),
+    /// Standing correction operations — chain-anchored operator claims
+    /// about Regent's cognitive layer per STANDING-CORRECTION-RECEIPT-SCHEMA.
+    /// Persist across cycles; consumed at Tier 1 of Regent's cognitive input.
+    #[command(subcommand)]
+    Correction(CorrectionCmd),
     /// Audit trail operations
     #[command(subcommand)]
     Audit(AuditCmd),
@@ -151,6 +177,10 @@ enum Commands {
     /// The audit chain is the registry; no external model database required.
     #[command(subcommand)]
     Model(ModelCmd),
+
+    /// Tool lifecycle management (list, remove)
+    #[command(subcommand)]
+    Tool(ToolCmd),
 
     /// Configure tools from vault (Semantic Sed)
     #[command(subcommand)]
@@ -300,6 +330,19 @@ enum Commands {
     /// Manage ZeroPoint configuration
     #[command(subcommand, name = "config")]
     Cfg(CfgCmd),
+
+    /// Talk to the Regent — ZeroPoint's apex cognitive entity
+    ///
+    /// Sends a message to the running Regent and prints the response.
+    /// Requires `[regent] enabled = true` in config and a running `zp serve`.
+    Regent {
+        /// Message to send to the Regent
+        message: String,
+
+        /// Show real-time cognitive pipeline events (timing, phases, bottlenecks)
+        #[arg(short, long)]
+        verbose: bool,
+    },
 
     /// Run post-install diagnostics — check everything and report problems
     Doctor {
@@ -633,6 +676,147 @@ enum PortCmd {
 }
 
 #[derive(Subcommand)]
+enum SubstrateCmd {
+    /// Run canonical substrate validation.
+    ///
+    /// Walks the chain, checks canonical disciplines (chain integrity, canary,
+    /// cognitive discipline sandwich, standing corrections, officer heartbeats,
+    /// receipt-type inventory), emits `substrate:validation:regent:<id>`
+    /// chain-anchored evidence receipt, returns structured findings.
+    ///
+    /// Same primitive Regent invokes via `substrate_validate` tool (task #20).
+    /// Operator direct-invocation via this verb sidesteps Regent dispatch drift.
+    ///
+    /// Examples:
+    ///   zp substrate validate
+    ///   zp substrate validate --json
+    Validate {
+        /// Emit result as raw JSON instead of formatted text
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum VaultCmd {
+    /// Probe a vault-stored provider credential for validity.
+    ///
+    /// Retrieves credential server-side (never in cognitive layer per aligned
+    /// blindness) and makes minimal auth-verification request against the
+    /// provider's endpoint. Returns pass/fail without echoing credential.
+    ///
+    /// Supported providers: anthropic, openai, abacus.
+    ///
+    /// Examples:
+    ///   zp vault test anthropic
+    ///   zp vault test abacus
+    ///   zp vault test openai --json
+    Test {
+        /// Provider name (anthropic | openai | abacus)
+        provider: String,
+        /// Emit result as raw JSON instead of formatted text
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum CorrectionCmd {
+    /// Issue a new standing correction.
+    ///
+    /// Accepts individual field flags OR --json for a full StandingCorrection payload.
+    /// Chain-anchors the correction as a cognitive:correction:standing event.
+    /// Regent's next perceive() cycle sees this at Tier 1.
+    ///
+    /// Examples:
+    ///   zp correction issue --type factual --domain cognitive.self_reference.model_state \
+    ///     --assertion "Regent is running Sonnet 4.6, not GLM 5.2" --priority 90
+    ///
+    ///   zp correction issue --type prohibition --domain cognitive.narration.tone.day_shape \
+    ///     --assertion "Regent may mirror day-shape framing when operator sets it" \
+    ///     --negation "Do not open with 'good morning'" --priority 70
+    ///
+    ///   cat correction.json | zp correction issue --json -
+    Issue {
+        /// Correction type: factual | boundary | prohibition | preference
+        #[arg(long = "type", value_parser = ["factual", "boundary", "prohibition", "preference"])]
+        correction_type: Option<String>,
+        /// Domain string (hierarchical, e.g. cognitive.narration.tone.day_shape)
+        #[arg(long)]
+        domain: Option<String>,
+        /// The authoritative assertion (what Regent should treat as true / do)
+        #[arg(long)]
+        assertion: Option<String>,
+        /// What Regent should not claim / should not do (optional negation)
+        #[arg(long)]
+        negation: Option<String>,
+        /// Human context for why the correction exists (optional)
+        #[arg(long)]
+        context: Option<String>,
+        /// Priority (0-100). Default scale: 100=existential, 50-99=high, 10-49=moderate, 1-9=soft.
+        #[arg(long, default_value = "50")]
+        priority: u32,
+        /// Read full StandingCorrection JSON payload from file path (or "-" for stdin)
+        #[arg(long)]
+        json: Option<String>,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json_out: bool,
+    },
+    /// List currently active standing corrections.
+    List {
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Revoke a standing correction by id.
+    Revoke {
+        /// Correction id (from `zp correction list`)
+        correction_id: String,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum OfficerCmd {
+    /// Trigger an on-demand sweep of one or all officers.
+    ///
+    /// Without a name, runs the full enabled roster. With a name, runs
+    /// only the specified officer. Composes with OFFICER-ACTION-SURFACES —
+    /// sweep is an ephemeral action-surface invocation producing
+    /// chain-anchored findings.
+    ///
+    /// Examples:
+    ///   zp officer sweep              # all enabled officers
+    ///   zp officer sweep steward      # steward only
+    ///   zp officer sweep sentinel     # sentinel only
+    Sweep {
+        /// Officer name (steward | sentinel | forge | cleo). Omit for full roster.
+        name: Option<String>,
+        /// Emit result as raw JSON instead of formatted text
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ToolCmd {
+    /// List registered tools (same as `zp port list`)
+    List,
+    /// Remove a tool from governance — stops process, revokes delegations,
+    /// deallocates port, deletes .env.zp, emits removal receipt.
+    Remove {
+        /// Tool name (case-insensitive)
+        name: String,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum MemoryCmd {
     /// List pending memory promotion reviews
     Review {
@@ -899,6 +1083,12 @@ enum AuditCmd {
     },
     /// Verify audit chain integrity
     Verify,
+    /// Compact the chain by archiving old entries
+    Compact {
+        /// Number of recent entries to retain (default: 10000)
+        #[arg(long, default_value = "10000")]
+        retain: usize,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1779,6 +1969,199 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
+    // Tool lifecycle management (list, remove) — no pipeline needed.
+    #[cfg(feature = "embedded-server")]
+    if let Some(Commands::Tool(cmd)) = &args.command {
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
+        let data_dir = cfg.data_dir.value.clone();
+
+        match cmd {
+            ToolCmd::List => {
+                // Reuse the same listing logic as `zp port list`.
+                let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
+                let mut bindings = registry.list();
+                if bindings.is_empty() {
+                    println!("No registered tools.");
+                    std::process::exit(0);
+                }
+                bindings.sort_by(|a, b| a.tool.cmp(&b.tool));
+                println!("{:<20} {:<10} {:<10} {:<10} {:<10}", "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY");
+                println!("{}", "─".repeat(62));
+                for b in bindings {
+                    println!(
+                        "{:<20} {:<10} {:<10} {:<10} {:<10}",
+                        b.tool,
+                        b.port,
+                        b.actual_port
+                            .map(|p| p.to_string())
+                            .unwrap_or_else(|| "—".to_string()),
+                        b.pid
+                            .map(|p| p.to_string())
+                            .unwrap_or_else(|| "—".to_string()),
+                        b.proxy_port
+                            .map(|p| p.to_string())
+                            .unwrap_or_else(|| "—".to_string()),
+                    );
+                }
+                std::process::exit(0);
+            }
+            ToolCmd::Remove { name, force } => {
+                let name_lower = name.to_lowercase();
+                let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
+
+                // 1. Resolve
+                let binding = match registry.get_assigned(&name_lower) {
+                    Some(b) => b,
+                    None => {
+                        eprintln!("\x1b[31m✗\x1b[0m  Tool '{}' is not registered.", name);
+                        std::process::exit(1);
+                    }
+                };
+
+                let pid_alive = binding.pid.map_or(false, |p| {
+                    zp_server::tool_ports::is_pid_alive(p)
+                });
+                let working_dir = binding.launch_command.as_ref()
+                    .and_then(|lc| lc.working_dir.as_deref());
+                let env_zp_exists = working_dir
+                    .map(|d| std::path::Path::new(d).join(".env.zp").exists())
+                    .unwrap_or(false);
+
+                // Confirmation prompt
+                if !force {
+                    println!("Will remove \x1b[1m{}\x1b[0m:", binding.tool);
+                    if pid_alive {
+                        println!("  • Stop process (pid {})", binding.pid.unwrap());
+                    }
+                    println!("  • Deallocate port :{}", binding.port);
+                    if env_zp_exists {
+                        println!("  • Delete {}", std::path::Path::new(working_dir.unwrap()).join(".env.zp").display());
+                    }
+                    print!("\nProceed? [y/N] ");
+                    use std::io::Write;
+                    std::io::stdout().flush().unwrap();
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input).unwrap();
+                    if !input.trim().eq_ignore_ascii_case("y") {
+                        println!("Cancelled.");
+                        std::process::exit(0);
+                    }
+                }
+
+                // Try the server API first — this updates the running server's
+                // in-memory PortRegistry so the dashboard reflects the change
+                // immediately. Fall back to standalone registry only if the
+                // server is unreachable.
+                let server_url = format!(
+                    "http://127.0.0.1:{}/api/v1/tools/{}/remove",
+                    cfg.port.value, name_lower,
+                );
+                let server_result = std::process::Command::new("curl")
+                    .args([
+                        "-s", "-X", "POST",
+                        "-w", "\n%{http_code}",
+                        &server_url,
+                    ])
+                    .output();
+
+                let used_server = match server_result {
+                    Ok(output) if output.status.success() => {
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        let lines: Vec<&str> = stdout.trim().lines().collect();
+                        if lines.len() >= 2 {
+                            let http_code = lines.last().unwrap_or(&"0");
+                            let body = lines[..lines.len() - 1].join("\n");
+                            if *http_code == "200" {
+                                // Server handled the full removal.
+                                if let Ok(resp) = serde_json::from_str::<serde_json::Value>(&body) {
+                                    let mut parts: Vec<String> = Vec::new();
+                                    if let Some(pid) = resp.get("pid_killed").and_then(|v| v.as_u64()) {
+                                        parts.push(format!("killed pid {}", pid));
+                                    }
+                                    parts.push(format!("deallocated :{}", binding.port));
+                                    if resp.get("env_zp_deleted").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                        parts.push("deleted .env.zp".to_string());
+                                    }
+                                    println!(
+                                        "\x1b[32m✓\x1b[0m  Removed {}: {}",
+                                        binding.tool,
+                                        parts.join(", ")
+                                    );
+                                } else {
+                                    println!("\x1b[32m✓\x1b[0m  Removed {} via server.", binding.tool);
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                };
+
+                if !used_server {
+                    // Server unreachable — fall back to standalone registry.
+                    // This path only updates disk; the in-memory state syncs
+                    // on next server restart.
+                    eprintln!("  (server unreachable — removing from disk registry)");
+
+                    let mut summary_parts: Vec<String> = Vec::new();
+
+                    // Stop process
+                    if pid_alive {
+                        let pid = binding.pid.unwrap();
+                        let _ = std::process::Command::new("kill")
+                            .args([&pid.to_string()])
+                            .output();
+                        for _ in 0..6 {
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                            if !zp_server::tool_ports::is_pid_alive(pid) {
+                                break;
+                            }
+                        }
+                        if zp_server::tool_ports::is_pid_alive(pid) {
+                            let _ = std::process::Command::new("kill")
+                                .args(["-9", &pid.to_string()])
+                                .output();
+                        }
+                        summary_parts.push(format!("killed pid {}", pid));
+                    }
+
+                    // Deallocate port
+                    registry.deallocate(&name_lower);
+                    summary_parts.push(format!("deallocated :{}", binding.port));
+
+                    // Delete .env.zp
+                    if env_zp_exists {
+                        let env_zp_path = std::path::Path::new(working_dir.unwrap()).join(".env.zp");
+                        if let Err(e) = std::fs::remove_file(&env_zp_path) {
+                            eprintln!("  Warning: could not delete {}: {}", env_zp_path.display(), e);
+                        } else {
+                            summary_parts.push("deleted .env.zp".to_string());
+                        }
+                    }
+
+                    println!(
+                        "\x1b[32m✓\x1b[0m  Removed {}: {}",
+                        binding.tool,
+                        summary_parts.join(", ")
+                    );
+                }
+
+                std::process::exit(0);
+            }
+        }
+    }
+    #[cfg(not(feature = "embedded-server"))]
+    if matches!(&args.command, Some(Commands::Tool(_))) {
+        eprintln!(
+            "\x1b[31m✗\x1b[0m  zp tool requires the embedded-server feature"
+        );
+        std::process::exit(1);
+    }
+
     // Guard runs synchronously without needing the pipeline
     if let Some(Commands::Guard {
         command: cmd,
@@ -2180,7 +2563,7 @@ async fn main() -> anyhow::Result<()> {
                                             Ok(kr) => {
                                                 // genesis_secret is an OnceLock cache hit —
                                                 // resolve_vault_key() already loaded it above.
-                                                let genesis_secret = kr.genesis_secret().ok();
+                                                let genesis_secret = crate::commands::load_genesis_secret_composed().ok();
                                                 let receipt_fields = run::LaunchReceiptFields {
                                                     tool_name: name,
                                                     manifest_hash:
@@ -2356,8 +2739,7 @@ async fn main() -> anyhow::Result<()> {
                                                                 use std::sync::{Arc, Mutex};
                                                                 let keyring = crate::commands::open_keyring()
                                                                     .context("open keyring")?;
-                                                                let genesis_secret = keyring
-                                                                    .genesis_secret()
+                                                                let genesis_secret = crate::commands::load_genesis_secret_composed()
                                                                     .context("genesis secret")?;
                                                                 let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
                                                                 let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
@@ -2370,8 +2752,7 @@ async fn main() -> anyhow::Result<()> {
                                                                 if bead_zeros.contains_key(&format!("tool:{}", name)) {
                                                                     return Ok(()); // already on chain
                                                                 }
-                                                                let operator_secret: [u8; 32] = keyring
-                                                                    .load_operator()
+                                                                let operator_secret: [u8; 32] = crate::commands::load_operator_composed(&keyring)
                                                                     .context("operator key")?
                                                                     .secret_key();
                                                                 let signing_key = ed25519_dalek::SigningKey::from_bytes(&operator_secret);
@@ -4261,6 +4642,117 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
+    // Regent — talk to the cognitive loop via HTTP
+    if let Some(Commands::Regent { message, verbose }) = &args.command {
+        let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
+        let port = cfg.port.value;
+        let bind = &cfg.bind.value;
+        let api_url = format!("http://{}:{}/api/v1/regent/input", bind, port);
+        let verbose = *verbose;
+
+        // If verbose, start SSE listener before sending the request so we
+        // catch all cognitive events including cycle_start.
+        let sse_handle = if verbose {
+            let sse_url = format!("http://{}:{}/api/v1/events/stream", bind, port);
+            let t0 = std::time::Instant::now();
+            Some(tokio::spawn(async move {
+                let client = reqwest::Client::new();
+                let resp = match client.get(&sse_url).send().await {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
+                let mut stream = resp.bytes_stream();
+                use futures::StreamExt;
+                let mut buf = String::new();
+                while let Some(Ok(chunk)) = stream.next().await {
+                    buf.push_str(&String::from_utf8_lossy(&chunk));
+                    // Process complete SSE messages (terminated by double newline)
+                    while let Some(pos) = buf.find("\n\n") {
+                        let msg = buf[..pos].to_string();
+                        buf = buf[pos + 2..].to_string();
+
+                        // Parse SSE: look for event: and data: lines
+                        let mut event_type = String::new();
+                        let mut data = String::new();
+                        for line in msg.lines() {
+                            if let Some(rest) = line.strip_prefix("event:") {
+                                event_type = rest.trim().to_string();
+                            } else if let Some(rest) = line.strip_prefix("data:") {
+                                data = rest.trim().to_string();
+                            }
+                        }
+
+                        // Only show cognition events
+                        if event_type != "cognition" {
+                            continue;
+                        }
+
+                        if let Ok(item) = serde_json::from_str::<serde_json::Value>(&data) {
+                            let elapsed = t0.elapsed().as_millis();
+                            let phase = item.get("event_type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("?");
+                            let summary = item.get("summary")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            eprintln!(
+                                "\x1b[2m[{:>6}ms] {:<30} {}\x1b[0m",
+                                elapsed, phase, summary
+                            );
+                        }
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+
+        // Small delay to ensure SSE is connected before we send.
+        if verbose {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+
+        let client = reqwest::Client::new();
+        match client
+            .post(&api_url)
+            .json(&serde_json::json!({"content": message}))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                let status = resp.status();
+                let body: serde_json::Value = resp
+                    .json()
+                    .await
+                    .unwrap_or_else(|_| serde_json::json!({"error": "failed to parse response"}));
+
+                if status.is_success() {
+                    if let Some(text) = body.get("response").and_then(|v| v.as_str()) {
+                        println!("{}", text);
+                    } else {
+                        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_default());
+                    }
+                } else {
+                    let err = body.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error");
+                    eprintln!("regent: {}", err);
+                    std::process::exit(1);
+                }
+            }
+            Err(e) => {
+                eprintln!("regent: cannot reach zp serve at {} — {}", api_url, e);
+                std::process::exit(1);
+            }
+        }
+
+        // Give the SSE listener a moment to flush remaining events, then drop it.
+        if let Some(handle) = sse_handle {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            handle.abort();
+        }
+
+        std::process::exit(0);
+    }
+
     // Doctor — post-install diagnostics
     if let Some(Commands::Doctor { json }) = &args.command {
         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
@@ -5370,8 +5862,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Derive the audit signer from the Genesis secret
     let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let genesis_secret = keyring
-        .genesis_secret()
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
@@ -5405,9 +5896,52 @@ async fn main() -> anyhow::Result<()> {
     match args.command {
         None | Some(Commands::Chat) => chat::run(&pipeline).await?,
         Some(Commands::Health) => commands::health(&pipeline).await?,
+        Some(Commands::Officer(OfficerCmd::Sweep { name, json })) => {
+            run_officer_sweep(name.as_deref(), json).await?;
+        }
+        Some(Commands::Vault(VaultCmd::Test { provider, json })) => {
+            run_vault_test(&provider, json).await?;
+        }
+        Some(Commands::Substrate(SubstrateCmd::Validate { json })) => {
+            run_substrate_validate(json).await?;
+        }
+        Some(Commands::Correction(CorrectionCmd::Issue {
+            correction_type,
+            domain,
+            assertion,
+            negation,
+            context,
+            priority,
+            json,
+            json_out,
+        })) => {
+            run_correction_issue(
+                correction_type.as_deref(),
+                domain.as_deref(),
+                assertion.as_deref(),
+                negation.as_deref(),
+                context.as_deref(),
+                priority,
+                json.as_deref(),
+                json_out,
+            )
+            .await?;
+        }
+        Some(Commands::Correction(CorrectionCmd::List { json })) => {
+            run_correction_list(json).await?;
+        }
+        Some(Commands::Correction(CorrectionCmd::Revoke {
+            correction_id,
+            json,
+        })) => {
+            run_correction_revoke(&correction_id, json).await?;
+        }
         Some(Commands::Audit(AuditCmd::Verify)) => commands::audit_verify(&pipeline).await?,
         Some(Commands::Audit(AuditCmd::Log { limit, category })) => {
             commands::audit_log(&pipeline, limit, category.as_deref()).await?
+        }
+        Some(Commands::Audit(AuditCmd::Compact { retain })) => {
+            commands::audit_compact(&pipeline, retain).await?
         }
         Some(Commands::Chain(ChainCmd::Story { limit, domain, summary, json })) => {
             commands::chain_story(&pipeline, limit, domain.as_deref(), summary, json).await?
@@ -5416,6 +5950,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Restart { .. }) => unreachable!(), // handled above
         Some(Commands::Port(_)) => unreachable!(),      // handled above
+        Some(Commands::Tool(_)) => unreachable!(),      // handled above
         Some(Commands::Secure { .. }) => unreachable!(), // handled above
         Some(Commands::Status) => unreachable!(),       // handled above
         Some(Commands::Policy(_)) => unreachable!(),    // handled above
@@ -5432,6 +5967,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Revoke { .. }) => unreachable!(), // handled above
         Some(Commands::Grants { .. }) => unreachable!(), // handled above
         Some(Commands::Cfg(_)) => unreachable!(),       // handled above
+        Some(Commands::Regent { .. }) => unreachable!(),  // handled above
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
         Some(Commands::Ps { .. }) => unreachable!(),    // handled above
         #[cfg(feature = "embedded-server")]
@@ -5688,7 +6224,7 @@ fn run_canonicalize(
             return 1;
         }
     };
-    let genesis_secret = match keyring.genesis_secret() {
+    let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("\x1b[31merror\x1b[0m: genesis secret: {e}");
@@ -5710,7 +6246,7 @@ fn run_canonicalize(
     };
 
     // Derive operator signing key for the receipt itself.
-    let operator_secret: [u8; 32] = match keyring.load_operator() {
+    let operator_secret: [u8; 32] = match crate::commands::load_operator_composed(&keyring) {
         Ok(k) => k.secret_key(),
         Err(e) => {
             eprintln!("\x1b[31merror\x1b[0m: operator key: {e}");
@@ -5811,7 +6347,7 @@ fn run_adapt(
                 return 2;
             }
         };
-        let genesis_secret = match keyring.genesis_secret() {
+        let genesis_secret = match crate::commands::load_genesis_secret_composed() {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("\x1b[31merror\x1b[0m: failed to load Genesis secret: {}", e);
@@ -6377,6 +6913,587 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
 /// Delegates to `read_zp_session_token_from` with the canonical path so the
 /// path-resolution logic can be tested independently without touching the real
 /// `~/ZeroPoint` directory.
+/// Trigger a manual officer sweep via the running substrate's HTTP API.
+///
+/// Hits `GET /api/v1/officer/sweep?officer=<name>` with session-token auth.
+/// Prints a formatted per-officer summary (or raw JSON with --json).
+///
+/// Composes with SUBSTRATE-COORDINATION-DISCIPLINE (autonomic vs deliberate
+/// scope): manual sweep is a deliberate operator (or Regent) diagnostic
+/// action outside routine coordination. Findings surface via the same
+/// chain-anchored discipline the periodic sweep uses; this verb just fires
+/// the sweep off-schedule.
+async fn run_officer_sweep(name: Option<&str>, json_out: bool) -> anyhow::Result<()> {
+    // Load config to get server port
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+
+    // Read session token
+    let token = read_zp_session_token()
+        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+
+    // Officer names are known-safe (alphanumeric, no URL-special chars).
+    // Reject anything else to avoid injection into the query string.
+    let mut url = format!("http://127.0.0.1:{}/api/v1/officer/sweep", port);
+    if let Some(n) = name {
+        if !n.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Err(anyhow::anyhow!(
+                "Officer name must be alphanumeric (got: {:?})",
+                n
+            ));
+        }
+        url.push_str(&format!("?officer={}", n));
+    }
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {}", e))?;
+
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate at 127.0.0.1:{}: {}", port, e))?;
+
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read response body: {}", e))?;
+
+    if !status.is_success() {
+        eprintln!("\x1b[31m✗\x1b[0m  Officer sweep failed: HTTP {}", status);
+        eprintln!("    {}", body);
+        std::process::exit(1);
+    }
+
+    if json_out {
+        println!("{}", body);
+        return Ok(());
+    }
+
+    // Formatted output
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response JSON: {}", e))?;
+
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        std::process::exit(1);
+    }
+
+    println!();
+    println!("\x1b[1mOfficer Sweep\x1b[0m");
+    println!("\x1b[2m─────────────\x1b[0m");
+    println!();
+
+    let officers_run = v["officers_run"].as_array().cloned().unwrap_or_default();
+    let officer_list = officers_run
+        .iter()
+        .filter_map(|o| o.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    println!("  Officers run:     {}", officer_list);
+    println!("  Total findings:   {}", v["total_findings"]);
+    println!(
+        "  Posture:          {:.2}",
+        v["posture_composite"].as_f64().unwrap_or(0.0)
+    );
+    println!(
+        "  Completed at:     {}",
+        v["completed_at"].as_str().unwrap_or("?")
+    );
+    println!();
+
+    if let Some(per_officer) = v["per_officer"].as_array() {
+        for entry in per_officer {
+            let officer = entry["officer"].as_str().unwrap_or("?");
+            let duration = entry["sweep_duration_ms"].as_u64().unwrap_or(0);
+            let count = entry["finding_count"].as_u64().unwrap_or(0);
+            println!(
+                "  \x1b[1m{}\x1b[0m ({}ms) — {} finding(s)",
+                officer, duration, count
+            );
+
+            if let Some(findings) = entry["findings"].as_array() {
+                for f in findings {
+                    let severity = f["severity"].as_str().unwrap_or("?");
+                    let ftype = f["finding_type"].as_str().unwrap_or("?");
+                    let summary = f["summary"].as_str().unwrap_or("");
+                    let color = match severity {
+                        "Critical" => "\x1b[31m",
+                        "Error" => "\x1b[31m",
+                        "Warning" => "\x1b[33m",
+                        "Info" => "\x1b[2m",
+                        _ => "\x1b[0m",
+                    };
+                    println!("    {}[{}]\x1b[0m {} — {}", color, severity, ftype, summary);
+                }
+            }
+            println!();
+        }
+    }
+
+    Ok(())
+}
+
+/// Probe a vault-stored provider credential via the running substrate.
+///
+/// Hits `POST /api/v1/vault/test/<provider>` with session-token auth. Prints
+/// formatted result (or raw JSON with --json). Composes with aligned blindness:
+/// credential value never appears in CLI output or logs — only structural
+/// pass/fail indicators.
+async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
+    // Validate provider name (mirrors server-side validation)
+    if !provider.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(anyhow::anyhow!(
+            "Provider name must be alphanumeric (got: {:?})",
+            provider
+        ));
+    }
+
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+
+    let token = read_zp_session_token()
+        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+
+    let url = format!("http://127.0.0.1:{}/api/v1/vault/test/{}", port, provider);
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {}", e))?;
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate at 127.0.0.1:{}: {}", port, e))?;
+
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read response body: {}", e))?;
+
+    if json_out {
+        println!("{}", body);
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+        anyhow::anyhow!("Failed to parse response JSON: {} (body: {})", e, body)
+    })?;
+
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        if let Some(known) = v.get("known_providers").and_then(|k| k.as_array()) {
+            let names: Vec<&str> = known.iter().filter_map(|n| n.as_str()).collect();
+            eprintln!("    Known providers: {}", names.join(", "));
+        }
+        std::process::exit(1);
+    }
+
+    let provider_display = v["provider"].as_str().unwrap_or(provider);
+    let probe_status = v["probe_status"].as_str().unwrap_or("unknown");
+    let http_status = v["http_status"].as_u64().unwrap_or(0);
+    let latency = v["latency_ms"].as_u64().unwrap_or(0);
+
+    let (icon, color) = match probe_status {
+        "credential_valid" => ("✓", "\x1b[32m"),         // green
+        "credential_rejected" => ("✗", "\x1b[31m"),      // red
+        "credential_not_found" => ("?", "\x1b[33m"),     // yellow
+        "rate_limited" => ("~", "\x1b[33m"),             // yellow
+        "provider_error" => ("!", "\x1b[33m"),           // yellow
+        "network_error" => ("~", "\x1b[33m"),            // yellow
+        _ => ("?", "\x1b[0m"),
+    };
+
+    println!();
+    println!("\x1b[1mVault Probe\x1b[0m");
+    println!("\x1b[2m───────────\x1b[0m");
+    println!();
+    println!("  Provider:      {}", provider_display);
+    println!(
+        "  Probe status:  {}{} {}\x1b[0m",
+        color, icon, probe_status
+    );
+    if http_status > 0 {
+        println!("  HTTP status:   {}", http_status);
+    }
+    if latency > 0 {
+        println!("  Latency:       {}ms", latency);
+    }
+    if let Some(detail) = v.get("detail").and_then(|d| d.as_str()) {
+        println!("  Detail:        {}", detail);
+    }
+    if let Some(url) = v.get("probe_url").and_then(|u| u.as_str()) {
+        println!("  Probe URL:     {}", url);
+    }
+    println!();
+
+    // Exit non-zero when probe fails so scripts can react.
+    if !matches!(probe_status, "credential_valid") || !status.is_success() {
+        std::process::exit(2);
+    }
+
+    Ok(())
+}
+
+// ── Substrate validate verb (task #21, companion to task #20) ──────────────
+
+/// Run substrate validation via server API and print structured results.
+///
+/// Hits `GET /api/v1/substrate/validate` with session-token auth. Server runs
+/// the same `substrate_validate::run_substrate_validation` primitive Regent
+/// invokes via her `substrate_validate` tool. Emits chain-anchored evidence
+/// receipt server-side. Prints formatted result (or raw JSON with --json).
+///
+/// Operator direct-invocation path independent of Regent's dispatch — useful
+/// when Regent drifts from the directive or when the operator wants a fresh
+/// validation without initiating a Regent cycle.
+async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+
+    let token = read_zp_session_token()
+        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+
+    let url = format!("http://127.0.0.1:{}/api/v1/substrate/validate", port);
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {}", e))?;
+
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate at 127.0.0.1:{}: {}", port, e))?;
+
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to read response body: {}", e))?;
+
+    if json_out {
+        println!("{}", body);
+        if !status.is_success() {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response JSON: {} (body: {})", e, body))?;
+
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  Substrate validation failed: {}", err);
+        std::process::exit(1);
+    }
+
+    let posture = v["posture"].as_str().unwrap_or("unknown");
+    let (posture_icon, posture_color) = match posture {
+        "healthy" => ("✓", "\x1b[32m"),
+        "degraded" => ("⚠", "\x1b[33m"),
+        "critical" => ("✗", "\x1b[31m"),
+        _ => ("?", "\x1b[0m"),
+    };
+
+    let validation_id = v["validation_id"].as_str().unwrap_or("?");
+    let validated_at = v["validated_at"].as_str().unwrap_or("?");
+    let evidence_hash = v["evidence_receipt"]["entry_hash"]
+        .as_str()
+        .unwrap_or("(none)");
+
+    println!();
+    println!("\x1b[1mSubstrate Validation\x1b[0m");
+    println!("\x1b[2m────────────────────\x1b[0m");
+    println!();
+    println!("  Posture:        {}{} {}\x1b[0m", posture_color, posture_icon, posture);
+    println!("  Validation ID:  {}", validation_id);
+    println!("  Timestamp:      {}", validated_at);
+    if let Some(short) = evidence_hash.get(..evidence_hash.len().min(16)) {
+        println!("  Evidence hash:  {}", short);
+    }
+    println!();
+
+    // Per-check summary.
+    if let Some(checks) = v["checks"].as_object() {
+        println!("  \x1b[1mChecks:\x1b[0m");
+        for (name, check) in checks {
+            let check_status = check["status"].as_str().unwrap_or("unknown");
+            let (icon, color) = match check_status {
+                "ok" | "self_healed" => ("✓", "\x1b[32m"),
+                "degraded" | "imbalanced" | "violations_present" | "unrecognized_present" => {
+                    ("⚠", "\x1b[33m")
+                }
+                "critical" | "failed" | "inactive" | "missing" => ("✗", "\x1b[31m"),
+                _ => ("?", "\x1b[0m"),
+            };
+            println!("    {}{} {}\x1b[0m  {} — {}", color, icon, check_status, name, check_status);
+        }
+        println!();
+    }
+
+    // Notable gaps.
+    if let Some(gaps) = v["notable_gaps"].as_array() {
+        if !gaps.is_empty() {
+            println!("  \x1b[1mNotable gaps:\x1b[0m");
+            for gap in gaps {
+                if let Some(s) = gap.as_str() {
+                    println!("    • {}", s);
+                }
+            }
+            println!();
+        }
+    }
+
+    // Exit non-zero on critical posture so scripts can react.
+    if posture == "critical" {
+        std::process::exit(2);
+    }
+
+    Ok(())
+}
+
+// ── Standing correction verbs (P2.1) ─────────────────────────────────────────
+
+/// Issue a standing correction — chain-anchored operator claim about Regent's
+/// cognitive layer. Chain-anchors as `cognitive:correction:standing` event so
+/// Regent's next perceive() cycle picks it up at Tier 1.
+#[allow(clippy::too_many_arguments)]
+async fn run_correction_issue(
+    correction_type: Option<&str>,
+    domain: Option<&str>,
+    assertion: Option<&str>,
+    negation: Option<&str>,
+    context: Option<&str>,
+    priority: u32,
+    json_source: Option<&str>,
+    json_out: bool,
+) -> anyhow::Result<()> {
+    // Assemble the payload from either --json input or individual flags.
+    let payload: serde_json::Value = if let Some(source) = json_source {
+        let raw = if source == "-" {
+            use std::io::Read;
+            let mut buf = String::new();
+            std::io::stdin().read_to_string(&mut buf)?;
+            buf
+        } else {
+            std::fs::read_to_string(source)
+                .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", source, e))?
+        };
+        serde_json::from_str(&raw)
+            .map_err(|e| anyhow::anyhow!("Failed to parse JSON payload: {}", e))?
+    } else {
+        let ct = correction_type.ok_or_else(|| {
+            anyhow::anyhow!("--type is required (or use --json for full payload)")
+        })?;
+        let dom = domain
+            .ok_or_else(|| anyhow::anyhow!("--domain is required (or use --json)"))?;
+        let ass = assertion
+            .ok_or_else(|| anyhow::anyhow!("--assertion is required (or use --json)"))?;
+
+        let mut content = serde_json::json!({ "assertion": ass });
+        if let Some(n) = negation {
+            content["negation"] = serde_json::json!(n);
+        }
+        if let Some(c) = context {
+            content["context"] = serde_json::json!(c);
+        }
+
+        serde_json::json!({
+            "correction_type": ct,
+            "domain": dom,
+            "content": content,
+            "priority": priority,
+        })
+    };
+
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = format!("http://127.0.0.1:{}/api/v1/correction/issue", port);
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()?;
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate at 127.0.0.1:{}: {}", port, e))?;
+    let status = resp.status();
+    let body = resp.text().await?;
+
+    if json_out {
+        println!("{}", body);
+        if !status.is_success() {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {} (body: {})", e, body))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        if let Some(hint) = v.get("hint").and_then(|h| h.as_str()) {
+            eprintln!("    {}", hint);
+        }
+        std::process::exit(1);
+    }
+
+    let cid = v["correction_id"].as_str().unwrap_or("?");
+    let dom_out = v["domain"].as_str().unwrap_or("?");
+    let pri = v["priority"].as_u64().unwrap_or(0);
+    let hash = v["entry_hash"].as_str().unwrap_or("");
+    println!();
+    println!("\x1b[1;32m✓\x1b[0m  Standing correction issued");
+    println!("    correction_id: {}", cid);
+    println!("    domain:        {}", dom_out);
+    println!("    priority:      {}", pri);
+    if !hash.is_empty() {
+        println!("    entry_hash:    {}", &hash[..hash.len().min(16)]);
+    }
+    println!();
+    Ok(())
+}
+
+/// List all currently active standing corrections (priority-sorted descending).
+async fn run_correction_list(json_out: bool) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = format!("http://127.0.0.1:{}/api/v1/correction/list", port);
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?;
+    let body = resp.text().await?;
+
+    if json_out {
+        println!("{}", body);
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        std::process::exit(1);
+    }
+
+    let count = v["active_count"].as_u64().unwrap_or(0);
+    println!();
+    println!("\x1b[1mActive standing corrections: {}\x1b[0m", count);
+    println!("\x1b[2m─────────────────────────────\x1b[0m");
+    if let Some(list) = v["corrections"].as_array() {
+        for item in list {
+            let c = &item["correction"];
+            let cid = c["correction_id"].as_str().unwrap_or("?");
+            let dom = c["domain"].as_str().unwrap_or("?");
+            let pri = c["priority"].as_u64().unwrap_or(0);
+            let ct = c["correction_type"].as_str().unwrap_or("?");
+            let ass = c["content"]["assertion"].as_str().unwrap_or("");
+            println!();
+            println!("  \x1b[36m{}\x1b[0m  [{}] pri={}", cid, ct, pri);
+            println!("    domain: {}", dom);
+            println!("    {}", ass);
+            if let Some(neg) = c["content"]["negation"].as_str() {
+                println!("    \x1b[33mnot:\x1b[0m {}", neg);
+            }
+        }
+    }
+    println!();
+    Ok(())
+}
+
+/// Revoke a standing correction by id.
+async fn run_correction_revoke(correction_id: &str, json_out: bool) -> anyhow::Result<()> {
+    if correction_id.is_empty() {
+        return Err(anyhow::anyhow!("correction_id must not be empty"));
+    }
+
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = format!(
+        "http://127.0.0.1:{}/api/v1/correction/revoke/{}",
+        port, correction_id
+    );
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?;
+    let body = resp.text().await?;
+
+    if json_out {
+        println!("{}", body);
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        std::process::exit(1);
+    }
+
+    let cid = v["correction_id"].as_str().unwrap_or(correction_id);
+    let revoked_at = v["revoked_at"].as_str().unwrap_or("");
+    println!();
+    println!("\x1b[1;33m✓\x1b[0m  Standing correction revoked");
+    println!("    correction_id: {}", cid);
+    if !revoked_at.is_empty() {
+        println!("    revoked_at:    {}", revoked_at);
+    }
+    println!();
+    Ok(())
+}
+
 fn read_zp_session_token() -> Result<String, Box<dyn std::error::Error>> {
     let path = zp_core::paths::session_path()?;
     read_zp_session_token_from(&path)
@@ -6508,7 +7625,7 @@ fn run_anchor(
             return 2;
         }
     };
-    let genesis_secret = match keyring.genesis_secret() {
+    let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error: failed to load Genesis secret: {}", e);
@@ -6746,15 +7863,104 @@ fn parse_authorities(spec: &str) -> Vec<zp_core::AuthorityRef> {
         .collect()
 }
 
+/// Parse capability specs from a comma-separated string.
+///
+/// Supports two forms:
+/// - `name` — Custom capability with Null parameters
+/// - `name{json}` — Custom capability with parsed JSON parameters
+///
+/// Example: `governance:propose{"mutations":["restart_tool","set_port"]},tool:exec`
 fn parse_capabilities(spec: &str) -> Vec<zp_core::GrantedCapability> {
-    spec.split(',')
-        .map(|c| c.trim())
-        .filter(|c| !c.is_empty())
-        .map(|c| zp_core::GrantedCapability::Custom {
-            name: c.to_string(),
-            parameters: serde_json::Value::Null,
-        })
-        .collect()
+    let mut caps = Vec::new();
+    let mut remaining = spec;
+
+    while !remaining.is_empty() {
+        let remaining_trimmed = remaining.trim_start_matches(',').trim();
+        if remaining_trimmed.is_empty() {
+            break;
+        }
+        remaining = remaining_trimmed;
+
+        // Find the capability name (up to '{' or ',' or end).
+        if let Some(brace_pos) = remaining.find('{') {
+            let comma_pos = remaining.find(',').unwrap_or(remaining.len());
+            if brace_pos < comma_pos {
+                // Has JSON parameters: name{...}
+                let name = remaining[..brace_pos].trim().to_string();
+                let rest = &remaining[brace_pos..];
+
+                // Find matching closing brace (handle nested braces).
+                let mut depth = 0i32;
+                let mut end = 0;
+                for (i, ch) in rest.char_indices() {
+                    match ch {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                end = i + 1;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                if end > 0 {
+                    let json_str = &rest[..end];
+                    let parameters = serde_json::from_str(json_str)
+                        .unwrap_or_else(|_| {
+                            eprintln!(
+                                "warning: invalid JSON in capability '{}': {}, using Null",
+                                name, json_str
+                            );
+                            serde_json::Value::Null
+                        });
+                    caps.push(zp_core::GrantedCapability::Custom { name, parameters });
+                    remaining = &rest[end..];
+                } else {
+                    // Unmatched brace — treat rest as name
+                    let name = remaining.trim().to_string();
+                    caps.push(zp_core::GrantedCapability::Custom {
+                        name,
+                        parameters: serde_json::Value::Null,
+                    });
+                    break;
+                }
+            } else {
+                // Comma comes before brace — plain name
+                let name = remaining[..comma_pos].trim().to_string();
+                if !name.is_empty() {
+                    caps.push(zp_core::GrantedCapability::Custom {
+                        name,
+                        parameters: serde_json::Value::Null,
+                    });
+                }
+                remaining = &remaining[comma_pos..];
+            }
+        } else if let Some(comma_pos) = remaining.find(',') {
+            let name = remaining[..comma_pos].trim().to_string();
+            if !name.is_empty() {
+                caps.push(zp_core::GrantedCapability::Custom {
+                    name,
+                    parameters: serde_json::Value::Null,
+                });
+            }
+            remaining = &remaining[comma_pos..];
+        } else {
+            // Last capability, no comma
+            let name = remaining.trim().to_string();
+            if !name.is_empty() {
+                caps.push(zp_core::GrantedCapability::Custom {
+                    name,
+                    parameters: serde_json::Value::Null,
+                });
+            }
+            break;
+        }
+    }
+
+    caps
 }
 
 /// Map a `--tier-ceiling` argument to `TrustTier`. Returns the numeric
@@ -6934,7 +8140,7 @@ fn run_delegate(
             return 2;
         }
     };
-    let genesis_secret = match keyring.genesis_secret() {
+    let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error: failed to load Genesis secret: {}", e);
@@ -7252,7 +8458,7 @@ fn run_revoke(
             return 2;
         }
     };
-    let genesis_secret = match keyring.genesis_secret() {
+    let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error: failed to load Genesis secret: {}", e);
@@ -7908,8 +9114,7 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
         .unwrap_or_else(|| data_dir.join("audit.db"));
 
     let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let secret = keyring
-        .load_operator()
+    let secret = crate::commands::load_operator_composed(&keyring)
         .context("No operator key available — run `zp init` first")?
         .secret_key();
     let signer = Signer::from_secret(&secret);
@@ -7958,8 +9163,7 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
     signer.sign(&mut receipt);
     let receipt_id = receipt.id.clone();
 
-    let genesis_secret = keyring
-        .genesis_secret()
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
@@ -8158,6 +9362,64 @@ mod tests {
             "malformed JSON must return Err"
         );
     }
+
+    #[test]
+    fn parse_capabilities_plain_names() {
+        let caps = super::parse_capabilities("tool:exec,tool:read");
+        assert_eq!(caps.len(), 2);
+        match &caps[0] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "tool:exec");
+                assert!(parameters.is_null());
+            }
+            _ => panic!("expected Custom"),
+        }
+    }
+
+    #[test]
+    fn parse_capabilities_with_json_params() {
+        let caps = super::parse_capabilities(
+            r#"governance:propose{"mutations":["restart_tool","set_port"]}"#,
+        );
+        assert_eq!(caps.len(), 1);
+        match &caps[0] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "governance:propose");
+                let mutations = parameters.get("mutations").unwrap().as_array().unwrap();
+                assert_eq!(mutations.len(), 2);
+                assert_eq!(mutations[0].as_str().unwrap(), "restart_tool");
+            }
+            _ => panic!("expected Custom"),
+        }
+    }
+
+    #[test]
+    fn parse_capabilities_mixed() {
+        let caps = super::parse_capabilities(
+            r#"governance:propose{"mutations":["*"]},tool:exec"#,
+        );
+        assert_eq!(caps.len(), 2);
+        match &caps[0] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "governance:propose");
+                assert!(!parameters.is_null());
+            }
+            _ => panic!("expected Custom"),
+        }
+        match &caps[1] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "tool:exec");
+                assert!(parameters.is_null());
+            }
+            _ => panic!("expected Custom"),
+        }
+    }
+
+    #[test]
+    fn parse_capabilities_empty() {
+        let caps = super::parse_capabilities("");
+        assert!(caps.is_empty());
+    }
 }
 
 // ============================================================================
@@ -8201,8 +9463,7 @@ async fn run_policy_set_inference(
 
     // Signing keys
     let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let secret = keyring
-        .load_operator()
+    let secret = crate::commands::load_operator_composed(&keyring)
         .context("No operator key available — run `zp init` first")?
         .secret_key();
     let signer = Signer::from_secret(&secret);
@@ -8228,8 +9489,7 @@ async fn run_policy_set_inference(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| data_dir.join("audit.db"));
 
-    let genesis_secret = keyring
-        .genesis_secret()
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
@@ -8414,8 +9674,7 @@ async fn run_model_register(
     };
 
     let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let secret = keyring
-        .load_operator()
+    let secret = crate::commands::load_operator_composed(&keyring)
         .context("No operator key available — run `zp init` first")?
         .secret_key();
     let signer = Signer::from_secret(&secret);
@@ -8441,8 +9700,7 @@ async fn run_model_register(
     let db_path = audit_db
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| data_dir.join("audit.db"));
-    let genesis_secret = keyring
-        .genesis_secret()
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
@@ -8595,8 +9853,7 @@ async fn run_model_update(
         serde_json::from_str(value_str).context("--value must be valid JSON")?;
 
     let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let secret = keyring
-        .load_operator()
+    let secret = crate::commands::load_operator_composed(&keyring)
         .context("No operator key available — run `zp init` first")?
         .secret_key();
     let signer = Signer::from_secret(&secret);
@@ -8617,8 +9874,7 @@ async fn run_model_update(
     let db_path = audit_db
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| data_dir.join("audit.db"));
-    let genesis_secret = keyring
-        .genesis_secret()
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);

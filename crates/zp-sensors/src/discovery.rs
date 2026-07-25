@@ -16,6 +16,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
 
 use crate::event::{DiscoveredPort, SensorEvent};
+use crate::process::gather_process_context;
 
 /// Known tool binding — what the port registry says should be true.
 #[derive(Debug, Clone)]
@@ -144,9 +145,12 @@ fn scan_and_diff(
     let mut events = Vec::new();
     let now = Utc::now();
 
+    // Self-exemption: never flag our own process as an unknown listener.
+    let self_pid = std::process::id();
+
     for (pid, (name, ports)) in &by_pid {
-        // Skip ignored.
-        if config.ignore_pids.contains(pid) || config.ignore_names.contains(name) {
+        // Skip ignored and self.
+        if *pid == self_pid || config.ignore_pids.contains(pid) || config.ignore_names.contains(name) {
             continue;
         }
 
@@ -177,10 +181,12 @@ fn scan_and_diff(
             let overlaps_known = listener_ports.iter().any(|p| known_ports.contains(p));
 
             if !overlaps_known {
+                let context = gather_process_context(*pid, name);
                 events.push(SensorEvent::NewListenerDiscovered {
                     pid: *pid,
                     process_name: name.clone(),
                     ports: ports.clone(),
+                    context,
                     timestamp: now,
                 });
             }

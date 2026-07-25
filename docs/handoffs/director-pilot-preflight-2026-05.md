@@ -342,7 +342,7 @@ exercising step 4 is the only end-to-end proof.
 - `docs/STEWARD-WIZARD-SCRIPT-2026-05.md` (file was renamed to
   SAGE-WIZARD-SCRIPT-2026-05.md mid-arc; same content) — the
   ceremony's interaction script
-- `docs/AGENT-AS-UX-ARCHITECTURE-2026-05.md` — Sage voice and
+- `docs/AGENT-AS-UX-ARCHITECTURE-2026-05.md` — the Regent voice and
   framing patterns
 - `docs/handoffs/ironclaw-substrate-session-auth-2026-05.md` — the
   substrate-session auth brief

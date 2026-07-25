@@ -1,0 +1,174 @@
+{
+  "title": "AI Chatbot Comparison 2026 — Reality Fabricator",
+  "subtitle": "Vendor-published (rfab.ai) pitch positioning Reality Fabricator against ChatGPT, Claude, and Gemini for 2026.",
+  "center": {
+    "label": "Reality Fabricator Pitch",
+    "emoji": "🎛️"
+  },
+  "branches": [
+    {
+      "label": "Comparison Table",
+      "emoji": "📊",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Reality Fabricator",
+          "children": [
+            {"label": "15+ models"},
+            {"label": "Free: 75K tokens/day"},
+            {"label": "Pro from $5"}
+          ]
+        },
+        {
+          "label": "ChatGPT",
+          "children": [
+            {"label": "2–3 models"},
+            {"label": "Free: Limited"},
+            {"label": "$20/month"}
+          ]
+        },
+        {
+          "label": "Claude",
+          "children": [
+            {"label": "2–3 models"},
+            {"label": "Free: Limited"},
+            {"label": "$20/month"}
+          ]
+        },
+        {
+          "label": "Gemini",
+          "children": [
+            {"label": "2 models"},
+            {"label": "Free: Generous"},
+            {"label": "$20/month"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Why Reality Fabricator",
+      "emoji": "✅",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Access to all models",
+          "children": [
+            {"label": "One place, not four subs"},
+            {"label": "Skip $20/mo × N stack"}
+          ]
+        },
+        {
+          "label": "DeepSeek R1 free + unlimited",
+          "children": [
+            {"label": "Claimed GPT-4-comparable"},
+            {"label": "No usage limits"}
+          ]
+        },
+        {
+          "label": "Cost transparency",
+          "children": [
+            {"label": "Per-model token cost shown"},
+            {"label": "\"No surprises\""}
+          ]
+        },
+        {
+          "label": "Unique feature stack",
+          "children": [
+            {"label": "See branch →"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Unique Features",
+      "emoji": "⚙️",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "Autonomous Agents",
+          "children": [
+            {"label": "\"AIs that act independently\""}
+          ]
+        },
+        {
+          "label": "Phone Calls",
+          "children": [
+            {"label": "AI can call real numbers"}
+          ]
+        },
+        {
+          "label": "Image Generation",
+          "children": [
+            {"label": "DALL-E"},
+            {"label": "Stable Diffusion"},
+            {"label": "Flux"}
+          ]
+        },
+        {
+          "label": "Interactive Narratives",
+          "children": [
+            {"label": "Adventures"},
+            {"label": "Companions"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Verdict",
+      "emoji": "🏁",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Their claim",
+          "children": [
+            {"label": "\"Best choice in 2026\""},
+            {"label": "For multi-model without stacking subs"}
+          ]
+        },
+        {
+          "label": "Call to action",
+          "children": [
+            {"label": "\"Try Reality Fabricator Free →\""},
+            {"label": "Links back to rfab.ai/"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Read-the-Room",
+      "emoji": "🧭",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Source posture",
+          "children": [
+            {"label": "Published on rfab.ai/blog"},
+            {"label": "Vendor comparing itself"},
+            {"label": "Author not disclosed"}
+          ]
+        },
+        {
+          "label": "Framing to check",
+          "children": [
+            {"label": "\"2–3 models\" undercounts rivals"},
+            {"label": "\"Comparable to GPT-4\" is claim, not test"},
+            {"label": "Feature parity ≠ execution parity"}
+          ]
+        },
+        {
+          "label": "Adjacent context",
+          "children": [
+            {"label": "rfab.ai referenced by Collinses"},
+            {"label": "Same team, AI-companion track"},
+            {"label": "Distinct from the 'AI girlfriend' post"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "Source: rfab.ai/blog/ai-chat-review, updated February 2026, vendor-published.",
+    "Article is compact — mindmap tracks it 1:1 rather than inventing depth.",
+    "Read-the-Room branch is editorial: reminds the reader this is marketing copy, not an independent review."
+  ]
+}

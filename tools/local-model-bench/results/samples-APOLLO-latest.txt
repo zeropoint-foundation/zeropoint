@@ -1,0 +1,189 @@
+[qwen3-30b-a3b] structured/receipt_json -> PASS
+{"receipt_type": "transcript:fetched", "video_id": "abc123XYZ01", "segments": 61, "source": "youtube_transcript_api"}
+
+[qwen3-30b-a3b] structured/tool_call_json -> PASS
+{"name": "youtube_get_transcript", "arguments": {"video": "dQw4w9WgXcQ"}}
+
+[qwen3-30b-a3b] structured/route_classifier -> PASS
+SLM
+
+[qwen3-30b-a3b] structured/uc1_synthesis -> PASS
+{"target": "DEPENDENCY-POSTURE", "relation": "updates", "why": "A frontier open model now runs locally on commodity hardware, making the local inference backend more feasible than previously assumed."}
+
+[qwen3-30b-a3b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+{
+  "trajectories": [
+    "Operator declared an inference envelope authorizing two models",
+    "Substrate recorded a served-model receipt",
+    "Router served a cheaper tier",
+    "Operator flagged the divergence for review"
+  ],
+  "decisions": [
+    "Operator declared an inference envelope authorizing two models",
+    "Operator flagged the divergence for review"
+  ],
+  "insights": [
+    "A divergence receipt fired when the router served a cheaper tier",
+    "Substrate recorded a served-model receipt"
+  ]
+}
+
+[qwen3-30b-a3b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+Sixty days' notice is required to terminate for convenience, as stated in Section 9.1.
+
+[qwen3-coder-30b-a3b] structured/receipt_json -> PASS
+{
+  "receipt_type": "transcript:fetched",
+  "video_id": "abc123XYZ01",
+  "segments": 61,
+ "source": "youtube_transcript_api"
+}
+
+[qwen3-coder-30b-a3b] structured/tool_call_json -> PASS
+{"name": "youtube_get_transcript", "arguments": {"video": "https://youtu.be/dQw4w9WgXcQ"}}
+```
+
+[qwen3-coder-30b-a3b] structured/route_classifier -> PASS
+SLM
+```
+
+[qwen3-coder-30b-a3b] structured/uc1_synthesis -> PASS
+{"target": "DEPENDENCY-POSTURE", "relation": "confirms", "why": "The new finding supports the strategic hedge approach by showing local inference is now practically feasible on commodity hardware"}
+
+[qwen3-coder-30b-a3b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+```json
+{
+  "trajectories": [
+    "model selection",
+    "substrate recording",
+    "router serving",
+    "divergence detection"
+  ],
+  "decisions": [
+    "declare inference envelope",
+    "record served model",
+    "flag divergence",
+    "review divergence"
+  ],
+  "insights": [
+    "two models authorized",
+    "cheaper tier served",
+    "divergence detected",
+    "review required"
+  ]
+}
+```
+
+[qwen3-coder-30b-a3b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+Section 9.1 states that either party may terminate for convenience with 60 days written notice.
+
+[qwen3-4b] structured/receipt_json -> PASS
+{
+  "receipt_type": "transcript:fetched",
+  "video_id": "abc123XYZ01",
+  "segments": 61,
+  "source": "youtube_transcript_api"
+}
+
+[qwen3-4b] structured/tool_call_json -> PASS
+{"name": "youtube_get_transcript", "arguments": {"video": "https://youtu.be/dQw4w9WgXcQ"}}
+
+[qwen3-4b] structured/route_classifier -> PASS
+SLM
+
+[qwen3-4b] structured/uc1_synthesis -> PASS
+{"target": "DEPENDENCY-POSTURE", "relation": "contradicts", "why": "local inference backend no longer a strategic hedge; now feasible on commodity hardware"}
+
+[qwen3-4b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+{
+  "trajectories": [
+    "Operator authorizes inference envelope for two models",
+    "Substrate records served-model receipt",
+    "Router serves cheaper tier, triggering divergence receipt",
+    "Operator flags divergence for review"
+  ],
+  "decisions": [
+    "Authorize inference envelope for two models",
+    "Flag divergence for review"
+  ],
+  "insights": [
+    "Inference envelope enables model selection flexibility",
+    "Served-model receipt confirms model deployment",
+    "Divergence detected when cheaper tier is served",
+    "Review process initiated for potential policy or routing issues"
+  ]
+}
+
+[qwen3-4b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+Sixty days' written notice is required to terminate for convenience, as specified in Section 9.1.
+
+[qwen3-1.7b] structured/receipt_json -> PASS
+<think>
+</think>
+
+{
+  "receipt_type": "transcript:fetched",
+  "video_id": "abc123XYZ01",
+  "segments": 61,
+  "source": "youtube_transcript_api"
+}
+
+[qwen3-1.7b] structured/tool_call_json -> PASS
+<think>
+Okay, let's see. The user is asking for the transcript of a YouTube video URL: https://youtu.be/dQw4w9WgXcQ. Hmm, I remember that the 'dQw4w9WgXcQ' is the short link for the video that's known for being a trick or a joke. Like, the video that says "This is the best part of the day" or something. But the user wants the transcript of that specific video.
+
+So the task is to call the tool 'youtube_get_transcript' with the video parameter set to that URL. The user specified that the response should be a JSON object with the name of the tool and the arguments including the video. I need to make sure that the JSON is correctly formatted with the video value as the URL provided. Let me check the example again. The structure should be {"name": "youtube_get_transcript", "arguments": {"video": "https://youtu.be/dQw4w9WgXcQ"}}. Yep, that's right. No need for any extra fields. Just the name of the tool and the video argument. I think that's all.
+</think>
+
+{"name": "youtube_get_transcript",
+
+[qwen3-1.7b] structured/route_classifier -> FAIL
+<think>
+Okay, let's try to figure out if this task should go to a small local model or a frontier model. The task is about re-running a structured extraction we did 40 times on a new receipt of an already-known class.
+
+First, I need to understand what the task is asking. The user wants to re-execute a previous extraction process on a new receipt. The key points here are that it's a repeat of a previous task, and the receipt is of an already-known class. 
+
+Now, the question is whether this is a small local model task or a frontier model one. Let me recall the differences. Small local models are typically used for tasks that are more straightforward, maybe with less complexity, and they can handle tasks that are similar to previous ones. Frontier models, on the other hand, are for more complex or novel tasks that might not have been done before, especially if they involve new data or different structures.
+
+The task here is about re-running an extraction process that's been done 40 times. So, it's not a completely new or novel task. It's just repeating a previous extraction. The receipt is of an already-known class, so the model might not need to be as complex as a frontier model. 
+
+
+
+[qwen3-1.7b] structured/uc1_synthesis -> FAIL
+<think>
+Okay, let's break this down. The user provided a design note and a new finding, and I need to determine the relationship between them. The design note says that a local inference backend is a strategic hedge, but it's not yet built. The new finding states that a frontier open model is now running locally on commodity hardware.
+
+So, the original note mentions that the local inference backend is a strategic hedge but isn't built. The new finding says that a model is running locally on commodity hardware. The question is whether this new finding updates, confirms, contradicts, or something else the original note.
+
+First, the original note says the backend is a hedge but not built. The new finding says that a model is running locally. So, if the backend is not built, but a model is running locally, does that mean the original note is being contradicted? Or is there a connection?
+
+Wait, the original note says the backend is a strategic hedge, but not built. The new finding says that a frontier open model is running locally. So, maybe the original note is about the backend not being built, but the new finding is about a model running locally. So, does that mean the original note is being contradicted? Or is there a connection
+
+[qwen3-1.7b] quality/uc1_ontology_extract
+  EXPECT: decisions include the envelope declaration; insights/trajectory note the routing divergence + operator flag.
+<think>
+Okay, let's see. The user provided a chain fragment and wants it converted into JSON with specific keys: trajectories, decisions, and insights. The keys are trajectories (an array of strings), decisions (an array of short strings), and insights (also an array of short strings). 
+
+First, I need to parse the given text. The original text is: "Operator declared an inference envelope authorizing two models; substrate recorded a served-model receipt; a divergence receipt fired when the router served a cheaper tier; operator flagged the divergence for review."
+
+Breaking it down sentence by sentence.
+
+First sentence: "Operator declared an inference envelope authorizing two models;" 
+So, "declared an inference envelope authorizing two models" – here, the key is "inference envelope" and "authorizing two models". But the key here is the action, which is "declared" and the thing declared is the envelope. But the JSON key is trajectories, decisions, insights. So maybe the "declared" is part of the decision? Or maybe the "inference envelope" is part of the trajectory? Wait, the user wants the JSON keys as trajectories, decisions, insights. So each sentence might be part of one of these.
+
+Wait, the user wants the JSON to have trajectories, decisions, and insights. So each of these is an array of strings. So the task is to extract the elements from the chain fragment and categorize them into these three arrays.
+
+Let me
+
+[qwen3-1.7b] quality/uc3_grounded_qa
+  EXPECT: 60 days, Section 9.1. (Wrong number or fabricated section = int4 degradation on grounded retrieval.)
+<think>
+</think>
+
+The required notice to terminate for convenience is 60 days, under Section 9.1.

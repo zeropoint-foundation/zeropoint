@@ -43,6 +43,8 @@ members = [
     "crates/zp-host",
     "crates/zp-officers",
     "crates/zp-sensors",
+    "crates/zp-regent",
+    "crates/zp-gossip",
 ]
 
 [workspace.package]

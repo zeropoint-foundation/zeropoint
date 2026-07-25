@@ -2,12 +2,18 @@
 
 **Document type:** Design specification  
 **Author:** Ken Romero, with synthesis assistance from Claude  
-**Date:** 2026-06-29  
-**Status:** Draft  
+**Date:** 2026-06-29 (with July 2026 addendum below)  
+**Status:** Draft — partially superseded  
+
+**July 2026 addendum:** A fifth officer, **Aegis**, was added in July 2026 with a specific domain: constitutional-trajectory monitoring. Aegis reads the Cartographer's ontology and the other officers' findings for patterns of drift toward constitutional concern. He is best-effort detection, not enforcement — atomic constitutional enforcement stays at the gate. His honest job description: clock misaligned trajectories. Specification lives in `docs/design/TRAJECTORY-AWARE-CONSTITUTIONAL-ENFORCEMENT-2026-07.md`. This document's "Four Officers" framing is preserved as historical record of the initial design; the current cadre is five.  
+
+**2026-07-10 amendment:** Officer reach depends on Substrate Form (`docs/design/SUBSTRATE-FORM-2026-07.md`). Officers query the ontology; the ontology is populated by the observation plane (`docs/design/OBSERVATION-PLANE-2026-07.md`) whose reachable observation surface varies by Form. Full host-body reach lives at Sovereign Form; Companion Form officers see only what the OS vendor permits. Forge's compute-surface-awareness scope specifically is now specified end-to-end in the observation plane doc, superseding the strategic-direction reservation in ARCHITECTURE-2026-04 Part VIII.
+
 **Companion documents:**
-- `docs/ARCHITECTURE-2026-04.md` — Canonical Architecture Record (north star)
+- `docs/ARCHITECTURE-2026-07.md` — Canonical Architecture Record (north star; supersedes ARCHITECTURE-2026-04.md; substrate-form amended 2026-07-10)
 - `docs/VAULT-INTEGRITY-SYSTEM-2026-06.md` — Vault validation infrastructure (Steward's primary instrument)
-- `docs/ARCHITECTURE-2026-04.md` Part VIII — Compute Surface Awareness (Forge's domain)
+- `docs/design/OBSERVATION-PLANE-2026-07.md` — full spec of the compute-surface-awareness arc (Forge and Sentinel primary consumers); supersedes ARCHITECTURE-2026-04 Part VIII
+- `docs/design/SUBSTRATE-FORM-2026-07.md` — Form-scoped reach of every officer's observation surface
 
 ---
 
@@ -53,7 +59,7 @@ All officers are **read-only**. They read chain, vault, port registry, and proce
 - Delegation health: grants approaching expiry, orphaned delegations, scope creep
 - Secret hygiene: plaintext secrets in logs, env vars, or chain receipts
 - Key material integrity: Genesis key accessibility, signing key consistency
-- Identity coherence: agent registrations that don't match delegation grants (the `"ironclaw"` vs hex-key mismatch we fixed this session)
+- Identity coherence: agent registrations that don't match delegation grants (agent-name vs hex-key mismatch pattern)
 
 **Boundary:** Proposes rotation and revocation. Never executes either.
 
@@ -78,9 +84,9 @@ All officers are **read-only**. They read chain, vault, port registry, and proce
 
 Officers are dormant subsystems inside `zp-server`. No separate processes, ports, or network surfaces. They share the server's access to chain, vault, port registry, and identity.
 
-**ZP-native** because officers need direct trusted access to the chain and vault. Running them through IronClaw would make them subjects of the governance they're supposed to tend.
+**ZP-native** because officers need direct trusted access to the chain and vault. Running them through any tenant framework would make them subjects of the governance they're supposed to tend.
 
-**Cockpit-agnostic** because officers never address a cockpit by name. They emit findings to the chain; cockpit agents (Sage, CLI, anything else) discover findings through the event stream (§3.5). Works identically regardless of which cockpit is running or whether any is.
+**Cockpit-agnostic** because officers never address a cockpit by name. They emit findings to the chain; cockpit agents (the Regent, CLI, anything else) discover findings through the event stream (§3.5). Works identically regardless of which cockpit is running or whether any is.
 
 ### 3.2 Activation — dual mode
 
@@ -131,7 +137,7 @@ Examples:
 - Forge observes a tool restarting 4 times in 30 minutes — one assessment of the pattern
 
 **Tier 3 — Operator notification (critical):**
-Findings that require human attention. The officer emits a Tier 1 receipt with `"notify": true` in the detail payload. The officer does not choose how the notification reaches the operator — that is the cockpit's decision. Any cockpit agent subscribed to the event stream (§3.5) sees the notify flag and surfaces it through its native notification mode: Sage might interrupt the conversation, a visual cockpit might flash a status indicator, a CLI cockpit might print to stderr.
+Findings that require human attention. The officer emits a Tier 1 receipt with `"notify": true` in the detail payload. The officer does not choose how the notification reaches the operator — that is the cockpit's decision. Any cockpit agent subscribed to the event stream (§3.5) sees the notify flag and surfaces it through its native notification mode: the Regent might interrupt the conversation, a visual cockpit might flash a status indicator, a CLI cockpit might print to stderr.
 
 The operator can acknowledge, dismiss, or act. Each response is a signed receipt.
 
@@ -152,7 +158,7 @@ Critical triggers (findings that set `notify: true`):
 Each officer subscribes to the others' findings via the chain. An officer can incorporate another's finding into its own assessment but cannot override the owning officer's conclusion.
 
 Example flow:
-1. Forge detects tool `ironclaw` restarting repeatedly
+1. Forge detects a governed tool restarting repeatedly
 2. Forge emits `officer:forge:process:crash_loop_detected`
 3. Steward's chain watcher sees the receipt, checks whether the crash loop correlates with vault changes
 4. Steward emits `officer:std:vault:no_correlation_with_crash` or `officer:std:vault:recent_change_correlates`
@@ -447,7 +453,7 @@ The smallest thing that produces value: officers that watch, find problems, and 
 
 **Event stream:**
 - Authenticated SSE on `zp serve`'s HTTP surface (§3.5)
-- Cockpit agents (Sage, CLI, etc.) subscribe for real-time findings
+- Cockpit agents (the Regent, CLI, etc.) subscribe for real-time findings
 
 ### Tier 2 — Make Them Useful (after Tier 1 is stable)
 

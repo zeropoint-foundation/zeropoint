@@ -15,7 +15,7 @@ The gap is a missing layer: structured objects with typed relationships, derived
 ```
 ┌──────────────────────────────────────────────────────┐
 │                    Cockpits                          │
-│              (Sage, CLI, future UIs)                 │
+│              (the Regent, CLI, future UIs)                 │
 │                  query ontology                      │
 └──────────────────────┬───────────────────────────────┘
                        │
@@ -339,7 +339,7 @@ Active Trajectories (3)
    Friction: local model list stale, not optimally quantized.
 
 3. Foundation Onboarding Prep                  last active: 2 days ago
-   Sage identity files updated. USER.md template ready.
+   the Regent identity files updated. USER.md template ready.
 ```
 
 Phase 1 output will be rougher. The `zp trajectories` CLI verb targets this output shape:
@@ -369,7 +369,7 @@ Trajectories (5 active, 2 dormant)
 
 Titles will be generic ("Governance activity cluster" derived from the dominant receipt type prefix), confidence scores will be visible, and some trajectories will be incorrectly split or merged. That's fine. A rough map with visible confidence is better than no map, and operator corrections improve it over time.
 
-`zp trajectories` is a substrate-tier command, no cockpit required. Cockpits (Sage) can add interpretation and conversational interaction on top.
+`zp trajectories` is a substrate-tier command, no cockpit required. Cockpits (the Regent) can add interpretation and conversational interaction on top.
 
 ## Governance
 
@@ -412,7 +412,7 @@ The ontology is a derived projection, not a source of truth. But projections can
 - This phase depends on local inference infrastructure being operational and governed. It is explicitly not a prerequisite for a useful ontology — Phases 1–3 must stand alone.
 
 ### Phase 5: Cockpit integration
-- Sage integration: ontology-grounded briefings on session start.
+- Regent integration: ontology-grounded briefings on session start.
 - Conversational trajectory management ("what am I working on?" answered from the ontology, not re-derived).
 - Artifact library integration: ontology objects as candidates for signed artifacts.
 
@@ -430,6 +430,6 @@ The ontology is a derived projection, not a source of truth. But projections can
 
    **Resolution path (Phase 5):** The cockpit emits structured receipts for context it decides is worth persisting — `context:decision:recorded`, `context:insight:captured`, `context:trajectory:annotated`. The cockpit owns the judgment of what's worth persisting; the Cartographer consumes these receipts like any other chain entry. No direct read of workspace memory, no cockpit dependency in the ontology layer. The chain remains the interface between cockpit and ontology — cockpits write to it, the Cartographer reads from it. This closes the context gap without coupling.
 
-2. **How do Trajectories relate to the IronClaw workspace memory?** IronClaw/Sage has its own memory system (workspace, AGENTS.md, USER.md). Trajectories are a substrate concept; workspace memory is a cockpit concept. They'll need to reference each other without creating a dependency. The cockpit should read the ontology; the ontology should not read the cockpit's memory.
+2. **How do Trajectories relate to the IronClaw workspace memory?** IronClaw/the Regent has its own memory system (workspace, AGENTS.md, USER.md). Trajectories are a substrate concept; workspace memory is a cockpit concept. They'll need to reference each other without creating a dependency. The cockpit should read the ontology; the ontology should not read the cockpit's memory.
 
 3. **What's the rebuild cost?** A full chain replay to rebuild `ontology.db` from scratch needs to be fast enough to be practical. At 6,000+ entries growing, this is fine. At 100,000+, it might need batching or checkpointing. Worth measuring early.

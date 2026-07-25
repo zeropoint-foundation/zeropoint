@@ -183,6 +183,13 @@ pub fn ingest_observation(
                     "Auto-promotion denied"
                 );
             }
+            PromotionResult::RequiresReview { .. } => {
+                // Interpreted stage never requires review — this shouldn't fire.
+                debug!(
+                    memory_id = %memory_id,
+                    "Auto-promotion: unexpectedly requires review"
+                );
+            }
             PromotionResult::NotFound => {
                 // Should not happen — we just registered it.
                 debug!(

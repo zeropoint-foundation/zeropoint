@@ -1,7 +1,7 @@
 # Tool Governance Lifecycle & Nested Observer
 
 **Date:** 2026-07-01 | **Status:** Draft
-**See also:** `ARCHITECTURE-2026-04.md`, `SYSTEM-OFFICER-CADRE-2026-06.md`, `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06.md`
+**See also:** `ARCHITECTURE-2026-07.md`, `SYSTEM-OFFICER-CADRE-2026-06.md`, `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06.md`
 
 How tools get brought under ZP governance, how officers evolve from observers to actors, and why Forge works like an immune system. Cartographer's cognitive mode detection is a separate document.
 
@@ -17,7 +17,7 @@ How tools get brought under ZP governance, how officers evolve from observers to
 
 ### What prompted this
 
-The proxy_port 404: IronClaw started outside the governed launch path, the registry wasn't updated, and the operator spent 20 minutes on archaeology that a state-aware observer would have caught in seconds.
+The proxy_port 404: a governed tool started outside the governed launch path, the registry wasn't updated, and the operator spent 20 minutes on archaeology that a state-aware observer would have caught in seconds.
 
 ---
 
@@ -99,7 +99,7 @@ A tool's posture is what's currently true, computed from chain evidence. Not a s
 | **Registered** | Manifest hash + port allocation on chain. |
 | **Provisioned** | Vault entries validate against manifest schema. |
 | **Governed** | Launched via `zp configure exec`, delegation exists, gate evaluating. |
-| **Hardened** | All four officers report clean. Forge deactivates. |
+| **Hardened** | All officers report clean. Forge deactivates. |
 | **Delegated-autonomous** | Band 3 delegation. Gated on Claim 4. |
 
 Posture = union of true facets. "Registered + Governed but not Provisioned" is valid — it means vault entries are missing, which Steward or Sentinel would report. Facets gain/drop as evidence appears/degrades. Exception: delegated-autonomous requires explicit operator signature.
@@ -113,7 +113,7 @@ When the sensor layer detects a new unregistered process:
 3. Sentinel activates on the discovery receipt, proposes vault entries
 4. Cleo activates on the discovery receipt, proposes minimal delegation
 5. Operator reviews accumulated proposals, signs, launches via `zp configure exec`
-6. Governed launch receipts activate all four officers → each assesses → all clean → hardened → Forge deactivates
+6. Governed launch receipts activate all officers → each assesses (Aegis's read may be minimal on a brand-new tool with no trajectory history yet) → all clean → hardened → Forge deactivates
 
 Operator involvement: one review-and-sign ceremony. After hardening, zero officer compute until a state change.
 
@@ -136,7 +136,7 @@ Each step is useful on its own.
 
 ## 6. Open Questions
 
-**`listeners` crate — validated.** Tested on APOLLO (2026-07-02). Unprivileged: 20 processes / 87 entries. Root: 30 / 118. The delta is system daemons (launchd, configd, syslogd, mDNSResponder, airportd, kdc, netbiosd) — infrastructure ZP doesn't govern. All user-space tools (IronClaw, ZP server, Comet) are visible without root. No elevated privileges needed for the sensor layer.
+**`listeners` crate — validated.** Tested on APOLLO (2026-07-02). Unprivileged: 20 processes / 87 entries. Root: 30 / 118. The delta is system daemons (launchd, configd, syslogd, mDNSResponder, airportd, kdc, netbiosd) — infrastructure ZP doesn't govern. All user-space tools (ZP server, Comet, governed tenant tools) are visible without root. No elevated privileges needed for the sensor layer.
 
 ---
 

@@ -3,7 +3,7 @@
 ## Architecture Specification — ZeroPoint Receipt & Audit Chains
 
 **Status:** Proposed
-**Author:** Ken Romero, ThinkStream Labs
+**Author:** Ken Romero, ZeroPoint Open Foundation
 **Date:** March 2026
 
 ---

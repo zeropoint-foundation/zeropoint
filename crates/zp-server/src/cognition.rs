@@ -19,7 +19,8 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use zp_memory::{
-    MemoryStage, PendingPromotion, ReviewAction, ReviewDecision, ReviewOutcome, ReviewQueue,
+    IngestionConfig, MemoryEntry, MemoryStage, PendingPromotion, ReviewAction, ReviewDecision,
+    ReviewOutcome, ReviewQueue,
 };
 use zp_observation::types::SourceRange;
 
@@ -137,6 +138,26 @@ pub async fn observe_handler(
             )
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
     };
+
+    // G5-1 integration: ingest observations into memory promotion lifecycle.
+    // This is the bridge from "observations produced" to "memories tracked."
+    if !result.observations.is_empty() {
+        let ingestion_config = IngestionConfig::default();
+        let mut engine = state.0.promotion_engine.lock().unwrap();
+        let mut qstore = state.0.quarantine_store.lock().unwrap();
+        let batch = zp_memory::ingest_observations(
+            &result.observations,
+            &mut engine,
+            &mut qstore,
+            &ingestion_config,
+        );
+        tracing::info!(
+            ingested = batch.ingested,
+            auto_promoted = batch.auto_promoted,
+            skipped = batch.skipped,
+            "Observations ingested into memory promotion lifecycle"
+        );
+    }
 
     let total_active = store.active_count().unwrap_or(0);
 
@@ -525,4 +546,166 @@ pub async fn sweep_reviews_handler(
         swept: expired.len(),
         expired_ids: expired,
     }))
+}
+
+// ============================================================================
+// Memory lifecycle inspection + manual sweep
+// ============================================================================
+
+/// Summary of a memory entry for the inspection endpoint.
+#[derive(Serialize)]
+pub struct MemorySummary {
+    pub id: String,
+    pub content: String,
+    pub category: String,
+    pub stage: String,
+    pub confidence: f64,
+    pub reinforcement_count: u32,
+    pub source_observation_id: Option<String>,
+    pub created_at: String,
+    pub last_promoted_at: String,
+    pub last_reinforced_at: String,
+    pub expires_at: Option<String>,
+    pub review_due_at: Option<String>,
+    pub reviewer: Option<String>,
+    pub promotion_receipts: Vec<String>,
+}
+
+impl From<&MemoryEntry> for MemorySummary {
+    fn from(e: &MemoryEntry) -> Self {
+        Self {
+            id: e.id.clone(),
+            content: e.content.clone(),
+            category: e.category.clone(),
+            stage: format!("{}", e.stage),
+            confidence: e.confidence,
+            reinforcement_count: e.reinforcement_count,
+            source_observation_id: e.source_observation_id.clone(),
+            created_at: e.created_at.to_rfc3339(),
+            last_promoted_at: e.last_promoted_at.to_rfc3339(),
+            last_reinforced_at: e.last_reinforced_at.to_rfc3339(),
+            expires_at: e.expires_at.map(|t| t.to_rfc3339()),
+            review_due_at: e.review_due_at.map(|t| t.to_rfc3339()),
+            reviewer: e.reviewer.clone(),
+            promotion_receipts: e.promotion_receipts.clone(),
+        }
+    }
+}
+
+/// Aggregate stats for the memory store.
+#[derive(Serialize)]
+pub struct MemoryStats {
+    pub total: usize,
+    pub by_stage: std::collections::HashMap<String, usize>,
+    pub expired: usize,
+    pub review_due: usize,
+}
+
+/// Response for GET /api/v1/cognition/memories.
+#[derive(Serialize)]
+pub struct MemoriesResponse {
+    pub stats: MemoryStats,
+    pub memories: Vec<MemorySummary>,
+}
+
+/// `GET /api/v1/cognition/memories` — inspect the memory promotion engine.
+///
+/// Returns all tracked memories with their lifecycle state: stage, confidence,
+/// reinforcement count, expiry, review-due timestamps. This is the surface
+/// that makes the memory lifecycle observable and testable.
+pub async fn list_memories_handler(
+    State(state): State<AppState>,
+) -> Json<MemoriesResponse> {
+    let engine = state.0.promotion_engine.lock().unwrap();
+    let all = engine.all_memories();
+
+    let mut by_stage: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut expired = 0usize;
+    let mut review_due = 0usize;
+
+    let memories: Vec<MemorySummary> = all
+        .iter()
+        .map(|e| {
+            *by_stage.entry(format!("{}", e.stage)).or_insert(0) += 1;
+            if zp_memory::is_expired(e) {
+                expired += 1;
+            }
+            if zp_memory::is_review_due(e) {
+                review_due += 1;
+            }
+            MemorySummary::from(*e)
+        })
+        .collect();
+
+    Json(MemoriesResponse {
+        stats: MemoryStats {
+            total: memories.len(),
+            by_stage,
+            expired,
+            review_due,
+        },
+        memories,
+    })
+}
+
+/// Response for POST /api/v1/cognition/memories/sweep.
+#[derive(Serialize)]
+pub struct MemorySweepResponse {
+    pub expired_count: usize,
+    pub expired_ids: Vec<String>,
+    pub review_due_count: usize,
+    pub review_due_ids: Vec<String>,
+}
+
+/// `POST /api/v1/cognition/memories/sweep` — manually trigger a lifecycle sweep.
+///
+/// Runs the same sweep that the officer timer runs on its 900s interval.
+/// Demotes expired memories and submits review-due memories to the review queue.
+/// Useful for testing without waiting for the periodic timer.
+pub async fn sweep_memories_handler(
+    State(state): State<AppState>,
+) -> Json<MemorySweepResponse> {
+    let mut engine = state.0.promotion_engine.lock().unwrap();
+
+    let sweep_result = {
+        let all_refs = engine.all_memories();
+        zp_memory::sweep_lifecycle(&all_refs)
+    };
+
+    // Demote expired memories.
+    for id in &sweep_result.expired_ids {
+        if let Some(entry) = engine.get_mut(id) {
+            zp_memory::demote(entry);
+        }
+    }
+
+    // Submit review-due memories to the review queue.
+    let review_submissions: Vec<(String, MemoryStage, MemoryStage)> =
+        sweep_result.review_due_ids.iter().filter_map(|id| {
+            engine.get(id).and_then(|entry| {
+                entry.stage.next().map(|next| (id.clone(), entry.stage, next))
+            })
+        }).collect();
+
+    if !review_submissions.is_empty() {
+        if let Some(ref rq) = state.0.review_queue {
+            let mut queue = rq.lock().unwrap();
+            for (id, current, target) in &review_submissions {
+                queue.submit_for_review(
+                    id,
+                    *current,
+                    *target,
+                    "Manual lifecycle sweep: reaffirmation due",
+                    "manual-sweep",
+                );
+            }
+        }
+    }
+
+    Json(MemorySweepResponse {
+        expired_count: sweep_result.expired_ids.len(),
+        expired_ids: sweep_result.expired_ids,
+        review_due_count: sweep_result.review_due_ids.len(),
+        review_due_ids: sweep_result.review_due_ids,
+    })
 }

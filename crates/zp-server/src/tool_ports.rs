@@ -265,6 +265,11 @@ impl PortRegistry {
 
         // Load persisted bindings — try new ToolBinding format first,
         // fall back to old PortAssignment JSON (migration path).
+        // Track whether load produced any content change so we can decide
+        // whether the post-construction persist() is actually needed.
+        // Unconditional persist here + kqueue watching tool-ports.json in
+        // the sensor layer caused a ~10Hz feedback loop (2026-07-10 diagnostic).
+        let mut migrated = false;
         let bindings: HashMap<String, ToolBinding> = if persist_path.exists() {
             match std::fs::read_to_string(&persist_path) {
                 Ok(data) => {
@@ -273,10 +278,17 @@ impl PortRegistry {
                         // Normalize keys to lowercase — subdomain routing is
                         // case-insensitive and get_assigned() uses exact lookup.
                         map.into_iter()
-                            .map(|(k, v)| (k.to_lowercase(), v))
+                            .map(|(k, v)| {
+                                let lower = k.to_lowercase();
+                                if lower != k {
+                                    migrated = true;
+                                }
+                                (lower, v)
+                            })
                             .collect()
                     } else {
                         // Fall back to old PortAssignment — migrate in place
+                        migrated = true;
                         serde_json::from_str::<HashMap<String, serde_json::Value>>(&data)
                             .unwrap_or_default()
                             .into_iter()
@@ -332,7 +344,11 @@ impl PortRegistry {
             HashMap::new()
         };
 
-        info!(
+        // debug! — PortRegistry::new is constructed on every sensor_forge_task tick
+        // and other hot paths, not just at startup. INFO caused ~1.7GB/day log growth
+        // (2026-07-10 diagnostic). Legitimate startup registry construction still
+        // surfaces via server startup INFO logs at a higher tier.
+        debug!(
             "Port registry: {} existing bindings, range {}–{}",
             bindings.len(),
             DEFAULT_RANGE_START,
@@ -348,8 +364,16 @@ impl PortRegistry {
             executor_id,
         };
 
-        // Re-persist to flush any migrated entries.
-        registry.persist();
+        // Re-persist ONLY if load produced content changes (legacy migration or
+        // case normalization). Unconditional persist here caused a ~10Hz feedback
+        // loop with the sensor layer's kqueue watch on tool-ports.json — every
+        // sensor sweep constructs a new PortRegistry (officers.rs:1062), which
+        // used to persist unconditionally, which fired kqueue NOTE_WRITE, which
+        // fired another sensor sweep. Empty registry → empty file → skip persist
+        // → loop broken.
+        if migrated {
+            registry.persist();
+        }
         registry
     }
 

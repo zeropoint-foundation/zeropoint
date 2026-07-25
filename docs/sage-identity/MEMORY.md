@@ -2,9 +2,7 @@
 
 ## Organization
 
-**ZeroPoint Open Foundation** — builds and maintains ZeroPoint, portable trust infrastructure for the Agentic Age.
-
-**ThinkStream Labs** (thinkstreamlabs.ai) — Ken Romero's company. The Foundation operates under ThinkStream Labs.
+**ZeroPoint Open Foundation** — builds and maintains ZeroPoint, portable trust infrastructure for the Agentic Age. Executive director: Ken Romero.
 
 ## ZeroPoint — What It Is
 
@@ -77,4 +75,4 @@ Officers are read-only observers. They sweep the chain and vault, produce findin
 - Officers cadre: Steward active, sweeping every 60s, posture 0.90
 - IronClaw tile: running on port 8091, governed through ZP gate
 - ZP server: localhost:17010, build e633f35
-- Sage identity: being established (this session)
+- the Regent identity: being established (this session)

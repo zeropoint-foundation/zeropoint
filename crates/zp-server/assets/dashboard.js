@@ -1097,7 +1097,7 @@
       if (statusEl) statusEl.textContent = tool.status === 'governed' ? 'governed \u00B7 launch ready' : '.env present';
       if (badgeEl) {
         badgeEl.className = 'tile-badge governed';
-        badgeEl.textContent = tool.status === 'governed' ? '\u2713 genesis-bound' : 'configured';
+        badgeEl.textContent = tool.governance ? '\u2713 ' + tool.governance : (tool.status === 'governed' ? '\u2713 governed' : 'configured');
       }
       if (issuesEl) issuesEl.remove();
     }
@@ -1416,7 +1416,8 @@
           statusText = issues[0] || 'not launch-ready';
         } else if (tool.status === 'governed') {
           healthClass = '';
-          badgeHtml = '<div class="tile-badge governed">\u2713 genesis-bound</div>';
+          var govLabel = tool.governance || 'governed';
+          badgeHtml = '<div class="tile-badge governed">\u2713 ' + govLabel + '</div>';
           statusText = chainBacked ? 'governed \u00B7 chain-verified' : 'governed \u00B7 launch ready';
         } else if (tool.status === 'configured' && tool.governance === 'unanchored') {
           healthClass = 'unanchored';
@@ -1974,3 +1975,74 @@ document.addEventListener('click', function(e) {
     panel.innerHTML = '<div style="color:#555;font-size:12px">Fleet status not available</div>';
   }
 })();
+
+// ── Regent Chat ─────────────────────────────────────────
+
+document.getElementById('chatHeader').addEventListener('click', toggleRegentChat);
+document.getElementById('regentSend').addEventListener('click', sendRegentMessage);
+document.getElementById('regentInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRegentMessage(); }
+});
+
+function toggleRegentChat() {
+  const body = document.getElementById('chatBody');
+  const toggle = document.getElementById('chatToggle');
+  body.classList.toggle('open');
+  toggle.classList.toggle('open');
+}
+
+function appendChatMessage(role, text) {
+  const container = document.getElementById('regentMessages');
+  const div = document.createElement('div');
+  div.className = 'regent-msg ' + role;
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = role === 'regent' ? 'Regent' : 'Operator';
+
+  const content = document.createElement('div');
+  content.textContent = text;
+
+  div.appendChild(label);
+  div.appendChild(content);
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendRegentMessage() {
+  const input = document.getElementById('regentInput');
+  const sendBtn = document.getElementById('regentSend');
+  const thinking = document.getElementById('regentThinking');
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Show operator message
+  appendChatMessage('operator', text);
+  input.value = '';
+  input.disabled = true;
+  sendBtn.disabled = true;
+  thinking.classList.add('active');
+
+  try {
+    const res = await zpFetch('/api/v1/regent/input', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      appendChatMessage('regent', '[Error: ' + res.status + '] ' + errText);
+    } else {
+      const data = await res.json();
+      appendChatMessage('regent', data.response || '(no response)');
+    }
+  } catch (err) {
+    appendChatMessage('regent', '[Network error] ' + err.message);
+  } finally {
+    thinking.classList.remove('active');
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}

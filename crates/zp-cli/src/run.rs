@@ -278,20 +278,20 @@ pub fn emit_launch_receipt(
     db_path: &Path,
     keyring: &zp_keys::Keyring,
 ) -> Result<String> {
-    // Load operator signing key
-    let secret = keyring
-        .load_operator()
+    // Load operator signing key — sovereignty-composed (composes with hardware
+    // Genesis via load_sovereign_root; single unwrap ceremony reused below).
+    let secret = crate::commands::load_operator_composed(keyring)
         .context("No operator key available — run `zp init` first")?
         .secret_key();
     let signer = Signer::from_secret(&secret);
 
     // Derive audit signer — use caller-supplied secret if available (avoids a
-    // redundant Keychain lookup when resolve_vault_key already loaded it).
-    // Fallback still hits the process-scoped OnceLock; no new prompt either way.
+    // redundant credential-store / sovereignty-provider touch when the caller
+    // already loaded it). Fallback routes through load_sovereign_root's
+    // process-scoped OnceLock; no new prompt either way.
     let genesis_secret = match fields.genesis_secret {
         Some(s) => s,
-        None => keyring
-            .genesis_secret()
+        None => crate::commands::load_genesis_secret_composed()
             .context("Failed to load Genesis secret for audit signer")?,
     };
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
@@ -531,9 +531,10 @@ pub fn run(
     };
 
     let db_path = data_dir.join("audit.db");
-    // genesis_secret is an OnceLock cache hit — resolve_vault_key() already
-    // loaded it via the standard-Keychain path in main.rs.
-    let genesis_secret = keyring.genesis_secret().ok();
+    // genesis_secret is a load_sovereign_root cache hit — the sovereignty
+    // provider layer already unwrapped Genesis at server boot; downstream
+    // process-scoped OnceLock returns the cached secret. No new prompt.
+    let genesis_secret = crate::commands::load_genesis_secret_composed().ok();
     let receipt_fields = LaunchReceiptFields {
         tool_name: name,
         manifest_hash: &manifest_hash,

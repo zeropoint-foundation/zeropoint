@@ -106,7 +106,7 @@ design, even when no backend is active. **P3, P8.**
 **2. Event-driven publication only via the six `AnchorTrigger` variants.**
 Anchor publication must be triggered by one of the six canonical `AnchorTrigger`
 variants: `OperatorRequested` (operator-initiated explicit publication via
-CLI or Sage tool), `CrossMeshIntroduction` (trust-bootstrap when two substrates
+CLI or the Regent tool), `CrossMeshIntroduction` (trust-bootstrap when two substrates
 first meet), `ComplianceCheckpoint` (periodic attestation for regulated
 deployments), `DisputeEvidence` (anchoring a chain state relevant to an
 active dispute), `Opportunistic` (embedding the chain head in a blockchain
@@ -260,7 +260,7 @@ Verifier tier's Optional #3 (verifier-side caching of verified prefixes): the
 anchor receipt is the authenticated checkpoint the verifier caches against.
 
 **Operator-readable anchor surface.** A `zp anchor` CLI subcommand (or
-equivalent Sage tool) that lets the operator trigger publication via
+equivalent the Regent tool) that lets the operator trigger publication via
 `OperatorRequested`, view anchor history from the chain, query the configured
 backend directly, and reconfigure the active `TruthAnchor` implementation is
 an optional operator-experience surface. Composes with the cockpit and Console

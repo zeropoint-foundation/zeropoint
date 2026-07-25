@@ -7752,6 +7752,7 @@ dependencies = [
  "chrono",
  "clap",
  "ed25519-dalek",
+ "futures",
  "hex",
  "rand 0.8.5",
  "regex",
@@ -7892,6 +7893,21 @@ dependencies = [
  "serde",
  "serde_json",
  "zp-receipt",
+]
+
+[[package]]
+name = "zp-gossip"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zp-core",
 ]
 
 [[package]]
@@ -8205,6 +8221,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-regent"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "tracing",
+ "uuid",
+ "zp-audit",
+ "zp-config",
+ "zp-core",
+ "zp-officers",
+ "zp-receipt",
+]
+
+[[package]]
 name = "zp-sensors"
 version = "0.1.0"
 dependencies = [
@@ -8276,6 +8314,7 @@ dependencies = [
  "zp-pipeline",
  "zp-policy",
  "zp-receipt",
+ "zp-regent",
  "zp-sensors",
  "zp-trust",
  "zp-verbs",

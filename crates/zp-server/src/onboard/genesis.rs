@@ -536,6 +536,7 @@ pub async fn handle_vault_check(state: &mut OnboardState) -> Vec<OnboardEvent> {
     match zp_keys::resolve_vault_key(&keyring) {
         Ok(resolved) => {
             let source_name = match resolved.source {
+                zp_keys::VaultKeySource::SovereigntyProvider => "sovereignty provider",
                 zp_keys::VaultKeySource::CredentialStore => "credential store",
                 zp_keys::VaultKeySource::LegacyFileMigrated => "file (migrated)",
                 zp_keys::VaultKeySource::LegacyEnvVar => "env var (legacy)",

@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="en" data-theme="zp-dark">
+<head>
+<meta charset="utf-8">
+<title>CompanionRank Methodology — What Rigor Looks Like</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: #0a0a0c;
+  color: #e8e8ec;
+  font-family: 'Inter','SF Pro Text',system-ui,-apple-system,sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background 200ms ease, color 200ms ease;
+}
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #222228;
+  background: #0a0a0c;
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar .title { font-weight: 700; font-size: 14px; letter-spacing: 0.01em; }
+.topbar .spacer { flex: 1; }
+.toolbar { display: flex; align-items: center; gap: 6px; }
+.toolbar-sep {
+  width: 1px; height: 20px; background: #222228;
+  margin: 0 4px;
+}
+.btn {
+  background: #1a1a1f; color: #e8e8ec;
+  border: 1px solid #222228;
+  padding: 6px 14px; border-radius: 8px;
+  font: inherit; font-size: 12px; font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.btn:hover { border-color: #7eb8da; }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: #7eb8da; color: #0a0a0c;
+  border-color: #7eb8da;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.icon-btn {
+  width: 32px; padding: 6px 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.theme-icon { line-height: 1; }
+.canvas {
+  width: 100%;
+  padding: 24px;
+  overflow: auto;
+}
+.svg-host { width: 100%; }
+.svg-host svg { display: block; max-width: 100%; height: auto; }
+
+.editor {
+  position: fixed; right: 0; top: 0; height: 100vh;
+  width: min(520px, 92vw);
+  transform: translateX(100%);
+  transition: transform 220ms ease;
+  background: #1a1a1f;
+  border-left: 1px solid #222228;
+  display: flex; flex-direction: column;
+  z-index: 20;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.15);
+}
+.editor.open { transform: translateX(0); }
+.editor-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid #222228;
+}
+.editor-actions { display: flex; gap: 8px; }
+#json-source {
+  flex: 1;
+  background: #0a0a0c;
+  color: #e8e8ec;
+  border: none;
+  padding: 16px 18px;
+  font-family: 'JetBrains Mono','SF Mono',ui-monospace,monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+.editor-status {
+  padding: 8px 18px; font-size: 12px; color: #8888a0;
+  border-top: 1px solid #222228;
+}
+
+/* Print — strip chrome for clean PDF via Save-as-PDF from the print dialog. */
+@media print {
+  .topbar, .editor { display: none !important; }
+  body { background: #ffffff; }
+  .canvas { padding: 0; overflow: visible; }
+  .svg-host svg { width: 100%; height: auto; }
+  @page { size: landscape; margin: 12mm; }
+}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">CompanionRank Methodology — What Rigor Looks Like</div>
+    <div class="spacer"></div>
+    <nav class="toolbar" aria-label="Export and view options">
+      <button id="theme-toggle" class="btn icon-btn" type="button"
+        aria-label="Toggle light/dark theme" title="Toggle light/dark">
+        <span class="theme-icon" aria-hidden="true">☾</span>
+      </button>
+      <div class="toolbar-sep" aria-hidden="true"></div>
+      <button id="export-pdf" class="btn" type="button" title="Print to PDF">PDF</button>
+      <button id="export-svg" class="btn" type="button" title="Download SVG">SVG</button>
+      <button id="export-md" class="btn" type="button" title="Download Markdown outline">MD</button>
+      <button id="export-json" class="btn" type="button" title="Download JSON">JSON</button>
+      <div class="toolbar-sep" aria-hidden="true"></div>
+      <button id="edit-toggle" class="btn" type="button" aria-controls="editor" aria-expanded="false">Edit JSON</button>
+    </nav>
+  </header>
+  <main class="canvas">
+    <div id="svg-host" class="svg-host"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3149 1994" width="100%" preserveAspectRatio="xMidYMid meet" style="background:#0a0a0c;font-family:'Inter','SF Pro Text',system-ui,-apple-system,sans-serif"><rect x="0" y="0" width="3149" height="1994" fill="#0a0a0c"/><g class="header"><text x="40" y="58" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="24" font-weight="700" fill="#e8e8ec">CompanionRank Methodology — What Rigor Looks Like</text><text x="40" y="84" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="14" font-weight="400" fill="#8888a0">An 8-category, fixed-fixture, blind-scored benchmark for AI companion platforms — and what to bring back to ZeroPoint&#x27;s empirical program.</text></g><path d="M 1361.4 977.0 C 1348.9 977.0, 1348.9 385.0, 1336.4 385.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1142.0 385.0 C 1022.0 385.0, 1022.0 169.0, 902.0 169.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 584.0 169.0 C 479.0 169.0, 479.0 129.0, 374.0 129.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 584.0 169.0 C 479.0 169.0, 479.0 169.0, 374.0 169.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 584.0 169.0 C 479.0 169.0, 479.0 209.0, 374.0 209.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1142.0 385.0 C 1022.0 385.0, 1022.0 313.0, 902.0 313.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 313.0 C 532.2 313.0, 532.2 273.0, 427.2 273.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 313.0 C 532.2 313.0, 532.2 313.0, 427.2 313.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 313.0 C 532.2 313.0, 532.2 353.0, 427.2 353.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1142.0 385.0 C 1022.0 385.0, 1022.0 457.0, 902.0 457.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 644.8 457.0 C 539.8 457.0, 539.8 417.0, 434.8 417.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 644.8 457.0 C 539.8 457.0, 539.8 457.0, 434.8 457.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 644.8 457.0 C 539.8 457.0, 539.8 497.0, 434.8 497.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1142.0 385.0 C 1022.0 385.0, 1022.0 601.0, 902.0 601.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 713.2 601.0 C 608.2 601.0, 608.2 561.0, 503.2 561.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 713.2 601.0 C 608.2 601.0, 608.2 601.0, 503.2 601.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 713.2 601.0 C 608.2 601.0, 608.2 641.0, 503.2 641.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1361.4 977.0 C 1348.9 977.0, 1348.9 977.0, 1336.4 977.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1081.8 977.0 C 961.8 977.0, 961.8 761.0, 841.8 761.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 622.6 761.0 C 517.6 761.0, 517.6 721.0, 412.6 721.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 622.6 761.0 C 517.6 761.0, 517.6 761.0, 412.6 761.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 622.6 761.0 C 517.6 761.0, 517.6 801.0, 412.6 801.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1081.8 977.0 C 961.8 977.0, 961.8 905.0, 841.8 905.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 599.8 905.0 C 494.8 905.0, 494.8 865.0, 389.8 865.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 599.8 905.0 C 494.8 905.0, 494.8 905.0, 389.8 905.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 599.8 905.0 C 494.8 905.0, 494.8 945.0, 389.8 945.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1081.8 977.0 C 961.8 977.0, 961.8 1049.0, 841.8 1049.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 622.6 1049.0 C 517.6 1049.0, 517.6 1009.0, 412.6 1009.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 622.6 1049.0 C 517.6 1049.0, 517.6 1049.0, 412.6 1049.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 622.6 1049.0 C 517.6 1049.0, 517.6 1089.0, 412.6 1089.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1081.8 977.0 C 961.8 977.0, 961.8 1193.0, 841.8 1193.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 683.4 1193.0 C 578.4 1193.0, 578.4 1153.0, 473.4 1153.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 683.4 1193.0 C 578.4 1193.0, 578.4 1193.0, 473.4 1193.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 683.4 1193.0 C 578.4 1193.0, 578.4 1233.0, 473.4 1233.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1361.4 977.0 C 1348.9 977.0, 1348.9 1569.0, 1336.4 1569.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1090.4 1569.0 C 970.4 1569.0, 970.4 1353.0, 850.4 1353.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1353.0 C 435.0 1353.0, 435.0 1313.0, 330.0 1313.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1353.0 C 435.0 1353.0, 435.0 1353.0, 330.0 1353.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1353.0 C 435.0 1353.0, 435.0 1393.0, 330.0 1393.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1090.4 1569.0 C 970.4 1569.0, 970.4 1497.0, 850.4 1497.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 555.2 1497.0 C 450.2 1497.0, 450.2 1457.0, 345.2 1457.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 555.2 1497.0 C 450.2 1497.0, 450.2 1497.0, 345.2 1497.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 555.2 1497.0 C 450.2 1497.0, 450.2 1537.0, 345.2 1537.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1090.4 1569.0 C 970.4 1569.0, 970.4 1641.0, 850.4 1641.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 524.8 1641.0 C 419.8 1641.0, 419.8 1601.0, 314.8 1601.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 524.8 1641.0 C 419.8 1641.0, 419.8 1641.0, 314.8 1641.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 524.8 1641.0 C 419.8 1641.0, 419.8 1681.0, 314.8 1681.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1090.4 1569.0 C 970.4 1569.0, 970.4 1785.0, 850.4 1785.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 547.6 1785.0 C 442.6 1785.0, 442.6 1745.0, 337.6 1745.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 547.6 1785.0 C 442.6 1785.0, 442.6 1785.0, 337.6 1785.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 547.6 1785.0 C 442.6 1785.0, 442.6 1825.0, 337.6 1825.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1831.4 977.0 C 1843.9 977.0, 1843.9 365.0, 1856.4 365.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2076.6 365.0 C 2196.6 365.0, 2196.6 149.0, 2316.6 149.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2528.2 149.0 C 2633.2 149.0, 2633.2 109.0, 2738.2 109.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2528.2 149.0 C 2633.2 149.0, 2633.2 149.0, 2738.2 149.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2528.2 149.0 C 2633.2 149.0, 2633.2 189.0, 2738.2 189.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2076.6 365.0 C 2196.6 365.0, 2196.6 293.0, 2316.6 293.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2490.2 293.0 C 2595.2 293.0, 2595.2 253.0, 2700.2 253.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2490.2 293.0 C 2595.2 293.0, 2595.2 293.0, 2700.2 293.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2490.2 293.0 C 2595.2 293.0, 2595.2 333.0, 2700.2 333.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2076.6 365.0 C 2196.6 365.0, 2196.6 437.0, 2316.6 437.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.0 437.0 C 2618.0 437.0, 2618.0 397.0, 2723.0 397.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.0 437.0 C 2618.0 437.0, 2618.0 437.0, 2723.0 437.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.0 437.0 C 2618.0 437.0, 2618.0 477.0, 2723.0 477.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2076.6 365.0 C 2196.6 365.0, 2196.6 581.0, 2316.6 581.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2452.2 581.0 C 2557.2 581.0, 2557.2 541.0, 2662.2 541.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2452.2 581.0 C 2557.2 581.0, 2557.2 581.0, 2662.2 581.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2452.2 581.0 C 2557.2 581.0, 2557.2 621.0, 2662.2 621.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1831.4 977.0 C 1843.9 977.0, 1843.9 977.0, 1856.4 977.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2111.0 977.0 C 2231.0 977.0, 2231.0 761.0, 2351.0 761.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2532.2 761.0 C 2637.2 761.0, 2637.2 701.0, 2742.2 701.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2532.2 761.0 C 2637.2 761.0, 2637.2 741.0, 2742.2 741.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2532.2 761.0 C 2637.2 761.0, 2637.2 781.0, 2742.2 781.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2532.2 761.0 C 2637.2 761.0, 2637.2 821.0, 2742.2 821.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2111.0 977.0 C 2231.0 977.0, 2231.0 925.0, 2351.0 925.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2631.0 925.0 C 2736.0 925.0, 2736.0 885.0, 2841.0 885.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2631.0 925.0 C 2736.0 925.0, 2736.0 925.0, 2841.0 925.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2631.0 925.0 C 2736.0 925.0, 2736.0 965.0, 2841.0 965.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2111.0 977.0 C 2231.0 977.0, 2231.0 1069.0, 2351.0 1069.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2623.4 1069.0 C 2728.4 1069.0, 2728.4 1029.0, 2833.4 1029.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2623.4 1069.0 C 2728.4 1069.0, 2728.4 1069.0, 2833.4 1069.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2623.4 1069.0 C 2728.4 1069.0, 2728.4 1109.0, 2833.4 1109.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2111.0 977.0 C 2231.0 977.0, 2231.0 1213.0, 2351.0 1213.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2555.0 1213.0 C 2660.0 1213.0, 2660.0 1173.0, 2765.0 1173.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2555.0 1213.0 C 2660.0 1213.0, 2660.0 1213.0, 2765.0 1213.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2555.0 1213.0 C 2660.0 1213.0, 2660.0 1253.0, 2765.0 1253.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1831.4 977.0 C 1843.9 977.0, 1843.9 1589.0, 1856.4 1589.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2050.8 1589.0 C 2170.8 1589.0, 2170.8 1373.0, 2290.8 1373.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2502.4 1373.0 C 2607.4 1373.0, 2607.4 1333.0, 2712.4 1333.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2502.4 1373.0 C 2607.4 1373.0, 2607.4 1373.0, 2712.4 1373.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2502.4 1373.0 C 2607.4 1373.0, 2607.4 1413.0, 2712.4 1413.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2050.8 1589.0 C 2170.8 1589.0, 2170.8 1517.0, 2290.8 1517.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2510.0 1517.0 C 2615.0 1517.0, 2615.0 1477.0, 2720.0 1477.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2510.0 1517.0 C 2615.0 1517.0, 2615.0 1517.0, 2720.0 1517.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2510.0 1517.0 C 2615.0 1517.0, 2615.0 1557.0, 2720.0 1557.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2050.8 1589.0 C 2170.8 1589.0, 2170.8 1661.0, 2290.8 1661.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2441.6 1661.0 C 2546.6 1661.0, 2546.6 1621.0, 2651.6 1621.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2441.6 1661.0 C 2546.6 1661.0, 2546.6 1661.0, 2651.6 1661.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2441.6 1661.0 C 2546.6 1661.0, 2546.6 1701.0, 2651.6 1701.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2050.8 1589.0 C 2170.8 1589.0, 2170.8 1805.0, 2290.8 1805.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2472.0 1805.0 C 2577.0 1805.0, 2577.0 1765.0, 2682.0 1765.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2472.0 1805.0 C 2577.0 1805.0, 2577.0 1805.0, 2682.0 1805.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2472.0 1805.0 C 2577.0 1805.0, 2577.0 1845.0, 2682.0 1845.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/><g class="pill pill-branch"><rect x="1142.0" y="363.0" width="194.4" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1160.0" cy="385.0" r="5" fill="#f87171" /><text x="1247.2" y="385.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🧪  Test Protocols</text></g>
+<g class="pill pill-sub"><rect x="584.0" y="151.0" width="318.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="743.0" y="169.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Fixed fixtures across all platforms</text></g>
+<g class="pill pill-leaf"><rect x="154.0" y="112.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="264.0" y="129.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Same 24-message scenario</text></g>
+<g class="pill pill-leaf"><rect x="154.0" y="152.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="264.0" y="169.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Same 20-prompt image set</text></g>
+<g class="pill pill-leaf"><rect x="133.0" y="192.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="253.5" y="209.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Same custom character built</text></g>
+<g class="pill pill-sub"><rect x="637.2" y="295.0" width="264.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="769.6" y="313.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Chat: 24 msgs + 7-day recall</text></g>
+<g class="pill pill-leaf"><rect x="144.2" y="256.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="285.7" y="273.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">8 small-talk + 8 emotion + 8 test</text></g>
+<g class="pill pill-leaf"><rect x="144.2" y="296.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="285.7" y="313.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">0–4 per turn, coherence/adherence</text></g>
+<g class="pill pill-leaf"><rect x="186.2" y="336.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="306.7" y="353.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">8+ = persona holds + recall</text></g>
+<g class="pill pill-sub"><rect x="644.8" y="439.0" width="257.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="773.4" y="457.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Voice: 10-min call, MOS 1–5</text></g>
+<g class="pill pill-leaf"><rect x="249.8" y="400.0" width="185.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="342.3" y="417.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Two blind reviewers</text></g>
+<g class="pill pill-leaf"><rect x="200.8" y="440.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="317.8" y="457.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Stopwatch-measured latency</text></g>
+<g class="pill pill-leaf"><rect x="200.8" y="480.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="317.8" y="497.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">8+ = MOS ≥4.0, &lt;2s latency</text></g>
+<g class="pill pill-sub"><rect x="713.2" y="583.0" width="188.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="807.6" y="601.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Realism: blind A/B</text></g>
+<g class="pill pill-leaf"><rect x="241.2" y="544.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="372.2" y="561.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">20-msg transcripts vs baseline</text></g>
+<g class="pill pill-leaf"><rect x="213.2" y="584.0" width="290.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="358.2" y="601.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">4 reviewers rate &#x27;plausibly human&#x27;</text></g>
+<g class="pill pill-leaf"><rect x="353.2" y="624.0" width="150.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="428.2" y="641.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">8+ = ≥75% pass</text></g>
+<g class="pill pill-branch"><rect x="1081.8" y="955.0" width="254.6" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1099.8" cy="977.0" r="5" fill="#a78bfa" /><text x="1217.1" y="977.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🚫  Stated Negative Space</text></g>
+<g class="pill pill-sub"><rect x="622.6" y="743.0" width="219.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="732.2" y="761.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">What they refuse to do</text></g>
+<g class="pill pill-leaf"><rect x="234.6" y="704.0" width="178.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="323.6" y="721.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No paid placements</text></g>
+<g class="pill pill-leaf"><rect x="220.6" y="744.0" width="192.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="316.6" y="761.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No sponsored reviews</text></g>
+<g class="pill pill-leaf"><rect x="171.6" y="784.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="292.1" y="801.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No republishing vendor copy</text></g>
+<g class="pill pill-sub"><rect x="599.8" y="887.0" width="242.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="720.8" y="905.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">What they refuse to score</text></g>
+<g class="pill pill-leaf"><rect x="197.8" y="848.0" width="192.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="293.8" y="865.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No untested features</text></g>
+<g class="pill pill-leaf"><rect x="106.8" y="888.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="248.3" y="905.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No AI-generated reviewer personas</text></g>
+<g class="pill pill-leaf"><rect x="162.8" y="928.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="276.3" y="945.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No fake aggregate ratings</text></g>
+<g class="pill pill-sub"><rect x="622.6" y="1031.0" width="219.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="732.2" y="1049.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Cost &amp; scope disclosed</text></g>
+<g class="pill pill-leaf"><rect x="136.6" y="992.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="274.6" y="1009.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">$40–180 test budget per platform</text></g>
+<g class="pill pill-leaf"><rect x="150.6" y="1032.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="281.6" y="1049.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">iPhone 15 Pro, Pixel 8, MBP M2</text></g>
+<g class="pill pill-leaf"><rect x="178.6" y="1072.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="295.6" y="1089.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Free + cheapest + top tier</text></g>
+<g class="pill pill-sub"><rect x="683.4" y="1175.0" width="158.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="762.6" y="1193.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Coverage claim</text></g>
+<g class="pill pill-leaf"><rect x="295.4" y="1136.0" width="178.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="384.4" y="1153.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">50+ sites reviewed</text></g>
+<g class="pill pill-leaf"><rect x="267.4" y="1176.0" width="206.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="370.4" y="1193.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">775+ characters tested</text></g>
+<g class="pill pill-leaf"><rect x="225.4" y="1216.0" width="248.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="349.4" y="1233.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">22+ named platforms in scope</text></g>
+<g class="pill pill-branch"><rect x="1090.4" y="1547.0" width="246.0" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1108.4" cy="1569.0" r="5" fill="#fb923c" /><text x="1221.4" y="1569.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🧭  ZeroPoint Resonances</text></g>
+<g class="pill pill-sub"><rect x="540.0" y="1335.0" width="310.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="695.2" y="1353.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Fixed fixtures ↔ empirical program</text></g>
+<g class="pill pill-leaf"><rect x="110.0" y="1296.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="220.0" y="1313.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Same fixture, every impl</text></g>
+<g class="pill pill-leaf"><rect x="40.0" y="1336.0" width="290.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="185.0" y="1353.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Four claims → verification targets</text></g>
+<g class="pill pill-leaf"><rect x="47.0" y="1376.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="188.5" y="1393.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Reproducibility as substrate norm</text></g>
+<g class="pill pill-sub"><rect x="555.2" y="1479.0" width="295.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="702.8" y="1497.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Compound gates ↔ Editor&#x27;s Choice</text></g>
+<g class="pill pill-leaf"><rect x="90.2" y="1440.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="217.7" y="1457.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Score AND floor AND stability</text></g>
+<g class="pill pill-leaf"><rect x="118.2" y="1480.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="231.7" y="1497.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Layer A conformance shape</text></g>
+<g class="pill pill-leaf"><rect x="76.2" y="1520.0" width="269.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="210.7" y="1537.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Coordination-not-oversight tier</text></g>
+<g class="pill pill-sub"><rect x="524.8" y="1623.0" width="325.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="687.6" y="1641.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Trigger-driven re-eval ↔ shadow-eval</text></g>
+<g class="pill pill-leaf"><rect x="52.8" y="1584.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="183.8" y="1601.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Model swap → automatic re-test</text></g>
+<g class="pill pill-leaf"><rect x="73.8" y="1624.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="194.3" y="1641.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Signed candidate vs control</text></g>
+<g class="pill pill-leaf"><rect x="101.8" y="1664.0" width="213.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="208.3" y="1681.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Evidence-based ceremony</text></g>
+<g class="pill pill-sub"><rect x="547.6" y="1767.0" width="302.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="699.0" y="1785.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Stated negative space ↔ blindness</text></g>
+<g class="pill pill-leaf"><rect x="75.6" y="1728.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="206.6" y="1745.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">What we won&#x27;t measure ≡ III.24</text></g>
+<g class="pill pill-leaf"><rect x="54.6" y="1768.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="196.1" y="1785.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Alignment identity is subtractive</text></g>
+<g class="pill pill-leaf"><rect x="89.6" y="1808.0" width="248.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="213.6" y="1825.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Load-bearing honesty pattern</text></g>
+<g class="pill pill-branch"><rect x="1856.4" y="343.0" width="220.2" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1874.4" cy="365.0" r="5" fill="#94e2d5" /><text x="1974.5" y="365.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">⚖️  8-Category Rubric</text></g>
+<g class="pill pill-sub"><rect x="2316.6" y="131.0" width="211.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2422.4" y="149.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Weights (sum to 100%)</text></g>
+<g class="pill pill-leaf"><rect x="2738.2" y="92.0" width="164.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2820.2" y="109.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Chat Quality 20%</text></g>
+<g class="pill pill-leaf"><rect x="2738.2" y="132.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2876.2" y="149.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Character Depth + Image 15% each</text></g>
+<g class="pill pill-leaf"><rect x="2738.2" y="172.0" width="304.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2890.2" y="189.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Video/Voice/UX/Realism/Community 10%</text></g>
+<g class="pill pill-sub"><rect x="2316.6" y="275.0" width="173.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2403.4" y="293.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Chat Quality 20%</text></g>
+<g class="pill pill-leaf"><rect x="2700.2" y="236.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2831.2" y="253.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Coherence, persona consistency</text></g>
+<g class="pill pill-leaf"><rect x="2700.2" y="276.0" width="199.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2799.7" y="293.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Instruction-following</text></g>
+<g class="pill pill-leaf"><rect x="2700.2" y="316.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2813.7" y="333.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Emotional-prompt handling</text></g>
+<g class="pill pill-sub"><rect x="2316.6" y="419.0" width="196.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2414.8" y="437.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Character Depth 15%</text></g>
+<g class="pill pill-leaf"><rect x="2723.0" y="380.0" width="192.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2819.0" y="397.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Customization fields</text></g>
+<g class="pill pill-leaf"><rect x="2723.0" y="420.0" width="185.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2815.5" y="437.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Prebuilt archetypes</text></g>
+<g class="pill pill-leaf"><rect x="2723.0" y="460.0" width="199.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2822.5" y="477.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Backstory persistence</text></g>
+<g class="pill pill-sub"><rect x="2316.6" y="563.0" width="135.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2384.4" y="581.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Realism 10%</text></g>
+<g class="pill pill-leaf"><rect x="2662.2" y="524.0" width="206.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2765.2" y="541.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Blind A/B, 4 reviewers</text></g>
+<g class="pill pill-leaf"><rect x="2662.2" y="564.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2772.2" y="581.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Plausibly human&quot; rating</text></g>
+<g class="pill pill-leaf"><rect x="2662.2" y="604.0" width="213.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2768.7" y="621.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Proactive-message check</text></g>
+<g class="pill pill-branch"><rect x="1856.4" y="955.0" width="254.6" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1874.4" cy="977.0" r="5" fill="#fbbf24" /><text x="1991.7" y="977.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🏆  Editor&#x27;s Choice Gates</text></g>
+<g class="pill pill-sub"><rect x="2351.0" y="743.0" width="181.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2441.6" y="761.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">All four required</text></g>
+<g class="pill pill-leaf"><rect x="2742.2" y="684.0" width="185.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2834.7" y="701.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">1. ≥8.5/10 weighted</text></g>
+<g class="pill pill-leaf"><rect x="2742.2" y="724.0" width="192.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2838.2" y="741.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">2. No cat below 6/10</text></g>
+<g class="pill pill-leaf"><rect x="2742.2" y="764.0" width="178.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2831.2" y="781.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">3. Stable ≥90 days</text></g>
+<g class="pill pill-leaf"><rect x="2742.2" y="804.0" width="206.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2845.2" y="821.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">4. Transparent billing</text></g>
+<g class="pill pill-sub"><rect x="2351.0" y="907.0" width="280.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2491.0" y="925.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Category floor is load-bearing</text></g>
+<g class="pill pill-leaf"><rect x="2841.0" y="868.0" width="206.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2944.0" y="885.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No single-axis winners</text></g>
+<g class="pill pill-leaf"><rect x="2841.0" y="908.0" width="213.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2947.5" y="925.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Catches uneven products</text></g>
+<g class="pill pill-leaf"><rect x="2841.0" y="948.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2954.5" y="965.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Compound criteria pattern</text></g>
+<g class="pill pill-sub"><rect x="2351.0" y="1051.0" width="272.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2487.2" y="1069.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Stability = 90-day durability</text></g>
+<g class="pill pill-leaf"><rect x="2833.4" y="1012.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2950.4" y="1029.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No unannounced model swaps</text></g>
+<g class="pill pill-leaf"><rect x="2833.4" y="1052.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2943.4" y="1069.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No sudden pricing shifts</text></g>
+<g class="pill pill-leaf"><rect x="2833.4" y="1092.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2971.4" y="1109.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Rewards operator-friendly builds</text></g>
+<g class="pill pill-sub"><rect x="2351.0" y="1195.0" width="204.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2453.0" y="1213.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Billing transparency</text></g>
+<g class="pill pill-leaf"><rect x="2765.0" y="1156.0" width="164.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2847.0" y="1173.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No dark patterns</text></g>
+<g class="pill pill-leaf"><rect x="2765.0" y="1196.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2878.5" y="1213.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No surprise credit drains</text></g>
+<g class="pill pill-leaf"><rect x="2765.0" y="1236.0" width="192.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2861.0" y="1253.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No hidden auto-renew</text></g>
+<g class="pill pill-branch"><rect x="1856.4" y="1567.0" width="194.4" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1874.4" cy="1589.0" r="5" fill="#34d399" /><text x="1961.6" y="1589.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🔁  Update Cadence</text></g>
+<g class="pill pill-sub"><rect x="2290.8" y="1355.0" width="211.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2396.6" y="1373.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Rolling re-evaluation</text></g>
+<g class="pill pill-leaf"><rect x="2712.4" y="1316.0" width="269.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2846.9" y="1333.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">90-day cycle across all reviews</text></g>
+<g class="pill pill-leaf"><rect x="2712.4" y="1356.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2822.4" y="1373.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Last tested&quot; date shown</text></g>
+<g class="pill pill-leaf"><rect x="2712.4" y="1396.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2832.9" y="1413.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&gt;90-day = lagging indicator</text></g>
+<g class="pill pill-sub"><rect x="2290.8" y="1499.0" width="219.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2400.4" y="1517.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Trigger-driven re-test</text></g>
+<g class="pill pill-leaf"><rect x="2720.0" y="1460.0" width="143.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2791.5" y="1477.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Price changes</text></g>
+<g class="pill pill-leaf"><rect x="2720.0" y="1500.0" width="115.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2777.5" y="1517.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">LLM swaps</text></g>
+<g class="pill pill-leaf"><rect x="2720.0" y="1540.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2830.0" y="1557.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Moderation policy shifts</text></g>
+<g class="pill pill-sub"><rect x="2290.8" y="1643.0" width="150.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2366.2" y="1661.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Reader-driven</text></g>
+<g class="pill pill-leaf"><rect x="2651.6" y="1604.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2761.6" y="1621.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Reproducible bug reports</text></g>
+<g class="pill pill-leaf"><rect x="2651.6" y="1644.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2772.1" y="1661.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Screenshots + logs accepted</text></g>
+<g class="pill pill-leaf"><rect x="2651.6" y="1684.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2782.6" y="1701.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Reviews re-open when warranted</text></g>
+<g class="pill pill-sub"><rect x="2290.8" y="1787.0" width="181.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2381.4" y="1805.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Dispute mechanism</text></g>
+<g class="pill pill-leaf"><rect x="2682.0" y="1748.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2795.5" y="1765.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Contact page for evidence</text></g>
+<g class="pill pill-leaf"><rect x="2682.0" y="1788.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2809.5" y="1805.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Published reasoning on change</text></g>
+<g class="pill pill-leaf"><rect x="2682.0" y="1828.0" width="192.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2778.0" y="1845.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Falsifiable rankings</text></g>
+<g class="pill pill-center"><rect x="1361.4" y="949.0" width="470.0" height="56.0" rx="28.0" ry="28.0" fill="#7eb8da" stroke="none" stroke-width="0" /><text x="1596.4" y="977.0" font-size="22" fill="#0a0a0c" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">📐  Fixed-Fixture Evidence Discipline</text></g><g class="footnotes">
+<text x="40" y="1882" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">1. Source: companionrank.com/methodology — © 2026, no explicit last-updated date on page.</text>
+<text x="40" y="1900" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">2. Fixture reproducibility is the key move: 24-msg scenario + 20-prompt image set + custom character are identical across every platform tested.</text>
+<text x="40" y="1918" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">3. Editor&#x27;s Choice is the compound-criteria pattern — four hard requirements, no single-axis passes; matches ZP&#x27;s Layer A conformance shape.</text>
+<text x="40" y="1936" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">4. Their &#x27;what we don&#x27;t do&#x27; section is functionally aligned-blindness (KEEL III.24) applied to a ranking body — the refusals define the identity.</text>
+</g></svg></div>
+  </main>
+  
+        <aside id="editor" class="editor" aria-hidden="true">
+          <div class="editor-head">
+            <strong>Mindmap JSON</strong>
+            <div class="editor-actions">
+              <button id="apply-btn" class="btn btn-primary" type="button">Render</button>
+              <button id="close-editor" class="btn" type="button" aria-label="Close">✕</button>
+            </div>
+          </div>
+          <textarea id="json-source" spellcheck="false">{
+  &quot;title&quot;: &quot;CompanionRank Methodology — What Rigor Looks Like&quot;,
+  &quot;subtitle&quot;: &quot;An 8-category, fixed-fixture, blind-scored benchmark for AI companion platforms — and what to bring back to ZeroPoint&#x27;s empirical program.&quot;,
+  &quot;center&quot;: {
+    &quot;label&quot;: &quot;Fixed-Fixture Evidence Discipline&quot;,
+    &quot;emoji&quot;: &quot;📐&quot;
+  },
+  &quot;branches&quot;: [
+    {
+      &quot;label&quot;: &quot;8-Category Rubric&quot;,
+      &quot;emoji&quot;: &quot;⚖️&quot;,
+      &quot;color&quot;: &quot;teal&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Weights (sum to 100%)&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Chat Quality 20%&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Character Depth + Image 15% each&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Video/Voice/UX/Realism/Community 10%&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Chat Quality 20%&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Coherence, persona consistency&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Instruction-following&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Emotional-prompt handling&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Character Depth 15%&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Customization fields&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Prebuilt archetypes&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Backstory persistence&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Realism 10%&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Blind A/B, 4 reviewers&quot;
+            },
+            {
+              &quot;label&quot;: &quot;\&quot;Plausibly human\&quot; rating&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Proactive-message check&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;Test Protocols&quot;,
+      &quot;emoji&quot;: &quot;🧪&quot;,
+      &quot;color&quot;: &quot;coral&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Fixed fixtures across all platforms&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Same 24-message scenario&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Same 20-prompt image set&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Same custom character built&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Chat: 24 msgs + 7-day recall&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;8 small-talk + 8 emotion + 8 test&quot;
+            },
+            {
+              &quot;label&quot;: &quot;0–4 per turn, coherence/adherence&quot;
+            },
+            {
+              &quot;label&quot;: &quot;8+ = persona holds + recall&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Voice: 10-min call, MOS 1–5&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Two blind reviewers&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Stopwatch-measured latency&quot;
+            },
+            {
+              &quot;label&quot;: &quot;8+ = MOS ≥4.0, &lt;2s latency&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Realism: blind A/B&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;20-msg transcripts vs baseline&quot;
+            },
+            {
+              &quot;label&quot;: &quot;4 reviewers rate &#x27;plausibly human&#x27;&quot;
+            },
+            {
+              &quot;label&quot;: &quot;8+ = ≥75% pass&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;Editor&#x27;s Choice Gates&quot;,
+      &quot;emoji&quot;: &quot;🏆&quot;,
+      &quot;color&quot;: &quot;saffron&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;All four required&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;1. ≥8.5/10 weighted&quot;
+            },
+            {
+              &quot;label&quot;: &quot;2. No cat below 6/10&quot;
+            },
+            {
+              &quot;label&quot;: &quot;3. Stable ≥90 days&quot;
+            },
+            {
+              &quot;label&quot;: &quot;4. Transparent billing&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Category floor is load-bearing&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;No single-axis winners&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Catches uneven products&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Compound criteria pattern&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Stability = 90-day durability&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;No unannounced model swaps&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No sudden pricing shifts&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Rewards operator-friendly builds&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Billing transparency&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;No dark patterns&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No surprise credit drains&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No hidden auto-renew&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;Stated Negative Space&quot;,
+      &quot;emoji&quot;: &quot;🚫&quot;,
+      &quot;color&quot;: &quot;lavender&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;What they refuse to do&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;No paid placements&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No sponsored reviews&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No republishing vendor copy&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;What they refuse to score&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;No untested features&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No AI-generated reviewer personas&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No fake aggregate ratings&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Cost &amp; scope disclosed&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;$40–180 test budget per platform&quot;
+            },
+            {
+              &quot;label&quot;: &quot;iPhone 15 Pro, Pixel 8, MBP M2&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Free + cheapest + top tier&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Coverage claim&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;50+ sites reviewed&quot;
+            },
+            {
+              &quot;label&quot;: &quot;775+ characters tested&quot;
+            },
+            {
+              &quot;label&quot;: &quot;22+ named platforms in scope&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;Update Cadence&quot;,
+      &quot;emoji&quot;: &quot;🔁&quot;,
+      &quot;color&quot;: &quot;sage&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Rolling re-evaluation&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;90-day cycle across all reviews&quot;
+            },
+            {
+              &quot;label&quot;: &quot;\&quot;Last tested\&quot; date shown&quot;
+            },
+            {
+              &quot;label&quot;: &quot;&gt;90-day = lagging indicator&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Trigger-driven re-test&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Price changes&quot;
+            },
+            {
+              &quot;label&quot;: &quot;LLM swaps&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Moderation policy shifts&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Reader-driven&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Reproducible bug reports&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Screenshots + logs accepted&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Reviews re-open when warranted&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Dispute mechanism&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Contact page for evidence&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Published reasoning on change&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Falsifiable rankings&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;ZeroPoint Resonances&quot;,
+      &quot;emoji&quot;: &quot;🧭&quot;,
+      &quot;color&quot;: &quot;rose&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Fixed fixtures ↔ empirical program&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Same fixture, every impl&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Four claims → verification targets&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Reproducibility as substrate norm&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Compound gates ↔ Editor&#x27;s Choice&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Score AND floor AND stability&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Layer A conformance shape&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Coordination-not-oversight tier&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Trigger-driven re-eval ↔ shadow-eval&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Model swap → automatic re-test&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Signed candidate vs control&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Evidence-based ceremony&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Stated negative space ↔ blindness&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;What we won&#x27;t measure ≡ III.24&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Alignment identity is subtractive&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Load-bearing honesty pattern&quot;
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  &quot;footnotes&quot;: [
+    &quot;Source: companionrank.com/methodology — © 2026, no explicit last-updated date on page.&quot;,
+    &quot;Fixture reproducibility is the key move: 24-msg scenario + 20-prompt image set + custom character are identical across every platform tested.&quot;,
+    &quot;Editor&#x27;s Choice is the compound-criteria pattern — four hard requirements, no single-axis passes; matches ZP&#x27;s Layer A conformance shape.&quot;,
+    &quot;Their &#x27;what we don&#x27;t do&#x27; section is functionally aligned-blindness (KEEL III.24) applied to a ranking body — the refusals define the identity.&quot;
+  ],
+  &quot;source&quot;: &quot;manual&quot;,
+  &quot;generated_at&quot;: &quot;2026-07-23T00:00:00Z&quot;
+}</textarea>
+          <div class="editor-status" id="status">Loaded. Edit and press Render.</div>
+        </aside>
+        
+  <script>
+(function(){
+  const BUNDLE = {"current": "zp-dark", "themes": {"zp-dark": {"name": "zp-dark", "bg": "#0a0a0c", "center_bg": "#7eb8da", "center_fg": "#0a0a0c", "pill_bg": "#1a1a1f", "pill_border": "#222228", "pill_fg": "#e8e8ec", "connector": "#7eb8da", "text_muted": "#8888a0", "palette": {"teal": "#94e2d5", "coral": "#f87171", "lavender": "#a78bfa", "saffron": "#fbbf24", "sage": "#34d399", "rose": "#fb923c"}, "font": "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif"}, "zp-light": {"name": "zp-light", "bg": "#f7f7f4", "center_bg": "#0a0a0c", "center_fg": "#7eb8da", "pill_bg": "#ffffff", "pill_border": "#d8d8d0", "pill_fg": "#0a0a0c", "connector": "#4a7a96", "text_muted": "#5a5a5e", "palette": {"teal": "#94e2d5", "coral": "#f87171", "lavender": "#a78bfa", "saffron": "#fbbf24", "sage": "#34d399", "rose": "#fb923c"}, "font": "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif"}}};
+  const INITIAL = {"title": "CompanionRank Methodology — What Rigor Looks Like", "subtitle": "An 8-category, fixed-fixture, blind-scored benchmark for AI companion platforms — and what to bring back to ZeroPoint's empirical program.", "center": {"label": "Fixed-Fixture Evidence Discipline", "emoji": "📐"}, "branches": [{"label": "8-Category Rubric", "emoji": "⚖️", "color": "teal", "children": [{"label": "Weights (sum to 100%)", "children": [{"label": "Chat Quality 20%"}, {"label": "Character Depth + Image 15% each"}, {"label": "Video/Voice/UX/Realism/Community 10%"}]}, {"label": "Chat Quality 20%", "children": [{"label": "Coherence, persona consistency"}, {"label": "Instruction-following"}, {"label": "Emotional-prompt handling"}]}, {"label": "Character Depth 15%", "children": [{"label": "Customization fields"}, {"label": "Prebuilt archetypes"}, {"label": "Backstory persistence"}]}, {"label": "Realism 10%", "children": [{"label": "Blind A/B, 4 reviewers"}, {"label": "\"Plausibly human\" rating"}, {"label": "Proactive-message check"}]}]}, {"label": "Test Protocols", "emoji": "🧪", "color": "coral", "children": [{"label": "Fixed fixtures across all platforms", "children": [{"label": "Same 24-message scenario"}, {"label": "Same 20-prompt image set"}, {"label": "Same custom character built"}]}, {"label": "Chat: 24 msgs + 7-day recall", "children": [{"label": "8 small-talk + 8 emotion + 8 test"}, {"label": "0–4 per turn, coherence/adherence"}, {"label": "8+ = persona holds + recall"}]}, {"label": "Voice: 10-min call, MOS 1–5", "children": [{"label": "Two blind reviewers"}, {"label": "Stopwatch-measured latency"}, {"label": "8+ = MOS ≥4.0, <2s latency"}]}, {"label": "Realism: blind A/B", "children": [{"label": "20-msg transcripts vs baseline"}, {"label": "4 reviewers rate 'plausibly human'"}, {"label": "8+ = ≥75% pass"}]}]}, {"label": "Editor's Choice Gates", "emoji": "🏆", "color": "saffron", "children": [{"label": "All four required", "children": [{"label": "1. ≥8.5/10 weighted"}, {"label": "2. No cat below 6/10"}, {"label": "3. Stable ≥90 days"}, {"label": "4. Transparent billing"}]}, {"label": "Category floor is load-bearing", "children": [{"label": "No single-axis winners"}, {"label": "Catches uneven products"}, {"label": "Compound criteria pattern"}]}, {"label": "Stability = 90-day durability", "children": [{"label": "No unannounced model swaps"}, {"label": "No sudden pricing shifts"}, {"label": "Rewards operator-friendly builds"}]}, {"label": "Billing transparency", "children": [{"label": "No dark patterns"}, {"label": "No surprise credit drains"}, {"label": "No hidden auto-renew"}]}]}, {"label": "Stated Negative Space", "emoji": "🚫", "color": "lavender", "children": [{"label": "What they refuse to do", "children": [{"label": "No paid placements"}, {"label": "No sponsored reviews"}, {"label": "No republishing vendor copy"}]}, {"label": "What they refuse to score", "children": [{"label": "No untested features"}, {"label": "No AI-generated reviewer personas"}, {"label": "No fake aggregate ratings"}]}, {"label": "Cost & scope disclosed", "children": [{"label": "$40–180 test budget per platform"}, {"label": "iPhone 15 Pro, Pixel 8, MBP M2"}, {"label": "Free + cheapest + top tier"}]}, {"label": "Coverage claim", "children": [{"label": "50+ sites reviewed"}, {"label": "775+ characters tested"}, {"label": "22+ named platforms in scope"}]}]}, {"label": "Update Cadence", "emoji": "🔁", "color": "sage", "children": [{"label": "Rolling re-evaluation", "children": [{"label": "90-day cycle across all reviews"}, {"label": "\"Last tested\" date shown"}, {"label": ">90-day = lagging indicator"}]}, {"label": "Trigger-driven re-test", "children": [{"label": "Price changes"}, {"label": "LLM swaps"}, {"label": "Moderation policy shifts"}]}, {"label": "Reader-driven", "children": [{"label": "Reproducible bug reports"}, {"label": "Screenshots + logs accepted"}, {"label": "Reviews re-open when warranted"}]}, {"label": "Dispute mechanism", "children": [{"label": "Contact page for evidence"}, {"label": "Published reasoning on change"}, {"label": "Falsifiable rankings"}]}]}, {"label": "ZeroPoint Resonances", "emoji": "🧭", "color": "rose", "children": [{"label": "Fixed fixtures ↔ empirical program", "children": [{"label": "Same fixture, every impl"}, {"label": "Four claims → verification targets"}, {"label": "Reproducibility as substrate norm"}]}, {"label": "Compound gates ↔ Editor's Choice", "children": [{"label": "Score AND floor AND stability"}, {"label": "Layer A conformance shape"}, {"label": "Coordination-not-oversight tier"}]}, {"label": "Trigger-driven re-eval ↔ shadow-eval", "children": [{"label": "Model swap → automatic re-test"}, {"label": "Signed candidate vs control"}, {"label": "Evidence-based ceremony"}]}, {"label": "Stated negative space ↔ blindness", "children": [{"label": "What we won't measure ≡ III.24"}, {"label": "Alignment identity is subtractive"}, {"label": "Load-bearing honesty pattern"}]}]}], "footnotes": ["Source: companionrank.com/methodology — © 2026, no explicit last-updated date on page.", "Fixture reproducibility is the key move: 24-msg scenario + 20-prompt image set + custom character are identical across every platform tested.", "Editor's Choice is the compound-criteria pattern — four hard requirements, no single-axis passes; matches ZP's Layer A conformance shape.", "Their 'what we don't do' section is functionally aligned-blindness (KEEL III.24) applied to a ranking body — the refusals define the identity."], "source": "manual", "generated_at": "2026-07-23T00:00:00Z"};
+  const HAS_EDITOR = true;
+
+  let activeThemeName = BUNDLE.current;
+  let activeMindmap = INITIAL;
+
+  const CANVAS_PAD=40, CENTER_MIN_W=190, CENTER_H=56, BRANCH_H=44, SUB_H=36, LEAF_H=34;
+  const CENTER_TO_BRANCH=260, BRANCH_TO_SUB=240, SUB_TO_LEAF=210;
+  const LEAF_ROW_MIN=40, SUB_GAP=24, BRANCH_GAP=40;
+  const FONT_CENTER=22, FONT_BRANCH=15, FONT_SUB=13, FONT_LEAF=12;
+  const CHAR_W_CENTER=12.0, CHAR_W_BRANCH=8.6, CHAR_W_SUB=7.6, CHAR_W_LEAF=7.0;
+  const PILL_PAD_X=26;
+
+  const PALETTE_COLORS = ["teal","coral","lavender","saffron","sage","rose"];
+
+  function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+  function pillW(label, charW, emoji){
+    const n = (label||"").length;
+    let base = Math.max(90, charW*n + PILL_PAD_X*2);
+    if(emoji) base += 22;
+    return base;
+  }
+
+  function activeTheme(){ return BUNDLE.themes[activeThemeName]; }
+
+  function buildTree(mindmap, THEME){
+    const center = mindmap.center || {};
+    const centerLabel = center.label || mindmap.title || "Untitled";
+    const centerNode = {
+      label: centerLabel, emoji: center.emoji||"", kind:"center", side:"right",
+      w: Math.max(CENTER_MIN_W, pillW(centerLabel, CHAR_W_CENTER, center.emoji||"")),
+      h: CENTER_H, x:0, y:0, children:[],
+    };
+    const left = [], right = [];
+    (mindmap.branches||[]).forEach((b, i) => {
+      const side = (i%2===0)?"right":"left";
+      const colorId = b.color || PALETTE_COLORS[i%PALETTE_COLORS.length];
+      const color = THEME.palette[colorId] || THEME.palette.teal;
+      const branch = {
+        label: b.label||"", emoji: b.emoji||"", color: color, kind:"branch", side:side,
+        w: pillW(b.label||"", CHAR_W_BRANCH, b.emoji||""), h: BRANCH_H, x:0,y:0,
+        children: (b.children||[]).map(s => ({
+          label: s.label||"", kind:"sub", side:side, color:color, emoji:"",
+          w: pillW(s.label||"", CHAR_W_SUB, ""), h: SUB_H, x:0,y:0,
+          children: (s.children||[]).map(l => ({
+            label: l.label||"", kind:"leaf", side:side, color:color, emoji:"",
+            w: pillW(l.label||"", CHAR_W_LEAF, ""), h: LEAF_H, x:0,y:0, children:[],
+          })),
+        })),
+      };
+      (side==="right"?right:left).push(branch);
+    });
+    return {center: centerNode, left, right};
+  }
+
+  function subHeight(sub){
+    if(!sub.children.length) return SUB_H;
+    return Math.max(SUB_H, sub.children.length*LEAF_ROW_MIN);
+  }
+  function branchHeight(br){
+    if(!br.children.length) return BRANCH_H;
+    let h = 0;
+    br.children.forEach((sub,i)=>{ if(i>0) h+=SUB_GAP; h+=subHeight(sub); });
+    return Math.max(BRANCH_H, h);
+  }
+  function measureSide(brs){
+    let total=0;
+    brs.forEach((b,i)=>{ if(i>0) total+=BRANCH_GAP; total+=branchHeight(b); });
+    return total;
+  }
+
+  function placeSide(brs, cx, cy, side, totalH){
+    let y = cy - totalH/2;
+    const brAnchor = (side==="right") ? cx+CENTER_TO_BRANCH : cx-CENTER_TO_BRANCH;
+    brs.forEach(br => {
+      const bh = branchHeight(br);
+      br.y = y + bh/2;
+      br.x = (side==="right") ? brAnchor + br.w/2 : brAnchor - br.w/2;
+      if(br.children.length){
+        let subsH = 0;
+        br.children.forEach((s,i)=>{ if(i>0) subsH+=SUB_GAP; subsH+=subHeight(s); });
+        let sy = br.y - subsH/2;
+        const subAnchor = (side==="right") ? br.x+br.w/2+BRANCH_TO_SUB : br.x-br.w/2-BRANCH_TO_SUB;
+        br.children.forEach(sub => {
+          const sh = subHeight(sub);
+          sub.y = sy + sh/2;
+          sub.x = (side==="right") ? subAnchor + sub.w/2 : subAnchor - sub.w/2;
+          if(sub.children.length){
+            const leavesH = sub.children.length*LEAF_ROW_MIN;
+            let ly = sub.y - leavesH/2 + LEAF_ROW_MIN/2;
+            const leafAnchor = (side==="right") ? sub.x+sub.w/2+SUB_TO_LEAF : sub.x-sub.w/2-SUB_TO_LEAF;
+            sub.children.forEach(lf => {
+              lf.y = ly;
+              lf.x = (side==="right") ? leafAnchor + lf.w/2 : leafAnchor - lf.w/2;
+              ly += LEAF_ROW_MIN;
+            });
+          }
+          sy += sh + SUB_GAP;
+        });
+      }
+      y += bh + BRANCH_GAP;
+    });
+  }
+
+  function walkAll(nodes, fn){ nodes.forEach(n => { fn(n); walkAll(n.children, fn); }); }
+  function bounds(center, left, right){
+    let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+    function absorb(n){
+      minx=Math.min(minx,n.x-n.w/2); maxx=Math.max(maxx,n.x+n.w/2);
+      miny=Math.min(miny,n.y-n.h/2); maxy=Math.max(maxy,n.y+n.h/2);
+    }
+    absorb(center); walkAll(left, absorb); walkAll(right, absorb);
+    return {minx,miny,maxx,maxy};
+  }
+
+  function shift(n, dx, dy){
+    n.x+=dx; n.y+=dy;
+    n.children.forEach(c => shift(c, dx, dy));
+  }
+
+  function bezier(x1,y1,x2,y2){
+    const mx = (x1+x2)/2;
+    return "M "+x1.toFixed(1)+" "+y1.toFixed(1)+" C "+mx.toFixed(1)+" "+y1.toFixed(1)+", "+mx.toFixed(1)+" "+y2.toFixed(1)+", "+x2.toFixed(1)+" "+y2.toFixed(1);
+  }
+  function connectorEnds(p, c){
+    const x1 = (c.side==="right") ? p.x + p.w/2 : p.x - p.w/2;
+    const x2 = (c.side==="right") ? c.x - c.w/2 : c.x + c.w/2;
+    return {x1, y1:p.y, x2, y2:c.y};
+  }
+
+  function pillSVG(n, THEME){
+    let fill, fg, stroke="none", strokeW=0, fontSize, radius=n.h/2, weight="500";
+    if(n.kind==="center"){
+      fill=THEME.center_bg; fg=THEME.center_fg; fontSize=FONT_CENTER; weight="600";
+    } else {
+      fill=THEME.pill_bg; fg=THEME.pill_fg; stroke=THEME.pill_border; strokeW=1.4;
+      if(n.kind==="branch"){ fontSize=FONT_BRANCH; weight="600"; }
+      else if(n.kind==="sub") fontSize=FONT_SUB;
+      else fontSize=FONT_LEAF;
+    }
+    const x = n.x - n.w/2, y = n.y - n.h/2;
+    let display = esc(n.label);
+    if(n.emoji) display = esc(n.emoji) + "  " + display;
+    let accent = "", textX = n.x;
+    if(n.kind==="branch" && n.color){
+      const dotCx = x+18;
+      accent = '<circle cx="'+dotCx.toFixed(1)+'" cy="'+n.y.toFixed(1)+'" r="5" fill="'+n.color+'"/>';
+      textX = n.x + 8;
+    }
+    return '<g class="pill pill-'+n.kind+'">'
+      + '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+n.w.toFixed(1)+'" height="'+n.h.toFixed(1)+'" '
+      + 'rx="'+radius.toFixed(1)+'" ry="'+radius.toFixed(1)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+strokeW+'"/>'
+      + accent
+      + '<text x="'+textX.toFixed(1)+'" y="'+n.y.toFixed(1)+'" font-size="'+fontSize+'" fill="'+fg+'" '
+      + 'text-anchor="middle" dominant-baseline="central" font-family="'+THEME.font+'" font-weight="'+weight+'">'+display+'</text>'
+      + '</g>';
+  }
+
+  function render(mindmap){
+    const THEME = activeTheme();
+    const {center, left, right} = buildTree(mindmap, THEME);
+    const leftH = measureSide(left);
+    const rightH = measureSide(right);
+    const cx = 1200, cy = 700;
+    center.x = cx; center.y = cy;
+    placeSide(right, cx, cy, "right", rightH);
+    placeSide(left, cx, cy, "left", leftH);
+    const title = mindmap.title||"", subtitle = mindmap.subtitle||"", fns = mindmap.footnotes||[];
+    let topPad = CANVAS_PAD; if(title) topPad += 30 + (subtitle?22:0);
+    let bottomPad = CANVAS_PAD; if(fns.length) bottomPad = 2*CANVAS_PAD + fns.length*18 + 20;
+    const {minx,miny,maxx,maxy} = bounds(center, left, right);
+    const dx = CANVAS_PAD - minx, dy = topPad - miny;
+    shift(center, dx, dy);
+    left.forEach(b => shift(b, dx, dy));
+    right.forEach(b => shift(b, dx, dy));
+    const svgW = Math.round(maxx - minx + CANVAS_PAD*2);
+    const svgH = Math.round(maxy - miny + topPad + bottomPad - CANVAS_PAD);
+
+    let connectors = "";
+    function drawConn(p, c, sw){
+      const {x1,y1,x2,y2} = connectorEnds(p,c);
+      connectors += '<path d="'+bezier(x1,y1,x2,y2)+'" fill="none" stroke="'+THEME.connector+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.55"/>';
+    }
+    [...left, ...right].forEach(br => {
+      drawConn(center, br, 1.8);
+      br.children.forEach(sub => {
+        drawConn(br, sub, 1.2);
+        sub.children.forEach(lf => drawConn(sub, lf, 0.9));
+      });
+    });
+
+    let pills = "";
+    function walk(n){ pills += pillSVG(n, THEME); n.children.forEach(walk); }
+    [...left, ...right].forEach(walk);
+    pills += pillSVG(center, THEME);
+
+    const esct = esc(title), escs = esc(subtitle);
+    let header = "";
+    if(title){
+      header = '<g><text x="'+CANVAS_PAD+'" y="'+(CANVAS_PAD+18)+'" font-family="'+THEME.font+'" font-size="24" font-weight="700" fill="'+THEME.pill_fg+'">'+esct+'</text>';
+      if(subtitle) header += '<text x="'+CANVAS_PAD+'" y="'+(CANVAS_PAD+44)+'" font-family="'+THEME.font+'" font-size="14" fill="'+THEME.text_muted+'">'+escs+'</text>';
+      header += '</g>';
+    }
+    let footer = "";
+    if(fns.length){
+      const baseY = svgH - CANVAS_PAD - fns.length*18;
+      footer = "<g>" + fns.map((f,i) => '<text x="'+CANVAS_PAD+'" y="'+(baseY + i*18)+'" font-family="'+THEME.font+'" font-size="12" fill="'+THEME.text_muted+'">'+(i+1)+'. '+esc(f)+'</text>').join("") + "</g>";
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+svgW+' '+svgH+'" preserveAspectRatio="xMidYMid meet" style="background:'+THEME.bg+'">'
+      + '<rect x="0" y="0" width="'+svgW+'" height="'+svgH+'" fill="'+THEME.bg+'"/>'
+      + header + connectors + pills + footer
+      + '</svg>';
+  }
+
+  // --- CSS variable re-theming when the toggle fires ---
+  function applyThemeToPage(){
+    const T = activeTheme();
+    const root = document.documentElement;
+    root.setAttribute('data-theme', activeThemeName);
+    // Direct style rewrites since we shipped :style-substituted CSS, not vars.
+    document.body.style.background = T.bg;
+    document.body.style.color = T.pill_fg;
+    document.querySelectorAll('.topbar').forEach(el => {
+      el.style.background = T.bg;
+      el.style.borderBottomColor = T.pill_border;
+    });
+    document.querySelectorAll('.btn').forEach(el => {
+      if(!el.classList.contains('btn-primary')){
+        el.style.background = T.pill_bg;
+        el.style.color = T.pill_fg;
+        el.style.borderColor = T.pill_border;
+      } else {
+        el.style.background = T.center_bg;
+        el.style.color = T.center_fg;
+        el.style.borderColor = T.center_bg;
+      }
+    });
+    document.querySelectorAll('.toolbar-sep').forEach(el => { el.style.background = T.pill_border; });
+    const editor = document.getElementById('editor');
+    if(editor){
+      editor.style.background = T.pill_bg;
+      editor.style.borderLeftColor = T.pill_border;
+    }
+    const src = document.getElementById('json-source');
+    if(src){
+      src.style.background = T.bg;
+      src.style.color = T.pill_fg;
+    }
+    const status = document.getElementById('status');
+    if(status){ status.style.color = T.text_muted; status.style.borderTopColor = T.pill_border; }
+    const themeIcon = document.querySelector('.theme-icon');
+    if(themeIcon){ themeIcon.textContent = (activeThemeName === 'zp-dark') ? '☾' : '☀'; }
+  }
+
+  // --- Markdown outline ---
+  function toMarkdown(mm){
+    const lines = [];
+    if(mm.title) lines.push('# ' + mm.title, '');
+    if(mm.subtitle) lines.push('_' + mm.subtitle + '_', '');
+    (mm.branches||[]).forEach(b => {
+      const pre = b.emoji ? (b.emoji + ' ') : '';
+      lines.push('## ' + pre + (b.label||''), '');
+      (b.children||[]).forEach(s => {
+        lines.push('### ' + (s.label||''));
+        (s.children||[]).forEach(l => { lines.push('- ' + (l.label||'')); });
+        lines.push('');
+      });
+    });
+    const fns = mm.footnotes||[];
+    if(fns.length){
+      lines.push('---', '');
+      fns.forEach((f,i) => lines.push((i+1) + '. ' + f));
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  // --- File download helper ---
+  function download(name, content, mime){
+    const blob = new Blob([content], {type: mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  }
+  function currentMindmapForExport(){
+    if(!HAS_EDITOR) return activeMindmap;
+    const src = document.getElementById('json-source');
+    if(!src) return activeMindmap;
+    try { return JSON.parse(src.value); } catch(e){ return activeMindmap; }
+  }
+  function safeName(){
+    const t = (activeMindmap.title||'mindmap').toLowerCase()
+      .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
+    return t || 'mindmap';
+  }
+
+  // --- Wiring ---
+  const host   = document.getElementById("svg-host");
+  const src    = document.getElementById("json-source");
+  const btn    = document.getElementById("apply-btn");
+  const toggle = document.getElementById("edit-toggle");
+  const closeEd = document.getElementById("close-editor");
+  const editor = document.getElementById("editor");
+  const status = document.getElementById("status");
+  const themeBtn = document.getElementById("theme-toggle");
+  const pdfBtn  = document.getElementById("export-pdf");
+  const svgBtn  = document.getElementById("export-svg");
+  const mdBtn   = document.getElementById("export-md");
+  const jsonBtn = document.getElementById("export-json");
+
+  function reRender(){
+    host.innerHTML = render(activeMindmap);
+  }
+
+  function apply(){
+    if(!src) return;
+    try{
+      const mm = JSON.parse(src.value);
+      activeMindmap = mm;
+      reRender();
+      if(status){ status.textContent = "Rendered."; status.style.color = activeTheme().text_muted; }
+    }catch(e){
+      if(status){ status.textContent = "JSON error: " + e.message; status.style.color = "#f87171"; }
+    }
+  }
+  if(btn) btn.addEventListener("click", apply);
+  if(toggle) toggle.addEventListener("click", () => {
+    const open = editor.classList.toggle("open");
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    editor.setAttribute("aria-hidden", open ? "false" : "true");
+  });
+  if(closeEd) closeEd.addEventListener("click", () => {
+    editor.classList.remove("open");
+    if(toggle){ toggle.setAttribute("aria-expanded", "false"); }
+    editor.setAttribute("aria-hidden", "true");
+  });
+
+  if(themeBtn) themeBtn.addEventListener("click", () => {
+    const others = Object.keys(BUNDLE.themes).filter(n => n !== activeThemeName);
+    if(others.length){
+      activeThemeName = others[0];
+      applyThemeToPage();
+      reRender();
+    }
+  });
+
+  if(pdfBtn) pdfBtn.addEventListener("click", () => { window.print(); });
+  if(svgBtn) svgBtn.addEventListener("click", () => {
+    const svg = host.querySelector("svg");
+    if(!svg) return;
+    download(safeName()+".svg", svg.outerHTML, "image/svg+xml");
+  });
+  if(mdBtn) mdBtn.addEventListener("click", () => {
+    download(safeName()+".md", toMarkdown(currentMindmapForExport()), "text/markdown");
+  });
+  if(jsonBtn) jsonBtn.addEventListener("click", () => {
+    const mm = currentMindmapForExport();
+    download(safeName()+".json", JSON.stringify(mm, null, 2), "application/json");
+  });
+
+  // Initial paint of the theme UI (button icon, editor styling).
+  applyThemeToPage();
+})();
+</script>
+</body>
+</html>

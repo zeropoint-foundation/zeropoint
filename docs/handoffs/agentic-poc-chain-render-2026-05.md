@@ -8,7 +8,7 @@ that birthed this PoC.*
 ## Goal
 
 Build the smallest viable test of agent-rendered substrate UX:
-IronClaw renders Ken's onboarding receipt chain in chat, in Sage's
+IronClaw renders Ken's onboarding receipt chain in chat, in the Regent's
 voice. Staged to the deployed foundation workspace; tested against
 production data. No localhost rig.
 
@@ -47,14 +47,14 @@ The shape:
 - The "bundle" is a voice anchor + a small number of few-shot
   examples. It is NOT a per-claim copy map.
 - At render time, IronClaw fetches the operator's receipts, then
-  asks Sage (via its existing model surface) to narrate the chain
+  asks the Regent (via its existing model surface) to narrate the chain
   in voice, using the anchor as guidance.
-- Sage interprets each receipt in context. Narration is fresh per
+- the Regent interprets each receipt in context. Narration is fresh per
   render, can synthesize across receipts ("three identity steps
   clean, recovery confirmed"), and references actual metadata
   fields.
 - Unknown / edge / never-seen-before claims handle themselves —
-  Sage reads the receipt as data and narrates in voice. No
+  the Regent reads the receipt as data and narrates in voice. No
   hardcoded fallback needed.
 
 Risks this exposes that templating would have hidden — and these
@@ -80,13 +80,13 @@ and where the line is.
   (per smoke-test-auth.sh).
 - The wizard's existing `sageHtml()` calls in
   `zeropointfoundation.org/onboard/index.html` are the source for
-  extracting Sage-voice copy.
+  extracting Regent-voice copy.
 
 ## Build, in order
 
 ### 1. Author the voice anchor (NOT per-claim copy)
 
-Create a small voice anchor that gives Sage enough to narrate any
+Create a small voice anchor that gives the Regent enough to narrate any
 receipt from the foundation onboarding workflow in voice. This is a
 guidance artifact, not a template. New file:
 
@@ -130,7 +130,7 @@ field_extraction_hints:
   - claim fields available on every receipt: id, operator_id, claim,
     subject, capability_used, metadata, created_at
   - the wizard emits metadata-rich payloads; the renderer should pass
-    the full receipt object to Sage so all fields are available for
+    the full receipt object to the Regent so all fields are available for
     interpretation
 ```
 
@@ -145,7 +145,7 @@ Notes on shape:
   no `claim:` prefix, no transformation. The wizard's `emit()` writes
   values like `onboard:identity:generated` straight into the
   `receipts.claim` column, and that's the form to use everywhere.
-- Edge / unknown claims need no special handling. Sage reads them as
+- Edge / unknown claims need no special handling. the Regent reads them as
   data.
 - The bundle is not signed in this PoC. Bundle signing is future work
   parallel to receipt signing (#143).
@@ -187,7 +187,7 @@ The tool:
 2. Loads the voice anchor from
    `/narratives/foundation-director-onboarding.yaml` (once per
    session; cache after first fetch)
-3. **Constructs a prompt for Sage** that includes:
+3. **Constructs a prompt for the Regent** that includes:
    - the voice anchor (patterns, do_not list, examples)
    - the receipts as structured data (full receipt objects, not
      summaries)
@@ -202,7 +202,7 @@ The tool:
    surface
 
 This step is the heart of the PoC. The narration is generated
-fresh each time; Sage interprets the receipts in the moment using
+fresh each time; the Regent interprets the receipts in the moment using
 the anchor as guidance. No template substitution. No per-claim
 key lookup. The tool delegates voice work to the LLM and trusts
 the anchor to keep tone consistent.
@@ -225,8 +225,8 @@ After deploy, Ken runs the following test:
 1. Opens IronClaw at `app.zeropointfoundation.org`.
 2. Issues the chain command (slash or natural language).
 3. Within ~10 seconds, sees his 9 onboarding receipts narrated by
-   Sage in chat.
-4. Sage's voice is recognizable across the chain — composed,
+   the Regent in chat.
+4. the Regent's voice is recognizable across the chain — composed,
    anticipatory, no fawning, no time-of-day framing. Tone is
    consistent across receipts (the anchor is doing its job).
 5. Narration references actual receipt content — fingerprint,

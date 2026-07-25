@@ -4,9 +4,9 @@
 
 ## Motivation
 
-The chain is the single source of truth — but it's operationally mute. `zp audit log` dumps raw entries: timestamp, hash, action debug repr. `zp audit verify` confirms hash linkage. Neither tells a story. To understand "what happened," an operator either reads raw JSON or asks Sage (cockpit-dependent, LLM-interpreted, ephemeral).
+The chain is the single source of truth — but it's operationally mute. `zp audit log` dumps raw entries: timestamp, hash, action debug repr. `zp audit verify` confirms hash linkage. Neither tells a story. To understand "what happened," an operator either reads raw JSON or asks the Regent (cockpit-dependent, LLM-interpreted, ephemeral).
 
-That gap means chain legibility requires a cockpit. A ZP deployment without IronClaw/Sage can write to the chain and verify its integrity but cannot read its own history in human terms. This violates Principle 3 (there is no center) — the chain's legibility depends on an external agent.
+That gap means chain legibility requires a cockpit. A ZP deployment without any cockpit/the Regent can write to the chain and verify its integrity but cannot read its own history in human terms. This violates Principle 3 (there is no center) — the chain's legibility depends on an external agent.
 
 Chain storytelling must be a substrate primitive: deterministic, template-driven, available via `zp` CLI, no LLM required.
 
@@ -20,11 +20,11 @@ These are structurally different inquiries with different sweep patterns, differ
 
 **Domain:** `governance`
 
-**Charter:** Read the receipt chain and tell the coherent story of how authority, trust, and delegation moved through the system. Explain not just *what* happened, but *why* that authority was granted or revoked, and *where* governance rules were followed or violated.
+**Charter:** Read the receipt chain and tell the coherent story of how authority, trust, and delegation moved through the system. Explain not just *what* happened, but *why* that authority was granted or revoked, and *where* governance rules were followed or violated. Extended (July 2026) to include proposing delegation-lifecycle actions during tool intake and other governance-lifecycle events — Cleo emits structured proposals (initial delegation scopes for newly-discovered tools, renewals for delegations approaching expiry, revocations for orphaned or scope-exceeded grants) that the operator signs. Proposals are governance narrative made actionable: Cleo already reads the governance story; proposing next steps is the natural extension. This resolves the role-scope conflict identified in the July 2026 corpus audit between narrator-only and delegation-lifecycle-proposer framings.
 
 **Key distinction:**
 - Steward tells you whether the system is **healthy and consistent**.
-- Cleo tells you the story of **who had power, how they got it, and whether they abused it or followed the rules**.
+- Cleo tells you the story of **who had power, how they got it, and whether they abused it or followed the rules** — and proposes the next governance-lifecycle actions the operator should sign.
 
 **Sweep checks:**
 
@@ -121,7 +121,7 @@ enum SegmentKind {
     ToolCompleted,
     ToolFailed,
 
-    // Cognition (IronClaw / agent interactions)
+    // Cognition (Regent / tenant agent interactions)
     MessageReceived,
     ResponseGenerated,
     ApiProxied,
@@ -152,7 +152,7 @@ impl ChainStory {
     pub fn from_entries(entries: &[AuditEntry]) -> Self { ... }
 
     /// Compressed summary: group related segments into arcs.
-    /// "IronClaw was delegated chain_render access and used it 3 times."
+    /// "The Regent was delegated chain_render access and used it 3 times."
     pub fn summarize(&self) -> Vec<StorySegment> { ... }
 
     /// Filter to a specific domain or SegmentKind.
@@ -169,8 +169,8 @@ Templates are deterministic format strings, not LLM prompts. Examples:
 
 | Chain event | Template |
 |------------|----------|
-| `delegation:granted:ironclaw` | "Delegation granted to **{subject}** for **{capabilities}**, valid until {expiry}." |
-| `delegation:revoked:ironclaw` | "Delegation to **{subject}** revoked by **{actor}**." |
+| `delegation:granted:{subject}` | "Delegation granted to **{subject}** for **{capabilities}**, valid until {expiry}." |
+| `delegation:revoked:{subject}` | "Delegation to **{subject}** revoked by **{actor}**." |
 | `gate:allowed:chain_render` | "Gate allowed **{tool}** for **{actor}**, citing delegation **{grant_id}**." |
 | `gate:denied:chain_render` | "Gate denied **{tool}** for **{actor}**: {reason}." |
 | `officer:std:heartbeat` | "Steward swept at {time}: {finding_count} findings, max severity {severity}." |
@@ -255,11 +255,11 @@ Example output:
          Chain silence: no entries in the last 47 minutes.
          Unsigned entry ratio: 280 of 286 (97%) lack signatures.
   08:14  System posture: 0.90 (Stable). Integrity 0.90, governance 1.00.
-  08:15  Delegation granted to ironclaw for chain_render, valid 24h.
-  08:15  Gate allowed chain_render for ironclaw, citing delegation #abc123.
+  08:15  Delegation granted to {tenant} for chain_render, valid 24h.
+  08:15  Gate allowed chain_render for {tenant}, citing delegation #abc123.
   08:16  Gate denied tool_exec for unknown_agent: no delegation exists.
   08:17  Cleo swept: 3 findings, max severity Info.
-         Delegation lifecycle: 1 active grant (ironclaw), 0 expired, 0 revoked.
+         Delegation lifecycle: 1 active grant ({tenant}), 0 expired, 0 revoked.
          Gate decisions: 1 allowed, 1 denied. Denial was correct (no delegation).
          Authority chain valid: all allowed actions trace to Genesis.
 ```
@@ -274,7 +274,7 @@ Raw dump stays as-is. Forensic tool, not narrative tool.
 
 `zp chain story` outputs deterministic text. Same input → same output, always. Available on any ZP deployment. Officers contribute findings and narration. The CLI renders `ChainStory::render_text()`.
 
-### Cockpit tier (Sage, future agents)
+### Cockpit tier (the Regent, future agents)
 
 Cockpits read `StorySegment`s via a new API endpoint:
 
@@ -282,8 +282,8 @@ Cockpits read `StorySegment`s via a new API endpoint:
 GET /api/v1/audit/story?limit=50&domain=governance
 ```
 
-Returns `ChainStory` as JSON. Sage adds interpretation:
-- "The gate denied chain_render because IronClaw's delegation had expired. Ken re-granted it, and the next attempt succeeded — three receipts documenting failure, intervention, and recovery."
+Returns `ChainStory` as JSON. the Regent adds interpretation:
+- "The gate denied chain_render because the tenant's delegation had expired. Ken re-granted it, and the next attempt succeeded — three receipts documenting failure, intervention, and recovery."
 - Wraps in visualization components from `<zp-receipt-chain>`.
 - Ephemeral by default. Operator can sign to promote to artifact.
 

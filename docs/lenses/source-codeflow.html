@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en" data-theme="zp-dark">
+<head>
+<meta charset="utf-8">
+<title>ZeroPoint — Source CodeFlow</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root {
+  --bg: #0a0a0c; --bg1: #111116; --bg2: #18181f; --bg3: #1e1e26;
+  --surface: #1a1a1f; --border: #222228;
+  --text: #e8e8ec; --muted: #8888a0; --dim: #55556a;
+  --accent: #7eb8da; --accent-dim: #4a7a96; --accent-bright: #a8d4ee;
+  --teal: #94e2d5; --coral: #f87171; --lavender: #a78bfa;
+  --saffron: #fbbf24; --sage: #34d399; --rose: #fb923c;
+  --font: 'Inter','SF Pro Text',system-ui,-apple-system,sans-serif;
+  --mono: 'JetBrains Mono','SF Mono',ui-monospace,monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--font); font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column;
+}
+header {
+  height: 52px; flex-shrink: 0;
+  background: var(--bg1); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 20px; padding: 0 20px;
+}
+.brand { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+.brand .dim { color: var(--muted); font-weight: 400; margin-left: 8px; }
+.tabs { display: flex; gap: 4px; }
+.tab {
+  background: transparent; color: var(--muted);
+  border: 1px solid transparent;
+  padding: 6px 14px; border-radius: 6px;
+  font: inherit; font-size: 12px; font-weight: 500;
+  cursor: pointer; letter-spacing: 0.02em;
+  transition: color 120ms, background 120ms, border-color 120ms;
+}
+.tab:hover { color: var(--text); background: var(--bg2); }
+.tab.active { color: var(--accent-bright); background: var(--bg2); border-color: var(--accent-dim); }
+.tab .q { color: var(--dim); font-weight: 400; margin-left: 6px; font-size: 11px; }
+.tab.active .q { color: var(--muted); }
+.filter-group { display: flex; align-items: center; gap: 4px; }
+.filter-label {
+  font-family: var(--mono); font-size: 10px; color: var(--dim);
+  text-transform: uppercase; letter-spacing: 0.08em; margin-right: 4px;
+}
+.filter-chip {
+  background: transparent; color: var(--dim);
+  border: 1px solid var(--border);
+  padding: 3px 10px; border-radius: 999px;
+  font: inherit; font-size: 10px; font-family: var(--mono);
+  cursor: pointer; letter-spacing: 0.02em;
+  transition: color 120ms, background 120ms, border-color 120ms;
+}
+.filter-chip:hover { color: var(--muted); }
+.filter-chip.active { color: var(--text); border-color: var(--accent-dim); background: var(--bg2); }
+.filter-chip .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
+}
+.spacer { flex: 1; }
+.stats { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+.stats strong { color: var(--text); font-weight: 500; }
+
+main {
+  flex: 1; display: flex; overflow: hidden;
+  position: relative;
+}
+.viewport {
+  flex: 1; position: relative;
+  overflow: hidden; background: var(--bg);
+}
+.viewport svg { display: block; width: 100%; height: 100%; }
+.viewport-hint {
+  position: absolute; top: 16px; left: 16px;
+  color: var(--muted); font-size: 11px; font-family: var(--mono);
+  pointer-events: none; z-index: 2;
+  max-width: 400px;
+  background: rgba(17,17,22,0.94); backdrop-filter: blur(6px);
+  padding: 8px 12px; border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.viewport-hint em { color: var(--text); font-style: normal; }
+
+aside.sidebar {
+  width: 360px; flex-shrink: 0;
+  background: var(--bg1); border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.sb-empty { color: var(--dim); font-size: 12px; font-style: italic; }
+.sb-title { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; color: var(--text); }
+.sb-meta {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  font-family: var(--mono); font-size: 11px;
+}
+.sb-chip {
+  background: var(--bg2); color: var(--muted);
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.sb-chip.role-signing    { color: var(--accent-bright); border-color: var(--accent-dim); }
+.sb-chip.role-gating     { color: var(--saffron); border-color: rgba(251,191,36,0.35); }
+.sb-chip.role-chain-emit { color: var(--sage); border-color: rgba(52,211,153,0.35); }
+.sb-chip.role-verifying  { color: var(--teal); border-color: rgba(148,226,213,0.35); }
+.sb-chip.role-receipt-authoring { color: var(--rose); border-color: rgba(251,146,60,0.35); }
+.sb-chip.role-utility    { color: var(--dim); }
+.sb-section { display: flex; flex-direction: column; gap: 6px; }
+.sb-section-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--dim); font-weight: 600;
+}
+.sb-list { display: flex; flex-direction: column; gap: 3px; }
+.sb-link {
+  font-family: var(--mono); font-size: 11px; color: var(--accent);
+  text-decoration: none; cursor: pointer;
+  padding: 4px 8px; border-radius: 4px;
+  background: transparent; border: none; text-align: left;
+  width: 100%;
+}
+.sb-link:hover { background: var(--bg2); color: var(--accent-bright); }
+.sb-stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px;
+  font-family: var(--mono); font-size: 11px;
+}
+.sb-stat { color: var(--muted); }
+.sb-stat strong { color: var(--text); font-weight: 500; font-size: 13px; }
+
+/* SVG element styling */
+.node { cursor: pointer; }
+.node circle, .node rect {
+  transition: opacity 200ms, stroke-width 100ms;
+}
+.node:hover circle { stroke-width: 2 !important; }
+.node.selected circle {
+  stroke: var(--accent-bright) !important;
+  stroke-width: 3 !important;
+}
+.node.faded { opacity: 0.15; }
+.node-label {
+  fill: var(--text); font-family: var(--mono); font-size: 10px;
+  pointer-events: none; text-anchor: middle;
+}
+.node-label.small { font-size: 9px; fill: var(--muted); }
+.edge {
+  fill: none; stroke-width: 1;
+  transition: opacity 200ms;
+}
+.edge.dep { stroke: var(--dim); opacity: 0.35; }
+.edge.dep.hi { stroke: var(--accent); opacity: 0.85; stroke-width: 1.5; }
+.edge.overlay-signing    { stroke: var(--accent-bright); stroke-width: 1.5; opacity: 0.55; }
+.edge.overlay-gating     { stroke: var(--saffron); stroke-width: 1.5; opacity: 0.55; }
+.edge.overlay-chain-emit { stroke: var(--sage); stroke-width: 1.5; opacity: 0.55; }
+.edge.overlay-verifying  { stroke: var(--teal); stroke-width: 1.5; opacity: 0.55; }
+.edge.overlay-receipt    { stroke: var(--rose); stroke-width: 1.5; opacity: 0.55; }
+.edge.faded { opacity: 0.05; }
+.col-label {
+  fill: var(--dim); font-family: var(--mono); font-size: 10px;
+  text-anchor: middle; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.legend {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(17,17,22,0.94); backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 11px; z-index: 3; max-width: 260px;
+}
+.legend-title {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--dim); font-weight: 600; margin-bottom: 2px;
+}
+.legend-row { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">ZeroPoint <span class="dim">source CodeFlow</span></div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-lens="codeflow">CodeFlow<span class="q">how does information flow?</span></button>
+      <button class="tab" data-lens="weave">Weave<span class="q">what depends on what?</span></button>
+    </div>
+    <div class="filter-group" id="overlay-filter">
+      <span class="filter-label">overlays:</span>
+      <button class="filter-chip" data-overlay="signing"><span class="dot" style="background:#a8d4ee"></span>signing</button>
+      <button class="filter-chip" data-overlay="gating"><span class="dot" style="background:#fbbf24"></span>gating</button>
+      <button class="filter-chip" data-overlay="chain-emit"><span class="dot" style="background:#34d399"></span>chain-emit</button>
+      <button class="filter-chip" data-overlay="verifying"><span class="dot" style="background:#94e2d5"></span>verifying</button>
+      <button class="filter-chip" data-overlay="receipt"><span class="dot" style="background:#fb923c"></span>receipt-authoring</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <main>
+    <div class="viewport">
+      <div class="viewport-hint" id="hint"></div>
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="legend" id="legend"></div>
+    </div>
+    <aside class="sidebar">
+      <div id="sb-empty" style="display:flex; flex-direction:column; gap:16px;"></div>
+      <div id="sb-content" style="display:none; flex-direction:column; gap:16px;"></div>
+    </aside>
+  </main>
+
+<script id="manifest" type="application/json">
+{"generated_at":1784999195,"crates":[{"name":"course-examples","files":17,"loc":1436,"deps":["zp-audit","zp-core","zp-keys","zp-mesh","zp-pipeline","zp-policy","zp-receipt","zp-trust"],"sign_count":2,"gate_count":24,"chain_count":5,"verify_count":9,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":40,"primary_role":"gating","consumed_by":[]},{"name":"execution-engine","files":7,"loc":1778,"deps":["zp-host"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":6,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":6,"primary_role":"verifying","consumed_by":["zp-pipeline"]},{"name":"mle-star-engine","files":8,"loc":2895,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-server"]},{"name":"monte-carlo-engine","files":10,"loc":3495,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-server"]},{"name":"trust-triangle","files":10,"loc":1348,"deps":["zp-core","zp-introduction","zp-keys","zp-policy","zp-receipt"],"sign_count":8,"gate_count":3,"chain_count":0,"verify_count":3,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":14,"primary_role":"signing","consumed_by":[]},{"name":"zp-anchor","files":1,"loc":320,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-cli","zp-server"]},{"name":"zp-artifacts","files":10,"loc":1368,"deps":["zp-content"],"sign_count":31,"gate_count":0,"chain_count":0,"verify_count":3,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":34,"primary_role":"signing","consumed_by":["zp-server"]},{"name":"zp-audit","files":12,"loc":6394,"deps":["zp-core","zp-receipt","zp-verify"],"sign_count":30,"gate_count":0,"chain_count":16,"verify_count":36,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":82,"primary_role":"verifying","consumed_by":["course-examples","zp-cli","zp-hardening-tests","zp-host","zp-mesh","zp-officers","zp-pipeline","zp-policy","zp-regent","zp-server"]},{"name":"zp-bench","files":1,"loc":515,"deps":["zp-engine","zp-receipt","zp-verify"],"sign_count":11,"gate_count":0,"chain_count":0,"verify_count":3,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":14,"primary_role":"signing","consumed_by":[]},{"name":"zp-cli","files":15,"loc":19028,"deps":["zp-anchor","zp-audit","zp-config","zp-configure","zp-core","zp-engine","zp-host","zp-keys","zp-mesh","zp-net","zp-officers","zp-pipeline","zp-policy","zp-receipt","zp-server","zp-trust","zp-verify"],"sign_count":24,"gate_count":6,"chain_count":2,"verify_count":3,"receipt_families":{"governance":2},"receipt_slugs_sample":["governance:propose"],"receipt_slug_total":1,"info_flow_signal":37,"primary_role":"signing","consumed_by":[]},{"name":"zp-cloudflare","files":3,"loc":109,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":[]},{"name":"zp-config","files":8,"loc":1603,"deps":[],"sign_count":8,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":8,"primary_role":"signing","consumed_by":["zp-cli","zp-hardening-tests","zp-regent","zp-server"]},{"name":"zp-configure","files":1,"loc":4479,"deps":["zp-engine","zp-net","zp-trust"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-cli","zp-server"]},{"name":"zp-content","files":6,"loc":747,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-artifacts","zp-server"]},{"name":"zp-core","files":19,"loc":8178,"deps":["zp-receipt"],"sign_count":39,"gate_count":0,"chain_count":1,"verify_count":49,"receipt_families":{"audit":2,"observation":1},"receipt_slugs_sample":["audit:append","audit:read","observation:op"],"receipt_slug_total":3,"info_flow_signal":92,"primary_role":"verifying","consumed_by":["course-examples","trust-triangle","zp-audit","zp-cli","zp-engine","zp-gossip","zp-hardening-tests","zp-host","zp-introduction","zp-keys","zp-learning","zp-llm","zp-memory","zp-mesh","zp-observation","zp-officers","zp-pipeline","zp-policy","zp-regent","zp-server","zp-skills","zp-trust"]},{"name":"zp-discipline","files":18,"loc":2475,"deps":[],"sign_count":5,"gate_count":0,"chain_count":0,"verify_count":11,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":16,"primary_role":"verifying","consumed_by":[]},{"name":"zp-engine","files":10,"loc":6197,"deps":["zp-core","zp-trust"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-bench","zp-cli","zp-configure","zp-server"]},{"name":"zp-gate-envelope","files":1,"loc":421,"deps":["zp-receipt"],"sign_count":6,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":6,"primary_role":"signing","consumed_by":["zp-server"]},{"name":"zp-gossip","files":6,"loc":827,"deps":["zp-core"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":[]},{"name":"zp-hardening-tests","files":16,"loc":3352,"deps":["zp-audit","zp-config","zp-core","zp-keys","zp-net","zp-server","zp-verify"],"sign_count":0,"gate_count":0,"chain_count":2,"verify_count":1,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":3,"primary_role":"chain-emit","consumed_by":[]},{"name":"zp-host","files":5,"loc":767,"deps":["zp-audit","zp-core","zp-policy"],"sign_count":0,"gate_count":11,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":11,"primary_role":"gating","consumed_by":["execution-engine","zp-cli","zp-pipeline","zp-server"]},{"name":"zp-introduction","files":5,"loc":467,"deps":["zp-core","zp-keys"],"sign_count":0,"gate_count":1,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":1,"primary_role":"gating","consumed_by":["trust-triangle"]},{"name":"zp-keys","files":30,"loc":12218,"deps":["zp-core","zp-receipt"],"sign_count":88,"gate_count":0,"chain_count":0,"verify_count":20,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":108,"primary_role":"signing","consumed_by":["course-examples","trust-triangle","zp-cli","zp-hardening-tests","zp-introduction","zp-server"]},{"name":"zp-learning","files":4,"loc":1622,"deps":["zp-core"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-pipeline"]},{"name":"zp-llm","files":9,"loc":1785,"deps":["zp-core"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-pipeline"]},{"name":"zp-memory","files":9,"loc":3588,"deps":["zp-core","zp-observation","zp-receipt"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-server"]},{"name":"zp-memory-index","files":3,"loc":409,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":[]},{"name":"zp-mesh","files":25,"loc":17954,"deps":["zp-audit","zp-core","zp-receipt","zp-trust"],"sign_count":63,"gate_count":0,"chain_count":2,"verify_count":40,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":105,"primary_role":"signing","consumed_by":["course-examples","zp-cli","zp-pipeline","zp-server"]},{"name":"zp-net","files":4,"loc":484,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-cli","zp-configure","zp-hardening-tests","zp-server"]},{"name":"zp-observation","files":9,"loc":3105,"deps":["zp-core","zp-receipt"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-memory","zp-server"]},{"name":"zp-officers","files":14,"loc":6781,"deps":["zp-audit","zp-core","zp-receipt"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":1,"receipt_families":{"governance":1,"gate":6,"delegation":4},"receipt_slugs_sample":["delegation:granted:bar","delegation:granted:ironclaw","gate:allowed:chain_render","gate:allowed:tool_a","gate:allowed:tool_b","gate:allowed:tool_c","gate:denied:chain_render","gate:denied:foo","governance:propose"],"receipt_slug_total":9,"info_flow_signal":12,"primary_role":"receipt-authoring","consumed_by":["zp-cli","zp-regent","zp-server"]},{"name":"zp-pipeline","files":5,"loc":6928,"deps":["execution-engine","zp-audit","zp-core","zp-host","zp-learning","zp-llm","zp-mesh","zp-policy","zp-receipt","zp-skills","zp-trust"],"sign_count":8,"gate_count":21,"chain_count":1,"verify_count":15,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":45,"primary_role":"gating","consumed_by":["course-examples","zp-cli","zp-server"]},{"name":"zp-policy","files":7,"loc":4538,"deps":["zp-audit","zp-core"],"sign_count":0,"gate_count":80,"chain_count":4,"verify_count":3,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":87,"primary_role":"gating","consumed_by":["course-examples","trust-triangle","zp-cli","zp-host","zp-pipeline","zp-server"]},{"name":"zp-preflight","files":6,"loc":1038,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":[]},{"name":"zp-receipt","files":17,"loc":7348,"deps":["zp-verify"],"sign_count":75,"gate_count":0,"chain_count":43,"verify_count":60,"receipt_families":{"capability":3},"receipt_slugs_sample":["capability:degraded","capability:failed","capability:verified"],"receipt_slug_total":3,"info_flow_signal":181,"primary_role":"signing","consumed_by":["course-examples","trust-triangle","zp-audit","zp-bench","zp-cli","zp-core","zp-gate-envelope","zp-keys","zp-memory","zp-mesh","zp-observation","zp-officers","zp-pipeline","zp-regent","zp-server","zp-verify"]},{"name":"zp-regent","files":18,"loc":10810,"deps":["zp-audit","zp-config","zp-core","zp-officers","zp-receipt"],"sign_count":0,"gate_count":0,"chain_count":5,"verify_count":0,"receipt_families":{"cognitive":4,"regent":1},"receipt_slugs_sample":["cognitive:correction:revoked","cognitive:correction:standing","cognitive:correction:violated","cognitive:observer:verified","regent:tool:completed:something"],"receipt_slug_total":5,"info_flow_signal":10,"primary_role":"chain-emit","consumed_by":["zp-server"]},{"name":"zp-sensors","files":6,"loc":1407,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-server"]},{"name":"zp-server","files":48,"loc":37899,"deps":["mle-star-engine","monte-carlo-engine","zp-anchor","zp-artifacts","zp-audit","zp-config","zp-configure","zp-content","zp-core","zp-engine","zp-gate-envelope","zp-host","zp-keys","zp-memory","zp-mesh","zp-net","zp-observation","zp-officers","zp-pipeline","zp-policy","zp-receipt","zp-regent","zp-sensors","zp-trust","zp-verbs"],"sign_count":106,"gate_count":17,"chain_count":19,"verify_count":43,"receipt_families":{"artifact":1,"chain":13,"capability":7,"gate":5,"delegation":6,"cognitive":8,"regent":15,"substrate":1},"receipt_slugs_sample":["artifact:signed","capability:degraded","capability:failed","capability:verified","capability:verified:ironclaw:auth","chain:canary:missed","chain:canary:remediated","chain:canary:remediation_failed","chain:canary:unresponsive","chain:canary:verified","chain:canary:written","cognitive:correction:revoked","cognitive:correction:standing","cognitive:correction:violated","cognitive:input:composed","cognitive:observer:verified","delegation:expired:artemis","delegation:granted","delegation:granted:artemis","delegation:granted:regent"],"receipt_slug_total":40,"info_flow_signal":241,"primary_role":"signing","consumed_by":["zp-cli","zp-hardening-tests"]},{"name":"zp-skills","files":3,"loc":731,"deps":["zp-core"],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-pipeline"]},{"name":"zp-trust","files":4,"loc":2313,"deps":["zp-core"],"sign_count":13,"gate_count":0,"chain_count":0,"verify_count":2,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":15,"primary_role":"signing","consumed_by":["course-examples","zp-cli","zp-configure","zp-engine","zp-mesh","zp-pipeline","zp-server"]},{"name":"zp-verbs","files":2,"loc":77,"deps":[],"sign_count":0,"gate_count":0,"chain_count":0,"verify_count":0,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":0,"primary_role":"utility","consumed_by":["zp-server"]},{"name":"zp-verify","files":3,"loc":1385,"deps":["zp-receipt"],"sign_count":22,"gate_count":0,"chain_count":0,"verify_count":17,"receipt_families":{},"receipt_slugs_sample":[],"receipt_slug_total":0,"info_flow_signal":39,"primary_role":"signing","consumed_by":["zp-audit","zp-bench","zp-cli","zp-hardening-tests","zp-receipt"]}],"counts":{"total_crates":42,"total_deps_edges":121,"total_sign_sites":539,"total_gate_crossings":163,"total_chain_emits":100,"total_verifications":325,"total_receipt_slugs":61}}
+</script>
+
+<script>
+(function(){
+  const M = JSON.parse(document.getElementById('manifest').textContent);
+  const byName = {};
+  M.crates.forEach(c => { byName[c.name] = c; });
+
+  let activeLens = 'codeflow';
+  let selected = null;
+  // Overlay toggle: which info-flow class edges to overlay
+  const overlays = new Set(); // 'signing' | 'gating' | 'chain-emit' | 'verifying' | 'receipt'
+
+  const P = {
+    bg: '#0a0a0c', bg1: '#111116', bg2: '#18181f', surface: '#1a1a1f',
+    border: '#222228', text: '#e8e8ec', muted: '#8888a0', dim: '#55556a',
+    accent: '#7eb8da', accentDim: '#4a7a96', accentBright: '#a8d4ee',
+    teal: '#94e2d5', coral: '#f87171', lavender: '#a78bfa',
+    saffron: '#fbbf24', sage: '#34d399', rose: '#fb923c',
+  };
+  const roleColor = {
+    'signing': P.accentBright,
+    'gating': P.saffron,
+    'chain-emit': P.sage,
+    'verifying': P.teal,
+    'receipt-authoring': P.rose,
+    'utility': P.dim,
+  };
+  const roleLabel = {
+    'signing': 'signing',
+    'gating': 'gating',
+    'chain-emit': 'chain-emit',
+    'verifying': 'verifying',
+    'receipt-authoring': 'receipt-authoring',
+    'utility': 'utility',
+  };
+  // For overlays: which role signal count to source from
+  const overlaySource = {
+    'signing': 'sign_count',
+    'gating': 'gate_count',
+    'chain-emit': 'chain_count',
+    'verifying': 'verify_count',
+    'receipt': 'receipt_slug_total',
+  };
+
+  const svg = document.getElementById('canvas');
+  const hint = document.getElementById('hint');
+  const legend = document.getElementById('legend');
+  const stats = document.getElementById('stats');
+  const sbEmpty = document.getElementById('sb-empty');
+  const sbContent = document.getElementById('sb-content');
+
+  function updateStats() {
+    const c = M.counts;
+    stats.innerHTML = `<strong>${c.total_crates}</strong> crates · <strong>${c.total_deps_edges}</strong> deps · <strong>${c.total_sign_sites}</strong> sign · <strong>${c.total_gate_crossings}</strong> gate · <strong>${c.total_chain_emits}</strong> chain-emit · <strong>${c.total_verifications}</strong> verify · <strong>${c.total_receipt_slugs}</strong> receipt-slugs`;
+  }
+  updateStats();
+
+  // ---- Empty-state summary in sidebar ----
+  function renderEmptyState() {
+    const empty = document.getElementById('sb-empty');
+    if (!empty) return;
+    const topBy = (key, n=5) => M.crates.slice().sort((a,b) => (b[key]||0) - (a[key]||0)).filter(c => c[key] > 0).slice(0, n);
+    const roleKeys = {
+      'signing': 'sign_count',
+      'gating': 'gate_count',
+      'chain-emit': 'chain_count',
+      'verifying': 'verify_count',
+      'receipt-authoring': 'receipt_slug_total',
+    };
+    const parts = [`<div class="sb-title" style="font-size:12px;color:var(--muted);font-weight:500;">Info-flow hot spots</div>`];
+    Object.keys(roleKeys).forEach(role => {
+      const key = roleKeys[role];
+      const arr = topBy(key);
+      if (!arr.length) return;
+      parts.push(`<div class="sb-section">
+        <div class="sb-section-label" style="color:${roleColor[role]}">${roleLabel[role]||role}</div>
+        <div class="sb-list">${arr.map(c => `<button class="sb-link" data-nav="${esc(c.name)}" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>${esc(c.name)}</span>
+          <span style="color:var(--dim);font-size:10px;">${c[key]}</span>
+        </button>`).join('')}</div>
+      </div>`);
+    });
+    parts.push(`<div style="color:var(--dim);font-size:11px;font-style:italic;padding-top:8px;border-top:1px solid var(--border);">Click any crate for full detail. Toggle overlays in the header to highlight where each info-flow class concentrates.</div>`);
+    empty.innerHTML = parts.join('');
+    empty.querySelectorAll('[data-nav]').forEach(el => {
+      el.addEventListener('click', () => selectCrate(el.dataset.nav));
+    });
+  }
+  renderEmptyState();
+
+  function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+  function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+  function svgEl(tag, attrs) {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function getVBSize() {
+    const r = svg.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+  // log-scale radius from signal count
+  function nodeR(c) {
+    const n = c.info_flow_signal;
+    if (n === 0) return 6;
+    return Math.min(30, 6 + Math.sqrt(n) * 1.2);
+  }
+
+  // ---- Tab wiring ----
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      activeLens = t.dataset.lens;
+      render();
+    });
+  });
+  document.querySelectorAll('#overlay-filter .filter-chip').forEach(c => {
+    c.addEventListener('click', () => {
+      const o = c.dataset.overlay;
+      if (overlays.has(o)) { overlays.delete(o); c.classList.remove('active'); }
+      else { overlays.add(o); c.classList.add('active'); }
+      render();
+    });
+  });
+
+  function selectCrate(name) {
+    selected = name;
+    render();
+    renderSidebar(byName[name]);
+  }
+  function renderSidebar(c) {
+    if (!c) { sbEmpty.style.display='flex'; sbContent.style.display='none'; return; }
+    sbEmpty.style.display = 'none';
+    sbContent.style.display = 'flex';
+    const parts = [];
+    parts.push(`<div class="sb-title">${esc(c.name)}</div>`);
+    parts.push(`<div class="sb-meta">
+      <span class="sb-chip role-${esc(c.primary_role)}">${esc(roleLabel[c.primary_role]||c.primary_role)}</span>
+      <span class="sb-chip">${c.files} files</span>
+      <span class="sb-chip">${c.loc.toLocaleString()} LOC</span>
+    </div>`);
+    parts.push(`<div class="sb-section">
+      <div class="sb-section-label">Info-flow signals</div>
+      <div class="sb-stat-grid">
+        <div class="sb-stat"><strong>${c.sign_count}</strong> signing sites</div>
+        <div class="sb-stat"><strong>${c.gate_count}</strong> gate crossings</div>
+        <div class="sb-stat"><strong>${c.chain_count}</strong> chain emits</div>
+        <div class="sb-stat"><strong>${c.verify_count}</strong> verifications</div>
+        <div class="sb-stat"><strong>${c.receipt_slug_total}</strong> receipt slugs</div>
+        <div class="sb-stat"><strong>${c.info_flow_signal}</strong> total signal</div>
+      </div>
+    </div>`);
+    if (c.deps.length) {
+      parts.push(`<div class="sb-section">
+        <div class="sb-section-label">Depends on (${c.deps.length})</div>
+        <div class="sb-list">${c.deps.map(d => `<button class="sb-link" data-nav="${esc(d)}">${esc(d)}</button>`).join('')}</div>
+      </div>`);
+    }
+    if (c.consumed_by.length) {
+      parts.push(`<div class="sb-section">
+        <div class="sb-section-label">Consumed by (${c.consumed_by.length})</div>
+        <div class="sb-list">${c.consumed_by.map(d => `<button class="sb-link" data-nav="${esc(d)}">${esc(d)}</button>`).join('')}</div>
+      </div>`);
+    }
+    const fams = Object.entries(c.receipt_families).sort((a,b) => b[1]-a[1]);
+    if (fams.length) {
+      parts.push(`<div class="sb-section">
+        <div class="sb-section-label">Receipt families authored (${fams.length})</div>
+        <div class="sb-meta">${fams.map(([n,ct]) => `<span class="sb-chip" title="${ct} references">${esc(n)} · ${ct}</span>`).join('')}</div>
+      </div>`);
+    }
+    if (c.receipt_slugs_sample.length) {
+      parts.push(`<div class="sb-section">
+        <div class="sb-section-label">Receipt slug sample</div>
+        <div class="sb-list">${c.receipt_slugs_sample.map(s => `<span class="sb-chip" style="font-family:var(--mono);text-align:left;">${esc(s)}</span>`).join('')}</div>
+      </div>`);
+    }
+    sbContent.innerHTML = parts.join('');
+    sbContent.querySelectorAll('[data-nav]').forEach(el => {
+      el.addEventListener('click', () => selectCrate(el.dataset.nav));
+    });
+  }
+
+  // ---- Compute dep depth for CodeFlow layout ----
+  function computeDepths() {
+    // Depth = length of longest dep path from this crate to a foundation crate (no ZP deps).
+    // Foundation crates are depth 0; consumers are depth+1 above their deepest dep.
+    const depth = {};
+    const inDeg = {}; // for topological
+    M.crates.forEach(c => { inDeg[c.name] = c.deps.filter(d => byName[d]).length; });
+    // Kahn's for topo, computing depth as we go
+    const queue = [];
+    M.crates.forEach(c => {
+      if (inDeg[c.name] === 0) { depth[c.name] = 0; queue.push(c.name); }
+    });
+    while (queue.length) {
+      const n = queue.shift();
+      const c = byName[n];
+      c.consumed_by.forEach(dep => {
+        const cur = depth[dep] === undefined ? -1 : depth[dep];
+        depth[dep] = Math.max(cur, (depth[n] || 0) + 1);
+        inDeg[dep] -= 1;
+        if (inDeg[dep] === 0) queue.push(dep);
+      });
+    }
+    // Any remaining un-visited crates (cycles) get depth 1
+    M.crates.forEach(c => { if (depth[c.name] === undefined) depth[c.name] = 1; });
+    return depth;
+  }
+  const DEPTHS = computeDepths();
+  const maxDepth = Math.max(...Object.values(DEPTHS));
+
+  // ---- CodeFlow renderer ----
+  function renderCodeFlow() {
+    const {w, h} = getVBSize();
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    clear(svg);
+    hint.innerHTML = 'Source-level CodeFlow. Columns = <em>dep depth</em> — foundation crates left, consumers right. Node size = info-flow signal density. Color = primary role. Toggle overlays to highlight where each info-flow class concentrates.';
+    legend.innerHTML = `
+      <div class="legend-title">Primary role (color)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.accentBright}"></div>signing (identity, ed25519, HKDF)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.saffron}"></div>gating (policy, delegation check)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.sage}"></div>chain-emit (append, receipt emit)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.teal}"></div>verifying (verify, integrity)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.rose}"></div>receipt-authoring (schema slugs)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.dim}"></div>utility</div>`;
+
+    // Group by depth
+    const cols = {};
+    M.crates.forEach(c => {
+      const d = DEPTHS[c.name] ?? 1;
+      (cols[d] = cols[d] || []).push(c);
+    });
+    Object.keys(cols).forEach(d => cols[d].sort((a,b) => b.info_flow_signal - a.info_flow_signal));
+
+    const pad = { l: 80, r: 80, t: 60, b: 40 };
+    const colW = (w - pad.l - pad.r) / Math.max(1, maxDepth);
+
+    const pos = {};
+    Object.keys(cols).forEach(d => {
+      const arr = cols[d];
+      const x = pad.l + parseInt(d) * colW;
+      const stepY = (h - pad.t - pad.b) / (arr.length + 1);
+      arr.forEach((c, i) => {
+        pos[c.name] = { x, y: pad.t + (i + 1) * stepY, depth: parseInt(d) };
+      });
+    });
+
+    // ---- Draw dep edges (all crates) ----
+    M.crates.forEach(c => {
+      c.deps.forEach(d => {
+        const p1 = pos[d];        // dep source (further left)
+        const p2 = pos[c.name];   // consumer (further right)
+        if (!p1 || !p2) return;
+        const isSelectedEdge = selected && (selected === c.name || selected === d);
+        const midX = (p1.x + p2.x) / 2;
+        const path = svgEl('path', {
+          d: `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`,
+          class: 'edge dep' + (isSelectedEdge ? ' hi' : (overlays.size ? ' faded' : '')),
+        });
+        svg.appendChild(path);
+      });
+    });
+
+    // ---- Overlay edges — for each overlay, draw a colored edge between each pair (dep, consumer)
+    // weighted by the *sum* of the class's signal at both ends. This lets you see which dep-chains
+    // are heavy in signing / gating / chain-emit / verifying / receipt authoring.
+    overlays.forEach(o => {
+      const sourceKey = overlaySource[o];
+      const edgeClass = (o === 'receipt') ? 'edge overlay-receipt' : ('edge overlay-' + o);
+      M.crates.forEach(c => {
+        c.deps.forEach(d => {
+          const p1 = pos[d];
+          const p2 = pos[c.name];
+          if (!p1 || !p2) return;
+          const other = byName[d];
+          if (!other) return;
+          const sig = (c[sourceKey] || 0) + (other[sourceKey] || 0);
+          if (sig === 0) return;
+          const midX = (p1.x + p2.x) / 2;
+          const path = svgEl('path', {
+            d: `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`,
+            class: edgeClass,
+          });
+          // Opacity scaled by signal
+          path.setAttribute('opacity', String(Math.min(0.9, 0.15 + sig / 40)));
+          svg.appendChild(path);
+        });
+      });
+    });
+
+    // ---- Column labels ----
+    Object.keys(cols).forEach(d => {
+      const x = pad.l + parseInt(d) * colW;
+      const label = svgEl('text', { x, y: 30, class: 'col-label' });
+      label.textContent = d == 0 ? 'FOUNDATION' : `L${d}`;
+      svg.appendChild(label);
+    });
+
+    // ---- Nodes ----
+    M.crates.forEach(c => {
+      const p = pos[c.name];
+      if (!p) return;
+      const color = roleColor[c.primary_role] || P.muted;
+      const r = nodeR(c);
+      const isSelected = selected === c.name;
+      const isRelated = selected && (byName[selected].deps.includes(c.name) || byName[selected].consumed_by.includes(c.name));
+      const g = svgEl('g', {
+        class: 'node' + (isSelected ? ' selected' : '') + (selected && !isSelected && !isRelated ? ' faded' : ''),
+        transform: `translate(${p.x} ${p.y})`
+      });
+      g.setAttribute('data-crate', c.name);
+      const dot = svgEl('circle', {
+        cx: 0, cy: 0, r,
+        fill: color,
+        'fill-opacity': 0.85,
+        stroke: color, 'stroke-width': 1,
+      });
+      g.appendChild(dot);
+      const label = svgEl('text', {
+        x: 0, y: r + 12, class: 'node-label', fill: P.text
+      });
+      label.textContent = c.name;
+      g.appendChild(label);
+      g.addEventListener('click', () => selectCrate(c.name));
+      svg.appendChild(g);
+    });
+  }
+
+  // ---- Weave renderer (radial dependency topology) ----
+  function renderWeave() {
+    const {w, h} = getVBSize();
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    clear(svg);
+    hint.innerHTML = 'Weave: radial dependency topology. Foundation crates (no deps) at center, consumer crates on outer rings. Ring position = dep depth. Angular position = clustered by primary role.';
+    legend.innerHTML = `
+      <div class="legend-title">Primary role (color)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.accentBright}"></div>signing</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.saffron}"></div>gating</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.sage}"></div>chain-emit</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.teal}"></div>verifying</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.rose}"></div>receipt-authoring</div>
+      <div class="legend-row"><div class="legend-dot" style="background:${P.dim}"></div>utility</div>
+      <div class="legend-title" style="margin-top:6px">Ring = dep depth</div>`;
+
+    const cx = w / 2, cy = h / 2;
+    const maxR = Math.min(w, h) * 0.42;
+
+    // Group crates by depth
+    const ringGroups = {};
+    M.crates.forEach(c => {
+      const d = DEPTHS[c.name] ?? 1;
+      (ringGroups[d] = ringGroups[d] || []).push(c);
+    });
+
+    const pos = {};
+    // Order within ring by primary role, then by info_flow_signal
+    const roleOrder = ['signing','gating','chain-emit','verifying','receipt-authoring','utility'];
+    Object.keys(ringGroups).forEach(d => {
+      const depth = parseInt(d);
+      const ringR = maxR * (depth / maxDepth);
+      const arr = ringGroups[d].slice().sort((a,b) => {
+        const ai = roleOrder.indexOf(a.primary_role), bi = roleOrder.indexOf(b.primary_role);
+        if (ai !== bi) return ai - bi;
+        return b.info_flow_signal - a.info_flow_signal;
+      });
+      arr.forEach((c, i) => {
+        const a = (i / arr.length) * Math.PI * 2 - Math.PI / 2;
+        pos[c.name] = { x: cx + Math.cos(a) * (depth === 0 ? 0 : ringR), y: cy + Math.sin(a) * (depth === 0 ? 0 : ringR) };
+      });
+    });
+    // Foundation crates cluster at center — spread them a bit
+    if (ringGroups[0]) {
+      const arr = ringGroups[0];
+      const clusterR = Math.min(w, h) * 0.08;
+      arr.forEach((c, i) => {
+        if (arr.length === 1) { pos[c.name] = { x: cx, y: cy }; return; }
+        const a = (i / arr.length) * Math.PI * 2 - Math.PI / 2;
+        pos[c.name] = { x: cx + Math.cos(a) * clusterR, y: cy + Math.sin(a) * clusterR };
+      });
+    }
+
+    // Draw dep edges
+    M.crates.forEach(c => {
+      c.deps.forEach(d => {
+        const p1 = pos[d], p2 = pos[c.name];
+        if (!p1 || !p2) return;
+        const isHi = selected && (selected === c.name || selected === d);
+        const path = svgEl('line', {
+          x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
+          class: 'edge dep' + (isHi ? ' hi' : ''),
+        });
+        svg.appendChild(path);
+      });
+    });
+    // Overlays
+    overlays.forEach(o => {
+      const sourceKey = overlaySource[o];
+      const edgeClass = (o === 'receipt') ? 'edge overlay-receipt' : ('edge overlay-' + o);
+      M.crates.forEach(c => {
+        c.deps.forEach(d => {
+          const p1 = pos[d], p2 = pos[c.name];
+          if (!p1 || !p2) return;
+          const other = byName[d];
+          const sig = (c[sourceKey] || 0) + (other[sourceKey] || 0);
+          if (sig === 0) return;
+          const path = svgEl('line', {
+            x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
+            class: edgeClass,
+          });
+          path.setAttribute('opacity', String(Math.min(0.9, 0.15 + sig / 40)));
+          svg.appendChild(path);
+        });
+      });
+    });
+
+    // Nodes
+    M.crates.forEach(c => {
+      const p = pos[c.name];
+      if (!p) return;
+      const color = roleColor[c.primary_role] || P.muted;
+      const r = nodeR(c);
+      const isSelected = selected === c.name;
+      const isRelated = selected && (byName[selected].deps.includes(c.name) || byName[selected].consumed_by.includes(c.name));
+      const g = svgEl('g', {
+        class: 'node' + (isSelected ? ' selected' : '') + (selected && !isSelected && !isRelated ? ' faded' : ''),
+        transform: `translate(${p.x} ${p.y})`
+      });
+      g.setAttribute('data-crate', c.name);
+      const dot = svgEl('circle', {
+        cx: 0, cy: 0, r, fill: color, 'fill-opacity': 0.85,
+        stroke: color, 'stroke-width': 1,
+      });
+      g.appendChild(dot);
+      const label = svgEl('text', {
+        x: 0, y: r + 12, class: 'node-label', fill: P.text
+      });
+      label.textContent = c.name;
+      g.appendChild(label);
+      g.addEventListener('click', () => selectCrate(c.name));
+      svg.appendChild(g);
+    });
+  }
+
+  function render() {
+    if (activeLens === 'codeflow') renderCodeFlow();
+    else if (activeLens === 'weave') renderWeave();
+  }
+
+  const ro = new ResizeObserver(render);
+  ro.observe(svg.parentElement);
+
+  const urlLens = new URLSearchParams(location.search).get('lens');
+  if (urlLens && ['codeflow','weave'].includes(urlLens)) {
+    activeLens = urlLens;
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.lens === urlLens));
+  }
+  render();
+})();
+</script>
+</body>
+</html>

@@ -39,7 +39,7 @@ fn middle_prompt_never_contains_last_receipt_claim() {
         receipt("r4", "LAST EVENT SENTINEL"),
     ];
     let middle = &receipts[1..receipts.len() - 1];
-    let prompt = build_middle_prompt(middle, "You are Sage.");
+    let prompt = build_middle_prompt(middle, "You are the apex observer.");
     assert!(
         !prompt.contains("LAST EVENT SENTINEL"),
         "middle prompt must never contain the last receipt: {prompt}"

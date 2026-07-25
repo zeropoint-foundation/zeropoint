@@ -1,0 +1,204 @@
+{
+  "target": "APOLLO",
+  "stamp": "latest",
+  "contexts": [
+    4096,
+    16384,
+    32768,
+    65536
+  ],
+  "results": [
+    {
+      "id": "qwen3-30b-a3b",
+      "repo": "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit",
+      "tier": "resident-general",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 3.3,
+      "decode_tps": 93.4,
+      "peak_memory_gb": 16.05,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4136,
+          "prefill_tps": 733.8,
+          "peak_gb": 17.06,
+          "synthesis_ok": true
+        },
+        "16384": {
+          "prompt_tokens": 16438,
+          "prefill_tps": 493.3,
+          "peak_gb": 18.13,
+          "synthesis_ok": true
+        },
+        "32768": {
+          "prompt_tokens": 32800,
+          "prefill_tps": 321.0,
+          "peak_gb": 19.63,
+          "synthesis_ok": true
+        },
+        "65536": {
+          "prompt_tokens": 65566,
+          "prefill_tps": 180.9,
+          "peak_gb": 22.59,
+          "synthesis_ok": true
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": true,
+        "uc1_synthesis": true
+      },
+      "structured_score": "4/4",
+      "samples": {
+        "uc1_ontology_extract": "{\n  \"trajectories\": [\n    \"Operator declared an inference envelope authorizing two models\",\n    \"Substrate recorded a served-model receipt\",\n    \"Router served a cheaper tier\",\n    \"Operator flagged the divergence for review\"\n  ],\n  \"decisions\": [\n    \"Operator declared an inference envelope authorizing two models\",\n    \"Operator flagged the divergence for review\"\n  ],\n  \"insights\": [\n    \"A divergence receipt fired when the router served a cheaper tier\",\n    \"Substrate recorded a served-model receipt\"\n  ]\n}",
+        "uc3_grounded_qa": "Sixty days' notice is required to terminate for convenience, as stated in Section 9.1."
+      }
+    },
+    {
+      "id": "qwen3-coder-30b-a3b",
+      "repo": "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+      "tier": "resident-coder",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 3.8,
+      "decode_tps": 93.1,
+      "peak_memory_gb": 16.05,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4136,
+          "prefill_tps": 740.4,
+          "peak_gb": 17.06,
+          "synthesis_ok": true
+        },
+        "16384": {
+          "prompt_tokens": 16438,
+          "prefill_tps": 453.3,
+          "peak_gb": 18.16,
+          "synthesis_ok": true
+        },
+        "32768": {
+          "prompt_tokens": 32800,
+          "prefill_tps": 287.4,
+          "peak_gb": 19.63,
+          "synthesis_ok": true
+        },
+        "65536": {
+          "prompt_tokens": 65566,
+          "prefill_tps": 166.9,
+          "peak_gb": 22.59,
+          "synthesis_ok": true
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": true,
+        "uc1_synthesis": true
+      },
+      "structured_score": "4/4",
+      "samples": {
+        "uc1_ontology_extract": "```json\n{\n  \"trajectories\": [\n    \"model selection\",\n    \"substrate recording\",\n    \"router serving\",\n    \"divergence detection\"\n  ],\n  \"decisions\": [\n    \"declare inference envelope\",\n    \"record served model\",\n    \"flag divergence\",\n    \"review divergence\"\n  ],\n  \"insights\": [\n    \"two models authorized\",\n    \"cheaper tier served\",\n    \"divergence detected\",\n    \"review required\"\n  ]\n}\n```",
+        "uc3_grounded_qa": "Section 9.1 states that either party may terminate for convenience with 60 days written notice."
+      }
+    },
+    {
+      "id": "qwen3-4b",
+      "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+      "tier": "fast-slm",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 1.0,
+      "decode_tps": 93.8,
+      "peak_memory_gb": 2.21,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4136,
+          "prefill_tps": 678.8,
+          "peak_gb": 3.41,
+          "synthesis_ok": true
+        },
+        "16384": {
+          "prompt_tokens": 16438,
+          "prefill_tps": 476.6,
+          "peak_gb": 4.94,
+          "synthesis_ok": true
+        },
+        "32768": {
+          "prompt_tokens": 32800,
+          "prefill_tps": 322.6,
+          "peak_gb": 7.22,
+          "synthesis_ok": true
+        },
+        "65536": {
+          "prompt_tokens": 65566,
+          "prefill_tps": 183.5,
+          "peak_gb": 11.94,
+          "synthesis_ok": true
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": true,
+        "uc1_synthesis": true
+      },
+      "structured_score": "4/4",
+      "samples": {
+        "uc1_ontology_extract": "{\n  \"trajectories\": [\n    \"Operator authorizes inference envelope for two models\",\n    \"Substrate records served-model receipt\",\n    \"Router serves cheaper tier, triggering divergence receipt\",\n    \"Operator flags divergence for review\"\n  ],\n  \"decisions\": [\n    \"Authorize inference envelope for two models\",\n    \"Flag divergence for review\"\n  ],\n  \"insights\": [\n    \"Inference envelope enables model selection flexibility\",\n    \"Served-model receipt confirms model deployment\",\n    \"Divergence detected when cheaper tier is served\",\n    \"Review process initiated for potential policy or routing issues\"\n  ]\n}",
+        "uc3_grounded_qa": "Sixty days' written notice is required to terminate for convenience, as specified in Section 9.1."
+      }
+    },
+    {
+      "id": "qwen3-1.7b",
+      "repo": "mlx-community/Qwen3-1.7B-4bit",
+      "tier": "classifier-edge",
+      "license": "Apache-2.0",
+      "loaded": true,
+      "load_error": null,
+      "load_seconds": 0.7,
+      "decode_tps": 199.0,
+      "peak_memory_gb": 0.98,
+      "prefill": {
+        "4096": {
+          "prompt_tokens": 4136,
+          "prefill_tps": 1357.8,
+          "peak_gb": 2.07,
+          "synthesis_ok": false
+        },
+        "16384": {
+          "prompt_tokens": 16438,
+          "prefill_tps": 1143.0,
+          "peak_gb": 3.34,
+          "synthesis_ok": false
+        },
+        "32768": {
+          "prompt_tokens": 32800,
+          "prefill_tps": 782.2,
+          "peak_gb": 4.96,
+          "synthesis_ok": false
+        },
+        "65536": {
+          "prompt_tokens": 65566,
+          "prefill_tps": 481.1,
+          "peak_gb": 8.64,
+          "synthesis_ok": false
+        }
+      },
+      "structured": {
+        "receipt_json": true,
+        "tool_call_json": true,
+        "route_classifier": false,
+        "uc1_synthesis": false
+      },
+      "structured_score": "2/4",
+      "samples": {
+        "uc1_ontology_extract": "<think>\nOkay, let's see. The user provided a chain fragment and wants it converted into JSON with specific keys: trajectories, decisions, and insights. The keys are trajectories (an array of strings), decisions (an array of short strings), and insights (also an array of short strings). \n\nFirst, I need to parse the given text. The original text is: \"Operator declared an inference envelope authorizing two models; substrate recorded a served-model receipt; a divergence receipt fired when the router served a cheaper tier; operator flagged the divergence for review.\"\n\nBreaking it down sentence by sentence.\n\nFirst sentence: \"Operator declared an inference envelope authorizing two models;\" \nSo, \"declared an inference envelope authorizing two models\" \u2013 here, the key is \"inference envelope\" and \"authorizing two models\". But the key here is the action, which is \"declared\" and the thing declared is the envelope. But the JSON key is trajectories, decisions, insights. So maybe the \"declared\" is part of the decision? Or maybe the \"inference envelope\" is part of the trajectory? Wait, the user wants the JSON keys as trajectories, decisions, insights. So each sentence might be part of one of these.\n\nWait, the user wants the JSON to have trajectories, decisions, and insights. So each of these is an array of strings. So the task is to extract the elements from the chain fragment and categorize them into these three arrays.\n\nLet me",
+        "uc3_grounded_qa": "<think>\n</think>\n\nThe required notice to terminate for convenience is 60 days, under Section 9.1."
+      }
+    }
+  ]
+}

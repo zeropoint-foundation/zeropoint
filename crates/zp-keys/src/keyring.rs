@@ -300,12 +300,38 @@ impl Keyring {
         GenesisKey::from_parts(secret, cert)
     }
 
-    /// Path to the `genesis.json` record for this keyring.
+    /// Path to the Genesis **certificate** file for this keyring
+    /// (`<keys_dir>/genesis.json`).
     ///
-    /// Pass this to [`zp_keys::load_sovereign_root`] to load the Genesis
-    /// secret through the canonical single-ceremony API.
-    pub fn genesis_record_path(&self) -> std::path::PathBuf {
+    /// This is the crypto-identity certificate (subject, role, public key,
+    /// issuer signature) — NOT the sovereignty descriptor that
+    /// [`zp_keys::load_sovereign_root`] consumes. The sovereignty descriptor
+    /// lives at the ZP-home root (`~/ZeroPoint/genesis.json`) and is obtained
+    /// via [`zp_core::paths::genesis_record_path`] instead.
+    ///
+    /// Do NOT pass this path to `load_sovereign_root`: the certificate JSON
+    /// has no `sovereignty_mode` field and the loader will error with
+    /// "genesis.json missing sovereignty_mode." This is the 2026-07-18 bug
+    /// documented in `docs/design/VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md`.
+    pub fn genesis_certificate_path(&self) -> std::path::PathBuf {
         self.base_dir.join("genesis.json")
+    }
+
+    /// Deprecated alias for [`Self::genesis_certificate_path`]. Retained so
+    /// external callers don't break at rename time; new call sites should use
+    /// the certificate name.
+    ///
+    /// # Warning
+    ///
+    /// The historical docstring here incorrectly recommended passing this to
+    /// [`zp_keys::load_sovereign_root`]. That is wrong — see the
+    /// `genesis_certificate_path` docstring for the correct usage.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Renamed to genesis_certificate_path — this method returns the certificate path, not the sovereignty record. Use zp_core::paths::genesis_record_path for the sovereignty descriptor consumed by load_sovereign_root."
+    )]
+    pub fn genesis_record_path(&self) -> std::path::PathBuf {
+        self.genesis_certificate_path()
     }
 
     /// Load the genesis secret via the standard OS Keychain (OnceLock-cached).

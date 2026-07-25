@@ -1,0 +1,247 @@
+{
+  "title": "The Hot Girl Service Economy",
+  "subtitle": "How tropical influencer hubs trap women in an insular, family-averse economy — and why it may soon collapse.",
+  "center": {
+    "label": "Hot Girl Service Economy",
+    "emoji": "💅"
+  },
+  "branches": [
+    {
+      "label": "The Sticky Fly Traps",
+      "emoji": "🌴",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Geographic hotspots",
+          "children": [
+            {"label": "Miami, Dubai, Bali, Phuket"},
+            {"label": "Coastal, warm year-round"},
+            {"label": "Bikini-viable 12 months"}
+          ]
+        },
+        {
+          "label": "Why not New York",
+          "children": [
+            {"label": "Lots of women, not a hotspot"},
+            {"label": "No sun / no beach lifestyle"}
+          ]
+        },
+        {
+          "label": "Miami paradox",
+          "children": [
+            {"label": "High cost of living, low wages"},
+            {"label": "Accountants known for fraud"},
+            {"label": "Worst social scene hosts lived in"}
+          ]
+        },
+        {
+          "label": "Dubai censorship",
+          "children": [
+            {"label": "Illegal to post negatives about Dubai"},
+            {"label": "Social media police visits"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Insular Economy",
+      "emoji": "💸",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Women sell to women",
+          "children": [
+            {"label": "Pilates, yoga, hair, aestheticians"},
+            {"label": "'It' yoga studio phenomenon"},
+            {"label": "One man quadruple-charged for 4 girls"}
+          ]
+        },
+        {
+          "label": "Money trickle-down",
+          "children": [
+            {"label": "Top OnlyFans girls fund network"},
+            {"label": "Peanut squirrel owners: $80k/mo"},
+            {"label": "Sustains dozens of invisible hot girls"}
+          ]
+        },
+        {
+          "label": "Path-dependent careers",
+          "children": [
+            {"label": "Model → makeup → yoga teacher"},
+            {"label": "Resume gap locks women in"},
+            {"label": "Boyfriends become paid 'managers'"}
+          ]
+        },
+        {
+          "label": "Scale of the bubble",
+          "children": [
+            {"label": "Millions of women involved"},
+            {"label": "Billions consume the media"},
+            {"label": "Aspirational funnel at the top"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Fertility Trap",
+      "emoji": "🚫",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Structural incentives",
+          "children": [
+            {"label": "Body is the job"},
+            {"label": "Pays hottest girls not to reproduce"},
+            {"label": "Natalist policies don't touch them"}
+          ]
+        },
+        {
+          "label": "Wrong men available",
+          "children": [
+            {"label": "Want Yellowstone cowboy, get shakes"},
+            {"label": "Tourists only stay 2 weeks"},
+            {"label": "Blue-collar guys can't get jobs there"}
+          ]
+        },
+        {
+          "label": "Isolation costs",
+          "children": [
+            {"label": "'Friend travel tax' — $5k weekend"},
+            {"label": "Chopped roots off the tree"},
+            {"label": "No community to return to"}
+          ]
+        },
+        {
+          "label": "Contrast case: Mormons",
+          "children": [
+            {"label": "Won't do Dubai sex-slave path"},
+            {"label": "Ballerina Farm, Secret Lives"},
+            {"label": "Young, hot, married, kid content"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Geography of the Sexes",
+      "emoji": "🗺️",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "The map problem",
+          "children": [
+            {"label": "Blue rural men, red urban women"},
+            {"label": "Blue counties doubled in 20 years"},
+            {"label": "Great Recession accelerated it"}
+          ]
+        },
+        {
+          "label": "Economic root",
+          "children": [
+            {"label": "Middle class needs 2 incomes"},
+            {"label": "Someone must lose their job"},
+            {"label": "Student debt locks women in cities"}
+          ]
+        },
+        {
+          "label": "Energy grid dictates jobs",
+          "children": [
+            {"label": "Cities kicked factories out"},
+            {"label": "Tesla gigafactory far from cities"},
+            {"label": "AI data centers follow the grid"}
+          ]
+        },
+        {
+          "label": "Proposed fixes",
+          "children": [
+            {"label": "Move energy into cities"},
+            {"label": "Split office jobs into small towns"},
+            {"label": "Malcolm: regulation kills it"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Coming Collapse",
+      "emoji": "❄️",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "Iran war shockwave",
+          "children": [
+            {"label": "Blocks Dubai airport"},
+            {"label": "Fertilizer, oil, food disrupted"},
+            {"label": "Travel industry hit hardest"}
+          ]
+        },
+        {
+          "label": "Oil reserve deadline",
+          "children": [
+            {"label": "EU/US reserves out by September"},
+            {"label": "China's silent collapse cushioning"},
+            {"label": "Jet fuel rationing looming"}
+          ]
+        },
+        {
+          "label": "AI replacement wave",
+          "children": [
+            {"label": "Models are easiest job to replace"},
+            {"label": "Undiscerning male audience"},
+            {"label": "rfab.ai uses AI over model shoots"}
+          ]
+        },
+        {
+          "label": "Hot girls come home",
+          "children": [
+            {"label": "'Desperate hot girl winter'"},
+            {"label": "Travel rehab centers proposed"},
+            {"label": "Trump's accidental 5D chess"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Cures and Culprits",
+      "emoji": "⚖️",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Shaming as policy",
+          "children": [
+            {"label": "OnlyFans payment: near-pedo tier"},
+            {"label": "Target manosphere status signals"},
+            {"label": "Kill the social-status payoff"}
+          ]
+        },
+        {
+          "label": "The demand side",
+          "children": [
+            {"label": "Guys use girls for social status"},
+            {"label": "Fresh & Fit table dynamic"},
+            {"label": "Rolex-stealing Miami anecdote"}
+          ]
+        },
+        {
+          "label": "Adjacent pipelines",
+          "children": [
+            {"label": "EA → sex work pipeline"},
+            {"label": "Poly pressure at tech jobs"},
+            {"label": "Pearl Davis's rapper entourage"}
+          ]
+        },
+        {
+          "label": "Written-off cohort",
+          "children": [
+            {"label": "Habituated to $500k burn rate"},
+            {"label": "Won't do drudge work"},
+            {"label": "Unmarriable, unsatiable set points"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "Key claim: subsidized, insular, self-selling female economies structurally pay top women not to reproduce.",
+    "Recurring theme: geography, energy grid, and dual-income economics segregate men and women into non-overlapping regions.",
+    "Guest's thesis: Iran war + oil crunch + AI models will crash the hot girl economy this winter."
+  ]
+}

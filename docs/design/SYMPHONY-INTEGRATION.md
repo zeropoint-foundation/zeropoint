@@ -2,7 +2,7 @@
 
 ## Governed Orchestration for Autonomous Coding Agents
 
-**ThinkStream Labs** · May 2026 · Revision 1.0
+**ZeroPoint Open Foundation** · May 2026 · Revision 1.0
 **Document:** ZP-SYM-ARCH-001 · **Classification:** Internal / Strategic
 **Companion specs:** Governed Agent Runtime (`governed-agent-runtime.md`), Hedera Grant Application (`HEDERA-GRANT-APPLICATION.md`), Formal Primitives (`FORMAL-PRIMITIVES.md`)
 **External dependency:** [OpenAI Symphony SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md) (Apache 2.0)

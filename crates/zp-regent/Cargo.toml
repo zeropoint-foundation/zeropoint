@@ -1,0 +1,45 @@
+[package]
+name = "zp-regent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The Regent — ZeroPoint's apex cognitive entity, governing on behalf of the sovereign operator"
+
+[dependencies]
+# Workspace — substrate access
+zp-core = { path = "../zp-core" }
+zp-receipt = { path = "../zp-receipt" }
+zp-audit = { path = "../zp-audit" }
+zp-officers = { path = "../zp-officers" }
+zp-config = { path = "../zp-config" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP client (for local inference)
+reqwest = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# UUID (for session/request IDs)
+uuid = { workspace = true }
+
+# TOML parsing (model dossier files)
+toml = { workspace = true }
+
+# SHA-256 for cognitive-input composition-summary hashing
+sha2 = { workspace = true }

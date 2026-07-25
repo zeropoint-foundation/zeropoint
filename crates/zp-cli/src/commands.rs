@@ -34,6 +34,49 @@ pub fn open_keyring() -> Result<Keyring, zp_keys::error::KeyError> {
     Keyring::open(resolve_zp_home().join("keys"))
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sovereignty-composed key loaders (2026-07-18)
+//
+// Drop-in replacements for direct keyring calls that would otherwise silently
+// fail under hardware-Genesis sovereignty modes (Trezor, YubiKey, Ledger,
+// OnlyKey). Every CLI code path that loads operator or Genesis material MUST
+// route through these composed variants; direct calls to
+// `keyring.load_operator()`, `keyring.load_genesis()`, or `keyring.genesis_secret()`
+// are structurally forbidden outside the sovereignty provider layer.
+//
+// See docs/design/VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md for the finding
+// and rationale; see docs/design/SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md
+// for the discipline pin that will enforce this at build time.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Load the Genesis secret via `load_sovereign_root` — composes with the
+/// sovereignty provider layer (Keychain fast path + hardware wallet fallback).
+/// Drop-in replacement for `keyring.genesis_secret()`.
+pub fn load_genesis_secret_composed() -> Result<[u8; 32], zp_keys::error::KeyError> {
+    let sovereignty_descriptor_path = resolve_zp_home().join("genesis.json");
+    let secret_ref = zp_keys::load_sovereign_root(&sovereignty_descriptor_path)?;
+    Ok(*secret_ref)
+}
+
+/// Load the operator key via sovereignty-composed Genesis load. Drop-in
+/// replacement for `keyring.load_operator()`.
+pub fn load_operator_composed(
+    keyring: &Keyring,
+) -> Result<zp_keys::hierarchy::OperatorKey, zp_keys::error::KeyError> {
+    let secret = load_genesis_secret_composed()?;
+    keyring.load_operator_with_genesis_secret(&secret)
+}
+
+/// Load the Genesis key (secret + certificate) via sovereignty-composed load.
+/// Drop-in replacement for `keyring.load_genesis()`.
+pub fn load_genesis_composed(
+    keyring: &Keyring,
+) -> Result<zp_keys::hierarchy::GenesisKey, zp_keys::error::KeyError> {
+    let secret = load_genesis_secret_composed()?;
+    let cert = keyring.load_genesis_certificate()?;
+    zp_keys::hierarchy::GenesisKey::from_parts(secret, cert)
+}
+
 /// List all registered skills
 #[allow(dead_code)]
 pub async fn skills_list(_pipeline: &Pipeline) -> Result<()> {
@@ -347,6 +390,51 @@ pub async fn audit_verify(_pipeline: &Pipeline) -> Result<()> {
     Ok(())
 }
 
+/// Compact the audit chain by archiving old entries.
+pub async fn audit_compact(_pipeline: &Pipeline, retain: usize) -> Result<()> {
+    let db_path = zp_core::paths::data_dir()
+        .map_err(|e| anyhow::anyhow!("Failed to resolve data directory: {}", e))?
+        .join("audit.db");
+
+    if !db_path.exists() {
+        eprintln!("  No audit store found.");
+        return Ok(());
+    }
+
+    let mut store = AuditStore::open_maintenance(&db_path)
+        .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
+
+    let before = store.entry_count()
+        .map_err(|e| anyhow::anyhow!("Failed to count entries: {}", e))?;
+
+    eprintln!();
+    eprintln!("  \x1b[1mChain Compaction\x1b[0m");
+    eprintln!("  \x1b[2m────────────────\x1b[0m");
+    eprintln!();
+    eprintln!("  Before:   {} entries", before);
+    eprintln!("  Retain:   {} most recent", retain);
+
+    if before <= retain {
+        eprintln!("  Status:   \x1b[2mnothing to compact\x1b[0m");
+        eprintln!();
+        return Ok(());
+    }
+
+    let archived = store.compact_chain(retain)
+        .map_err(|e| anyhow::anyhow!("Compaction failed: {}", e))?;
+
+    let after = store.entry_count()
+        .map_err(|e| anyhow::anyhow!("Failed to count entries: {}", e))?;
+
+    eprintln!("  Archived: {} entries", archived);
+    eprintln!("  After:    {} entries", after);
+    eprintln!();
+    eprintln!("  \x1b[32mCompaction complete.\x1b[0m Run `zp audit verify` to confirm chain integrity.");
+    eprintln!();
+
+    Ok(())
+}
+
 /// Check system health
 pub async fn health(_pipeline: &Pipeline) -> Result<()> {
     println!();
@@ -378,8 +466,8 @@ pub fn keys_issue(name: &str, capabilities: Option<&str>, expires_days: u64) -> 
         }
     };
 
-    // Load operator key (needed to sign agent key)
-    let operator = match keyring.load_operator() {
+    // Load operator key (needed to sign agent key) — sovereignty-composed.
+    let operator = match load_operator_composed(&keyring) {
         Ok(op) => op,
         Err(e) => {
             eprintln!("  No operator key found: {}", e);
@@ -574,8 +662,8 @@ fn rotate_operator(
     eprintln!("  \x1b[1mOperator Key Rotation\x1b[0m");
     eprintln!("  \x1b[2m─────────────────────\x1b[0m");
 
-    // Load genesis key (need the signing key for co-signature + vault key derivation)
-    let genesis = match keyring.load_genesis() {
+    // Load genesis key (need the signing key for co-signature + vault key derivation) — sovereignty-composed.
+    let genesis = match load_genesis_composed(&keyring) {
         Ok(g) => g,
         Err(e) => {
             eprintln!("  Failed to load genesis key: {}", e);
@@ -585,8 +673,8 @@ fn rotate_operator(
         }
     };
 
-    // Load current operator key
-    let old_operator = match keyring.load_operator() {
+    // Load current operator key — sovereignty-composed.
+    let old_operator = match load_operator_composed(&keyring) {
         Ok(op) => op,
         Err(e) => {
             eprintln!("  Failed to load operator key: {}", e);
@@ -749,8 +837,8 @@ fn rotate_agent(keyring: &Keyring, name: &str, reason: Option<&str>) -> i32 {
         &old_pub_hex[..16]
     );
 
-    // Load operator (needed to sign new agent cert + co-sign rotation)
-    let operator = match keyring.load_operator() {
+    // Load operator (needed to sign new agent cert + co-sign rotation) — sovereignty-composed.
+    let operator = match load_operator_composed(&keyring) {
         Ok(op) => op,
         Err(e) => {
             eprintln!("  Failed to load operator key: {}", e);
@@ -879,7 +967,7 @@ pub fn keys_derive_foundation_edge() -> i32 {
         }
     };
 
-    let genesis_secret = match keyring.genesis_secret() {
+    let genesis_secret = match load_genesis_secret_composed() {
         Ok(g) => g,
         Err(e) => {
             eprintln!("  Failed to load Genesis secret: {}", e);
@@ -1345,8 +1433,8 @@ pub fn operator_create(
         }
     };
 
-    // Load genesis key (needed to sign operator certificate)
-    let genesis = match keyring.load_genesis() {
+    // Load genesis key (needed to sign operator certificate) — sovereignty-composed.
+    let genesis = match load_genesis_composed(&keyring) {
         Ok(g) => g,
         Err(e) => {
             eprintln!("  No genesis key found: {}", e);
@@ -1696,7 +1784,7 @@ pub fn operator_succession(name: &str, email: &str) -> i32 {
         }
     };
 
-    let genesis = match keyring.load_genesis() {
+    let genesis = match load_genesis_composed(&keyring) {
         Ok(g) => g,
         Err(e) => {
             eprintln!("  No genesis key found: {}", e);

@@ -23,7 +23,7 @@ use zp_audit::AuditStore;
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
 use zp_receipt::{Receipt, Signer, Status};
 
-use crate::commands::open_keyring;
+use crate::commands::{open_keyring, resolve_zp_home};
 
 /// Execute the `zp emit` command.
 ///
@@ -46,19 +46,49 @@ pub fn run_emit(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| data_dir.join("audit.db"));
 
-    // Open keyring and get signing key — prefer agent key, fall back to operator
+    // Open keyring and get signing key — prefer agent key, fall back to operator.
+    //
+    // Load the singular sovereign root via `load_sovereign_root()` — composes with
+    // the sovereignty provider layer (OS credential store for standard modes,
+    // hardware wallets for Trezor / YubiKey / Ledger / OnlyKey). Cached in a
+    // process-scoped OnceLock; downstream uses (operator secret decrypt, audit
+    // signer derivation) are cache hits, matching the singular-sovereign-root
+    // discipline (one authentication, everything derived).
+    //
+    // Fixes the CLI-side surface of the sovereignty-provider composition drift
+    // documented in docs/design/VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md:
+    // prior code called `keyring.load_operator()` and `keyring.genesis_secret()`
+    // directly, which knew only the OS credential store — silently unusable when
+    // Genesis lives under a hardware wallet.
     let keyring = open_keyring().context("Failed to open keyring")?;
+
+    // Sovereignty record lives at the ZP-home root (~/ZeroPoint/genesis.json),
+    // NOT at the keys/ subdir. The latter is the Genesis certificate (crypto
+    // identity). `zp serve` uses `resolve_zp_home().join("genesis.json")` —
+    // we do the same for coherence.
+    //
+    // Naming caveat: `Keyring::genesis_record_path()` returns the certificate
+    // path, not the sovereignty record — its docstring is misleading. Do not
+    // use it here; a follow-up patch should rename that method and correct the
+    // doc so future callers don't make the same mistake.
+    let genesis_record_path = resolve_zp_home().join("genesis.json");
+    let genesis_secret = zp_keys::load_sovereign_root(&genesis_record_path)
+        .context(
+            "Failed to load Genesis via sovereignty provider — \
+             run `zp init` or confirm hardware wallet is connected and unlocked",
+        )?;
+
     let secret: [u8; 32] = if let Some(agent) = agent_id {
         match keyring.load_agent(agent) {
             Ok(k) => k.secret_key(),
             Err(_) => keyring
-                .load_operator()
+                .load_operator_with_genesis_secret(genesis_secret)
                 .context("No signing key available — run `zp init` first")?
                 .secret_key(),
         }
     } else {
         keyring
-            .load_operator()
+            .load_operator_with_genesis_secret(genesis_secret)
             .context("No operator key available — run `zp init` first")?
             .secret_key()
     };
@@ -109,11 +139,10 @@ pub fn run_emit(
     signer.sign(&mut receipt);
     let receipt_id = receipt.id.clone();
 
-    // Derive the audit signer from the Genesis secret
-    let genesis_secret = keyring
-        .genesis_secret()
-        .context("Failed to load Genesis secret for audit signer")?;
-    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    // Derive the audit signer from the Genesis secret already loaded via
+    // load_sovereign_root above — no second credential-store or sovereignty-
+    // provider touch. Cache hit; singular-sovereign-root discipline preserved.
+    let audit_seed = zp_keys::derive_audit_signer_seed(genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
 
     // Open audit store and append
@@ -198,10 +227,11 @@ pub fn emit_tool_launch_receipt(
     let event = format!("tool:launched:{}", tool_name);
     let db_path = data_dir.join("audit.db");
 
-    // Attempt signed write — derive audit key from keyring.
+    // Attempt signed write — derive audit key via sovereignty-composed load.
     let signed_result: anyhow::Result<String> = (|| {
-        let keyring = open_keyring().context("open keyring")?;
-        let genesis_secret = keyring.genesis_secret().context("genesis secret")?;
+        let _keyring = open_keyring().context("open keyring")?;
+        let genesis_secret = crate::commands::load_genesis_secret_composed()
+            .context("genesis secret via sovereignty provider")?;
         let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
         let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
         let mut store = AuditStore::open_signed(&db_path, audit_signer)

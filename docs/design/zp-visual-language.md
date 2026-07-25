@@ -1,5 +1,7 @@
 # ZeroPoint Visual Language
 
+**Composes with `LENS-DISCIPLINE-2026-07.md` §7.** The four visualization lenses defined below are formalized as `lens:declared:*` instances under the lens discipline. Each is a **view-in** direction lens (per the outside-in / inside-out / view-in generalization) — a UI projection of substrate state through a specific question. See `LENS-DISCIPLINE-2026-07.md` §7 for the formal declaration blocks (focus / dimensions / keyword_composition / transformation_question / cross_references) for Abacus, Weave, CodeFlow, and Walk (Walk formalized as a lens-composition transport operator rather than a lens itself).
+
 ZeroPoint's visual substrate is four lenses. Each lens answers exactly one question. The question you need to answer determines which lens you open. The lenses compose — you can drill from any one into any other without leaving context behind.
 
 ## Abacus

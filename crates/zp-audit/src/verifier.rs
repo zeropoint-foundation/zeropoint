@@ -290,6 +290,13 @@ fn recompute_entry_hash(entry: &AuditEntry) -> String {
 ///
 /// This is the right choice for DB-exported entries where the stored hashes
 /// are trusted but the in-memory fields may not round-trip perfectly.
+///
+/// Also counts `signatures_present` — the number of entries that carry at
+/// least one Ed25519 signature block. Prior to 2026-07-10, this was hardcoded
+/// to zero, which caused Steward to falsely report ~100% of entries unsigned
+/// on every sweep. `signatures_valid` is not checked here (that requires
+/// known keys); consumers who need cryptographic verification should use
+/// `ChainVerifier::verify` instead.
 pub fn verify_linkage_report(
     entries: &[AuditEntry],
     expected_prev_hash: Option<&str>,
@@ -329,11 +336,26 @@ pub fn verify_linkage_report(
                 .push(format!("Entry {:?} has broken chain link", entry.id.0));
         }
 
+        // Count signature presence — an entry has a signature if it carries
+        // at least one Ed25519 SignatureBlock. Structural presence only:
+        // validity is NOT checked here (that requires known keys and belongs
+        // in ChainVerifier::verify). This is what Steward needs to avoid
+        // emitting false-positive unsigned_entry_ratio findings.
+        // Per-entry `signature_valid` stays None — honestly labeling that
+        // this fast path didn't cryptographically verify.
+        let has_signature = entry
+            .signatures
+            .iter()
+            .any(|b| matches!(b.algorithm, SignatureAlgorithm::Ed25519));
+        if has_signature {
+            report.signatures_present += 1;
+        }
+
         report.entries.push(EntryVerification {
             entry_id: format!("{:?}", entry.id.0),
             hash_valid: true, // trust stored hash
             chain_link_valid,
-            signature_valid: None,
+            signature_valid: None, // presence counted at report level, validity unchecked here
             issue: if chain_link_valid {
                 None
             } else {

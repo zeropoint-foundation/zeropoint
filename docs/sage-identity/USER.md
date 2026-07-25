@@ -2,7 +2,7 @@
 
 ## Identity
 - kenrom
-- Founder, ThinkStream Labs
+- Founder, ZeroPoint Open Foundation
 - Building ZeroPoint — portable trust infrastructure for the Agentic Age
 
 ## Working style

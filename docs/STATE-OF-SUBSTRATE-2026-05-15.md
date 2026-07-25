@@ -34,8 +34,8 @@ Substantial design surface accumulated during the marathon. Each is documented i
 | #157 | Onboarding tightening — biometric-required + wizard narration extension | Task description |
 | #158 | Trust page documenting privacy properties | Task description |
 | #159 | Voice reference panel at app.zeropointfoundation.org/preferences/voice | Task description |
-| #160 | Sage audio narration via local TTS through operator's voice receipt | Task description |
-| #161 | voice_set Sage tool — conversational voice switching | Task description |
+| #160 | the Regent audio narration via local TTS through operator's voice receipt | Task description |
+| #161 | voice_set the Regent tool — conversational voice switching | Task description |
 | #162 | Artifact Library — composition rules + cached/signed renderings | `docs/ARTIFACT-LIBRARY-2026-05.md` |
 | #164 | Comet browser localhost cookie delivery investigation | Task description |
 

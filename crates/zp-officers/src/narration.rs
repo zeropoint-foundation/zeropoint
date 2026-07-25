@@ -6,7 +6,7 @@
 //!
 //! Two tiers consume these primitives:
 //! - **Substrate** (`zp chain story`): renders `ChainStory::render_text()`.
-//! - **Cockpit** (Sage, future agents): reads `ChainStory` as JSON, adds
+//! - **Cockpit** (Regent, future agents): reads `ChainStory` as JSON, adds
 //!   interpretation, wraps in visualization.
 
 use chrono::{DateTime, Utc};

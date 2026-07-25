@@ -1,8 +1,8 @@
 # Architecture Document — May 2026
 
-*Companion to `docs/ARCHITECTURE-2026-04.md`. The April doc remains the substrate's north star — the four claims, the seven design principles, the trust-as-grammar reframe. This document does not replace it. It captures what was learned during the May 6–7 invariantization sprint and the architectural realization that followed about the substrate's outer surface.*
+*Companion to `docs/ARCHITECTURE-2026-04.md`. Captures what was learned during the May 6–7 invariantization sprint and the architectural realization about the substrate's outer API surface.*
 
-*Status: draft, working tree only. Not yet committed. Open for revision in the regroup that produced it.*
+*Status: Historical (as of 2026-07-10). Canonical substrate claims live in `KEEL-2026-07.md`; corpus map lives in `CANONICAL-CORPUS-INDEX-2026-07.md`. Retained for the specific sprint findings on API surface discipline and the Seam-22 realization. **Not amended for corpus pivots past July 2026.***
 
 ---
 

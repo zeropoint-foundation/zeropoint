@@ -1,0 +1,28 @@
+{
+  "updated_at": "2026-07-10T20:45:00Z",
+  "current_phase": "Regent operational on Claude Sonnet 4.6 via Abacus RouteLLM; steering toward GLM 5.2 stand-up, not yet arrived",
+  "focus": "Substrate hygiene (chain integrity, hot-loop fix, corpus refactor) while running against Sonnet 4.6. GLM 5.2 stand-up is the next phase.",
+  "substrate_binary_status": "running on APOLLO",
+  "in_progress": [
+    "Chain integrity investigation: broken link at 019f433f-0dc0-79c2-aaf4-ebf56ed379db (Steward finding since 2026-07-08T19:45:18)",
+    "Regent behavior: over-cautious ask-permission loop on baseline-scope reads (Sonnet 4.6 alignment)",
+    "Spend log wiring: dashboard/data/spend.jsonl has no entries; InferenceBackend needs append hook",
+    "Build process design pass: kill/rebuild/restart cycle likely introduced chain break"
+  ],
+  "next_phase_glm52_standup": [
+    "Author GLM 5.2 system prompt variant (prompts/glm/unified_system.md)",
+    "Write GLM 5.2 model dossier at models/glm/model_dossier.toml",
+    "Add GLM 5.2 to ~/ZeroPoint/cloud-models.toml",
+    "CloudMandate ceremony for Abacus + GLM 5.2 with token and cost caps",
+    "Swap config.toml reasoning_model and routing_model to glm-5.2 identifier",
+    "End-to-end test: operator prompt → Regent cycle → GLM 5.2 → tool dispatch → chain receipts"
+  ],
+  "recent_completions": [
+    "SUBSTRATE-FORM-2026-07.md drafted (three-Form architectural pivot: Companion, Appliance, Sovereign)",
+    "OBSERVATION-PLANE-2026-07.md drafted (six observation surfaces, delegation-scoped)",
+    "KEEL amended: Part XIV Substrate Realization, new invariant II.14, inference-sourcing decoupled from Form",
+    "CANONICAL-CORPUS-INDEX-2026-07.md established (four-tier hierarchy)",
+    "IronClaw purged from current-context canonical corpus",
+    "Substrate hot-loop bug fixed: PortRegistry::new no longer persists on empty load (broke 10Hz feedback loop)"
+  ]
+}

@@ -510,6 +510,130 @@
     .warning-text { color: #FFB020; }
     .error-text { color: #FF4444; }
 
+    /* ── Regent Chat ──────────────────────────────────────── */
+    .regent-chat { margin-bottom: 60px; }
+    .regent-chat-header {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none; padding: 8px 0;
+    }
+    .regent-chat-header:hover .section-title { color: #7eb8da; }
+    .regent-chat-toggle { color: #555; font-size: 10px; transition: transform 0.2s; }
+    .regent-chat-toggle.open { transform: rotate(90deg); }
+    .regent-chat-body { display: none; }
+    .regent-chat-body.open { display: block; }
+    .regent-messages {
+      background: #0A0A0C;
+      border: 1px solid #1E1E22;
+      border-radius: 4px 4px 0 0;
+      padding: 16px;
+      min-height: 200px;
+      max-height: 480px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .regent-msg {
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 10px 14px;
+      border-radius: 4px;
+      max-width: 88%;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .regent-msg.operator {
+      align-self: flex-end;
+      background: rgba(126, 184, 218, 0.08);
+      border: 1px solid rgba(126, 184, 218, 0.15);
+      color: #E8E6E3;
+    }
+    .regent-msg.regent {
+      align-self: flex-start;
+      background: #111114;
+      border: 1px solid #1E1E22;
+      color: #E8E6E3;
+    }
+    .regent-msg.regent .msg-label {
+      color: #00C896;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .regent-msg.operator .msg-label {
+      color: #7eb8da;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .regent-msg.system {
+      align-self: center;
+      color: #555;
+      font-size: 11px;
+      padding: 4px 12px;
+    }
+    .regent-input-row {
+      display: flex;
+      border: 1px solid #1E1E22;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      background: #111114;
+    }
+    .regent-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #E8E6E3;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      padding: 14px 16px;
+      outline: none;
+    }
+    .regent-input::placeholder { color: #444; }
+    .regent-send {
+      background: none;
+      border: none;
+      border-left: 1px solid #1E1E22;
+      color: #7eb8da;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 14px 20px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .regent-send:hover { background: rgba(126, 184, 218, 0.08); }
+    .regent-send:disabled { color: #333; cursor: not-allowed; }
+    .regent-thinking {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      color: #555;
+      font-size: 11px;
+    }
+    .regent-thinking.active { display: flex; }
+    .regent-thinking .dot-pulse {
+      display: inline-flex; gap: 3px;
+    }
+    .regent-thinking .dot-pulse span {
+      width: 4px; height: 4px; border-radius: 50%;
+      background: #555;
+      animation: dotPulse 1.2s ease-in-out infinite;
+    }
+    .regent-thinking .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+    .regent-thinking .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotPulse {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1); }
+    }
+
     /* Footer */
     .footer { margin-top: 120px; padding-top: 40px; border-top: 1px solid #2A2A2E; text-align: center; color: #8B8984; }
     .footer-tagline { font-size: 13px; margin-bottom: 16px; letter-spacing: 0.02em; }
@@ -595,6 +719,29 @@
       <div class="header-title">ZEROPOINT</div>
       <div class="header-tagline">Trust is infrastructure.</div>
       <div class="header-operator" id="headerOperator"></div>
+    </div>
+
+    <!-- ── Regent Chat ──────────────────────────────────── -->
+    <div class="regent-chat section">
+      <div class="regent-chat-header" id="chatHeader">
+        <div class="section-title">Regent</div>
+        <span class="regent-chat-toggle open" id="chatToggle">▶</span>
+      </div>
+      <div class="regent-chat-body open" id="chatBody">
+        <div class="regent-messages" id="regentMessages">
+          <div class="regent-msg system">Channel open. The Regent is listening.</div>
+        </div>
+        <div class="regent-thinking" id="regentThinking">
+          <div class="dot-pulse"><span></span><span></span><span></span></div>
+          <span>Regent is thinking...</span>
+        </div>
+        <div class="regent-input-row">
+          <input class="regent-input" id="regentInput" type="text"
+                 placeholder="Talk to the Regent..."
+                 autocomplete="off">
+          <button class="regent-send" id="regentSend">Send</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── Cockpit / Launch Pad ──────────────────────────── -->

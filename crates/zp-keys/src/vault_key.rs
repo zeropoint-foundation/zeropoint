@@ -44,7 +44,14 @@ const VAULT_KEY_CONTEXT: &[u8] = b"zp-credential-vault-v1";
 /// Indicates how the vault key was resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VaultKeySource {
-    /// Derived from Genesis secret in OS credential store.
+    /// Derived from Genesis secret loaded via the sovereignty provider layer
+    /// (`load_sovereign_root`). Covers the OS credential store fast path,
+    /// hardware wallets (Trezor / YubiKey / Ledger / OnlyKey), Touch ID, etc.
+    /// This is the canonical singular-sovereign-root path.
+    SovereigntyProvider,
+    /// Derived from Genesis secret in OS credential store via the legacy
+    /// keyring-direct path (`Keyring::load_genesis_secret`). Kept for backward
+    /// compatibility with call sites that predate sovereignty composition.
     CredentialStore,
     /// Derived from Genesis secret found on disk (legacy, migrated).
     LegacyFileMigrated,
@@ -79,26 +86,59 @@ pub fn derive_vault_key(genesis_secret: &[u8; 32]) -> Zeroizing<[u8; 32]> {
 /// Anything shorter than 16 bytes is rejected as too weak.
 const MIN_ENV_KEY_LENGTH: usize = 16;
 
-/// Resolve the vault master key from the keyring.
+/// Resolve the vault master key from the sovereignty provider layer.
 ///
-/// Reads the Genesis secret from the OS credential store (or legacy file),
-/// derives the vault key via BLAKE3, and returns it with source metadata.
-///
-/// Source attribution is determined at **runtime** by `load_genesis_secret()`,
-/// which reports whether the secret came from the credential store or a legacy
-/// file on disk. This is more accurate than the compile-time `cfg!` check.
+/// Loads the Genesis secret via the canonical singular-sovereign-root path
+/// (`load_sovereign_root`) — which composes the OS credential store fast path
+/// with hardware wallet providers (Trezor / YubiKey / Ledger / OnlyKey) —
+/// and derives the vault key via BLAKE3.
 ///
 /// Priority:
-/// 1. Genesis secret from OS credential store (Keychain) → derive vault key
-/// 2. Genesis secret from legacy file → derive vault key, migrate to credential store
-/// 3. `SECRETS_MASTER_KEY` env var → deprecated fallback (hex only, ≥16 bytes)
-/// 4. Error — no silent degradation
+/// 1. Sovereignty provider via `load_sovereign_root` (ZP-home sovereignty
+///    descriptor) → covers Keychain fast path AND hardware wallets.
+/// 2. Legacy `Keyring::load_genesis_secret` (credential store direct) —
+///    fallback for call sites where the sovereignty descriptor is missing.
+/// 3. `SECRETS_MASTER_KEY` env var → deprecated fallback (hex only, ≥16 bytes).
+/// 4. Error — no silent degradation.
+///
+/// This closes the singular-sovereign-root drift documented in
+/// `docs/design/VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md`: prior versions
+/// called only `keyring.load_genesis_secret()`, which silently failed under
+/// hardware Genesis because the credential store is empty in that mode.
 pub fn resolve_vault_key(keyring: &Keyring) -> Result<ResolvedVaultKey, KeyError> {
-    // 1. Try loading Genesis secret from keyring (credential store → file fallback)
+    // 1. Sovereignty provider path — covers Keychain fast path AND hardware wallets.
+    //    The sovereignty descriptor lives at the ZP-home root; we obtain it via
+    //    `zp_core::paths::genesis_record_path()` (the free function on the paths
+    //    module, distinct from the misleadingly-named `Keyring::genesis_record_path`
+    //    which returns the certificate path in keys/).
+    if let Ok(sovereignty_descriptor_path) = zp_core::paths::genesis_record_path() {
+        if sovereignty_descriptor_path.exists() {
+            match crate::sovereignty::load_sovereign_root(&sovereignty_descriptor_path) {
+                Ok(secret_ref) => {
+                    let key = derive_vault_key(secret_ref);
+                    return Ok(ResolvedVaultKey {
+                        key,
+                        source: VaultKeySource::SovereigntyProvider,
+                    });
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        "load_sovereign_root failed, falling through to keyring: {}",
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    // 2. Legacy fallback: try loading Genesis secret from keyring directly
+    //    (credential store → file fallback). Retained for backward compatibility
+    //    with call sites and tests that predate sovereignty composition, and for
+    //    the case where the sovereignty descriptor is missing but Genesis is
+    //    still in credential store.
     match keyring.load_genesis_secret() {
         Ok((secret, from_credential_store)) => {
             let key = derive_vault_key(&secret);
-            // Runtime source tracking — the keyring tells us where it actually came from
             let source = if from_credential_store {
                 VaultKeySource::CredentialStore
             } else {

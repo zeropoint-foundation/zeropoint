@@ -161,3 +161,14 @@ This document should be revisited:
 The goal is not zero external dependencies — that's impractical. The goal is that
 every dependency is in the right tier, every Tier 3 exposure has a named mitigation
 owner, and no surprises accumulate silently.
+
+
+---
+
+## Measured note (2026-07-22) — local inference backend: hedge → measured baseline
+
+Promotes the held **E2** nomination from `AI-LANDSCAPE-SIGNAL-2026-07.md` §2 from assertion to measurement, updating the Tier-3 "LLM API providers" gap above. Benchmarked on APOLLO (M4 Pro, 64GB) via `tools/local-model-bench/`; selection rationale in `LOCAL-MODEL-SELECTION-2026-07.md`.
+
+The Tier-3 gap noted local inference "is not yet a first-class backend" and treated it as a hedge. **Measurement closes the gap: a clear-license Apache-2.0 Qwen3-30B-A3B runs as an interactive sovereign Regent on APOLLO** — ~93 tok/s, 4/4 structured emission, int4-trustworthy grounded reasoning, 64k-corpus synthesis, resident in 16GB. The full local tier is clear-license and measured: reflection (Qwen3-30B-A3B), fast (Qwen3-4B, ~93 tok/s, 2.2GB), and routing classifier (Qwen3-1.7B, ~206 tok/s) — all Apache-2.0, no license-capture exposure.
+
+**Reframe the Tier-3 posture accordingly:** local inference is no longer merely a strategic hedge against the cognition-layer liability — it is a demonstrated capable backend and should be the sovereign *default*, with cloud/rally reserved for realtime novelty. This does not remove the Tier-3 exposure for operators who choose cloud, but it converts "no sovereign fallback exists" into "the sovereign path is measured and works." Priority accordingly rises from "add a local backend" to "wire the measured local tier as the default; cloud is escalation."

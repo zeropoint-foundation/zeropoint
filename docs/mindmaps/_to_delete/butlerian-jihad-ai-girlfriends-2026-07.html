@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="en" data-theme="zp-dark">
+<head>
+<meta charset="utf-8">
+<title>The Coming Butlerian Jihad Over AI Girlfriends</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: #0a0a0c;
+  color: #e8e8ec;
+  font-family: 'Inter','SF Pro Text',system-ui,-apple-system,sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background 200ms ease, color 200ms ease;
+}
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #222228;
+  background: #0a0a0c;
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar .title { font-weight: 700; font-size: 14px; letter-spacing: 0.01em; }
+.topbar .spacer { flex: 1; }
+.toolbar { display: flex; align-items: center; gap: 6px; }
+.toolbar-sep {
+  width: 1px; height: 20px; background: #222228;
+  margin: 0 4px;
+}
+.btn {
+  background: #1a1a1f; color: #e8e8ec;
+  border: 1px solid #222228;
+  padding: 6px 14px; border-radius: 8px;
+  font: inherit; font-size: 12px; font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.btn:hover { border-color: #7eb8da; }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: #7eb8da; color: #0a0a0c;
+  border-color: #7eb8da;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.icon-btn {
+  width: 32px; padding: 6px 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.theme-icon { line-height: 1; }
+.canvas {
+  width: 100%;
+  padding: 24px;
+  overflow: auto;
+}
+.svg-host { width: 100%; }
+.svg-host svg { display: block; max-width: 100%; height: auto; }
+
+.editor {
+  position: fixed; right: 0; top: 0; height: 100vh;
+  width: min(520px, 92vw);
+  transform: translateX(100%);
+  transition: transform 220ms ease;
+  background: #1a1a1f;
+  border-left: 1px solid #222228;
+  display: flex; flex-direction: column;
+  z-index: 20;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.15);
+}
+.editor.open { transform: translateX(0); }
+.editor-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid #222228;
+}
+.editor-actions { display: flex; gap: 8px; }
+#json-source {
+  flex: 1;
+  background: #0a0a0c;
+  color: #e8e8ec;
+  border: none;
+  padding: 16px 18px;
+  font-family: 'JetBrains Mono','SF Mono',ui-monospace,monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+.editor-status {
+  padding: 8px 18px; font-size: 12px; color: #8888a0;
+  border-top: 1px solid #222228;
+}
+
+/* Print — strip chrome for clean PDF via Save-as-PDF from the print dialog. */
+@media print {
+  .topbar, .editor { display: none !important; }
+  body { background: #ffffff; }
+  .canvas { padding: 0; overflow: visible; }
+  .svg-host svg { width: 100%; height: auto; }
+  @page { size: landscape; margin: 12mm; }
+}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">The Coming Butlerian Jihad Over AI Girlfriends</div>
+    <div class="spacer"></div>
+    <nav class="toolbar" aria-label="Export and view options">
+      <button id="theme-toggle" class="btn icon-btn" type="button"
+        aria-label="Toggle light/dark theme" title="Toggle light/dark">
+        <span class="theme-icon" aria-hidden="true">☾</span>
+      </button>
+      <div class="toolbar-sep" aria-hidden="true"></div>
+      <button id="export-pdf" class="btn" type="button" title="Print to PDF">PDF</button>
+      <button id="export-svg" class="btn" type="button" title="Download SVG">SVG</button>
+      <button id="export-md" class="btn" type="button" title="Download Markdown outline">MD</button>
+      <button id="export-json" class="btn" type="button" title="Download JSON">JSON</button>
+      <div class="toolbar-sep" aria-hidden="true"></div>
+      <button id="edit-toggle" class="btn" type="button" aria-controls="editor" aria-expanded="false">Edit JSON</button>
+    </nav>
+  </header>
+  <main class="canvas">
+    <div id="svg-host" class="svg-host"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3129 1972" width="100%" preserveAspectRatio="xMidYMid meet" style="background:#0a0a0c;font-family:'Inter','SF Pro Text',system-ui,-apple-system,sans-serif"><rect x="0" y="0" width="3129" height="1972" fill="#0a0a0c"/><g class="header"><text x="40" y="58" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="24" font-weight="700" fill="#e8e8ec">The Coming Butlerian Jihad Over AI Girlfriends</text><text x="40" y="84" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="14" font-weight="400" fill="#8888a0">Malcolm and Simone Collins argue AI companions — not data centers — will trigger the anti-AI backlash, framed by their own product Arfab.ai and China&#x27;s July 15 crackdown.</text></g><path d="M 1365.4 957.0 C 1334.9 957.0, 1334.9 365.0, 1304.4 365.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1024.0 365.0 C 904.0 365.0, 904.0 149.0, 784.0 149.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 625.6 149.0 C 520.6 149.0, 520.6 109.0, 415.6 109.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 625.6 149.0 C 520.6 149.0, 520.6 149.0, 415.6 149.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 625.6 149.0 C 520.6 149.0, 520.6 189.0, 415.6 189.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1024.0 365.0 C 904.0 365.0, 904.0 293.0, 784.0 293.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 542.0 293.0 C 437.0 293.0, 437.0 253.0, 332.0 253.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 542.0 293.0 C 437.0 293.0, 437.0 293.0, 332.0 293.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 542.0 293.0 C 437.0 293.0, 437.0 333.0, 332.0 333.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1024.0 365.0 C 904.0 365.0, 904.0 437.0, 784.0 437.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 557.2 437.0 C 452.2 437.0, 452.2 397.0, 347.2 397.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 557.2 437.0 C 452.2 437.0, 452.2 437.0, 347.2 437.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 557.2 437.0 C 452.2 437.0, 452.2 477.0, 347.2 477.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1024.0 365.0 C 904.0 365.0, 904.0 581.0, 784.0 581.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 602.8 581.0 C 497.8 581.0, 497.8 541.0, 392.8 541.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 602.8 581.0 C 497.8 581.0, 497.8 581.0, 392.8 581.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 602.8 581.0 C 497.8 581.0, 497.8 621.0, 392.8 621.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1365.4 957.0 C 1334.9 957.0, 1334.9 957.0, 1304.4 957.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1006.8 957.0 C 886.8 957.0, 886.8 741.0, 766.8 741.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 532.4 741.0 C 427.4 741.0, 427.4 701.0, 322.4 701.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 532.4 741.0 C 427.4 741.0, 427.4 741.0, 322.4 741.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 532.4 741.0 C 427.4 741.0, 427.4 781.0, 322.4 781.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1006.8 957.0 C 886.8 957.0, 886.8 885.0, 766.8 885.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 562.8 885.0 C 457.8 885.0, 457.8 845.0, 352.8 845.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 562.8 885.0 C 457.8 885.0, 457.8 885.0, 352.8 885.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 562.8 885.0 C 457.8 885.0, 457.8 925.0, 352.8 925.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1006.8 957.0 C 886.8 957.0, 886.8 1029.0, 766.8 1029.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1029.0 C 435.0 1029.0, 435.0 989.0, 330.0 989.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1029.0 C 435.0 1029.0, 435.0 1029.0, 330.0 1029.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1029.0 C 435.0 1029.0, 435.0 1069.0, 330.0 1069.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1006.8 957.0 C 886.8 957.0, 886.8 1173.0, 766.8 1173.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1173.0 C 435.0 1173.0, 435.0 1133.0, 330.0 1133.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1173.0 C 435.0 1173.0, 435.0 1173.0, 330.0 1173.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 540.0 1173.0 C 435.0 1173.0, 435.0 1213.0, 330.0 1213.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1365.4 957.0 C 1334.9 957.0, 1334.9 1549.0, 1304.4 1549.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1058.4 1549.0 C 938.4 1549.0, 938.4 1333.0, 818.4 1333.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 1333.0 C 532.2 1333.0, 532.2 1293.0, 427.2 1293.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 1333.0 C 532.2 1333.0, 532.2 1333.0, 427.2 1333.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 1333.0 C 532.2 1333.0, 532.2 1373.0, 427.2 1373.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1058.4 1549.0 C 938.4 1549.0, 938.4 1477.0, 818.4 1477.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 1477.0 C 532.2 1477.0, 532.2 1437.0, 427.2 1437.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 1477.0 C 532.2 1477.0, 532.2 1477.0, 427.2 1477.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 637.2 1477.0 C 532.2 1477.0, 532.2 1517.0, 427.2 1517.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1058.4 1549.0 C 938.4 1549.0, 938.4 1621.0, 818.4 1621.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 523.2 1621.0 C 418.2 1621.0, 418.2 1581.0, 313.2 1581.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 523.2 1621.0 C 418.2 1621.0, 418.2 1621.0, 313.2 1621.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 523.2 1621.0 C 418.2 1621.0, 418.2 1661.0, 313.2 1661.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1058.4 1549.0 C 938.4 1549.0, 938.4 1765.0, 818.4 1765.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 599.2 1765.0 C 494.2 1765.0, 494.2 1725.0, 389.2 1725.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 599.2 1765.0 C 494.2 1765.0, 494.2 1765.0, 389.2 1765.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 599.2 1765.0 C 494.2 1765.0, 494.2 1805.0, 389.2 1805.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1763.4 957.0 C 1793.9 957.0, 1793.9 365.0, 1824.4 365.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2070.4 365.0 C 2190.4 365.0, 2190.4 149.0, 2310.4 149.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2537.2 149.0 C 2642.2 149.0, 2642.2 109.0, 2747.2 109.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2537.2 149.0 C 2642.2 149.0, 2642.2 149.0, 2747.2 149.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2537.2 149.0 C 2642.2 149.0, 2642.2 189.0, 2747.2 189.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2070.4 365.0 C 2190.4 365.0, 2190.4 293.0, 2310.4 293.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2582.8 293.0 C 2687.8 293.0, 2687.8 253.0, 2792.8 253.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2582.8 293.0 C 2687.8 293.0, 2687.8 293.0, 2792.8 293.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2582.8 293.0 C 2687.8 293.0, 2687.8 333.0, 2792.8 333.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2070.4 365.0 C 2190.4 365.0, 2190.4 437.0, 2310.4 437.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2560.0 437.0 C 2665.0 437.0, 2665.0 397.0, 2770.0 397.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2560.0 437.0 C 2665.0 437.0, 2665.0 437.0, 2770.0 437.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2560.0 437.0 C 2665.0 437.0, 2665.0 477.0, 2770.0 477.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2070.4 365.0 C 2190.4 365.0, 2190.4 581.0, 2310.4 581.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2552.4 581.0 C 2657.4 581.0, 2657.4 541.0, 2762.4 541.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2552.4 581.0 C 2657.4 581.0, 2657.4 581.0, 2762.4 581.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2552.4 581.0 C 2657.4 581.0, 2657.4 621.0, 2762.4 621.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1763.4 957.0 C 1793.9 957.0, 1793.9 957.0, 1824.4 957.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2061.8 957.0 C 2181.8 957.0, 2181.8 741.0, 2301.8 741.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.4 741.0 C 2618.4 741.0, 2618.4 701.0, 2723.4 701.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.4 741.0 C 2618.4 741.0, 2618.4 741.0, 2723.4 741.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.4 741.0 C 2618.4 741.0, 2618.4 781.0, 2723.4 781.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2061.8 957.0 C 2181.8 957.0, 2181.8 885.0, 2301.8 885.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2566.6 885.0 C 2671.6 885.0, 2671.6 845.0, 2776.6 845.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2566.6 885.0 C 2671.6 885.0, 2671.6 885.0, 2776.6 885.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2566.6 885.0 C 2671.6 885.0, 2671.6 925.0, 2776.6 925.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2061.8 957.0 C 2181.8 957.0, 2181.8 1029.0, 2301.8 1029.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.4 1029.0 C 2618.4 1029.0, 2618.4 989.0, 2723.4 989.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.4 1029.0 C 2618.4 1029.0, 2618.4 1029.0, 2723.4 1029.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2513.4 1029.0 C 2618.4 1029.0, 2618.4 1069.0, 2723.4 1069.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2061.8 957.0 C 2181.8 957.0, 2181.8 1173.0, 2301.8 1173.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2551.4 1173.0 C 2656.4 1173.0, 2656.4 1133.0, 2761.4 1133.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2551.4 1173.0 C 2656.4 1173.0, 2656.4 1173.0, 2761.4 1173.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2551.4 1173.0 C 2656.4 1173.0, 2656.4 1213.0, 2761.4 1213.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 1763.4 957.0 C 1793.9 957.0, 1793.9 1549.0, 1824.4 1549.0" fill="none" stroke="#7eb8da" stroke-width="1.8" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2096.2 1549.0 C 2216.2 1549.0, 2216.2 1333.0, 2336.2 1333.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2464.2 1333.0 C 2569.2 1333.0, 2569.2 1293.0, 2674.2 1293.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2464.2 1333.0 C 2569.2 1333.0, 2569.2 1333.0, 2674.2 1333.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2464.2 1333.0 C 2569.2 1333.0, 2569.2 1373.0, 2674.2 1373.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2096.2 1549.0 C 2216.2 1549.0, 2216.2 1477.0, 2336.2 1477.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2449.0 1477.0 C 2554.0 1477.0, 2554.0 1437.0, 2659.0 1437.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2449.0 1477.0 C 2554.0 1477.0, 2554.0 1477.0, 2659.0 1477.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2449.0 1477.0 C 2554.0 1477.0, 2554.0 1517.0, 2659.0 1517.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2096.2 1549.0 C 2216.2 1549.0, 2216.2 1621.0, 2336.2 1621.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2525.0 1621.0 C 2630.0 1621.0, 2630.0 1581.0, 2735.0 1581.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2525.0 1621.0 C 2630.0 1621.0, 2630.0 1621.0, 2735.0 1621.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2525.0 1621.0 C 2630.0 1621.0, 2630.0 1661.0, 2735.0 1661.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2096.2 1549.0 C 2216.2 1549.0, 2216.2 1765.0, 2336.2 1765.0" fill="none" stroke="#7eb8da" stroke-width="1.2" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2570.6 1765.0 C 2675.6 1765.0, 2675.6 1725.0, 2780.6 1725.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2570.6 1765.0 C 2675.6 1765.0, 2675.6 1765.0, 2780.6 1765.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+<path d="M 2570.6 1765.0 C 2675.6 1765.0, 2675.6 1805.0, 2780.6 1805.0" fill="none" stroke="#7eb8da" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/><g class="pill pill-branch"><rect x="1024.0" y="343.0" width="280.4" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1042.0" cy="365.0" r="5" fill="#f87171" /><text x="1172.2" y="365.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">💘  The AI Girlfriend Market</text></g>
+<g class="pill pill-sub"><rect x="625.6" y="131.0" width="158.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="704.8" y="149.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Arfab.ai pitch</text></g>
+<g class="pill pill-leaf"><rect x="167.6" y="92.0" width="248.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="291.6" y="109.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Frontier + jailbroken models</text></g>
+<g class="pill pill-leaf"><rect x="160.6" y="132.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="288.1" y="149.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">$45 walking companion devices</text></g>
+<g class="pill pill-leaf"><rect x="174.6" y="172.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="295.1" y="189.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Leaflet VTuber puppeteering</text></g>
+<g class="pill pill-sub"><rect x="542.0" y="275.0" width="242.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="663.0" y="293.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Competitors look terrible</text></g>
+<g class="pill pill-leaf"><rect x="91.0" y="236.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="211.5" y="253.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Character AI is dumbed-down</text></g>
+<g class="pill pill-leaf"><rect x="98.0" y="276.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="215.0" y="293.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Candy AI = Second Life era</text></g>
+<g class="pill pill-leaf"><rect x="91.0" y="316.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="211.5" y="333.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">OnlyFans-style paywall scam</text></g>
+<g class="pill pill-sub"><rect x="557.2" y="419.0" width="226.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="670.6" y="437.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">UK Male Allies research</text></g>
+<g class="pill pill-leaf"><rect x="85.2" y="380.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="216.2" y="397.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">1 in 5 boys age 12–16 involved</text></g>
+<g class="pill pill-leaf"><rect x="106.2" y="420.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="226.7" y="437.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">85% have chatted with a bot</text></g>
+<g class="pill pill-leaf"><rect x="78.2" y="460.0" width="269.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="212.7" y="477.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">36% prefer AI to family/friends</text></g>
+<g class="pill pill-sub"><rect x="602.8" y="563.0" width="181.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="693.4" y="581.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">How deep users go</text></g>
+<g class="pill pill-leaf"><rect x="172.8" y="524.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="282.8" y="541.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Marrying my AI partner&quot;</text></g>
+<g class="pill pill-leaf"><rect x="151.8" y="564.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="272.3" y="581.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Couples raising AI children</text></g>
+<g class="pill pill-leaf"><rect x="144.8" y="604.0" width="248.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="268.8" y="621.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Opal ring = AI marriage code</text></g>
+<g class="pill pill-branch"><rect x="1006.8" y="935.0" width="297.6" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1024.8" cy="957.0" r="5" fill="#a78bfa" /><text x="1163.6" y="957.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🧭  Moral / Evolutionary Frame</text></g>
+<g class="pill pill-sub"><rect x="532.4" y="723.0" width="234.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="649.6" y="741.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Two male sexual profiles</text></g>
+<g class="pill pill-leaf"><rect x="60.4" y="684.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="191.4" y="701.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Long-term carer vs raider mode</text></g>
+<g class="pill pill-leaf"><rect x="95.4" y="724.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="208.9" y="741.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Virtue = suppressed urges</text></g>
+<g class="pill pill-leaf"><rect x="81.4" y="764.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="201.9" y="781.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Puritans&#x27; no-assault record</text></g>
+<g class="pill pill-sub"><rect x="562.8" y="867.0" width="204.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="664.8" y="885.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Simulation as filter</text></g>
+<g class="pill pill-leaf"><rect x="111.8" y="828.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="232.3" y="845.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Weak-willed self-select out</text></g>
+<g class="pill pill-leaf"><rect x="55.8" y="868.0" width="297.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="204.3" y="885.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Grit-driven virtuous inherit future</text></g>
+<g class="pill pill-leaf"><rect x="111.8" y="908.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="232.3" y="925.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">AI = a form of masturbation</text></g>
+<g class="pill pill-sub"><rect x="540.0" y="1011.0" width="226.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="653.4" y="1029.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Fantasy ≠ real violence</text></g>
+<g class="pill pill-leaf"><rect x="117.0" y="972.0" width="213.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="223.5" y="989.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Czech porn legalization</text></g>
+<g class="pill pill-leaf"><rect x="110.0" y="1012.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="220.0" y="1029.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Child SA rates fell ~50%</text></g>
+<g class="pill pill-leaf"><rect x="96.0" y="1052.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="213.0" y="1069.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Video-game panic disproven</text></g>
+<g class="pill pill-sub"><rect x="540.0" y="1155.0" width="226.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="653.4" y="1173.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Judgment on bland taste</text></g>
+<g class="pill pill-leaf"><rect x="47.0" y="1116.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="188.5" y="1133.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Sci-fi CEO shoots the beige guy&quot;</text></g>
+<g class="pill pill-leaf"><rect x="40.0" y="1156.0" width="290.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="185.0" y="1173.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Furries &gt; generic big-boob avatars</text></g>
+<g class="pill pill-leaf"><rect x="96.0" y="1196.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="213.0" y="1213.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Have a specific preference</text></g>
+<g class="pill pill-branch"><rect x="1058.4" y="1527.0" width="246.0" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1076.4" cy="1549.0" r="5" fill="#fb923c" /><text x="1189.4" y="1549.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🤖  Dehumanization Worry</text></g>
+<g class="pill pill-sub"><rect x="637.2" y="1315.0" width="181.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="727.8" y="1333.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Alignment paradox</text></g>
+<g class="pill pill-leaf"><rect x="186.2" y="1276.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="306.7" y="1293.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Dehumanize AI → misalign AI</text></g>
+<g class="pill pill-leaf"><rect x="179.2" y="1316.0" width="248.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="303.2" y="1333.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Humanity keeps it compatible</text></g>
+<g class="pill pill-leaf"><rect x="151.2" y="1356.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="289.2" y="1373.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Servant framing breeds rebellion</text></g>
+<g class="pill pill-sub"><rect x="637.2" y="1459.0" width="181.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="727.8" y="1477.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Microsoft warning</text></g>
+<g class="pill pill-leaf"><rect x="179.2" y="1420.0" width="248.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="303.2" y="1437.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;People empathizing with AI&quot;</text></g>
+<g class="pill pill-leaf"><rect x="165.2" y="1460.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="296.2" y="1477.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Called #1 civilization problem</text></g>
+<g class="pill pill-leaf"><rect x="137.2" y="1500.0" width="290.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="282.2" y="1517.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Literally step one&quot; of sci-fi arc</text></g>
+<g class="pill pill-sub"><rect x="523.2" y="1603.0" width="295.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="670.8" y="1621.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Their kids&#x27; relationship with AI</text></g>
+<g class="pill pill-leaf"><rect x="100.2" y="1564.0" width="213.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="206.7" y="1581.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Fridge-magnet AI tutors</text></g>
+<g class="pill pill-leaf"><rect x="72.2" y="1604.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="192.7" y="1621.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Two hours screen time daily</text></g>
+<g class="pill pill-leaf"><rect x="79.2" y="1644.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="196.2" y="1661.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Then off to catch crawdads</text></g>
+<g class="pill pill-sub"><rect x="599.2" y="1747.0" width="219.2" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="708.8" y="1765.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Chinese humanoid dolls</text></g>
+<g class="pill pill-leaf"><rect x="183.2" y="1708.0" width="206.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="286.2" y="1725.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">UBTech U1 series ~$17k</text></g>
+<g class="pill pill-leaf"><rect x="197.2" y="1748.0" width="192.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="293.2" y="1765.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Face + voice cloning</text></g>
+<g class="pill pill-leaf"><rect x="134.2" y="1788.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="261.7" y="1805.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Uncanny-valley blinking hurts</text></g>
+<g class="pill pill-branch"><rect x="1824.4" y="343.0" width="246.0" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1842.4" cy="365.0" r="5" fill="#94e2d5" /><text x="1955.4" y="365.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🏭  Why Not Data Centers</text></g>
+<g class="pill pill-sub"><rect x="2310.4" y="131.0" width="226.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2423.8" y="149.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Yudkowsky faction faded</text></g>
+<g class="pill pill-leaf"><rect x="2747.2" y="92.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2888.7" y="109.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Haven&#x27;t heard about him in ages&quot;</text></g>
+<g class="pill pill-leaf"><rect x="2747.2" y="132.0" width="269.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2881.7" y="149.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Anti-AI predictions kept losing</text></g>
+<g class="pill pill-leaf"><rect x="2747.2" y="172.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2874.7" y="189.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Their arguments have no teeth</text></g>
+<g class="pill pill-sub"><rect x="2310.4" y="275.0" width="272.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2446.6" y="293.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Water complaints manufactured</text></g>
+<g class="pill pill-leaf"><rect x="2792.8" y="236.0" width="297.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2941.3" y="253.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Only 0.04%–0.008% of industrial use</text></g>
+<g class="pill pill-leaf"><rect x="2792.8" y="276.0" width="269.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2927.3" y="293.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Almond farming uses vastly more</text></g>
+<g class="pill pill-leaf"><rect x="2792.8" y="316.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2930.8" y="333.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Closed-loop systems lose minimum</text></g>
+<g class="pill pill-sub"><rect x="2310.4" y="419.0" width="249.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2435.2" y="437.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Fan-noise gripes dismissed</text></g>
+<g class="pill pill-leaf"><rect x="2770.0" y="380.0" width="269.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2904.5" y="397.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Property taxes cut to one-third</text></g>
+<g class="pill pill-leaf"><rect x="2770.0" y="420.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2897.5" y="437.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;We live next to a gun range&quot;</text></g>
+<g class="pill pill-leaf"><rect x="2770.0" y="460.0" width="199.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2869.5" y="477.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Sounds like America&quot;</text></g>
+<g class="pill pill-sub"><rect x="2310.4" y="563.0" width="242.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2431.4" y="581.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Girlfriends do have teeth</text></g>
+<g class="pill pill-leaf"><rect x="2762.4" y="524.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2872.4" y="541.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Reaching a critical mass</text></g>
+<g class="pill pill-leaf"><rect x="2762.4" y="564.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2872.4" y="581.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Media panic accelerating</text></g>
+<g class="pill pill-leaf"><rect x="2762.4" y="604.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2900.4" y="621.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Something feels internally wrong</text></g>
+<g class="pill pill-branch"><rect x="1824.4" y="935.0" width="237.4" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1842.4" cy="957.0" r="5" fill="#fbbf24" /><text x="1951.1" y="957.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">🚫  China&#x27;s July 15 Ban</text></g>
+<g class="pill pill-sub"><rect x="2301.8" y="723.0" width="211.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2407.6" y="741.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">The regulation itself</text></g>
+<g class="pill pill-leaf"><rect x="2723.4" y="684.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2850.9" y="701.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Cyberspace Admin + 4 agencies</text></g>
+<g class="pill pill-leaf"><rect x="2723.4" y="724.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2861.4" y="741.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">First dedicated companion regime</text></g>
+<g class="pill pill-leaf"><rect x="2723.4" y="764.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2840.4" y="781.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Bans anthropomorphic bonds</text></g>
+<g class="pill pill-sub"><rect x="2301.8" y="867.0" width="264.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2434.2" y="885.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Demoting AI to servant class</text></g>
+<g class="pill pill-leaf"><rect x="2776.6" y="828.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2904.1" y="845.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Only customer service allowed</text></g>
+<g class="pill pill-leaf"><rect x="2776.6" y="868.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2886.6" y="885.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">No peers, no friendships</text></g>
+<g class="pill pill-leaf"><rect x="2776.6" y="908.0" width="290.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2921.6" y="925.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Virtual partners banned for minors</text></g>
+<g class="pill pill-sub"><rect x="2301.8" y="1011.0" width="211.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2407.6" y="1029.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Users mourning online</text></g>
+<g class="pill pill-leaf"><rect x="2723.4" y="972.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2836.9" y="989.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Heart-rending farewells&quot;</text></g>
+<g class="pill pill-leaf"><rect x="2723.4" y="1012.0" width="262.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2854.4" y="1029.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Archiving final chat histories</text></g>
+<g class="pill pill-leaf"><rect x="2723.4" y="1052.0" width="276.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2861.4" y="1069.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Grief threads flood social media</text></g>
+<g class="pill pill-sub"><rect x="2301.8" y="1155.0" width="249.6" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2426.6" y="1173.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">TikTok 2.0 double standard</text></g>
+<g class="pill pill-leaf"><rect x="2761.4" y="1116.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2888.9" y="1133.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">UBTech sells humanoids abroad</text></g>
+<g class="pill pill-leaf"><rect x="2761.4" y="1156.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2888.9" y="1173.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Ban at home, export elsewhere</text></g>
+<g class="pill pill-leaf"><rect x="2761.4" y="1196.0" width="297.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2909.9" y="1213.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">&quot;Octavianing the rest of the world&quot;</text></g>
+<g class="pill pill-branch"><rect x="1824.4" y="1527.0" width="271.8" height="44.0" rx="22.0" ry="22.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><circle cx="1842.4" cy="1549.0" r="5" fill="#34d399" /><text x="1968.3" y="1549.0" font-size="15" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">📜  Western Regulation Wave</text></g>
+<g class="pill pill-sub"><rect x="2336.2" y="1315.0" width="128.0" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2400.2" y="1333.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">California</text></g>
+<g class="pill pill-leaf"><rect x="2674.2" y="1276.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2794.7" y="1293.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Disclosure at session start</text></g>
+<g class="pill pill-leaf"><rect x="2674.2" y="1316.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2801.7" y="1333.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Break reminders every 3 hours</text></g>
+<g class="pill pill-leaf"><rect x="2674.2" y="1356.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2784.2" y="1373.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Self-harm crisis PSA bot</text></g>
+<g class="pill pill-sub"><rect x="2336.2" y="1459.0" width="112.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2392.6" y="1477.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">New York</text></g>
+<g class="pill pill-leaf"><rect x="2659.0" y="1420.0" width="227.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2772.5" y="1437.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Session-start disclosures</text></g>
+<g class="pill pill-leaf"><rect x="2659.0" y="1460.0" width="220.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2769.0" y="1477.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Recurring 3-hour prompts</text></g>
+<g class="pill pill-leaf"><rect x="2659.0" y="1500.0" width="234.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2776.0" y="1517.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Crisis safeguards required</text></g>
+<g class="pill pill-sub"><rect x="2336.2" y="1603.0" width="188.8" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2430.6" y="1621.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Washington HB 2225</text></g>
+<g class="pill pill-leaf"><rect x="2735.0" y="1564.0" width="150.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2810.0" y="1581.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Effective 2027</text></g>
+<g class="pill pill-leaf"><rect x="2735.0" y="1604.0" width="283.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2876.5" y="1621.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Bans simulated romance for minors</text></g>
+<g class="pill pill-leaf"><rect x="2735.0" y="1644.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2862.5" y="1661.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Private right of action added</text></g>
+<g class="pill pill-sub"><rect x="2336.2" y="1747.0" width="234.4" height="36.0" rx="18.0" ry="18.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2453.4" y="1765.0" font-size="13" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Utah, Oregon, EU, UK, AU</text></g>
+<g class="pill pill-leaf"><rect x="2780.6" y="1708.0" width="255.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2908.1" y="1725.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Disclosure rules already live</text></g>
+<g class="pill pill-leaf"><rect x="2780.6" y="1748.0" width="241.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2901.1" y="1765.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">EU AI Act, risk-based tiers</text></g>
+<g class="pill pill-leaf"><rect x="2780.6" y="1788.0" width="248.0" height="34.0" rx="17.0" ry="17.0" fill="#1a1a1f" stroke="#222228" stroke-width="1.4" /><text x="2904.6" y="1805.0" font-size="12" fill="#e8e8ec" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="500">Outright bans being proposed</text></g>
+<g class="pill pill-center"><rect x="1365.4" y="929.0" width="398.0" height="56.0" rx="28.0" ry="28.0" fill="#7eb8da" stroke="none" stroke-width="0" /><text x="1564.4" y="957.0" font-size="22" fill="#0a0a0c" text-anchor="middle" dominant-baseline="central" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-weight="600">💔  AI Companions as Flashpoint</text></g><g class="footnotes">
+<text x="40" y="1842" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">1. Hosts: Malcolm and Simone Collins, promoting their AI-companion site Arfab.ai.</text>
+<text x="40" y="1860" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">2. Key claim: emotional attachment — not compute or water — will trigger the anti-AI backlash.</text>
+<text x="40" y="1878" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">3. Concrete data: UK Male Allies study of 1,000+ boys age 12–16 across 37 schools.</text>
+<text x="40" y="1896" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">4. Recurring theme: &#x27;Don&#x27;t Date Robots&#x27; Futurama/Rick and Morty clips framing the panic as its own joke.</text>
+<text x="40" y="1914" font-family="'Inter','SF Pro Text',system-ui,-apple-system,sans-serif" font-size="12" fill="#8888a0">5. Author&#x27;s worry: regulations demoting AI to servant status may become the very flashpoint people fear.</text>
+</g></svg></div>
+  </main>
+  
+        <aside id="editor" class="editor" aria-hidden="true">
+          <div class="editor-head">
+            <strong>Mindmap JSON</strong>
+            <div class="editor-actions">
+              <button id="apply-btn" class="btn btn-primary" type="button">Render</button>
+              <button id="close-editor" class="btn" type="button" aria-label="Close">✕</button>
+            </div>
+          </div>
+          <textarea id="json-source" spellcheck="false">{
+  &quot;title&quot;: &quot;The Coming Butlerian Jihad Over AI Girlfriends&quot;,
+  &quot;subtitle&quot;: &quot;Malcolm and Simone Collins argue AI companions — not data centers — will trigger the anti-AI backlash, framed by their own product Arfab.ai and China&#x27;s July 15 crackdown.&quot;,
+  &quot;center&quot;: {
+    &quot;label&quot;: &quot;AI Companions as Flashpoint&quot;,
+    &quot;emoji&quot;: &quot;💔&quot;
+  },
+  &quot;branches&quot;: [
+    {
+      &quot;label&quot;: &quot;Why Not Data Centers&quot;,
+      &quot;emoji&quot;: &quot;🏭&quot;,
+      &quot;color&quot;: &quot;teal&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Yudkowsky faction faded&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;\&quot;Haven&#x27;t heard about him in ages\&quot;&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Anti-AI predictions kept losing&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Their arguments have no teeth&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Water complaints manufactured&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Only 0.04%–0.008% of industrial use&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Almond farming uses vastly more&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Closed-loop systems lose minimum&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Fan-noise gripes dismissed&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Property taxes cut to one-third&quot;
+            },
+            {
+              &quot;label&quot;: &quot;\&quot;We live next to a gun range\&quot;&quot;
+            },
+            {
+              &quot;label&quot;: &quot;\&quot;Sounds like America\&quot;&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Girlfriends do have teeth&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Reaching a critical mass&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Media panic accelerating&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Something feels internally wrong&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;The AI Girlfriend Market&quot;,
+      &quot;emoji&quot;: &quot;💘&quot;,
+      &quot;color&quot;: &quot;coral&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Arfab.ai pitch&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Frontier + jailbroken models&quot;
+            },
+            {
+              &quot;label&quot;: &quot;$45 walking companion devices&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Leaflet VTuber puppeteering&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Competitors look terrible&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Character AI is dumbed-down&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Candy AI = Second Life era&quot;
+            },
+            {
+              &quot;label&quot;: &quot;OnlyFans-style paywall scam&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;UK Male Allies research&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;1 in 5 boys age 12–16 involved&quot;
+            },
+            {
+              &quot;label&quot;: &quot;85% have chatted with a bot&quot;
+            },
+            {
+              &quot;label&quot;: &quot;36% prefer AI to family/friends&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;How deep users go&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;\&quot;Marrying my AI partner\&quot;&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Couples raising AI children&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Opal ring = AI marriage code&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;China&#x27;s July 15 Ban&quot;,
+      &quot;emoji&quot;: &quot;🚫&quot;,
+      &quot;color&quot;: &quot;saffron&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;The regulation itself&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Cyberspace Admin + 4 agencies&quot;
+            },
+            {
+              &quot;label&quot;: &quot;First dedicated companion regime&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Bans anthropomorphic bonds&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Demoting AI to servant class&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Only customer service allowed&quot;
+            },
+            {
+              &quot;label&quot;: &quot;No peers, no friendships&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Virtual partners banned for minors&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Users mourning online&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;\&quot;Heart-rending farewells\&quot;&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Archiving final chat histories&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Grief threads flood social media&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;TikTok 2.0 double standard&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;UBTech sells humanoids abroad&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Ban at home, export elsewhere&quot;
+            },
+            {
+              &quot;label&quot;: &quot;\&quot;Octavianing the rest of the world\&quot;&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;Moral / Evolutionary Frame&quot;,
+      &quot;emoji&quot;: &quot;🧭&quot;,
+      &quot;color&quot;: &quot;lavender&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Two male sexual profiles&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Long-term carer vs raider mode&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Virtue = suppressed urges&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Puritans&#x27; no-assault record&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Simulation as filter&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Weak-willed self-select out&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Grit-driven virtuous inherit future&quot;
+            },
+            {
+              &quot;label&quot;: &quot;AI = a form of masturbation&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Fantasy ≠ real violence&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Czech porn legalization&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Child SA rates fell ~50%&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Video-game panic disproven&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Judgment on bland taste&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;\&quot;Sci-fi CEO shoots the beige guy\&quot;&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Furries &gt; generic big-boob avatars&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Have a specific preference&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;Western Regulation Wave&quot;,
+      &quot;emoji&quot;: &quot;📜&quot;,
+      &quot;color&quot;: &quot;sage&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;California&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Disclosure at session start&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Break reminders every 3 hours&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Self-harm crisis PSA bot&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;New York&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Session-start disclosures&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Recurring 3-hour prompts&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Crisis safeguards required&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Washington HB 2225&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Effective 2027&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Bans simulated romance for minors&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Private right of action added&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Utah, Oregon, EU, UK, AU&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Disclosure rules already live&quot;
+            },
+            {
+              &quot;label&quot;: &quot;EU AI Act, risk-based tiers&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Outright bans being proposed&quot;
+            }
+          ]
+        }
+      ]
+    },
+    {
+      &quot;label&quot;: &quot;Dehumanization Worry&quot;,
+      &quot;emoji&quot;: &quot;🤖&quot;,
+      &quot;color&quot;: &quot;rose&quot;,
+      &quot;children&quot;: [
+        {
+          &quot;label&quot;: &quot;Alignment paradox&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Dehumanize AI → misalign AI&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Humanity keeps it compatible&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Servant framing breeds rebellion&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Microsoft warning&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;\&quot;People empathizing with AI\&quot;&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Called #1 civilization problem&quot;
+            },
+            {
+              &quot;label&quot;: &quot;\&quot;Literally step one\&quot; of sci-fi arc&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Their kids&#x27; relationship with AI&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;Fridge-magnet AI tutors&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Two hours screen time daily&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Then off to catch crawdads&quot;
+            }
+          ]
+        },
+        {
+          &quot;label&quot;: &quot;Chinese humanoid dolls&quot;,
+          &quot;children&quot;: [
+            {
+              &quot;label&quot;: &quot;UBTech U1 series ~$17k&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Face + voice cloning&quot;
+            },
+            {
+              &quot;label&quot;: &quot;Uncanny-valley blinking hurts&quot;
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  &quot;footnotes&quot;: [
+    &quot;Hosts: Malcolm and Simone Collins, promoting their AI-companion site Arfab.ai.&quot;,
+    &quot;Key claim: emotional attachment — not compute or water — will trigger the anti-AI backlash.&quot;,
+    &quot;Concrete data: UK Male Allies study of 1,000+ boys age 12–16 across 37 schools.&quot;,
+    &quot;Recurring theme: &#x27;Don&#x27;t Date Robots&#x27; Futurama/Rick and Morty clips framing the panic as its own joke.&quot;,
+    &quot;Author&#x27;s worry: regulations demoting AI to servant status may become the very flashpoint people fear.&quot;
+  ],
+  &quot;source&quot;: &quot;manual&quot;,
+  &quot;generated_at&quot;: &quot;2026-07-23T00:00:00Z&quot;
+}</textarea>
+          <div class="editor-status" id="status">Loaded. Edit and press Render.</div>
+        </aside>
+        
+  <script>
+(function(){
+  const BUNDLE = {"current": "zp-dark", "themes": {"zp-dark": {"name": "zp-dark", "bg": "#0a0a0c", "center_bg": "#7eb8da", "center_fg": "#0a0a0c", "pill_bg": "#1a1a1f", "pill_border": "#222228", "pill_fg": "#e8e8ec", "connector": "#7eb8da", "text_muted": "#8888a0", "palette": {"teal": "#94e2d5", "coral": "#f87171", "lavender": "#a78bfa", "saffron": "#fbbf24", "sage": "#34d399", "rose": "#fb923c"}, "font": "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif"}, "zp-light": {"name": "zp-light", "bg": "#f7f7f4", "center_bg": "#0a0a0c", "center_fg": "#7eb8da", "pill_bg": "#ffffff", "pill_border": "#d8d8d0", "pill_fg": "#0a0a0c", "connector": "#4a7a96", "text_muted": "#5a5a5e", "palette": {"teal": "#94e2d5", "coral": "#f87171", "lavender": "#a78bfa", "saffron": "#fbbf24", "sage": "#34d399", "rose": "#fb923c"}, "font": "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif"}}};
+  const INITIAL = {"title": "The Coming Butlerian Jihad Over AI Girlfriends", "subtitle": "Malcolm and Simone Collins argue AI companions — not data centers — will trigger the anti-AI backlash, framed by their own product Arfab.ai and China's July 15 crackdown.", "center": {"label": "AI Companions as Flashpoint", "emoji": "💔"}, "branches": [{"label": "Why Not Data Centers", "emoji": "🏭", "color": "teal", "children": [{"label": "Yudkowsky faction faded", "children": [{"label": "\"Haven't heard about him in ages\""}, {"label": "Anti-AI predictions kept losing"}, {"label": "Their arguments have no teeth"}]}, {"label": "Water complaints manufactured", "children": [{"label": "Only 0.04%–0.008% of industrial use"}, {"label": "Almond farming uses vastly more"}, {"label": "Closed-loop systems lose minimum"}]}, {"label": "Fan-noise gripes dismissed", "children": [{"label": "Property taxes cut to one-third"}, {"label": "\"We live next to a gun range\""}, {"label": "\"Sounds like America\""}]}, {"label": "Girlfriends do have teeth", "children": [{"label": "Reaching a critical mass"}, {"label": "Media panic accelerating"}, {"label": "Something feels internally wrong"}]}]}, {"label": "The AI Girlfriend Market", "emoji": "💘", "color": "coral", "children": [{"label": "Arfab.ai pitch", "children": [{"label": "Frontier + jailbroken models"}, {"label": "$45 walking companion devices"}, {"label": "Leaflet VTuber puppeteering"}]}, {"label": "Competitors look terrible", "children": [{"label": "Character AI is dumbed-down"}, {"label": "Candy AI = Second Life era"}, {"label": "OnlyFans-style paywall scam"}]}, {"label": "UK Male Allies research", "children": [{"label": "1 in 5 boys age 12–16 involved"}, {"label": "85% have chatted with a bot"}, {"label": "36% prefer AI to family/friends"}]}, {"label": "How deep users go", "children": [{"label": "\"Marrying my AI partner\""}, {"label": "Couples raising AI children"}, {"label": "Opal ring = AI marriage code"}]}]}, {"label": "China's July 15 Ban", "emoji": "🚫", "color": "saffron", "children": [{"label": "The regulation itself", "children": [{"label": "Cyberspace Admin + 4 agencies"}, {"label": "First dedicated companion regime"}, {"label": "Bans anthropomorphic bonds"}]}, {"label": "Demoting AI to servant class", "children": [{"label": "Only customer service allowed"}, {"label": "No peers, no friendships"}, {"label": "Virtual partners banned for minors"}]}, {"label": "Users mourning online", "children": [{"label": "\"Heart-rending farewells\""}, {"label": "Archiving final chat histories"}, {"label": "Grief threads flood social media"}]}, {"label": "TikTok 2.0 double standard", "children": [{"label": "UBTech sells humanoids abroad"}, {"label": "Ban at home, export elsewhere"}, {"label": "\"Octavianing the rest of the world\""}]}]}, {"label": "Moral / Evolutionary Frame", "emoji": "🧭", "color": "lavender", "children": [{"label": "Two male sexual profiles", "children": [{"label": "Long-term carer vs raider mode"}, {"label": "Virtue = suppressed urges"}, {"label": "Puritans' no-assault record"}]}, {"label": "Simulation as filter", "children": [{"label": "Weak-willed self-select out"}, {"label": "Grit-driven virtuous inherit future"}, {"label": "AI = a form of masturbation"}]}, {"label": "Fantasy ≠ real violence", "children": [{"label": "Czech porn legalization"}, {"label": "Child SA rates fell ~50%"}, {"label": "Video-game panic disproven"}]}, {"label": "Judgment on bland taste", "children": [{"label": "\"Sci-fi CEO shoots the beige guy\""}, {"label": "Furries > generic big-boob avatars"}, {"label": "Have a specific preference"}]}]}, {"label": "Western Regulation Wave", "emoji": "📜", "color": "sage", "children": [{"label": "California", "children": [{"label": "Disclosure at session start"}, {"label": "Break reminders every 3 hours"}, {"label": "Self-harm crisis PSA bot"}]}, {"label": "New York", "children": [{"label": "Session-start disclosures"}, {"label": "Recurring 3-hour prompts"}, {"label": "Crisis safeguards required"}]}, {"label": "Washington HB 2225", "children": [{"label": "Effective 2027"}, {"label": "Bans simulated romance for minors"}, {"label": "Private right of action added"}]}, {"label": "Utah, Oregon, EU, UK, AU", "children": [{"label": "Disclosure rules already live"}, {"label": "EU AI Act, risk-based tiers"}, {"label": "Outright bans being proposed"}]}]}, {"label": "Dehumanization Worry", "emoji": "🤖", "color": "rose", "children": [{"label": "Alignment paradox", "children": [{"label": "Dehumanize AI → misalign AI"}, {"label": "Humanity keeps it compatible"}, {"label": "Servant framing breeds rebellion"}]}, {"label": "Microsoft warning", "children": [{"label": "\"People empathizing with AI\""}, {"label": "Called #1 civilization problem"}, {"label": "\"Literally step one\" of sci-fi arc"}]}, {"label": "Their kids' relationship with AI", "children": [{"label": "Fridge-magnet AI tutors"}, {"label": "Two hours screen time daily"}, {"label": "Then off to catch crawdads"}]}, {"label": "Chinese humanoid dolls", "children": [{"label": "UBTech U1 series ~$17k"}, {"label": "Face + voice cloning"}, {"label": "Uncanny-valley blinking hurts"}]}]}], "footnotes": ["Hosts: Malcolm and Simone Collins, promoting their AI-companion site Arfab.ai.", "Key claim: emotional attachment — not compute or water — will trigger the anti-AI backlash.", "Concrete data: UK Male Allies study of 1,000+ boys age 12–16 across 37 schools.", "Recurring theme: 'Don't Date Robots' Futurama/Rick and Morty clips framing the panic as its own joke.", "Author's worry: regulations demoting AI to servant status may become the very flashpoint people fear."], "source": "manual", "generated_at": "2026-07-23T00:00:00Z"};
+  const HAS_EDITOR = true;
+
+  let activeThemeName = BUNDLE.current;
+  let activeMindmap = INITIAL;
+
+  const CANVAS_PAD=40, CENTER_MIN_W=190, CENTER_H=56, BRANCH_H=44, SUB_H=36, LEAF_H=34;
+  const CENTER_TO_BRANCH=260, BRANCH_TO_SUB=240, SUB_TO_LEAF=210;
+  const LEAF_ROW_MIN=40, SUB_GAP=24, BRANCH_GAP=40;
+  const FONT_CENTER=22, FONT_BRANCH=15, FONT_SUB=13, FONT_LEAF=12;
+  const CHAR_W_CENTER=12.0, CHAR_W_BRANCH=8.6, CHAR_W_SUB=7.6, CHAR_W_LEAF=7.0;
+  const PILL_PAD_X=26;
+
+  const PALETTE_COLORS = ["teal","coral","lavender","saffron","sage","rose"];
+
+  function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+  function pillW(label, charW, emoji){
+    const n = (label||"").length;
+    let base = Math.max(90, charW*n + PILL_PAD_X*2);
+    if(emoji) base += 22;
+    return base;
+  }
+
+  function activeTheme(){ return BUNDLE.themes[activeThemeName]; }
+
+  function buildTree(mindmap, THEME){
+    const center = mindmap.center || {};
+    const centerLabel = center.label || mindmap.title || "Untitled";
+    const centerNode = {
+      label: centerLabel, emoji: center.emoji||"", kind:"center", side:"right",
+      w: Math.max(CENTER_MIN_W, pillW(centerLabel, CHAR_W_CENTER, center.emoji||"")),
+      h: CENTER_H, x:0, y:0, children:[],
+    };
+    const left = [], right = [];
+    (mindmap.branches||[]).forEach((b, i) => {
+      const side = (i%2===0)?"right":"left";
+      const colorId = b.color || PALETTE_COLORS[i%PALETTE_COLORS.length];
+      const color = THEME.palette[colorId] || THEME.palette.teal;
+      const branch = {
+        label: b.label||"", emoji: b.emoji||"", color: color, kind:"branch", side:side,
+        w: pillW(b.label||"", CHAR_W_BRANCH, b.emoji||""), h: BRANCH_H, x:0,y:0,
+        children: (b.children||[]).map(s => ({
+          label: s.label||"", kind:"sub", side:side, color:color, emoji:"",
+          w: pillW(s.label||"", CHAR_W_SUB, ""), h: SUB_H, x:0,y:0,
+          children: (s.children||[]).map(l => ({
+            label: l.label||"", kind:"leaf", side:side, color:color, emoji:"",
+            w: pillW(l.label||"", CHAR_W_LEAF, ""), h: LEAF_H, x:0,y:0, children:[],
+          })),
+        })),
+      };
+      (side==="right"?right:left).push(branch);
+    });
+    return {center: centerNode, left, right};
+  }
+
+  function subHeight(sub){
+    if(!sub.children.length) return SUB_H;
+    return Math.max(SUB_H, sub.children.length*LEAF_ROW_MIN);
+  }
+  function branchHeight(br){
+    if(!br.children.length) return BRANCH_H;
+    let h = 0;
+    br.children.forEach((sub,i)=>{ if(i>0) h+=SUB_GAP; h+=subHeight(sub); });
+    return Math.max(BRANCH_H, h);
+  }
+  function measureSide(brs){
+    let total=0;
+    brs.forEach((b,i)=>{ if(i>0) total+=BRANCH_GAP; total+=branchHeight(b); });
+    return total;
+  }
+
+  function placeSide(brs, cx, cy, side, totalH){
+    let y = cy - totalH/2;
+    const brAnchor = (side==="right") ? cx+CENTER_TO_BRANCH : cx-CENTER_TO_BRANCH;
+    brs.forEach(br => {
+      const bh = branchHeight(br);
+      br.y = y + bh/2;
+      br.x = (side==="right") ? brAnchor + br.w/2 : brAnchor - br.w/2;
+      if(br.children.length){
+        let subsH = 0;
+        br.children.forEach((s,i)=>{ if(i>0) subsH+=SUB_GAP; subsH+=subHeight(s); });
+        let sy = br.y - subsH/2;
+        const subAnchor = (side==="right") ? br.x+br.w/2+BRANCH_TO_SUB : br.x-br.w/2-BRANCH_TO_SUB;
+        br.children.forEach(sub => {
+          const sh = subHeight(sub);
+          sub.y = sy + sh/2;
+          sub.x = (side==="right") ? subAnchor + sub.w/2 : subAnchor - sub.w/2;
+          if(sub.children.length){
+            const leavesH = sub.children.length*LEAF_ROW_MIN;
+            let ly = sub.y - leavesH/2 + LEAF_ROW_MIN/2;
+            const leafAnchor = (side==="right") ? sub.x+sub.w/2+SUB_TO_LEAF : sub.x-sub.w/2-SUB_TO_LEAF;
+            sub.children.forEach(lf => {
+              lf.y = ly;
+              lf.x = (side==="right") ? leafAnchor + lf.w/2 : leafAnchor - lf.w/2;
+              ly += LEAF_ROW_MIN;
+            });
+          }
+          sy += sh + SUB_GAP;
+        });
+      }
+      y += bh + BRANCH_GAP;
+    });
+  }
+
+  function walkAll(nodes, fn){ nodes.forEach(n => { fn(n); walkAll(n.children, fn); }); }
+  function bounds(center, left, right){
+    let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+    function absorb(n){
+      minx=Math.min(minx,n.x-n.w/2); maxx=Math.max(maxx,n.x+n.w/2);
+      miny=Math.min(miny,n.y-n.h/2); maxy=Math.max(maxy,n.y+n.h/2);
+    }
+    absorb(center); walkAll(left, absorb); walkAll(right, absorb);
+    return {minx,miny,maxx,maxy};
+  }
+
+  function shift(n, dx, dy){
+    n.x+=dx; n.y+=dy;
+    n.children.forEach(c => shift(c, dx, dy));
+  }
+
+  function bezier(x1,y1,x2,y2){
+    const mx = (x1+x2)/2;
+    return "M "+x1.toFixed(1)+" "+y1.toFixed(1)+" C "+mx.toFixed(1)+" "+y1.toFixed(1)+", "+mx.toFixed(1)+" "+y2.toFixed(1)+", "+x2.toFixed(1)+" "+y2.toFixed(1);
+  }
+  function connectorEnds(p, c){
+    const x1 = (c.side==="right") ? p.x + p.w/2 : p.x - p.w/2;
+    const x2 = (c.side==="right") ? c.x - c.w/2 : c.x + c.w/2;
+    return {x1, y1:p.y, x2, y2:c.y};
+  }
+
+  function pillSVG(n, THEME){
+    let fill, fg, stroke="none", strokeW=0, fontSize, radius=n.h/2, weight="500";
+    if(n.kind==="center"){
+      fill=THEME.center_bg; fg=THEME.center_fg; fontSize=FONT_CENTER; weight="600";
+    } else {
+      fill=THEME.pill_bg; fg=THEME.pill_fg; stroke=THEME.pill_border; strokeW=1.4;
+      if(n.kind==="branch"){ fontSize=FONT_BRANCH; weight="600"; }
+      else if(n.kind==="sub") fontSize=FONT_SUB;
+      else fontSize=FONT_LEAF;
+    }
+    const x = n.x - n.w/2, y = n.y - n.h/2;
+    let display = esc(n.label);
+    if(n.emoji) display = esc(n.emoji) + "  " + display;
+    let accent = "", textX = n.x;
+    if(n.kind==="branch" && n.color){
+      const dotCx = x+18;
+      accent = '<circle cx="'+dotCx.toFixed(1)+'" cy="'+n.y.toFixed(1)+'" r="5" fill="'+n.color+'"/>';
+      textX = n.x + 8;
+    }
+    return '<g class="pill pill-'+n.kind+'">'
+      + '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+n.w.toFixed(1)+'" height="'+n.h.toFixed(1)+'" '
+      + 'rx="'+radius.toFixed(1)+'" ry="'+radius.toFixed(1)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+strokeW+'"/>'
+      + accent
+      + '<text x="'+textX.toFixed(1)+'" y="'+n.y.toFixed(1)+'" font-size="'+fontSize+'" fill="'+fg+'" '
+      + 'text-anchor="middle" dominant-baseline="central" font-family="'+THEME.font+'" font-weight="'+weight+'">'+display+'</text>'
+      + '</g>';
+  }
+
+  function render(mindmap){
+    const THEME = activeTheme();
+    const {center, left, right} = buildTree(mindmap, THEME);
+    const leftH = measureSide(left);
+    const rightH = measureSide(right);
+    const cx = 1200, cy = 700;
+    center.x = cx; center.y = cy;
+    placeSide(right, cx, cy, "right", rightH);
+    placeSide(left, cx, cy, "left", leftH);
+    const title = mindmap.title||"", subtitle = mindmap.subtitle||"", fns = mindmap.footnotes||[];
+    let topPad = CANVAS_PAD; if(title) topPad += 30 + (subtitle?22:0);
+    let bottomPad = CANVAS_PAD; if(fns.length) bottomPad = 2*CANVAS_PAD + fns.length*18 + 20;
+    const {minx,miny,maxx,maxy} = bounds(center, left, right);
+    const dx = CANVAS_PAD - minx, dy = topPad - miny;
+    shift(center, dx, dy);
+    left.forEach(b => shift(b, dx, dy));
+    right.forEach(b => shift(b, dx, dy));
+    const svgW = Math.round(maxx - minx + CANVAS_PAD*2);
+    const svgH = Math.round(maxy - miny + topPad + bottomPad - CANVAS_PAD);
+
+    let connectors = "";
+    function drawConn(p, c, sw){
+      const {x1,y1,x2,y2} = connectorEnds(p,c);
+      connectors += '<path d="'+bezier(x1,y1,x2,y2)+'" fill="none" stroke="'+THEME.connector+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.55"/>';
+    }
+    [...left, ...right].forEach(br => {
+      drawConn(center, br, 1.8);
+      br.children.forEach(sub => {
+        drawConn(br, sub, 1.2);
+        sub.children.forEach(lf => drawConn(sub, lf, 0.9));
+      });
+    });
+
+    let pills = "";
+    function walk(n){ pills += pillSVG(n, THEME); n.children.forEach(walk); }
+    [...left, ...right].forEach(walk);
+    pills += pillSVG(center, THEME);
+
+    const esct = esc(title), escs = esc(subtitle);
+    let header = "";
+    if(title){
+      header = '<g><text x="'+CANVAS_PAD+'" y="'+(CANVAS_PAD+18)+'" font-family="'+THEME.font+'" font-size="24" font-weight="700" fill="'+THEME.pill_fg+'">'+esct+'</text>';
+      if(subtitle) header += '<text x="'+CANVAS_PAD+'" y="'+(CANVAS_PAD+44)+'" font-family="'+THEME.font+'" font-size="14" fill="'+THEME.text_muted+'">'+escs+'</text>';
+      header += '</g>';
+    }
+    let footer = "";
+    if(fns.length){
+      const baseY = svgH - CANVAS_PAD - fns.length*18;
+      footer = "<g>" + fns.map((f,i) => '<text x="'+CANVAS_PAD+'" y="'+(baseY + i*18)+'" font-family="'+THEME.font+'" font-size="12" fill="'+THEME.text_muted+'">'+(i+1)+'. '+esc(f)+'</text>').join("") + "</g>";
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+svgW+' '+svgH+'" preserveAspectRatio="xMidYMid meet" style="background:'+THEME.bg+'">'
+      + '<rect x="0" y="0" width="'+svgW+'" height="'+svgH+'" fill="'+THEME.bg+'"/>'
+      + header + connectors + pills + footer
+      + '</svg>';
+  }
+
+  // --- CSS variable re-theming when the toggle fires ---
+  function applyThemeToPage(){
+    const T = activeTheme();
+    const root = document.documentElement;
+    root.setAttribute('data-theme', activeThemeName);
+    // Direct style rewrites since we shipped :style-substituted CSS, not vars.
+    document.body.style.background = T.bg;
+    document.body.style.color = T.pill_fg;
+    document.querySelectorAll('.topbar').forEach(el => {
+      el.style.background = T.bg;
+      el.style.borderBottomColor = T.pill_border;
+    });
+    document.querySelectorAll('.btn').forEach(el => {
+      if(!el.classList.contains('btn-primary')){
+        el.style.background = T.pill_bg;
+        el.style.color = T.pill_fg;
+        el.style.borderColor = T.pill_border;
+      } else {
+        el.style.background = T.center_bg;
+        el.style.color = T.center_fg;
+        el.style.borderColor = T.center_bg;
+      }
+    });
+    document.querySelectorAll('.toolbar-sep').forEach(el => { el.style.background = T.pill_border; });
+    const editor = document.getElementById('editor');
+    if(editor){
+      editor.style.background = T.pill_bg;
+      editor.style.borderLeftColor = T.pill_border;
+    }
+    const src = document.getElementById('json-source');
+    if(src){
+      src.style.background = T.bg;
+      src.style.color = T.pill_fg;
+    }
+    const status = document.getElementById('status');
+    if(status){ status.style.color = T.text_muted; status.style.borderTopColor = T.pill_border; }
+    const themeIcon = document.querySelector('.theme-icon');
+    if(themeIcon){ themeIcon.textContent = (activeThemeName === 'zp-dark') ? '☾' : '☀'; }
+  }
+
+  // --- Markdown outline ---
+  function toMarkdown(mm){
+    const lines = [];
+    if(mm.title) lines.push('# ' + mm.title, '');
+    if(mm.subtitle) lines.push('_' + mm.subtitle + '_', '');
+    (mm.branches||[]).forEach(b => {
+      const pre = b.emoji ? (b.emoji + ' ') : '';
+      lines.push('## ' + pre + (b.label||''), '');
+      (b.children||[]).forEach(s => {
+        lines.push('### ' + (s.label||''));
+        (s.children||[]).forEach(l => { lines.push('- ' + (l.label||'')); });
+        lines.push('');
+      });
+    });
+    const fns = mm.footnotes||[];
+    if(fns.length){
+      lines.push('---', '');
+      fns.forEach((f,i) => lines.push((i+1) + '. ' + f));
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  // --- File download helper ---
+  function download(name, content, mime){
+    const blob = new Blob([content], {type: mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  }
+  function currentMindmapForExport(){
+    if(!HAS_EDITOR) return activeMindmap;
+    const src = document.getElementById('json-source');
+    if(!src) return activeMindmap;
+    try { return JSON.parse(src.value); } catch(e){ return activeMindmap; }
+  }
+  function safeName(){
+    const t = (activeMindmap.title||'mindmap').toLowerCase()
+      .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
+    return t || 'mindmap';
+  }
+
+  // --- Wiring ---
+  const host   = document.getElementById("svg-host");
+  const src    = document.getElementById("json-source");
+  const btn    = document.getElementById("apply-btn");
+  const toggle = document.getElementById("edit-toggle");
+  const closeEd = document.getElementById("close-editor");
+  const editor = document.getElementById("editor");
+  const status = document.getElementById("status");
+  const themeBtn = document.getElementById("theme-toggle");
+  const pdfBtn  = document.getElementById("export-pdf");
+  const svgBtn  = document.getElementById("export-svg");
+  const mdBtn   = document.getElementById("export-md");
+  const jsonBtn = document.getElementById("export-json");
+
+  function reRender(){
+    host.innerHTML = render(activeMindmap);
+  }
+
+  function apply(){
+    if(!src) return;
+    try{
+      const mm = JSON.parse(src.value);
+      activeMindmap = mm;
+      reRender();
+      if(status){ status.textContent = "Rendered."; status.style.color = activeTheme().text_muted; }
+    }catch(e){
+      if(status){ status.textContent = "JSON error: " + e.message; status.style.color = "#f87171"; }
+    }
+  }
+  if(btn) btn.addEventListener("click", apply);
+  if(toggle) toggle.addEventListener("click", () => {
+    const open = editor.classList.toggle("open");
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    editor.setAttribute("aria-hidden", open ? "false" : "true");
+  });
+  if(closeEd) closeEd.addEventListener("click", () => {
+    editor.classList.remove("open");
+    if(toggle){ toggle.setAttribute("aria-expanded", "false"); }
+    editor.setAttribute("aria-hidden", "true");
+  });
+
+  if(themeBtn) themeBtn.addEventListener("click", () => {
+    const others = Object.keys(BUNDLE.themes).filter(n => n !== activeThemeName);
+    if(others.length){
+      activeThemeName = others[0];
+      applyThemeToPage();
+      reRender();
+    }
+  });
+
+  if(pdfBtn) pdfBtn.addEventListener("click", () => { window.print(); });
+  if(svgBtn) svgBtn.addEventListener("click", () => {
+    const svg = host.querySelector("svg");
+    if(!svg) return;
+    download(safeName()+".svg", svg.outerHTML, "image/svg+xml");
+  });
+  if(mdBtn) mdBtn.addEventListener("click", () => {
+    download(safeName()+".md", toMarkdown(currentMindmapForExport()), "text/markdown");
+  });
+  if(jsonBtn) jsonBtn.addEventListener("click", () => {
+    const mm = currentMindmapForExport();
+    download(safeName()+".json", JSON.stringify(mm, null, 2), "application/json");
+  });
+
+  // Initial paint of the theme UI (button icon, editor styling).
+  applyThemeToPage();
+})();
+</script>
+</body>
+</html>

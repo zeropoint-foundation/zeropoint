@@ -206,7 +206,7 @@ the way a chemist reads a structural formula.
   is healthy, a ceremony is in progress, an anomaly is present. On
   click: full receipt content, verification trace, signer attribution,
   related-receipt navigation.
-- **Speaking the language** — Sage's narration, surface copy, error
+- **Speaking the language** — the Regent's narration, surface copy, error
   messages, CLI help text, and documentation all use molecular
   vocabulary consistently. Operators learn the language through
   repeated exposure in context, not from a one-time reading of the
@@ -237,7 +237,7 @@ This composes with several adjacent design threads:
 - **`docs/AGENT-AS-UX-ARCHITECTURE-2026-05.md`** — same theme of UX
   designed around continuous-presence rather than discrete-event
   surfaces, applied here to the chain itself
-- **Sage's voice in the narration layer** (per
+- **the Regent's voice in the narration layer** (per
   `RECEIPT-CHAIN-VIZ-2026-05.md`) — becomes the in-line tutor for
   the molecular language; every animated event has a phrase
   attached that teaches the vocabulary in context
@@ -311,7 +311,7 @@ Catalog of recognized patterns grows over time, each documented.
 The chain visualizer (#145) renders using molecular conventions.
 Layout algorithms borrow from cheminformatics (force-directed
 layouts, template-based rendering for known functional groups).
-Sage's narration uses the molecular vocabulary.
+the Regent's narration uses the molecular vocabulary.
 
 **Phase 6 — Documentation and pedagogy**
 

@@ -98,6 +98,6 @@ Trust is infrastructure. I intend to prove it.
 
 ---
 
-*I'm Ken Romero, founder of ThinkStream Labs. ZeroPoint is open-source and under active development. If you're interested in agent governance, trust infrastructure, or the intersection of cryptography and AI safety, follow along. The next post is about where these ideas come from — the intellectual lineage that converged into a trust grammar.*
+*I'm Ken Romero, founder of ZeroPoint Open Foundation. ZeroPoint is open-source and under active development. If you're interested in agent governance, trust infrastructure, or the intersection of cryptography and AI safety, follow along. The next post is about where these ideas come from — the intellectual lineage that converged into a trust grammar.*
 
 *You can find the project at [github.com/zeropoint-foundation/zeropoint](https://github.com/zeropoint-foundation/zeropoint).*

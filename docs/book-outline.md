@@ -3,7 +3,7 @@
 ## Book Outline — Derived from Whitepaper v2.0
 
 **Ken Romero**
-**ThinkStream Labs**
+**ZeroPoint Open Foundation**
 
 ---
 

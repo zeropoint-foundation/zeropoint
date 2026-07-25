@@ -662,7 +662,11 @@ impl CredentialVault {
 
         // Try new format first
         if let Ok(entries) = serde_json::from_str::<HashMap<String, VaultEntry>>(&json) {
-            info!(
+            // debug! — vault.load() is called on every sensor_forge_task tick and
+            // other hot paths, not just at startup. INFO caused ~1.7GB/day log growth
+            // (2026-07-10 diagnostic). Restart hygiene: the legitimate startup load
+            // still surfaces via zp-server::AppState::new INFO log at a higher tier.
+            debug!(
                 path = %path.display(),
                 count = entries.len(),
                 "Vault loaded (tiered format)"
@@ -675,7 +679,7 @@ impl CredentialVault {
         let legacy: HashMap<String, EncryptedCredential> = serde_json::from_str(&json)
             .map_err(|e| VaultError::SerializationError(e.to_string()))?;
 
-        info!(
+        debug!(
             path = %path.display(),
             count = legacy.len(),
             "Vault loaded (legacy format — auto-upgrading)"

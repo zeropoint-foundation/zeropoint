@@ -541,6 +541,12 @@ fn is_exempt(path: &str) -> bool {
             | "/readyz"
             | "/onboard"
             | "/api/onboard/ws"
+            // Regent cockpit — CLI and future cockpit surfaces send operator
+            // input. Loopback-only (the server binds 127.0.0.1 by default);
+            // future network-facing deployments will add envelope auth in
+            // the handler. Exempt from session-token auth because the CLI
+            // doesn't have a browser session.
+            | "/api/v1/regent/input"
             // P4 (#197) — lease renewal endpoint. Authenticates by Ed25519
             // signature against the grant's bound subject_public_key (NOT
             // a session cookie). The handler enforces signature verification

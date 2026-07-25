@@ -107,7 +107,7 @@ After `resolve_tool_env` and before injection, if a manifest exists:
    - Add to `ToolChainState.preflight_issues`.
 4. Still inject and launch (degrade-open for the process), but `preflight_passed = false`.
 
-The existing `ToolChainState.ready` already gates on `preflight_passed`. Any surface that reads readiness (CLI, dashboard, Sage) will report the broken state.
+The existing `ToolChainState.ready` already gates on `preflight_passed`. Any surface that reads readiness (CLI, dashboard, the Regent) will report the broken state.
 
 ### Phase 3: Post-write verification
 

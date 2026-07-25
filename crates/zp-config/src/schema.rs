@@ -84,6 +84,19 @@ pub struct ZpConfig {
     pub officers_sentinel_enabled: Sourced<bool>,
     pub officers_forge_enabled: Sourced<bool>,
     pub officers_cleo_enabled: Sourced<bool>,
+    pub officers_aegis_enabled: Sourced<bool>,
+
+    /// External processes the operator acknowledges as expected listeners.
+    pub acknowledged_listeners: Sourced<Vec<AcknowledgedListener>>,
+
+    // ── Regent ──
+    pub regent_enabled: Sourced<bool>,
+    pub regent_inference_endpoint: Sourced<String>,
+    pub regent_inference_api_key: Sourced<Option<String>>,
+    pub regent_reasoning_model: Sourced<String>,
+    pub regent_routing_model: Sourced<String>,
+    pub regent_loop_interval_secs: Sourced<u64>,
+    pub regent_display_name: Sourced<String>,
 
     // ── Server runtime paths (Seam 12-B) ──
     /// Optional override directory for HTML/CSS/JS assets the server
@@ -125,6 +138,16 @@ impl Default for ZpConfig {
             officers_sentinel_enabled: Sourced::default_value(true),
             officers_forge_enabled: Sourced::default_value(true),
             officers_cleo_enabled: Sourced::default_value(true),
+            officers_aegis_enabled: Sourced::default_value(true),
+            acknowledged_listeners: Sourced::default_value(Vec::new()),
+
+            regent_enabled: Sourced::default_value(false),
+            regent_inference_endpoint: Sourced::default_value("http://127.0.0.1:11434".into()),
+            regent_inference_api_key: Sourced::default_value(None),
+            regent_reasoning_model: Sourced::default_value("qwen3:8b".into()),
+            regent_routing_model: Sourced::default_value("qwen3:1.7b".into()),
+            regent_loop_interval_secs: Sourced::default_value(60),
+            regent_display_name: Sourced::default_value("Regent".into()),
 
             assets_dir: Sourced::default_value(None),
             bridge_dir: Sourced::default_value(None),
@@ -228,6 +251,51 @@ impl ZpConfig {
             "  cleo_enabled = {}  # {}",
             self.officers_cleo_enabled.value, self.officers_cleo_enabled.source
         ));
+        lines.push(format!(
+            "  aegis_enabled = {}  # {}",
+            self.officers_aegis_enabled.value, self.officers_aegis_enabled.source
+        ));
+        if !self.acknowledged_listeners.value.is_empty() {
+            for ack in &self.acknowledged_listeners.value {
+                lines.push(format!(
+                    "  acknowledged_listener = {{ name = \"{}\", port = {} }}  # {}",
+                    ack.name, ack.port, self.acknowledged_listeners.source
+                ));
+            }
+        }
+
+        lines.push(String::new());
+        lines.push("[regent]".into());
+        lines.push(format!(
+            "  enabled = {}  # {}",
+            self.regent_enabled.value, self.regent_enabled.source
+        ));
+        lines.push(format!(
+            "  inference_endpoint = \"{}\"  # {}",
+            self.regent_inference_endpoint.value, self.regent_inference_endpoint.source
+        ));
+        if let Some(ref _key) = self.regent_inference_api_key.value {
+            lines.push(format!(
+                "  inference_api_key = \"***\"  # {} (redacted)",
+                self.regent_inference_api_key.source
+            ));
+        }
+        lines.push(format!(
+            "  reasoning_model = \"{}\"  # {}",
+            self.regent_reasoning_model.value, self.regent_reasoning_model.source
+        ));
+        lines.push(format!(
+            "  routing_model = \"{}\"  # {}",
+            self.regent_routing_model.value, self.regent_routing_model.source
+        ));
+        lines.push(format!(
+            "  loop_interval_secs = {}  # {}",
+            self.regent_loop_interval_secs.value, self.regent_loop_interval_secs.source
+        ));
+        lines.push(format!(
+            "  display_name = \"{}\"  # {}",
+            self.regent_display_name.value, self.regent_display_name.source
+        ));
 
         lines.join("\n")
     }
@@ -257,6 +325,8 @@ pub struct ConfigFile {
     pub node: NodeSection,
     #[serde(default)]
     pub officers: OfficersSection,
+    #[serde(default)]
+    pub regent: RegentSection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -309,6 +379,44 @@ pub struct OfficersSection {
     pub forge_enabled: Option<bool>,
     /// Enable the Cleo (governance) officer.
     pub cleo_enabled: Option<bool>,
+    /// Enable the Aegis (trajectory) officer.
+    pub aegis_enabled: Option<bool>,
+    /// External processes the operator acknowledges as expected listeners.
+    /// Each entry is a table: `{ name = "ollama", port = 11434 }`.
+    /// Registered as KnownBindings so the Sentinel tracks them instead of
+    /// alerting on them. If the process disappears, the Sentinel flags it
+    /// as stale — visibility, not blindness.
+    pub acknowledged_listeners: Option<Vec<AcknowledgedListener>>,
+}
+
+/// An external process the operator has explicitly acknowledged.
+/// Registered with the sensor layer as a KnownBinding so the Sentinel
+/// tracks it (reports if it disappears) rather than alerting on it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AcknowledgedListener {
+    /// Human-readable name (e.g., "ollama", "comet-cdp").
+    pub name: String,
+    /// Expected port. The Sentinel flags if something else binds this port.
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct RegentSection {
+    /// Enable the Regent cognitive loop.
+    pub enabled: Option<bool>,
+    /// Inference endpoint (Ollama local or OpenAI-compatible cloud).
+    pub inference_endpoint: Option<String>,
+    /// API key for cloud inference. When set, uses OpenAI protocol.
+    pub inference_api_key: Option<String>,
+    /// Model for reasoning tasks.
+    pub reasoning_model: Option<String>,
+    /// Model for fast routing/classification.
+    pub routing_model: Option<String>,
+    /// Seconds between autonomous cognitive cycles (0 = disable autonomous wake).
+    pub loop_interval_secs: Option<u64>,
+    /// Display name for the Regent (operator-renameable via chain receipt).
+    pub display_name: Option<String>,
 }
 
 impl From<&ZpConfig> for ConfigFile {
@@ -339,6 +447,17 @@ impl From<&ZpConfig> for ConfigFile {
                 sentinel_enabled: Some(cfg.officers_sentinel_enabled.value),
                 forge_enabled: Some(cfg.officers_forge_enabled.value),
                 cleo_enabled: Some(cfg.officers_cleo_enabled.value),
+                aegis_enabled: Some(cfg.officers_aegis_enabled.value),
+                acknowledged_listeners: if cfg.acknowledged_listeners.value.is_empty() { None } else { Some(cfg.acknowledged_listeners.value.clone()) },
+            },
+            regent: RegentSection {
+                enabled: Some(cfg.regent_enabled.value),
+                inference_endpoint: Some(cfg.regent_inference_endpoint.value.clone()),
+                inference_api_key: cfg.regent_inference_api_key.value.clone(),
+                reasoning_model: Some(cfg.regent_reasoning_model.value.clone()),
+                routing_model: Some(cfg.regent_routing_model.value.clone()),
+                loop_interval_secs: Some(cfg.regent_loop_interval_secs.value),
+                display_name: Some(cfg.regent_display_name.value.clone()),
             },
         }
     }

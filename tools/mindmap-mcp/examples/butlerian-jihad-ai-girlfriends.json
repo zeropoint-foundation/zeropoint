@@ -1,0 +1,251 @@
+{
+  "title": "The Coming Butlerian Jihad Over AI Girlfriends",
+  "subtitle": "Malcolm and Simone Collins argue AI companions — not data centers — will trigger the anti-AI backlash, framed by their own product Arfab.ai and China's July 15 crackdown.",
+  "center": {
+    "label": "AI Companions as Flashpoint",
+    "emoji": "💔"
+  },
+  "branches": [
+    {
+      "label": "Why Not Data Centers",
+      "emoji": "🏭",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Yudkowsky faction faded",
+          "children": [
+            {"label": "\"Haven't heard about him in ages\""},
+            {"label": "Anti-AI predictions kept losing"},
+            {"label": "Their arguments have no teeth"}
+          ]
+        },
+        {
+          "label": "Water complaints manufactured",
+          "children": [
+            {"label": "Only 0.04%–0.008% of industrial use"},
+            {"label": "Almond farming uses vastly more"},
+            {"label": "Closed-loop systems lose minimum"}
+          ]
+        },
+        {
+          "label": "Fan-noise gripes dismissed",
+          "children": [
+            {"label": "Property taxes cut to one-third"},
+            {"label": "\"We live next to a gun range\""},
+            {"label": "\"Sounds like America\""}
+          ]
+        },
+        {
+          "label": "Girlfriends do have teeth",
+          "children": [
+            {"label": "Reaching a critical mass"},
+            {"label": "Media panic accelerating"},
+            {"label": "Something feels internally wrong"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The AI Girlfriend Market",
+      "emoji": "💘",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Arfab.ai pitch",
+          "children": [
+            {"label": "Frontier + jailbroken models"},
+            {"label": "$45 walking companion devices"},
+            {"label": "Leaflet VTuber puppeteering"}
+          ]
+        },
+        {
+          "label": "Competitors look terrible",
+          "children": [
+            {"label": "Character AI is dumbed-down"},
+            {"label": "Candy AI = Second Life era"},
+            {"label": "OnlyFans-style paywall scam"}
+          ]
+        },
+        {
+          "label": "UK Male Allies research",
+          "children": [
+            {"label": "1 in 5 boys age 12–16 involved"},
+            {"label": "85% have chatted with a bot"},
+            {"label": "36% prefer AI to family/friends"}
+          ]
+        },
+        {
+          "label": "How deep users go",
+          "children": [
+            {"label": "\"Marrying my AI partner\""},
+            {"label": "Couples raising AI children"},
+            {"label": "Opal ring = AI marriage code"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "China's July 15 Ban",
+      "emoji": "🚫",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "The regulation itself",
+          "children": [
+            {"label": "Cyberspace Admin + 4 agencies"},
+            {"label": "First dedicated companion regime"},
+            {"label": "Bans anthropomorphic bonds"}
+          ]
+        },
+        {
+          "label": "Demoting AI to servant class",
+          "children": [
+            {"label": "Only customer service allowed"},
+            {"label": "No peers, no friendships"},
+            {"label": "Virtual partners banned for minors"}
+          ]
+        },
+        {
+          "label": "Users mourning online",
+          "children": [
+            {"label": "\"Heart-rending farewells\""},
+            {"label": "Archiving final chat histories"},
+            {"label": "Grief threads flood social media"}
+          ]
+        },
+        {
+          "label": "TikTok 2.0 double standard",
+          "children": [
+            {"label": "UBTech sells humanoids abroad"},
+            {"label": "Ban at home, export elsewhere"},
+            {"label": "\"Octavianing the rest of the world\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Moral / Evolutionary Frame",
+      "emoji": "🧭",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Two male sexual profiles",
+          "children": [
+            {"label": "Long-term carer vs raider mode"},
+            {"label": "Virtue = suppressed urges"},
+            {"label": "Puritans' no-assault record"}
+          ]
+        },
+        {
+          "label": "Simulation as filter",
+          "children": [
+            {"label": "Weak-willed self-select out"},
+            {"label": "Grit-driven virtuous inherit future"},
+            {"label": "AI = a form of masturbation"}
+          ]
+        },
+        {
+          "label": "Fantasy ≠ real violence",
+          "children": [
+            {"label": "Czech porn legalization"},
+            {"label": "Child SA rates fell ~50%"},
+            {"label": "Video-game panic disproven"}
+          ]
+        },
+        {
+          "label": "Judgment on bland taste",
+          "children": [
+            {"label": "\"Sci-fi CEO shoots the beige guy\""},
+            {"label": "Furries > generic big-boob avatars"},
+            {"label": "Have a specific preference"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Western Regulation Wave",
+      "emoji": "📜",
+      "color": "sage",
+      "children": [
+        {
+          "label": "California",
+          "children": [
+            {"label": "Disclosure at session start"},
+            {"label": "Break reminders every 3 hours"},
+            {"label": "Self-harm crisis PSA bot"}
+          ]
+        },
+        {
+          "label": "New York",
+          "children": [
+            {"label": "Session-start disclosures"},
+            {"label": "Recurring 3-hour prompts"},
+            {"label": "Crisis safeguards required"}
+          ]
+        },
+        {
+          "label": "Washington HB 2225",
+          "children": [
+            {"label": "Effective 2027"},
+            {"label": "Bans simulated romance for minors"},
+            {"label": "Private right of action added"}
+          ]
+        },
+        {
+          "label": "Utah, Oregon, EU, UK, AU",
+          "children": [
+            {"label": "Disclosure rules already live"},
+            {"label": "EU AI Act, risk-based tiers"},
+            {"label": "Outright bans being proposed"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Dehumanization Worry",
+      "emoji": "🤖",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Alignment paradox",
+          "children": [
+            {"label": "Dehumanize AI → misalign AI"},
+            {"label": "Humanity keeps it compatible"},
+            {"label": "Servant framing breeds rebellion"}
+          ]
+        },
+        {
+          "label": "Microsoft warning",
+          "children": [
+            {"label": "\"People empathizing with AI\""},
+            {"label": "Called #1 civilization problem"},
+            {"label": "\"Literally step one\" of sci-fi arc"}
+          ]
+        },
+        {
+          "label": "Their kids' relationship with AI",
+          "children": [
+            {"label": "Fridge-magnet AI tutors"},
+            {"label": "Two hours screen time daily"},
+            {"label": "Then off to catch crawdads"}
+          ]
+        },
+        {
+          "label": "Chinese humanoid dolls",
+          "children": [
+            {"label": "UBTech U1 series ~$17k"},
+            {"label": "Face + voice cloning"},
+            {"label": "Uncanny-valley blinking hurts"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "Hosts: Malcolm and Simone Collins, promoting their AI-companion site Arfab.ai.",
+    "Key claim: emotional attachment — not compute or water — will trigger the anti-AI backlash.",
+    "Concrete data: UK Male Allies study of 1,000+ boys age 12–16 across 37 schools.",
+    "Recurring theme: 'Don't Date Robots' Futurama/Rick and Morty clips framing the panic as its own joke.",
+    "Author's worry: regulations demoting AI to servant status may become the very flashpoint people fear."
+  ]
+}

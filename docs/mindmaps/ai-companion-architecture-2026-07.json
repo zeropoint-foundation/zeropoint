@@ -1,0 +1,250 @@
+{
+  "title": "AI Companion Architecture — 2026 Landscape",
+  "subtitle": "rfab.ai's stack, their 'best' claim, and what real memory + behavior architecture looks like across the vertical.",
+  "center": {
+    "label": "AI Companion Architecture, 2026",
+    "emoji": "🧠"
+  },
+  "branches": [
+    {
+      "label": "rfab.ai Actual Stack",
+      "emoji": "🏗️",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Model orchestration",
+          "children": [
+            {"label": "15+ models, 6 providers"},
+            {"label": "OpenAI, Anthropic, Google, xAI"},
+            {"label": "Mistral, DeepSeek R1 (free tier)"}
+          ]
+        },
+        {
+          "label": "Memory system",
+          "children": [
+            {"label": "PostgreSQL agent_events table"},
+            {"label": "Last-50-memory rolling window"},
+            {"label": "Keyword SEARCH_MEMORY, not embeddings"}
+          ]
+        },
+        {
+          "label": "7-step thinking loop",
+          "children": [
+            {"label": "Personality + goals loaded per tick"},
+            {"label": "Regex-parsed action commands"},
+            {"label": "Timed or continuous (≥3.5s)"}
+          ]
+        },
+        {
+          "label": "Comms + multimodal",
+          "children": [
+            {"label": "Vapi + OpenAI Realtime phone calls"},
+            {"label": "Twilio SMS/WhatsApp, AWS SES email"},
+            {"label": "Flux/Ideogram/Recraft image gen"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The 'Best' Evidence Gap",
+      "emoji": "⚖️",
+      "color": "coral",
+      "children": [
+        {
+          "label": "What's asserted",
+          "children": [
+            {"label": "\"Best choice in 2026\""},
+            {"label": "\"Better than Character.AI\""},
+            {"label": "\"More reliable architecture\""}
+          ]
+        },
+        {
+          "label": "What's absent",
+          "children": [
+            {"label": "No memory-recall benchmark"},
+            {"label": "No retention or latency figures"},
+            {"label": "No third-party audit"}
+          ]
+        },
+        {
+          "label": "What 'best' actually rests on",
+          "children": [
+            {"label": "15+ models vs rivals' 1–3"},
+            {"label": "$5 entry vs $20/mo subs"},
+            {"label": "DeepSeek R1 free hook"}
+          ]
+        },
+        {
+          "label": "External signal",
+          "children": [
+            {"label": "Only Scamadviser + TikTok"},
+            {"label": "One YouTube video"},
+            {"label": "Zero press or independent review"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Memory Architecture Families",
+      "emoji": "🗂️",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "A: Context-window only",
+          "children": [
+            {"label": "Character.AI, Replika"},
+            {"label": "Janitor AI (~8-9k tokens)"},
+            {"label": "Talkie, Muah (~40-50 msgs)"}
+          ]
+        },
+        {
+          "label": "B: Lorebook + context",
+          "children": [
+            {"label": "SillyTavern World Info"},
+            {"label": "Chub Character Books"},
+            {"label": "Keyword-triggered injection"}
+          ]
+        },
+        {
+          "label": "C: Vector-RAG + tiers",
+          "children": [
+            {"label": "Kindroid: 3 tiers, AI relevance"},
+            {"label": "Nomi: 3-tier + Mind Map graph"},
+            {"label": "ST Vector Storage / VectFox"}
+          ]
+        },
+        {
+          "label": "D: Hierarchical / agentic",
+          "children": [
+            {"label": "Letta (MemGPT lineage)"},
+            {"label": "Mem0: semantic+BM25+entity"},
+            {"label": "Zep + Graphiti: temporal graph"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Where Personality Sticks",
+      "emoji": "🎭",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Weakly (mid-arc drift)",
+          "children": [
+            {"label": "Character.AI, Replika"},
+            {"label": "System-prompt-only"},
+            {"label": "\"Personality reset\" reports"}
+          ]
+        },
+        {
+          "label": "Moderately (proprietary)",
+          "children": [
+            {"label": "Kindroid Cascaded tier"},
+            {"label": "Nomi Identity Core anchor"},
+            {"label": "Multi-agent group chats"}
+          ]
+        },
+        {
+          "label": "Strongly (composed)",
+          "children": [
+            {"label": "ST card + embedded book"},
+            {"label": "Portable V2/V3 char spec"},
+            {"label": "Sticks as triggers fire"}
+          ]
+        },
+        {
+          "label": "Multimodal edge",
+          "children": [
+            {"label": "Muah realtime phone (LLM→TTS)"},
+            {"label": "Kindroid TTS-tunable voice"},
+            {"label": "rfab: agents can make calls"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Open-Source Frontier",
+      "emoji": "🛠️",
+      "color": "sage",
+      "children": [
+        {
+          "label": "SillyTavern stack",
+          "children": [
+            {"label": "Character card V2/V3"},
+            {"label": "World Info + scan depth"},
+            {"label": "Summarize + Vector extensions"}
+          ]
+        },
+        {
+          "label": "Chub / CharacterHub",
+          "children": [
+            {"label": "Shared character library"},
+            {"label": "Books propagate as content"},
+            {"label": "ST + Chub format-compatible"}
+          ]
+        },
+        {
+          "label": "Local inference",
+          "children": [
+            {"label": "KoboldCpp (llama.cpp fork)"},
+            {"label": "AI Horde distributed"},
+            {"label": "Ollama via rfab RF Bridge"}
+          ]
+        },
+        {
+          "label": "Memory infrastructure",
+          "children": [
+            {"label": "Letta hierarchical tiers"},
+            {"label": "Mem0 multi-signal fusion"},
+            {"label": "Qdrant / Chroma / pgvector"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Winning Pattern",
+      "emoji": "🎯",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Hybrid retrieval",
+          "children": [
+            {"label": "Recency + keyword + semantic"},
+            {"label": "ST+Vector Storage exemplifies"},
+            {"label": "Kindroid Cascaded approximates"}
+          ]
+        },
+        {
+          "label": "Structured-event extraction",
+          "children": [
+            {"label": "Typed records, not prose"},
+            {"label": "VectFox and Mem0"},
+            {"label": "Retrieval quality ceiling"}
+          ]
+        },
+        {
+          "label": "Temporal knowledge graph",
+          "children": [
+            {"label": "Zep/Graphiti valid intervals"},
+            {"label": "\"What was true when\""},
+            {"label": "No consumer app yet"}
+          ]
+        },
+        {
+          "label": "Tool-managed tiered memory",
+          "children": [
+            {"label": "Letta core_memory_append"},
+            {"label": "archival_memory_search"},
+            {"label": "Agent decides what to keep"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "rfab.ai runtime: PostgreSQL agent_events + Redis Streams; 50-memory rolling window; keyword search only.",
+    "'Best' is asserted, not measured — zero memory-recall benchmarks, retention figures, or third-party audits published.",
+    "Kindroid is the most technically transparent closed companion; SillyTavern + Chub + Letta + Mem0 + Zep is the only fully-documented public stack.",
+    "Benchmarks worth citing: Mem0 92.5 LoCoMo / 94.4 LongMemEval; Zep 94.8 DMR (vs MemGPT 93.4), +18.5% LongMemEval, ~90% lower latency."
+  ]
+}

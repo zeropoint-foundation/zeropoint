@@ -331,6 +331,189 @@ impl Forge {
     }
 }
 
+impl Forge {
+    /// Assess an unregistered listening process from an operations perspective.
+    ///
+    /// Forge evaluates: should this process be brought under governance?
+    /// Surfaces operational facts — what it is, what ports it holds, how
+    /// long it's been running — without making security judgments (that's
+    /// Sentinel's job). Proposes governance integration if the process
+    /// looks like a tool that should be registered.
+    pub fn assess_unregistered_listener(
+        &self,
+        pid: u32,
+        process_name: &str,
+        ports: &[serde_json::Value],
+        context: &serde_json::Value,
+    ) -> Vec<Finding> {
+        let mut findings = Vec::new();
+
+        let binary_path = context
+            .get("binary_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let user = context
+            .get("user")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+
+        let port_list: Vec<u64> = ports
+            .iter()
+            .filter_map(|p| p.get("port").and_then(|v| v.as_u64()))
+            .collect();
+
+        // Operational assessment: this process is using resources (ports)
+        // that could conflict with governed tools.
+        findings.push(Finding {
+            officer: self.name(),
+            domain: self.domain(),
+            finding_type: "unregistered_listener".into(),
+            severity: Severity::Info,
+            summary: format!(
+                "Process '{}' (pid {}, user {}) listening on port(s) {} — not under governance",
+                process_name,
+                pid,
+                user,
+                port_list.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", "),
+            ),
+            detail: json!({
+                "pid": pid,
+                "process_name": process_name,
+                "binary_path": binary_path,
+                "ports": port_list,
+                "context": context,
+                "tool_name": process_name,
+            }),
+            timestamp: Utc::now(),
+            cross_domain_depth: 0,
+        });
+
+        findings
+    }
+
+    /// Generate proposals from sweep findings (Band 2).
+    ///
+    /// Translates diagnostic findings into actionable mutations. Unlike
+    /// `propose()` which scans the chain directly, this method converts
+    /// findings that were already produced by `sweep()` or sensor-driven
+    /// assessment into structured proposals.
+    ///
+    /// Supported conversions:
+    /// - `port_mismatch` → `SetPortBinding` (correct the registry)
+    /// - `unregistered_listener` → `SetPortBinding` (register the process)
+    /// - `launch_failure_rate` → `RestartTool` (clean restart)
+    pub fn propose_from_findings(
+        &self,
+        findings: &[Finding],
+    ) -> Vec<crate::proposal::Proposal> {
+        use crate::proposal::{Proposal, ProposedMutation};
+
+        let mut proposals = Vec::new();
+
+        for f in findings {
+            match f.finding_type.as_str() {
+                "port_mismatch" => {
+                    let tool = match f
+                        .detail
+                        .get("tool_name")
+                        .or(f.detail.get("tool"))
+                        .and_then(|v| v.as_str())
+                    {
+                        Some(t) => t.to_string(),
+                        None => continue,
+                    };
+                    let actual_ports: Vec<u16> = f
+                        .detail
+                        .get("actual_ports")
+                        .or(f.detail.get("actual"))
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_u64().map(|p| p as u16))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    if let Some(&port) = actual_ports.first() {
+                        proposals.push(Proposal::new(
+                            f.clone(),
+                            ProposedMutation::SetPortBinding {
+                                tool: tool.clone(),
+                                port,
+                                rationale: format!(
+                                    "observed on port {} (registry disagrees)",
+                                    port
+                                ),
+                            },
+                            self.name(),
+                        ));
+                    }
+                }
+                "unregistered_listener" => {
+                    let tool = match f
+                        .detail
+                        .get("process_name")
+                        .and_then(|v| v.as_str())
+                    {
+                        Some(t) => t.to_string(),
+                        None => continue,
+                    };
+                    let ports: Vec<u16> = f
+                        .detail
+                        .get("ports")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_u64().map(|p| p as u16))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    if let Some(&port) = ports.first() {
+                        proposals.push(Proposal::new(
+                            f.clone(),
+                            ProposedMutation::SetPortBinding {
+                                tool: tool.clone(),
+                                port,
+                                rationale: format!(
+                                    "discovered on port {} — register under governance",
+                                    port
+                                ),
+                            },
+                            self.name(),
+                        ));
+                    }
+                }
+                "launch_failure_rate" => {
+                    let tool = match f.detail.get("tool").and_then(|v| v.as_str()) {
+                        Some(t) => t.to_string(),
+                        None => continue,
+                    };
+                    let failures = f
+                        .detail
+                        .get("failures")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    proposals.push(Proposal::new(
+                        f.clone(),
+                        ProposedMutation::RestartTool {
+                            tool: tool.clone(),
+                            rationale: format!(
+                                "{} launch failures — clean restart may resolve",
+                                failures
+                            ),
+                        },
+                        self.name(),
+                    ));
+                }
+                _ => {} // Other finding types don't have well-defined automated fixes yet.
+            }
+        }
+
+        proposals
+    }
+}
+
 /// Extract tool name from a tool-related chain event, if present.
 fn extract_tool_from_event(event: &str) -> Option<&str> {
     let prefixes = [
@@ -592,6 +775,30 @@ mod tests {
     }
 
     #[test]
+    fn forge_assesses_unregistered_listener() {
+        let forge = Forge::new();
+        let context = json!({
+            "pid": 12345,
+            "name": "node",
+            "binary_path": "/usr/local/bin/node",
+            "user": "ken",
+            "parent_name": "zsh"
+        });
+        let ports = vec![
+            json!({"port": 3000, "protocol": "TCP", "socket": "127.0.0.1:3000"}),
+            json!({"port": 3001, "protocol": "TCP", "socket": "127.0.0.1:3001"}),
+        ];
+
+        let findings = forge.assess_unregistered_listener(12345, "node", &ports, &context);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].finding_type, "unregistered_listener");
+        assert_eq!(findings[0].severity, Severity::Info);
+        assert!(findings[0].summary.contains("node"));
+        assert!(findings[0].summary.contains("3000"));
+        assert!(findings[0].detail.get("tool_name").is_some());
+    }
+
+    #[test]
     fn propose_empty_chain() {
         let store = test_store();
         let chain = ChainReader::new(&store);
@@ -624,5 +831,95 @@ mod tests {
             "forge",
         );
         assert_eq!(p.event_key(), "proposal:forge:restart_tool:ironclaw");
+    }
+
+    #[test]
+    fn propose_from_port_mismatch_finding() {
+        let forge = Forge::new();
+        let findings = vec![Finding {
+            officer: "forge",
+            domain: "operations",
+            finding_type: "port_mismatch".into(),
+            severity: Severity::Warning,
+            summary: "ironclaw port mismatch".into(),
+            detail: json!({
+                "tool_name": "ironclaw",
+                "actual_ports": [8090],
+                "expected": 9101,
+            }),
+            timestamp: Utc::now(),
+            cross_domain_depth: 0,
+        }];
+
+        let proposals = forge.propose_from_findings(&findings);
+        assert_eq!(proposals.len(), 1);
+        assert_eq!(proposals[0].mutation.kind_label(), "set_port");
+        assert_eq!(proposals[0].mutation.tool_name(), "ironclaw");
+    }
+
+    #[test]
+    fn propose_from_unregistered_listener() {
+        let forge = Forge::new();
+        let findings = vec![Finding {
+            officer: "forge",
+            domain: "operations",
+            finding_type: "unregistered_listener".into(),
+            severity: Severity::Info,
+            summary: "node listening".into(),
+            detail: json!({
+                "pid": 12345,
+                "process_name": "node",
+                "ports": [3000],
+            }),
+            timestamp: Utc::now(),
+            cross_domain_depth: 0,
+        }];
+
+        let proposals = forge.propose_from_findings(&findings);
+        assert_eq!(proposals.len(), 1);
+        assert_eq!(proposals[0].mutation.kind_label(), "set_port");
+        assert_eq!(proposals[0].mutation.tool_name(), "node");
+    }
+
+    #[test]
+    fn propose_from_launch_failure() {
+        let forge = Forge::new();
+        let findings = vec![Finding {
+            officer: "forge",
+            domain: "operations",
+            finding_type: "launch_failure_rate".into(),
+            severity: Severity::Warning,
+            summary: "ironclaw launch failures".into(),
+            detail: json!({
+                "tool": "ironclaw",
+                "failures": 5,
+                "successes": 1,
+            }),
+            timestamp: Utc::now(),
+            cross_domain_depth: 0,
+        }];
+
+        let proposals = forge.propose_from_findings(&findings);
+        assert_eq!(proposals.len(), 1);
+        assert_eq!(proposals[0].mutation.kind_label(), "restart_tool");
+        assert_eq!(proposals[0].mutation.tool_name(), "ironclaw");
+    }
+
+    #[test]
+    fn propose_from_findings_skips_unknown_types() {
+        let forge = Forge::new();
+        let findings = vec![Finding {
+            officer: "forge",
+            domain: "operations",
+            finding_type: "operational_silence".into(),
+            severity: Severity::Info,
+            summary: "no activity".into(),
+            detail: json!({"tool": "ironclaw"}),
+            timestamp: Utc::now(),
+            cross_domain_depth: 0,
+        }];
+
+        let proposals = forge.propose_from_findings(&findings);
+        assert!(proposals.is_empty());
     }
 }

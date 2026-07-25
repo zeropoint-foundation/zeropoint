@@ -39,6 +39,7 @@ zp-verbs = { path = "../zp-verbs" }
 zp-net = { path = "../zp-net" }
 zp-artifacts = { path = "../zp-artifacts" }
 zp-content = { path = "../zp-content" }
+zp-regent = { path = "../zp-regent" }
 mle-star-engine = { path = "../mle-star-engine" }
 monte-carlo-engine = { path = "../monte-carlo-engine" }
 

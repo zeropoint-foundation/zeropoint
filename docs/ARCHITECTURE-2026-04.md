@@ -3,7 +3,8 @@
 **Document type:** Canonical Architecture Record. Referenced in `CLAUDE.md` as the north star for all structural decisions. Every session reads the eight design principles and four claims from this document as binding constraints.
 **Author:** Ken Romero, with synthesis assistance from Claude.
 **Date:** 2026-04-06. Last updated: 2026-04-22.
-**Status:** Active. This document is revised after every major adversarial test cycle and every architectural commitment. Code that contradicts it is wrong.
+**Status:** Historical (as of 2026-07-10). Canonical substrate claims live in `KEEL-2026-07.md`; corpus map lives in `CANONICAL-CORPUS-INDEX-2026-07.md`. This document is retained for its historical value: the pentest findings in Parts II-III, the first articulation of the design principles (Part V½), the trust-as-grammar reframe, and the strategic reservation of Part VIII (Compute Surface Awareness) that eventually landed as `docs/design/OBSERVATION-PLANE-2026-07.md`. **Not amended for corpus pivots past July 2026.** Framing amendment notes below this line reflect the pivots noticed while retiring this doc, kept as breadcrumbs rather than as forward-canonical claims.
+
 **Companion documents:**
 - `docs/whitepaper-v2.md` — the public thesis (autoregressive trust, the trajectory model)
 - `security/pentest-2026-04-06/PENTEST-REPORT.md` — what the 2026-04-06 black-box pentest found
@@ -14,6 +15,8 @@
 - `docs/design/sentinel-rf-sovereignty-design.md` — WiFi sensing defense network: firmware integrity, 802.11bf detection, active countermeasures, fleet correlation, sovereign hardware selection
 
 This document sits *above* all four. The whitepaper is the thesis; the pentest is the evidence; the catalog is the grammar; the notes are the workshop. This document is the operating spec — the thing that says what ZeroPoint actually is now, what it is supposed to become, and how the work between those two states is sequenced.
+
+> **2026-07-10 framing amendment.** This document was written under the silent assumption that the substrate installs on the operator's existing operating system. That assumption is now scoped: it describes **Companion Form** per `docs/design/SUBSTRATE-FORM-2026-07.md`, which is one of three Forms the substrate can take, not the canonical form. The canonical form is **Sovereign Form** — a reproducibly-built OS with operator-controlled hardware trust chain. `docs/KEEL-2026-07.md` Part XIV declares this. Every claim in this document about "the host," "the operator's machine," "install," or "the OS" should be read with the Substrate Form in mind — the reach of that claim depends on which Form the substrate is running as. The four claims, eight principles, and eight-plus-Part architecture still hold; their scope is now Form-dependent.
 
 ---
 
@@ -88,7 +91,7 @@ This is the project's autoregressive structure at the *meta* layer: not just rec
 
 ZeroPoint is a *cockpit-OS*. The category distinguishes the substrate from things it is routinely confused with: agent platforms run agents, governance frameworks decree rules, audit logs record after the fact, identity providers issue tokens. ZeroPoint does none of those things primarily. It is the operator's runtime for coherent agent authority — the seat from which the operator's own delegation, gate-enforced authority, and chain-anchored history are simultaneously legible, durable, and projectable into whatever control surface the operator inhabits.
 
-The word *cockpit* names a control surface — CLI, conversational agent (Sage), visual panel — through which the operator acts. ZeroPoint's commitment is that each cockpit is a **pure projection of chain-anchored state into a native interaction mode**, not a seat of authority unto itself. The chain decides what the operator can currently do; the cockpit renders that decision as flags, tools, buttons, or affordances. The same authority surfaces in every cockpit because there is one source of truth — the chain — and many rendering modes. Affordances appear when the chain grants them and disappear when the chain withdraws them. There is no menu cache. There is no static declaration to keep in sync. The cockpit-projection heuristic in `CLAUDE.md` is the day-to-day expression of this commitment; the cockpit-OS framing is the category-level claim it derives from.
+The word *cockpit* names a control surface — CLI, conversational agent (the Regent), visual panel — through which the operator acts. ZeroPoint's commitment is that each cockpit is a **pure projection of chain-anchored state into a native interaction mode**, not a seat of authority unto itself. The chain decides what the operator can currently do; the cockpit renders that decision as flags, tools, buttons, or affordances. The same authority surfaces in every cockpit because there is one source of truth — the chain — and many rendering modes. Affordances appear when the chain grants them and disappear when the chain withdraws them. There is no menu cache. There is no static declaration to keep in sync. The cockpit-projection heuristic in `CLAUDE.md` is the day-to-day expression of this commitment; the cockpit-OS framing is the category-level claim it derives from.
 
 This shape is not the one that produced the recent OSS sustainability crises — single maintainers holding registry-publishing authority, single repositories holding install-time trust, single platforms claiming downstream ecosystems. Those failures share concentrated trust authority in fragile nodes. The cockpit-OS framing pushes the opposite direction: every operator holds their own chain-anchored authority; the substrate is the operator's, not the platform's; verifiability flows from cryptographic lineage rooted in the operator's Genesis key, not from a central registry that could be compromised, abandoned, or weaponized. The structural alternative to concentrated trust is per-operator chain authority that other operators can verify independently — which is exactly the substrate's shape.
 
@@ -624,6 +627,8 @@ Eight capabilities observed in AGT that ZeroPoint should adapt. Ordered by prior
 ## Part VIII — Compute Surface Awareness
 
 **Strategic direction reserved 2026-05-19, design pass pending. This part captures the architectural intent; implementation scope is deferred to a dedicated design brief when prioritized.**
+
+> **2026-07-10 amendment.** The dedicated design brief has landed: `docs/design/OBSERVATION-PLANE-2026-07.md`. That doc supersedes the "design pass deliverables" list at the end of this Part and refines the reach claims below. Two refinements matter for reading Part VIII now: (a) the substrate's observation reach varies by **Substrate Form** (Sovereign / Appliance / Companion) per `docs/design/SUBSTRATE-FORM-2026-07.md` — full reach lives at Sovereign Form; Companion Form is limited to what the OS vendor permits, honestly disclosed; (b) observation scope is a delegation class, not an implicit substrate authority — the operator signs `delegation:observe:*` receipts to grant surface access, and privacy becomes a cryptographic property of the chain rather than a policy. The framing of "visibility universal, authority scoped" below still holds, but "visibility universal" is now bounded by *Form-appropriate observation reach with operator-delegated scope*.
 
 ### Framing
 

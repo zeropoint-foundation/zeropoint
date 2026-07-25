@@ -239,6 +239,34 @@ impl ConfigResolver {
         if let Some(v) = file.officers.cleo_enabled {
             self.config.officers_cleo_enabled.override_with(v, source.clone());
         }
+        if let Some(v) = file.officers.aegis_enabled {
+            self.config.officers_aegis_enabled.override_with(v, source.clone());
+        }
+        if let Some(v) = file.officers.acknowledged_listeners {
+            self.config.acknowledged_listeners.override_with(v, source.clone());
+        }
+        // Regent
+        if let Some(v) = file.regent.enabled {
+            self.config.regent_enabled.override_with(v, source.clone());
+        }
+        if let Some(v) = file.regent.inference_endpoint {
+            self.config.regent_inference_endpoint.override_with(v, source.clone());
+        }
+        if let Some(v) = file.regent.inference_api_key {
+            self.config.regent_inference_api_key.override_with(Some(v), source.clone());
+        }
+        if let Some(v) = file.regent.reasoning_model {
+            self.config.regent_reasoning_model.override_with(v, source.clone());
+        }
+        if let Some(v) = file.regent.routing_model {
+            self.config.regent_routing_model.override_with(v, source.clone());
+        }
+        if let Some(v) = file.regent.loop_interval_secs {
+            self.config.regent_loop_interval_secs.override_with(v, source.clone());
+        }
+        if let Some(v) = file.regent.display_name {
+            self.config.regent_display_name.override_with(v, source.clone());
+        }
     }
 }
 
@@ -391,6 +419,13 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
                 reason: "must be true or false".into(),
             })?;
             file.officers.cleo_enabled = Some(b);
+        }
+        "officers.aegis_enabled" => {
+            let b = parse_bool(value).ok_or(ConfigError::InvalidValue {
+                key: key.into(),
+                reason: "must be true or false".into(),
+            })?;
+            file.officers.aegis_enabled = Some(b);
         }
         _ => {
             return Err(ConfigError::InvalidValue {

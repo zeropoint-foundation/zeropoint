@@ -3,7 +3,7 @@
 ## Securing Truth Transitions on Insecure Substrates
 
 Version 1.0 — April 2026
-ThinkStream Labs
+ZeroPoint Open Foundation
 CONFIDENTIAL
 
 Companion to: `zp-doctrine-memo.md` (constitutional principles),

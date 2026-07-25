@@ -40,17 +40,24 @@ impl Steward {
         let mut findings = Vec::new();
 
         if report.chain_valid {
+            // Note: signatures_valid is 0 on the fast path (verify_linkage_report
+            // counts presence only; cryptographic verification is
+            // ChainVerifier::verify's job). Text used to read "0/N signatures
+            // valid" which read to consumers as "none are valid" — misleading.
+            // Now reports presence explicitly and defers validity language to
+            // the crypto layer. Regent misread the old text 2026-07-10 and
+            // nearly invoked batch_sign in response.
             findings.push(Finding {
                 officer: self.name(),
                 domain: self.domain(),
                 finding_type: "integrity_verified".into(),
                 severity: Severity::Ok,
                 summary: format!(
-                    "Chain integrity verified: {} entries, {} hashes valid, {}/{} signatures valid",
+                    "Chain integrity verified: {} entries, {} hashes valid, {}/{} signatures present (cryptographic verification deferred to ChainVerifier)",
                     report.entries_examined,
                     report.hashes_valid,
-                    report.signatures_valid,
                     report.signatures_present,
+                    report.entries_examined,
                 ),
                 detail: json!({
                     "entries_examined": report.entries_examined,
@@ -174,6 +181,17 @@ impl Steward {
 
         let mut findings = Vec::new();
         let now = Utc::now();
+
+        // 2026-07-10 DIAGNOSTIC: Steward reporting chain_silence when chain is
+        // active. Direct SQLite confirms recent_entries should return current
+        // data. Log what we actually see so we can diagnose staleness source.
+        tracing::info!(
+            entries_returned = entries.len(),
+            oldest_ts = entries.first().map(|e| e.timestamp.to_rfc3339()).unwrap_or_default(),
+            newest_ts = entries.last().map(|e| e.timestamp.to_rfc3339()).unwrap_or_default(),
+            now = %now.to_rfc3339(),
+            "Steward chain_growth diagnostic: what did recent_entries(1000) see?"
+        );
 
         // Check for suspicious silence — no entries in the last hour
         if let Some(newest) = entries.last() {

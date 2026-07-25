@@ -337,7 +337,7 @@ async fn chain_denied_gate_no_exec_when_delegation_absent() {
 
     // Now the substrate must NOT have an exec receipt for this tool.
     // (In the real substrate the gate handler returns `allowed:false`
-    // and the caller — IronClaw / Sage — must not execute the tool.
+    // and the caller — IronClaw / the regent — must not execute the tool.
     // There is no server-side enforcement preventing a misbehaving caller
     // from calling emit_exec_receipt; this test verifies the chain STATE
     // after the denied decision, not caller compliance.)

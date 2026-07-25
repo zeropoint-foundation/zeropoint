@@ -2,7 +2,7 @@
 
 ## Architecture Specification
 
-**ThinkStream Labs** · April 2026 · Revision 1.4
+**ZeroPoint Open Foundation** · April 2026 · Revision 1.4
 **Document:** ZP-GAR-SPEC-001 · **Classification:** Internal / Strategic
 **First Tenant:** IronClaw (NEAR AI) · v0.26.0, ~202k LOC Rust, Apache 2.0 / MIT, 23+ builtin tools, 7+ LLM providers, 6 channel types, WASM sandbox, MCP client, Docker orchestrator
 **Second Tenant (roadmap):** Hermes Agent (Nous Research) · v0.10.0, ~510k LOC Python, 61 tools, 15+ messaging gateways — see Appendix A

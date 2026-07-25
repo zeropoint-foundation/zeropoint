@@ -1,0 +1,31 @@
+[project]
+name = "mindmap-mcp"
+version = "0.1.0"
+description = "Structured mindmap generation + MyLens-style HTML rendering as an MCP tool"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ThinkStream Labs" }]
+dependencies = [
+    "mcp>=1.2.0",
+    "pydantic>=2.6.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+# Provider adapters — install as needed. Each rung is optional at import time,
+# the ladder degrades silently to whichever is configured (see fetchers pattern
+# in youtube-transcript-mcp).
+openai = ["openai>=1.40.0"]
+anthropic = ["anthropic>=0.34.0"]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+mindmap-mcp = "mindmap_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mindmap_mcp"]

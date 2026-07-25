@@ -149,6 +149,15 @@ pub struct PromotionRequest {
 pub enum PromotionResult {
     /// Promotion succeeded. Contains the receipt ID.
     Promoted { receipt_id: String },
+    /// Promotion requires human review before it can proceed.
+    /// The caller should route this to the ReviewQueue.
+    RequiresReview {
+        memory_id: String,
+        current_stage: MemoryStage,
+        target_stage: MemoryStage,
+        evidence: String,
+        requestor: String,
+    },
     /// Promotion denied with reason.
     Denied { reason: String },
     /// Memory not found.

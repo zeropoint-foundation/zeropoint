@@ -75,6 +75,15 @@ impl TestApp {
             officers_cleo_enabled: true,
             officers_forge_enabled: false,
             officers_sentinel_enabled: false,
+            officers_aegis_enabled: false,
+            regent_enabled: false,
+            regent_inference_endpoint: "http://127.0.0.1:11434".to_string(),
+            regent_reasoning_model: "qwen3:8b".to_string(),
+            regent_routing_model: "qwen3:1.7b".to_string(),
+            regent_loop_interval_secs: 60,
+            regent_display_name: "Regent".to_string(),
+            acknowledged_listeners: Vec::new(),
+            regent_inference_api_key: None,
         };
 
         let state = zp_server::AppState::init(&config).await;
@@ -247,6 +256,15 @@ impl TestServer {
             officers_cleo_enabled: true,
             officers_forge_enabled: false,
             officers_sentinel_enabled: false,
+            officers_aegis_enabled: false,
+            regent_enabled: false,
+            regent_inference_endpoint: "http://127.0.0.1:11434".to_string(),
+            regent_reasoning_model: "qwen3:8b".to_string(),
+            regent_routing_model: "qwen3:1.7b".to_string(),
+            regent_loop_interval_secs: 60,
+            regent_display_name: "Regent".to_string(),
+            acknowledged_listeners: Vec::new(),
+            regent_inference_api_key: None,
         };
 
         let state = zp_server::AppState::init(&config).await;

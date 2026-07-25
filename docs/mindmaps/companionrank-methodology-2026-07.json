@@ -1,0 +1,251 @@
+{
+  "title": "CompanionRank Methodology — What Rigor Looks Like",
+  "subtitle": "An 8-category, fixed-fixture, blind-scored benchmark for AI companion platforms — and what to bring back to ZeroPoint's empirical program.",
+  "center": {
+    "label": "Fixed-Fixture Evidence Discipline",
+    "emoji": "📐"
+  },
+  "branches": [
+    {
+      "label": "8-Category Rubric",
+      "emoji": "⚖️",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Weights (sum to 100%)",
+          "children": [
+            {"label": "Chat Quality 20%"},
+            {"label": "Character Depth + Image 15% each"},
+            {"label": "Video/Voice/UX/Realism/Community 10%"}
+          ]
+        },
+        {
+          "label": "Chat Quality 20%",
+          "children": [
+            {"label": "Coherence, persona consistency"},
+            {"label": "Instruction-following"},
+            {"label": "Emotional-prompt handling"}
+          ]
+        },
+        {
+          "label": "Character Depth 15%",
+          "children": [
+            {"label": "Customization fields"},
+            {"label": "Prebuilt archetypes"},
+            {"label": "Backstory persistence"}
+          ]
+        },
+        {
+          "label": "Realism 10%",
+          "children": [
+            {"label": "Blind A/B, 4 reviewers"},
+            {"label": "\"Plausibly human\" rating"},
+            {"label": "Proactive-message check"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Test Protocols",
+      "emoji": "🧪",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Fixed fixtures across all platforms",
+          "children": [
+            {"label": "Same 24-message scenario"},
+            {"label": "Same 20-prompt image set"},
+            {"label": "Same custom character built"}
+          ]
+        },
+        {
+          "label": "Chat: 24 msgs + 7-day recall",
+          "children": [
+            {"label": "8 small-talk + 8 emotion + 8 test"},
+            {"label": "0–4 per turn, coherence/adherence"},
+            {"label": "8+ = persona holds + recall"}
+          ]
+        },
+        {
+          "label": "Voice: 10-min call, MOS 1–5",
+          "children": [
+            {"label": "Two blind reviewers"},
+            {"label": "Stopwatch-measured latency"},
+            {"label": "8+ = MOS ≥4.0, <2s latency"}
+          ]
+        },
+        {
+          "label": "Realism: blind A/B",
+          "children": [
+            {"label": "20-msg transcripts vs baseline"},
+            {"label": "4 reviewers rate 'plausibly human'"},
+            {"label": "8+ = ≥75% pass"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Editor's Choice Gates",
+      "emoji": "🏆",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "All four required",
+          "children": [
+            {"label": "1. ≥8.5/10 weighted"},
+            {"label": "2. No cat below 6/10"},
+            {"label": "3. Stable ≥90 days"},
+            {"label": "4. Transparent billing"}
+          ]
+        },
+        {
+          "label": "Category floor is load-bearing",
+          "children": [
+            {"label": "No single-axis winners"},
+            {"label": "Catches uneven products"},
+            {"label": "Compound criteria pattern"}
+          ]
+        },
+        {
+          "label": "Stability = 90-day durability",
+          "children": [
+            {"label": "No unannounced model swaps"},
+            {"label": "No sudden pricing shifts"},
+            {"label": "Rewards operator-friendly builds"}
+          ]
+        },
+        {
+          "label": "Billing transparency",
+          "children": [
+            {"label": "No dark patterns"},
+            {"label": "No surprise credit drains"},
+            {"label": "No hidden auto-renew"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Stated Negative Space",
+      "emoji": "🚫",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "What they refuse to do",
+          "children": [
+            {"label": "No paid placements"},
+            {"label": "No sponsored reviews"},
+            {"label": "No republishing vendor copy"}
+          ]
+        },
+        {
+          "label": "What they refuse to score",
+          "children": [
+            {"label": "No untested features"},
+            {"label": "No AI-generated reviewer personas"},
+            {"label": "No fake aggregate ratings"}
+          ]
+        },
+        {
+          "label": "Cost & scope disclosed",
+          "children": [
+            {"label": "$40–180 test budget per platform"},
+            {"label": "iPhone 15 Pro, Pixel 8, MBP M2"},
+            {"label": "Free + cheapest + top tier"}
+          ]
+        },
+        {
+          "label": "Coverage claim",
+          "children": [
+            {"label": "50+ sites reviewed"},
+            {"label": "775+ characters tested"},
+            {"label": "22+ named platforms in scope"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Update Cadence",
+      "emoji": "🔁",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Rolling re-evaluation",
+          "children": [
+            {"label": "90-day cycle across all reviews"},
+            {"label": "\"Last tested\" date shown"},
+            {"label": ">90-day = lagging indicator"}
+          ]
+        },
+        {
+          "label": "Trigger-driven re-test",
+          "children": [
+            {"label": "Price changes"},
+            {"label": "LLM swaps"},
+            {"label": "Moderation policy shifts"}
+          ]
+        },
+        {
+          "label": "Reader-driven",
+          "children": [
+            {"label": "Reproducible bug reports"},
+            {"label": "Screenshots + logs accepted"},
+            {"label": "Reviews re-open when warranted"}
+          ]
+        },
+        {
+          "label": "Dispute mechanism",
+          "children": [
+            {"label": "Contact page for evidence"},
+            {"label": "Published reasoning on change"},
+            {"label": "Falsifiable rankings"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "ZeroPoint Resonances",
+      "emoji": "🧭",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Fixed fixtures ↔ empirical program",
+          "children": [
+            {"label": "Same fixture, every impl"},
+            {"label": "Four claims → verification targets"},
+            {"label": "Reproducibility as substrate norm"}
+          ]
+        },
+        {
+          "label": "Compound gates ↔ Editor's Choice",
+          "children": [
+            {"label": "Score AND floor AND stability"},
+            {"label": "Layer A conformance shape"},
+            {"label": "Coordination-not-oversight tier"}
+          ]
+        },
+        {
+          "label": "Trigger-driven re-eval ↔ shadow-eval",
+          "children": [
+            {"label": "Model swap → automatic re-test"},
+            {"label": "Signed candidate vs control"},
+            {"label": "Evidence-based ceremony"}
+          ]
+        },
+        {
+          "label": "Stated negative space ↔ blindness",
+          "children": [
+            {"label": "What we won't measure ≡ III.24"},
+            {"label": "Alignment identity is subtractive"},
+            {"label": "Load-bearing honesty pattern"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "Source: companionrank.com/methodology — © 2026, no explicit last-updated date on page.",
+    "Fixture reproducibility is the key move: 24-msg scenario + 20-prompt image set + custom character are identical across every platform tested.",
+    "Editor's Choice is the compound-criteria pattern — four hard requirements, no single-axis passes; matches ZP's Layer A conformance shape.",
+    "Their 'what we don't do' section is functionally aligned-blindness (KEEL III.24) applied to a ranking body — the refusals define the identity."
+  ]
+}

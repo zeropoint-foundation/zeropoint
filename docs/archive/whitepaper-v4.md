@@ -3,7 +3,7 @@
 ## Cryptographic Governance Primitives for Accountable Systems
 
 **Whitepaper v4.0 — June 2026**
-**Ken Romero, Founder, ThinkStream Labs**
+**Ken Romero, Founder, ZeroPoint Open Foundation**
 
 Status: Public Technical Overview
 License: CC BY 4.0 (text); Code remains MIT/Apache-2.0
@@ -11,7 +11,7 @@ Canonical URL: https://zeropoint.global/whitepaper
 PDF: [zeropoint-whitepaper-v4.0.pdf](https://zeropoint.global/zeropoint-whitepaper-v4.0.pdf)
 
 **How to cite:**
-> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ThinkStream Labs, Whitepaper v4.0, June 2026. https://zeropoint.global/whitepaper
+> Romero, Ken. "ZeroPoint: Cryptographic Governance Primitives for Accountable Systems." ZeroPoint Open Foundation, Whitepaper v4.0, June 2026. https://zeropoint.global/whitepaper
 
 ---
 
@@ -853,11 +853,11 @@ This pattern is identical whether the requester is an agent, a human operator us
 
 ---
 
-*ZeroPoint is maintained by ThinkStream Labs.*
+*ZeroPoint is maintained by ZeroPoint Open Foundation.*
 *Contact: ken@thinkstreamlabs.ai*
 *Repository: https://github.com/zeropoint-foundation/zeropoint*
 *Website: https://zeropoint.global*
 
 ---
 
-*© 2026 ThinkStream Labs. This document is released under CC BY 4.0. The ZeroPoint codebase is released under MIT/Apache-2.0.*
+*© 2026 ZeroPoint Open Foundation. This document is released under CC BY 4.0. The ZeroPoint codebase is released under MIT/Apache-2.0.*
