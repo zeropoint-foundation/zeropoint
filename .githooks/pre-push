@@ -93,4 +93,25 @@ if ! ( cd "$WORKTREE" && cargo test -p zp-discipline --quiet ); then
     exit 1
 fi
 
+# Corpus coherence — only when the push touches docs/. Most pushes are
+# code-only, and the hook's value depends on staying fast enough that
+# nobody disables it. CI runs this unconditionally.
+if git diff --name-only @{push}..HEAD 2>/dev/null | grep -q '^docs/' \
+   || git diff --name-only HEAD~1..HEAD 2>/dev/null | grep -q '^docs/'; then
+    echo "pre-push: corpus-lint against HEAD..."
+    if ! ( cd "$WORKTREE" && python3 tools/corpus-lint/corpus_lint.py . --strict ); then
+        echo ""
+        echo "pre-push: corpus-lint found a defect on HEAD. Push aborted."
+        echo ""
+        echo "corpus-lint checks structural coherence between docs/ and"
+        echo "crates/ — tier declarations, KEEL section references,"
+        echo "cross-document links, index integrity, receipt vocabulary."
+        echo "Measurements never fail; only defects do."
+        echo ""
+        echo "Run locally for the full list:"
+        echo "  python3 tools/corpus-lint/corpus_lint.py ."
+        exit 1
+    fi
+fi
+
 echo "pre-push: HEAD builds cleanly and pins pass."

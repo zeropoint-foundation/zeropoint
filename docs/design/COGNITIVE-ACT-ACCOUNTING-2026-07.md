@@ -79,7 +79,17 @@ So the object carries two field groups with different epistemic status, and the 
 | `flow_ref` | the flow this act belongs to, if any — the composition unit |
 | `operation` | the declared act-signature this act matches, within `mode`, or `unmatched` — see §3.4 |
 
-**Every one of these exists on chain today.** No new Regent behavior is required to populate the witnessed half. See §6.
+**Implementation status, verified against `crates/` 2026-07-25.** An earlier draft of this document asserted that all witnessed fields existed on chain today. That was read from the Cognitive Input Plane spec rather than from the runtime, and it was wrong in three places.
+
+| Field | Status |
+|---|---|
+| `cycle_ref`, `emitted`, `enacted`, `outcome` | **Shipped.** `emit_composition_receipt` at `zp-regent/src/loop_runner.rs:719`; all seven `regent:intent:*` kinds in `zp-server/src/regent.rs`; gate receipts throughout `zp-policy` |
+| `attended` | **Partial.** The receipt carries correction and finding counts plus two content hashes, not per-class content hashes across all seven classes. `basis`-checking (CA2) is therefore scoped to corrections and findings until the receipt widens |
+| `mode` | **Derivable.** `invocation_reason` is populated — see `COGNITIVE-MODE-AND-AGENCY-2026-07.md` §3, which rederives the mode set from the four values the runtime actually emits |
+| `suppressed` | **Not emitted, and nothing to emit yet** — see §3.3 Layer 1 |
+| `frame` | **No source.** Zero `lens:applied` or `lens:declared` occurrences in `crates/`. The lens primitive is specified and unimplemented |
+| `operation` | Requires the signature library; see §3.4 |
+| `flow_ref` | Requires flow boundaries; see the mode document §5 |
 
 ### 3.2 Asserted fields — Regent claims, verification-bearing
 
@@ -98,7 +108,9 @@ Each asserted field carries a `verification_status` of `verified | unverified | 
 
 *"The chain proves what was done, not what was weighed"* reads as a single gap. It is four, with different resolutions, and one of them is already closed.
 
-**Layer 1 — alternatives never attended to. Already witnessed.** The `suppressed` field records what the composition filters withheld from the cycle. That is a chain-anchored record of paths not taken at the attention layer, available today. If suppressed content later proves to have mattered, the chain shows what was withheld and under which filter policy. No new mechanism required; this layer is closed and was under-read in the first draft of this document.
+**Layer 1 — alternatives never attended to. Specified, not shipped, and currently vacuous.** The Cognitive Input Plane specifies a suppressed-filter application record in its Step 6 receipt. The runtime emits counts and hashes instead, and `zp-regent` performs no filtering or false-positive suppression at all.
+
+The honest consequence is narrower than a gap: **if nothing is filtered, nothing is silently withheld**, so this layer is satisfied by the absence of the mechanism rather than by the presence of a record. It opens the moment filtering ships — and the filter application record must ship in the same change, or the substrate acquires an attention-layer blind spot it did not previously have. That coupling is the actionable item, not the field itself.
 
 **Layer 2 — alternatives attended to and rejected. Closes by restructuring.** An internal weighing cannot be verified, so it should not be claimed — it should be made to emit. Where the Regent emits candidate intents before committing to one, each candidate is a witnessed emission and each rejection is witnessed by non-selection. The corpus already runs this pattern: `improvement:evaluated` carries `candidate_approaches[]` and `shadow_eval_receipts[]`, and `regent:route:assigned` records alternatives considered. **Alternatives become witnessed by being acts rather than thoughts.**
 
@@ -178,14 +190,22 @@ The risk this document runs is the one already named in the opportunity mapping:
 
 So the first slice adds **no new Regent behavior at all.**
 
-> **v0 = Cartographer materializes Deliberation from receipts that already exist, matched against a seed signature library.**
-> Join `cognitive:input:composed` (attended, suppressed, cycle_ref) with `regent:intent:*` (emitted), the gate decision (enacted), and the tool receipts (outcome). Populate `frame` from `lens:applied:*` in the cycle window. Match `operation` against the seed library; unmatched is a valid and expected value. Leave every asserted field null.
+**There is no Cartographer.** `ONTOLOGY-AND-CARTOGRAPHER-2026-07.md` is a design document; the only occurrence of the word in `crates/` is a string inside a model-evaluation fixture. No `Trajectory` struct, no materializer. An earlier draft of this section proposed v0 as a Cartographer projection, which was not implementable.
+
+The constraint improves the design. Under §III.13 — *chain is truth; ontology is understanding* — the **receipt is the fact and the ontology object is the projection**, so the receipt should come first regardless. The original sequencing had it backwards.
+
+> **v0 = emit `cognitive:act:recorded` from the loop runner, beside the composition receipt.**
+> `emit_composition_receipt` already runs at `zp-regent/src/loop_runner.rs:719` with the cycle's `CompositionSummary` in hand. The act receipt emits at the same point, carrying `cycle_ref`, `attended` (at current receipt granularity), `mode` (from `invocation_reason`), `emitted`, `enacted`, and `outcome`. `frame`, `suppressed`, `operation` and `flow_ref` are absent-by-status, not null-by-choice, and each carries the reason. Every asserted field is null.
+
+Deliberation as an ontology object materializes later, when a Cartographer exists, from these receipts. Nothing about the object's schema changes — only which layer instantiates it first.
 
 That is a pure projection over existing chain data, consistent with *"the ontology is a derived, rebuildable projection,"* and it ships as instrumentation rather than remediation. It immediately satisfies the doom-loop doc's H6–H8 need for a per-emission record, and it produces the evidence that tells us whether the asserted half is worth building.
 
-Sequence from there: **v0** (witnessed fields, Cartographer-materialized, matched against the seed library) → **v1** (`basis` asserted and checked against `attended` — the free confabulation check; first signature revision from match rate and unmatched residual) → **v2** (`operation_claimed` as second channel; divergence surfaced as a typed state) → **v3** (composition operator over Deliberation sequences; the Cognition service decision).
+Sequence from there: **v0** (act receipt emitted from the loop runner at current field granularity) → **v1** (`basis` asserted and checked against `attended` — the free confabulation check; first signature revision from match rate and unmatched residual) → **v2** (`operation_claimed` as second channel; divergence surfaced as a typed state) → **v3** (composition operator over Deliberation sequences; the Cognition service decision).
 
-The seed library ships **with** v0 rather than after it. Recognition requires signatures declared in advance — deferring them would leave `operation` empty across exactly the corpus the revision is supposed to learn from, and would make v0 produce less evidence, not more rigorous evidence.
+The seed library ships **with v1 rather than v0**, and this is a change forced by implementation reality rather than by the evidentiary argument that was correctly rejected earlier. Signature matching is scoped to `(mode, pattern)` over `attended` shape, `frame`, `emitted` and `outcome`. With `frame` sourceless and `attended` at count granularity, a signature declared today could only discriminate on intent type and outcome — too coarse to be worth declaring, and declaring it anyway would populate the library with signatures we would immediately have to retire.
+
+The principle stands unchanged: the library is designed, not derived, and evidence revises it rather than authorizing it. It waits on field granularity, not on evidence.
 
 Only v0 and v1 are proposed for commitment now. v2 and v3 are gated on what v0 and v1 show.
 
@@ -238,8 +258,8 @@ The remaining enumerations are not lenses and do not take lens edges. Their rela
 
 ## 9. Verifiable outcomes
 
-- **CA1** — A Deliberation object is materializable for every cognitive cycle from existing receipts alone, with no new emission behavior.
-- **CA2** — A `basis` claim naming content absent from the same cycle's `attended` set is detected deterministically, without inference.
+- **CA1** — A `cognitive:act:recorded` receipt is emittable for every cognitive cycle from state already assembled at the composition point, requiring no new perception or reasoning behavior.
+- **CA2** — A `basis` claim naming content absent from the same cycle's `attended` set is detected deterministically, without inference. **Scoped to standing corrections and officer findings** until the composition receipt carries per-class content hashes.
 - **CA3** — Deliberations of mismatched `band` are rejected at composition time rather than surfacing as behavioral defects downstream.
 - **CA4** — Chronic-drift heuristics H6–H8 operate against Deliberation without extending Artifact semantics.
 - **CA5** — Over N cycles, the match rate per declared signature is measurable, partitioned by `origin`; signatures that never match are removable by ceremony.

@@ -2,7 +2,7 @@
 
 **Document type:** Tier 4 working discipline, **not** a Tier 2 canonical elaboration. It elaborates no KEEL section — it describes how corpus documents are authored, which is behavioral rule rather than substrate claim. Registers the `authoring` domain in the heuristic taxonomy declared Layer B canonical by `IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md`. This document deliberately follows the form it describes; that self-application is the strongest available argument for the rules.
 
-**Date:** 2026-07-25. Status: Draft, ten heuristics staged for promotion.
+**Date:** 2026-07-25. Status: Draft, eleven heuristics staged for promotion.
 
 **Motivation:** The Regent will author her own decision records. Today she receives the nine design principles as Tier 0 identity context and nothing else — the twenty-eight workflow heuristics in `CLAUDE.md` have no delivery path into her cycle, and the conventions governing document *form* have never been written down at all. They are demonstrated across roughly a hundred corpus documents and stated nowhere. An agent authoring her first ADR would have to infer the form by reading widely, which is precisely the tacit-knowledge erosion `IMPROVEMENT-LOOP-DISCIPLINE` §Framing exists to prevent.
 
@@ -14,13 +14,13 @@
 
 **1. The form is load-bearing, not decorative.** A document declaring its tier lets a reader know what authority it carries. A document naming its compositions makes the corpus navigable by traversal rather than by search. A document declaring non-goals tells the next author where the boundary is. These are not style preferences; they are what makes a hundred-document corpus usable by someone who did not write it.
 
-**2. The bar is met.** The canonization rule requires N distinct instances before a pattern becomes discipline. The form below is extracted from documents that already exist — five authored in a single session on 2026-07-25, against a corpus of roughly a hundred that demonstrate the same conventions. This is extraction, not invention, and every heuristic cites an instance.
+**2. The bar is met.** The canonization rule requires N distinct instances before a pattern becomes discipline. The form below is extracted from documents that already exist — five authored in a single session on 2026-07-25, against a corpus of roughly a hundred that demonstrate the same conventions. This is extraction, not invention, and every heuristic cites an instance. A11 is the exception in kind: it is extracted from a failure rather than from a practice, which is the stronger provenance.
 
 **3. Heuristics are for the author, whoever that is.** These are written to be equally applicable to operator, external agent, and Regent. Nothing here assumes a human reader, which is the property that makes them promotable to `heuristic:workflow:authoring:*` receipts rather than remaining prose in an operator's context file.
 
 ---
 
-## The ten heuristics
+## The eleven heuristics
 
 ### A1 — Declare the tier and the elaboration target in the opening line. If you cannot name the KEEL section, it is not Tier 2.
 
@@ -104,6 +104,18 @@ Outcomes get a short document-specific prefix and sequential numbers, so they ar
 
 *Triggers:* document creation for any design or elaboration document.
 
+### A11 — Distinguish what is specified from what is shipped.
+
+A Tier 2 document describes a design. It does not, by existing, describe a runtime. Any claim that a mechanism, receipt, or field *is available today* carries an implementation reference — a file and line, or an explicit "specified, not shipped." Without the marker, a later reader cannot tell a design from an inventory, and will build on the wrong one.
+
+This is *stated destination is not current state* applied to the corpus rather than to config, and it is the heuristic this domain most exists to prevent the absence of. An agent author is at higher risk than a human here: the corpus is the most authoritative text available, it reads as descriptive, and nothing in the document form currently signals otherwise.
+
+*Instance:* on 2026-07-25 three documents were authored asserting that `cognitive:input:composed` carried a suppressed-filter record, that a Cartographer could materialize an ontology object, and that `lens:applied` receipts were available for a `frame` field. A read of `crates/` found the first partial, the second nonexistent, and the third absent entirely. All three claims came from reading Tier 2 specifications — the Cognitive Input Plane, Ontology and Cartographer, Lens Discipline — as inventory. The corrections are recorded in `COGNITIVE-ACT-ACCOUNTING-2026-07.md` §3.1 and §6 and `COGNITIVE-MODE-AND-AGENCY-2026-07.md` §3.
+
+**The check must run code-to-spec, not spec-to-code.** Searching `crates/` for a symbol named after the document is unsound: the Cognitive Self-Observer is 1,754 lines and contains no occurrence of `SelfObserver`, because the code calls it `cognitive_observer`. Verify instead by the citation the implementing module declares in its own header — `//! Spec: docs/design/X.md` — which is authored by whoever built the thing. `SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md` §2 records the failed pass in full; the heuristic is weaker without it, because knowing to distinguish specified from shipped does not help if the method used to check is unreliable in both directions.
+
+*Triggers:* any claim that a mechanism exists, is emitted, or is available; any minimum-slice proposal per A8, since A8's value depends entirely on the slice actually being derivable.
+
 ---
 
 ## Receipt shape
@@ -127,7 +139,7 @@ Each heuristic promotes to the schema declared in `IMPROVEMENT-LOOP-DISCIPLINE-2
 }
 ```
 
-**Canary for this domain is document-shaped rather than cycle-shaped.** The natural verification is: for the last N documents authored, did each satisfy the heuristics whose triggers fired? That check is deterministic for A1, A2, A9 and A10 — the structural ones — and requires reading for A4, A5 and A8. Start with the structural four; the others accumulate evidence before they get a canary.
+**Canary for this domain is document-shaped rather than cycle-shaped.** The natural verification is: for the last N documents authored, did each satisfy the heuristics whose triggers fired? That check is deterministic for A1, A2, A9, A10 and A11 — the structural ones, since A11's implementation references are checkable by resolving them — and requires reading for A4, A5 and A8. Start with the structural five; the others accumulate evidence before they get a canary.
 
 ---
 

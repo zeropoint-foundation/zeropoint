@@ -364,7 +364,7 @@ Presence-driven policy responders sit between the observation plane and substrat
 
 ### Why this isn't its own elaboration yet
 
-Presence-driven screen mute is the first concrete case of an observation-plane consumer that responds to observations autonomously via signed policy. When a second concrete case emerges (e.g., idle-process suspension responding to process-observation quiescence; network-anomaly quiet-hours response), the pattern probably deserves its own Tier-2 elaboration (`POLICY-RESPONDER-DISCIPLINE-2026-07.md` or similar). Until then, this section is the substrate's acknowledgment that the composition exists and preserves its shape.
+Presence-driven screen mute is the first concrete case of an observation-plane consumer that responds to observations autonomously via signed policy. When a second concrete case emerges (e.g., idle-process suspension responding to process-observation quiescence; network-anomaly quiet-hours response), the pattern probably deserves its own Tier-2 elaboration (`POLICY-RESPONDER-DISCIPLINE-2026-07.md (not yet written)` or similar). Until then, this section is the substrate's acknowledgment that the composition exists and preserves its shape.
 
 ## Composition with Regent
 

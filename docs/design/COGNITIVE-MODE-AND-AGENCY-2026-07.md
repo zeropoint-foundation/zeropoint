@@ -6,7 +6,7 @@
 
 **Motivation:** The substrate carries cognition and agency as two planes that do not compose. The cognitive input plane governs what the Regent thinks with; the gate and delegation model govern what she may do. Nothing declares the relationship. The consequence is that cognition produces labels nothing acts on, and agency executes without a declared deliberative posture behind it. This document names the coupling.
 
-**Composes with:** `COGNITIVE-ACT-ACCOUNTING-2026-07.md` (whose `mode` and `flow_ref` fields refer to this layer), `COGNITIVE-INPUT-PLANE-2026-07.md` (Step 1 cycle invocation triggers, from which mode derives), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (the three-part autonomous action test), `COGNITIVE-DESIGN-PRINCIPLES-2026-07.md` §#11 (conversation mode / stewardship mode — the embryo of this layer), `REGENT-ORCHESTRATION-ARCHITECTURE-2026-07.md`.
+**Composes with:** `COGNITIVE-ACT-ACCOUNTING-2026-07.md` (whose `mode` and `flow_ref` fields refer to this layer), `COGNITIVE-INPUT-PLANE-2026-07.md` (Step 1 specifies four invocation triggers; the runtime emits a different four — see §3), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (the three-part autonomous action test), `COGNITIVE-DESIGN-PRINCIPLES-2026-07.md` §#11 (conversation mode / stewardship mode — the embryo of this layer), `REGENT-ORCHESTRATION-ARCHITECTURE-2026-07.md`.
 
 ---
 
@@ -51,16 +51,26 @@ This makes the gate and the input plane two views of one structure rather than t
 
 ---
 
-## 3. The four modes
+## 3. The modes
 
-Mode is **witnessed, not declared per cycle.** It derives from three things already on chain: the cycle invocation reason (`COGNITIVE-INPUT-PLANE` Step 1 records it in `cognitive:input:composed`), the active delegation scope, and the severity context.
+Mode is **witnessed, not declared per cycle.** It derives from the cycle invocation reason, the active delegation scope, and the severity context.
 
-| Mode | Invocation trigger | Posture | Envelope |
-|---|---|---|---|
-| **Conversational** | operator directive | Dialogic. Operator directive at Tier 3; interrupt threshold high — only Critical findings break in. Deliberation rigor D1 by default. | Narrow: respond, ask, observe. Consequential acts require explicit operator turn — she talks, she does not act. |
-| **Stewardship** | chain event / officer finding | Diagnostic. Officer findings at Tier 2, precedent at Tier 1. Pattern-matching against prior remediation. Rigor D2 when a Decision is implied. | Precedent-bounded: the three-part test applies in full. Known pattern plus known context acts; novelty escalates. |
-| **Committed** | scheduled commitment firing | Fulfilment. The commitment receipt itself is the highest-priority context; the question is *what did I promise and is it still right*. | Pre-authorized by the commitment receipt — agency was granted when the promise was made and signed. Narrower than stewardship, not broader. |
-| **Reactive** | circuit-breaker transition, escalation | Triage. Substrate state dominates; degraded-capability signals foregrounded. Rigor D3 for anything consequential. | **Narrowed.** Scope reduces with breaker level: L1 elevated observation, L2 rate-limited, L3 soft arrest at scope, L4 hard arrest. |
+**Rederived against the runtime, 2026-07-25.** An earlier draft derived four modes from the Cognitive Input Plane's four specified invocation triggers. The runtime emits a different set — `perception_invocation_reason` at `zp-regent/src/regent.rs:52` returns `operator_directive`, `work_arc_continuation`, `tool_dispatch_narration`, or `autonomous_cycle`. Two of those are not postures at all, and two of the specified triggers do not exist because their subsystems do not exist. The corrected derivation is below, and it is smaller and more useful than the original.
+
+| Mode | Invocation reason | Status | Posture | Envelope |
+|---|---|---|---|---|
+| **Conversational** | `operator_directive` | **Derivable today** | Dialogic. Operator directive at Tier 3; interrupt threshold high. Rigor D1 by default. | Narrow: respond, ask, observe. She talks; she does not act. |
+| **Stewardship** | `autonomous_cycle` | **Derivable today** | Diagnostic. Officer findings and precedent foregrounded. Rigor D2 when a Decision is implied. | Precedent-bounded — the three-part test in full. |
+| **Committed** | *(no trigger)* | **Blocked.** `regent:commitment:*` has zero occurrences in `crates/`; commitments are unimplemented | Fulfilment against a signed promise. | Pre-authorized by the commitment receipt. |
+| **Reactive** | *(not in reason)* | **Blocked.** Circuit-breaker state exists in `zp-policy` but does not reach the invocation reason | Triage. Rigor D3 for anything consequential. | Strictly narrowing with breaker level. |
+
+**So the runtime supports two modes today, not four.** Committed and Reactive are correct as designed and arrive with their triggers; recording them as blocked rather than deleting them keeps the envelope semantics settled in advance of the subsystems.
+
+### 3.1 The two continuation reasons are flow signals, not modes
+
+`work_arc_continuation` and `tool_dispatch_narration` are not postures — they are markers that a cycle continues work already in progress. A continuing cycle **inherits the mode of the cycle that opened the arc**; it does not have a mode of its own.
+
+This is a gift rather than a complication. The runtime already distinguishes flow-initiation from flow-continuation, which is precisely the boundary §5 needs to bound a flow, and it is available without building anything. A flow opens on `operator_directive` or `autonomous_cycle` and continues across `work_arc_continuation` and `tool_dispatch_narration` until the next initiating reason or a mode transition.
 
 Two properties worth stating explicitly.
 
@@ -127,7 +137,9 @@ Courage deserves the note. The article treats willingness to act under novelty a
 
 Consistent with the accounting doc: **the first slice adds no new Regent behavior.**
 
-> **m0 = derive and record mode.** Cycle invocation reason already lands in `cognitive:input:composed`; delegation scope and severity are already readable. Compute mode, emit `cognitive:mode:entered:<mode>` on change, populate `Deliberation.mode`.
+> **m0 = derive and record the two available modes, and mark flow continuity.** `invocation_reason` is already computed and already lands in the composition receipt. Map `operator_directive` → Conversational and `autonomous_cycle` → Stewardship; treat `work_arc_continuation` and `tool_dispatch_narration` as continuation of the open flow's mode. Emit `cognitive:mode:entered:<mode>` on change and populate the act receipt's `mode` field.
+
+Committed and Reactive are unreachable until commitments ship and breaker state reaches the invocation reason. Both are one-line additions to `perception_invocation_reason` once their subsystems exist — worth noting so the extension point is known rather than rediscovered.
 
 That is a pure derivation over existing state. It immediately gives act signatures their disambiguating scope, gives flows their boundaries, and produces the transition record that §4's anomaly detection needs.
 
@@ -144,14 +156,14 @@ Sequence: **m0** (mode derived and recorded) → **m1** (envelope declared per m
 - **MA3** — A transition with no corresponding triggering signal is detected deterministically.
 - **MA4** — For every cycle, the acts emitted are a subset of the mode envelope; divergences are countable (m1) before they are blocked (m3).
 - **MA5** — No mode envelope exceeds active delegation at any point, under any transition sequence.
-- **MA6** — Reactive mode strictly narrows: for each breaker level, the envelope is a subset of the level below.
-- **MA7** — Flow boundaries align with mode transitions; no flow spans a transition.
+- **MA6** — Reactive mode strictly narrows: for each breaker level, the envelope is a subset of the level below. *(Unreachable until breaker state reaches the invocation reason.)*
+- **MA7** — Flow boundaries align with mode transitions and with initiating invocation reasons; no flow spans a transition, and continuation reasons never open one.
 
 ---
 
 ## 9. Open positions
 
-- **Are four modes enough?** Constructive (multi-act work toward a deliverable — WorkArc territory) and Investigative (diagnosis with unknown cause) are both real postures not derivable from current triggers. They would need a declared entry rather than a witnessed one, which weakens the witnessed-mode property. Held pending m0 evidence about whether stewardship is doing double duty.
+- **Are four modes enough — and are two too few?** Two are reachable today.  Constructive (multi-act work toward a deliverable — WorkArc territory) and Investigative (diagnosis with unknown cause) are both real postures not derivable from current triggers. They would need a declared entry rather than a witnessed one, which weakens the witnessed-mode property. Held pending m0 evidence about whether stewardship is doing double duty.
 - **Envelope authorship.** Whether envelopes are declared per mode in Layer B, or derived as a function of (delegation, severity, breaker level), is unresolved. Derivation is cleaner and avoids a second place where authority is written down; declaration is more legible to the operator. Leaning derivation, because two sources of authority truth is the failure §II.13 P8 exists to prevent.
 - **Committed-mode scope.** A commitment made under a delegation that has since been revoked: does the mode still fire with a narrowed envelope, or not fire at all? Forward-only recovery suggests the commitment stands as a chain fact while its envelope evaluates fresh — but that means a commitment that cannot be fulfilled, which needs its own receipt.
 - **Does this warrant an axiom?** The §2 invariant — cognition and agency are coupled per mode — is a claim about what the substrate may do, which is axiom-shaped. Held pending m1 evidence, per *config reflects today, not roadmap*.

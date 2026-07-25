@@ -1,5 +1,7 @@
 # ZeroPoint
 
+**Document type:** Public-facing overview draft. Not canonical and not a Tier 2 elaboration — narrative synthesis for external readers. Canonical claims live in `KEEL-2026-07.md`.
+
 *An overview of the sovereign agentic system — July 2026.*
 
 ---

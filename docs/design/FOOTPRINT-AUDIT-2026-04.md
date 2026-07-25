@@ -1,5 +1,7 @@
 # ZeroPoint Footprint Audit — Cross-Reference Against Five Security Frameworks
 
+**Document type:** Tier 3 historical. Frozen at authoring frame; not amended for corpus pivots. Ratings reflect the codebase as of 2026-04. For canonical claims see `KEEL-2026-07.md`.
+
 **Date:** 2026-04-25
 **Method:** Each framework item tested against ZP codebase reality (not marketing claims). Ratings are GREEN (implemented and verifiable in code), YELLOW (partial — code exists but incomplete, or structurally addressed but not purpose-built), RED (out of scope or not implemented).
 

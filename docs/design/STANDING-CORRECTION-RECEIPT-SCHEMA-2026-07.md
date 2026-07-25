@@ -119,6 +119,8 @@ The primary receipt described above. Chain-anchored correction issued by operato
 
 ### `cognitive:correction:acknowledged`
 
+**Implementation status: specified, not shipped.** `cognitive_observer.rs` implements the `standing`, `revoked` and `violated` members of this family; the acknowledgment mechanism is item 8 of this document's own open list. Verified against `crates/` 2026-07-25.
+
 Emitted by Regent (via signed receipt through her delegation) when she has read a correction and confirmed she'll observe it going forward. Fields:
 - Reference to correction ID
 - Timestamp of acknowledgment

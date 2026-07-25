@@ -163,3 +163,29 @@ jobs:
           python -c "from zp_sentinel.mesh import MeshClient; print('✓ mesh imports')"
           python -c "from zp_sentinel.anomaly import AnomalyDetector; print('✓ anomaly imports')"
           python -c "from zp_sentinel.audit import AuditStore; print('✓ audit imports')"
+
+  # ── Corpus Coherence ────────────────────────────────────────
+  corpus:
+    name: Corpus coherence (docs ↔ crates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Mechanical coherence checks over the governed corpus: tier
+      # declarations, KEEL section references, cross-document links,
+      # duplicate numbered sections, index integrity, and receipt
+      # vocabulary drift against the code registry.
+      #
+      # Measurements (pre-convention stratum size, specified-not-shipped
+      # receipt surface) report but never fail — they describe a corpus
+      # mid-construction rather than a defect in it.
+      #
+      # Spec: docs/design/SUBSTRATE-LOOP-CLOSURE-2026-07.md §4 S1/S2
+      - name: corpus-lint
+        run: python3 tools/corpus-lint/corpus_lint.py . --strict

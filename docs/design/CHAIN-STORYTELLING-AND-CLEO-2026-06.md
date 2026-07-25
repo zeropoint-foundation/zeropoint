@@ -1,5 +1,7 @@
 # Chain Storytelling Architecture & Cleo Officer
 
+**Document type:** Tier 2 canonical elaboration. Elaborates KEEL §II.6 (officer signing keys) and §III.4 (officer charters) — Cleo's charter and the chain-narration primitives. Reclassified Tier 2 on 2026-07-10.
+
 *2026-06-30. Chain narration as a substrate primitive, not a cockpit feature.*
 
 ## Motivation

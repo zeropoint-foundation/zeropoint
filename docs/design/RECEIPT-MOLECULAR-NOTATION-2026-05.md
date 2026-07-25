@@ -1,5 +1,7 @@
 # Receipt Chain Molecular Notation — Design Note
 
+**Document type:** Tier 3 historical. Frozen at authoring frame; not amended for corpus pivots. For canonical claims see `KEEL-2026-07.md`.
+
 *2026-05-19. Design inspiration from observing that a DMT molecule rendered
 in standard skeletal/structural notation visually resembles ZeroPoint's
 receipt chain graphs. Pursuing the analogy further: chemistry has spent

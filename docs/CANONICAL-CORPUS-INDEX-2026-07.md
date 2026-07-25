@@ -229,7 +229,7 @@ Retained for reasoning trail. Not amended for corpus pivots. Read with the note 
 - **[`design/docker-displacement-2026-06.md`](design/docker-displacement-2026-06.md)** — pre-July design note; scope subsumed by later work.
 - **[`design/routellm-inference-governance-2026-06.md`](design/routellm-inference-governance-2026-06.md)** — pre-July inference-governance note; scope subsumed by inference-routing-2026-07.
 - **[`design/tool-version-provenance-2026-06.md`](design/tool-version-provenance-2026-06.md)** — pre-July design note; scope subsumed by TOOL-GOVERNANCE-LIFECYCLE-2026-07.
-- **[`whitepaper-v2.md`](whitepaper-v2.md)**, **[`whitepaper-v9.md`](whitepaper-v9.md)** and other public-thesis drafts — public-audience content, deferred per July 2026 directive. Historical for our internal reasoning; will need reconciliation with the substrate-form pivot when public documentation resumes.
+- **[`whitepaper-v8.md`](whitepaper-v8.md)**, **[`whitepaper-v9.md`](whitepaper-v9.md)** and other public-thesis drafts — public-audience content, deferred per July 2026 directive. Historical for our internal reasoning; will need reconciliation with the substrate-form pivot when public documentation resumes.
 - Older `docs/design/` docs not listed above — read as historical unless explicitly reclassified as Tier 2 in this index.
 
 ## Update conventions

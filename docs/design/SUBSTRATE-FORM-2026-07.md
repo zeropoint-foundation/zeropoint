@@ -267,8 +267,8 @@ Immediate design work:
 
 1. `OBSERVATION-PLANE-2026-07.md` — six observation surfaces, delegation scopes, composition with Forms (drafted next).
 2. KEEL Part XV — this doc's declarations elevated to invariant status.
-3. `HARDWARE-GENESIS-2026-07.md` — YubiKey / Nitrokey / Trezor selection, WebAuthn / OpenPGP interface, ceremony flow, recovery quorum.
-4. `FORM-GRADUATION-2026-07.md` — ceremony protocol for each graduation path, chain replication details, rollback semantics.
+3. `HARDWARE-GENESIS-2026-07.md` **(not yet written)** — YubiKey / Nitrokey / Trezor selection, WebAuthn / OpenPGP interface, ceremony flow, recovery quorum.
+4. `FORM-GRADUATION-2026-07.md` **(not yet written)** — ceremony protocol for each graduation path, chain replication details, rollback semantics.
 
 Near-term implementation work:
 
