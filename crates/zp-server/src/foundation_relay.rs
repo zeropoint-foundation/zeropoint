@@ -37,7 +37,7 @@ use axum::{
 };
 use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
-use ed25519_dalek::{Signature, VerifyingKey};
+use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -45,7 +45,8 @@ use crate::AppState;
 use zp_audit::UnsealedEntry;
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
 use zp_receipt::{
-    Action, ActionType, ClaimSemantics, ReceiptBuilder, ReceiptType, Status, TrustGrade,
+    verify_signature, Action, ActionType, ClaimSemantics, ReceiptBuilder, ReceiptType, Status,
+    TrustGrade,
 };
 
 // ── Registry ──────────────────────────────────────────────────────────────────
@@ -142,12 +143,16 @@ impl PubkeyRegistry {
                 sig_bytes.len()
             ));
         }
-        let sig = Signature::from_slice(&sig_bytes)
+        let sig_arr: [u8; 64] = sig_bytes
+            .as_slice()
+            .try_into()
             .map_err(|_| "signature failed to parse".to_string())?;
 
-        entry
-            .verifying_key
-            .verify_strict(body, &sig)
+        // Routes through the single sanctioned verify primitive
+        // (Seam 5) instead of calling `VerifyingKey::verify_strict`
+        // directly — see `no_direct_verify_strict_outside_helper`.
+        let pk_bytes = entry.verifying_key.to_bytes();
+        verify_signature(&pk_bytes, body, &sig_arr)
             .map_err(|_| "signature did not verify".to_string())
     }
 
