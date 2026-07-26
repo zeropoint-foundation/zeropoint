@@ -24,6 +24,34 @@ use zp_regent::intent::Intent;
 use zp_regent::loop_runner::{IntentExecutor, IntentOutcome, RegentHandle};
 use zp_regent::regent::Regent;
 
+/// The Regent's tool surface: capability name and delegation scope.
+///
+/// **Single source of truth.** Both the `CapabilityGrant` the gate honours and
+/// the `DelegationSummary` list the Regent perceives are built from this array.
+/// They were previously two hand-maintained lists and drifted: `browser_use`
+/// appeared in the perceived-delegation list but not in the grant, so the
+/// Regent believed she held a capability the gate would deny (2026-07-26).
+///
+/// Presence in this array **is** the grant. Adding an entry grants the
+/// capability; that is an authority decision, not a lint fix.
+///
+/// `browser_use` is implemented with a full sub-dispatch surface (goto_url, js,
+/// page_info, list_tabs, wait_for_element) and is deliberately absent — it is
+/// ungranted until the operator decides otherwise. Add the pair
+/// `("browser_use", "web:allowed_domains")` to grant it.
+const REGENT_TOOLS: &[(&str, &str)] = &[
+    ("chain_query", "audit_chain"),
+    ("governance_posture", "governance"),
+    ("model_evaluate", "inference"),
+    ("system_status", "system"),
+    ("batch_sign", "audit_chain"),
+    ("chain_compact", "audit_chain"),
+    ("self_configure", "inference:endpoint,model,api_key"),
+    ("memory_list", "cognition:memory_promotion"),
+    ("memory_review", "cognition:memory_promotion:review_remembered"),
+    ("substrate_validate", "substrate:validation:regent"),
+];
+
 // ── Conversation namespace ──────────────────────────────────────────────────
 
 /// Dedicated `ConversationId` for all Regent receipts.
@@ -1539,18 +1567,7 @@ pub async fn spawn_regent(
             "genesis".to_string(),                   // grantor: substrate itself
             "regent".to_string(),                     // grantee: regent actor
             GrantedCapability::ToolCall {
-                tools: vec![
-                    "chain_query".to_string(),
-                    "governance_posture".to_string(),
-                    "model_evaluate".to_string(),
-                    "system_status".to_string(),
-                    "batch_sign".to_string(),
-                    "chain_compact".to_string(),
-                    "self_configure".to_string(),
-                    "memory_list".to_string(),
-                    "memory_review".to_string(),
-                    "substrate_validate".to_string(),
-                ],
+                tools: REGENT_TOOLS.iter().map(|(c, _)| c.to_string()).collect(),
             },
             format!("rcpt-regent-startup-{}", Uuid::now_v7()),
         );
@@ -1614,74 +1631,18 @@ pub async fn spawn_regent(
 
     // Build delegation summaries so the Regent knows its tools.
     // Eventually read from chain; for now, static from startup grant.
-    let delegations = vec![
-        zp_regent::context::DelegationSummary {
-            capability: "chain_query".to_string(),
-            scope: "audit_chain".to_string(),
+    // Built from REGENT_TOOLS so what the Regent perceives and what the
+    // gate honours cannot disagree. Previously a parallel hand-maintained
+    // list; see REGENT_TOOLS for the drift that motivated collapsing them.
+    let delegations: Vec<zp_regent::context::DelegationSummary> = REGENT_TOOLS
+        .iter()
+        .map(|(capability, scope)| zp_regent::context::DelegationSummary {
+            capability: capability.to_string(),
+            scope: scope.to_string(),
             granted_at: chrono::Utc::now(),
             expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "governance_posture".to_string(),
-            scope: "governance".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "model_evaluate".to_string(),
-            scope: "inference".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "system_status".to_string(),
-            scope: "system".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "batch_sign".to_string(),
-            scope: "audit_chain".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "chain_compact".to_string(),
-            scope: "audit_chain".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "browser_use".to_string(),
-            scope: "web:allowed_domains".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "self_configure".to_string(),
-            scope: "inference:endpoint,model,api_key".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "memory_list".to_string(),
-            scope: "cognition:memory_promotion".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "memory_review".to_string(),
-            scope: "cognition:memory_promotion:review_remembered".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-        zp_regent::context::DelegationSummary {
-            capability: "substrate_validate".to_string(),
-            scope: "substrate:validation:regent".to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
-        },
-    ];
+        })
+        .collect();
 
     let handle = zp_regent::loop_runner::start_loop(
         regent,

@@ -290,7 +290,9 @@ The Regent should not wait for the operator to ask about problems the officers h
 
 Before acting on an officer finding without operator input, the Regent evaluates:
 
-1. **Authority gate.** Does the proposed action fall within their active delegation scope? This is the existing gate mechanism — if the delegation doesn't cover the action, stop. No escalation, no proposal. The gate is the hard boundary.
+1. **Authority gate.** Does the proposed action fall within their active delegation scope? This is the existing gate mechanism. If the delegation doesn't cover the action, the Regent does not act — the gate is a hard boundary on *acting*, and no precedent, urgency, or operator expectation softens it.
+
+   *Amended 2026-07-26.* This limb previously read "stop. No escalation, no proposal." That contradicted this section's own terminal-state paragraph ("any test fails → escalate"), and the more restrictive reading is the one that governed behavior: an operator request the Regent lacked authority to fulfil produced silence where a proposal was the correct output. **Proposing an action one cannot take is not taking it** — it is *the substrate proposes; operators sign*, which is the discipline the rest of this corpus is built on. The gate bounds action. It does not bound speech about action. Terminal states are enumerated below.
 
 2. **Pattern precedent.** Has the Regent performed this class of remediation before, and was the outcome operator-approved? They query the chain for prior `regent:remediation:*` receipts matching the same (finding_type, remediation_verb) pair. An operator-signed precedent receipt means: "this pattern has been tried, the operator approved the result, do it again." No precedent → this is a new class of action → escalate.
 
@@ -298,7 +300,31 @@ Before acting on an officer finding without operator input, the Regent evaluates
 
 All three pass → **act autonomously**. Emit a `regent:remediation:{verb}` receipt documenting: what was done, which officer finding triggered it, which precedent receipt authorized the pattern, and what changed. The operator sees this in the chain as a fait accompli with full audit trail.
 
-Any test fails → **escalate**. Surface the proposed remediation to the operator as a `regent:proposal:{verb}` receipt containing: the finding, the proposed action, why the Regent can't act autonomously (no authority / no precedent / novel context), and the expected outcome. The operator reviews and signs or rejects. A signed approval becomes the new precedent receipt for that (finding_type, remediation_verb, context_signature) tuple.
+#### Terminal states (amended 2026-07-26)
+
+Every evaluation of the test ends in exactly one of three states. **Silence is not among them.**
+
+**Act** — all three limbs pass. Emit a `regent:remediation:{verb}` receipt documenting what was done, which finding triggered it, which precedent authorized the pattern, and what changed.
+
+**Propose an action** — a limb fails, but the mechanism to do the thing exists and the Regent simply lacks the authority to invoke it. Surface a `regent:proposal:{verb}` receipt carrying: the finding, the proposed action, which limb failed (no authority / no precedent / novel context), and the expected outcome. The operator signs or rejects; a signed approval becomes the new precedent for that (finding_type, remediation_verb, context_signature) tuple.
+
+**Propose a mechanism** — no mechanism exists to do the thing at all. This is not a proposal receipt; it is `improvement:proposed` per `IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md` Stage 1, with `finding_class: new_capability`. The distinction matters: proposing an *action* asks for authority, proposing a *mechanism* asks for a capability, and conflating them puts capability requests through a review path built for one-off approvals.
+
+**Declaring an absence is a floor, not a terminal state.** "I have no mechanism for that" is an accurate sentence and an insufficient response. It is only correct when paired with one of the two proposals above, or when the request is one the substrate refuses on principle — in which case the refusal cites the principle. A response that names a limitation and stops has converted the Regent into a notification engine, which §Phase 7's opening paragraph exists to prevent.
+
+#### Operator-request procedure (added 2026-07-26)
+
+The three-part test above is scoped to officer findings producing remediation. **It does not cover operator requests**, and that gap was load-bearing: an operator request falling outside delegation had no decision procedure at all, so the Regent fell back on the only content guaranteed to be in context — the persona block — and recited it.
+
+Operator requests evaluate against the same limbs with different terminals:
+
+1. **Within delegation** → fulfil, and emit the corresponding receipt.
+2. **Mechanism exists, authority does not** → draft the artifact, surface it for signature, and honour it in-session as an *unsigned candidate* while stating plainly that it will not survive a cycle boot unsigned. The candidate is not canonical and must not be described as though it were.
+3. **No mechanism exists** → `improvement:proposed`, and say so directly.
+
+*Worked example, 2026-07-25.* The operator said "Please call me Kenrom." `CorrectionType::Preference` exists and is rendered into Tier 1 context every cycle; standing corrections are operator-issued, so the Regent holds no authority to write one. That is case 2. The correct output is a drafted `cognitive:correction:standing` of type Preference awaiting signature, honoured for the session and marked unsigned. The observed output was a byte-identical repeat of the previous turn's persona recitation — which this procedure's absence permitted.
+
+**Composition with §III.27.** A standing correction the Regent proposes about operator preference is Class 2 self-affecting material under `ZEP-self-referential-authorship-2026-07.md`: it enters her own cognitive context, so it decays unless adopted, and adoption retains her attribution and continues counting toward the self-authorship ratio. No separate mechanism is required — the proposal pattern is the same one that axiom already specifies.
 
 #### Remediation Receipt Schema
 
@@ -387,6 +413,8 @@ At this point, the lsof test has a cognitive counterpart: the substrate is matur
 ---
 
 ## What This ADR Does NOT Decide
+
+*Amended 2026-07-26: the three-part test's terminal states and the operator-request procedure were corrected in Phase 7 after a live diagnostic showed the Regent terminating on silence where a proposal was correct. The items below are unchanged.*
 
 - **Specific directive receipt schemas.** Each phase will design its own receipt types as it ships.
 - **Regent-Forge conflict resolution protocol.** The current answer is "surface to operator." A formal protocol may emerge from operational experience.

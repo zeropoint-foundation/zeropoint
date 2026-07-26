@@ -65,6 +65,28 @@ fn perception_invocation_reason(
     }
 }
 
+/// Cognitive mode per COGNITIVE-MODE-AND-AGENCY-2026-07.md §3.
+///
+/// Two modes are reachable today. Committed and Reactive are specified and
+/// blocked on subsystems that do not exist (`regent:commitment:*`, breaker
+/// state reaching the invocation reason) — see that doc's §3 table. Do not
+/// invent mappings for them here; that would be a capability claim the
+/// runtime cannot support.
+///
+/// `"continuation"` is a placeholder, not a mode — it marks that a
+/// continuation cycle (`work_arc_continuation` / `tool_dispatch_narration`)
+/// should inherit the mode of the cycle that opened the flow, per §3.1. No
+/// flow tracking exists yet (m2), so resolution against the preceding act
+/// receipt is deferred to the analysis layer rather than guessed here.
+pub(crate) fn cognitive_mode(invocation_reason: &str) -> &'static str {
+    match invocation_reason {
+        "operator_directive" => "conversational",
+        "autonomous_cycle" => "stewardship",
+        "work_arc_continuation" | "tool_dispatch_narration" => "continuation",
+        _ => "unknown",
+    }
+}
+
 /// Render active standing corrections into a Tier 1 system-prompt section.
 ///
 /// Standing corrections are chain-anchored operator claims that persist across
@@ -614,14 +636,33 @@ impl Regent {
 
         // ── Composition provenance ──────────────────────────────────────
         // Structural hashes only — no content bloat on chain per cycle.
+        //
+        // Authorship: standing corrections are always operator-issued today
+        // (`StandingCorrection::issued_by` is the operator's Genesis key —
+        // no Regent-authored standing correction exists in this runtime),
+        // and officer findings are always officer-authored by construction.
+        // So `self_authorship_ratio` is 0.0 on every cycle until Regent
+        // corpus authorship (Class 2/3 per §III.27) exists — the expected
+        // baseline per ZEP-self-referential-authorship-2026-07.md §10.
+        let standing_correction_authorship =
+            crate::context::ClassAuthorship::all_operator(standing_corrections.len());
+        let officer_finding_authorship =
+            crate::context::ClassAuthorship::all_officer(officer_findings.len());
+        let self_authorship_ratio = crate::context::tier_weighted_self_authorship_ratio(
+            &standing_correction_authorship,
+            &officer_finding_authorship,
+        );
+
         let composition_summary = Some(crate::context::CompositionSummary {
             matrix_version: COGNITIVE_INPUT_MATRIX_VERSION.to_string(),
             standing_correction_count: standing_corrections.len(),
             standing_corrections_hash:
                 crate::context::CompositionSummary::hash_corrections(&standing_corrections),
+            standing_correction_authorship,
             officer_finding_count: officer_findings.len(),
             officer_findings_hash:
                 crate::context::CompositionSummary::hash_findings(&officer_findings),
+            officer_finding_authorship,
             recent_chain_count: recent_chain.len(),
             active_delegation_count: delegations.len(),
             invocation_reason: perception_invocation_reason(
@@ -629,6 +670,7 @@ impl Regent {
                 &work_arc,
                 !tool_results.is_empty(),
             ),
+            self_authorship_ratio,
         });
 
         Ok(CognitiveContext {
@@ -917,9 +959,12 @@ impl Regent {
 
         let standing_corrections_section = build_standing_corrections_section(context);
 
+        let available_actions = Self::build_available_actions(context);
+
         let system_prompt = PROMPT_COMPOSE
             .replace("{persona}", &persona_fragment)
             .replace("{sovereign_section}", &sovereign_section)
+            .replace("{available_actions}", &available_actions)
             .replace(
                 "{standing_corrections_section}",
                 &standing_corrections_section,
@@ -976,14 +1021,95 @@ impl Regent {
     }
 
     /// Build the routing prompt — minimal, for intent classification only.
-    fn build_routing_prompt(&self, context: &CognitiveContext) -> String {
-        let has_delegations = !context.active_delegations.is_empty();
-
-        if has_delegations {
-            PROMPT_ROUTING_TOOLS.trim().to_string()
-        } else {
-            PROMPT_ROUTING_NO_TOOLS.trim().to_string()
+    /// Call signature for a granted capability, for the routing menu.
+    ///
+    /// Presence is derived from active delegations; only the *syntax* is
+    /// declared here. A capability with no entry is offered as `name()`.
+    fn tool_signature(capability: &str) -> String {
+        match capability {
+            "chain_query" => "chain_query(limit:N)".to_string(),
+            "model_evaluate" => "model_evaluate(model:\"name\")".to_string(),
+            "memory_list" => "memory_list(stage?)".to_string(),
+            "memory_review" => "memory_review(action,review_id?,reason?)".to_string(),
+            other => format!("{other}()"),
         }
+    }
+
+    /// Routing-tier hint for capabilities a small model routinely mis-routes.
+    /// Emitted only when the capability is actually delegated.
+    fn tool_hint(capability: &str) -> Option<&'static str> {
+        match capability {
+            "self_configure" => Some(
+                "- Operator asks what model, endpoint, or inference config you are running → {\"intent\":\"execute\",\"tool\":\"self_configure\",\"params\":{}}",
+            ),
+            "substrate_validate" => Some(
+                "- Operator asks for substrate validation, health, or posture report → {\"intent\":\"execute\",\"tool\":\"substrate_validate\",\"params\":{}}",
+            ),
+            _ => None,
+        }
+    }
+
+    /// Build the routing prompt.
+    ///
+    /// The tool menu is **derived from active delegations**, not hardcoded.
+    /// Per the working heuristic *the chain configures the cockpit; cockpits
+    /// are pure projections*: the Regent's tool menu is a cockpit affordance,
+    /// and affordances are a projection of currently-granted capability over
+    /// the verb set. A parallel hand-maintained list drifts — on 2026-07-26 a
+    /// static menu omitted `self_configure`, so the routing model could never
+    /// select it, and a standing correction requiring config verification
+    /// became unsatisfiable. Deriving the menu makes that class of bug
+    /// structurally impossible.
+    fn build_routing_prompt(&self, context: &CognitiveContext) -> String {
+        if context.active_delegations.is_empty() {
+            return PROMPT_ROUTING_NO_TOOLS.trim().to_string();
+        }
+
+        let mut caps: Vec<&str> = context
+            .active_delegations
+            .iter()
+            .map(|d| d.capability.as_str())
+            .collect();
+        caps.sort_unstable();
+        caps.dedup();
+
+        let tools = caps
+            .iter()
+            .map(|c| Self::tool_signature(c))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let hints = caps
+            .iter()
+            .filter_map(|c| Self::tool_hint(c))
+            .map(|h| format!("{h}\n"))
+            .collect::<String>();
+
+        PROMPT_ROUTING_TOOLS
+            .trim()
+            .replace("{tools}", &tools)
+            .replace("{tool_hints}", &hints)
+    }
+
+    /// The action menu, rendered for the composing tier.
+    ///
+    /// The compose model writes prose and cannot dispatch tools — routing does
+    /// that. But without knowing what *can* be done it invents offers it cannot
+    /// honour ("shall I check the active model for you?" when no such tool was
+    /// reachable). Giving it the same derived list makes its offers accurate.
+    fn build_available_actions(context: &CognitiveContext) -> String {
+        if context.active_delegations.is_empty() {
+            return "None. You cannot take actions this cycle — answer from context only."
+                .to_string();
+        }
+        let mut caps: Vec<&str> = context
+            .active_delegations
+            .iter()
+            .map(|d| d.capability.as_str())
+            .collect();
+        caps.sort_unstable();
+        caps.dedup();
+        caps.join(", ")
     }
 
     /// Build the user prompt from cognitive context.
@@ -1008,16 +1134,39 @@ impl Regent {
             ));
         }
 
-        // MIRROR: the Regent's own prior response.
-        // When the operator is talking AND a prior response exists, show
-        // the Regent what she said so she can self-evaluate. Confabulation
-        // becomes visible as a gap between the question and the answer.
+        // CONVERSATION CONTINUITY: the Regent's own prior turn.
+        //
+        // This was previously framed as a SELF-CHECK asking the Regent to
+        // verify whether her prior response was confabulated. That framing
+        // broke multi-turn threads: told to distrust her own last turn, a
+        // small model resets to a neutral response and abandons whatever
+        // the thread established. Observed 2026-07-26 — "shall I retrieve
+        // that?" / "yes please" produced "I am here. What would you like
+        // to do?" because the mirror instructed suspicion of the offer.
+        //
+        // Post-emission verification belongs to the Cognitive Self-Observer
+        // (KEEL §II.17), which is implemented and running. Doing it here too
+        // violates P8 (one canonical path per substrate concern) and the
+        // prompt-side copy degrades cognition while the real one works.
+        // This block is now neutral continuity context.
         if context.pending_input.is_some() {
-            if let Some(ref prior) = context.prior_response {
-                let q = prior
-                    .operator_question
-                    .as_deref()
-                    .unwrap_or("(no question)");
+            // Only mirror an actual conversational turn. `last_prior_response`
+            // captures every non-error cycle response, including an autonomous
+            // cycle's observe narration ("cycle 1: 55 chain entries, 0 findings,
+            // no input, no urgency"). That is not something the Regent said *to
+            // the operator*, and presenting it as such — then instructing her to
+            // continue the conversation — makes her recite cycle telemetry at
+            // the operator. Observed 2026-07-26 immediately after this block was
+            // reframed from self-check to continuity: the prior framing had been
+            // accidentally suppressing it by instructing distrust of the prior turn.
+            //
+            // A conversational turn is one that had an operator question.
+            if let Some(prior) = context
+                .prior_response
+                .as_ref()
+                .filter(|p| p.operator_question.is_some())
+            {
+                let q = prior.operator_question.as_deref().unwrap_or_default();
                 // Truncate long responses to avoid burning context on the mirror.
                 let r = if prior.response_content.len() > 300 {
                     format!("{}…", &prior.response_content[..300])
@@ -1025,14 +1174,14 @@ impl Regent {
                     prior.response_content.clone()
                 };
                 parts.push(format!(
-                    "SELF-CHECK (mirror):\n\
-                     Last cycle, the operator asked: \"{}\"\n\
-                     You responded (via {}): \"{}\"\n\
-                     Before responding now, verify: did your prior response actually \
-                     address what was asked? If not, correct course. If you were \
-                     confabulating (generic filler instead of specific engagement), \
-                     acknowledge it and engage with the actual question this time.",
-                    q, prior.model_used, r,
+                    "CONVERSATION SO FAR:\n\
+                     Operator: \"{}\"\n\
+                     You: \"{}\"\n\
+                     Continue this conversation. If your previous turn offered to do \
+                     something and the operator has now accepted, do that thing — do \
+                     not offer again. Treat the exchange above as what you remember \
+                     saying, not as something to evaluate.",
+                    q, r,
                 ));
             }
         }
