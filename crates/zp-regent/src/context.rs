@@ -536,6 +536,14 @@ pub struct SystemAwareness {
     /// Background tasks the Regent has spawned.
     pub active_tasks: Vec<BackgroundTaskStatus>,
 
+    /// The previous session's profile, read from chain at startup.
+    /// `None` on a first run, or when no prior profile is on chain.
+    ///
+    /// Phase 6's long window: "structural drift — invisible within any
+    /// single session — becomes detectable."
+    #[serde(default)]
+    pub prior_session: Option<SessionProfile>,
+
     /// Medium-window trends across recent cycles, when enough samples
     /// exist. `None` on the first cycles of a session.
     ///
@@ -544,6 +552,32 @@ pub struct SystemAwareness {
     /// across cycles, "where operational drift becomes visible."
     #[serde(default)]
     pub trends: Option<SystemTrends>,
+}
+
+/// A completed session's medium window, emitted at shutdown and read
+/// back at startup for cross-session comparison.
+///
+/// Structural only — counts and deltas, no content — matching the
+/// no-chain-bloat discipline the composition receipt follows.
+///
+/// Phase 6's worked example is "boot-to-ready time is 3x what it was
+/// last epoch." That is deliberately absent: boot-to-ready is not
+/// measured anywhere, and emitting a field for it would be inventing a
+/// measurement. The profile carries what the medium window actually has.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionProfile {
+    /// Cognitive cycles completed in that session.
+    pub cycles: u64,
+    /// Samples the medium window held at shutdown.
+    pub samples: usize,
+    /// Memory usage change across that session's window.
+    pub memory_usage_delta: f64,
+    /// Whether memory rose at every step.
+    pub memory_monotonic_rising: bool,
+    /// Change in resident model count.
+    pub loaded_model_delta: i64,
+    /// Change in the Regent's background task count.
+    pub active_task_delta: i64,
 }
 
 /// Medium-window trends — Phase 6's rolling aggregation.

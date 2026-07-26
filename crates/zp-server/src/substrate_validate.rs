@@ -92,6 +92,8 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // §"reopen_watch — the two tiers". Declared here ahead of the runtime
     // so a documented receipt does not surface as receipt-drift; the
     // canary cannot evaluate predicates yet.
+    // Phase 6 long window — per EXECUTION-AUTHORITY-MODEL-2026-07.md
+    "regent:awareness:session_profile",
     "improvement:tieoff:declared",
     "improvement:reopen:eligible",
     "improvement:reopen:review_due",

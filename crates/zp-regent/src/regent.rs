@@ -1329,6 +1329,29 @@ impl Regent {
                 if t.active_task_delta != 0 {
                     notes.push(format!("your background tasks {:+}", t.active_task_delta));
                 }
+                // Long window: compare this session against the last.
+                // Drift invisible inside one session shows up here.
+                if let Some(prior) = context
+                    .system_awareness
+                    .as_ref()
+                    .and_then(|a| a.prior_session.as_ref())
+                {
+                    let now = t.memory_usage_delta;
+                    let then = prior.memory_usage_delta;
+                    // Only remark when the change is both material and
+                    // larger than last session's. A session that drifts
+                    // less than the one before it is not news.
+                    if now.abs() >= 0.05 && now.abs() > then.abs() * 1.5 {
+                        notes.push(format!(
+                            "memory drift this session is larger than last session's \
+                             ({:+.0} points vs {:+.0} over {} cycles)",
+                            now * 100.0,
+                            then * 100.0,
+                            prior.cycles
+                        ));
+                    }
+                }
+
                 if !notes.is_empty() {
                     parts.push(format!(
                         "TRENDS ({} cycles): {}.\n\

@@ -97,6 +97,9 @@ pub struct SystemMonitor {
     inference: Arc<InferenceBackend>,
     /// Medium window — rolling samples across recent cycles.
     history: std::collections::VecDeque<Sample>,
+    /// Long window — the previous session's profile, set at startup from
+    /// the most recent `regent:awareness:session_profile` receipt.
+    prior_session: Option<crate::context::SessionProfile>,
 }
 
 impl SystemMonitor {
@@ -106,6 +109,7 @@ impl SystemMonitor {
             tasks: Vec::new(),
             inference,
             history: std::collections::VecDeque::with_capacity(TREND_WINDOW),
+            prior_session: None,
         }
     }
 
@@ -178,8 +182,30 @@ impl SystemMonitor {
             memory,
             loaded_models,
             active_tasks,
+            prior_session: self.prior_session.clone(),
             trends,
         }
+    }
+
+    /// Seed the long window from chain at startup.
+    pub fn set_prior_session(&mut self, profile: crate::context::SessionProfile) {
+        self.prior_session = Some(profile);
+    }
+
+    /// This session's profile, for emission at shutdown.
+    ///
+    /// `cycles` comes from the Regent rather than the monitor — the
+    /// monitor counts snapshots, and a cycle can end before perceiving.
+    pub fn session_profile(&self, cycles: u64) -> Option<crate::context::SessionProfile> {
+        let t = self.compute_trends()?;
+        Some(crate::context::SessionProfile {
+            cycles,
+            samples: t.samples,
+            memory_usage_delta: t.memory_usage_delta,
+            memory_monotonic_rising: t.memory_monotonic_rising,
+            loaded_model_delta: t.loaded_model_delta,
+            active_task_delta: t.active_task_delta,
+        })
     }
 
     /// Aggregate the medium window. `None` until enough samples exist.

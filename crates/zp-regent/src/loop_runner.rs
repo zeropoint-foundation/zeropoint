@@ -497,6 +497,22 @@ pub fn start_loop(
             }
         }
 
+        // Long window (Phase 6): emit this session's medium-window
+        // summary before the loop exits, so the next session can compare.
+        // Emitted before the memory flush — a failed flush should not
+        // cost the profile.
+        {
+            let cycles = regent.lock().await.cycle_count();
+            let profile = monitor.lock().await.session_profile(cycles);
+            match profile {
+                Some(p) => emit_session_profile_receipt(&audit_store, &p),
+                // Below MIN_TREND_SAMPLES there is no window to summarise.
+                // A short session emitting a profile of two points would
+                // pollute the cross-session comparison it exists to serve.
+                None => info!("session too short for a profile; none emitted"),
+            }
+        }
+
         // Flush memory on shutdown.
         let mut regent = regent.lock().await;
         if let Err(e) = regent.flush_memory() {
@@ -1020,6 +1036,56 @@ async fn run_cycle(
 /// callers — namely the cognitive-act receipt (below) — can cite the
 /// composition they reasoned from, per
 /// COGNITIVE-ACT-ACCOUNTING-2026-07.md §6.
+/// Emit `regent:awareness:session_profile` at shutdown.
+///
+/// Phase 6's long window: each session's medium-window summary lands on
+/// chain so the next startup can compare against it. Structural only —
+/// counts and deltas — per the same no-content discipline the
+/// composition receipt follows.
+fn emit_session_profile_receipt(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    profile: &crate::context::SessionProfile,
+) {
+    let event = format!(
+        "regent:awareness:session_profile cycles={} samples={} mem_delta={:.4} \
+         mem_rising={} models={} tasks={}",
+        profile.cycles,
+        profile.samples,
+        profile.memory_usage_delta,
+        profile.memory_monotonic_rising,
+        profile.loaded_model_delta,
+        profile.active_task_delta,
+    );
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-awareness".to_string(),
+        receipt: None,
+    };
+
+    match audit_store.lock() {
+        Ok(mut store) => {
+            if let Err(e) = store.append(entry) {
+                warn!("session profile receipt emission failed: {}", e);
+            } else {
+                info!(
+                    cycles = profile.cycles,
+                    samples = profile.samples,
+                    "session profile emitted"
+                );
+            }
+        }
+        Err(e) => warn!("session profile: audit store lock poisoned: {}", e),
+    }
+}
+
 fn emit_composition_receipt(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     summary: &crate::context::CompositionSummary,

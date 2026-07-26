@@ -1666,6 +1666,77 @@ pub async fn spawn_regent(
         zp_regent::awareness::SystemMonitor::new(inference.clone()),
     ));
 
+    // Long window (Phase 6): seed the monitor with the previous session's
+    // profile so this session can be compared against it. Same shape as
+    // the pin reconstitution above — scan recent entries for the most
+    // recent matching receipt and parse its inline key=value detail.
+    //
+    // Absence is normal, not an error: a first run, or a prior session too
+    // short to have a window, leaves this None and the comparison simply
+    // does not render.
+    // The scan and the seed are deliberately separated. `audit_store` is a
+    // std::sync::Mutex; holding its guard across the `.await` below would
+    // make this future !Send and fail to compile inside the spawn.
+    let prior_profile = {
+        let mut found = None;
+        if let Ok(store) = audit_store.lock() {
+            if let Ok(entries) = store.recent_entries(500) {
+                found = entries.iter().rev().find_map(|entry| {
+                let zp_core::AuditAction::SystemEvent { ref event } = entry.action else {
+                    return None;
+                };
+                if !event.starts_with("regent:awareness:session_profile") {
+                    return None;
+                }
+                let mut cycles = 0u64;
+                let mut samples = 0usize;
+                let mut mem_delta = 0f64;
+                let mut mem_rising = false;
+                let mut models = 0i64;
+                let mut tasks = 0i64;
+                for part in event.split_whitespace() {
+                    if let Some(v) = part.strip_prefix("cycles=") {
+                        cycles = v.parse().unwrap_or(0);
+                    } else if let Some(v) = part.strip_prefix("samples=") {
+                        samples = v.parse().unwrap_or(0);
+                    } else if let Some(v) = part.strip_prefix("mem_delta=") {
+                        mem_delta = v.parse().unwrap_or(0.0);
+                    } else if let Some(v) = part.strip_prefix("mem_rising=") {
+                        mem_rising = v == "true";
+                    } else if let Some(v) = part.strip_prefix("models=") {
+                        models = v.parse().unwrap_or(0);
+                    } else if let Some(v) = part.strip_prefix("tasks=") {
+                        tasks = v.parse().unwrap_or(0);
+                    }
+                }
+                // A profile with no samples parsed is a malformed receipt,
+                // not a short session — do not seed from it.
+                if samples == 0 {
+                    return None;
+                }
+                    Some(zp_regent::context::SessionProfile {
+                        cycles,
+                        samples,
+                        memory_usage_delta: mem_delta,
+                        memory_monotonic_rising: mem_rising,
+                        loaded_model_delta: models,
+                        active_task_delta: tasks,
+                    })
+                });
+            }
+        }
+        found
+    };
+
+    if let Some(profile) = prior_profile {
+        tracing::info!(
+            prior_cycles = profile.cycles,
+            prior_samples = profile.samples,
+            "seeded long window from prior session profile"
+        );
+        system_monitor.lock().await.set_prior_session(profile);
+    }
+
     let executor = Arc::new(ServerIntentExecutor::new(
         audit_store.clone(),
         gate,
