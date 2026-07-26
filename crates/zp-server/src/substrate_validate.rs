@@ -88,6 +88,13 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "cognitive:correction:violated",
     // Cognitive act accounting (v0) — per COGNITIVE-ACT-ACCOUNTING-2026-07.md §6
     "cognitive:act:recorded",
+    // Tie-off watch (Stage 1t) — per IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md
+    // §"reopen_watch — the two tiers". Declared here ahead of the runtime
+    // so a documented receipt does not surface as receipt-drift; the
+    // canary cannot evaluate predicates yet.
+    "improvement:tieoff:declared",
+    "improvement:reopen:eligible",
+    "improvement:reopen:review_due",
     // Canary discipline
     "chain:canary:",
     // Substrate validation (this tool's own emissions)

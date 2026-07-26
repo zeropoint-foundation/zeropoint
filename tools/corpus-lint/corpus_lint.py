@@ -236,6 +236,81 @@ def check_receipt_vocabulary(docs, registry):
                 f"family {f}: is implemented but {r} is not a member — rename, or a "
                 f"real gap. Implemented: {', '.join(impl)}")
 
+def post_convention(root):
+    """Indexed documents authored under the index convention.
+
+    `governed()` excludes anything matching FROZEN, which is right for
+    amendment-shaped checks and wrong here. Current investigations and
+    programs describe themselves as "frozen at authoring frame" -- that
+    phrase means *this document will not be retrofitted*, not *this
+    document is historical*. Their reopen conditions are precisely the
+    part meant to stay live, and the blunt filter was skipping them:
+    SUBSTRATE-LOOP-CLOSURE's three tie-offs went unchecked because its
+    own header tripped the regex.
+
+    Date is the honest discriminator, as it is for index-coverage.
+    """
+    idx = root / "docs" / "CANONICAL-CORPUS-INDEX-2026-07.md"
+    if not idx.exists():
+        return []
+    listed = set(re.findall(r"\(((?:design/)?[A-Za-z0-9\-_.]+\.md)\)",
+                            idx.read_text(errors="replace")))
+    out = []
+    for rel in sorted(listed):
+        p = root / "docs" / rel
+        if not p.exists():
+            continue
+        m = re.search(r"^\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})",
+                      p.read_text(errors="replace"), re.M)
+        if m and m.group(1) >= INDEX_ESTABLISHED:
+            out.append(p)
+    return out
+
+def check_tieoff_reopen_conditions(docs, root):
+    """Stage 1t — a deferred or open tie-off must declare a way back.
+
+    IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md §Stage 1t: `reopen_condition`
+    is the load-bearing field. "Without it a tie-off is a prose bullet in
+    a document nobody re-reads." The four dispositions differ precisely
+    here -- `declined` and `limited` are terminal by design and need no
+    condition; `deferred` and `open` are claims that the branch will be
+    revisited, and a revisit claim with no stated trigger is a permanent
+    absence wearing a temporary label.
+
+    This is §III.19 applied to the corpus's own decisions: convert the
+    absence into a record. It is also the declaration layer the
+    CONNECTION-INTEGRITY-PROGRAM guardrail needs -- a tie-off cannot be
+    watched before it can be read.
+
+    Scoped to governed, non-frozen documents. Tier 3 is frozen at
+    authoring frame and its prose predates the convention.
+    """
+    disp = re.compile(r'\*(declined|deferred|open|limited)\.?\*', re.I)
+    for d in docs:
+        for n, line in enumerate(d.read_text(errors="replace").split("\n"), 1):
+            stripped = line.lstrip()
+            if not stripped.startswith(("-", "*", "|")):
+                continue
+            m = disp.search(line)
+            if not m or m.group(1).lower() not in ("deferred", "open"):
+                continue
+            disposition = m.group(1).capitalize()
+            has_cond = bool(re.search(r"reopen[ _]condition", line, re.I))
+            has_watch = bool(re.search(r"reopen[ _]watch", line, re.I))
+            if has_cond and has_watch:
+                continue
+            missing = []
+            if not has_cond:
+                missing.append("reopen condition")
+            if not has_watch:
+                missing.append("reopen watch")
+            finding("tie-off", d.relative_to(root) if str(d).startswith(str(root)) else d,
+                    f"tie-off marked *{disposition}* is missing "
+                    f"{' and '.join(missing)} — a revisit claim with no stated "
+                    f"trigger, or no way of noticing the trigger, is a permanent "
+                    f"absence wearing a temporary label "
+                    f"(IMPROVEMENT-LOOP-DISCIPLINE Stage 1t)", line=n)
+
 def check_index_coverage(docs, root):
     """SC6 — docs present but unindexed, and index entries pointing nowhere."""
     idx = root / "docs" / "CANONICAL-CORPUS-INDEX-2026-07.md"
@@ -304,6 +379,7 @@ def main():
     check_doc_crossrefs(gov, root)
     check_spec_citations(root)
     check_receipt_vocabulary(gov, registry)
+    check_tieoff_reopen_conditions(post_convention(root), root)
     check_index_coverage(gov, root)
 
     out = FINDINGS

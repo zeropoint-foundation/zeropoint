@@ -141,6 +141,39 @@ An improvement arc is a chain-anchored entity with a declared lifecycle. Each st
 
 **`reopen_condition` is the load-bearing field.** Without it a tie-off is a prose bullet in a document nobody re-reads — the corpus's current state. With it, the branch becomes a watched dependency. `reopen_watch` is what makes the watching systematic: a canary schedule that periodically evaluates the condition, or a chain event pattern that fires when it becomes true. A `deferred` or `open` tie-off with `reopen_watch: none` is itself a coherence finding — something was deferred with no path back.
 
+#### `reopen_watch` — the two tiers (amended 2026-07-26)
+
+Stage 1t declared `reopen_watch: "<canary schedule | chain_event_pattern | none>"` without saying what a watch may contain. Writing the runtime first would have decided that silently, so it is decided here.
+
+**A reopen condition is either a structured predicate or prose with a review cadence.** The four reopen conditions actually in the tree on 2026-07-26 split roughly evenly between the two, which is why neither form alone was adopted: *"P1 complete"* is mechanically checkable, *"any attempt to run the server off a machine other than its build host"* is detectable at runtime and would have caught the dossier defect the first time ZP started on ARTEMIS, while *"if the generator cannot reach a subsystem at all"* is judgment and always will be.
+
+| `watch` | Form | Who evaluates |
+|---|---|---|
+| `watched` | structured predicate | the canary, autonomously |
+| `reviewed` | prose + declared cadence | surfaced to the operator on schedule |
+| `none` | — | legal only for `declined` and `limited` |
+
+**The tier split is the authority boundary, not a convenience.** Evaluating a structured predicate is *applying* criteria; under `ZEP-self-referential-authorship-2026-07.md` §III.27's criteria-versus-inputs test that is not Class 3, so the canary — and eventually the Regent — may do it without operator ceremony. Judging whether prose has become true is *interpreting* criteria, which is Class 3-adjacent and stays with the operator. The mechanical question and the authority question have the same answer, and a condition's tier declares which one it is.
+
+**Predicate forms.** Deliberately four. Each is justified by a reopen condition that exists, not by anticipated need; adding a fifth requires a condition that needs it.
+
+- `receipt_exists(<prefix>)` — a matching receipt appears on chain
+- `artifact_exists(<path>)` — a declared artifact appears in the tree
+- `metric_threshold(<name>, <op>, <value>)` — a named substrate metric crosses a bound
+- `invariant_violated(<pin_or_check>)` — a discipline pin or runtime check fires
+
+**Escalation.** A satisfied watch does not reopen anything. `watched` predicate true emits `improvement:reopen:eligible <arc_id>`; an elapsed `reviewed` cadence emits `improvement:reopen:review_due <arc_id>`. Both make the arc *eligible for re-proposal against its original `arc_id`* — the decision to reopen remains an authored act, and per §Stage 1t a canary firing on a reopen condition "is not a miss and not a regression; it is the arc becoming live again."
+
+**Prose form**, for tie-offs recorded in documents rather than as receipts:
+
+```
+*Deferred.* <rationale> Reopen condition: <text>. Reopen watch: <predicate> | review:<cadence>
+```
+
+`corpus-lint check_tieoff_reopen_conditions` enforces that a `deferred` or `open` tie-off carries both fields. A terminal disposition needs neither.
+
+**Not yet built.** The canary evaluates chain-read visibility only (`crates/zp-server/src/canary.rs`, Tier 1); it cannot evaluate predicates. This amendment specifies the declaration layer so conditions become *readable* before they become *watchable* — a tie-off cannot be watched before it can be read. *Deferred.* Runtime predicate evaluation is a separate increment. Reopen condition: the canary runtime supports scheduled evaluation of a non-chain-read predicate. Reopen watch: `invariant_violated(canary_supports_predicates)`
+
 **Reopening is an arc event, not a new arc.** `improvement:proposed:<arc_id>` re-emitted against the same `arc_id` after a tie-off resumes the original arc, carrying its history. This preserves the reasoning trail: the second time a branch is proposed, the chain shows it was considered before, why it was set aside, and what changed. That is the precedent query working on the substrate's own design process rather than on its runtime behavior.
 
 **Scope.** This stage is for branches that cost something to rediscover — an alternative someone will otherwise re-propose, or a deferral gated on real evidence. It is deliberately **not** for non-goals. A non-goal is a boundary statement about what a component is, not a path through a decision; recording non-goals as tied-off arcs would turn the mechanism into a compliance ritual filled in mechanically, which is its principal failure mode.
