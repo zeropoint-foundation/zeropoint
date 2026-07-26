@@ -1,19 +1,19 @@
 {
-  "generated_from_commit": "bec2cf6",
+  "generated_from_commit": "af43c31",
   "governed_docs": 117,
   "totals": {
     "connections": 975,
-    "live": 285,
+    "live": 286,
     "tied_off": 41,
-    "defect": 649,
-    "maturity": 0.3344
+    "defect": 648,
+    "maturity": 0.3354
   },
   "by_kind": {
     "code_to_artifact/defect": 125,
     "code_to_artifact/live": 33,
     "code_to_corpus/live": 5,
-    "corpus_to_chain/defect": 500,
-    "corpus_to_chain/live": 64,
+    "corpus_to_chain/defect": 499,
+    "corpus_to_chain/live": 65,
     "corpus_to_code/defect": 20,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 125,
@@ -5567,9 +5567,9 @@
       "kind": "corpus_to_chain",
       "source": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md",
       "target": "regent:awareness:session_profile",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md"
     },
     {
@@ -7379,7 +7379,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-regent/src/awareness.rs:315"
+      "site": "crates/zp-regent/src/awareness.rs:341"
     },
     {
       "kind": "code_to_artifact",
@@ -8782,7 +8782,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "54 relevant files changed since it was written (19 commits)",
+      "note": "54 relevant files changed since it was written (21 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -8791,16 +8791,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "20 relevant files changed since it was written (8 commits)",
+      "note": "21 relevant files changed since it was written (10 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "5451e60",
+      "target": "af43c31",
       "status": "defect",
       "detector": null,
-      "note": "9 relevant files changed since it was written (3 commits), declared source 5451e60 dated 2026-07-26",
+      "note": "6 relevant files changed since it was written (1 commits), declared source af43c31 dated 2026-07-26",
       "site": "tools/connection-map/connections.json"
     }
   ]
