@@ -149,10 +149,30 @@ Deliberately first because C7 was the newest condition and the least theorised �
 
 *Exit:* met. The pin exists, the violation is enumerated, and the tie-off carries a reopen condition.
 
-### P1 — Enumerate from the seven sources
-Build `tools/connection-map/` that emits `connections.json` from the sources in §6. No new analysis; only collation of what the tree already knows. Every edge lands as Live, TiedOff, or Defect by the §4 rule, and the initial Defect count will be large — that number is the baseline, and a large one is the expected result, not a failure of the tool.
+### P1 — Enumerate from the sources — **shipped 2026-07-26**
+`tools/connection-map/` emits `connections.json`. Collation only; no new analysis.
 
-*Ships:* the generator plus its first output, committed so drift is diffable. *Exit:* a number for `|Defect|`.
+**First baseline, at commit `2a41453`:**
+
+| | count |
+|---|---|
+| declared connections | **969** |
+| live | 285 |
+| tied off | 41 |
+| **defect** | **643** |
+| maturity | **33.6%** |
+
+Where the defects are: 500 `corpus_to_chain` (receipt types documented with no implementing family), 125 `code_to_artifact` (runtime path resolution, nothing verifying the artifact is present or versioned), 18 `corpus_to_code` (a governed document naming an implementing module, which nothing checks — `check_spec_citations` walks code→doc only).
+
+Two-thirds of the substrate's declared connections are unclassified. That is the expected result and the point of measuring it.
+
+**§10's granularity question is resolved:** a connection is a *declared dependency at its declaration site*. The unit is not uniform across kinds and should not be — it is whatever unit the declaration itself uses. Cargo declares crate→crate; `//! Spec:` declares module→doc; a file-open site declares code→artifact at call-site granularity, because that is where the defect lives.
+
+This also settles the §9 alternative "extend graphify instead." graphify carries 126,231 nodes and 358,825 function-level links, none of which anyone *asserted* — so none can be an unhonoured assertion. Derived call-graph edges are out of scope by definition, not by convenience. Call-graph reachability is not connection integrity.
+
+**Two limits found on the first run, both recorded rather than papered over.** `code_to_artifact` overstates C7 because it does not separate operator-data reads (resolved through `zp_core::paths`, legitimately absent on first run) from substrate-artifact reads; and a tie-off recorded where a path is *constructed* does not attach to the site that *reads* it, so the dossier tie-off leaves the corresponding `read_dir` red. Both are owed to P2.
+
+*Exit:* met. `|Defect| = 643`.
 
 ### P2 — Detectors for the unhandled conditions
 In order of danger rather than ease.
@@ -194,6 +214,6 @@ Recorded as tie-offs per A6.
 
 ## 10. Open positions
 
-- **What is the unit of a connection?** §4 defines it structurally, but the granularity is unsettled — is `zp-regent → zp-audit` one edge or one per call site? Too coarse hides defects; too fine makes `|Defect|` meaningless. Resolution: P1's first run, empirically.
-- **Does a tie-off need operator signature?** Stage 1t is chain-anchored, but tying off a connection is a claim that an absence is deliberate, and P9 says the operator signs consequential acts. If every unclassified edge needs a signature, the ceremony cost may exceed the program's value. Resolution: P1's Defect count.
+- ~~**What is the unit of a connection?**~~ **Resolved 2026-07-26 by P1.** A declared dependency at its declaration site; the unit varies by kind and should. Derived edges are excluded — an edge nobody asserted cannot be an unhonoured assertion.
+- **Does a tie-off need operator signature?** Stage 1t is chain-anchored, but tying off a connection is a claim that an absence is deliberate, and P9 says the operator signs consequential acts. **P1 gives the number this was waiting on: 643.** Signing each individually is not viable at that volume. The live options are signing *classes* of tie-off rather than instances, or signing only where the tied-off edge crosses a trust boundary. Unresolved, and now the program's most consequential open question — if the Regent may eventually tie off her own defects, this is the gate.
 - **Is `|Defect| = 0` reachable, or asymptotic?** Every new subsystem adds edges faster than detectors get written. The program may describe a gradient rather than a destination — which would still be useful, but should be said plainly rather than discovered later.
