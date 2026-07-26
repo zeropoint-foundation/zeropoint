@@ -18,6 +18,11 @@ FINDINGS = []
 # properties of a corpus mid-construction, not defects in it.
 INFORMATIONAL = {"index-coverage", "receipt-coverage"}
 
+# The corpus index declares its own establishment date in its opening
+# line ("Established 2026-07-10"). Documents authored on or after it were
+# written under the convention and are expected to be indexed.
+INDEX_ESTABLISHED = "2026-07-10"
+
 def finding(check, path, msg, line=None):
     FINDINGS.append({"check": check, "path": str(path), "line": line, "msg": msg,
                      "kind": "measurement" if check in INFORMATIONAL else "defect"})
@@ -245,11 +250,37 @@ def check_index_coverage(docs, root):
     present = set(list(d.glob("*.md")) + list((d / "design").glob("*.md")))
     unlisted = [p for p in present if str(p.relative_to(d)) not in listed
                 and p.name != "CANONICAL-CORPUS-INDEX-2026-07.md"]
-    if unlisted:
-        finding("index-coverage", "docs/", 
-                f"{len(unlisted)} of {len(present)} documents in docs/ and docs/design "
-                f"are not listed in the index (pre-convention stratum; not a defect by "
-                f"itself — Tier 3 is frozen at authoring frame)")
+
+    # Partition by declared date against the index's own establishment
+    # date. Lumping the two together was itself a C4 defect per
+    # docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md §3 — the check
+    # ran, reported a number, and could not distinguish "deliberately
+    # frozen" from "someone forgot." Four documents from the 2026-07-25/26
+    # arc sat inside that number reading as pre-convention stratum.
+    #
+    # A document that declares a date on or after INDEX_ESTABLISHED was
+    # authored under the convention and is a defect if unindexed. One
+    # that predates it, or declares no date at all, stays a measurement —
+    # Tier 3 is frozen at authoring frame and is not retro-indexed.
+    post_convention, pre_convention = [], []
+    for p in unlisted:
+        m = re.search(r"^\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})",
+                      p.read_text(errors="replace"), re.M)
+        (post_convention if m and m.group(1) >= INDEX_ESTABLISHED
+         else pre_convention).append(p)
+
+    for p in sorted(post_convention):
+        finding("index-missing", str(p.relative_to(root)),
+                f"authored {INDEX_ESTABLISHED} or later and not listed in the "
+                f"corpus index — the index is the map; an unlisted document "
+                f"is unreachable by anyone navigating it")
+
+    if pre_convention:
+        finding("index-coverage", "docs/",
+                f"{len(pre_convention)} of {len(present)} documents in docs/ and "
+                f"docs/design are not listed in the index (pre-convention stratum "
+                f"or undated; not a defect by itself — Tier 3 is frozen at "
+                f"authoring frame)")
 
 # ── main ─────────────────────────────────────────────────────────────────────
 def main():

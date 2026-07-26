@@ -217,6 +217,19 @@ Outside-in framings that shape how substrate primitives compose to serve specifi
 
 - **[`zeropoint-overview-draft-2026-07.md`](zeropoint-overview-draft-2026-07.md)** — draft public thesis. Deferred per "us as sole audience, coherent project plan" directive. Will need substantive revision when public documentation resumes to reflect the substrate-form pivot.
 
+## Investigations and programs
+
+Current, load-bearing, and **not** canonical elaborations — each of these elaborates no KEEL section, and each says so in its own header. They audit correspondence between what the corpus claims and what the substrate does, or they specify a standing property and the work to establish it.
+
+Added 2026-07-26. The category existed before the section did: four documents had accumulated with no home, because Tier 2 requires elaborating a KEEL section and Tier 3 means *historical* — "predating the July 2026 KEEL declaration, or superseded by later work." A current document that elaborates nothing fits neither. They were unlisted rather than misfiled, which made them invisible to anyone navigating by the index.
+
+A document moves from here to Tier 3 when it is superseded, or when its findings have landed in Tier 1 or Tier 2 and the reasoning trail is all that remains.
+
+- **[`design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md`](design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md)** — Program. Names the eight observed ways a substrate connection goes unrealized (specified-not-built, built-not-wired, built-and-wired-not-known, wired-not-enforced, emitted-not-consumed, configured-not-honoured, loaded-not-versioned, declared-complete-not-integrated), each anchored to a defect actually found rather than imagined. Defines substrate maturity as **zero unclassified connections** rather than zero broken ones: every edge is Live (a detector would catch it breaking), TiedOff (declared absent with a `reopen_condition`, reusing IMPROVEMENT-LOOP-DISCIPLINE Stage 1t), or Defect — with no "known to work" status, since an edge that works and would break silently is a defect that has not fired yet. The connection inventory is *derivable* from seven sources already in the tree and is never hand-authored, because a hand-authored map would be the ninth variety of the same defect. Ships P0 rather than only planning it (`no_build_time_paths_at_runtime`). Generalizes SUBSTRATE-LOOP-CLOSURE from seven named edges to the whole substrate.
+- **[`design/SUBSTRATE-LOOP-CLOSURE-2026-07.md`](design/SUBSTRATE-LOOP-CLOSURE-2026-07.md)** — Investigation. The corpus describes the substrate as a closed cycle — specs govern code, code emits receipts, receipts materialize as ontology, officers and Regent read the ontology, Regent authors specs. Audits whether it closes. Three of seven edges are broken, and not independently: two cascades, not three faults. Names the corpus→cognition→corpus cycle as the one recursion the substrate has never bounded, because it had never been named. Re-prioritizes the Cartographer as the highest-leverage single absence — the only one that breaks two edges and manufactures a fragility the corpus explicitly denies (officers reading raw receipts while CLAUDE.md asserts they cannot).
+- **[`design/SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md`](design/SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md)** — Investigation. Correspondence between KEEL's declared invariants and the code that claims to implement them. §2 records a failed audit method as a finding in its own right: symbol-grepping for type names returned zeros and nearly produced a false claim that §II.17 and §II.18 were unimplemented, when the Cognitive Self-Observer is 1,754 lines. Code-to-spec via `//! Spec:` citation is the method that works; symbol matching is not.
+- **[`design/AUTHORING-DISCIPLINE-2026-07.md`](design/AUTHORING-DISCIPLINE-2026-07.md)** — Discipline. Eleven heuristics (A1–A11) for authoring corpus documents, written so the Regent can produce well-formed ADRs under the same constraints as any other author. A11 — distinguish specified from shipped — carries the method correction from the investigation above. Depends on E6 (corpus reaching Regent cognition) for its intended reader; until that edge closes it is scaffolding for operator and external agent, and says so in its own Delivery section.
+
 ## Tier 3 — Historical corpus
 
 Retained for reasoning trail. Not amended for corpus pivots. Read with the note that canonical claims live in Tier 1.
@@ -237,6 +250,8 @@ Retained for reasoning trail. Not amended for corpus pivots. Read with the note 
 **When a canonical claim changes**, amend KEEL and the affected Tier-2 elaborations. Update this index if the tier structure changes (new Tier-2 doc lands, existing doc reclassifies).
 
 **When a new elaboration lands**, add it to the appropriate Tier-2 group in this index with a one-line description of its scope and the KEEL section it elaborates.
+
+**When an investigation or program lands**, add it to *Investigations and programs* instead — it has no KEEL section to name, and that is the point of the category rather than a defect in the document. `corpus-lint index-missing` enforces this for anything declaring a date on or after 2026-07-10; a document that predates the index convention stays in the measurement and is not retro-indexed.
 
 **When a doc becomes historical**, move it to Tier 3 in this index. Its front matter should get a Historical-status header pointing at KEEL for canonical claims. Don't delete — freeze at authoring frame.
 
