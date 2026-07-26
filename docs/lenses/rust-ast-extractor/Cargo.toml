@@ -1,0 +1,29 @@
+[package]
+name = "zp-lens-ast-extractor"
+version = "0.1.0"
+edition = "2021"
+description = "AST-based extractor for docs/lenses/source-manifest.json"
+publish = false
+
+# Standalone crate — do NOT inherit the ZeroPoint workspace at the repo root.
+# The extractor is a build tool that lives inside the doc tree; it should
+# not appear as a workspace member or pull in workspace-wide lints/deps.
+[workspace]
+
+[[bin]]
+name = "zp-lens-ast-extractor"
+path = "src/main.rs"
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits", "visit"] }
+walkdir = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+indexmap = { version = "2", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+regex = "1"
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
