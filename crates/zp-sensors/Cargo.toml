@@ -28,8 +28,10 @@ thiserror = { workspace = true }
 # ~1ms per call on macOS. Cross-platform (macOS, Linux, FreeBSD).
 listeners = "0.6"
 
-# Low-level libc bindings for kqueue syscalls.
-[target.'cfg(any(target_os = "macos", target_os = "freebsd"))'.dependencies]
+# Low-level libc bindings for kqueue syscalls (macOS/FreeBSD) and for
+# UID→username resolution via getpwuid (also used on Linux — see
+# crates/zp-sensors/src/process.rs `enrich()`).
+[target.'cfg(any(target_os = "macos", target_os = "freebsd", target_os = "linux"))'.dependencies]
 libc = "0.2"
 
 [dev-dependencies]
