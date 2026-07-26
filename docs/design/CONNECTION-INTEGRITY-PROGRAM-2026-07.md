@@ -6,7 +6,7 @@
 
 **Motivation:** Ten commits landed in one session. Every defect they closed was work that already existed and was not connected to the thing that would have made it count. Not one was a missing feature.
 
-**Composes with:** `SUBSTRATE-LOOP-CLOSURE-2026-07.md` (the seven-edge audit this generalizes, and whose §6 declined the survey this program must not become), `AUTHORING-DISCIPLINE-2026-07.md` (A11 — distinguish specified from shipped), `IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md` (Stage 1t tie-offs, the mechanism for declared absence), `SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md` (§2, the audit method), `EMPIRICAL-PROGRAM-2026-07.md` (the four architectural claims this protects).
+**Composes with:** `SUBSTRATE-LOOP-CLOSURE-2026-07.md` (the seven-edge audit this generalizes, and whose §6 declined the survey this program must not become), `AUTHORING-DISCIPLINE-2026-07.md` (A11 — distinguish specified from shipped), `IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md` (Stage 1t tie-offs, the mechanism for declared absence), `ZEP-self-referential-authorship-2026-07.md` (III.27 — the class test that governs who may tie off), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (Phase 6 nested observer windows, the drift detector), `SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md` (§2, the audit method), `EMPIRICAL-PROGRAM-2026-07.md` (the four architectural claims this protects).
 
 ---
 
@@ -119,6 +119,39 @@ There is no fourth status, and specifically no "known to work." An edge that wor
 
 Stage 1t is load-bearing here and is reused rather than reinvented. The substrate already has a chain-anchored mechanism for declaring "this is deliberately not connected, and here is what would reopen it." The program needs no new ceremony. The first instance is in the tree: `crates/zp-server/src/regent.rs`, the dossier path, carrying a disposition and a reopen condition inline.
 
+### Who may tie off
+
+A tie-off is two objects that read as one. The **observation** — *nothing checks this edge* — is witnessed: `connection-map` derives it from the tree and anyone can reproduce it. The **disposition** — *and that is acceptable* — is asserted. Only the second carries authority, and an earlier draft of this program asked for ceremony on the first, which is ceremony for a measurement.
+
+The asserted half is already governed. **A tie-off changes what counts as a defect, which is criteria rather than inputs, so a Regent-authored tie-off is Class 3 under `ZEP-self-referential-authorship-2026-07.md` §III.27 — "material that changes what counts as a violation, or what an act is recognized as."** Class 3 is non-delegable: no operator grant confers Regent authorship of the criteria by which her own outputs are verified. She may propose; adoption is an operator act.
+
+**Authoring criteria is Class 3; applying them is not.** That distinction is III.27's own test and it is what makes the volume tractable. The operator adopts a tie-off policy once — that adoption is the Class 3 act, chain-anchored and attributed. The Regent applying that policy to classify an edge is applying criteria, not changing them, and drops to Class 1 or 2. A tie-off that cannot be derived from the policy is by definition a criteria change, returns to Class 3, and escalates. That is *act on precedent, escalate on novelty* derived structurally rather than asserted as a new rule.
+
+The reflexive case needs no carve-out. An edge terminating in the observation apparatus — the Cognitive Self-Observer, the `reopen_watch` canary, this program's own detectors — *is* criteria by the same test, and is therefore non-delegable already. The concern that the thing measuring might tie off the thing measuring it is answered by a rule that predates the concern.
+
+### The guardrail, and why it must precede the authority
+
+Per-act gating cannot catch the failure that matters here. A single bad tie-off is visible; what is not visible is the classification standard sliding across generations, because a tie-off's effect is to make something *stop being looked at*, and the evidence of the error is precisely the evidence that stops being collected. Self-modification that reduces observability is the one case where "the chain will show it" does not hold.
+
+Four mechanisms compose to cover it. Only one is built.
+
+| | Role | State |
+|---|---|---|
+| §III.27 Class 3 | gate — who may author criteria | **decided**, enforceable at ceremony today |
+| `connections.json` | external ground truth for coverage | **shipped** (P1) |
+| Phase 6 long window | cross-session drift detection | specified |
+| `reopen_watch` canary | per-tie-off liveness | specified — 0 code hits, 6 spec mentions |
+
+Two things about that table are load-bearing.
+
+**Observer windows alone are insufficient, and the program supplies what they lack.** `EXECUTION-AUTHORITY-MODEL` Phase 6 is explicit that "officers observe the *substrate*; the Regent observes *herself operating within the substrate*." Self-observation cannot detect drift in its own frame of reference. Metacognitive fidelity is defined as agreement between the substrate's claims about itself and the actual state *as measured externally* — and until P1 there was no external measure of coverage to calibrate against. `connections.json` is computed from the tree rather than from the Regent's perception, which makes it the calibration target that definition requires. P1 produced the guardrail's prerequisite as a side effect of producing the baseline.
+
+**A `reopen_condition` that never fires is currently silence, not a record.** That is a §III.19 violation sitting inside the mechanism meant to prevent exactly this class, and it is the difference between a tie-off that can expire and one that is permanent by omission.
+
+**Sequencing.** Three of four are specified-not-built, which is C1 — this program's largest defect class. Relying on unbuilt mechanisms to guard a self-modification path would be the program committing its own primary error. Phase 6 also carries its own prerequisite in the execution-authority model: stabilize the cycle, establish what normal looks like empirically, *then* add the windows, because "adding observation windows before normal behavior is characterized means observing noise."
+
+So the guardrail is built and baselined **before** the derivation authority is granted, not alongside it. Until then the Regent proposes tie-offs and the operator adopts each one — Class 3 behaving exactly as specified, and also the period that generates the precedent corpus any future policy would be written from.
+
 ## 5. What "fully mature" means
 
 Not zero broken connections. **Zero unclassified connections.**
@@ -226,6 +259,8 @@ Recorded as tie-offs per A6.
 ## 10. Open positions
 
 - ~~**What is the unit of a connection?**~~ **Resolved 2026-07-26 by P1.** A declared dependency at its declaration site; the unit varies by kind and should. Derived edges are excluded — an edge nobody asserted cannot be an unhonoured assertion.
-- **Does a tie-off need operator signature?** Stage 1t is chain-anchored, but tying off a connection is a claim that an absence is deliberate, and P9 says the operator signs consequential acts. **P1 gives the number this was waiting on: 643.** Signing each individually is not viable at that volume. The live options are signing *classes* of tie-off rather than instances, or signing only where the tied-off edge crosses a trust boundary. Unresolved, and now the program's most consequential open question — if the Regent may eventually tie off her own defects, this is the gate.
+- ~~**Does a tie-off need operator signature?**~~ **Resolved 2026-07-26 — see §4 "Who may tie off."** The question was malformed: it treated a tie-off as a single act needing ceremony, when it is a witnessed observation plus an asserted disposition, and only the second carries authority. That disposition was already governed — a tie-off changes criteria, so it is Class 3 under §III.27 and non-delegable. Authoring criteria is Class 3; applying operator-adopted criteria is not, which makes the volume tractable without inventing a ceremony class. The residual question is not authority but **sequencing**: the guardrail (Phase 6 long window, `reopen_watch` canary) is specified and unbuilt, so the derivation authority cannot be granted until it exists and has a baseline. Recorded as a constraint rather than an open position.
+
+- **What is a tie-off policy, concretely?** §4 establishes that the operator adopts one Class 3 policy from which conforming tie-offs derive. Its content is undefined. It needs at minimum an *exposure* notion — what becomes silently possible if this edge breaks unnoticed — since Stage 1t's four dispositions record why a branch was not taken and not what accepting it costs. Resolution: the precedent corpus accumulated while the operator adopts tie-offs individually.
 - **The taxonomy is incomplete by construction.** C9 was added hours after C1–C8 were declared, surfaced by a question rather than a detector. Nine conditions derived from twelve observed defects over two days is a floor, not a census. Expect C10 to arrive the same way — from something breaking in a shape no existing detector was built to see. A version of this program that claimed completeness would be asserting exactly the kind of unverified correspondence it exists to catch.
 - **Is `|Defect| = 0` reachable, or asymptotic?** Every new subsystem adds edges faster than detectors get written. The program may describe a gradient rather than a destination — which would still be useful, but should be said plainly rather than discovered later.
