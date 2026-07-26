@@ -535,6 +535,51 @@ pub struct SystemAwareness {
 
     /// Background tasks the Regent has spawned.
     pub active_tasks: Vec<BackgroundTaskStatus>,
+
+    /// Medium-window trends across recent cycles, when enough samples
+    /// exist. `None` on the first cycles of a session.
+    ///
+    /// Per `EXECUTION-AUTHORITY-MODEL-2026-07.md` Phase 6: the short
+    /// window is this snapshot; the medium window is rolling aggregation
+    /// across cycles, "where operational drift becomes visible."
+    #[serde(default)]
+    pub trends: Option<SystemTrends>,
+}
+
+/// Medium-window trends — Phase 6's rolling aggregation.
+///
+/// Deltas are computed oldest-to-newest across the retained window.
+/// Aggregation is deliberately simple statistics, not inference, per the
+/// phase's implementation note.
+///
+/// # What is missing, and why it is not invented here
+///
+/// Phase 6 names `latency_delta` and `accuracy_delta` alongside memory.
+/// Neither has a source: `SystemAwareness` carries no latency and no
+/// accuracy, and the only latency the Regent records lives in
+/// `evaluation.rs`, off the cognitive-cycle path entirely. Adding a
+/// field for either would be inventing a measurement rather than
+/// aggregating one. Recorded as a tie-off in the execution-authority
+/// model instead.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemTrends {
+    /// How many cycles the window covers.
+    pub samples: usize,
+
+    /// Change in memory usage fraction across the window
+    /// (newest − oldest). Positive means pressure is rising.
+    pub memory_usage_delta: f64,
+
+    /// True when memory usage rose at every step. A steady climb is a
+    /// different signal from a noisy one with the same endpoints, and
+    /// the endpoints alone cannot distinguish them.
+    pub memory_monotonic_rising: bool,
+
+    /// Change in the number of models resident in the inference backend.
+    pub loaded_model_delta: i64,
+
+    /// Change in the count of the Regent's own background tasks.
+    pub active_task_delta: i64,
 }
 
 /// System memory pressure — the Regent's view of available resources.

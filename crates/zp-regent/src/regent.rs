@@ -1294,6 +1294,53 @@ impl Regent {
             }
         }
 
+        // Medium-window trends — stewardship mode only.
+        //
+        // Phase 6's scope is the Regent observing "whether her own
+        // perception and action quality is changing." That is a
+        // stewardship concern; when the operator is mid-conversation,
+        // drift telemetry is exactly the noise the attention hierarchy
+        // above exists to suppress.
+        //
+        // This block is the trends' consumer. Without it the window
+        // would compute every cycle and be read by nothing — the
+        // emitted-not-consumed condition (C5) in
+        // CONNECTION-INTEGRITY-PROGRAM-2026-07.md §3, created on
+        // arrival by the change that added the measurement.
+        if context.pending_input.is_none() {
+            if let Some(t) = context
+                .system_awareness
+                .as_ref()
+                .and_then(|a| a.trends.as_ref())
+            {
+                let mut notes = Vec::new();
+                if t.memory_usage_delta.abs() >= 0.05 {
+                    notes.push(format!(
+                        "memory usage {} {:.0} points over {} cycles{}",
+                        if t.memory_usage_delta > 0.0 { "up" } else { "down" },
+                        t.memory_usage_delta.abs() * 100.0,
+                        t.samples,
+                        if t.memory_monotonic_rising { ", rising every cycle" } else { "" },
+                    ));
+                }
+                if t.loaded_model_delta != 0 {
+                    notes.push(format!("loaded models {:+}", t.loaded_model_delta));
+                }
+                if t.active_task_delta != 0 {
+                    notes.push(format!("your background tasks {:+}", t.active_task_delta));
+                }
+                if !notes.is_empty() {
+                    parts.push(format!(
+                        "TRENDS ({} cycles): {}.\n\
+                         These are observations, not instructions. Mention them only if \
+                         they bear on what you are doing.",
+                        t.samples,
+                        notes.join("; ")
+                    ));
+                }
+            }
+        }
+
         // Memory fragments.
         if !context.memory_fragments.is_empty() {
             let mems: Vec<String> = context

@@ -65,6 +65,29 @@ impl BackgroundTask {
 /// Lives in the loop runner's spawned task. Tracks idle time, manages
 /// background work, assembles SystemAwareness snapshots for the
 /// cognitive context.
+/// How many cycles the medium window retains.
+///
+/// Phase 6's own worked example is "over the last 20 cycles."
+const TREND_WINDOW: usize = 20;
+
+/// Below this many samples a delta is noise rather than drift, and the
+/// window reports nothing rather than reporting confidently from two
+/// points.
+const MIN_TREND_SAMPLES: usize = 3;
+
+/// One cycle's scalars, retained for trend computation.
+///
+/// Deliberately not a `SystemAwareness` — that type now carries the
+/// trends themselves, so retaining it would nest each window inside the
+/// next. It also allocates two `Vec`s per snapshot, which is real cost
+/// to hold twenty of for no gain.
+#[derive(Debug, Clone, Copy)]
+struct Sample {
+    usage_fraction: f64,
+    loaded_models: usize,
+    active_tasks: usize,
+}
+
 pub struct SystemMonitor {
     /// When the operator last sent input.
     last_operator_input: Instant,
@@ -72,6 +95,8 @@ pub struct SystemMonitor {
     tasks: Vec<BackgroundTask>,
     /// Reference to the inference backend for Ollama queries.
     inference: Arc<InferenceBackend>,
+    /// Medium window — rolling samples across recent cycles.
+    history: std::collections::VecDeque<Sample>,
 }
 
 impl SystemMonitor {
@@ -80,6 +105,7 @@ impl SystemMonitor {
             last_operator_input: Instant::now(),
             tasks: Vec::new(),
             inference,
+            history: std::collections::VecDeque::with_capacity(TREND_WINDOW),
         }
     }
 
@@ -135,12 +161,52 @@ impl SystemMonitor {
             .map(|t| t.status())
             .collect();
 
+        // Record this cycle before computing the window, so the trend
+        // includes the sample it is reported alongside.
+        self.history.push_back(Sample {
+            usage_fraction: memory.usage_fraction,
+            loaded_models: loaded_models.len(),
+            active_tasks: active_tasks.len(),
+        });
+        while self.history.len() > TREND_WINDOW {
+            self.history.pop_front();
+        }
+        let trends = self.compute_trends();
+
         SystemAwareness {
             idle_secs: self.idle_secs(),
             memory,
             loaded_models,
             active_tasks,
+            trends,
         }
+    }
+
+    /// Aggregate the medium window. `None` until enough samples exist.
+    ///
+    /// Simple statistics only — delta and monotonicity — per Phase 6's
+    /// implementation note that the aggregation "is simple statistics
+    /// (mean, delta, monotonicity), not inference."
+    fn compute_trends(&self) -> Option<crate::context::SystemTrends> {
+        if self.history.len() < MIN_TREND_SAMPLES {
+            return None;
+        }
+        let first = self.history.front()?;
+        let last = self.history.back()?;
+
+        let monotonic_rising = self
+            .history
+            .iter()
+            .zip(self.history.iter().skip(1))
+            .all(|(a, b)| b.usage_fraction >= a.usage_fraction);
+
+        Some(crate::context::SystemTrends {
+            samples: self.history.len(),
+            memory_usage_delta: last.usage_fraction - first.usage_fraction,
+            memory_monotonic_rising: monotonic_rising,
+            loaded_model_delta: last.loaded_models as i64 - first.loaded_models as i64,
+            active_task_delta: last.active_tasks as i64 - first.active_tasks as i64,
+        })
     }
 
     /// Create a new cancel flag for a background task.

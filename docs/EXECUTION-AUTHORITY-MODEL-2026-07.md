@@ -278,7 +278,17 @@ The scope is Regent-internal, not officer-level. Officers observe the *substrate
 
 **Prerequisites:** Stable baseline from empirical operation of the core cycle. Adding observation windows before normal behavior is characterized means observing noise. The right sequence: stabilize the cycle → establish what "normal" looks like empirically → add medium window to detect deviation from that baseline → add long window after enough sessions to compare.
 
-**Implementation shape:** The medium window is a `Vec<SystemAwareness>` ring buffer in the Regent struct, with a `compute_trends()` method that produces a `SystemTrends` struct (latency_delta, memory_delta, accuracy_delta) injected into the cognitive context alongside the raw snapshot. The long window is chain-read at startup + chain-write at shutdown. Both are lightweight — the aggregation is simple statistics (mean, delta, monotonicity), not inference.
+**Implementation shape:** The medium window is a `Vec<SystemAwareness>` ring buffer in the Regent struct, with a `compute_trends()` method that produces a `SystemTrends` struct (latency_delta, memory_delta, accuracy_delta) injected into the cognitive context alongside the raw snapshot.
+
+**Landed 2026-07-26, with two deviations recorded rather than smoothed over.**
+
+The ring buffer lives on `SystemMonitor` (`crates/zp-regent/src/awareness.rs`) rather than on `Regent`. `SystemMonitor::snapshot()` is where samples are produced and it already holds `&mut self` behind a mutex; putting the buffer on `Regent` — which receives snapshots as a parameter and never produces them — would have required threading state through `perceive()` to reach the same result. It retains a compact `Sample` rather than `SystemAwareness`, since that type now carries the trends themselves and retaining it would nest each window inside the next.
+
+`SystemTrends` ships `memory_usage_delta`, `memory_monotonic_rising`, `loaded_model_delta` and `active_task_delta`. **It does not ship `latency_delta` or `accuracy_delta`, because neither has a source.** `SystemAwareness` carries no latency and no accuracy; the only latency the Regent records lives in `evaluation.rs`, off the cognitive-cycle path. Adding fields for them would have been inventing measurements rather than aggregating them.
+
+- **Latency and accuracy in the medium window.** *Deferred.* Both are named in this phase's implementation shape and neither exists on the cycle path. Adding them means deciding what the Regent measures about herself per cycle — cycle wall-clock, inference round-trip, or routing-tier latency specifically — which is a measurement design, not a plumbing change, and the monotonicity of a metric nobody has characterized is not yet meaningful. Reopen condition: the medium window has accumulated enough sessions to show what memory drift looks like normally, giving a characterized baseline to add a second metric against. Reopen watch: `receipt_exists(regent:awareness:session_profile)` — the long window emitting at all means sessions are being profiled, which is the evidence this defers on.
+
+Consistent with this phase's own prerequisite: observation windows added before normal behavior is characterized observe noise. The window ships collecting, with no thresholds and no alerting. The long window is chain-read at startup + chain-write at shutdown. Both are lightweight — the aggregation is simple statistics (mean, delta, monotonicity), not inference.
 
 Connects to Cognitive Principle #6 (peer windows — the Regent's observer windows are their own peer windows for self-monitoring) and the balanced loop heuristic (each observation cycle is itself a smallest end-to-end test of the Regent's own operational health).
 
