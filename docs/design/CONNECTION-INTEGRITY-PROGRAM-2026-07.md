@@ -1,6 +1,6 @@
 # Connection Integrity Program
 
-**Document type:** Program. Not a Tier 2 canonical elaboration — it elaborates no KEEL section. It defines a standing property the substrate does not currently have, names the eight ways that property has been violated, and specifies the work to establish it. Tier 3 input; supersedes nothing.
+**Document type:** Program. Not a Tier 2 canonical elaboration — it elaborates no KEEL section. It defines a standing property the substrate does not currently have, names the nine ways that property has been violated, and specifies the work to establish it. Tier 3 input; supersedes nothing.
 
 **Date:** 2026-07-26.
 
@@ -16,7 +16,7 @@ The substrate's failures are not absences. They are **unrealized edges**: a depe
 
 This class is invisible to every instrument currently pointed at it. Nothing fails. Tests pass. The code compiles, the docs are internally consistent, the feature is present in the tree. The defect surfaces only when someone traverses the edge by hand and finds the far end.
 
-Eight distinct varieties have now been observed. Each is listed below with the defect that revealed it, because a taxonomy derived from anything other than observed failures is a guess with a table around it.
+Nine distinct varieties have now been observed. The ninth arrived while this document was being committed, which is the expected mode rather than an embarrassment — see §10. Each is listed below with the defect that revealed it, because a taxonomy derived from anything other than observed failures is a guess with a table around it.
 
 ## 2. Why the deliverable is not a map
 
@@ -90,9 +90,20 @@ A corpus artifact claims membership in a structure that does not include it.
 
 *Detector:* **Partial.** `corpus-lint check_doc_crossrefs` resolves references to sections that exist. It cannot catch a claim of membership that the referenced document does not corroborate.
 
+### C9 — Derived, not refreshed
+An artifact generated from a source is consumed as current, and nothing checks it still matches.
+
+*Evidence:* `graphify-out/graph.json` declared `built_at_commit = e29aef4`, dated **2026-05-17** — 106 commits and **184 changed `.rs` files** behind `HEAD` on 2026-07-26. `CLAUDE.md` instructs every session to read `graphify-out/GRAPH_REPORT.md` *before any source file*, calling it "your primary map of the codebase," with `graphify update .` prescribed one line below and nothing enforcing it. The directory is also gitignored with zero files tracked, so the map exists on one disk — and its manifest is keyed on `/Users/kenrom/projects/zeropoint/...` absolute paths, making it the same build-host-path shape as C7's dossier finding.
+
+Two further instances have a weaker defect: `docs/lenses/manifest.json` and `source-manifest.json` record `generated_at` wall-clock time rather than a source commit, so their freshness **cannot be checked against repo state at all**. That is a defect of declaration, not of age.
+
+The condition is not "old." A derived artifact is only as good as the correspondence it claims, and none of the four in the tree had that correspondence checked. This one was surfaced by the operator asking whether graphify was stale enough to be meaningless, which is worth recording: the detector existed nowhere, and the question was the instrument.
+
+*Detector:* **Shipped 2026-07-26** — `connection-map` `derived_artifact`. Compares each declaring artifact against the files changed since it was last written. Its first run flagged `connections.json`, the program's own P1 output, for being one commit behind with zero material change — which corrected the rule from *time passed* to *inputs changed*.
+
 ---
 
-**Three conditions have narrow detectors, one has a first slice, four have none.** The detection surface for this entire class of defect is one day old.
+**Three conditions have narrow detectors, two have first slices, four have none.** The detection surface for this entire class of defect is one day old.
 
 ## 4. The connection object
 
@@ -216,4 +227,5 @@ Recorded as tie-offs per A6.
 
 - ~~**What is the unit of a connection?**~~ **Resolved 2026-07-26 by P1.** A declared dependency at its declaration site; the unit varies by kind and should. Derived edges are excluded — an edge nobody asserted cannot be an unhonoured assertion.
 - **Does a tie-off need operator signature?** Stage 1t is chain-anchored, but tying off a connection is a claim that an absence is deliberate, and P9 says the operator signs consequential acts. **P1 gives the number this was waiting on: 643.** Signing each individually is not viable at that volume. The live options are signing *classes* of tie-off rather than instances, or signing only where the tied-off edge crosses a trust boundary. Unresolved, and now the program's most consequential open question — if the Regent may eventually tie off her own defects, this is the gate.
+- **The taxonomy is incomplete by construction.** C9 was added hours after C1–C8 were declared, surfaced by a question rather than a detector. Nine conditions derived from twelve observed defects over two days is a floor, not a census. Expect C10 to arrive the same way — from something breaking in a shape no existing detector was built to see. A version of this program that claimed completeness would be asserting exactly the kind of unverified correspondence it exists to catch.
 - **Is `|Defect| = 0` reachable, or asymptotic?** Every new subsystem adds edges faster than detectors get written. The program may describe a gradient rather than a destination — which would still be useful, but should be said plainly rather than discovered later.

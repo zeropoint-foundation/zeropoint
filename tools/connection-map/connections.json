@@ -1,12 +1,12 @@
 {
-  "generated_from_commit": "2a41453",
+  "generated_from_commit": "7f72c79",
   "governed_docs": 117,
   "totals": {
-    "connections": 969,
-    "live": 285,
+    "connections": 973,
+    "live": 286,
     "tied_off": 41,
-    "defect": 643,
-    "maturity": 0.3364
+    "defect": 646,
+    "maturity": 0.3361
   },
   "by_kind": {
     "code_to_artifact/defect": 125,
@@ -17,6 +17,8 @@
     "corpus_to_code/defect": 18,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 125,
+    "derived_artifact/defect": 3,
+    "derived_artifact/live": 1,
     "pin/live": 19,
     "pin_exception/tied_off": 41
   },
@@ -8747,6 +8749,42 @@
       "detector": "cargo test -p zp-discipline --no-fail-fast",
       "note": null,
       "site": "crates/zp-discipline/tests/verbs_must_match_schema.rs"
+    },
+    {
+      "kind": "derived_artifact",
+      "source": "graphify-out/graph.json",
+      "target": "untracked",
+      "status": "defect",
+      "detector": null,
+      "note": "derived artifact is not tracked in git; drift is undiffable",
+      "site": "graphify-out/graph.json"
+    },
+    {
+      "kind": "derived_artifact",
+      "source": "docs/lenses/manifest.json",
+      "target": "4cb9e4436932",
+      "status": "defect",
+      "detector": null,
+      "note": "52 relevant files changed since it was written (15 commits)",
+      "site": "docs/lenses/manifest.json"
+    },
+    {
+      "kind": "derived_artifact",
+      "source": "docs/lenses/source-manifest.json",
+      "target": "8a6c25ea2b31",
+      "status": "defect",
+      "detector": null,
+      "note": "13 relevant files changed since it was written (4 commits)",
+      "site": "docs/lenses/source-manifest.json"
+    },
+    {
+      "kind": "derived_artifact",
+      "source": "tools/connection-map/connections.json",
+      "target": "7f72c79",
+      "status": "live",
+      "detector": "connection-map derived_artifact",
+      "note": "no relevant inputs changed since it was written (0 commits ago)",
+      "site": "tools/connection-map/connections.json"
     }
   ]
 }

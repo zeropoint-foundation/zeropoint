@@ -30,6 +30,7 @@ There is deliberately no "works today" status.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -231,6 +232,110 @@ def collect_pin_tieoffs(root):
                  site=rel)
 
 
+# ── 8. derived artifact → the source state it was derived from ─────────
+# C9 (derived, not refreshed). A generated artifact declares the state it
+# came from; the connection is honoured only while that state still holds.
+#
+# Found 2026-07-26: graphify-out/graph.json declared
+# built_at_commit=e29aef4 (2026-05-17) against a HEAD 106 commits and 184
+# changed .rs files later -- while CLAUDE.md instructs every session to
+# read it *before* any source file, as "your primary map of the
+# codebase." The refresh instruction exists one line below and nothing
+# enforces it.
+#
+# An artifact recording wall-clock time instead of a source commit cannot
+# be checked against repo state at all. That is a weaker declaration, and
+# it lands as a defect for that reason rather than for being old.
+COMMIT_KEYS = ("built_at_commit", "generated_from_commit", "source_commit")
+TIME_KEYS = ("generated_at", "built_at", "timestamp")
+DERIVED_SCAN = ("graphify-out", "docs/lenses", "tools")
+
+
+def collect_derived_artifacts(root):
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                              capture_output=True, text=True).stdout.strip()
+    except Exception:
+        drop("git unavailable", "derived-artifact freshness unchecked")
+        return
+
+    for scan in DERIVED_SCAN:
+        base = root / scan
+        if not base.is_dir():
+            continue
+        # Prune during the walk, not after. rglob descends the whole
+        # tree first, and docs/lenses/rust-ast-extractor/target/ is 116MB
+        # of build output -- enough to blow a 45s budget on its own.
+        candidates = []
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d not in (
+                "target", "node_modules", ".git", "cache", ".venv", "venv",
+                "site-packages", "dist", "build", "__pycache__")]
+            candidates += [Path(dirpath) / f for f in filenames if f.endswith(".json")]
+        for jf in sorted(candidates):
+            try:
+                data = json.loads(jf.read_text(errors="replace"))
+            except Exception:
+                continue
+            if not isinstance(data, dict):
+                continue
+            rel = str(jf.relative_to(root))
+
+            declared = next((str(data[k]) for k in COMMIT_KEYS if k in data), None)
+            stamp = next((k for k in TIME_KEYS if k in data), None)
+            if not declared and not stamp:
+                continue    # not a derived artifact; it declares no provenance
+
+            # Reference point is the commit that last *wrote* the
+            # artifact, not the commit it declares. A self-regenerating
+            # artifact always trails its own declared commit by one, and
+            # judging on commit distance alone marks it stale the moment
+            # anything lands after it -- caught on this detector's first
+            # run against its own output. Staleness follows from inputs
+            # changing, not from time passing.
+            last = subprocess.run(
+                ["git", "log", "-1", "--format=%H", "--", rel],
+                cwd=root, capture_output=True, text=True).stdout.strip()
+            if not last:
+                edge("derived_artifact", rel, "untracked", "defect",
+                     note="derived artifact is not tracked in git; drift is undiffable",
+                     site=rel)
+                continue
+
+            changed = [f for f in subprocess.run(
+                ["git", "diff", "--name-only", f"{last}..HEAD"],
+                cwd=root, capture_output=True, text=True).stdout.split()
+                if f.endswith((".rs", ".md", ".toml", ".py"))
+                and not f.startswith(("graphify-out/", "tools/connection-map/"))]
+
+            behind = subprocess.run(["git", "rev-list", "--count", f"{last}..HEAD"],
+                                    cwd=root, capture_output=True, text=True).stdout.strip()
+
+            if not changed:
+                edge("derived_artifact", rel, declared or last[:12], "live",
+                     detector="connection-map derived_artifact",
+                     note=f"no relevant inputs changed since it was written ({behind} commits ago)",
+                     site=rel)
+            else:
+                age = ""
+                if declared:
+                    d = subprocess.run(["git", "show", "-s", "--format=%cs", declared],
+                                       cwd=root, capture_output=True, text=True)
+                    if d.returncode == 0 and d.stdout.strip():
+                        age = f", declared source {declared[:12]} dated {d.stdout.strip()}"
+                edge("derived_artifact", rel, declared or last[:12], "defect",
+                     note=(f"{len(changed)} relevant files changed since it was "
+                           f"written ({behind} commits){age}"),
+                     site=rel)
+            continue
+
+            if stamp:
+                edge("derived_artifact", rel, f"{stamp}={data[stamp]}", "defect",
+                     note=("records wall-clock time, not a source commit -- "
+                           "freshness cannot be checked against repo state"),
+                     site=rel)
+
+
 # ── governed docs (mirrors corpus-lint's definition) ────────────────────
 FROZEN = re.compile(r"Tier 3 historical|Status:\W{0,4}Historical|—\s*SUPERSEDED|"
                     r"This document is superseded|frozen at authoring frame",
@@ -285,6 +390,7 @@ def main():
     collect_receipts(root, gov)
     collect_artifact_reads(root)
     collect_pin_tieoffs(root)
+    collect_derived_artifacts(root)
 
     by_status = Counter(e["status"] for e in EDGES)
     by_kind = Counter((e["kind"], e["status"]) for e in EDGES)

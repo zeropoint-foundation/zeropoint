@@ -39,6 +39,9 @@ There is deliberately no "works today." An edge that works and would break silen
 | `corpus_to_chain` | receipt strings in governed docs | `corpus-lint check_receipt_vocabulary` |
 | `code_to_artifact` | `include_str!` / `read_to_string` / `File::open` / `read_dir` | `rustc` for compile-time embeds only |
 | `pin` / `pin_exception` | `crates/zp-discipline/tests/*.rs` | `cargo test -p zp-discipline --no-fail-fast` |
+| `derived_artifact` | JSON declaring `built_at_commit` / `generated_from_commit` / `generated_at` | this tool |
+
+A derived artifact is judged by whether its **inputs changed**, not by how many commits passed — measured from the commit that last wrote the artifact, not the one it declares. A self-regenerating artifact always trails its own declared commit by one, and judging on distance alone marks it stale the instant anything lands after it. That was caught on this detector's first run against its own output. A file is only considered a derived artifact if it declares provenance; without that guard every `package.json` in the tree qualifies, which was the run before.
 
 Tier 3 and superseded documents are excluded from claim checks and the count is reported, not silently dropped. Their claims predate the conventions, and flagging them reports the corpus's age as a defect — the same error `corpus-lint`'s `frozen()` exists to avoid. The two definitions are deliberate mirrors and must not drift.
 
