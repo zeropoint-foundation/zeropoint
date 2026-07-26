@@ -1542,7 +1542,26 @@ pub async fn spawn_regent(
 
     // Load model dossier corpus — the router's evidence base.
     // Reads models/*/model_dossier.toml from the source tree.
-    let models_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    //
+    // TIE-OFF (Stage 1t, 2026-07-26) — disposition: deferred.
+    // This resolves the dossier corpus from CARGO_MANIFEST_DIR, which is
+    // the *build host's* path. On any machine other than the one that
+    // compiled the binary the read fails, load_from_dir warns and returns
+    // an empty corpus, and every routing decision silently falls through
+    // to route_from_config. ARTEMIS has therefore never exercised
+    // dossier-based routing. The `.unwrap_or_else` below is dead code:
+    // `.parent().parent()` cannot return None for a valid manifest dir.
+    //
+    // Not fixed here because where the dossier corpus should live at
+    // runtime is an architecture decision, not a substitution — the
+    // candidates (zp_core::paths data root, a config field, ZP_SOURCE_DIR)
+    // differ in how they behave across Substrate Forms, and Sovereign Form
+    // ships a built OS with no source tree at all.
+    //
+    // Reopen condition: the Substrate Form question is decided, OR any
+    // attempt to run the server off a machine other than its build host.
+    // See docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md §3 C7.
+    let models_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")) // BUILD-PATH-TIEOFF: see above
         .parent()
         .and_then(|p| p.parent())
         .map(|root| root.join("models"))
