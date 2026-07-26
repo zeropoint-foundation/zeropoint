@@ -1,12 +1,12 @@
 {
-  "generated_from_commit": "7f72c79",
+  "generated_from_commit": "bec2cf6",
   "governed_docs": 117,
   "totals": {
-    "connections": 973,
-    "live": 286,
+    "connections": 975,
+    "live": 285,
     "tied_off": 41,
-    "defect": 646,
-    "maturity": 0.3361
+    "defect": 649,
+    "maturity": 0.3344
   },
   "by_kind": {
     "code_to_artifact/defect": 125,
@@ -14,11 +14,10 @@
     "code_to_corpus/live": 5,
     "corpus_to_chain/defect": 500,
     "corpus_to_chain/live": 64,
-    "corpus_to_code/defect": 18,
+    "corpus_to_code/defect": 20,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 125,
-    "derived_artifact/defect": 3,
-    "derived_artifact/live": 1,
+    "derived_artifact/defect": 4,
     "pin/live": 19,
     "pin_exception/tied_off": 41
   },
@@ -1201,6 +1200,15 @@
     },
     {
       "kind": "corpus_to_code",
+      "source": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md",
+      "target": "crates/zp-regent/src/awareness.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
       "source": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md",
       "target": "crates/zp-regent/src/error.rs",
       "status": "defect",
@@ -1261,6 +1269,15 @@
       "detector": null,
       "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
       "site": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md",
+      "target": "crates/zp-server/src/canary.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
@@ -7362,7 +7379,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-regent/src/awareness.rs:249"
+      "site": "crates/zp-regent/src/awareness.rs:315"
     },
     {
       "kind": "code_to_artifact",
@@ -8765,7 +8782,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "52 relevant files changed since it was written (15 commits)",
+      "note": "54 relevant files changed since it was written (19 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -8774,16 +8791,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "13 relevant files changed since it was written (4 commits)",
+      "note": "20 relevant files changed since it was written (8 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "7f72c79",
-      "status": "live",
-      "detector": "connection-map derived_artifact",
-      "note": "no relevant inputs changed since it was written (0 commits ago)",
+      "target": "5451e60",
+      "status": "defect",
+      "detector": null,
+      "note": "9 relevant files changed since it was written (3 commits), declared source 5451e60 dated 2026-07-26",
       "site": "tools/connection-map/connections.json"
     }
   ]
