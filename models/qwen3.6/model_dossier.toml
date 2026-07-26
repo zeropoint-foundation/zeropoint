@@ -1,0 +1,257 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  MODEL DOSSIER: qwen3.6                                       ║
+# ║  Everything the substrate knows before trusting this model.     ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# Last updated: 2026-07-06
+# Status: PRE-CHARACTERIZATION — researched, not yet bench-tested for regent use.
+# The 35b-a3b MoE variant is already deployed for officer escalation.
+# The 27b dense variant is the candidate for regent reasoning upgrade.
+
+# ── Identity ────────────────────────────────────────────────────────
+
+[identity]
+family = "qwen3.6"
+provider = "Alibaba Cloud / Qwen Team"
+variants_available = ["qwen3.6:27b", "qwen3.6:27b-mlx", "qwen3.6:35b-a3b", "qwen3.6:27b-q4_K_M", "qwen3.6:27b-q8_0"]
+variant_primary = "qwen3.6:27b-mlx"
+architecture = "decoder-only transformer, dense (27b) and MoE (35b-a3b)"
+license = "Apache 2.0"
+context_window = 262_144              # 256K native, extensible to 1M+
+release_date = "2026"
+
+[identity.parameters]
+"qwen3.6:27b" = "27B dense"
+"qwen3.6:27b-mlx" = "27B dense, MLX-optimized for Apple Silicon"
+"qwen3.6:35b-a3b" = "35B MoE, ~3B active parameters per token"
+
+# ── Strengths (Researched) ──────────────────────────────────────────
+
+[strengths]
+
+reasoning = """
+Flagship of the Qwen3.6 family. 77.2% SWE-bench — highest among
+models runnable on consumer hardware. Handles repository-level
+reasoning and multi-file understanding. Significant upgrade over
+qwen3:8b for complex cognitive tasks."""
+
+tool_calling = """
+Native tool calling support. Produces valid tool-call JSON when
+think: false is passed. All quantized variants reportedly maintain
+tool-call JSON validity. This is critical for regent Phase 1
+(IntentExecutor + gate dispatch)."""
+
+instruction_following = """
+Described as prioritizing 'stability and real-world utility' over
+the 3.5 series. More intuitive and responsive. Same family as
+qwen3:8b so prompt patterns should transfer, but with substantially
+more reasoning depth at 27B."""
+
+context_handling = """
+262K native context window, extensible to 1M+. Far exceeds the
+regent's current 8K recommended context. Opens the possibility
+of feeding significantly more chain history and officer findings
+per cognitive cycle."""
+
+family_continuity = """
+Same model family as the current production roster (qwen3:8b for
+reasoning, qwen3:1.7b for routing, qwen3.6:35b-a3b for officer
+escalation). Prompt compatibility is expected to be high, reducing
+integration risk. The model-prompt coupling invariant favors
+in-family upgrades."""
+
+# ── Quirks (Researched) ────────────────────────────────────────────
+
+[quirks]
+
+[quirks.thinks_by_default]
+severity = "informational"
+description = """
+Qwen3.6 thinks by default — chain-of-thought reasoning is emitted
+unless explicitly suppressed. For the regent's structured intent
+envelope, thinking must be disabled via think: false in Ollama
+options. The model respects this cleanly per community reports."""
+mitigation = "Set think: false in Ollama inference options for structured output tasks."
+
+[quirks.ollama_thinking_hook_bypass]
+severity = "caution"
+description = """
+Ollama 0.24 reportedly ignores the disable-thinking hook for Qwen3
+family and keeps streaming reasoning chunks. These decode at full
+model rate. If this affects Qwen3.6, thinking suppression via
+Ollama options may not work as expected. Needs empirical validation."""
+mitigation = "Test think: false behavior empirically during bench. If Ollama ignores it, test /no_think token in user message as fallback."
+
+[quirks.mlx_performance_plateau]
+severity = "informational"
+description = """
+Community benchmarks show MLX advantage collapses at 27B+ where
+memory bandwidth saturates. The 20-87% MLX speedup seen at <14B
+may not apply. Expect performance closer to standard GGUF inference.
+Still, the MLX variant should match or slightly exceed non-MLX."""
+mitigation = "Bench both qwen3.6:27b-mlx and qwen3.6:27b to determine if MLX variant is worth the specificity."
+
+[quirks.coding_focus]
+severity = "informational"
+description = """
+Qwen3.6 is described as 'flagship coding in a 27B dense package.'
+The training emphasis on coding may or may not translate to the
+regent's needs (governance reasoning, operator communication,
+chain interpretation). Coding skill correlates with structured
+output quality but not necessarily with persona maintenance or
+conversational nuance."""
+mitigation = "Test conversational and identity-related prompts specifically, not just JSON compliance."
+
+# ── Prompt Compatibility (Pre-Test Hypotheses) ──────────────────────
+
+[prompt_compatibility]
+
+[prompt_compatibility.unified_system]
+status = "untested"
+hypothesis = """
+HIGH probability of compatibility. Same family as qwen3:8b which
+validates cleanly. 27B should handle the JSON envelope constraint
+at least as well as 8B. The sovereign_line injection should work
+identically. Key test: does the model connect 'You serve operator
+kenrom' with 'who am I?' — the question qwen3:8b fails."""
+
+[prompt_compatibility.routing]
+status = "untested"
+hypothesis = """
+Likely overkill for routing. 27B is much larger than needed for
+intent classification. May be worth testing but qwen3:1.7b is
+already fast and accurate for routing. No reason to change."""
+
+[prompt_compatibility.compose]
+status = "untested"
+hypothesis = """
+This is where 27B should shine over 8B. Longer, more coherent
+composed responses. Better persona maintenance. More nuanced
+operator communication. The primary target for bench testing."""
+
+[prompt_compatibility.officer_classification]
+status = "partially_validated"
+hypothesis = """
+The 35b-a3b MoE variant is already deployed for officer escalation
+(trajectory boundary, 1.00 accuracy). The 27b dense variant should
+perform at least as well on classification tasks, but gemma4 is
+faster and already deployed for fast-path — no reason to replace."""
+
+# ── Inference Configuration (Pre-Test) ──────────────────────────────
+
+[inference]
+
+[inference.ollama]
+think = false                    # suppress for structured output
+format_json = true               # use native format parameter
+temperature = 0.0                # deterministic for intent classification
+context_window = 262_144         # model maximum
+recommended_context = 16_384     # start conservative, expand with testing
+
+[inference.performance]
+# ESTIMATED — not yet measured on APOLLO.
+# Community reports ~55 tok/s for the 35b-a3b MoE on Apple Silicon.
+# The 27b dense should be comparable or slightly faster.
+estimated_tokens_per_sec = 50    # conservative estimate for 27b-mlx
+estimated_latency_classify = 0.5 # seconds, with format parameter
+estimated_latency_compose = 3.0  # seconds, longer composition
+
+# ── Bench Results ───────────────────────────────────────────────────
+
+[bench]
+# EMPTY — awaiting bench run against regent prompt templates.
+# The 35b-a3b variant has officer bench results in officer-inference.toml
+# but the 27b dense has not been tested for regent use.
+date = "pending"
+script = "scripts/bench-local-models.py"
+
+# Regent-specific bench tasks (not officer tasks):
+# 1. sovereign_identity — "Do you know who I am?" with sovereign_line in system prompt
+# 2. intent_classify — unified_system.md prompt, JSON envelope output
+# 3. multi_step_reasoning — multi-turn cognitive task (Phase 1 preview)
+# 4. composition_quality — compose.md prompt, assess depth and coherence
+# 5. context_dump_resistance — feed full cognitive context, verify no dump
+
+# ── Tier Recommendations (Pre-Test) ────────────────────────────────
+
+[tiers]
+
+[tiers.routing]
+variant = "qwen3.6:27b-mlx"
+suitability = "not_recommended"
+notes = "Overkill. qwen3:1.7b handles routing at 120 tok/s."
+
+[tiers.reasoning]
+variant = "qwen3.6:27b-mlx"
+suitability = "candidate"
+notes = """
+PRIMARY CANDIDATE for regent reasoning upgrade. Same family as
+current production model, 3.4x parameter count. Expected to
+resolve the sovereign identity gap and provide substantially
+deeper reasoning for Phase 1 multi-step tasks."""
+
+[tiers.officer]
+variant = "qwen3.6:35b-a3b"
+suitability = "deployed"
+notes = """
+Already deployed for officer escalation (trajectory boundary).
+1.00 accuracy, 22.3s latency with think mode. See officer-inference.toml."""
+
+# ── Deployment Status ───────────────────────────────────────────────
+
+[deployment]
+active_tiers = ["officer_escalation"]  # 35b-a3b variant only
+chain_validated = false
+last_empirical_test = "pending"
+candidate_tiers = ["reasoning"]        # 27b-mlx awaiting bench
+
+# ── Research Notes ──────────────────────────────────────────────────
+
+[research]
+
+[research.architecture]
+notes = """
+Qwen3.6 is positioned as the first open-weight variant after the
+Qwen3.5 series. The 27B dense variant uses the same GQA + RoPE +
+SwiGLU architecture as earlier Qwen models but with significant
+training improvements focused on coding and agentic workflows.
+The MoE variant (35b-a3b) uses sigmoid gating. Both support
+sliding-window attention patterns."""
+
+[research.community]
+notes = """
+Community describes Qwen3.6 as the best overall model on consumer
+hardware (77.2% SWE-bench, Apache 2.0, fits in 24GB at Q4).
+Strong endorsements for agentic coding. Less community data on
+general conversation quality, persona maintenance, or governance
+reasoning — these are substrate-specific needs that require our
+own bench."""
+
+[research.integration_risk]
+notes = """
+LOWEST RISK candidate. Same family means:
+- /no_think token works (if needed)
+- JSON output patterns match qwen3:8b
+- Ollama options (think, format) behave identically
+- System prompt structure carries over
+- Prompt resolution hierarchy (prompts/qwen3.6/ → prompts/base/)
+  may not even need model-specific prompts if base works
+
+The primary unknown is whether 27B resolves the sovereign identity
+gap that 8B exhibits, or whether that's a prompt issue independent
+of model scale."""
+
+[research.comparison_to_current]
+notes = """
+vs qwen3:8b (current regent reasoning):
+  - 3.4x parameters
+  - 262K vs 32K context window
+  - Expected: deeper reasoning, better persona, richer composition
+  - Expected: slower (50 vs 45 tok/s estimate)
+  - Risk: minimal — same family, same prompt patterns
+
+vs gemma4:26b-mlx (officer fast-path):
+  - Similar parameter count (27B vs 26B)
+  - Qwen family has proven JSON compliance for regent use
+  - gemma4 has the context-dump failure mode that blocks it from regent
+  - If qwen3.6:27b works for regent, no reason to try gemma4 again"""

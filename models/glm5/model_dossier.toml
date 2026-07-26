@@ -1,0 +1,385 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  MODEL DOSSIER: glm5 (GLM-5.2)                                ║
+# ║  Everything the substrate knows before trusting this model.     ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# Last updated: 2026-07-26
+# Characterized by: kenrom (empirical, live substrate test), web research
+#
+# Provenance: fields carry an `origin` marker where the grade of evidence
+# is not obvious. `measured` = observed from the substrate. `researched` =
+# published documentation or vendor guidance, not yet reproduced here.
+# `inherited` = carried over from another dossier's default and never
+# characterized for this model. A researched field is a starting point,
+# not a finding; the evaluation battery is what converts it.
+# NOTE: First cloud-only model dossier. No local variant exists.
+
+# ── Identity ────────────────────────────────────────────────────────
+
+[identity]
+family = "glm5"
+provider = "Z.ai (Zhipu AI)"
+variants_tested = ["zai-org/GLM-5.2"]
+variant_primary = "zai-org/GLM-5.2"
+architecture = "decoder-only transformer, Mixture-of-Experts (753B total, 40B active per token)"
+license = "MIT"
+release_date = "2026-06-13"
+
+[identity.parameters]
+"zai-org/GLM-5.2" = "753B MoE (40B active)"
+
+[identity.cloud]
+# Cloud-only model — not available for local inference via Ollama.
+# Accessed through Abacus RouteLLM or Z.ai first-party API.
+providers = ["abacus", "z.ai", "openrouter", "nvidia-nim"]
+abacus_model_id = "zai-org/GLM-5.2"
+first_party_pricing = { input_per_1m = 1.40, output_per_1m = 4.40, cached_per_1m = 0.26 }
+
+# ── Strengths ───────────────────────────────────────────────────────
+
+[strengths]
+
+instruction_following = """
+Strong. Live substrate test (2026-07-12) showed GLM-5.2 correctly
+interpreting the unified_system.md prompt: read chain state,
+interpreted Sentinel findings, identified cycling cadence in
+officer emissions, offered to investigate. No context dumps,
+no prompt interpretation failure. Instruction following benchmarks
+(IFEval) reported as strong in published evaluations."""
+
+structured_output = """
+Supports structured outputs and JSON schema validation natively.
+Published as a key capability. Not yet tested against the substrate's
+constrained JSON intent envelope — live test used free-form response
+within the unified prompt's JSON contract, which succeeded."""
+
+coding = """
+Strongest open-weight coding model as of June 2026. Competitive
+with Claude Opus 4.8 on long-horizon coding benchmarks. Purpose-built
+for agentic coding and tool-driven workloads. Relevant to future
+substrate self-improvement (Phase 5 — Regent reads own source)."""
+
+context_window = """
+1,048,576 tokens (1M). Largest context window in the dossier corpus.
+Output up to 131,072 tokens. IndexShare architecture reuses indexer
+across sparse attention layers, cutting per-token compute ~2.9x at
+full context length. Relevant for deep chain analysis tasks."""
+
+reasoning = """
+Two reasoning effort levels: high and max. Supports extended thinking
+for complex problems. Not yet tested against substrate reasoning
+tasks — first test was conversational, not reasoning-intensive."""
+
+# ── Quirks ──────────────────────────────────────────────────────────
+
+[quirks]
+
+[quirks.cloud_only]
+severity = "informational"
+description = """
+No local variant exists. 753B MoE cannot run on APOLLO (64GB).
+All inference requires network access and API authentication.
+Fallback to local Ollama is structurally guaranteed to use a
+different model family."""
+mitigation = "Fallback mechanism already handles this — cloud failure degrades to local qwen3."
+
+[quirks.moe_latency]
+severity = "informational"
+description = """
+40B active parameters per token is comparable to a dense 40B model
+for inference speed, but MoE routing adds overhead. Latency
+characteristics not yet measured from the substrate's perspective.
+First live test showed acceptable conversational response time
+but no precise measurement was taken."""
+mitigation = "Measure latency empirically during evaluation battery."
+
+[quirks.thinking_mode]
+severity = "blocking"
+origin = "researched"          # published API docs, 2026-07-26 — not substrate-measured
+description = """
+RESOLVED 2026-07-26 (research, not measurement). The open question is
+answered and the answer is a blocker, not a caution.
+
+GLM-5.2's OpenAI-compatible surface controls thinking through two
+parameters passed via `extra_body`:
+  extra_body.thinking      = {"type": "enabled"} | {"type": "disabled"}
+  extra_body.reasoning_effort = "high" | "max"   (only when enabled)
+Reasoning tokens are returned in a separate `reasoning_content` field
+on the message/delta, not in `content`.
+
+The substrate cannot send either parameter. `chat_openai` in
+crates/zp-regent/src/inference.rs builds a body containing exactly
+model, messages, temperature, stream, and an optional response_format —
+there is no extra_body or per-provider passthrough. So GLM-5.2 would
+run at its default thinking setting, and the response parser reads only
+choices[0].message.content, discarding `reasoning_content` entirely.
+
+Consequence: every compose call generates reasoning tokens that are
+billed at the output rate ($4.40/1M), add latency, and are then thrown
+away unread. This is a cost and latency defect, not a correctness one —
+the prose still arrives — which is why it would not surface as a failed
+test."""
+mitigation = """
+Add a per-provider request-extras passthrough to chat_openai before
+deploying GLM-5.2 on the compose tier. Until then the model is usable
+but pays for discarded reasoning on every call."""
+
+[quirks.prompt_compatibility_shallow]
+severity = "caution"
+description = """
+Prompt compatibility validated via ONE live conversational test
+(2026-07-12). The model correctly handled the unified_system prompt
+and produced a coherent, contextual response. However: parameterized
+tool dispatch, JSON intent envelope parsing, few-shot routing,
+adversarial probes, and context-window stress tests have NOT been run.
+Current validation is shallow — sufficient for 'viable' tier
+recommendation, not for 'recommended.'"""
+mitigation = "Run full evaluation battery before promoting to recommended tier."
+
+# ── Prompt Compatibility ────────────────────────────────────────────
+
+[prompt_compatibility]
+
+[prompt_compatibility.unified_system]
+status = "validated_shallow"
+notes = """
+Single live test (2026-07-12): GLM-5.2 received the full unified_system
+prompt with chain context, officer findings, sovereign identity, and
+operator input. Produced a coherent response: identified Sentinel
+cascade pattern, reported governance_posture via tool call, offered
+to investigate. No context dump, no prompt interpretation failure.
+Shallow validation — not yet tested with adversarial inputs, edge
+cases, or high-context-load scenarios."""
+
+[prompt_compatibility.routing]
+status = "untested"
+notes = """
+Not tested for intent routing (classification). Currently using
+claude-sonnet-4-6 for routing tier alongside GLM-5.2 for reasoning.
+Testing GLM-5.2 as a router would require the two-tier prompt path."""
+
+[prompt_compatibility.compose]
+status = "untested"
+notes = """
+Not tested with compose-specific prompts, and the target moved:
+prompts/compose.md was rewritten 2026-07-26 (task restated at both
+prompt boundaries, persona demoted to a VOICE section, new ACTIONS
+AVAILABLE THIS CYCLE block, explicit three-state terminal handling).
+The rewrite was validated against qwen3:8b only.
+
+This is the tier GLM-5.2 would actually occupy. The two-tier path is
+selected when routing_model != reasoning_model, so the intended
+configuration -- qwen3:1.7b routing, GLM-5.2 reasoning -- puts GLM on
+compose.md and leaves routing local, which is what [tiers.routing]
+already recommends.
+
+Note also that there is no prompts/{model_family}/ resolution in the
+code. All six prompts are include_str! compiled-in constants; the
+override hierarchy described in the model-prompt coupling heuristic is
+specified and not built. A GLM-specific compose prompt therefore cannot
+be selected today even if one were written."""
+
+[prompt_compatibility.officer_classification]
+status = "untested"
+notes = "Not tested for officer sweep tasks."
+
+# ── Inference Configuration ─────────────────────────────────────────
+
+[inference]
+
+[inference.openai_compatible]
+# Accessed via OpenAI-compatible API (Abacus RouteLLM or Z.ai direct).
+# Ollama options do not apply.
+#
+# `temperature = 0.0` was carried over from the local-model dossiers,
+# where it buys deterministic JSON out of small models. Published GLM-5.2
+# guidance disagrees: ~1.0 for reasoning work, ~0.3 for tool-calling
+# stability. 0.0 is a naive default inherited from a different model
+# class, not a characterization of this one.
+#
+# The substrate currently sends 0.3 on the compose tier
+# (crates/zp-regent/src/regent.rs), 0.1 on routing, 0.3 unified — so the
+# live compose value already matches published tool-calling guidance and
+# the dossier field is the outlier. Left recorded rather than silently
+# changed; the evaluation battery is what should set it.
+temperature = 0.0                 # origin: inherited — see note above
+temperature_researched_reasoning = 1.0    # origin: researched 2026-07-26
+temperature_researched_tool_calling = 0.3 # origin: researched 2026-07-26
+context_window = 1048576
+recommended_context = 32768       # conservative until stress-tested
+max_output_tokens = 131072
+
+# Structured output: `response_format = {"type": "json_object"}` (JSON
+# mode). Z.ai documents json_object, not json_schema. The substrate's
+# chat_openai already emits exactly this shape when a format is
+# requested, so the JSON intent envelope path is compatible as written.
+# origin: researched 2026-07-26
+structured_output_param = "response_format"
+structured_output_value = "json_object"
+json_schema_supported = false
+
+# Native tool calling follows the standard OpenAI `tools` /
+# `tool_choice` schema. Informational only — the substrate does not use
+# native tool calling; it parses a JSON intent envelope out of the
+# prompt. Recorded so a future migration to native tools knows the
+# surface exists. origin: researched 2026-07-26
+native_tool_calling = "openai_standard"
+
+[inference.performance]
+# Not yet measured from the substrate. These are published figures.
+tokens_per_sec = "unknown — cloud-dependent, varies by provider load"
+typical_latency_conversation = "acceptable (observed, not measured)"
+pricing_input_per_1m = 1.40
+pricing_output_per_1m = 4.40
+
+# ── Bench Results ───────────────────────────────────────────────────
+
+[bench]
+# No substrate bench results yet. Published benchmarks only.
+date = "2026-07-12"
+script = "none — manual live test"
+
+[bench.live_test]
+date = "2026-07-12"
+test_type = "conversational"
+prompt_template = "unified_system.md"
+result = "pass"
+notes = """
+Operator asked for inference config report + substrate assessment.
+GLM-5.2 correctly: (1) dispatched governance_posture and system_status
+tools, (2) interpreted chain state showing Sentinel cascade pattern,
+(3) identified repeating 2-second officer-cadre/sentinel cycle,
+(4) noted scattered PIDs suggesting non-sequential process spawns,
+(5) offered autonomous investigation. Response was contextual,
+coherent, and structurally appropriate."""
+
+# Published benchmark position (external, not substrate-measured):
+[bench.published]
+overall_rank = "10/79 (provisional), 5/35 (verified) — BenchLM.ai"
+coding = "strongest open-weight, competitive with Claude Opus 4.8"
+instruction_following = "strong (IFEval)"
+structured_output = "strong (native JSON schema support)"
+
+# ── Tier Recommendations ────────────────────────────────────────────
+
+[tiers]
+
+[tiers.routing]
+variant = "zai-org/GLM-5.2"
+suitability = "untested"
+notes = """
+Not tested for intent classification. 40B active params is
+overkill for routing — cloud latency + cost makes this unsuitable
+when local qwen3:1.7b handles routing in <200ms for free."""
+
+[tiers.reasoning]
+variant = "zai-org/GLM-5.2"
+suitability = "viable"
+notes = """
+Single live test passed. Coherent conversational response with
+chain interpretation and tool dispatch. Promoted from 'untested'
+to 'viable' based on empirical evidence. Full evaluation battery
+required for 'recommended' promotion. Cloud-only — subject to
+network availability and API costs ($1.40/$4.40 per 1M tokens)."""
+
+[tiers.officer]
+variant = "zai-org/GLM-5.2"
+suitability = "untested"
+notes = """
+Not tested for officer sweep tasks. Cloud latency and cost
+make this questionable for high-frequency classification —
+gemma4:26b-mlx handles officer inference locally at 70 tok/s."""
+
+[tiers.cloud_escalation]
+variant = "zai-org/GLM-5.2"
+suitability = "viable"
+notes = """
+Natural fit for cloud escalation tier — when local models
+are insufficient for a reasoning task, GLM-5.2 via Abacus
+provides frontier-class reasoning at moderate cost. The 1M
+context window makes it suitable for deep chain analysis
+that would overflow local model context limits."""
+
+# ── Deployment Status ───────────────────────────────────────────────
+
+[deployment]
+active_tiers = ["reasoning"]       # currently active via self_configure
+chain_validated = false            # no regent:config:inference receipt yet
+last_empirical_test = "2026-07-12"
+access_method = "cloud_api"
+provider = "abacus"
+model_id = "zai-org/GLM-5.2"
+notes = """
+Deployed via in-memory self_configure (not persisted to config.toml).
+Restart reverts to previous model. For persistent deployment,
+emit regent:config:inference receipt or update config.toml."""
+
+# ── Research Notes ──────────────────────────────────────────────────
+
+[research]
+
+[research.architecture]
+notes = """
+GLM-5.2 is the third major iteration in the GLM-5 line. 753B total
+parameters with 40B active per token (MoE). Key architectural
+innovation: IndexShare — reuses the same indexer across every four
+sparse attention layers, cutting per-token compute ~2.9x at full
+1M context. Multi-token prediction layer for faster decoding.
+Released 2026-06-13 under MIT license."""
+
+[research.community]
+notes = """
+Strong community reception. Positioned as the leading open-weight
+coding model, competitive with closed-source frontier models on
+long-horizon coding benchmarks. Purpose-built for agentic coding
+and tool-driven workloads — directly relevant to ZP's substrate
+self-improvement arc (Phase 5). Available via multiple API providers
+(Z.ai, Abacus, OpenRouter, NVIDIA NIM) and as downloadable weights
+on Hugging Face (zai-org/GLM-5.2)."""
+
+[research.known_issues]
+notes = """
+No critical known issues reported in community sources as of
+2026-07-12. The model is new (4 weeks since release) — community
+characterization is still maturing.
+
+Update 2026-07-26: the think_mode question is answered — see
+[quirks.thinking_mode]. It resolved into a substrate defect rather than
+a model issue: the control parameters exist and the substrate has no way
+to send them."""
+
+[research.substrate_gaps]
+origin = "researched"
+notes = """
+Recorded 2026-07-26. Three substrate-side gaps stand between this
+dossier and a GLM-5.2 deployment, none of which are properties of the
+model:
+
+1. No request-extras passthrough in chat_openai, so thinking cannot be
+   disabled and reasoning_content is generated, billed and discarded.
+   See [quirks.thinking_mode].
+
+2. No prompts/{model_family}/ resolution. All prompts are compiled-in
+   constants, so a model-specific prompt variant cannot be selected.
+   The model-prompt coupling invariant assumes this hierarchy exists.
+
+3. Two routing sites use config.inference_endpoint while hardcoding
+   InferenceTier::Local — route_from_config and the Evaluation branch
+   in routing.rs. With the endpoint pointed at a cloud provider, the
+   first mislabels cloud spend as local for mandate accounting and the
+   second sends model_evaluate of a local model to the cloud endpoint.
+   The main dossier-scored path is correct; cloud_only is derived from
+   the presence of an [identity.cloud] table, which this dossier has.
+
+Also unresolved and not substrate-side: cloud_mandate is None, so there
+is no token or cost cap in force for a cloud reasoning tier."""
+
+[research.substrate_relevance]
+notes = """
+Three properties make GLM-5.2 particularly relevant for ZP:
+1. MIT license — aligns with substrate sovereignty (no vendor lock-in
+   on the model weights themselves, even if accessed via cloud API).
+2. 1M context window — enables chain analysis tasks that overflow
+   local model context limits (qwen3:8b recommended_context = 8192).
+3. Agentic coding focus — directly applicable to Phase 5 self-improvement
+   (Regent reading and proposing changes to her own prompts/source)."""

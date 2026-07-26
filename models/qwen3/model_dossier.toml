@@ -1,0 +1,271 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  MODEL DOSSIER: qwen3                                          ║
+# ║  Everything the substrate knows before trusting this model.     ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# Last updated: 2026-07-06
+# Characterized by: kenrom (empirical), bench-local-models.py (automated)
+
+# ── Identity ────────────────────────────────────────────────────────
+
+[identity]
+family = "qwen3"
+provider = "Alibaba Cloud / Qwen Team"
+variants_tested = ["qwen3:8b", "qwen3:4b", "qwen3:1.7b"]
+variant_primary = "qwen3:8b"
+architecture = "decoder-only transformer, MoE available in larger variants"
+license = "Apache 2.0"
+
+[identity.parameters]
+# Parameter counts for tested variants.
+"qwen3:8b" = "8B dense"
+"qwen3:4b" = "4B dense"
+"qwen3:1.7b" = "1.7B dense"
+
+# ── Strengths ───────────────────────────────────────────────────────
+
+[strengths]
+# What this model family does well, grounded in empirical observation.
+
+json_compliance = """
+Excellent. qwen3:8b reliably produces valid JSON when instructed.
+With Ollama native format parameter (grammar-level constraint),
+JSON output is guaranteed. Without format parameter, still compliant
+under strict prompts — bench showed 0.93-1.00 accuracy."""
+
+instruction_following = """
+Strong at 8b; variable at 1.7b. qwen3:8b follows "reply ONLY
+with JSON" faithfully. qwen3:1.7b follows it for simple intents
+(parameterless tools, respond) but struggles with nested JSON
+for parameterized tool calls. Few-shot examples significantly
+improve routing accuracy at 1.7b."""
+
+classification = """
+Fast and accurate on categorical tasks. receipt_classify: 0.94,
+severity_assess: 0.93 (bench-validated, 2026-07-01)."""
+
+thinking_control = """
+Supports /no_think token in user message and think: false in
+Ollama options. Both work on qwen3:8b. On qwen3:1.7b, think:
+false does NOT fully suppress thinking — </think> tags leak
+into output on some inference calls (observed on parameterized
+tool dispatches). Leaks are logged at warn level as model
+characterization signal; parse_intent strips only when needed
+for JSON recovery. The inconsistency between variants is
+itself useful data for the model dossier."""
+
+# ── Quirks ──────────────────────────────────────────────────────────
+
+[quirks]
+# Known behavioral idiosyncrasies. Each quirk has a severity
+# (informational | caution | blocking) and mitigation if known.
+
+[quirks.thinking_token]
+severity = "informational"
+description = """
+Supports /no_think token in user message to suppress chain-of-thought.
+This is model-specific — other families don't recognize it.
+The Ollama options.think=false is the portable mechanism."""
+mitigation = "Use Ollama think option, not /no_think token, for portability."
+
+[quirks.timeout_inflation_small_variants]
+severity = "caution"
+description = """
+qwen3:4b showed timeout-inflated scores during bench (2026-07-01).
+Tasks that completed in <1s on qwen3:8b took 5-10s on 4b,
+likely due to repeated generation attempts hitting format constraints.
+Now locally available on APOLLO (2026-07-06) — ready for evaluation
+battery + collapse probes to map where it sits between 1.7b and 8b."""
+mitigation = "Use qwen3:8b or larger for production. 4b may fill a mid-tier role if collapse profile is favorable."
+
+[quirks.sovereign_identity_response]
+severity = "informational"
+description = """
+RESOLVED (2026-07-06). Was misdiagnosed as a model limitation.
+Actual cause: sovereign line was jammed mid-sentence with no
+delimiter ('...this substrate.You serve operator kenrom...').
+Restructured to 'IDENTITY: You serve operator kenrom (genesis:
+907975ce...).' on its own line with clear prefix — works
+immediately, even on qwen3:1.7b. Lesson: prompt failure looks
+like model failure. Check prompt structure before escalating
+to a larger model."""
+mitigation = "Use IDENTITY: prefix on its own line."
+
+[quirks.think_tag_leaking]
+severity = "caution"
+description = """
+Even with think: false in Ollama options, qwen3:1.7b sometimes
+leaks </think> tags into the content output. Observed on
+parameterized tool calls (chain_query with limit param) where
+the model produces output like:
+  {"intent":"execute","tool":"chain_query","params":{"limit":5}}</think>
+The </think> tag corrupts JSON parsing. May not affect all
+inference calls — system_status (no params) was clean."""
+mitigation = "Inference layer logs think tag leaks as warn-level diagnostic (model characterization signal). parse_intent strips tags only when needed for JSON recovery. Signal preserved for model dossier; parsing still works."
+
+[quirks.parameterized_json_1_7b]
+severity = "caution"
+description = """
+qwen3:1.7b struggles to produce nested JSON for parameterized
+tool calls under constrained decoding. Parameterless tools
+(system_status, governance_posture) dispatch correctly.
+Parameterized tools (chain_query with limit, model_evaluate
+with model) produce malformed JSON — e.g., escaped quotes
+embedding params into the tool string field instead of proper
+nested structure. Constrained decoding can't fix this because
+the corruption happens within string values, not structure."""
+mitigation = "recover_execute_intent() extracts tool name from malformed output and dispatches with default params. For full param support, use qwen3:8b or the two-tier path (1.7b routes, 8b composes params)."
+
+# ── Prompt Compatibility ────────────────────────────────────────────
+
+[prompt_compatibility]
+# How this model interacts with the substrate's prompt templates.
+
+[prompt_compatibility.unified_system]
+status = "validated"
+notes = """
+Works with unified_system.md template. JSON output reliable.
+Sovereign section injection ({sovereign_section}) with IDENTITY:
+prefix on its own line works at all tested tiers including 1.7b.
+Model responds within the response contract (intent/content JSON
+envelope). Parameterless tools dispatch cleanly at 1.7b;
+parameterized tools need recovery fallback or 8b."""
+
+[prompt_compatibility.routing]
+status = "validated"
+notes = """
+qwen3:1.7b handles routing (intent classification) effectively.
+Fast (<200ms) and accurate for respond/execute/observe routing."""
+
+[prompt_compatibility.compose]
+status = "validated"
+notes = """
+qwen3:8b produces concise, direct responses in compose tier.
+Follows 'be direct, concise' instruction. Does not dump
+raw context when instructed not to."""
+
+[prompt_compatibility.strict_prompts]
+status = "validated"
+notes = """
+Bench delta: strict prompts (JSON-only constraint) show
+minimal accuracy change (+0.03 on fast-path tasks) but
+reduce output variance. Recommended as default."""
+
+# ── Inference Configuration ─────────────────────────────────────────
+
+[inference]
+# Optimal inference settings for this model family.
+
+[inference.ollama]
+think = false                    # suppress CoT for structured output tasks
+format_json = true               # native format parameter for JSON guarantee
+temperature = 0.0                # deterministic for classification/routing
+context_window = 32768           # model maximum
+recommended_context = 8192       # practical limit for regent use
+
+[inference.performance]
+# Measured on APOLLO (Apple Silicon, specific to local hardware).
+tokens_per_sec_8b = 45           # approximate, varies with context length
+tokens_per_sec_1_7b = 120        # routing tier, very fast
+typical_latency_classify = 0.3   # seconds, with format parameter
+typical_latency_compose = 1.5    # seconds, reasoning response
+
+# ── Bench Results ───────────────────────────────────────────────────
+
+[bench]
+# From scripts/bench-local-models.py, 2026-07-01.
+# Conditions: strict prompts, native format ON for fast-path,
+# think OFF for fast-path, think ON for reasoning tasks.
+
+date = "2026-07-01"
+script = "scripts/bench-local-models.py"
+
+[bench.tasks.receipt_classify]
+model = "qwen3:8b"
+accuracy = 0.94
+latency_s = 0.3
+format = true
+think = false
+
+[bench.tasks.severity_assess]
+model = "qwen3:8b"
+accuracy = 0.93
+latency_s = 0.8
+format = true
+think = false
+
+[bench.tasks.receipt_summarize]
+model = "qwen3:8b"
+accuracy = 0.95
+latency_s = 1.2
+format = true
+think = false
+
+[bench.tasks.pattern_detect]
+model = "qwen3:8b"
+accuracy = 0.80
+latency_s = 12.0
+format = false
+think = true
+notes = "Competitive but gemma4 matched at higher tok/s."
+
+# ── Tier Recommendations ────────────────────────────────────────────
+
+[tiers]
+# Which substrate inference tiers this model is suitable for.
+# Tiers: routing (intent classification), reasoning (response composition),
+#         officer (sweep analysis), cloud_escalation (not applicable for local)
+
+[tiers.routing]
+variant = "qwen3:1.7b"
+suitability = "recommended"
+notes = "Fast, accurate intent classification. Current production choice."
+
+[tiers.reasoning]
+variant = "qwen3:8b"
+suitability = "recommended"
+notes = """
+Current production model for regent response composition.
+Reliable JSON, good instruction following, adequate reasoning."""
+
+[tiers.officer]
+variant = "qwen3:8b"
+suitability = "viable"
+notes = """
+Tested in officer bench. Competitive on severity/pattern tasks
+but gemma4:26b-mlx outperforms on fast-path at higher throughput.
+Not currently deployed for officer inference — see officer-inference.toml."""
+
+# ── Deployment Status ───────────────────────────────────────────────
+
+[deployment]
+# Current substrate deployment state.
+active_tiers = ["routing", "reasoning"]
+chain_validated = false          # no regent:config:inference receipt yet
+last_empirical_test = "2026-07-06"
+
+# ── Research Notes ──────────────────────────────────────────────────
+
+[research]
+# External findings, community reports, architecture notes.
+
+[research.architecture]
+notes = """
+Qwen3 family uses grouped query attention (GQA), RoPE positional
+encoding, SwiGLU activation. The 8B variant is dense (not MoE).
+Larger variants (e.g. qwen3.6:35b-a3b) use mixture-of-experts
+with active parameter subsets."""
+
+[research.community]
+notes = """
+Widely reported as strong for structured output and instruction
+following in the 8B class. Community consensus aligns with our
+bench results — reliable JSON, good classification, adequate
+but not exceptional reasoning at 8B scale."""
+
+[research.known_issues]
+notes = """
+No critical known issues for the 8B variant. The /no_think token
+is qwen-specific and not documented in the model card — discovered
+empirically by the community. Ollama think option is the portable
+equivalent."""

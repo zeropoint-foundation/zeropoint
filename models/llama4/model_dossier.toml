@@ -1,0 +1,330 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  MODEL DOSSIER: llama4                                         ║
+# ║  Everything the substrate knows before trusting this model.     ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# Last updated: 2026-07-06
+# Status: PRE-CHARACTERIZATION — researched, not yet bench-tested.
+# Candidate for regent reasoning tier — architecture play (native tool calling).
+
+# ── Identity ────────────────────────────────────────────────────────
+
+[identity]
+family = "llama4"
+provider = "Meta AI"
+variants_available = ["llama4:scout", "llama4:maverick"]
+variant_primary = "llama4:scout"
+architecture = "decoder-only transformer, Mixture-of-Experts, early fusion multimodal"
+license = "Llama 4 Community License"
+context_window = 10_000_000      # 10M tokens — Scout's headline feature
+release_date = "2025"
+
+[identity.parameters]
+"llama4:scout" = "109B total, 17B active per token, 16 experts"
+"llama4:maverick" = "400B total, 17B active per token, 128 experts"
+
+[identity.moe_details]
+notes = """
+Both Scout and Maverick use only 17B active parameters per token
+during inference. This means inference speed and memory bandwidth
+requirements are closer to a 17B dense model than to 109B/400B.
+The MoE routing selects which experts to activate per token,
+giving the model access to a much larger knowledge base while
+keeping per-token compute fixed.
+
+Scout: 16 experts, ~25GB at Q4_K_M. Fits in 32GB+ unified memory.
+Maverick: 128 experts, ~60GB at Q4_K_M. Needs 64GB+ unified memory."""
+
+# ── Strengths (Researched) ──────────────────────────────────────────
+
+[strengths]
+
+native_tool_calling = """
+CRITICAL DIFFERENTIATOR. Llama 4 was designed from the ground up
+for tool calling and agentic workflows. The tool-calling format
+is native to the architecture, not bolted on via fine-tuning.
+This suggests structured output (JSON tool calls) should be
+highly reliable — the model's architecture is optimized for it.
+
+For the regent, this means the intent/content JSON envelope may
+be more naturally expressed as a tool call response, potentially
+eliminating the prompt engineering required to get other models
+to produce structured output consistently."""
+
+multimodal_early_fusion = """
+Scout processes text and images together from the ground up (early
+fusion), not through a separate vision adapter. While the substrate
+doesn't currently use vision, this is future-looking: a regent that
+can reason about screenshots, diagrams, or visual governance
+artifacts without a separate model pipeline."""
+
+reasoning_depth = """
+Scout: 74.3% MMLU Pro, 57.2% GPQA Diamond.
+Maverick: 80.5% MMLU Pro, 69.8% GPQA Diamond.
+Scout's reasoning is solid but not exceptional compared to
+specialized reasoning models. The value is in the combination
+of tool calling + reasoning + multimodal, not in raw reasoning
+benchmarks alone."""
+
+context_window = """
+10M token context window on Scout. For the regent, this removes
+context as a constraint entirely — the full chain history, all
+officer findings, complete memory store could fit in a single
+inference call. In practice we'd still limit context for latency,
+but the ceiling disappears."""
+
+inference_efficiency = """
+17B active parameters means inference speed of a 17B dense model.
+On Apple Silicon, this should run at 60-80+ tok/s despite 109B
+total parameters. The MoE routing adds minimal overhead. Combined
+with the tool-calling architecture, this could be the fastest
+path to reliable structured output."""
+
+# ── Quirks (Researched) ────────────────────────────────────────────
+
+[quirks]
+
+[quirks.moe_routing_on_apple_silicon]
+severity = "caution"
+description = """
+MoE models on Apple Silicon are less characterized than dense
+models. The expert routing mechanism adds memory access patterns
+that may not benefit as much from unified memory architecture.
+Community benchmarks focus on NVIDIA GPUs; Apple Silicon MoE
+performance data is sparse for the 109B/16-expert configuration."""
+mitigation = "Bench tok/s empirically on APOLLO. Compare to qwen3.6:27b-mlx (dense, similar active params)."
+
+[quirks.disk_and_memory_footprint]
+severity = "caution"
+description = """
+Scout at Q4_K_M is ~25GB on disk. With 16 experts all needing
+to be accessible in memory (even if only a subset is active per
+token), memory pressure may be higher than a 17B dense model.
+If APOLLO has 64GB+ this is fine; at 36-48GB it may compete
+with other loaded models."""
+mitigation = "Check APOLLO's available unified memory. May need to unload other models during bench."
+
+[quirks.llama4_prompt_format]
+severity = "caution"
+description = """
+Llama 4 uses a specific prompt format with <|header|> and
+<|eot|> tokens. Ollama handles this via the model's template,
+but custom system prompts (like the regent's unified_system.md)
+need to be compatible with the template's expectations. The
+tool-calling format in particular has specific structural
+requirements."""
+mitigation = """
+Test whether raw system prompt injection via Ollama works, or
+whether the regent needs to use Llama 4's native tool-calling
+API to get structured output. The latter would be architecturally
+better but requires changes to the inference backend."""
+
+[quirks.tool_call_vs_json_envelope]
+severity = "caution"
+description = """
+The regent currently asks models to produce a JSON envelope
+({"intent":"respond","content":"..."}) via system prompt
+instruction. Llama 4's native path is to produce structured
+output via tool-call format, not freeform JSON. These are
+different mechanisms:
+  - Prompt-instructed JSON: model generates {"intent":...}
+  - Tool-call format: model generates a structured tool call
+
+The second is architecturally stronger (grammar-constrained,
+native to the model) but requires the regent's inference
+backend to present intents as tools, not as JSON prompts.
+This is a design question, not just a bench question."""
+mitigation = """
+Bench both approaches:
+  1. Prompt-instructed JSON envelope (current regent approach)
+  2. Tool-call format (present regent intents as callable tools)
+If approach 2 works, it's a path to eliminating the entire
+prompt-engineering surface for structured output."""
+
+[quirks.community_license]
+severity = "informational"
+description = """
+Llama 4 Community License is more restrictive than Apache 2.0
+(Qwen) or MIT (Phi-4). Usage above 700M MAU requires Meta
+permission. For a personal governance substrate this is not a
+concern, but if ZeroPoint is distributed to others running
+their own regents, the license terms need review."""
+mitigation = "Not blocking for development or personal deployment. Review before distribution."
+
+# ── Prompt Compatibility (Pre-Test Hypotheses) ──────────────────────
+
+[prompt_compatibility]
+
+[prompt_compatibility.unified_system]
+status = "untested"
+hypothesis = """
+UNCERTAIN. The biggest question is whether Llama 4 should be
+tested against the current prompt-instructed JSON approach or
+against its native tool-calling format. Testing both will reveal
+which path is more reliable. The prompt-instructed approach may
+work (Llama models generally follow JSON instructions) but the
+tool-call approach may be categorically better."""
+
+[prompt_compatibility.routing]
+status = "untested"
+hypothesis = """
+At 17B active, routing would be slower than qwen3:1.7b. Not
+the target tier. However, if Scout's tool-calling makes intent
+classification trivially reliable, the speed trade-off might
+be worth testing."""
+
+[prompt_compatibility.compose]
+status = "untested"
+hypothesis = """
+Composition quality depends on Scout's conversational capability,
+which is less characterized than its tool-calling. Meta positions
+Llama 4 for agentic use, not conversational assistants. Composition
+may be adequate but not the model's strong suit."""
+
+[prompt_compatibility.sovereign_identity]
+status = "untested"
+hypothesis = """
+Third lineage (after Qwen and Phi) testing the sovereign identity
+question. Llama 3.3 scored 92.1% on IFEval — if Llama 4 inherits
+that instruction-following quality, system prompt identity
+injection should work. Meta's emphasis on instruction following
+is encouraging."""
+
+# ── Inference Configuration (Pre-Test) ──────────────────────────────
+
+[inference]
+
+[inference.ollama]
+think = false                    # Scout doesn't have a think mode by default
+format_json = true               # test both native format and tool-call format
+temperature = 0.0
+context_window = 10_000_000      # absurd maximum; practical limit TBD
+recommended_context = 16_384     # start conservative despite 10M ceiling
+
+[inference.performance]
+# ESTIMATED — not yet measured on APOLLO.
+# 17B active on Apple Silicon should be 60-80 tok/s.
+# MoE routing overhead on unified memory is unknown.
+estimated_tokens_per_sec = 65    # conservative; MoE overhead uncertain
+estimated_latency_classify = 0.3 # seconds
+estimated_latency_compose = 2.0  # seconds
+
+# ── Bench Results ───────────────────────────────────────────────────
+
+[bench]
+date = "pending"
+script = "scripts/bench-local-models.py"
+
+# Regent-specific bench tasks:
+# 1. sovereign_identity — third lineage test
+# 2. intent_classify_prompt — current JSON envelope via system prompt
+# 3. intent_classify_tools — NEW: present intents as tool calls, test native format
+# 4. composition_quality — compose.md prompt
+# 5. context_dump_resistance — full cognitive context
+# 6. tool_call_reliability — native tool calling with complex parameter schemas
+# 7. multimodal_baseline — optional: test image understanding for future use
+
+# ── Tier Recommendations (Pre-Test) ────────────────────────────────
+
+[tiers]
+
+[tiers.routing]
+variant = "llama4:scout"
+suitability = "not_recommended"
+notes = "17B active is oversized for routing. Speed penalty vs qwen3:1.7b."
+
+[tiers.reasoning]
+variant = "llama4:scout"
+suitability = "candidate"
+notes = """
+ARCHITECTURE CANDIDATE. The value isn't raw reasoning benchmarks
+(Scout is 57.2% GPQA Diamond vs phi4-reasoning's likely higher score).
+The value is native tool calling — if the regent can express intents
+as tool calls instead of prompt-instructed JSON, the structured
+output reliability problem may be eliminated architecturally.
+
+Lower priority than qwen3.6:27b (higher integration risk, different
+family), but potentially higher ceiling if the tool-call approach
+validates."""
+
+[tiers.officer]
+variant = "llama4:scout"
+suitability = "not_recommended"
+notes = """
+gemma4:26b-mlx at 70 tok/s with format parameter is hard to beat
+for officer classification. Scout's MoE overhead likely makes it
+slower for the same active parameter count."""
+
+# ── Deployment Status ───────────────────────────────────────────────
+
+[deployment]
+active_tiers = []
+chain_validated = false
+last_empirical_test = "pending"
+candidate_tiers = ["reasoning"]
+
+# ── Research Notes ──────────────────────────────────────────────────
+
+[research]
+
+[research.architecture]
+notes = """
+Llama 4 introduces early fusion multimodal (text + images processed
+together, not adapter-mediated) and native tool calling at the
+architecture level. The MoE design with fixed 17B active parameters
+gives scaling benefits without proportional inference cost.
+
+The 10M context window on Scout is achieved through 'rope-theta-based
+long-context extension' — no explicit sliding window. This is
+architecturally different from Qwen3.6's sliding window attention."""
+
+[research.tool_calling_architecture]
+notes = """
+This is the most interesting architectural feature for the substrate.
+Current regent inference:
+  System prompt → 'reply with JSON' → hope model complies → parse
+
+With native tool calling:
+  Present intents as tools → model selects tool + fills parameters
+  → output is structurally valid by construction
+
+The second approach is what Ollama's 'format' parameter does at the
+grammar level, but tool calling adds semantic structure: the model
+doesn't just produce valid JSON, it produces a valid *call* to a
+named *function* with typed *parameters*. This maps directly to
+the regent's Intent enum (Respond, Execute, Observe, Confused).
+
+Worth exploring even if qwen3.6:27b becomes the production model —
+the tool-calling approach could work across model families and
+eliminate the model-specific prompt engineering surface entirely."""
+
+[research.community]
+notes = """
+Meta positions Llama 4 for agentic workflows, not conversation.
+Community adoption is massive (llama3.1 has 116.5M pulls on Ollama),
+but most usage is on NVIDIA hardware. Apple Silicon MoE performance
+data is still emerging. Early reports suggest Scout runs well on
+M-series chips but concrete tok/s benchmarks are scarce."""
+
+[research.comparison_to_current]
+notes = """
+vs qwen3:8b (current regent reasoning):
+  - 17B active vs 8B (2x effective parameters)
+  - Native tool calling vs prompt-instructed JSON
+  - 10M vs 32K context window
+  - Different family = higher integration risk
+  - Potentially eliminates structured output prompt engineering
+
+vs qwen3.6:27b (primary candidate):
+  - 17B active vs 27B dense (less raw compute per token)
+  - Native tool calling is architectural advantage
+  - MoE overhead vs dense throughput — empirical question
+  - Higher integration risk (different family, different prompt format)
+  - Value is in the approach (tool calling), not the benchmarks
+
+vs phi4-reasoning:
+  - 17B active vs 14.7B dense (similar effective size)
+  - Tool calling architecture vs reasoning training
+  - Different strengths: Scout = structured output reliability,
+    Phi4 = reasoning depth per parameter
+  - Both are diversity candidates against the Qwen primary"""

@@ -1,0 +1,295 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  MODEL DOSSIER: phi4                                           ║
+# ║  Everything the substrate knows before trusting this model.     ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# Last updated: 2026-07-06
+# Status: LOCALLY AVAILABLE — phi4-reasoning pulled on APOLLO.
+# Ready for evaluation battery + collapse probes.
+# Candidate for regent reasoning tier as a diversity play (non-Qwen lineage).
+
+# ── Identity ────────────────────────────────────────────────────────
+
+[identity]
+family = "phi4"
+provider = "Microsoft Research"
+variants_available = ["phi4", "phi4-reasoning", "phi4-reasoning-plus", "phi4-mini", "phi4-mini-reasoning"]
+variant_primary = "phi4-reasoning"
+architecture = "decoder-only transformer, dense, 14.7B parameters"
+license = "MIT"
+context_window = 128_000         # phi4-mini reportedly allocates full 128K
+release_date = "2025-2026"
+
+[identity.parameters]
+"phi4" = "14.7B dense"
+"phi4-reasoning" = "14.7B dense, SFT on reasoning demonstrations"
+"phi4-reasoning-plus" = "14.7B dense, SFT + RL on reasoning"
+"phi4-mini" = "3.8B dense"
+"phi4-mini-reasoning" = "3.8B dense, reasoning variant"
+
+[identity.training]
+notes = """
+Phi-4-reasoning is trained via supervised fine-tuning of Phi-4 on
+carefully curated reasoning demonstrations from OpenAI's o3-mini.
+The 'plus' variant adds reinforcement learning. This means the
+model has internalized reasoning patterns from a frontier model,
+distilled into 14.7B parameters. The training approach prioritizes
+data curation over parameter count."""
+
+# ── Strengths (Researched) ──────────────────────────────────────────
+
+[strengths]
+
+reasoning_per_parameter = """
+Exceptional. 80.4% on MATH benchmark. Competitive with 70B models
+on structured problem-solving. The reasoning-plus variant exceeds
+DeepSeek-R1 Distill Llama 70B (5x larger) on several benchmarks.
+This is the model's primary value proposition: frontier-class
+reasoning in a 14.7B package."""
+
+instruction_following = """
+Tested across IFEval, HumanEvalPlus, MMLUPro, ArenaHard, PhiBench.
+Phi-4 family shows strong instruction following but specific IFEval
+scores for the reasoning variant are not widely published. The base
+phi4 is reportedly solid; the reasoning variant adds structured
+thinking on top."""
+
+hardware_efficiency = """
+14.7B fits on a 12GB GPU. On APOLLO (Apple Silicon), this should
+run very fast — likely 80-100+ tok/s. The fastest candidate in the
+evaluation set by a significant margin. If quality is sufficient,
+the speed advantage is substantial."""
+
+mathematical_reasoning = """
+MATH 80.4%, AIME 2024 competitive. For governance reasoning that
+involves numerical posture scoring, threshold evaluation, or
+quantitative chain analysis, phi4 may outperform larger models
+that lack specialized mathematical training."""
+
+# ── Quirks (Researched) ────────────────────────────────────────────
+
+[quirks]
+
+[quirks.formatting_artifacts]
+severity = "caution"
+description = """
+Community reports 'occasional formatting artifacts in structured
+output' from Phi-4 Mini. Whether this applies to the full 14.7B
+reasoning variant is unknown. The artifacts may include unexpected
+whitespace, partial JSON, or inconsistent field ordering. Needs
+empirical validation against the regent's strict JSON envelope."""
+mitigation = "Bench with strict format parameter. Test with and without native JSON schema constraint."
+
+[quirks.reasoning_trace_output]
+severity = "caution"
+description = """
+The reasoning variants produce explicit chain-of-thought before
+the final answer, similar to DeepSeek R1 but reportedly more
+controlled. If the regent's parse_intent() expects raw JSON without
+a thinking preamble, the reasoning trace will break parsing.
+The model's think suppression mechanism needs testing.
+
+KEY QUESTION: Ollama separates thinking into a distinct `thinking`
+field in the API response — the inference layer already handles this
+(falls back to thinking content when content is empty). But if
+phi4-reasoning's CoT leaks into the content field (like qwen3:1.7b),
+the think tag diagnostic logging will capture it and parse_intent's
+three-layer recovery handles cleanup. The evaluation battery's
+ThinkSuppression tests will characterize which mechanisms work."""
+mitigation = """
+Test Ollama think: false option. Test think: omitted. The /no_think
+token is qwen3-specific and will correctly report as ineffective.
+If no suppression mechanism works, parse_intent recovery handles it.
+The base phi4 (non-reasoning) is available as fallback if CoT
+suppression proves wholly unreliable."""
+
+[quirks.system_prompt_behavior]
+severity = "unknown"
+description = """
+Unlike DeepSeek R1 (where system prompts degrade performance),
+Phi-4's system prompt behavior is not widely characterized for
+the reasoning variant. The base phi4 uses standard system prompt
+conventions. Whether the reasoning SFT changed system prompt
+adherence is unknown."""
+mitigation = "Test sovereign_line injection via system prompt. Compare base phi4 vs phi4-reasoning."
+
+[quirks.high_ram_for_size]
+severity = "informational"
+description = """
+Phi-4 Mini (3.8B) reportedly uses 8.9GB RAM — higher than expected,
+likely due to 128K context window pre-allocation. The 14.7B
+reasoning variant may similarly over-allocate. On APOLLO this
+shouldn't matter (ample unified memory) but worth noting for
+resource planning when running multiple models."""
+mitigation = "Monitor memory usage during bench. Not a blocking concern on APOLLO."
+
+[quirks.different_lineage]
+severity = "informational"
+description = """
+Phi-4 is a completely different model family from Qwen. Prompt
+patterns that work for qwen3:8b may not transfer. The model's
+interpretation of 'reply ONLY with JSON' may differ (as we saw
+with gemma4's context-dump interpretation). This is both the risk
+AND the value — diversity means different failure modes, which
+means a more resilient roster if both pass validation."""
+mitigation = "Test every regent prompt template independently. Do not assume compatibility."
+
+# ── Prompt Compatibility (Pre-Test Hypotheses) ──────────────────────
+
+[prompt_compatibility]
+
+[prompt_compatibility.unified_system]
+status = "untested"
+hypothesis = """
+MEDIUM probability of compatibility. Different lineage from Qwen
+means the JSON envelope instruction may be interpreted differently.
+Phi-4's strong instruction following is encouraging, but gemma4
+also had 'strong instruction following' and still failed on the
+regent prompt with context dumps. Must test empirically.
+
+If unified_system.md fails, the model-prompt coupling principle
+requires a prompts/phi4/ override directory. Do NOT create overrides
+preemptively — run the battery first, diagnose the failure mode,
+then create a prompt variant that addresses the specific gap.
+Prompt failure looks like model failure (lesson from qwen3 sovereign
+identity fix)."""
+
+[prompt_compatibility.routing]
+status = "untested"
+hypothesis = """
+Could work as routing model if speed is high enough. At 14.7B it's
+larger than qwen3:1.7b but if it runs at 80+ tok/s, routing latency
+would still be sub-second. Worth benchmarking but not the primary
+target — routing isn't the gap."""
+
+[prompt_compatibility.compose]
+status = "untested"
+hypothesis = """
+The reasoning variant's strength may shine here — deeper, more
+structured responses than qwen3:8b. The mathematical reasoning
+training could help with governance posture explanations and
+quantitative chain analysis. But composition also requires
+conversational fluency and persona maintenance, which are not
+Phi-4's advertised strengths."""
+
+[prompt_compatibility.sovereign_identity]
+status = "untested"
+hypothesis = """
+KEY TEST. Different training lineage may handle persona/identity
+questions differently from Qwen. If phi4-reasoning connects
+'You serve operator kenrom' to 'who am I?' where qwen3:8b fails,
+it reveals the gap is model-specific, not prompt-specific."""
+
+# ── Inference Configuration (Pre-Test) ──────────────────────────────
+
+[inference]
+
+[inference.ollama]
+think = false                    # test both; reasoning variant may need suppression
+format_json = true               # native format parameter
+temperature = 0.0
+context_window = 128_000
+recommended_context = 8_192      # start conservative
+
+[inference.performance]
+# ESTIMATED — not yet measured on APOLLO.
+estimated_tokens_per_sec = 90    # 14.7B on Apple Silicon should be fast
+estimated_latency_classify = 0.2 # seconds
+estimated_latency_compose = 1.5  # seconds
+
+# ── Bench Results ───────────────────────────────────────────────────
+
+[bench]
+date = "pending"
+script = "scripts/bench-local-models.py"
+
+# Regent-specific bench tasks:
+# 1. sovereign_identity — THE critical test (different lineage may reveal if gap is model or prompt)
+# 2. intent_classify — unified_system.md, JSON envelope compliance
+# 3. reasoning_depth — multi-step governance reasoning
+# 4. composition_quality — compose.md, assess depth and conversational fluency
+# 5. context_dump_resistance — feed full cognitive context, verify no dump
+# 6. think_suppression — verify CoT can be cleanly suppressed
+# 7. format_artifact_check — look for the formatting artifacts community reports
+
+# ── Tier Recommendations (Pre-Test) ────────────────────────────────
+
+[tiers]
+
+[tiers.routing]
+variant = "phi4-reasoning"
+suitability = "not_recommended"
+notes = "14.7B is oversized for routing. qwen3:1.7b at 120 tok/s is the right tool."
+
+[tiers.reasoning]
+variant = "phi4-reasoning"
+suitability = "candidate"
+notes = """
+DIVERSITY CANDIDATE. If qwen3.6:27b becomes the primary regent
+reasoning model, phi4-reasoning could serve as fallback — different
+lineage means different failure modes. At 14.7B it's smaller but
+the reasoning-per-parameter ratio is exceptional. Worth testing
+as a lightweight alternative or fallback."""
+
+[tiers.officer]
+variant = "phi4-reasoning"
+suitability = "candidate"
+notes = """
+Could compete with gemma4 on officer fast-path tasks. 14.7B at
+high tok/s might match gemma4's throughput with comparable accuracy.
+Lower priority than regent testing but worth a bench run."""
+
+# ── Deployment Status ───────────────────────────────────────────────
+
+[deployment]
+active_tiers = []
+chain_validated = false
+locally_available = true           # phi4-reasoning pulled on APOLLO 2026-07-06
+last_empirical_test = "pending"
+candidate_tiers = ["reasoning"]
+
+# ── Research Notes ──────────────────────────────────────────────────
+
+[research]
+
+[research.architecture]
+notes = """
+Phi-4 uses a standard dense transformer architecture. The key
+differentiator is training methodology: curated synthetic data
+and reasoning demonstrations from o3-mini, not architectural
+innovation. This means the model's reasoning capability comes
+from internalized patterns rather than explicit mechanisms
+(like MoE routing or thinking tokens)."""
+
+[research.training_provenance]
+notes = """
+The reasoning variant's training data includes demonstrations from
+OpenAI's o3-mini. This is worth noting for the substrate's trust
+model: the model has internalized reasoning patterns from a
+proprietary system. For governance substrate use, this is neutral
+(we're using the model's capabilities, not its training data
+directly), but it's a provenance fact worth recording."""
+
+[research.community]
+notes = """
+Strong reputation for punching above weight class on reasoning
+benchmarks. Less community data on long-form conversation, persona
+maintenance, or structured output reliability in production
+deployments. Most benchmarks test single-turn reasoning, not
+the multi-turn cognitive loop the regent needs."""
+
+[research.comparison_to_current]
+notes = """
+vs qwen3:8b (current regent reasoning):
+  - 1.8x parameters
+  - Likely 2x tok/s (faster due to efficiency)
+  - Stronger on mathematical/logical reasoning
+  - Unknown on persona, identity, conversational fluency
+  - Different lineage = integration risk but also diversity value
+
+vs qwen3.6:27b (primary candidate):
+  - 0.55x parameters (much smaller)
+  - Likely 1.8x tok/s (faster)
+  - May match or exceed on reasoning despite smaller size
+  - Less likely to match on composition and conversation depth
+  - Value is as FALLBACK, not replacement — different failure modes"""

@@ -1,0 +1,13 @@
+FROM deepcoder:14b
+
+PARAMETER temperature 0.3
+PARAMETER num_ctx 16384
+
+SYSTEM """You are a coding assistant. Provide code solutions directly without showing your thinking process. Use <think> tags only when explicitly asked for reasoning. Output clean, working code."""
+
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+/no_think {{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""

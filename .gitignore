@@ -61,7 +61,6 @@ clawd/
 openclaw/
 reticulum-meshchat/
 miniCPM-o-4_5/
-models/
 sandbox/
 server/
 zeropoint-server/
@@ -160,3 +159,26 @@ zeropointfoundation.org/
 zeropointfoundation.org/
 docs/handoffs/
 .understand-anything/
+
+# ── models/ — weights out, characterization in ──────────────────────
+#
+# `models/` was previously ignored wholesale because it holds ~820MB of
+# TTS weights. That also excluded the model dossiers, which are corpus
+# artifacts: CLAUDE.md cites them as canonical, EXECUTION-AUTHORITY-MODEL
+# Phase 5 depends on them, and zp-regent's routing corpus loads them at
+# runtime to score candidates. Nothing under models/ had ever been
+# tracked, so a clean clone had an empty dossier corpus and every routing
+# decision fell through to route_from_config.
+#
+# Exclude the weights by location and by extension; keep the
+# characterization. Extension patterns catch a future model family that
+# drops weights in a directory not named here.
+models/kokoro/
+models/piper/
+models/**/*.onnx
+models/**/*.bin
+models/**/*.gguf
+models/**/*.safetensors
+models/**/*.pt
+models/**/*.pth
+models/**/.DS_Store

@@ -1,0 +1,242 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  MODEL DOSSIER: gemma4                                         ║
+# ║  Everything the substrate knows before trusting this model.     ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# Last updated: 2026-07-06
+# Characterized by: kenrom (empirical), bench-local-models.py (automated)
+
+# ── Identity ────────────────────────────────────────────────────────
+
+[identity]
+family = "gemma4"
+provider = "Google DeepMind"
+variants_tested = ["gemma4:27b-mlx", "gemma4:26b-mlx"]
+variant_primary = "gemma4:26b-mlx"
+architecture = "decoder-only transformer, dense"
+license = "Gemma Terms of Use"
+
+[identity.parameters]
+"gemma4:27b-mlx" = "27B dense, MLX-optimized"
+"gemma4:26b-mlx" = "26B dense, MLX-optimized"
+
+# ── Strengths ───────────────────────────────────────────────────────
+
+[strengths]
+
+throughput = """
+Excellent. 70 tok/s on APOLLO (MLX variant). Fastest model in
+the bench at this parameter class. Sub-second classification."""
+
+classification_accuracy = """
+Top-tier on fast-path tasks. receipt_classify: 0.94,
+severity_assess: 0.93, receipt_summarize: 1.00
+(bench-validated, 2026-07-01, with native format)."""
+
+native_format = """
+Responds well to Ollama native format parameter. Grammar-level
+JSON constraint works cleanly on classification/scoring tasks.
+Best accuracy achieved with format ON + think OFF."""
+
+pattern_detection = """
+Competitive on pattern_detect: 0.80 accuracy at 18.8s with
+think mode. Matches qwen3:8b while running at higher tok/s."""
+
+# ── Quirks ──────────────────────────────────────────────────────────
+
+[quirks]
+
+[quirks.context_dump_as_json]
+severity = "blocking"
+description = """
+CRITICAL for regent use. When prompted with 'reply ONLY with JSON'
+in a system prompt that includes cognitive context (chain entries,
+officer findings, memory fragments), gemma4 interprets the instruction
+as 'serialize what you see as JSON' rather than 'produce a structured
+response envelope.' The output is valid JSON — but it's the raw
+cognitive context echoed back, not an intent/content envelope.
+
+This was discovered empirically (2026-07-04) when testing gemma4:27b-mlx
+as a regent reasoning model. The unified_system.md prompt that works
+with qwen3:8b produced context dumps from gemma4. The model followed
+a different interpretation of 'reply with JSON' (serialize input)
+rather than the intended one (produce a response in JSON format)."""
+mitigation = """
+Do NOT use gemma4 for regent inference (routing or reasoning tiers)
+with the current prompt templates. Model-specific prompts would be
+needed — the base templates are structurally incompatible with gemma4's
+interpretation of JSON output instructions.
+
+gemma4 IS suitable for officer inference where the prompt structure
+is different: single-task classification with a JSON schema constraint
+via the format parameter. The format parameter constrains at the
+grammar level, bypassing the model's own interpretation of 'reply
+with JSON.'"""
+
+[quirks.ollama_empty_response]
+severity = "blocking"
+description = """
+gemma4:26b-mlx returns empty responses from the Ollama /api/chat
+endpoint under certain conditions. Observed during regent testing
+(2026-07-04). The HTTP response is 200 OK but the message content
+is empty. Root cause not yet determined — may be related to
+context length, prompt structure, or MLX backend specifics."""
+mitigation = "Under investigation. Does not affect officer inference path."
+
+[quirks.think_mode_interaction]
+severity = "caution"
+description = """
+format ON + think ON is the worst combination for gemma4.
+Bench showed 18 timeouts and 0.58 accuracy. The model appears
+to get stuck generating chain-of-thought inside the format
+constraint, producing neither valid reasoning nor valid output."""
+mitigation = """
+Never combine format ON + think ON. Use format ON + think OFF
+for classification, format OFF + think ON for reasoning tasks."""
+
+# ── Prompt Compatibility ────────────────────────────────────────────
+
+[prompt_compatibility]
+
+[prompt_compatibility.unified_system]
+status = "incompatible"
+notes = """
+FAILS. Produces context dumps instead of intent/content envelope.
+See quirks.context_dump_as_json. Model-specific prompt required
+before gemma4 can serve as regent reasoning model."""
+
+[prompt_compatibility.routing]
+status = "untested"
+notes = "Not tested for intent routing. qwen3:1.7b handles this tier."
+
+[prompt_compatibility.compose]
+status = "incompatible"
+notes = """
+Same failure mode as unified_system — compose.md template
+produces context serialization rather than composed response."""
+
+[prompt_compatibility.officer_classification]
+status = "validated"
+notes = """
+Works excellently for officer sweep tasks (receipt classification,
+severity assessment, summarization). These prompts use single-task
+framing with JSON schema format parameter — structurally different
+from the regent prompt templates. Currently deployed for officer
+inference via officer-inference.toml."""
+
+# ── Inference Configuration ─────────────────────────────────────────
+
+[inference]
+
+[inference.ollama]
+think = false                    # default; enable per-task for reasoning
+format_json = true               # critical: grammar-level constraint
+temperature = 0.0
+context_window = 32768
+recommended_context = 8192
+
+# IMPORTANT: never set think=true AND format_json=true simultaneously.
+# See quirks.think_mode_interaction.
+
+[inference.performance]
+tokens_per_sec_26b = 70          # MLX variant on APOLLO
+typical_latency_classify = 0.3   # seconds, with format parameter
+typical_latency_summarize = 1.9  # seconds, with format parameter
+typical_latency_pattern = 18.8   # seconds, with think mode (no format)
+
+# ── Bench Results ───────────────────────────────────────────────────
+
+[bench]
+date = "2026-07-01"
+script = "scripts/bench-local-models.py"
+
+[bench.tasks.receipt_classify]
+model = "gemma4:26b-mlx"
+accuracy = 0.94
+latency_s = 0.3
+format = true
+think = false
+notes = "Matches qwen3:8b accuracy at higher throughput."
+
+[bench.tasks.severity_assess]
+model = "gemma4:26b-mlx"
+accuracy = 0.93
+latency_s = 0.8
+format = true
+think = false
+
+[bench.tasks.receipt_summarize]
+model = "gemma4:26b-mlx"
+accuracy = 1.00
+latency_s = 1.9
+format = true
+think = false
+notes = "Perfect score. Best summarization result in bench."
+
+[bench.tasks.pattern_detect]
+model = "gemma4:26b-mlx"
+accuracy = 0.80
+latency_s = 18.8
+format = false
+think = true
+notes = "Competitive. Deployed as default officer model."
+
+# ── Tier Recommendations ────────────────────────────────────────────
+
+[tiers]
+
+[tiers.routing]
+variant = "gemma4:26b-mlx"
+suitability = "not_recommended"
+notes = "Untested. qwen3:1.7b is faster and validated for routing."
+
+[tiers.reasoning]
+variant = "gemma4:27b-mlx"
+suitability = "blocked"
+notes = """
+Context dump failure mode makes gemma4 unsuitable for regent
+reasoning with current prompt templates. Requires model-specific
+prompt engineering before re-evaluation. See quirks.context_dump_as_json."""
+
+[tiers.officer]
+variant = "gemma4:26b-mlx"
+suitability = "recommended"
+notes = """
+Currently deployed as the default officer inference model.
+Highest throughput, strong accuracy, reliable with format parameter.
+See officer-inference.toml for task-specific routing."""
+
+# ── Deployment Status ───────────────────────────────────────────────
+
+[deployment]
+active_tiers = ["officer"]
+chain_validated = false
+last_empirical_test = "2026-07-06"
+blocked_tiers = ["reasoning"]    # context dump failure mode
+blocked_reason = "Incompatible with regent prompt templates. See quirks."
+
+# ── Research Notes ──────────────────────────────────────────────────
+
+[research]
+
+[research.architecture]
+notes = """
+Gemma 4 uses standard dense transformer architecture with
+rotary positional embeddings. The MLX variants are optimized
+for Apple Silicon via the MLX framework, providing significant
+throughput gains on M-series chips (70 tok/s at 26B)."""
+
+[research.community]
+notes = """
+Strong community reputation for instruction following and
+classification tasks. Less commonly used for structured output
+generation compared to Qwen/Llama families. The context dump
+behavior we observed may be related to how Gemma models were
+fine-tuned — they appear to treat JSON output instructions as
+serialization directives rather than format constraints."""
+
+[research.known_issues]
+notes = """
+The empty response issue from Ollama /api/chat is not widely
+reported in the community — may be specific to the MLX backend
+or our prompt structure. Needs further investigation."""
