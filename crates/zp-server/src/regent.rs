@@ -35,10 +35,19 @@ use zp_regent::regent::Regent;
 /// Presence in this array **is** the grant. Adding an entry grants the
 /// capability; that is an authority decision, not a lint fix.
 ///
-/// `browser_use` is implemented with a full sub-dispatch surface (goto_url, js,
-/// page_info, list_tabs, wait_for_element) and is deliberately absent — it is
-/// ungranted until the operator decides otherwise. Add the pair
-/// `("browser_use", "web:allowed_domains")` to grant it.
+/// `browser_use` was granted 2026-07-26. Three defects were closed at the
+/// same time, because granting is what made them reachable: the domain gate
+/// was a substring test against the whole URL, the three Python parameter
+/// interpolations escaped only single quotes, and the `js` action carried no
+/// URL and so never reached the gate at all. The gate is now host-anchored,
+/// parameters are encoded as JSON string literals, and `js` pre-flights
+/// `page_info()` and is held to the same allowlist, failing closed when the
+/// focused tab's URL cannot be read.
+///
+/// The `web:allowed_domains` scope selector is not yet read by anything —
+/// `ALLOWED_DOMAINS` is a hardcoded const in the dispatch arm. The grant is
+/// genuinely narrow, but narrower than the delegation advertises; moving the
+/// list onto the delegation is the follow-up that makes the scope real.
 const REGENT_TOOLS: &[(&str, &str)] = &[
     ("chain_query", "audit_chain"),
     ("governance_posture", "governance"),
@@ -50,6 +59,7 @@ const REGENT_TOOLS: &[(&str, &str)] = &[
     ("memory_list", "cognition:memory_promotion"),
     ("memory_review", "cognition:memory_promotion:review_remembered"),
     ("substrate_validate", "substrate:validation:regent"),
+    ("browser_use", "web:allowed_domains"),
 ];
 
 // ── Conversation namespace ──────────────────────────────────────────────────
@@ -535,100 +545,30 @@ impl ServerIntentExecutor {
 
             "browser_use" => {
                 // Domain-restricted browser automation via browser-harness CLI.
-                const ALLOWED_DOMAINS: &[&str] = &[
-                    "zeropoint.global",
-                    "zeropointfoundation.org",
-                    "github.com/zeropoint-foundation",
-                    "localhost",
-                    "127.0.0.1",
-                    "example.com", // testing
+                // (host, required path prefix). Matching is host-anchored:
+                // the URL's parsed host must equal the entry or be a
+                // subdomain of it, and the path must start with the prefix.
+                //
+                // Previously this was a substring test against the whole
+                // URL, which `https://evil.example/?x=zeropoint.global`
+                // and `https://zeropoint.global.attacker.net/` both passed.
+                const ALLOWED_DOMAINS: &[(&str, &str)] = &[
+                    ("zeropoint.global", "/"),
+                    ("zeropointfoundation.org", "/"),
+                    ("github.com", "/zeropoint-foundation"),
+                    ("localhost", "/"),
+                    ("127.0.0.1", "/"),
+                    ("example.com", "/"), // testing
                 ];
 
-                // Recover action + URL from params. Small models often emit
-                // {"intent":"execute","tool":"browser_use"} with no params
-                // even when the operator said "navigate to X". Default to
-                // goto_url when a URL is present, page_info otherwise.
-                let raw_action = params
-                    .get("action")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let raw_url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
-
-                // If model didn't provide action but we have a URL, infer goto_url.
-                // If neither, try to extract a URL from the operator's original
-                // request stored in the recent chain context.
-                let (action, url) = if !raw_action.is_empty() {
-                    (raw_action.to_string(), raw_url.to_string())
-                } else if !raw_url.is_empty() {
-                    ("goto_url".to_string(), raw_url.to_string())
-                } else {
-                    // Last resort: scan allowed domains — if the operator likely
-                    // named one, use it. This handles the common case where the
-                    // model emits bare {"tool":"browser_use"} for "navigate to
-                    // zeropoint.global".
-                    // For now, default to page_info (safe, no URL needed).
-                    ("page_info".to_string(), String::new())
-                };
-
-                // Domain gate: if action involves a URL, validate it.
-                if !url.is_empty() {
-                    let domain_ok = ALLOWED_DOMAINS.iter().any(|d| url.contains(d));
-                    if !domain_ok {
-                        return Ok(serde_json::json!({
-                            "error": "domain_blocked",
-                            "message": format!("URL '{}' is not in allowed_domains", url),
-                            "allowed": ALLOWED_DOMAINS,
-                        }));
-                    }
-                }
-
-                // Build the Python snippet for browser-harness.
-                // Always start with ensure_real_tab() to avoid hung-tab
-                // timeouts (a tab with stalled JS blocks Runtime.evaluate).
-                let py_code = match action.as_str() {
-                    "goto_url" => {
-                        if url.is_empty() {
-                            return Ok(serde_json::json!({
-                                "error": "missing_url",
-                                "message": "goto_url requires a 'url' parameter",
-                            }));
-                        }
-                        format!(
-                            "ensure_real_tab()\ncdp(\"Page.bringToFront\")\ngoto_url('{}')\nwait(2)\ninfo = page_info()\nimport json; print(json.dumps(info))",
-                            url.replace('\'', "\\'")
-                        )
-                    }
-                    "page_info" => {
-                        "ensure_real_tab()\ncdp(\"Page.bringToFront\")\ninfo = page_info()\nimport json; print(json.dumps(info))".to_string()
-                    }
-                    "js" => {
-                        let expr = params.get("expression").and_then(|v| v.as_str()).unwrap_or("null");
-                        format!(
-                            "ensure_real_tab()\ncdp(\"Page.bringToFront\")\nresult = js('{}')\nprint(result)",
-                            expr.replace('\'', "\\'")
-                        )
-                    }
-                    "list_tabs" => {
-                        "tabs = list_tabs()\nimport json; print(json.dumps([{{'url': t.get('url',''), 'title': t.get('title','')}} for t in tabs[:20]]))".to_string()
-                    }
-                    "wait_for_element" => {
-                        let sel = params.get("selector").and_then(|v| v.as_str()).unwrap_or("body");
-                        format!(
-                            "ensure_real_tab()\ncdp(\"Page.bringToFront\")\nwait_for_element('{}')\nprint('found')",
-                            sel.replace('\'', "\\'")
-                        )
-                    }
-                    _ => {
-                        return Ok(serde_json::json!({
-                            "error": "unknown_action",
-                            "message": format!("browser_use action '{}' not recognized", action),
-                            "supported": ["goto_url", "page_info", "js", "list_tabs", "wait_for_element"],
-                        }));
-                    }
-                };
-
-                // Shell out to browser-harness with explicit stdin close + timeout.
-                let output = std::process::Command::new("browser-harness")
+                /// Run one `browser-harness` invocation to completion.
+                ///
+                /// Extracted so the `js` action can pre-flight `page_info()`
+                /// through the same path before its expression is allowed to
+                /// run — the domain gate has to be enforced substrate-side,
+                /// not by the generated Python.
+                fn run_harness(py_code: &str) -> std::io::Result<std::process::Output> {
+                    std::process::Command::new("browser-harness")
                     .stdin(std::process::Stdio::piped())
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
@@ -659,7 +599,170 @@ impl ServerIntentExecutor {
                                 None => std::thread::sleep(std::time::Duration::from_millis(100)),
                             }
                         }
-                    });
+                    })
+                }
+
+                /// Encode a parameter as a Python string literal.
+                ///
+                /// JSON string syntax is a subset of Python's, so a
+                /// `serde_json` encoding is a safe literal: quotes,
+                /// backslashes, newlines and control characters are all
+                /// escaped. The previous single-quote-only escape let a
+                /// raw newline in `url`, `expression` or `selector` break
+                /// out of the literal and execute as Python in the
+                /// browser-harness process.
+                fn py_str(s: &str) -> String {
+                    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
+                }
+
+                /// Host-anchored allowlist check. Returns false on any URL
+                /// that fails to parse, on non-http(s) schemes, and on any
+                /// host that is not an exact match or a dot-boundary
+                /// subdomain of an allowlisted host.
+                fn domain_allowed(raw: &str, allow: &[(&str, &str)]) -> bool {
+                    let parsed = match reqwest::Url::parse(raw) {
+                        Ok(u) => u,
+                        Err(_) => return false,
+                    };
+                    if !matches!(parsed.scheme(), "http" | "https") {
+                        return false;
+                    }
+                    let host = match parsed.host_str() {
+                        Some(h) => h.to_ascii_lowercase(),
+                        None => return false,
+                    };
+                    let path = parsed.path();
+                    allow.iter().any(|(d, prefix)| {
+                        let d = d.to_ascii_lowercase();
+                        let host_ok = host == d || host.ends_with(&format!(".{}", d));
+                        host_ok && path.starts_with(prefix)
+                    })
+                }
+
+                // Recover action + URL from params. Small models often emit
+                // {"intent":"execute","tool":"browser_use"} with no params
+                // even when the operator said "navigate to X". Default to
+                // goto_url when a URL is present, page_info otherwise.
+                let raw_action = params
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let raw_url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
+
+                // If model didn't provide action but we have a URL, infer goto_url.
+                // If neither, try to extract a URL from the operator's original
+                // request stored in the recent chain context.
+                let (action, url) = if !raw_action.is_empty() {
+                    (raw_action.to_string(), raw_url.to_string())
+                } else if !raw_url.is_empty() {
+                    ("goto_url".to_string(), raw_url.to_string())
+                } else {
+                    // Last resort: scan allowed domains — if the operator likely
+                    // named one, use it. This handles the common case where the
+                    // model emits bare {"tool":"browser_use"} for "navigate to
+                    // zeropoint.global".
+                    // For now, default to page_info (safe, no URL needed).
+                    ("page_info".to_string(), String::new())
+                };
+
+                // Domain gate: if action involves a URL, validate it.
+                if !url.is_empty() {
+                    if !domain_allowed(&url, ALLOWED_DOMAINS) {
+                        return Ok(serde_json::json!({
+                            "error": "domain_blocked",
+                            "message": format!("URL '{}' is not in allowed_domains", url),
+                            "allowed": ALLOWED_DOMAINS
+                                .iter()
+                                .map(|(d, p)| format!("{}{}", d, p))
+                                .collect::<Vec<_>>(),
+                        }));
+                    }
+                }
+
+                // Build the Python snippet for browser-harness.
+                // Always start with ensure_real_tab() to avoid hung-tab
+                // timeouts (a tab with stalled JS blocks Runtime.evaluate).
+                let py_code = match action.as_str() {
+                    "goto_url" => {
+                        if url.is_empty() {
+                            return Ok(serde_json::json!({
+                                "error": "missing_url",
+                                "message": "goto_url requires a 'url' parameter",
+                            }));
+                        }
+                        format!(
+                            "ensure_real_tab()\ncdp(\"Page.bringToFront\")\ngoto_url({})\nwait(2)\ninfo = page_info()\nimport json; print(json.dumps(info))",
+                            py_str(&url)
+                        )
+                    }
+                    "page_info" => {
+                        "ensure_real_tab()\ncdp(\"Page.bringToFront\")\ninfo = page_info()\nimport json; print(json.dumps(info))".to_string()
+                    }
+                    "js" => {
+                        // Pre-flight: `js` carries no URL of its own, so the
+                        // domain gate above never sees it. Read the focused
+                        // tab's URL first and hold the expression to the same
+                        // host-anchored allowlist every other action obeys.
+                        let probe = run_harness(
+                            "ensure_real_tab()\ncdp(\"Page.bringToFront\")\ninfo = page_info()\nimport json; print(json.dumps(info))",
+                        );
+                        let current_url = match probe {
+                            Ok(out) if out.status.success() => {
+                                let stdout = String::from_utf8_lossy(&out.stdout);
+                                serde_json::from_str::<serde_json::Value>(stdout.trim())
+                                    .ok()
+                                    .and_then(|v| {
+                                        v.get("url").and_then(|u| u.as_str()).map(String::from)
+                                    })
+                            }
+                            _ => None,
+                        };
+                        // Fail closed: an unreadable tab is not an allowed tab.
+                        let Some(current_url) = current_url else {
+                            return Ok(serde_json::json!({
+                                "error": "tab_url_unavailable",
+                                "message": "Could not read the focused tab's URL; js refused.",
+                            }));
+                        };
+                        if !domain_allowed(&current_url, ALLOWED_DOMAINS) {
+                            return Ok(serde_json::json!({
+                                "error": "domain_blocked",
+                                "message": format!(
+                                    "Focused tab '{}' is not in allowed_domains; js refused.",
+                                    current_url
+                                ),
+                                "allowed": ALLOWED_DOMAINS
+                                    .iter()
+                                    .map(|(d, p)| format!("{}{}", d, p))
+                                    .collect::<Vec<_>>(),
+                            }));
+                        }
+                        let expr = params.get("expression").and_then(|v| v.as_str()).unwrap_or("null");
+                        format!(
+                            "ensure_real_tab()\ncdp(\"Page.bringToFront\")\nresult = js({})\nprint(result)",
+                            py_str(expr)
+                        )
+                    }
+                    "list_tabs" => {
+                        "tabs = list_tabs()\nimport json; print(json.dumps([{{'url': t.get('url',''), 'title': t.get('title','')}} for t in tabs[:20]]))".to_string()
+                    }
+                    "wait_for_element" => {
+                        let sel = params.get("selector").and_then(|v| v.as_str()).unwrap_or("body");
+                        format!(
+                            "ensure_real_tab()\ncdp(\"Page.bringToFront\")\nwait_for_element({})\nprint('found')",
+                            py_str(sel)
+                        )
+                    }
+                    _ => {
+                        return Ok(serde_json::json!({
+                            "error": "unknown_action",
+                            "message": format!("browser_use action '{}' not recognized", action),
+                            "supported": ["goto_url", "page_info", "js", "list_tabs", "wait_for_element"],
+                        }));
+                    }
+                };
+
+                let output = run_harness(&py_code);
 
                 match output {
                     Ok(out) => {

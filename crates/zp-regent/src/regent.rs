@@ -1031,6 +1031,10 @@ impl Regent {
             "model_evaluate" => "model_evaluate(model:\"name\")".to_string(),
             "memory_list" => "memory_list(stage?)".to_string(),
             "memory_review" => "memory_review(action,review_id?,reason?)".to_string(),
+            "browser_use" => {
+                "browser_use(action:\"goto_url|page_info|js|list_tabs|wait_for_element\",url?,expression?,selector?)"
+                    .to_string()
+            }
             other => format!("{other}()"),
         }
     }
@@ -1044,6 +1048,9 @@ impl Regent {
             ),
             "substrate_validate" => Some(
                 "- Operator asks for substrate validation, health, or posture report → {\"intent\":\"execute\",\"tool\":\"substrate_validate\",\"params\":{}}",
+            ),
+            "browser_use" => Some(
+                "- Operator asks you to open, visit, navigate to, or read a web page → {\"intent\":\"execute\",\"tool\":\"browser_use\",\"params\":{\"action\":\"goto_url\",\"url\":\"https://…\"}}",
             ),
             _ => None,
         }
