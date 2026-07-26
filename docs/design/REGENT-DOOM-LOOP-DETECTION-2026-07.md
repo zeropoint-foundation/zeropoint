@@ -1,7 +1,7 @@
 # Regent Doom-Loop Detection
 
 **Document type:** Tier 2 canonical elaboration.
-**Elaborates:** KEEL §II.17 (cognitive discipline sandwich), §III.19 (detectability — silence-is-the-enemy applied to cognitive emissions), §III.20 (forward-only recovery), §III.22 (evidence-based ceremony). Companion to `COGNITIVE-SELF-OBSERVER-2026-07.md` — this document extends the observer's verification catalog with a new class (Class 8: Emission Coherence).
+**Elaborates:** KEEL §II.17 (cognitive discipline sandwich), §III.19 (detectability — silence-is-the-enemy applied to cognitive emissions), §III.20 (forward-only recovery), §III.22 (evidence-based ceremony). Companion to `COGNITIVE-SELF-OBSERVER-2026-07.md` — this document **proposes** a new class for the observer's verification catalog (proposed Class 8: Emission Coherence). CSO ships Classes 1–7 today; integration of Class 8 is pending and lands via follow-up work.
 **Date:** 2026-07-18. Motivated by SLM failure-mode analysis (Liquid AI LFM 2/2.5 talk by Maxime Labonne) and the observation that the substrate's Regent tier — currently qwen3:8b — is exactly the class of model that hits doom loops under load without any substrate mechanism noticing.
 **Author:** Ken Romero, with synthesis assistance from Claude.
 **Status:** Living discipline. Ships as instrumentation, not remediation — the substrate first observes and chain-anchors evidence; escalation policy per class lands via follow-up work.
@@ -296,7 +296,7 @@ Emission cadence: at most one `chronic_drift_suspected` receipt per (model, heur
 
 ## Part V — Composition with existing disciplines
 
-**COGNITIVE-SELF-OBSERVER-2026-07.md** — this document extends the observer's verification catalog. The Self-Observer's current classes (v1: pattern-based standing-correction violation detection) become Class 1–7. Doom-loop detection lands as Class 8: Emission Coherence. Same infrastructure: post-emission verification, pattern-match extraction, chain-anchored findings. Different signal.
+**COGNITIVE-SELF-OBSERVER-2026-07.md** — this document proposes to extend the observer's verification catalog. CSO today ships Classes 1–7 (Chain-state, Diagnosis, Interpretation, Precedent, Commitment, Self-state, Capability). Doom-loop detection is proposed as an additional Class 8: Emission Coherence. Same infrastructure: post-emission verification, pattern-match extraction, chain-anchored findings. Different signal. **Integration status:** Class 8 is not yet in CSO's shipped catalog; picked up in follow-up work when doom-loop instrumentation lands.
 
 **MODEL-DOSSIER-2026-07** (via EXECUTION-AUTHORITY-MODEL Phase 5) — dossier's `suitability` field extends to include:
 - `doom_loop_rate_per_1k_responses` — chain-anchored measurement over rolling window
@@ -409,7 +409,7 @@ Testable claims that must hold post-implementation:
 
 ## Composes with / connects to
 
-- **COGNITIVE-SELF-OBSERVER-2026-07.md** — this document is Class 8 (Emission Coherence) of the observer's verification catalog.
+- **COGNITIVE-SELF-OBSERVER-2026-07.md** — this document proposes Class 8 (Emission Coherence) as an extension to the observer's verification catalog. CSO today ships Classes 1–7; Class 8 integration is pending.
 - **EXECUTION-AUTHORITY-MODEL-2026-07.md** — Phase 5 model evaluation absorbs doom-loop rate as first-class metric.
 - **INFERENCE-ROUTING-DISCIPLINE-2026-07.md** — Class R2 fallback tier engagement.
 - **SHADOW-EVALUATION-PRIMITIVE-2026-07.md** — doom-loop rate as candidate-vs-control comparison signal.

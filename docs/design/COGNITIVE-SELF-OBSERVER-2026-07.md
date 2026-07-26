@@ -113,6 +113,14 @@ Assertions about what Regent can or cannot do. Primary responsibility of Claim V
 
 **Detection method**: overlap with Claim Verifier; the observer catches the diagnostic/interpretive framings that Claim Verifier's structural pattern-match misses.
 
+### Proposed extensions (not yet integrated)
+
+Classes 1–7 above are the shipped catalog. A sibling Tier-2 elaboration proposes an additional class; picked up here so someone reading the catalog can see the extension:
+
+- **Proposed Class 8 — Emission Coherence** (per `REGENT-DOOM-LOOP-DETECTION-2026-07.md`). Same post-emission verification infrastructure applied to a different signal: structural coherence of the response itself (lexical repetition storms, sentence-level cycling, structural collapse), rather than truth-of-claim against ground truth. Integration into this document's catalog is pending doom-loop instrumentation landing; when it does, this section moves inline as Class 8 alongside the other seven.
+
+Additions to this list arrive through the same Tier-2 elaboration pattern: a sibling doc proposes a new class with its verification source and detection method, and integration into this catalog happens as a coherence pass once the implementation lands.
+
 ## The observer runtime
 
 Layer A component that runs post-emission on Regent's outputs.
@@ -162,7 +170,7 @@ For each verified claim, compare claimed vs actual:
 
 The observer's per-response manifest of verified claims (with pass/fail per claim) becomes the input to the Cognitive Input Plane's next-cycle matrix. Standing pattern of the same confabulation type can trigger:
 
-- Automatic proposal of a `regent:standing_correction` receipt (operator reviews and signs)
+- Automatic proposal of a `cognitive:correction:standing` receipt (operator reviews and signs; canonical schema in `STANDING-CORRECTION-RECEIPT-SCHEMA-2026-07.md`)
 - Contribution to escalation-ladder threshold (sustained confabulation-gap in a specific class → L1 elevated attention on Regent's cognitive scope)
 
 ## Layer A / Layer B split
