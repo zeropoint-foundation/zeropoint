@@ -402,7 +402,7 @@ impl Router {
                 let variant = dossier.variant_for(category);
                 let is_local = !dossier.cloud_only;
                 let endpoint = if is_local {
-                    "http://localhost:11434".to_string()
+                    "http://127.0.0.1:11434".to_string()
                 } else {
                     config.inference_endpoint.clone()
                 };

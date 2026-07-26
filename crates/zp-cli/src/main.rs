@@ -2052,9 +2052,10 @@ async fn main() -> anyhow::Result<()> {
                 // in-memory PortRegistry so the dashboard reflects the change
                 // immediately. Fall back to standalone registry only if the
                 // server is unreachable.
-                let server_url = format!(
-                    "http://127.0.0.1:{}/api/v1/tools/{}/remove",
-                    cfg.port.value, name_lower,
+                let server_url = zp_net::peer_url_with_path(
+                    "127.0.0.1",
+                    cfg.port.value,
+                    &format!("/api/v1/tools/{}/remove", name_lower),
                 );
                 let server_result = std::process::Command::new("curl")
                     .args([
@@ -4124,7 +4125,7 @@ async fn main() -> anyhow::Result<()> {
                     }
 
                     // ── HTTP probe: proxy_target with auth ─────────────────
-                    let probe_url = format!("http://127.0.0.1:{}/", proxy_target);
+                    let probe_url = zp_net::peer_url_with_path("127.0.0.1", proxy_target, "/");
                     let auth_token = binding.auth_token.clone();
                     let (authed_status, authed_ct, unauthed_status) = rt.block_on(async {
                         let client = reqwest::Client::builder()
@@ -6935,7 +6936,7 @@ async fn run_officer_sweep(name: Option<&str>, json_out: bool) -> anyhow::Result
 
     // Officer names are known-safe (alphanumeric, no URL-special chars).
     // Reject anything else to avoid injection into the query string.
-    let mut url = format!("http://127.0.0.1:{}/api/v1/officer/sweep", port);
+    let mut url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/officer/sweep");
     if let Some(n) = name {
         if !n.chars().all(|c| c.is_ascii_alphanumeric()) {
             return Err(anyhow::anyhow!(
@@ -7062,7 +7063,11 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
     let token = read_zp_session_token()
         .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
 
-    let url = format!("http://127.0.0.1:{}/api/v1/vault/test/{}", port, provider);
+    let url = zp_net::peer_url_with_path(
+        "127.0.0.1",
+        port,
+        &format!("/api/v1/vault/test/{}", provider),
+    );
 
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))
@@ -7167,7 +7172,7 @@ async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
     let token = read_zp_session_token()
         .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
 
-    let url = format!("http://127.0.0.1:{}/api/v1/substrate/validate", port);
+    let url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/substrate/validate");
 
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))
@@ -7330,7 +7335,7 @@ async fn run_correction_issue(
         anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
     })?;
 
-    let url = format!("http://127.0.0.1:{}/api/v1/correction/issue", port);
+    let url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/correction/issue");
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))
         .timeout(std::time::Duration::from_secs(15))
@@ -7389,7 +7394,7 @@ async fn run_correction_list(json_out: bool) -> anyhow::Result<()> {
         anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
     })?;
 
-    let url = format!("http://127.0.0.1:{}/api/v1/correction/list", port);
+    let url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/correction/list");
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))
         .timeout(std::time::Duration::from_secs(10))
@@ -7453,9 +7458,10 @@ async fn run_correction_revoke(correction_id: &str, json_out: bool) -> anyhow::R
         anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
     })?;
 
-    let url = format!(
-        "http://127.0.0.1:{}/api/v1/correction/revoke/{}",
-        port, correction_id
+    let url = zp_net::peer_url_with_path(
+        "127.0.0.1",
+        port,
+        &format!("/api/v1/correction/revoke/{}", correction_id),
     );
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))

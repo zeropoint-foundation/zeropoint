@@ -38,6 +38,22 @@
 //! - `crates/zp-engine/src/discovery.rs` — `looks_like_internal_url`
 //!   test fixtures.
 //! - `crates/zp-llm/` — external-provider clients (Ollama).
+//! - `crates/zp-regent/src/{routing,inference,config}.rs`,
+//!   `crates/zp-server/src/regent.rs`, `crates/zp-config/src/schema.rs`
+//!   — Ollama endpoint defaults, the inference fallback endpoint, and
+//!   the `ensure_ollama_running` health probes. Ollama is an external
+//!   provider that happens to listen on loopback; it is not a
+//!   substrate peer, so `zp_net::peer_url*` is the wrong carrier
+//!   (`zp-regent` and `zp-config` do not depend on `zp-net`, and
+//!   adding the dependency to normalize a third-party provider URL
+//!   would invert the layering).
+//!
+//!   The resolver-order concern is real for these sites even though
+//!   the pin does not reach them: all five were normalized to the
+//!   IPv4 literal on 2026-07-26 after `routing.rs` and `inference.rs`
+//!   were found using the `localhost` form while the configured
+//!   defaults used `127.0.0.1`. Keep new Ollama URLs on the IPv4
+//!   literal.
 //! - `crates/zp-configure/` — operator-facing display copy + test
 //!   fixtures (`.env.example` prose, OLLAMA_SERVER_URL templates).
 //!   The substantive proxy-URL site migrated to
@@ -99,6 +115,17 @@ fn peer_urls_must_route_through_zp_net() {
         .allow_path("crates/zp-server/src/onboard/detect.rs")
         // External provider client (Ollama).
         .allow_path("crates/zp-llm/src/")
+        // Ollama endpoint defaults and health probes. Same class as
+        // zp-llm and onboard/detect.rs above: Ollama is an external
+        // provider reached over loopback, not a substrate peer, so
+        // zp_net's peer builders are the wrong carrier. Host form is
+        // pinned to the IPv4 literal at every site by convention
+        // rather than by this pin — see the module note below.
+        .allow_path("crates/zp-regent/src/routing.rs")
+        .allow_path("crates/zp-regent/src/inference.rs")
+        .allow_path("crates/zp-regent/src/config.rs")
+        .allow_path("crates/zp-server/src/regent.rs")
+        .allow_path("crates/zp-config/src/schema.rs")
         // Config-example prose + unreachable-URL test fixtures.
         .allow_path("crates/zp-server/src/lease_heartbeat.rs")
         // Discovery test fixture (`looks_like_internal_url`).

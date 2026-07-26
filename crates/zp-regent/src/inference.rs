@@ -362,7 +362,7 @@ impl InferenceBackend {
             resolved_key,
             protocol,
             provider,
-            fallback_endpoint: "http://localhost:11434".to_string(),
+            fallback_endpoint: "http://127.0.0.1:11434".to_string(),
             fallback_model,
             last_fallback: std::sync::Mutex::new(None),
         }
@@ -528,7 +528,7 @@ impl InferenceBackend {
     async fn ensure_ollama_running() -> Result<(), String> {
         // Check if already running via a quick health check.
         let client = reqwest::Client::new();
-        if client.get("http://localhost:11434/api/tags")
+        if client.get("http://127.0.0.1:11434/api/tags")
             .timeout(std::time::Duration::from_secs(2))
             .send()
             .await
@@ -571,7 +571,7 @@ impl InferenceBackend {
         // Poll until responsive (up to 8 seconds, 500ms intervals).
         for _ in 0..16 {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            if client.get("http://localhost:11434/api/tags")
+            if client.get("http://127.0.0.1:11434/api/tags")
                 .timeout(std::time::Duration::from_secs(1))
                 .send()
                 .await

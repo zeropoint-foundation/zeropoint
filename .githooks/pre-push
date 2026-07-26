@@ -78,7 +78,7 @@ fi
 # the workspace. ~1-2s; pure-Rust file I/O. Pins also run in CI as
 # part of `cargo test --workspace`; this is the local fast-fail layer.
 echo "pre-push: cargo test -p zp-discipline against HEAD..."
-if ! ( cd "$WORKTREE" && cargo test -p zp-discipline --quiet ); then
+if ! ( cd "$WORKTREE" && cargo test -p zp-discipline --quiet --no-fail-fast ); then
     echo ""
     echo "pre-push: A discipline pin is failing on HEAD. Push aborted."
     echo ""

@@ -44,7 +44,11 @@ jobs:
         run: cargo build --workspace
 
       - name: Test (minimal kernel)
-        run: cargo test --workspace
+        # --no-fail-fast: cargo aborts remaining test targets on the
+        # first failure, which means one failing discipline pin masks
+        # every pin after it. Two masked pins surfaced this way on
+        # 2026-07-26. Report every failure per run.
+        run: cargo test --workspace --no-fail-fast
 
       - name: Clippy (minimal kernel)
         run: cargo clippy --workspace -- -D warnings
@@ -54,7 +58,7 @@ jobs:
         run: cargo build --workspace --features zp-cli/full,zp-server/full,zp-policy/policy-wasm
 
       - name: Test (full features)
-        run: cargo test --workspace --features zp-cli/full,zp-server/full,zp-policy/policy-wasm
+        run: cargo test --workspace --no-fail-fast --features zp-cli/full,zp-server/full,zp-policy/policy-wasm
 
       - name: Clippy (full features)
         run: cargo clippy --workspace --features zp-cli/full,zp-server/full,zp-policy/policy-wasm -- -D warnings
