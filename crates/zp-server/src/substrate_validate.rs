@@ -86,6 +86,8 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "cognitive:correction:standing",
     "cognitive:correction:revoked",
     "cognitive:correction:violated",
+    // Cognitive act accounting (v0) — per COGNITIVE-ACT-ACCOUNTING-2026-07.md §6
+    "cognitive:act:recorded",
     // Canary discipline
     "chain:canary:",
     // Substrate validation (this tool's own emissions)

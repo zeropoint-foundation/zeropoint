@@ -139,16 +139,163 @@ pub struct CompositionSummary {
     /// Hash of the top-K standing corrections (in the order presented to Regent).
     /// Empty string when the correction set is empty.
     pub standing_corrections_hash: String,
+    /// Authorship provenance for the standing-corrections class (Tier 1).
+    /// Per ZEP-self-referential-authorship-2026-07.md §4: "provenance on every
+    /// artifact."
+    #[serde(default)]
+    pub standing_correction_authorship: ClassAuthorship,
     /// Number of officer findings included in Tier 2.
     pub officer_finding_count: usize,
     /// Hash of the officer findings (in the order presented).
     pub officer_findings_hash: String,
+    /// Authorship provenance for the officer-findings class (Tier 2).
+    #[serde(default)]
+    pub officer_finding_authorship: ClassAuthorship,
     /// Number of recent chain entries in Tier 2 context.
     pub recent_chain_count: usize,
     /// Number of active delegations in Tier 2 context.
     pub active_delegation_count: usize,
     /// Cycle invocation reason — hint for downstream analysis.
     pub invocation_reason: String,
+    /// Tier-weighted fraction of this cycle's composed context that is
+    /// self-authored (Regent-authored, directly or via an adopted proposal).
+    /// Computed per ZEP-self-referential-authorship-2026-07.md §III.27 /
+    /// §4 ("the ratio is the instrument"). Always `0.0` today — every
+    /// composed class is operator- or officer-authored; no Regent corpus
+    /// authorship (Class 2/3) exists yet in the runtime. That is the
+    /// expected baseline, not a bug — see the axiom's §10 prerequisite.
+    #[serde(default)]
+    pub self_authorship_ratio: f64,
+}
+
+/// Who authored an item of composed context, per
+/// ZEP-self-referential-authorship-2026-07.md's ontology term
+/// "self-referential authorship." Only `Operator` and `Officer` are
+/// reachable in the runtime today — `Regent` is forward-declared so the
+/// ratio computation is meaningful the moment Regent corpus authorship
+/// (Class 2/3 per §III.27) exists, and should not be constructed anywhere
+/// yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthorClass {
+    /// Authored by the sovereign operator (e.g. a standing correction
+    /// `issued_by` the operator's Genesis key).
+    Operator,
+    /// Authored by an officer (e.g. an officer finding).
+    Officer,
+    /// Authored by the Regent herself. Not reachable today.
+    Regent,
+}
+
+/// Authorship provenance for one contributing class of composed context.
+///
+/// Counts, not content — consistent with `CompositionSummary`'s
+/// structural-only discipline; nothing here bloats the chain receipt.
+///
+/// `proposed_by_regent` is tracked separately from `authored_by` per
+/// ZEP-self-referential-authorship-2026-07.md §4: "`proposed_by` is
+/// separate from `authored_by` and never stripped. Where material was
+/// Regent-proposed and operator-adopted, both fields persist and the item
+/// still counts toward the ratio." An adopted proposal is counted in both
+/// its `authored_by` bucket (the adopting author — operator or officer)
+/// *and* in `proposed_by_regent`, so it still contributes to the
+/// self-authorship ratio numerator via [`ClassAuthorship::self_authored`]
+/// without inflating the class total.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClassAuthorship {
+    /// Count of items in this class with `authored_by == operator`.
+    pub operator_authored: usize,
+    /// Count of items in this class with `authored_by == officer`.
+    pub officer_authored: usize,
+    /// Count of items in this class with `authored_by == regent`. Always
+    /// `0` until Regent corpus authorship exists.
+    pub regent_authored: usize,
+    /// Of the items counted above (any `authored_by`), how many additionally
+    /// carry `proposed_by == regent` — an operator- or officer-authored item
+    /// that adopted a Regent proposal. Never stripped; always `0` until
+    /// the proposal/adoption mechanism exists (out of scope for this slice).
+    pub regent_proposed_adopted: usize,
+}
+
+impl ClassAuthorship {
+    /// All items in this class authored by the operator.
+    pub fn all_operator(count: usize) -> Self {
+        Self {
+            operator_authored: count,
+            ..Default::default()
+        }
+    }
+
+    /// All items in this class authored by an officer.
+    pub fn all_officer(count: usize) -> Self {
+        Self {
+            officer_authored: count,
+            ..Default::default()
+        }
+    }
+
+    /// Count of items in this class attributed to the given [`AuthorClass`].
+    /// Does not include `regent_proposed_adopted` — that's cross-cutting
+    /// metadata over items already counted here, not its own author class.
+    pub fn count(&self, author: AuthorClass) -> usize {
+        match author {
+            AuthorClass::Operator => self.operator_authored,
+            AuthorClass::Officer => self.officer_authored,
+            AuthorClass::Regent => self.regent_authored,
+        }
+    }
+
+    /// Total items in this class, across all `authored_by` values.
+    /// `regent_proposed_adopted` is not added — it's metadata on items
+    /// already counted in `operator_authored`/`officer_authored`, not a
+    /// separate population.
+    pub fn total(&self) -> usize {
+        self.operator_authored + self.officer_authored + self.regent_authored
+    }
+
+    /// Items counting toward the self-authorship ratio numerator: directly
+    /// Regent-authored, plus operator/officer-authored items that adopted a
+    /// Regent proposal (proposed_by is never stripped and still counts, per
+    /// ZEP-self-referential-authorship-2026-07.md §III.27 / §4).
+    pub fn self_authored(&self) -> usize {
+        self.regent_authored + self.regent_proposed_adopted
+    }
+}
+
+/// Relative weight of Tier 1 context (standing corrections) vs Tier 2
+/// (officer findings) in the self-authorship ratio.
+///
+/// Per ZEP-self-referential-authorship-2026-07.md §4: "Weight by tier, not
+/// by item count. A self-authored Tier 1 standing correction conditions the
+/// cycle far more than a self-authored Tier 2 finding. Item-count weighting
+/// understates exactly the case the ratio exists to catch." 2:1 reflects
+/// Tier 1's status as persistent, load-bearing context per
+/// COGNITIVE-INPUT-PLANE-2026-07.md §"Priority tier summary" (Tier 1 is what
+/// Regent "must remember across cycles"; Tier 2 is "current context"). These
+/// are placeholder magnitudes, not derived from evidence — re-tune once the
+/// ratio has an observed distribution (open position: "Breaker thresholds
+/// for the ratio").
+const TIER1_AUTHORSHIP_WEIGHT: f64 = 2.0;
+const TIER2_AUTHORSHIP_WEIGHT: f64 = 1.0;
+
+/// Compute the tier-weighted self-authorship ratio across the two
+/// contributing classes currently tracked (standing corrections = Tier 1,
+/// officer findings = Tier 2). Returns `0.0` when there is no composed
+/// context to weight (avoids division by zero) — which is also the
+/// universal result today, since no class has any Regent-authored or
+/// Regent-proposed-and-adopted items yet.
+pub fn tier_weighted_self_authorship_ratio(
+    tier1: &ClassAuthorship,
+    tier2: &ClassAuthorship,
+) -> f64 {
+    let weighted_total = TIER1_AUTHORSHIP_WEIGHT * tier1.total() as f64
+        + TIER2_AUTHORSHIP_WEIGHT * tier2.total() as f64;
+    if weighted_total == 0.0 {
+        return 0.0;
+    }
+    let weighted_self = TIER1_AUTHORSHIP_WEIGHT * tier1.self_authored() as f64
+        + TIER2_AUTHORSHIP_WEIGHT * tier2.self_authored() as f64;
+    weighted_self / weighted_total
 }
 
 impl CompositionSummary {
@@ -172,6 +319,24 @@ impl CompositionSummary {
         }
         let bytes = serde_json::to_vec(findings).unwrap_or_default();
         hex_sha256(&bytes)
+    }
+
+    /// Number of composition classes that contributed at least one item to
+    /// this cycle's context — the structural attention signal for the
+    /// cognitive-act receipt's `attended=` field, at "current receipt
+    /// granularity" per COGNITIVE-ACT-ACCOUNTING-2026-07.md §6 (v0 scope;
+    /// per-class content hashing across all seven classes is deferred, per
+    /// that doc's §3.1 `attended` status note).
+    pub fn attended_class_count(&self) -> usize {
+        [
+            self.standing_correction_count > 0,
+            self.officer_finding_count > 0,
+            self.recent_chain_count > 0,
+            self.active_delegation_count > 0,
+        ]
+        .iter()
+        .filter(|&&present| present)
+        .count()
     }
 }
 

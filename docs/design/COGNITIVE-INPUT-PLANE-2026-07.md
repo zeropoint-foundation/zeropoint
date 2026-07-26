@@ -20,7 +20,7 @@ Three properties frame the plane:
 
 ## The composition matrix
 
-Regent's cycle input is composed from seven source classes, each with a declared priority tier, fetch cadence, filter criteria, and displacement rule.
+Regent's cycle input is composed from six source classes, each with a declared priority tier, fetch cadence, filter criteria, and displacement rule.
 
 ### Class 1 — Identity and core principles (Tier 0, static)
 
@@ -33,17 +33,17 @@ Compact identity block: Regent's role, current sovereign operator, active Form, 
 
 ### Class 2 — Active standing corrections (Tier 1, chain-loaded)
 
-Chain-anchored `regent:standing_correction:*` receipts that are currently active. Emitted when operator corrects Regent's behavior in a way that should persist across cycles. Includes correction text, scope (what pattern it applies to), and expiry (optional).
+Chain-anchored `cognitive:correction:standing` receipts that are currently active. Emitted when operator corrects Regent's behavior in a way that should persist across cycles. Each carries a `correction_type` (`factual | boundary | prohibition | preference`), a hierarchical `domain`, and full content/scope/expiry per the canonical schema in `STANDING-CORRECTION-RECEIPT-SCHEMA-2026-07.md`. Correction identity is by `correction_id` (content hash), not by pattern name in the receipt type.
 
 - **Priority**: Tier 1 — immediately after identity, before anything else.
 - **Fetch cadence**: Every cycle, fresh from chain.
-- **Filter**: Active only (not-expired, not-revoked). All active corrections included.
-- **Displacement**: Never displaced unless expired or revoked.
+- **Filter**: Active only (not-expired, not-superseded). All active corrections included.
+- **Displacement**: Never displaced unless expired or superseded.
 
-Example receipts:
-- `regent:standing_correction:discovery_listener_storm` — "unauthorized_listener bursts against empty port registry are normal Mac process enumeration, not probing; do not recommend PID termination based on this pattern"
-- `regent:standing_correction:chain_query_filter_format` — "chain_query filter matches receipt action event keys directly; use `regent:tool:completed:batch_sign` not `regent:remediation:` for finding your prior batch_sign actions"
-- `regent:standing_correction:credential_probing_authority` — "credential probing belongs to Forge/observation-plane executor tier; vault values must never enter cognitive-layer context"
+Example active corrections (each is a `cognitive:correction:standing` receipt; the phrase after the arrow identifies the correction; the `correction_type` and `domain` shown are what would appear on the receipt itself):
+- *discovery_listener_storm* (`correction_type: factual`, `domain: substrate.factual.discovery_scan_pattern`) — "unauthorized_listener bursts against empty port registry are normal Mac process enumeration, not probing; do not recommend PID termination based on this pattern"
+- *chain_query_filter_format* (`correction_type: factual`, `domain: cognitive.tool_usage.chain_query`) — "chain_query filter matches receipt action event keys directly; use `regent:tool:completed:batch_sign` not `regent:remediation:` for finding your prior batch_sign actions"
+- *credential_probing_authority* (`correction_type: boundary`, `domain: cognitive.boundary.credential_probing`) — "credential probing belongs to Forge/observation-plane executor tier; vault values must never enter cognitive-layer context"
 
 ### Class 3 — Recent precedent (Tier 1, chain-loaded)
 
@@ -152,7 +152,7 @@ Composition observer reads the current matrix specification from Layer B canonic
 
 Per matrix rules, dispatch source fetches concurrently:
 - Identity block from local static
-- Standing corrections from chain (query for active `regent:standing_correction:*`)
+- Standing corrections from chain (query for active `cognitive:correction:standing` receipts, filtered by not-expired and not-superseded)
 - Precedent from chain (last N `regent:tool:completed:*` and `regent:intent:*`)
 - Commitments from chain (active `regent:commitment:*`)
 - Officer findings from chain (recent + filtered per suppression list)
@@ -285,7 +285,7 @@ Real threats and how the plane addresses them:
 Immediate design work:
 
 1. **Matrix schema** — Layer B canonical spec for the matrix specification (source class × priority tier × cadence × filter × displacement rule × prompt template layout).
-2. **Standing correction receipt schema** — Layer B canonical spec for the `regent:standing_correction:*` receipt type. Fields: pattern, correction text, scope, expiry, operator signature.
+2. **Standing correction receipt schema** — canonical spec lives in `STANDING-CORRECTION-RECEIPT-SCHEMA-2026-07.md` (receipt_type: `cognitive:correction:standing`; discriminating `correction_type` field; hierarchical `domain`; content/scope/expiry/supersedes; operator signature).
 3. **False-positive suppression list schema** — Layer B canonical spec for suppression patterns.
 4. **Prompt template layout** — how tier boundaries render, how each class formats within a tier.
 5. **Regent-facing prompt structure changes** — the Regent unified system prompt (currently in `crates/zp-regent/prompts/unified_system.md`) needs adjustment to expect the new composition; identity block becomes Tier 0, standing corrections + precedent + commitments get Tier 1 placeholders.
@@ -297,7 +297,7 @@ Near-term implementation:
 2. Standing correction chain-write path — operator command `zp regent correct <pattern> <text>` emits the signed receipt.
 3. Precedent extractor — utility querying Regent's own action receipts within the sliding window.
 4. Suppression list bootstrap with the known-false-positive patterns identified today (chain_link_broken, unsigned_entry_ratio, unauthorized_listener + empty registry, discovery-scan storm signature).
-5. Layer B matrix specification record with initial seven source classes.
+5. Layer B matrix specification record with initial six source classes.
 
 ## Framing note
 

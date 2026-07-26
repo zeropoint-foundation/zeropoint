@@ -660,6 +660,15 @@ async fn run_cycle(
     emit(event_tx, CognitiveEvent::new(Phase::CycleStart, 0)
         .with_detail(format!("findings={} arc={}", findings.len(), work_arc.is_some())));
 
+    // Cognitive act accounting (v0, per COGNITIVE-ACT-ACCOUNTING-2026-07.md
+    // §6 / BRIEF-cognitive-act-v0-m0-2026-07.md §2). The act receipt cites
+    // the composition receipt it reasoned from, so the most recent
+    // composition emitted this cycle is tracked here — updated every turn,
+    // read at every post-composition exit (including after the loop, for
+    // the max-turns fallback path).
+    let mut last_composition_hash: Option<String> = None;
+    let mut last_composition_summary: Option<crate::context::CompositionSummary> = None;
+
     for turn in 0..MAX_TOOL_TURNS {
         // Lock the regent first (async-safe tokio Mutex).
         let mut regent_guard = regent.lock().await;
@@ -716,7 +725,8 @@ async fn run_cycle(
         // per COGNITIVE-INPUT-PLANE-2026-07.md Step 6. Structural only
         // (hashes, counts) — no content bloat on chain per cycle.
         if let Some(ref summary) = context.composition_summary {
-            emit_composition_receipt(&audit_store, summary);
+            last_composition_hash = emit_composition_receipt(&audit_store, summary);
+            last_composition_summary = Some(summary.clone());
         }
 
         // ── Reason (inference) ───────────────────────────────────
@@ -730,6 +740,17 @@ async fn run_cycle(
                 warn!("regent reason failed: {}", e);
                 emit(event_tx, CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
                     .with_detail(format!("reason: {}", e)));
+                // A cycle where reasoning failed is precisely the kind of
+                // act the accounting layer exists to make visible — the
+                // exit a bottom-of-function emit would silently drop.
+                emit_cognitive_act_receipt(
+                    &audit_store,
+                    last_composition_hash.as_deref(),
+                    last_composition_summary.as_ref(),
+                    None, // no intent — reasoning never produced one
+                    "reason_failed",
+                    turn,
+                );
                 return CycleOutcome::Done(format!("error: reason failed: {}", e));
             }
         };
@@ -880,6 +901,17 @@ async fn run_cycle(
                     progress = progress.as_str(),
                     "regent requesting continue"
                 );
+                // One act per turn within a continuing flow — per
+                // COGNITIVE-MODE-AND-AGENCY-2026-07.md §3.1, each turn is
+                // one Deliberation; the flow spans them.
+                emit_cognitive_act_receipt(
+                    &audit_store,
+                    last_composition_hash.as_deref(),
+                    last_composition_summary.as_ref(),
+                    Some(intent.receipt_event()),
+                    "continue",
+                    turn,
+                );
                 return CycleOutcome::Continue {
                     progress: progress.clone(),
                     tool_results,
@@ -923,6 +955,14 @@ async fn run_cycle(
                     total_ms,
                     "regent cycle complete"
                 );
+                emit_cognitive_act_receipt(
+                    &audit_store,
+                    last_composition_hash.as_deref(),
+                    last_composition_summary.as_ref(),
+                    Some(intent.receipt_event()),
+                    "done",
+                    turn,
+                );
                 return CycleOutcome::Done(response);
             }
         }
@@ -951,6 +991,18 @@ async fn run_cycle(
         );
         "error: max tool turns reached".to_string()
     };
+    // Only the Execute branch's `continue;` reaches this point — Continue,
+    // Done, and the RequestApproval/Observe/other arm of Done all `return`
+    // earlier in the loop — so the last intent produced before falling out
+    // of the loop was always Execute.
+    emit_cognitive_act_receipt(
+        &audit_store,
+        last_composition_hash.as_deref(),
+        last_composition_summary.as_ref(),
+        Some("execute"),
+        "done_fallback",
+        MAX_TOOL_TURNS.saturating_sub(1),
+    );
     CycleOutcome::Done(fallback)
 }
 
@@ -963,10 +1015,15 @@ async fn run_cycle(
 /// at time T, without the chain-bloat cost of storing every prompt.
 ///
 /// Per COGNITIVE-INPUT-PLANE-2026-07.md Step 6.
+///
+/// Returns the appended entry's chain hash on success (`None` on failure) so
+/// callers — namely the cognitive-act receipt (below) — can cite the
+/// composition they reasoned from, per
+/// COGNITIVE-ACT-ACCOUNTING-2026-07.md §6.
 fn emit_composition_receipt(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     summary: &crate::context::CompositionSummary,
-) {
+) -> Option<String> {
     // Encode summary metadata inline in the event string (existing pattern for
     // chain-anchored regent events — see server::regent::emit_remediation_receipt).
     let event = format!(
@@ -995,13 +1052,93 @@ fn emit_composition_receipt(
     };
 
     match audit_store.lock() {
+        Ok(mut store) => match store.append(entry) {
+            Ok(appended) => Some(appended.entry_hash),
+            Err(e) => {
+                warn!("composition receipt emission failed: {}", e);
+                None
+            }
+        },
+        Err(e) => {
+            warn!("composition receipt: audit store lock poisoned: {}", e);
+            None
+        }
+    }
+}
+
+// ── Cognitive act receipt emission (v0) ───────────────────────────────────────
+
+/// Emit a `cognitive:act:recorded` chain receipt at cycle exit.
+///
+/// v0 per COGNITIVE-ACT-ACCOUNTING-2026-07.md §6 / BRIEF-cognitive-act-v0-m0
+/// -2026-07.md §2 and §5: cites the composition receipt this act reasoned
+/// from (a cycle-completion record referencing a perception-time one), not
+/// emitted beside it. Called at every post-composition exit of `run_cycle` —
+/// `reason_failed`, `continue`, `done`, `done_fallback` — so the reason-failed
+/// path (the one exit a bottom-of-function emit would silently drop) is
+/// covered.
+///
+/// Structural only — hashes, counts, enums — per the same no-chain-bloat
+/// discipline `emit_composition_receipt` follows. `frame`, `suppressed`,
+/// `operation` and `flow_ref` from the full Deliberation schema are absent
+/// by v0 scope, not by omission; asserted fields (`basis`, `alternatives`,
+/// ...) are v1+.
+fn emit_cognitive_act_receipt(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    composition_receipt_hash: Option<&str>,
+    summary: Option<&crate::context::CompositionSummary>,
+    intent_kind: Option<&str>,
+    outcome: &str,
+    turn: u32,
+) {
+    // Mode, reason, attended, and sar all derive from the composition this
+    // act reasoned from. `summary` should always be `Some` here — the
+    // composition receipt is emitted every turn before any of this
+    // function's call sites are reached — but degrade structurally rather
+    // than panic if a future exit path is added without threading it.
+    let (mode, reason, attended, sar) = match summary {
+        Some(s) => (
+            crate::regent::cognitive_mode(&s.invocation_reason),
+            s.invocation_reason.as_str(),
+            s.attended_class_count(),
+            s.self_authorship_ratio,
+        ),
+        None => ("unknown", "unknown", 0, 0.0),
+    };
+
+    let event = format!(
+        "cognitive:act:recorded cycle={} mode={} reason={} intent={} outcome={} turn={} attended={} sar={}",
+        composition_receipt_hash.unwrap_or("none"),
+        mode,
+        reason,
+        intent_kind.unwrap_or("none"),
+        outcome,
+        turn,
+        attended,
+        sar,
+    );
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-cognitive-act".to_string(),
+        receipt: None,
+    };
+
+    match audit_store.lock() {
         Ok(mut store) => {
             if let Err(e) = store.append(entry) {
-                warn!("composition receipt emission failed: {}", e);
+                warn!("cognitive act receipt emission failed: {}", e);
             }
         }
         Err(e) => {
-            warn!("composition receipt: audit store lock poisoned: {}", e);
+            warn!("cognitive act receipt: audit store lock poisoned: {}", e);
         }
     }
 }
