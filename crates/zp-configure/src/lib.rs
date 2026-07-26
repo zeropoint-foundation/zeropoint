@@ -2169,8 +2169,7 @@ fn manifest_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
                 .join(".zp-configure.toml"),
         );
     }
-    if let Ok(home) = std::env::var("HOME") {
-        let home = std::path::PathBuf::from(home);
+    if let Ok(home) = zp_core::paths::user_home() {
         // ZP source tree (where IronClaw's manifest lives)
         paths.push(
             home.join("projects/zeropoint/tools")

@@ -9,6 +9,7 @@ repository.workspace = true
 description = "ZeroPoint tool configuration engine — the Semantic Sed library shared by CLI and server"
 
 [dependencies]
+zp-core = { path = "../zp-core" }
 zp-trust = { path = "../zp-trust" }
 zp-engine = { path = "../zp-engine" }
 zp-net = { path = "../zp-net" }

@@ -7811,6 +7811,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "zp-core",
  "zp-engine",
  "zp-net",
  "zp-trust",
