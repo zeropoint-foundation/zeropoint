@@ -94,6 +94,10 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // canary cannot evaluate predicates yet.
     // Phase 6 long window — per EXECUTION-AUTHORITY-MODEL-2026-07.md
     "regent:awareness:session_profile",
+    // Approval resolution — the operator's answer to
+    // Intent::RequestApproval. Seeds the precedent corpus.
+    "regent:approval:granted",
+    "regent:approval:denied",
     "improvement:tieoff:declared",
     "improvement:reopen:eligible",
     "improvement:reopen:review_due",

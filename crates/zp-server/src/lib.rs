@@ -1347,6 +1347,15 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             "/api/v1/correction/revoke/:correction_id",
             post(correction_revoke_handler),
         )
+        // Approval resolution — the operator's answer to
+        // Intent::RequestApproval. The request half was already
+        // chain-anchored; this is the half that records the answer, so a
+        // proposal stops being fire-and-forget and can become precedent.
+        .route("/api/v1/regent/approvals", get(regent_approvals_handler))
+        .route(
+            "/api/v1/regent/approvals/:request_hash/resolve",
+            post(regent_approval_resolve_handler),
+        )
         // Security posture + topology
         .route("/api/v1/security/posture", get(security_posture_handler))
         .route("/api/v1/security/topology", get(topology_handler))
@@ -3592,6 +3601,196 @@ async fn correction_list_handler(
 /// Emits a `cognitive:correction:revoked` event referencing the given id.
 /// The revocation is chain-preserved (revocation itself is a receipt) but the
 /// correction stops appearing in the active index.
+/// Outstanding and recently resolved approval requests.
+///
+/// Reads both receipt families over one window and joins them, the same
+/// shape as `correction_list_handler`.
+async fn regent_approvals_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    use zp_regent::approvals::{
+        ApprovalIndex, EVENT_PREFIX_DENIED, EVENT_PREFIX_GRANTED, EVENT_PREFIX_REQUEST,
+    };
+
+    let store = match state.0.audit_store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Audit store lock poisoned: {}", e),
+                })),
+            );
+        }
+    };
+
+    let mut entries = store
+        .search_chain_by_action_keyword(EVENT_PREFIX_REQUEST, 1024)
+        .unwrap_or_default();
+    entries.append(
+        &mut store
+            .search_chain_by_action_keyword(EVENT_PREFIX_GRANTED, 1024)
+            .unwrap_or_default(),
+    );
+    entries.append(
+        &mut store
+            .search_chain_by_action_keyword(EVENT_PREFIX_DENIED, 1024)
+            .unwrap_or_default(),
+    );
+    drop(store);
+
+    let index = ApprovalIndex::build(&entries);
+    let pending = index.pending();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "pending_count": pending.len(),
+            "pending": pending,
+            "all": index.all(),
+        })),
+    )
+}
+
+/// Record the operator's answer to a request.
+///
+/// Actor is `ActorId::Operator`, not the Regent — per P9 the approval is
+/// the operator's act. The receipt cites the request's `entry_hash`,
+/// because an approval that does not name what it approved is not
+/// evidence of anything.
+async fn regent_approval_resolve_handler(
+    State(state): State<AppState>,
+    AxumPath(request_hash): AxumPath<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    use zp_regent::approvals::{
+        resolution_event_string, ApprovalIndex, Resolution, EVENT_PREFIX_DENIED,
+        EVENT_PREFIX_GRANTED, EVENT_PREFIX_REQUEST,
+    };
+
+    let decision = match payload
+        .get("decision")
+        .and_then(|v| v.as_str())
+        .and_then(Resolution::parse)
+    {
+        Some(d) => d,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "decision must be \"granted\" or \"denied\"",
+                })),
+            );
+        }
+    };
+    let reason = payload.get("reason").and_then(|v| v.as_str());
+
+    // Resolve the operator's (possibly abbreviated) hash against real
+    // requests, and refuse to answer one that is already answered —
+    // silently double-resolving would make the record depend on read order.
+    let (full_hash, action) = {
+        let store = match state.0.audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("Audit store lock poisoned: {}", e),
+                    })),
+                );
+            }
+        };
+        let mut entries = store
+            .search_chain_by_action_keyword(EVENT_PREFIX_REQUEST, 1024)
+            .unwrap_or_default();
+        entries.append(
+            &mut store
+                .search_chain_by_action_keyword(EVENT_PREFIX_GRANTED, 1024)
+                .unwrap_or_default(),
+        );
+        entries.append(
+            &mut store
+                .search_chain_by_action_keyword(EVENT_PREFIX_DENIED, 1024)
+                .unwrap_or_default(),
+        );
+        drop(store);
+
+        let index = ApprovalIndex::build(&entries);
+        let full = match index.resolve_prefix(&request_hash) {
+            Ok(h) => h,
+            Err(e) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({ "error": e })),
+                );
+            }
+        };
+        let req = index
+            .all()
+            .iter()
+            .find(|r| r.request_hash == full)
+            .cloned();
+        match req {
+            Some(r) if !r.is_pending() => {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "request is already resolved",
+                        "request_hash": full,
+                        "resolution": r.resolution,
+                    })),
+                );
+            }
+            Some(r) => (full, r.action),
+            None => (full, String::new()),
+        }
+    };
+
+    let resolved_at = chrono::Utc::now();
+    let event = resolution_event_string(decision, &full_hash, reason, resolved_at);
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::Operator,
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "operator-approval".to_string(),
+        receipt: None,
+    };
+
+    match state.0.audit_store.lock() {
+        Ok(mut store) => match store.append(entry) {
+            Ok(sealed) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "resolved",
+                    "decision": decision,
+                    "request_hash": full_hash,
+                    "action": action,
+                    "entry_hash": sealed.entry_hash,
+                    "resolved_at": resolved_at.to_rfc3339(),
+                })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to anchor resolution: {}", e),
+                })),
+            ),
+        },
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("Audit store lock poisoned: {}", e),
+            })),
+        ),
+    }
+}
+
 async fn correction_revoke_handler(
     State(state): State<AppState>,
     AxumPath(correction_id): AxumPath<String>,

@@ -119,6 +119,13 @@ enum Commands {
     /// Persist across cycles; consumed at Tier 1 of Regent's cognitive input.
     #[command(subcommand)]
     Correction(CorrectionCmd),
+    /// Approval requests the Regent has raised, and the operator's answers.
+    ///
+    /// `Intent::RequestApproval` chain-anchors the ask; these verbs
+    /// chain-anchor the answer. Per P9 the approval is the operator's act,
+    /// not the Regent's reading of a conversation.
+    #[command(subcommand)]
+    Approval(ApprovalCmd),
     /// Audit trail operations
     #[command(subcommand)]
     Audit(AuditCmd),
@@ -717,6 +724,32 @@ enum VaultCmd {
         /// Emit result as raw JSON instead of formatted text
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ApprovalCmd {
+    /// List approval requests awaiting an answer.
+    List {
+        /// Emit raw JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Grant a pending request. Accepts a hash prefix.
+    Grant {
+        /// Request hash (from `zp approval list`); a unique prefix is enough.
+        request_hash: String,
+        /// Optional note recorded with the approval.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Deny a pending request. Accepts a hash prefix.
+    Deny {
+        /// Request hash (from `zp approval list`); a unique prefix is enough.
+        request_hash: String,
+        /// Optional note recorded with the denial.
+        #[arg(long)]
+        reason: Option<String>,
     },
 }
 
@@ -2615,9 +2648,8 @@ async fn main() -> anyhow::Result<()> {
                                         // vault.retrieve("session/*").
                                         //
                                         // Retained during Step 3 of the genesis-signed-gate-requests
-                                        // migration. The new envelope path (ZP-Sig) reaches IronClaw
-                                        // via IRONCLAW_ZP_GENESIS_PATH below; the bearer token is
-                                        // dead code once Step 4 removes legacy bearer acceptance.
+                                        // migration; the bearer token is dead code once Step 4
+                                        // removes legacy bearer acceptance.
                                         match read_zp_session_token() {
                                             Ok(tok) => {
                                                 child.env("ZP_SESSION_TOKEN", tok);
@@ -2631,15 +2663,6 @@ async fn main() -> anyhow::Result<()> {
                                             }
                                         }
 
-                                        // Inject Genesis record path for the ZP-Sig envelope signer.
-                                        // IronClaw loads the operator's Genesis via load_sovereign_root,
-                                        // derives the gate signer with derive_gate_signer_seed, and
-                                        // produces a fresh signed envelope on every gate request. The
-                                        // path is *not* a secret — it points at genesis.json, whose
-                                        // contents IronClaw never reads directly.
-                                        if let Ok(genesis_path) = zp_core::paths::genesis_record_path() {
-                                            child.env("IRONCLAW_ZP_GENESIS_PATH", genesis_path);
-                                        }
                                         #[cfg(unix)]
                                         {
                                             // With embedded-server: spawn() so we can capture the
@@ -5931,6 +5954,15 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Correction(CorrectionCmd::List { json })) => {
             run_correction_list(json).await?;
         }
+        Some(Commands::Approval(ApprovalCmd::List { json })) => {
+            run_approval_list(json).await?;
+        }
+        Some(Commands::Approval(ApprovalCmd::Grant { request_hash, reason })) => {
+            run_approval_resolve(&request_hash, "granted", reason.as_deref()).await?;
+        }
+        Some(Commands::Approval(ApprovalCmd::Deny { request_hash, reason })) => {
+            run_approval_resolve(&request_hash, "denied", reason.as_deref()).await?;
+        }
         Some(Commands::Correction(CorrectionCmd::Revoke {
             correction_id,
             json,
@@ -7386,6 +7418,128 @@ async fn run_correction_issue(
 }
 
 /// List all currently active standing corrections (priority-sorted descending).
+/// List approval requests awaiting an operator answer.
+async fn run_approval_list(json_out: bool) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/regent/approvals");
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?;
+    let body = resp.text().await?;
+
+    if json_out {
+        println!("{}", body);
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        std::process::exit(1);
+    }
+
+    let count = v["pending_count"].as_u64().unwrap_or(0);
+    println!();
+    println!("\x1b[1mApproval requests awaiting an answer: {}\x1b[0m", count);
+    println!("\x1b[2m──────────────────────────────────────\x1b[0m");
+    if count == 0 {
+        println!("\x1b[2mNothing pending.\x1b[0m");
+        println!();
+        return Ok(());
+    }
+    if let Some(list) = v["pending"].as_array() {
+        for item in list {
+            let hash = item["request_hash"].as_str().unwrap_or("?");
+            let action = item["action"].as_str().unwrap_or("?");
+            let at = item["requested_at"].as_str().unwrap_or("?");
+            println!("  \x1b[1m{}\x1b[0m", &hash[..hash.len().min(12)]);
+            println!("    {}", action);
+            println!("    \x1b[2masked {}\x1b[0m", at);
+            println!();
+        }
+    }
+    println!("\x1b[2mzp approval grant <hash>   |   zp approval deny <hash> --reason \"...\"\x1b[0m");
+    println!();
+    Ok(())
+}
+
+/// Record the operator's answer. `decision` is "granted" or "denied".
+async fn run_approval_resolve(
+    request_hash: &str,
+    decision: &str,
+    reason: Option<&str>,
+) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = zp_net::peer_url_with_path(
+        "127.0.0.1",
+        port,
+        &format!("/api/v1/regent/approvals/{}/resolve", request_hash),
+    );
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "decision": decision,
+            "reason": reason.unwrap_or(""),
+        }))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?;
+    let body = resp.text().await?;
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        std::process::exit(1);
+    }
+
+    let mark = if decision == "granted" { "✓" } else { "•" };
+    println!();
+    println!(
+        "\x1b[32m{}\x1b[0m  {} — {}",
+        mark,
+        decision,
+        v["action"].as_str().unwrap_or("(request)")
+    );
+    println!(
+        "    \x1b[2mrequest {}\x1b[0m",
+        v["request_hash"].as_str().unwrap_or("?")
+    );
+    println!(
+        "    \x1b[2manchored {}\x1b[0m",
+        v["entry_hash"].as_str().unwrap_or("?")
+    );
+    println!();
+    Ok(())
+}
+
 async fn run_correction_list(json_out: bool) -> anyhow::Result<()> {
     let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;

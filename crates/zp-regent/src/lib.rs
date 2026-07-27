@@ -16,6 +16,7 @@
 //! See `docs/ARCHITECTURE-2026-07.md` Part II for the full cognitive
 //! architecture specification.
 
+pub mod approvals;
 pub mod awareness;
 pub mod cognitive_observer;
 pub mod cognitive_observer_semantic;
