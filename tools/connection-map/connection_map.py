@@ -347,6 +347,97 @@ def collect_derived_artifacts(root):
                      site=rel)
 
 
+# ── declared tie-offs ───────────────────────────────────────────────────
+# A tie-off moves an edge from `defect` to `tied_off`. Read from
+# tools/connection-map/tieoffs.toml rather than hardcoded here: an
+# allowlist in the tool is exactly the shape this program exists to
+# catch, because it records the suppression without the reason.
+TIEOFF_RULES = []
+
+
+def load_tieoffs(root):
+    """Parse tieoffs.toml without a TOML dependency.
+
+    Deliberately minimal: [[tieoff]] blocks with key = "value" and
+    key = \"\"\"triple quoted\"\"\" values. Stdlib tomllib exists on 3.11+
+    but this tool targets whatever python3 is present, and the format is
+    small enough that hand-parsing beats adding a version floor.
+    """
+    f = root / "tools/connection-map/tieoffs.toml"
+    if not f.exists():
+        return []
+    text = f.read_text(errors="replace")
+    rules, cur = [], None
+    i, lines = 0, text.split("\n")
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped == "[[tieoff]]":
+            if cur:
+                rules.append(cur)
+            cur = {}
+        elif cur is not None and "=" in stripped and not stripped.startswith("#"):
+            key, _, val = stripped.partition("=")
+            key, val = key.strip(), val.strip()
+            if val.startswith('"""'):
+                body = [val[3:]]
+                i += 1
+                while i < len(lines) and '"""' not in lines[i]:
+                    body.append(lines[i])
+                    i += 1
+                if i < len(lines):
+                    body.append(lines[i].split('"""')[0])
+                cur[key] = "\n".join(body).strip().replace("\\\n", "")
+            else:
+                cur[key] = val.strip('"')
+        i += 1
+    if cur:
+        rules.append(cur)
+
+    # Stage 1t: deferred and open must declare a way back. A tie-off that
+    # cannot be revisited is a permanent absence wearing a temporary label.
+    for r in rules:
+        d = r.get("disposition", "")
+        if d in ("deferred", "open"):
+            missing = [k for k in ("reopen_condition", "reopen_watch") if not r.get(k)]
+            if missing:
+                drop(f"tie-off '{r.get('source','?')}' is {d} without "
+                     f"{' and '.join(missing)} — not applied",
+                     "IMPROVEMENT-LOOP-DISCIPLINE Stage 1t")
+                r["_invalid"] = True
+        elif d not in ("declined", "limited"):
+            drop(f"tie-off '{r.get('source','?')}' has unknown disposition "
+                 f"'{d}' — not applied", "expected declined|deferred|open|limited")
+            r["_invalid"] = True
+    return [r for r in rules if not r.get("_invalid")]
+
+
+def apply_tieoffs():
+    """Reclassify defects that carry a declared tie-off."""
+    applied = set()
+    for e in EDGES:
+        if e["status"] != "defect":
+            continue
+        for n, r in enumerate(TIEOFF_RULES):
+            if r.get("kind") and r["kind"] != e["kind"]:
+                continue
+            if r.get("source") and r["source"] != e["source"]:
+                continue
+            if r.get("target") and r["target"] != e["target"]:
+                continue
+            e["status"] = "tied_off"
+            e["note"] = f"[{r.get('disposition')}] {e['note']}"
+            e["tieoff"] = r.get("rationale", "").split("\n")[0][:120]
+            applied.add(n)
+            break
+    # A tie-off matching nothing is suppressing nothing, and will go on
+    # looking like coverage. Same class as a check that does not run.
+    for n, r in enumerate(TIEOFF_RULES):
+        if n not in applied:
+            drop("tie-off matches no edge (stale?)",
+                 f"{r.get('kind','?')} / {r.get('source','?')}")
+
+
 # ── governed docs (mirrors corpus-lint's definition) ────────────────────
 FROZEN = re.compile(r"Tier 3 historical|Status:\W{0,4}Historical|—\s*SUPERSEDED|"
                     r"This document is superseded|frozen at authoring frame",
@@ -402,6 +493,10 @@ def main():
     collect_artifact_reads(root)
     collect_pin_tieoffs(root)
     collect_derived_artifacts(root)
+
+    global TIEOFF_RULES
+    TIEOFF_RULES = load_tieoffs(root)
+    apply_tieoffs()
 
     by_status = Counter(e["status"] for e in EDGES)
     by_kind = Counter((e["kind"], e["status"]) for e in EDGES)

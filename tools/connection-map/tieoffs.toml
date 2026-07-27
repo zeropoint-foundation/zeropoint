@@ -1,0 +1,46 @@
+# Declared tie-offs for connection-map.
+#
+# A tie-off moves an edge from `defect` to `tied_off`: the connection is
+# deliberately not made, and this file is where that deliberation is
+# recorded. Per IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md Stage 1t, the
+# disposition determines what else is required:
+#
+#   declined  considered, decided against    reopen_condition optional
+#   deferred  will do, not now               reopen_condition + watch REQUIRED
+#   open      undecided, actively unresolved reopen_condition + watch REQUIRED
+#   limited   cannot be done in principle    neither
+#
+# The tool enforces that. It also reports tie-offs matching no edge —
+# a stale tie-off silently suppressing nothing is the same class of
+# defect as an unenforced check.
+#
+# This file is NOT an allowlist. An allowlist says "ignore this." A
+# tie-off says "this absence is deliberate, here is why, and here is what
+# would reopen it." The difference is the reason.
+
+[[tieoff]]
+kind = "derived_artifact"
+source = "graphify-out/graph.json"
+disposition = "limited"
+declared = "2026-07-27"
+rationale = """
+graphify-out/ is gitignored and untracked, which connection-map reports \
+as `derived artifact is not tracked in git; drift is undiffable`. That \
+verdict was correct while the graph was stale — it sat 70 days and 106 \
+commits behind HEAD, and nothing would have said so.
+
+It is no longer correct. .githooks/post-commit rebuilds the graph after \
+every commit, and became live on 2026-07-27 when core.hooksPath was \
+pointed at .githooks. The hook was installed 2026-05-12 and had been \
+structurally unable to fire; the staleness C9 detected was a symptom of \
+the C4 defect, not an independent finding.
+
+A 135,000-node artifact that regenerates deterministically on every \
+commit should not be tracked. Committing it would add megabytes of churn \
+per commit to encode information already derivable from the tree. \
+Untracked is the correct disposition, not a gap — hence `limited` rather \
+than `deferred`.
+
+The edge that matters is not "is it tracked" but "does it rebuild," and \
+that is now enforced by the hook rather than by anyone remembering.
+"""

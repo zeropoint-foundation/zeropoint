@@ -1,23 +1,25 @@
 {
-  "generated_from_commit": "b5a8535",
-  "governed_docs": 119,
+  "generated_from_commit": "32ca343",
+  "governed_docs": 120,
   "totals": {
-    "connections": 975,
-    "live": 285,
-    "tied_off": 41,
-    "defect": 649,
-    "maturity": 0.3344
+    "connections": 982,
+    "live": 288,
+    "tied_off": 42,
+    "defect": 652,
+    "maturity": 0.336
   },
   "by_kind": {
     "code_to_artifact/defect": 125,
     "code_to_artifact/live": 33,
     "code_to_corpus/live": 5,
-    "corpus_to_chain/defect": 497,
-    "corpus_to_chain/live": 64,
-    "corpus_to_code/defect": 23,
+    "corpus_to_chain/defect": 498,
+    "corpus_to_chain/live": 66,
+    "corpus_to_code/defect": 27,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 125,
-    "derived_artifact/defect": 4,
+    "derived_artifact/defect": 2,
+    "derived_artifact/live": 1,
+    "derived_artifact/tied_off": 1,
     "pin/live": 19,
     "pin_exception/tied_off": 41
   },
@@ -1269,6 +1271,42 @@
       "detector": null,
       "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
       "site": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
+      "target": "crates/zp-host/src/context.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
+      "target": "crates/zp-mesh/src/reputation.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
+      "target": "crates/zp-officers/src/officer.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
+      "target": "crates/zp-policy/src/wasm_runtime.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
@@ -4170,6 +4208,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
+      "target": "lens:composed:executable_artifacts:decentralized_transport",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/MEDIA-PROVENANCE-INTEROP-2026-07.md",
       "target": "lens:composed:media_provenance:media_provenance_interop",
       "status": "defect",
@@ -6627,6 +6674,24 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md",
+      "target": "system:shutdown",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md",
+      "target": "system:startup",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/SYSTEM-OFFICER-CADRE-2026-06.md",
       "target": "system:sweep",
       "status": "defect",
@@ -7694,7 +7759,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1960"
+      "site": "crates/zp-server/src/lib.rs:1980"
     },
     {
       "kind": "code_to_artifact",
@@ -7703,7 +7768,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:3437"
+      "site": "crates/zp-server/src/lib.rs:3457"
     },
     {
       "kind": "code_to_artifact",
@@ -7712,7 +7777,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:3750"
+      "site": "crates/zp-server/src/lib.rs:3770"
     },
     {
       "kind": "code_to_artifact",
@@ -7721,7 +7786,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4028"
+      "site": "crates/zp-server/src/lib.rs:4048"
     },
     {
       "kind": "code_to_artifact",
@@ -7730,7 +7795,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4470"
+      "site": "crates/zp-server/src/lib.rs:4490"
     },
     {
       "kind": "code_to_artifact",
@@ -7739,7 +7804,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6109"
+      "site": "crates/zp-server/src/lib.rs:6129"
     },
     {
       "kind": "code_to_artifact",
@@ -7748,7 +7813,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6110"
+      "site": "crates/zp-server/src/lib.rs:6130"
     },
     {
       "kind": "code_to_artifact",
@@ -7757,7 +7822,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6111"
+      "site": "crates/zp-server/src/lib.rs:6131"
     },
     {
       "kind": "code_to_artifact",
@@ -7766,7 +7831,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6112"
+      "site": "crates/zp-server/src/lib.rs:6132"
     },
     {
       "kind": "code_to_artifact",
@@ -7775,7 +7840,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6114"
+      "site": "crates/zp-server/src/lib.rs:6134"
     },
     {
       "kind": "code_to_artifact",
@@ -7784,7 +7849,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6115"
+      "site": "crates/zp-server/src/lib.rs:6135"
     },
     {
       "kind": "code_to_artifact",
@@ -7793,7 +7858,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6116"
+      "site": "crates/zp-server/src/lib.rs:6136"
     },
     {
       "kind": "code_to_artifact",
@@ -7802,7 +7867,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6117"
+      "site": "crates/zp-server/src/lib.rs:6137"
     },
     {
       "kind": "code_to_artifact",
@@ -7811,7 +7876,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6118"
+      "site": "crates/zp-server/src/lib.rs:6138"
     },
     {
       "kind": "code_to_artifact",
@@ -7820,7 +7885,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6119"
+      "site": "crates/zp-server/src/lib.rs:6139"
     },
     {
       "kind": "code_to_artifact",
@@ -7829,7 +7894,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6121"
+      "site": "crates/zp-server/src/lib.rs:6141"
     },
     {
       "kind": "code_to_artifact",
@@ -7838,7 +7903,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6122"
+      "site": "crates/zp-server/src/lib.rs:6142"
     },
     {
       "kind": "code_to_artifact",
@@ -7847,7 +7912,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6123"
+      "site": "crates/zp-server/src/lib.rs:6143"
     },
     {
       "kind": "code_to_artifact",
@@ -7856,7 +7921,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6124"
+      "site": "crates/zp-server/src/lib.rs:6144"
     },
     {
       "kind": "code_to_artifact",
@@ -7865,7 +7930,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6126"
+      "site": "crates/zp-server/src/lib.rs:6146"
     },
     {
       "kind": "code_to_artifact",
@@ -7874,7 +7939,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6127"
+      "site": "crates/zp-server/src/lib.rs:6147"
     },
     {
       "kind": "code_to_artifact",
@@ -7883,7 +7948,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6128"
+      "site": "crates/zp-server/src/lib.rs:6148"
     },
     {
       "kind": "code_to_artifact",
@@ -7892,7 +7957,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6166"
+      "site": "crates/zp-server/src/lib.rs:6186"
     },
     {
       "kind": "code_to_artifact",
@@ -7901,7 +7966,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6304"
+      "site": "crates/zp-server/src/lib.rs:6324"
     },
     {
       "kind": "code_to_artifact",
@@ -8771,10 +8836,11 @@
       "kind": "derived_artifact",
       "source": "graphify-out/graph.json",
       "target": "untracked",
-      "status": "defect",
+      "status": "tied_off",
       "detector": null,
-      "note": "derived artifact is not tracked in git; drift is undiffable",
-      "site": "graphify-out/graph.json"
+      "note": "[limited] derived artifact is not tracked in git; drift is undiffable",
+      "site": "graphify-out/graph.json",
+      "tieoff": "graphify-out/ is gitignored and untracked, which connection-map reports as `derived artifact is not tracked in git; drif"
     },
     {
       "kind": "derived_artifact",
@@ -8782,7 +8848,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "54 relevant files changed since it was written (25 commits)",
+      "note": "55 relevant files changed since it was written (27 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -8791,16 +8857,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "21 relevant files changed since it was written (14 commits)",
+      "note": "23 relevant files changed since it was written (16 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "af43c31",
-      "status": "defect",
-      "detector": null,
-      "note": "2 relevant files changed since it was written (3 commits), declared source af43c31 dated 2026-07-26",
+      "target": "32ca343",
+      "status": "live",
+      "detector": "connection-map derived_artifact",
+      "note": "no relevant inputs changed since it was written (0 commits ago)",
       "site": "tools/connection-map/connections.json"
     }
   ]
