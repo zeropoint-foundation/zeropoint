@@ -1,20 +1,20 @@
 {
-  "generated_from_commit": "af43c31",
-  "governed_docs": 117,
+  "generated_from_commit": "b5a8535",
+  "governed_docs": 119,
   "totals": {
     "connections": 975,
-    "live": 286,
+    "live": 285,
     "tied_off": 41,
-    "defect": 648,
-    "maturity": 0.3354
+    "defect": 649,
+    "maturity": 0.3344
   },
   "by_kind": {
     "code_to_artifact/defect": 125,
     "code_to_artifact/live": 33,
     "code_to_corpus/live": 5,
-    "corpus_to_chain/defect": 499,
-    "corpus_to_chain/live": 65,
-    "corpus_to_code/defect": 20,
+    "corpus_to_chain/defect": 497,
+    "corpus_to_chain/live": 64,
+    "corpus_to_code/defect": 23,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 125,
     "derived_artifact/defect": 4,
@@ -1269,6 +1269,33 @@
       "detector": null,
       "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
       "site": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md",
+      "target": "crates/zp-mesh/src/discovery.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md",
+      "target": "crates/zp-mesh/src/interface.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md",
+      "target": "crates/zp-pipeline/src/mesh_bridge.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "site": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
@@ -4134,6 +4161,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/DECENTRALIZED-TRANSPORT-OPPORTUNITY-MAPPING-2026-07.md",
+      "target": "lens:composed:decentralized_transport:ai_landscape",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/DECENTRALIZED-TRANSPORT-OPPORTUNITY-MAPPING-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/MEDIA-PROVENANCE-INTEROP-2026-07.md",
       "target": "lens:composed:media_provenance:media_provenance_interop",
       "status": "defect",
@@ -4230,6 +4266,15 @@
       "detector": null,
       "note": "documented with no family in the code registry",
       "site": "docs/design/COGNITIVE-TOOLS-OPPORTUNITY-MAPPING-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/DECENTRALIZED-TRANSPORT-OPPORTUNITY-MAPPING-2026-07.md",
+      "target": "lens:declared:decentralized_transport",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/DECENTRALIZED-TRANSPORT-OPPORTUNITY-MAPPING-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4414,15 +4459,6 @@
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "observation:display:*",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
       "target": "observation:filesystem:*",
       "status": "defect",
       "detector": null,
@@ -4437,6 +4473,15 @@
       "detector": null,
       "note": "documented with no family in the code registry",
       "site": "docs/KEEL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "target": "observation:inference:drafter_acceptance",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4482,15 +4527,6 @@
       "detector": null,
       "note": "documented with no family in the code registry",
       "site": "docs/design/CHAIN-WATCHER-AND-COMMITMENTS-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "observation:source:announced:face_tracking",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4585,15 +4621,6 @@
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "observe:displays:topology",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
       "target": "observe:filesystem:full",
       "status": "defect",
       "detector": null,
@@ -4617,6 +4644,15 @@
       "detector": null,
       "note": "documented with no family in the code registry",
       "site": "docs/design/HARDWARE-OBSERVER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
+      "target": "observe:inference:acceptance",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4653,42 +4689,6 @@
       "detector": null,
       "note": "documented with no family in the code registry",
       "site": "docs/design/COGNITIVE-SELF-OBSERVER-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "observe:operator:face:gaze_locus",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "observe:operator:face:presence",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "observe:operator:face:proximity",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "observe:operator:face:turn_intent",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5313,33 +5313,6 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "policy:presence_responder:v1",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "policy:response:screen_mute:applied",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/OBSERVATION-PLANE-2026-07.md",
-      "target": "policy:response:screen_mute:restored",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/OBSERVATION-PLANE-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
       "source": "docs/design/BUILD-PROCESS-DESIGN-2026-07.md",
       "target": "port_registry:snapshot",
       "status": "defect",
@@ -5682,12 +5655,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
+      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
       "target": "regent:config:inference",
       "status": "defect",
       "detector": null,
       "note": "documented with no family in the code registry",
-      "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5835,15 +5808,6 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/inference-routing-2026-07.md",
-      "target": "regent:evaluation:model",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
-      "site": "docs/design/inference-routing-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
       "source": "docs/design/regent-gossip-and-evolution-2026-07.md",
       "target": "regent:evolution:applied",
       "status": "defect",
@@ -5976,15 +5940,6 @@
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_chain",
-      "source": "docs/design/inference-routing-2026-07.md",
-      "target": "regent:inference:fallback",
-      "status": "live",
-      "detector": "corpus-lint check_receipt_vocabulary",
-      "note": null,
-      "site": "docs/design/inference-routing-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6537,6 +6492,51 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "target": "substrate:characterization:activated",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "target": "substrate:characterization:drift_suspected",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "target": "substrate:characterization:proposed",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "target": "substrate:characterization:superseded",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "target": "substrate:characterization:validated",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md",
       "target": "substrate:degraded:entropy_baseline_missing",
       "status": "defect",
@@ -6875,7 +6875,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3029"
+      "site": "crates/zp-cli/src/main.rs:3019"
     },
     {
       "kind": "code_to_artifact",
@@ -6884,7 +6884,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3276"
+      "site": "crates/zp-cli/src/main.rs:3266"
     },
     {
       "kind": "code_to_artifact",
@@ -6893,7 +6893,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:6757"
+      "site": "crates/zp-cli/src/main.rs:6747"
     },
     {
       "kind": "code_to_artifact",
@@ -6902,7 +6902,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7298"
+      "site": "crates/zp-cli/src/main.rs:7288"
     },
     {
       "kind": "code_to_artifact",
@@ -6911,7 +6911,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7301"
+      "site": "crates/zp-cli/src/main.rs:7291"
     },
     {
       "kind": "code_to_artifact",
@@ -6920,7 +6920,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7517"
+      "site": "crates/zp-cli/src/main.rs:7507"
     },
     {
       "kind": "code_to_artifact",
@@ -6929,7 +6929,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:9235"
+      "site": "crates/zp-cli/src/main.rs:9225"
     },
     {
       "kind": "code_to_artifact",
@@ -7739,6 +7739,42 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
+      "site": "crates/zp-server/src/lib.rs:6109"
+    },
+    {
+      "kind": "code_to_artifact",
+      "source": "crates/zp-server/src/lib.rs",
+      "target": "include_str!",
+      "status": "live",
+      "detector": "rustc (compile-time embed)",
+      "note": "content embedded at build time; cannot break at runtime",
+      "site": "crates/zp-server/src/lib.rs:6110"
+    },
+    {
+      "kind": "code_to_artifact",
+      "source": "crates/zp-server/src/lib.rs",
+      "target": "include_str!",
+      "status": "live",
+      "detector": "rustc (compile-time embed)",
+      "note": "content embedded at build time; cannot break at runtime",
+      "site": "crates/zp-server/src/lib.rs:6111"
+    },
+    {
+      "kind": "code_to_artifact",
+      "source": "crates/zp-server/src/lib.rs",
+      "target": "include_str!",
+      "status": "live",
+      "detector": "rustc (compile-time embed)",
+      "note": "content embedded at build time; cannot break at runtime",
+      "site": "crates/zp-server/src/lib.rs:6112"
+    },
+    {
+      "kind": "code_to_artifact",
+      "source": "crates/zp-server/src/lib.rs",
+      "target": "include_str!",
+      "status": "live",
+      "detector": "rustc (compile-time embed)",
+      "note": "content embedded at build time; cannot break at runtime",
       "site": "crates/zp-server/src/lib.rs:6114"
     },
     {
@@ -7775,7 +7811,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6119"
+      "site": "crates/zp-server/src/lib.rs:6118"
     },
     {
       "kind": "code_to_artifact",
@@ -7784,7 +7820,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6120"
+      "site": "crates/zp-server/src/lib.rs:6119"
     },
     {
       "kind": "code_to_artifact",
@@ -7834,7 +7870,7 @@
     {
       "kind": "code_to_artifact",
       "source": "crates/zp-server/src/lib.rs",
-      "target": "include_str!",
+      "target": "include_bytes!",
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
@@ -7843,7 +7879,7 @@
     {
       "kind": "code_to_artifact",
       "source": "crates/zp-server/src/lib.rs",
-      "target": "include_str!",
+      "target": "include_bytes!",
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
@@ -7852,38 +7888,11 @@
     {
       "kind": "code_to_artifact",
       "source": "crates/zp-server/src/lib.rs",
-      "target": "include_str!",
-      "status": "live",
-      "detector": "rustc (compile-time embed)",
-      "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6129"
-    },
-    {
-      "kind": "code_to_artifact",
-      "source": "crates/zp-server/src/lib.rs",
-      "target": "include_str!",
-      "status": "live",
-      "detector": "rustc (compile-time embed)",
-      "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6131"
-    },
-    {
-      "kind": "code_to_artifact",
-      "source": "crates/zp-server/src/lib.rs",
-      "target": "include_bytes!",
-      "status": "live",
-      "detector": "rustc (compile-time embed)",
-      "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6132"
-    },
-    {
-      "kind": "code_to_artifact",
-      "source": "crates/zp-server/src/lib.rs",
-      "target": "include_bytes!",
-      "status": "live",
-      "detector": "rustc (compile-time embed)",
-      "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6133"
+      "target": "read_to_string",
+      "status": "defect",
+      "detector": null,
+      "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
+      "site": "crates/zp-server/src/lib.rs:6166"
     },
     {
       "kind": "code_to_artifact",
@@ -7892,16 +7901,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6171"
-    },
-    {
-      "kind": "code_to_artifact",
-      "source": "crates/zp-server/src/lib.rs",
-      "target": "read_to_string",
-      "status": "defect",
-      "detector": null,
-      "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6309"
+      "site": "crates/zp-server/src/lib.rs:6304"
     },
     {
       "kind": "code_to_artifact",
@@ -8782,7 +8782,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "54 relevant files changed since it was written (21 commits)",
+      "note": "54 relevant files changed since it was written (25 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -8791,7 +8791,7 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "21 relevant files changed since it was written (10 commits)",
+      "note": "21 relevant files changed since it was written (14 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
@@ -8800,7 +8800,7 @@
       "target": "af43c31",
       "status": "defect",
       "detector": null,
-      "note": "6 relevant files changed since it was written (1 commits), declared source af43c31 dated 2026-07-26",
+      "note": "2 relevant files changed since it was written (3 commits), declared source af43c31 dated 2026-07-26",
       "site": "tools/connection-map/connections.json"
     }
   ]

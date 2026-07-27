@@ -144,11 +144,22 @@ def collect_receipts(root, governed_docs):
     if not reg_file.exists():
         drop("registry missing", str(reg_file))
         return
-    m = REGISTRY_RE.search(reg_file.read_text(errors="replace"))
-    if not m:
+    # Per-line parse: the array body contains `//` comments with quoted
+    # words in them, and a blanket findall reads those as declared
+    # prefixes. Found 2026-07-26 when `reopen_watch — the two tiers`
+    # showed up in the declared set.
+    body = REGISTRY_RE.search(reg_file.read_text(errors="replace"))
+    if not body:
         drop("registry unparsed", "KNOWN_RECEIPT_PREFIXES not matched")
         return
-    registry = set(re.findall(r'"([^"]+)"', m.group(1)))
+    registry = set()
+    for line in body.group(1).split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("//"):
+            continue
+        entry = re.fullmatch(r'"([^"]+)"\s*,?', stripped)
+        if entry:
+            registry.add(entry.group(1))
 
     documented = {}
     for doc in governed_docs:

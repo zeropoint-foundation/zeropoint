@@ -41,6 +41,14 @@ The corpus asserts a mechanism; no code implements it.
 
 *Detector:* **Partial.** `corpus-lint receipt-coverage` catches this for receipt strings only, and reports it as a measurement rather than a defect — correctly, since the corpus is permitted to specify ahead of the code. What is missing is the *declaration*: a specified-not-built mechanism should say so in its own text, and nothing checks that it does.
 
+*Two findings from the first receipt-inventory sweep, 2026-07-26, both C1 and neither visible to any existing detector:*
+
+**`system:startup` and `system:shutdown`.** Declared in the receipt registry, handled by `zp_officers::narration`, fixtured in Aegis's tests — and emitted nowhere. Zero occurrences across 84,246 chain entries. The substrate held no record of its own session boundaries, which is why the Phase 6 long window had nothing to anchor "across sessions" to and why boot-to-ready (that phase's own worked example) was uncomputable. Emitters landed the same day.
+
+**The precedent system.** `crates/zp-server/src/regent.rs` describes `regent:remediation:` receipts as "the foundation for the precedent system — future cycles query these to determine whether Regent has precedent for autonomous action," and carries a comment naming the query filter. No query exists. Every occurrence of "precedent" in `crates/` is a comment describing a mechanism that was never built. So *act on precedent, escalate on novelty* — a canonical `CLAUDE.md` working principle with a specified three-part test, cited as the thing that prevents both over-cautious and over-confident autonomy — has no implementation. This is the sharpest form of the condition: a receipt emitted for a reader that does not exist, in service of a gate that does not exist, and the receipt itself has never fired.
+
+The second is the one worth generalizing from. It was invisible to `receipt-coverage` because the prefix *is* in the registry; invisible to `granted_tools_must_be_reachable` because the tools are reachable; invisible to `connection-map` because nobody declared the edge. It surfaced only from asking what the substrate has never done.
+
 ### C2 — Built, not wired
 An implementation exists and no path reaches it.
 

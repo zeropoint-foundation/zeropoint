@@ -5,7 +5,7 @@
 //! and system pressure. The routing decision is auditable, governable, and
 //! sovereign — no external router decides which model handles a given task.
 //!
-//! See `docs/design/inference-routing-2026-07.md` for the full design.
+//! See `docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md` for the full design.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
