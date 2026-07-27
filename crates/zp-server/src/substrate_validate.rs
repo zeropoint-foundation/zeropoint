@@ -156,7 +156,7 @@ pub fn run_substrate_validation(
     let cognitive_sandwich = check_cognitive_sandwich(&recent_entries, one_hour_ago);
     let standing_corrections = check_standing_corrections(audit_store);
     let officer_heartbeats = check_officer_heartbeats(&recent_entries, one_hour_ago);
-    let receipt_inventory = check_receipt_inventory(&recent_entries);
+    let receipt_inventory = check_receipt_inventory(audit_store);
 
     // ── Roll-up posture ──────────────────────────────────────────────────
     let posture = derive_posture(
@@ -515,7 +515,50 @@ fn check_officer_heartbeats(
 }
 
 /// Categorize recent receipts by prefix; flag unrecognized types.
-fn check_receipt_inventory(recent: &[zp_core::AuditEntry]) -> serde_json::Value {
+/// How far back the inventory looks.
+///
+/// The other checks share a 1024-entry window, which on an active chain
+/// is minutes. "Which families have never fired" is a different question
+/// and needs a different window: over minutes almost every event-driven
+/// family is legitimately silent, and the number would be noise.
+///
+/// Bounded rather than whole-chain — the answer should not require
+/// loading an unbounded history into memory. The window actually read is
+/// reported alongside the result so the number stays interpretable.
+const INVENTORY_WINDOW: usize = 25_000;
+
+fn check_receipt_inventory(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+) -> serde_json::Value {
+    let recent: Vec<zp_core::AuditEntry> = match audit_store.lock() {
+        Ok(store) => match store.recent_entries(INVENTORY_WINDOW) {
+            Ok(e) => e,
+            Err(e) => {
+                return serde_json::json!({
+                    "status": "unavailable",
+                    "error": format!("inventory read failed: {}", e),
+                })
+            }
+        },
+        Err(e) => {
+            return serde_json::json!({
+                "status": "unavailable",
+                "error": format!("audit store lock poisoned: {}", e),
+            })
+        }
+    };
+    let recent = &recent[..];
+
+    let window_span = match (recent.iter().map(|e| e.timestamp).min(),
+                             recent.iter().map(|e| e.timestamp).max()) {
+        (Some(a), Some(b)) => serde_json::json!({
+            "from": a.to_rfc3339(),
+            "to": b.to_rfc3339(),
+            "entries": recent.len(),
+        }),
+        _ => serde_json::json!({ "entries": 0 }),
+    };
+
     let mut counts_by_prefix: BTreeMap<String, u32> = BTreeMap::new();
     let mut unknown_samples: BTreeMap<String, u32> = BTreeMap::new();
 
@@ -550,12 +593,39 @@ fn check_receipt_inventory(recent: &[zp_core::AuditEntry]) -> serde_json::Value 
         }
     }
 
+    // The inventory read from the other side.
+    //
+    // The histogram above answers "what fired, and was any of it
+    // unrecognized." It cannot answer the question that matters more for
+    // substrate maturity: **which declared mechanisms never fired at
+    // all.** A prefix in KNOWN_RECEIPT_PREFIXES that appears zero times
+    // is a family the substrate declares and, over this window, has never
+    // executed — built-not-invoked (C2/C3) in
+    // `docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md` §3.
+    //
+    // Absence over a short window is not a defect: most families are
+    // event-driven and legitimately quiet. The signal is absence over a
+    // *long* window, and the caller owns the window. Reported as an
+    // enumeration rather than a verdict for that reason — and because
+    // waiting for normal activity to exercise 100+ families is too slow
+    // to be a strategy, which is what the exercise sweep is for.
+    let silent: Vec<&str> = KNOWN_RECEIPT_PREFIXES
+        .iter()
+        .filter(|p| !counts_by_prefix.contains_key(**p))
+        .copied()
+        .collect();
+
     let status = if unknown_samples.is_empty() { "ok" } else { "unrecognized_present" };
 
     serde_json::json!({
         "status": status,
         "known_prefix_counts": counts_by_prefix,
         "unrecognized_prefix_counts": unknown_samples,
+        "window": window_span,
+        "declared_total": KNOWN_RECEIPT_PREFIXES.len(),
+        "observed_distinct": counts_by_prefix.len(),
+        "silent_in_window": silent.len(),
+        "silent_prefixes": silent,
     })
 }
 
@@ -631,6 +701,27 @@ fn derive_notable_gaps(
             gaps.push(format!(
                 "Unrecognized receipt-type prefixes in recent chain: {}. Consider adding to known-prefix registry or investigating source.",
                 names.join(", ")
+            ));
+        }
+    }
+    // The inventory read from the other side. Not a fault — most families
+    // are event-driven and legitimately quiet — but the count is the
+    // substrate's honest answer to "how much of what I declare have I
+    // ever actually done," and it belongs in the roll-up rather than
+    // buried in the report body.
+    if let (Some(silent), Some(declared)) = (
+        inventory["silent_in_window"].as_u64(),
+        inventory["declared_total"].as_u64(),
+    ) {
+        if silent > 0 {
+            gaps.push(format!(
+                "{} of {} declared receipt families were silent across the inventory window \
+                 ({} entries). Silence is not a fault by itself; it is the set an exercise \
+                 sweep should drive, and whatever stays silent after one is either unreachable \
+                 or wants a declared tie-off.",
+                silent,
+                declared,
+                inventory["window"]["entries"].as_u64().unwrap_or(0),
             ));
         }
     }
