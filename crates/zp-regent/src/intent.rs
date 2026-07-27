@@ -12,6 +12,36 @@ use serde::{Deserialize, Serialize};
 /// Every intent becomes a `regent:intent:{kind}` receipt before execution.
 /// If the intent requires operator approval, execution blocks until signed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// # Which intents are reachable, and why the rest are not
+///
+/// `parse_intent` accepts all eight variants below. The prompts expose
+/// fewer, deliberately, and the gap is recorded here because it was
+/// previously invisible: across 84,246 chain entries the model had only
+/// ever emitted `respond` (18) and `execute` (1). Every other variant was
+/// structurally impossible for it to say, and nothing declared that.
+///
+/// **Exposed** (`prompts/routing_with_tools.md`, `prompts/unified_tools.md`):
+/// `execute`, `respond`, `continue`, `request_approval`. Each has an
+/// executor that does the work it names.
+///
+/// **Deliberately not exposed** — `delegate`, `remember`, `escalate`.
+/// Their executors are stubs: `Delegate` carries `TODO: sub-agent
+/// dispatch`, `Escalate` carries `TODO: cloud escalation path with mandate
+/// validation`, and `Remember` discards its `content` field. All three
+/// emit a receipt and return `Observed`. Exposing them would let the
+/// Regent emit chain evidence describing acts that did not happen, which
+/// is worse than being unable to name them.
+///
+/// *Deferred.* Reopen condition: the corresponding executor performs the
+/// act its receipt claims — sub-agent dispatch for `delegate`, mandate
+/// validation and a cloud call for `escalate`, an actual memory write for
+/// `remember`. Reopen watch: `receipt_exists(regent:intent:delegate)` and
+/// siblings would fire today from the stub, so the watch is on the
+/// executor rather than the receipt: `invariant_violated(intent_stub_removed)`.
+///
+/// `observe` is emitted by the loop rather than the model — the
+/// early-return in `reason()` when there is no input and no urgency — and
+/// is not a prompt-selectable intent. That is why it dominates the chain.
 pub enum Intent {
     /// Respond to the operator through a cockpit surface.
     Respond {
