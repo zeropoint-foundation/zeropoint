@@ -12,11 +12,12 @@ from pathlib import Path
 from collections import defaultdict
 
 FINDINGS = []
+ROOT = None
 
 # Checks that measure rather than judge. They report and are never a build failure:
 # the pre-convention stratum and the specified-not-shipped receipt surface are
 # properties of a corpus mid-construction, not defects in it.
-INFORMATIONAL = {"index-coverage", "receipt-coverage"}
+INFORMATIONAL = {"index-coverage", "receipt-coverage", "stated-count"}
 
 # The corpus index declares its own establishment date in its opening
 # line ("Established 2026-07-10"). Documents authored on or after it were
@@ -135,28 +136,84 @@ def check_doc_crossrefs(docs, root):
                     finding("crossref", d, f"references {ref}, which does not exist", i)
 
 def check_stated_counts(docs):
-    """CSA said 'fifteen' above 17 rows; CIP said 'six' above 7 classes."""
+    """A stated count that disagrees with the structure right below it.
+
+    CSA said "fifteen" above 17 rows; CIP said "six" above 7 classes.
+
+    **Reported as a measurement, not a defect**, and the reason is in the
+    check's own history. It was written, completed, and then never wired
+    into `main()` -- so when it first ran on 2026-07-26 it had never been
+    calibrated and produced 33 findings, nearly all false.
+
+    Two rounds of calibration got it to 17: skip lines that cross-
+    reference (a `§`, a `.md`, `KEEL`), and count the block immediately
+    following the claim rather than the host document's global maximum,
+    which had been comparing "Three properties frame the discipline:"
+    against six table rows elsewhere in the file.
+
+    The residual is not a tuning problem. Distinguishing *this document
+    claims N about its own structure* from *this document mentions a
+    count defined elsewhere* is a semantic judgment, and a regex cannot
+    make it. Defect grade would mean blocking on a check that is wrong
+    more often than right, which trains readers to ignore the suite --
+    the alarm-fatigue harm named in SUBSTRATE-COORDINATION-DISCIPLINE.
+    So it surfaces candidates and asserts nothing.
+    """
     words = {w: n for n, w in enumerate(
         "zero one two three four five six seven eight nine ten eleven twelve "
         "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split())}
     pat = re.compile(r"\b(" + "|".join(words) + r")\b\s+(?:\w+\s+){0,3}?"
                      r"(features|classes|source classes|principles|heuristics|modes|primitives|"
                      r"outcomes|properties|dimensions|stages|layers|edges)\b", re.I)
+    xref = re.compile(r"§|\.md|KEEL")
+
+    def following_block(lines, start):
+        """Items in the first structured block after `start`, or None."""
+        i, n = start, len(lines)
+        while i < n and not lines[i].strip():
+            i += 1
+        prose = 0
+        while i < n and lines[i].strip() and not re.match(r"^\s*(?:[-*]\s|\d+\.\s|\|)", lines[i]):
+            prose += 1
+            if prose > 2 or lines[i].startswith("#"):
+                return None
+            i += 1
+        count, table_started = 0, False
+        while i < n:
+            l = lines[i]
+            if not l.strip():
+                if count:
+                    break
+                i += 1
+                continue
+            if re.match(r"^\s*[-*]\s|^\s*\d+\.\s", l):
+                count += 1
+            elif l.lstrip().startswith("|"):
+                if re.match(r"^\s*\|[\s\-:|]+\|\s*$", l):
+                    table_started = True
+                elif table_started:
+                    count += 1
+            elif l.startswith("#"):
+                break
+            i += 1
+        return count or None
+
     for d in docs:
-        text = d.read_text(errors="replace")
-        for i, line in enumerate(text.splitlines(), 1):
+        lines = d.read_text(errors="replace").splitlines()
+        for i, line in enumerate(lines):
             m = pat.search(line)
             if not m:
                 continue
-            claimed, noun = words[m.group(1).lower()], m.group(2).lower()
-            if claimed < 3:
+            claimed = words[m.group(1).lower()]
+            if claimed < 3 or xref.search(line):
                 continue
-            rows = len(re.findall(r"^\|\s+\*\*", text, re.M))
-            heads = len(re.findall(r"^###\s+(?:Class|Stage|Layer)\s+\d", text, re.M))
-            actual = max(rows, heads)
-            if actual and abs(actual - claimed) >= 1 and actual not in (claimed,):
-                finding("stated-count", d,
-                        f"says {m.group(1)} {noun}; structural count is {actual}", i)
+            actual = following_block(lines, i + 1)
+            if actual and actual != claimed:
+                finding("stated-count", d.relative_to(ROOT) if ROOT and str(d).startswith(str(ROOT)) else d,
+                        f"says {m.group(1)} {m.group(2).lower()}; the block below has "
+                        f"{actual} — candidate, not a verdict: the check cannot tell a "
+                        f"self-claim from a mention of a count defined elsewhere",
+                        i + 1)
 
 def check_spec_citations(root):
     """SC1 — every //! Spec: citation in crates/ resolves."""
@@ -366,21 +423,56 @@ def main():
     ap.add_argument("--only", help="comma-separated check names")
     args = ap.parse_args()
     root = Path(args.root).resolve()
+    global ROOT
+    ROOT = root
 
     docs = load_docs(root)
     gov = governed(root)
     sections = keel_sections(root)
     registry = receipt_registry(root)
 
-    check_tier_declaration(gov)
-    check_keel_refs(gov, sections)
-    check_duplicate_headings(gov)
-    check_numbered_section_sequence(gov)
-    check_doc_crossrefs(gov, root)
-    check_spec_citations(root)
-    check_receipt_vocabulary(gov, registry)
-    check_tieoff_reopen_conditions(post_convention(root), root)
-    check_index_coverage(gov, root)
+    # Every check is registered here, and registration is enforced below.
+    #
+    # This was a flat call list, and `check_stated_counts` sat in the file
+    # for weeks without appearing in it — written in response to two real
+    # defects (its docstring names both), complete, and never run. A check
+    # that does not run is the C4 condition in
+    # `docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md` §3, and it is
+    # the class that reads as green: the suite passed, reported nine
+    # checks, and the tenth was invisible.
+    #
+    # Same fix as REGENT_TOOLS in crates/zp-server/src/regent.rs — one
+    # source of truth plus a structural assertion, so the omission cannot
+    # recur by inattention.
+    checks = {
+        "tier_declaration": lambda: check_tier_declaration(gov),
+        "keel_refs": lambda: check_keel_refs(gov, sections),
+        "duplicate_headings": lambda: check_duplicate_headings(gov),
+        "numbered_section_sequence": lambda: check_numbered_section_sequence(gov),
+        "doc_crossrefs": lambda: check_doc_crossrefs(gov, root),
+        "stated_counts": lambda: check_stated_counts(gov),
+        "spec_citations": lambda: check_spec_citations(root),
+        "receipt_vocabulary": lambda: check_receipt_vocabulary(gov, registry),
+        "tieoff_reopen_conditions": lambda: check_tieoff_reopen_conditions(
+            post_convention(root), root),
+        "index_coverage": lambda: check_index_coverage(gov, root),
+    }
+
+    # Structural guard: a `check_*` defined in this module and absent from
+    # the registry is a defect in the linter, not in the corpus, and fails
+    # loudly rather than passing quietly.
+    declared = {n[len("check_"):] for n in dir(sys.modules[__name__])
+                if n.startswith("check_") and callable(getattr(sys.modules[__name__], n))}
+    unregistered = declared - set(checks)
+    if unregistered:
+        print(f"corpus-lint: {len(unregistered)} check(s) defined but never run: "
+              f"{', '.join(sorted(unregistered))}", file=sys.stderr)
+        print("Every check_* must appear in the `checks` registry in main().",
+              file=sys.stderr)
+        raise SystemExit(2)
+
+    for run in checks.values():
+        run()
 
     out = FINDINGS
     if args.only:
