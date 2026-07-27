@@ -1824,6 +1824,19 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // Write our own PID
     std::fs::write(&server_pid_path, std::process::id().to_string()).ok();
 
+    // Lifecycle: record that this session began, before any listener
+    // accepts. Version and pid make sessions distinguishable on the chain
+    // without needing content.
+    emit_lifecycle_receipt(
+        &state.0.audit_store,
+        format!(
+            "system:startup version={} pid={} port={}",
+            env!("CARGO_PKG_VERSION"),
+            std::process::id(),
+            config.port,
+        ),
+    );
+
     // ── Singular loopback binding: all listener binds + serve+shutdown ─
     // wiring routes through `zp_net`. One CancellationToken gates the
     // ctrl_c watcher (which performs tool-PID cleanup) and all four
@@ -1855,8 +1868,15 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     {
         let signal_shutdown = shutdown.clone();
         let server_pid_path = server_pid_path.clone();
+        let shutdown_audit = state.0.audit_store.clone();
         tokio::spawn(async move {
             tokio::signal::ctrl_c().await.ok();
+            // Emit before cleanup: cleanup can fail, and a session that
+            // ended is a fact independent of whether teardown succeeded.
+            emit_lifecycle_receipt(
+                &shutdown_audit,
+                format!("system:shutdown pid={} reason=signal", std::process::id()),
+            );
             cleanup_launched_tools(&pid_dir(), &server_pid_path);
             signal_shutdown.cancel();
         });
@@ -5511,11 +5531,7 @@ async fn tool_launch_handler(
         // Signal that ZP owns process lifecycle for this tool — suppresses
         // IronClaw's own singleton enforcement (PID lock) and any other
         // self-management behaviors that belong to the governance layer.
-        .env("ZP_GOVERNED", "1")
-        // Enable ZP substrate integration so the tool can call back to
-        // this server for chain queries, gate calls, and cognition hooks.
-        // ZP_BASE_URL defaults to http://127.0.0.1:17010 in ZpConfig.
-        .env("IRONCLAW_ZP_ENABLED", "true");
+        .env("ZP_GOVERNED", "1");
 
     // Inject vault-managed tool env vars (e.g. OPENAI_API_KEY, OPENAI_BASE_URL).
     // Stored at tools/{tool}/* via `zp configure vault-set-tool-env`.
@@ -5691,7 +5707,7 @@ async fn tool_launch_handler(
                     // ZP-owned routing vars — port allocation belongs to the
                     // substrate, not the vault. Skip any vault-stored value so
                     // the port we assigned above is never silently overridden.
-                    // ZP_MANAGED, ZP_GOVERNED, IRONCLAW_ZP_ENABLED, and
+                    // ZP_MANAGED, ZP_GOVERNED, and
                     // GATEWAY_AUTH_TOKEN are substrate-controlled operational
                     // flags. The vault must not override them — the substrate
                     // is the authority on whether governance is active.
@@ -5712,7 +5728,6 @@ async fn tool_launch_handler(
                         "GATEWAY_AUTH_TOKEN",
                         "ZP_MANAGED",
                         "ZP_GOVERNED",
-                        "IRONCLAW_ZP_ENABLED",
                     ];
                     for (var, val_bytes) in &tool_env {
                         if ZP_OWNED_VARS.contains(&var.as_str()) {
@@ -6339,6 +6354,47 @@ async fn genesis_handler(State(state): State<AppState>) -> Json<serde_json::Valu
 // endpoint and the gate prerequisite check, against an in-memory audit
 // store. The HTTP layer itself is covered transitively — the handler is
 // thin glue over the helpers tested here.
+
+
+/// Emit a substrate lifecycle receipt.
+///
+/// `system:startup` and `system:shutdown` were declared in the receipt
+/// registry, handled by `zp_officers::narration`, and fixtured in Aegis's
+/// tests — and emitted nowhere. Across 84,246 chain entries neither had
+/// ever appeared, so the substrate held no record of its own session
+/// boundaries. Found 2026-07-26 by the receipt-inventory sweep.
+///
+/// Consequences of the absence, beyond the missing record: the Regent's
+/// long observation window has nothing to anchor "across sessions" to,
+/// boot-to-ready time (Phase 6's own worked example) is uncomputable, and
+/// narration's lifecycle branch is unreachable code.
+///
+/// Actor is `System("server")` rather than the Regent namespace — this is
+/// the substrate's own lifecycle, not a cognitive act.
+fn emit_lifecycle_receipt(
+    audit_store: &std::sync::Arc<std::sync::Mutex<zp_audit::AuditStore>>,
+    event: String,
+) {
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("server".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(uuid::Uuid::nil()),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "server-lifecycle".to_string(),
+        receipt: None,
+    };
+    match audit_store.lock() {
+        Ok(mut store) => {
+            if let Err(e) = store.append(entry) {
+                warn!("lifecycle receipt emission failed: {}", e);
+            }
+        }
+        Err(e) => warn!("lifecycle receipt: audit store lock poisoned: {}", e),
+    }
+}
+
 
 #[cfg(test)]
 mod p4_phase2_tests {
