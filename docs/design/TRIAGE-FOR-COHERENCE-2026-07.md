@@ -2,13 +2,13 @@
 
 **Document type:** Working discipline. **Not** a Tier 2 canonical elaboration — it elaborates no KEEL section. It defines the ranking rule that decides which coherence question gets asked next, and the receipt states that make *unexamined* distinguishable from *examined and fine*. Belongs in *Investigations and programs* alongside `AUTHORING-DISCIPLINE-2026-07.md`.
 
-**Date:** 2026-07-27. **Status:** Draft. Ranking rule and state model proposed; nothing implemented.
+**Date:** 2026-07-27. **Status:** Draft. Ranking rule and state model proposed. The denominator is settled and the first coverage figure is recorded in §First run; the receipt family and the four-state model remain unimplemented.
 
 **Motivation:** The corpus treats coherence as a state to be checked — observer coherence, emission coherence, spec-implementation coherence. It has no operation that decides *what to check next*, and no way to tell a claim that was verified from a claim nobody has ever looked at. Both present as silence. Every finding of 2026-07-27 was incidental: surfaced while doing something else, true for weeks beforehand, and reachable in most cases within one tool call.
 
 **Source:** The term is Ken's, coined 2026-07-27 after a session in which seven divergences were found by accident. The ranking rule, the state model and the coverage measure below are the ZeroPoint reading of what the term demands if taken as a primitive rather than a description.
 
-**Composes with:** `CONNECTION-INTEGRITY-PROGRAM-2026-07.md` (**the primary relationship** — that program supplies the taxonomy C1–C9, the connection object, the tie-off, and the detectors; this document supplies the ranking rule it does not have, and the notion of coverage it cannot currently compute), `STRUCTURAL-FIT-INVENTORY-2026-07.md` (a hand-run instance of this discipline over representations; its SF-4 is the template for why structural beats vigilant), `SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md` (the same operation over behaviour; its §2 records why the naive search direction is unsound), `AUTHORING-DISCIPLINE-2026-07.md` (A11 is the rule this discipline exists because writing down was not sufficient to enforce), `OBSERVER-COHERENCE-DISCIPLINE-2026-07.md` (cross-observer agreement — a different coherence class, deliberately not merged here), `CHAIN-READ-CANARY-DISCIPLINE-2026-07.md` (the same insight applied to reads: silence must be made loud).
+**Composes with:** `CONNECTION-INTEGRITY-PROGRAM-2026-07.md` (**the primary relationship** — that program supplies the taxonomy C1–C9, the connection object, the tie-off, and the detectors; this document supplies the ranking rule it does not have, and the reading of its maturity figure as a coverage measure), `STRUCTURAL-FIT-INVENTORY-2026-07.md` (a hand-run instance of this discipline over representations; its SF-4 is the template for why structural beats vigilant), `SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md` (the same operation over behaviour; its §2 records why the naive search direction is unsound), `AUTHORING-DISCIPLINE-2026-07.md` (A11 is the rule this discipline exists because writing down was not sufficient to enforce), `OBSERVER-COHERENCE-DISCIPLINE-2026-07.md` (cross-observer agreement — a different coherence class, deliberately not merged here), `CHAIN-READ-CANARY-DISCIPLINE-2026-07.md` (the same insight applied to reads: silence must be made loud).
 
 ---
 
@@ -72,28 +72,44 @@ This number is the thing vigilance cannot produce at any level of skill. It also
 
 - **TC1** — Every load-bearing claim resolves to exactly one of the four states, with `untriaged` as the default rather than an implied absence.
 - **TC2** — Every `coherent` verdict names the commit it was checked against; a verdict without one is rejected, not warned.
-- **TC3** — Coverage is computable as a number and reported, including when the number is zero.
+- **TC3** — Coverage is computable as a number and reported, including when the number is unflattering. **First satisfied 2026-07-27** — see §First run.
 - **TC4** — The queue is derived from the uncovered set and the staleness set, not authored.
 - **TC5** — A claim whose inputs change transitions to `stale` without human action.
 - **TC6** — Triage that finds no divergence still emits a receipt. *Examined and fine* is a fact worth holding.
 
 ---
 
-## Minimum slice
+## First run — 2026-07-27
 
-**m0: publish the denominator.**
+**Coverage is 331 of 987 declared connections: 33.5%,** at commit `b548fb8`, across 122 governed documents, with 9 frozen documents dropped explicitly rather than silently. The figure is `connection_map`'s own maturity computation; this document contributes the reading of it as a coverage measure and the denominator ruling above.
 
-Coverage cannot be reported without knowing what the load-bearing claims are, and that set is derivable today from artifacts that already exist — `corpus-lint`'s receipt inventory, `connections.json` from the program's P1, and the cross-reference resolution already implemented in `check_doc_crossrefs`. The slice is to emit the count of load-bearing claims and a coverage figure of zero.
+Three things the first run established that the design did not anticipate.
 
-A denominator with no numerator looks like a non-deliverable and is the opposite. It converts *we should check more things* into *we have N claims and have verified none of them*, which is a number that can move, be argued with, and be regressed against. Nothing else in this document is worth building before it exists.
+**The number was never going to be zero.** This document's m0 predicted publishing a denominator with an empty numerator. That was wrong: `CONNECTION-INTEGRITY-PROGRAM`'s P1 had already computed both halves, and its rule that an unwatched edge lands as `defect` and never as *unknown* means its statuses are already triage verdicts. The 656 defects are not 656 broken things — they are 656 declared dependencies that nothing would notice breaking. m0 turned out to be a reading task, not a building task.
 
-The natural second slice is the three checks already identified as trivially mechanical — every backticked path in `docs/` resolves; symbol references in doc comments are rustdoc intra-doc links so `cargo doc -D rustdoc::broken_intra_doc_links` fails the build; every `pub` type has a non-test consumer or an annotation saying it is deliberately ahead of one. Between them they cover four of the seven findings of 2026-07-27 and cost zero attention per run thereafter.
+**The measure moves the wrong way under authoring.** Coverage fell from 33.6% to 33.5% across the five documents written on 2026-07-27, because each new document declares connections and ships no detectors. That is correct behaviour — a claim genuinely is unwatched the moment it is written — but it means **maturity must never become a target.** Anyone optimising the percentage is incentivised to stop writing things down, which inverts the discipline. The number moves honestly in one direction only: by building detectors.
+
+**The queue is not heterogeneous, which weakens the case for an elaborate ranking rule.** Of 656 defects, **498 are `corpus_to_chain`** — documents naming receipt types with no emitting code. One shape holds 76% of the unwatched surface, and `corpus-lint receipt-coverage` already measures it. The remaining 158 divide as 127 `code_to_artifact`, 28 `corpus_to_code`, 3 `derived_artifact`. So the ranking rule in §The ranking rule governs a minority of the queue, and the majority is a single bulk problem with an existing instrument. Rank the 158; measure the 498.
+
+---
+
+## Next slice
+
+Not more measurement. The first run shows the denominator, the numerator and the composition are all available today, so the binding constraint is the detector surface — 289 of 987 connections have something that would fail if the edge broke.
+
+The three cheapest additions, each of which converts a class rather than an instance:
+
+1. **Every backticked path in `docs/` resolves.** Catches `AGENT-TOOL-CONTRACT`'s `src/tools/wasm/capabilities.rs` and `EXTENSION-SURFACE`'s `crates/zp-server/src/extensions/`, both dangling as of this date.
+2. **Symbol references in doc comments become rustdoc intra-doc links**, so `cargo doc -D rustdoc::broken_intra_doc_links` fails the build. Catches the phantom `narrow_capability` class, and moves the check from convention to compiler.
+3. **Every `pub` type has a non-test consumer** or an annotation declaring it deliberately ahead of one. Catches `MerkleProof` and `DiscoveryManager`, and is `CONNECTION-INTEGRITY-PROGRAM` C2 at type granularity — a form that program's own text notes nothing currently generalizes.
+
+None of these needs the receipt family, the four states, or any part of this document's proposed machinery. They are worth doing first for exactly that reason.
 
 ---
 
 ## Open positions
 
-- **A — What exactly counts as load-bearing?** The denominator is the whole measure, and a definition that is too broad makes coverage permanently near zero while one too narrow makes it vacuous. *Resolution: derive from the connection object — a claim is load-bearing if a document elaborates it or a code path depends on it — then inspect the first computed set and adjust once, before any coverage figure is published.*
+- **A — What exactly counts as load-bearing?** **RESOLVED 2026-07-27.** The denominator is `corpus_lint.governed()` — *"The corpus the conventions actually govern: what the index lists (Tier 1/2)"* — minus documents matching the frozen predicate. No new rule was needed and none should be added: a second definition would fork the measure on the day it was published. Two consequences worth stating. **Indexing is registration** — a document absent from `CANONICAL-CORPUS-INDEX-2026-07.md` is outside the measure, which retroactively converts the indexing convention from bookkeeping into the act that admits a claim to the corpus. And the apparent gap between 122 governed documents and 277 `.md` files under `docs/` is not a definitional dispute; it is documents predating the index convention, which the corpus already holds as a separate stratum that is *"counted, not flagged."*
 - **B — Who may issue a `coherent` verdict?** A detector can. An agent reading source can. Whether an agent's verdict counts without operator adoption is the same Class 3 question `CONNECTION-INTEGRITY-PROGRAM` §4 settles for tie-offs. *Resolution: adopt that document's answer rather than a second one — agent proposes, operator adopts, until precedent supports otherwise.*
 - **C — Does a `coherent` verdict ever expire on time alone?** C9's corrected rule says inputs-changed, not time-passed. Some claims have inputs outside the repo — an external dependency, a regulatory posture. *Resolution: an explicit inputs list per claim, with claims whose inputs are unrepresentable marked as such rather than silently aged.*
 - **D — Does this merge with observer coherence?** `OBSERVER-COHERENCE-DISCIPLINE` compares two observers on one question; this compares one claim against reality. Same word, different operations. *Resolution: kept separate here deliberately; revisit only if the receipt families turn out to share a consumer.*
@@ -102,7 +118,7 @@ The natural second slice is the three checks already identified as trivially mec
 
 ## What is specified vs. what is shipped
 
-Per A11: **nothing in this document is implemented.** The ranking rule, the four states, the receipt family and the coverage measure are all proposals. What exists and is being composed with rather than duplicated: `CONNECTION-INTEGRITY-PROGRAM`'s C1–C9 taxonomy, its connection object and tie-off, its P0/P1 detectors shipped 2026-07-26, and `corpus-lint`'s `receipt-coverage`, `check_doc_crossrefs` and `connection-map` `derived_artifact` checks. No `coherence:triaged:*` receipt exists. No coverage figure has ever been computed.
+Per A11: **the ranking rule, the four states and the receipt family are unimplemented.** The coverage figure in §First run is not — it is `connection_map`'s existing output, read through this document's denominator ruling. The ranking rule, the four states, the receipt family and the coverage measure are all proposals. What exists and is being composed with rather than duplicated: `CONNECTION-INTEGRITY-PROGRAM`'s C1–C9 taxonomy, its connection object and tie-off, its P0/P1 detectors shipped 2026-07-26, and `corpus-lint`'s `receipt-coverage`, `check_doc_crossrefs` and `connection-map` `derived_artifact` checks. No `coherence:triaged:*` receipt exists. No coverage figure has ever been computed.
 
 ---
 
