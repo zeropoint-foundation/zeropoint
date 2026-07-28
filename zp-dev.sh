@@ -165,25 +165,38 @@ start_server() {
             grep -qi "ledger"  "$LOG" 2>/dev/null && device="Ledger"
             grep -qi "onlykey" "$LOG" 2>/dev/null && device="OnlyKey"
 
-            # No right-hand border and no width-padding: the em-dash is
-            # three bytes and one column, so printf padding drifts, and a
-            # longer device name would break the box anyway. Unmissable
-            # beats decorative.
+            # Block letters rather than a boxed message. This is a
+            # *physical* action — the operator may have walked away, or be
+            # looking at the device rather than the terminal — and a
+            # message that scrolls past at normal weight is the same
+            # failure as the INFO line in the logfile, just closer.
+            #
+            # Hardcoded glyphs rather than figlet: five lines beats a
+            # runtime dependency the script would have to detect, and
+            # there is exactly one word to render.
+            #
+            # No box borders or width padding either. The em-dash is three
+            # bytes and one column, so printf padding drifts, and a longer
+            # device name would break any fixed frame.
+            local Y='\033[1;33m' Rst='\033[0m'
             printf '\a'    # terminal bell — a human is needed
             echo ""
-            printf "\033[1;33m  ══════════════════════════════════════════════════\033[0m\n"
-            printf "\033[1;33m   ▶  ACTION NEEDED — TOUCH YOUR %s\033[0m\n" "$(echo "$device" | tr '[:lower:]' '[:upper:]')"
-            printf "\033[1;33m  ══════════════════════════════════════════════════\033[0m\n"
+            printf "${Y}   ██████  ████  ██  ██  █████ ██  ██${Rst}\n"
+            printf "${Y}     ██   ██  ██ ██  ██ ██     ██  ██${Rst}\n"
+            printf "${Y}     ██   ██  ██ ██  ██ ██     ██████${Rst}\n"
+            printf "${Y}     ██   ██  ██ ██  ██ ██     ██  ██${Rst}\n"
+            printf "${Y}     ██    ████   ████   █████ ██  ██${Rst}\n"
             echo ""
-            echo "   Your $device is asking you to confirm. Look at the device"
-            echo "   and press its button."
+            printf "${Y}        ▶  Y O U R   %s${Rst}\n" \
+                "$(echo "$device" | tr '[:lower:]' '[:upper:]' | sed 's/./& /g')"
             echo ""
-            echo "   ZeroPoint is unlocking the sovereign root — every signature"
-            echo "   this session traces back to this one touch."
+            echo "   The device is asking you to confirm. Press its button."
             echo ""
-            echo "   Nothing is wrong. Boot is paused until you confirm, and will"
-            echo "   wait as long as it takes. The ceremony is bounded by you, not"
-            echo "   by a clock."
+            echo "   ZeroPoint is unlocking the sovereign root — every signature this"
+            echo "   session traces back to this one touch."
+            echo ""
+            echo "   Boot is paused until you confirm and will wait as long as it takes."
+            echo "   The ceremony is bounded by you, not by a clock."
             echo ""
             prompted=1
             last_nag=$tries
