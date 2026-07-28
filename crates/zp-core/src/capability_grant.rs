@@ -631,7 +631,7 @@ impl CapabilityGrant {
     /// - References this grant as `parent_grant_id`
     /// - Has `delegation_depth = self.delegation_depth + 1`
     /// - Inherits `max_delegation_depth` from the parent
-    /// - Must have equal or narrower scope (enforced by `narrow_capability`)
+    /// - Must have equal or narrower scope (enforced by `GrantedCapability::contains`)
     /// - Inherits all parent constraints plus any additional ones
     /// - Inherits expiration: uses the earlier of parent's expiration or requested expiration
     /// - Trust tier is max(parent_tier, requested_tier) — never lower than parent

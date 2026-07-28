@@ -1,0 +1,251 @@
+{
+  "title": "Data Structures — The Shape Is the Trade",
+  "subtitle": "A 28-minute survey of fourteen structures, each introduced as the fix for what the previous one could not do: contiguity buys addressing and forfeits insertion, linkage buys insertion and forfeits addressing, and every structure after that is another trade made deliberately rather than inherited.",
+  "center": {
+    "label": "Each fixes what the last one couldn't",
+    "emoji": "🔀"
+  },
+  "branches": [
+    {
+      "label": "Position vs. Linkage",
+      "emoji": "📐",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Contiguity buys addressing",
+          "children": [
+            {"label": "Items sit next to each other"},
+            {"label": "Position is computed, not searched"},
+            {"label": "Item 40,000 costs the same as item 4"}
+          ]
+        },
+        {
+          "label": "What the array pays",
+          "children": [
+            {"label": "Size fixed at creation"},
+            {"label": "Growth = new block, copy all"},
+            {"label": "Insert shifts everything after"}
+          ]
+        },
+        {
+          "label": "Linkage buys insertion",
+          "children": [
+            {"label": "Each node holds value plus pointer"},
+            {"label": "Insert is two pointer updates"},
+            {"label": "Ten nodes or ten million, same cost"}
+          ]
+        },
+        {
+          "label": "What the list pays",
+          "children": [
+            {"label": "No index to jump to"},
+            {"label": "Always start at the beginning"},
+            {"label": "The exact inverse trade"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "One End, or Both",
+      "emoji": "🔁",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Stack — newest first",
+          "children": [
+            {"label": "Push and pop, top only"},
+            {"label": "Undo, back button, call stack"},
+            {"label": "The limitation is what makes it fast"}
+          ]
+        },
+        {
+          "label": "Queue — oldest first",
+          "children": [
+            {"label": "Enqueue at back, dequeue at front"},
+            {"label": "Print jobs, request backlogs"},
+            {"label": "The middle stays untouchable"}
+          ]
+        },
+        {
+          "label": "Deque — both ends live",
+          "children": [
+            {"label": "Add or remove at either end"},
+            {"label": "Becomes a stack or a queue on demand"},
+            {"label": "Sliding windows over a stream"}
+          ]
+        },
+        {
+          "label": "Choosing between them",
+          "children": [
+            {"label": "Stack: always the newest task"},
+            {"label": "Queue: finish what you started"},
+            {"label": "Deque only when both ends matter"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Address by Content",
+      "emoji": "🔑",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "The hash function",
+          "children": [
+            {"label": "Key through a formula, out a slot"},
+            {"label": "Same key, same slot, every time"},
+            {"label": "Direct jump instead of a scan"}
+          ]
+        },
+        {
+          "label": "Why size stops mattering",
+          "children": [
+            {"label": "Ten contacts or ten million"},
+            {"label": "Dictionaries, objects, DB indexes"},
+            {"label": "Scanning gets slower; this does not"}
+          ]
+        },
+        {
+          "label": "What it pays",
+          "children": [
+            {"label": "More memory than a plain list"},
+            {"label": "Collisions: two keys, one slot"},
+            {"label": "Handled, not eliminated"}
+          ]
+        },
+        {
+          "label": "Hash set — keys only",
+          "children": [
+            {"label": "Membership is the entire question"},
+            {"label": "Every item appears exactly once"},
+            {"label": "Dedup, seen-lists, name availability"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Hierarchy and Order",
+      "emoji": "🌳",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Tree — parent and child",
+          "children": [
+            {"label": "One root, branches, leaves"},
+            {"label": "Filesystems, the DOM, reply threads"},
+            {"label": "No rule about where values sit"}
+          ]
+        },
+        {
+          "label": "BST — one rule, huge payoff",
+          "children": [
+            {"label": "Left is smaller, right is larger"},
+            {"label": "Each step halves what remains"},
+            {"label": "A million nodes in about 20 steps"}
+          ]
+        },
+        {
+          "label": "The BST's failure mode",
+          "children": [
+            {"label": "Feed it already-sorted input"},
+            {"label": "It grows in a straight line"},
+            {"label": "Looks like a tree, acts like a list"}
+          ]
+        },
+        {
+          "label": "Heap — priority, not order",
+          "children": [
+            {"label": "Highest priority always on top"},
+            {"label": "Reorders itself on every change"},
+            {"label": "Schedulers, live route recalculation"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Relationships, Not Hierarchy",
+      "emoji": "🕸️",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "Graph — dots and lines",
+          "children": [
+            {"label": "Vertices and edges, nothing more"},
+            {"label": "Directed or undirected"},
+            {"label": "Social graphs, road networks"}
+          ]
+        },
+        {
+          "label": "How you store one matters",
+          "children": [
+            {"label": "Matrix: fast lookup, hungry"},
+            {"label": "Adjacency list: leaner when sparse"},
+            {"label": "Traverse depth-first or breadth-first"}
+          ]
+        },
+        {
+          "label": "Trie — one letter per level",
+          "children": [
+            {"label": "Three letters typed, three steps"},
+            {"label": "Beats a hash map at \"starts with\""},
+            {"label": "Autocomplete, spellcheck, contacts"}
+          ]
+        },
+        {
+          "label": "Disjoint set — who is connected",
+          "children": [
+            {"label": "Every element starts alone"},
+            {"label": "Merge groups, compare leaders"},
+            {"label": "Path compression: faster as used"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Trading Truth for Space",
+      "emoji": "🎲",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Bloom filter — one-sided error",
+          "children": [
+            {"label": "A \"no\" is guaranteed true"},
+            {"label": "A \"yes\" is probably true"},
+            {"label": "It never gives a wrong no"}
+          ]
+        },
+        {
+          "label": "What the lie buys",
+          "children": [
+            {"label": "Gigabytes down to megabytes"},
+            {"label": "Breached-password checks"},
+            {"label": "Malicious URLs, chain lookups"}
+          ]
+        },
+        {
+          "label": "LRU — deciding what to forget",
+          "children": [
+            {"label": "Evict by recency, never at random"},
+            {"label": "Hash map plus doubly linked list"},
+            {"label": "Get and put both constant time"}
+          ]
+        },
+        {
+          "label": "When forgetting is correct",
+          "children": [
+            {"label": "CPU caches, browsers, databases"},
+            {"label": "Cannot afford to remember all"},
+            {"label": "\"Not a flaw — it keeps it fast\""}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "28-minute YouTube survey (`youtu.be/vVL6NFzr0Rg`) covering fourteen structures: array, linked list, stack, queue, deque, hash map, hash set, tree, BST, heap, graph, trie, disjoint set, bloom filter, LRU cache. Contains a sponsor segment around 13:37–14:27, excluded here.",
+    "Branches are grouped by the property each structure buys rather than by the video's running order. The video's own spine is a chain — each structure introduced as the fix for what the previous one could not do — and the regrouping preserves that while making the trades comparable.",
+    "The through-line worth keeping: no structure is better than another, and every one of them pays for its strength somewhere specific. The array pays for O(1) addressing with rigid size; the linked list pays for cheap insertion with linear search; the bloom filter pays for compactness with a bounded, one-directional lie. Choosing well means knowing which price you are willing to pay.",
+    "ZP resonance (my framing, not the video's): several substrate invariants are data-structure properties stated as prose, and the question of whether the structure actually supplies the property has never been asked in one place. Four candidates. (1) The chain is a hash chain, not a Merkle log — tamper-evident with O(n) verification, but no compact inclusion proof, which is exactly what \"peer-verifiable by hash equality\" and the External Anchor tier's compact-commitment discipline are reaching for. (2) Delegation narrowing is a meet-semilattice claim; stating it as one yields associativity, commutativity, and a decidable validity check instead of per-field imperative logic. (3) `MULTI-DEVICE-OPERATION`'s \"causal ordering and merge receipts\" is CRDT-shaped and needs vector clocks or dotted version vectors specifically — timestamps would not supply causality. (4) `NodeRegistry`'s strict sequence monotonicity already earns §III.19 detectability structurally, by making a gap observable rather than relying on vigilance — the pattern the other three should follow.",
+    "Two structures in this video map onto gaps the mesh survey found the same day: a bloom or cuckoo filter is the textbook fit for `DiscoveryManager`'s replay-nonce tracking, which currently grows an unbounded `HashMap` of `VecDeque`s, and an LRU or time-decayed sketch fits `PeerReputation`'s per-category FIFO cap, whose current eviction drops the oldest event of a category regardless of weight and therefore biases the decay it is meant to model."
+  ]
+}
