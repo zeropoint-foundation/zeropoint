@@ -24,6 +24,88 @@ pub mod trezor;
 pub mod yubikey;
 
 use crate::error::KeyError;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Whether the touch banner has already been shown this process.
+///
+/// One sovereign root per process means one ceremony per process, so the
+/// full banner belongs once. A device that asks twice gets a one-line
+/// reminder rather than a second wall of block letters.
+static TOUCH_PROMPTED: AtomicBool = AtomicBool::new(false);
+
+/// Tell the operator, on their terminal, that a hardware device is waiting
+/// for a physical touch.
+///
+/// # Why this exists
+///
+/// A hardware-Genesis boot blocks indefinitely on a button press — which
+/// is correct, because the ceremony is bounded by the operator and not by
+/// a clock. But until 2026-07-28 the only sign of it was
+/// `tracing::info!("Waiting for user confirmation…")`, which under a
+/// normal launch goes to a logfile. From the terminal, a boot waiting on a
+/// human was indistinguishable from a hang: `zp-dev.sh` gave up after 180
+/// seconds and printed "Failed to start" while the server was alive and
+/// healthy, with a device sitting three feet away asking to be touched.
+///
+/// `zp-dev.sh` now watches the log and prints a banner, but that only
+/// helps launches that go through the wrapper. Appliance and Sovereign
+/// Form have no wrapper. The prompt belongs to whoever is blocking, which
+/// is here.
+///
+/// # Why stderr, and why only on a TTY
+///
+/// stderr is the operator channel; stdout may be a pipe carrying real
+/// output. And block letters written into a captured logfile are noise —
+/// `std::io::IsTerminal` gates on an actual terminal being attached, so a
+/// headless or wrapped launch is unaffected and keeps the `tracing` line
+/// as its record.
+///
+/// This is deliberately not a `tracing` event. Tracing is the substrate's
+/// record of what happened; this is an instruction to a person standing
+/// at a keyboard, and routing it through the same channel is what caused
+/// the problem in the first place.
+pub fn prompt_operator_touch(device: &str) {
+    use std::io::IsTerminal;
+
+    if !std::io::stderr().is_terminal() {
+        return;
+    }
+
+    // Bindings rather than consts: implicit format-arg capture is
+    // unambiguous for locals.
+    let y = "\x1b[1;33m";
+    let r = "\x1b[0m";
+
+    if TOUCH_PROMPTED.swap(true, Ordering::SeqCst) {
+        eprintln!("{y}   … still waiting on your {device} — press the button{r}");
+        return;
+    }
+
+    let spaced: String = device
+        .to_uppercase()
+        .chars()
+        .flat_map(|c| [c, ' '])
+        .collect();
+
+    eprint!("\x07"); // bell — a human is needed
+    eprintln!();
+    eprintln!("{y}   ██████  ████  ██  ██  █████ ██  ██{r}");
+    eprintln!("{y}     ██   ██  ██ ██  ██ ██     ██  ██{r}");
+    eprintln!("{y}     ██   ██  ██ ██  ██ ██     ██████{r}");
+    eprintln!("{y}     ██   ██  ██ ██  ██ ██     ██  ██{r}");
+    eprintln!("{y}     ██    ████   ████   █████ ██  ██{r}");
+    eprintln!();
+    eprintln!("{y}        ▶  Y O U R   {spaced}{r}");
+    eprintln!();
+    eprintln!("   The device is asking you to confirm. Press its button.");
+    eprintln!();
+    eprintln!("   ZeroPoint is unlocking the sovereign root — every signature this");
+    eprintln!("   session traces back to this one touch.");
+    eprintln!();
+    eprintln!("   This will wait as long as it takes. The ceremony is bounded by");
+    eprintln!("   you, not by a clock.");
+    eprintln!();
+}
 
 /// Shared constant for the encrypted secret file path.
 const SOVEREIGNTY_DIR: &str = "sovereignty";

@@ -160,10 +160,29 @@ start_server() {
         # indistinguishable from a hang.
         if [ $prompted -eq 0 ] \
            && grep -qE "confirm on device|Waiting for user confirmation" "$LOG" 2>/dev/null; then
-            grep -qi "trezor" "$LOG" 2>/dev/null && device="Trezor"
-            grep -qi "yubikey" "$LOG" 2>/dev/null && device="YubiKey"
-            grep -qi "ledger"  "$LOG" 2>/dev/null && device="Ledger"
-            grep -qi "onlykey" "$LOG" 2>/dev/null && device="OnlyKey"
+            # Identify the device from the line that actually triggered
+            # the prompt, not from anywhere in the log.
+            #
+            # Grepping the whole file matched "trezor" on
+            # `trezor_client: transport connect: Connection refused` — a
+            # probe line that appears whether or not a Trezor is the
+            # device in use — so a YubiKey boot would have been told to
+            # touch a Trezor. The four greps were also sequential
+            # overwrites, so the last one appearing anywhere won,
+            # in arbitrary order.
+            #
+            # The tracing module path on the prompting line is
+            # unambiguous: zp_keys::sovereignty::hardware::<provider>.
+            local promptline
+            promptline=$(grep -E "confirm on device|Waiting for user confirmation" \
+                         "$LOG" 2>/dev/null | tail -1)
+            case "$promptline" in
+                *hardware::trezor*)  device="Trezor"  ;;
+                *hardware::yubikey*) device="YubiKey" ;;
+                *hardware::ledger*)  device="Ledger"  ;;
+                *hardware::onlykey*) device="OnlyKey" ;;
+                *)                   device="hardware key" ;;
+            esac
 
             # Block letters rather than a boxed message. This is a
             # *physical* action — the operator may have walked away, or be

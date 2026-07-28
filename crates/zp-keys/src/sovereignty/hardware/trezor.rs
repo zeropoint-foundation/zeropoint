@@ -357,7 +357,12 @@ fn derive_wrapping_key() -> Result<([u8; 32], String), KeyError> {
             }
 
             TrezorResponse::ButtonRequest(br) => {
+                // The tracing line is the substrate's record. The banner is
+                // the instruction to the person, and goes to their terminal
+                // — see `prompt_operator_touch` for why the two are
+                // separate channels.
                 tracing::info!("Waiting for user confirmation on Trezor...");
+                crate::sovereignty::hardware::prompt_operator_touch("Trezor");
                 response = br.ack().map_err(|e| {
                     KeyError::UserCancelled(format!("Trezor button acknowledgment failed: {}", e))
                 })?;
