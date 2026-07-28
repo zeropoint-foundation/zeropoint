@@ -52,6 +52,35 @@ hedge — preserve it. Neither transport should become the only path.
 
 ---
 
+### Freenet — Decentralized transport (targeted, not yet a dependency)
+
+**Status first, because it inverts the usual reading of this section:** Freenet is
+*targeted* as a compatible transport per `docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md`
+(operator ruling 2026-07-27). No Freenet code is in the dependency graph today. This
+entry exists so the posture is decided before the dependency lands rather than after.
+
+**Risk:** A 501(c)(3) nonprofit founded 2001, funded by grants and donations, with
+one full-time developer and two part-time. Its apps are alpha or pre-alpha by the
+author's own account and the network is young. Calendar risk is real and independent
+of design quality. A public overlay is also a larger attack surface than the current
+private mesh — the transport carries traffic from anyone, not only from peers the
+operator attached.
+
+**Mitigation:** Enters behind the existing `DiscoveryBackend` trait in `zp-mesh`,
+which already insulates by construction — backends *"transmit this blob as-is"* and
+*"MUST NOT parse, log, or retain the payload."* Feature-gated and off by default;
+at least one other backend stays attached in any configuration where it is enabled.
+The trait is the stable surface; Freenet is an implementation detail, per the same
+pattern as `turbovec` behind `MemoryIndex`.
+
+**Note on the libp2p precedent.** That entry's mitigation reads *"Neither transport
+should become the only path"* with status *"Hedged architecturally; not yet hedged
+in code"* — and in the working tree `libp2p` is an unconditional dependency of
+`zp-mesh`, not feature-gated. Freenet is gated from the first commit specifically so
+this posture stays true in code and not only on paper.
+
+---
+
 ### `ml-dsa` — Post-quantum signing (FIPS 204 / ML-DSA-65)
 
 **Risk:** Still a release candidate (`0.1.0-rc`). API may have breaking changes

@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration.** Elaborates `KEEL-2026-07.md` §II.5 (Genesis-derived signing), §III.20 (forward-only recovery), Part VII (Peer-Verification Contract), Part XIV (Substrate Realization). Specifies the substrate's transport-layer discipline: how chain-anchored primitives compose over any message-oriented transport, from high-bandwidth TCP/HTTP to low-bandwidth constrained mesh (Reticulum, LoRa, packet radio). Canonical claims live in KEEL.
 
-Draft — 2026-07-11 — internal audience only. Composes with `COPRESENCE-BEACON-PROTOCOL-2026-07.md` (short-range beacon transport as one specific case), `DISCOVERY-AND-BOOTSTRAP-2026-07.md` (discovery layers per transport), `PEER-TRUST-ANCHOR-2026-07.md` (peer trust independent of transport), `SUBSTRATE-FORM-2026-07.md` (transport capabilities vary by Form), `REPRODUCIBILITY-CEREMONY-2026-07.md` (chain evidence portable across transports).
+Draft — 2026-07-11 — internal audience only. Composes with `COPRESENCE-BEACON-PROTOCOL-2026-07.md` (short-range beacon transport as one specific case), `DISCOVERY-AND-BOOTSTRAP-2026-07.md` (discovery layers per transport), `PEER-TRUST-ANCHOR-2026-07.md` (peer trust independent of transport), `SUBSTRATE-FORM-2026-07.md` (transport capabilities vary by Form), `REPRODUCIBILITY-CEREMONY-2026-07.md` (chain evidence portable across transports), `FREENET-TRANSPORT-CONFORMANCE-2026-07.md` (a public overlay conformed against this document's message transport contract; added 2026-07-27), `DECENTRALIZED-TRANSPORT-OPPORTUNITY-MAPPING-2026-07.md` (the lens that produced it).
 
 ## Framing
 
@@ -35,6 +35,7 @@ Transports satisfying this contract get first-class substrate composability. Ada
 - **TCP/HTTP** — baseline. JSON-over-HTTPS for peer sync, dashboard, tools.
 - **WebSocket** — bidirectional streaming for live updates within a substrate session.
 - **Reticulum RNS + LXMF** — mesh transport with propagation nodes. Store-and-forward native. Peer identity abstracted over RNS destination.
+- **Public overlay networks (Freenet)** — content-addressed state over a small-world routed peer network with no servers; peers relay opaque signed payloads they cannot read. Store-and-forward native, and the propagation-node discipline below applies unchanged — depend on an overlay peer for availability, never for integrity. Latency is routed-and-eventual rather than link-bounded, so it sits closer to the medium-bandwidth mode than to TCP. Targeted 2026-07-27 per `FREENET-TRANSPORT-CONFORMANCE-2026-07.md`: one adapter among several, feature-gated, never the only path. Distinct from the other entries in one respect worth naming — the medium is reachable by anyone rather than by peers the operator attached, which makes inbound authentication load-bearing in a way a private mesh lets it not be.
 - **LoRa (LoRaWAN or direct)** — constrained payload (50-250 bytes region-dependent), high latency, high intermittency. Fragmentation required for most receipts.
 - **Packet radio (AX.25, FT8, others)** — amateur-radio-friendly, region-dependent regulatory constraints, low-bandwidth.
 - **BLE / UWB** — short-range, high-bandwidth-within-reach. Per COPRESENCE-BEACON-PROTOCOL.
@@ -150,6 +151,7 @@ Fragmentation is transport-adapter concern. Substrate above the transport contra
 - **PEER-TRUST-ANCHOR-2026-07.md**: peer trust is per-peer per-surface, independent of which transport peer sync uses. Same peer trusted at same surface regardless of connectivity mode.
 - **SUBSTRATE-FORM-2026-07.md**: Substrate Forms have different transport capabilities. Sovereign Form on Pi 5 with radio HAT can support Reticulum + LoRa + WiFi + Ethernet. Companion Form on macOS may be limited to TCP/HTTP. Per-Form transport capability declaration.
 - **REPRODUCIBILITY-CEREMONY-2026-07.md**: chain evidence is portable across transports. Reproducibility ceremony works over any transport that satisfies the contract; substrate operations reproducible regardless of delivery path.
+- **FREENET-TRANSPORT-CONFORMANCE-2026-07.md**: a public overlay conformed against the message transport contract above. Lands in `zp-mesh` behind the existing `DiscoveryBackend` trait rather than as a new abstraction. Its m0 is gated behind three prerequisites owed to the current mesh regardless of any new transport — wiring `DiscoveryManager` into a running binary, closing the inbound-authentication gap, and bounding the intake path. Note the dependency in the other direction: the contract accepts best-effort delivery on the condition that *"Substrate handles retry, deduplication, and store-and-forward at the substrate layer"*, and that layer is near-term implementation item 8 below, unbuilt. A store-and-forward medium makes its absence visible immediately where TCP on a LAN hides it.
 - **CIRCUIT-BREAKER-2026-07.md**: transport degradation is not itself a circuit-breaker event; substrate adapts to lower-capacity modes gracefully. Sustained inability to sync with critical peers may escalate per operator preference.
 
 ## Attack model
@@ -211,6 +213,7 @@ Near-term implementation:
 8. **Store-and-forward outbound queue** with persistence across substrate restart
 9. **Adaptive mode manager** with capacity detection and transition ceremony emission
 10. **CLI verbs**: `zp transport list`, `zp transport mode set|get`, `zp transport queue status`, `zp transport peer route`
+11. **Public overlay adapter** (Freenet) — `DiscoveryBackend` first, `Interface` second; feature-gated, off by default. Sequenced after items 1 and 8, and after the inbound-authentication work named in `FREENET-TRANSPORT-CONFORMANCE-2026-07.md`.
 
 ## Framing note
 

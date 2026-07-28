@@ -490,6 +490,29 @@ an indirect path with an explicit relay receipt. Required affordance #3
 (C signs its relay receipt with C's own key) and Forbidden #2 (C does not
 re-sign A's entries as C's own) are what make this honest.
 
+**A public overlay as the rendezvous medium (targeted, not implemented).**
+Freenet — a serverless peer-to-peer network whose peers form a small-world
+ring and hold content-addressed state — is targeted as a compatible
+transport per `docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md`
+(operator ruling 2026-07-27). The sketch is included here per §8 trigger 1,
+ahead of implementation, because the contract's answer is what determines
+whether the implementation is worth building. Conformance is unremarkable:
+the overlay carries an opaque signed announce blob or a signed
+`MeshEnvelope`, and every Required affordance is satisfied above it exactly
+as it is over TCP. Peer identity still derives from the Ed25519 public key;
+outbound messages are still signed before they reach the medium; the peer
+registry is still local and operator-consented; inbound entries are still
+verified against the sender's key and never merged into the local chain
+(Forbidden #7). What differs is not the contract but the population: the
+medium is reachable by anyone rather than by peers the operator attached,
+which makes Required inbound authentication load-bearing in a way a private
+TCP mesh lets it not be. The contract already forbids the failure mode
+(Forbidden #1, no unsigned messages); a public medium is what makes the
+gap between the contract and its current enforcement operationally visible.
+The overlay is never an authority — a rendezvous contract's validity rule
+is signature verification and nothing else, and no capability, delegation,
+or membership decision is expressible in it.
+
 ---
 
 ## 8. Autoregressive update triggers
