@@ -258,6 +258,8 @@ Retained for reasoning trail. Not amended for corpus pivots. Read with the note 
 
 **When an investigation or program lands**, add it to *Investigations and programs* instead — it has no KEEL section to name, and that is the point of the category rather than a defect in the document. `corpus-lint index-missing` enforces this for anything declaring a date on or after 2026-07-10; a document that predates the index convention stays in the measurement and is not retro-indexed.
 
+**Handoffs are local notes, not corpus.** `docs/handoffs/` is gitignored by decision (2026-07-27), and stays that way. Twenty-four corpus documents cite seventy-one handoff files between them; from any clone but the operator's, those paths do not resolve. That is accepted — a handoff is a reasoning trail for whoever was there, not a shared artifact — but it means a citation to `docs/handoffs/*` should be read as *a local note exists*, never as a resolvable reference, and nothing canonical may depend on one to be understood.
+
 **When a doc becomes historical**, move it to Tier 3 in this index. Its front matter should get a Historical-status header pointing at KEEL for canonical claims. Don't delete — freeze at authoring frame.
 
 **Never amend Tier 3 docs for corpus pivots.** If a pivot exposes a gap in Tier 1 or Tier 2, close the gap there. The historical doc stays as-is.
