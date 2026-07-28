@@ -116,22 +116,101 @@ start_server() {
     #   - OS Keychain Genesis:  ~9s (vault key resolution + startup)
     #   - Hardware Genesis (Trezor/YubiKey/Ledger/OnlyKey): operator confirmation
     #     latency is unbounded — physical touch on device, typically 10–120s.
-    # Poll window sized for hardware-Genesis case; override via ZP_BOOT_WAIT_SECS.
+    # The comment above says operator confirmation latency is *unbounded*,
+    # and the poll window used to bound it at 180s anyway — so a boot
+    # correctly waiting on a hardware touch reported "Failed to start"
+    # while the server was alive and healthy (observed 2026-07-28). An
+    # operator who believes that message kills a good boot and retries,
+    # and after a few rounds raises ZP_BOOT_WAIT_SECS or turns hardware
+    # Genesis off. That is the bypass pattern *delegable safety* names:
+    # the rigid mechanism does not get fixed, it gets routed around.
+    #
+    # Three states, distinguished rather than collapsed:
+    #   process exited        → real failure, reported immediately
+    #   awaiting a touch      → unbounded, and SAID SO on the terminal
+    #   neither               → bounded wait, reported as "not yet
+    #                           listening" rather than as failure
     local wait_secs="${ZP_BOOT_WAIT_SECS:-180}"
     local max_tries=$((wait_secs * 2))
     local tries=0
-    while [ $tries -lt $max_tries ]; do
+    local prompted=0
+    local last_nag=0
+    local device="hardware key"
+    while :; do
         if lsof -i :$PORT -sTCP:LISTEN > /dev/null 2>&1; then
+            [ $prompted -eq 1 ] && echo "✓ confirmed"
             echo "✓ localhost:$PORT (PID $server_pid, build $commit)"
             return 0
         fi
+
+        # A dead process is a real failure and should not wait out the
+        # window. This previously burned the full 180s on an instant crash.
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "✗ Server exited during boot (PID $server_pid)"
+            echo "  log: $LOG"
+            tail -20 "$LOG"
+            return 1
+        fi
+
+        # The prompt existed — at INFO, in a logfile, where nobody was
+        # looking. Put it where the person is, and make it impossible to
+        # miss: this is a *physical* action, and the operator may have
+        # walked away or scrolled past. Bell, banner, and a repeating
+        # reminder, because a boot that silently waits on a human is
+        # indistinguishable from a hang.
+        if [ $prompted -eq 0 ] \
+           && grep -qE "confirm on device|Waiting for user confirmation" "$LOG" 2>/dev/null; then
+            grep -qi "trezor" "$LOG" 2>/dev/null && device="Trezor"
+            grep -qi "yubikey" "$LOG" 2>/dev/null && device="YubiKey"
+            grep -qi "ledger"  "$LOG" 2>/dev/null && device="Ledger"
+            grep -qi "onlykey" "$LOG" 2>/dev/null && device="OnlyKey"
+
+            # No right-hand border and no width-padding: the em-dash is
+            # three bytes and one column, so printf padding drifts, and a
+            # longer device name would break the box anyway. Unmissable
+            # beats decorative.
+            printf '\a'    # terminal bell — a human is needed
+            echo ""
+            printf "\033[1;33m  ══════════════════════════════════════════════════\033[0m\n"
+            printf "\033[1;33m   ▶  ACTION NEEDED — TOUCH YOUR %s\033[0m\n" "$(echo "$device" | tr '[:lower:]' '[:upper:]')"
+            printf "\033[1;33m  ══════════════════════════════════════════════════\033[0m\n"
+            echo ""
+            echo "   Your $device is asking you to confirm. Look at the device"
+            echo "   and press its button."
+            echo ""
+            echo "   ZeroPoint is unlocking the sovereign root — every signature"
+            echo "   this session traces back to this one touch."
+            echo ""
+            echo "   Nothing is wrong. Boot is paused until you confirm, and will"
+            echo "   wait as long as it takes. The ceremony is bounded by you, not"
+            echo "   by a clock."
+            echo ""
+            prompted=1
+            last_nag=$tries
+        fi
+
+        # Repeat every ~20s. Someone who stepped away comes back to a
+        # live instruction rather than a wall of scrollback.
+        if [ $prompted -eq 1 ] && [ $((tries - last_nag)) -ge 40 ]; then
+            printf '\a'
+            printf "     \033[1;33m… still waiting on your %s — press the button to continue\033[0m\n" "$device"
+            last_nag=$tries
+        fi
+
         sleep 0.5
         tries=$((tries + 1))
+
+        # Only the non-ceremony path is bounded, and even then the server
+        # is left running — it is alive, just not listening yet.
+        if [ $prompted -eq 0 ] && [ $tries -ge $max_tries ]; then
+            echo "⚠ Not listening after ${wait_secs}s, but the process is alive (PID $server_pid)."
+            echo "  This is not necessarily a failure — check what it is waiting on:"
+            echo "    ./zp-dev.sh log"
+            echo "  (extend with ZP_BOOT_WAIT_SECS=<seconds>)"
+            tail -10 "$LOG"
+            return 1
+        fi
     done
-    echo "✗ Failed to start after ${wait_secs}s — check: ./zp-dev.sh log"
-    echo "  (override wait with ZP_BOOT_WAIT_SECS=<seconds>)"
-    tail -10 "$LOG"
-    return 1
 }
 
 # ── Verify the running server matches source ────────────────────────
