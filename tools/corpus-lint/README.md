@@ -39,6 +39,34 @@ the tool will stop asking:
   exempt from drift reporting
 - a document whose header declares Tier 3 historical or superseded is excluded
   from amendment-shaped checks entirely
+- a line that reports a path as missing — "does not exist", "dangling",
+  "absent from", "unbuilt" — is not flagged for naming it. An investigation
+  quoting a dangling path is doing its job, not committing the defect
+- `docs/handoffs/*` is never path-checked: handoffs are local notes by the
+  convention in `CANONICAL-CORPUS-INDEX-2026-07.md`, and their paths are not
+  expected to resolve in any clone
+
+## Added 2026-07-27
+
+Three checks from the first triage-for-coherence pass, each justified by a
+real finding of that day rather than by a category someone imagined:
+
+- **`doc-path`** (defect) — a backticked repo path in a governed doc that does
+  not resolve. Motivated by `AGENT-TOOL-CONTRACT-2026-06.md` citing a Wasmtime
+  capability schema for a runtime never present in this repo. File paths are
+  the defect; directories are reported separately as `doc-path-prospective`,
+  because "this will live here" is C1 and the corpus may specify ahead of code.
+- **`doc-symbol`** (defect) — a backticked identifier in a Rust doc comment
+  absent from its own crate. Motivated by `CapabilityGrant::delegate`
+  documenting its scope check as enforced by a function that never existed.
+  Expected to report zero: it is a regression guard. Backticks are invisible to
+  rustdoc, so nothing else reaches this class.
+- **`pub-consumer`** (measurement) — a public type with no non-test,
+  non-import consumer. C2 of `CONNECTION-INTEGRITY-PROGRAM-2026-07.md` at type
+  granularity, which that program records as ungeneralized. Motivated by
+  `MerkleProof` in `zp-receipt`: complete, tested, re-exported, never called.
+  Counting a re-export as a consumer is precisely what hides this, so imports
+  are stripped before the index is built.
 
 Every check is justified by a defect found on 2026-07-25; none is speculative.
 Checks that could not find their motivating instance reliably were removed

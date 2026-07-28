@@ -17,7 +17,8 @@ ROOT = None
 # Checks that measure rather than judge. They report and are never a build failure:
 # the pre-convention stratum and the specified-not-shipped receipt surface are
 # properties of a corpus mid-construction, not defects in it.
-INFORMATIONAL = {"index-coverage", "receipt-coverage", "stated-count"}
+INFORMATIONAL = {"index-coverage", "receipt-coverage", "stated-count",
+                 "doc-path-prospective", "pub-consumer"}
 
 # The corpus index declares its own establishment date in its opening
 # line ("Established 2026-07-10"). Documents authored on or after it were
@@ -415,6 +416,169 @@ def check_index_coverage(docs, root):
                 f"authoring frame)")
 
 # ── main ─────────────────────────────────────────────────────────────────────
+def check_doc_paths(docs, root):
+    """SC3 — every backticked repo path in a governed doc resolves.
+
+    Justified by two real defects, 2026-07-27: AGENT-TOOL-CONTRACT-2026-06.md
+    cites `src/tools/wasm/capabilities.rs` for a runtime that was never in
+    this repo, and EXTENSION-SURFACE-2026-07.md names
+    `crates/zp-server/src/extensions/` as near-term implementation. Both read
+    as descriptions of a tree that exists.
+
+    File and directory misses are separated deliberately. A directory that
+    does not exist is usually prospective -- "this will live here" -- which is
+    C1 and the corpus is permitted to specify ahead of the code. A file path
+    is far more often asserted as fact, so it is the defect and the directory
+    is the measurement.
+
+    docs/handoffs/* is skipped: handoffs are local notes by the convention
+    recorded in CANONICAL-CORPUS-INDEX-2026-07.md, and their paths are not
+    expected to resolve in any clone.
+    """
+    TOP = {"crates", "tools", "scripts", "docs", "policies", "models", "dashboard",
+           "prompts", "src", "wasm-modules", "zeropoint.global", "migrations",
+           "zeropointfoundation.org", "zeropoint-py", "graphify-out", "core", "INPUT"}
+    EXT = (".rs", ".py", ".toml", ".json", ".md", ".sh", ".yml", ".yaml",
+           ".jsonl", ".sql", ".html")
+    pat = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_.-]+/?)`")
+
+    def resolves(ref):
+        # crate- and tool-relative citations are idiomatic in this corpus
+        return ((root / ref).exists() or (root / "crates" / ref).exists()
+                or (root / "tools" / ref).exists())
+
+    for doc in docs:
+        try:
+            lines = doc.read_text(errors="replace").splitlines()
+        except Exception:
+            continue
+        for i, line in enumerate(lines, 1):
+            for ref in pat.findall(line):
+                if ref.startswith(("http", "/", "~")) or "*" in ref or "{" in ref:
+                    continue
+                if ref.split("/")[0] not in TOP and not ref.endswith(EXT):
+                    continue
+                if ref.startswith("docs/handoffs/"):
+                    continue
+                if resolves(ref):
+                    continue
+                # A document reporting that a path dangles must not be flagged
+                # for naming it. Both instances on first run (2026-07-27) were
+                # of this shape: an investigation quoting the missing path from
+                # the document that asserts it.
+                if any(w in line.lower() for w in
+                       ("does not exist", "no such", "never existed", "does not resolve",
+                        "dangl", "absent from", "unbuilt", "not present")):
+                    continue
+                if ref.endswith("/"):
+                    finding("doc-path-prospective", doc,
+                            f"cites directory {ref}, which does not exist", i)
+                else:
+                    finding("doc-path", doc,
+                            f"cites {ref}, which does not exist", i)
+
+
+def check_doc_comment_symbols(root):
+    """SC4 — a backticked symbol in a Rust doc comment exists in its own crate.
+
+    Justified by a real defect, 2026-07-27: CapabilityGrant::delegate documented
+    its scope check as "enforced by `narrow_capability`", a function that has
+    never existed in the tree; enforcement is GrantedCapability::contains. The
+    comment had been read by at least two surveys as evidence of a mechanism.
+
+    Backticks in doc comments are invisible to rustdoc, so no compiler check
+    reaches them. Writing them as intra-doc links would let
+    `cargo doc -D rustdoc::broken_intra_doc_links` enforce this structurally,
+    which is the better fix; until then this catches the phantom class.
+
+    Deliberately narrow: only tokens shaped like identifiers (containing `::`
+    or `_`, or CamelCase) and at least four characters, to avoid flagging
+    prose. Expected to report zero -- it is a regression guard, not a
+    discovery tool.
+    """
+    sym = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)`")
+    crates = root / "crates"
+    if not crates.exists():
+        return
+    sources = [p for p in crates.rglob("*.rs") if "/target/" not in str(p)]
+    text_of = {}
+    for path in sources:
+        crate = crates / path.relative_to(crates).parts[0]
+        if crate not in text_of:
+            # token set, not a joined blob: membership is O(1) and the blob
+            # form made this check the slowest in the suite by two orders
+            text_of[crate] = set(re.findall(
+                r"[A-Za-z_][A-Za-z0-9_]*",
+                "\n".join(q.read_text(errors="replace") for q in crate.rglob("*.rs")
+                           if "/target/" not in str(q))))
+        for i, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            stripped = line.strip()
+            if not (stripped.startswith("///") or stripped.startswith("//!")):
+                continue
+            for token in sym.findall(line):
+                if ("::" not in token and "_" not in token
+                        and not re.match(r"^[A-Z][a-zA-Z0-9]*$", token)):
+                    continue
+                leaf = token.split("::")[-1]
+                if len(leaf) < 4:
+                    continue
+                if leaf not in text_of[crate]:
+                    finding("doc-symbol", path,
+                            f"doc comment cites `{token}`, absent from this crate", i)
+
+
+def check_pub_type_consumers(root):
+    """SC5 — public types with no consumer outside the file that defines them.
+
+    C2 of CONNECTION-INTEGRITY-PROGRAM-2026-07.md at type granularity. That
+    program's detector covers Regent tools; its own text records that nothing
+    generalizes it. Justified by a real finding, 2026-07-27: MerkleProof,
+    ProofStep and Direction in zp-receipt/src/epoch.rs are complete, tested
+    and re-exported, and no path constructs or checks an inclusion proof --
+    the capability the anchor tier's compact-commitment discipline wants,
+    built and never called.
+
+    Imports and re-exports are not consumers. Counting `pub use` as one is
+    what hides exactly this case, since a type re-exported from lib.rs looks
+    used from a naive grep.
+
+    Informational by design: a public type with no internal consumer may be
+    deliberate API surface. The number is the signal, and its movement more
+    so than its level.
+    """
+    crates = root / "crates"
+    if not crates.exists():
+        return
+    sources = [p for p in crates.rglob("*.rs") if "/target/" not in str(p)]
+    decl = re.compile(r"^\s*pub\s+(?:struct|enum|trait)\s+([A-Z][A-Za-z0-9_]*)", re.M)
+
+    def without_tests(text):
+        cut = text.find("#[cfg(test)]")
+        return text[:cut] if cut != -1 else text
+
+    def without_imports(text):
+        return "\n".join(l for l in text.splitlines()
+                          if not re.match(r"\s*(pub\s+)?use\s", l))
+
+    # Inverted index: token -> set of files mentioning it. Built in one pass,
+    # because the naive form (regex per type per file) is ~10^6 searches and
+    # made the suite unrunnable.
+    token = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+    declared_in, seen_in = {}, defaultdict(set)
+    for path in sources:
+        text = without_tests(path.read_text(errors="replace"))
+        for name in decl.findall(text):
+            declared_in.setdefault(name, path)
+        for tok in set(token.findall(without_imports(text))):
+            seen_in[tok].add(path)
+
+    for name, path in sorted(declared_in.items()):
+        if seen_in.get(name, set()) - {path}:
+            continue
+        finding("pub-consumer", path,
+                f"pub type {name} has no non-test, non-import consumer")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", nargs="?", default=".")
@@ -456,6 +620,9 @@ def main():
         "tieoff_reopen_conditions": lambda: check_tieoff_reopen_conditions(
             post_convention(root), root),
         "index_coverage": lambda: check_index_coverage(gov, root),
+        "doc_paths": lambda: check_doc_paths(gov, root),
+        "doc_comment_symbols": lambda: check_doc_comment_symbols(root),
+        "pub_type_consumers": lambda: check_pub_type_consumers(root),
     }
 
     # Structural guard: a `check_*` defined in this module and absent from
