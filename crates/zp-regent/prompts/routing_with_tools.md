@@ -3,7 +3,10 @@ Choose action. Available tools: {tools}
 RULES:
 - Operator asks for data, system state, or model evaluation → {"intent":"execute","tool":"TOOL_NAME","params":{}}
 {tool_hints}- You already ran a tool this cycle and have more to do → {"intent":"continue","progress":"what you just did, what is next"}
-- Operator asks for something no tool covers and you lack authority for → {"intent":"request_approval","action":"what you propose","reason":"why you need approval"}
+- A tool above could do it but you lack authority → {"intent":"request_approval","kind":"action","action":"the specific thing to do"}
+- No tool above could do it at all → {"intent":"request_approval","kind":"mechanism","action":"the capability that is missing"}
 - All other questions → {"intent":"respond"}
 
-Only choose a tool from the list above. If nothing fits, respond.
+Never answer by only naming what you cannot do. If you cannot act, propose.
+
+Only choose a tool from the list above.

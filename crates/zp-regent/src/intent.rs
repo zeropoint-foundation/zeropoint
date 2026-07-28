@@ -7,11 +7,40 @@
 
 use serde::{Deserialize, Serialize};
 
+/// What a proposal asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProposalKind {
+    /// A mechanism exists; the Regent lacks the authority to invoke it.
+    /// Resolved by operator signature; a grant becomes precedent.
+    Action,
+    /// No mechanism exists. Goes to the improvement loop as a capability
+    /// request, not to the approval queue.
+    Mechanism,
+}
+
+impl ProposalKind {
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "mechanism" | "capability" | "new_capability" => ProposalKind::Mechanism,
+            _ => ProposalKind::Action,
+        }
+    }
+
+    /// Receipt family this proposal lands in.
+    pub fn receipt_prefix(&self) -> &'static str {
+        match self {
+            ProposalKind::Action => "regent:proposal:",
+            ProposalKind::Mechanism => "improvement:proposed",
+        }
+    }
+}
+
 /// What the Regent decided to do after reasoning.
 ///
 /// Every intent becomes a `regent:intent:{kind}` receipt before execution.
 /// If the intent requires operator approval, execution blocks until signed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
 /// # Which intents are reachable, and why the rest are not
 ///
 /// `parse_intent` accepts all eight variants below. The prompts expose
@@ -42,6 +71,7 @@ use serde::{Deserialize, Serialize};
 /// `observe` is emitted by the loop rather than the model — the
 /// early-return in `reason()` when there is no input and no urgency — and
 /// is not a prompt-selectable intent. That is why it dominates the chain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Intent {
     /// Respond to the operator through a cockpit surface.
     Respond {
@@ -77,12 +107,47 @@ pub enum Intent {
         content: String,
     },
 
-    /// Request operator approval for an action beyond current delegation.
+    /// A proposal — the Regent cannot simply act, and says what she wants
+    /// instead of naming a limitation and stopping.
+    ///
+    /// Covers two of the three terminal states in
+    /// `docs/EXECUTION-AUTHORITY-MODEL-2026-07.md` §Phase 7: *propose an
+    /// action* (a mechanism exists, authority does not) and *propose a
+    /// mechanism* (no mechanism exists). They are one intent with a
+    /// discriminator rather than two intents because the routing tier can
+    /// check the distinction against its own tool list — a tool exists and
+    /// she lacks authority, versus no tool exists — where a second intent
+    /// would be another thing for a small model to confuse.
+    ///
+    /// They must stay distinguishable downstream: per that spec,
+    /// "proposing an *action* asks for authority, proposing a *mechanism*
+    /// asks for a capability, and conflating them puts capability requests
+    /// through a review path built for one-off approvals." The kind
+    /// selects the receipt: `regent:proposal:*` or `improvement:proposed`.
+    ///
+    /// The routing tier fills `kind` and `proposed_action` only. The rest
+    /// is written by the compose tier — a proposal is reasoning prose, and
+    /// the two-tier split exists so prose is not authored by the 1.7b
+    /// classifier.
     RequestApproval {
-        /// What the Regent wants to do.
+        /// Authority, or capability.
+        kind: ProposalKind,
+        /// One sentence: the specific thing to be done.
         proposed_action: String,
-        /// Why it needs approval.
+        /// Why approval is needed. Retained as the human-readable summary.
         reason: String,
+        /// What was observed that prompted this.
+        finding: Option<String>,
+        /// Which limb failed: no authority | no precedent | novel context |
+        /// no mechanism.
+        failed_limb: Option<String>,
+        /// What will be true afterwards that is not true now. Not a
+        /// restatement of `proposed_action`.
+        expected_outcome: Option<String>,
+        /// The artifact itself, where the proposal is for something the
+        /// substrate already knows how to store. Honoured in-session as an
+        /// unsigned candidate; does not survive a restart unsigned.
+        draft: Option<String>,
     },
 
     /// No action needed — the Regent observed but has nothing to do.

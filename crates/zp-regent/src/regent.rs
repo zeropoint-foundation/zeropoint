@@ -15,6 +15,7 @@ const PROMPT_UNIFIED_NO_TOOLS: &str = include_str!("../prompts/unified_no_tools.
 const PROMPT_ROUTING_TOOLS: &str = include_str!("../prompts/routing_with_tools.md");
 const PROMPT_ROUTING_NO_TOOLS: &str = include_str!("../prompts/routing_no_tools.md");
 const PROMPT_COMPOSE: &str = include_str!("../prompts/compose.md");
+const PROMPT_PROPOSE: &str = include_str!("../prompts/propose.md");
 
 use crate::config::RegentConfig;
 use crate::context::{
@@ -745,8 +746,163 @@ impl Regent {
                 })
             }
 
+            // A proposal is reasoning prose. Routing decided *that* she
+            // proposes; the composer writes *what* the proposal says. This
+            // arm previously fell through, which left the four fields the
+            // authority model requires being authored by the 1.7b
+            // classifier from a terse routing prompt.
+            Intent::RequestApproval {
+                kind,
+                proposed_action,
+                ..
+            } => {
+                let (kind, seed) = (*kind, proposed_action.clone());
+                match self.compose_proposal(context, kind, &seed).await {
+                    Ok(p) => Ok(p),
+                    Err(e) => {
+                        // A failed compose must not silently downgrade the
+                        // proposal into a bare refusal — that is the floor
+                        // Phase 7 forbids. Keep the router's seed and say
+                        // the body is missing.
+                        warn!("proposal compose failed, emitting seed only: {}", e);
+                        Ok(Intent::RequestApproval {
+                            kind,
+                            proposed_action: seed,
+                            reason: "proposal body could not be composed".to_string(),
+                            finding: None,
+                            failed_limb: None,
+                            expected_outcome: None,
+                            draft: None,
+                        })
+                    }
+                }
+            }
+
             _ => Ok(intent),
         }
+    }
+
+    /// Write the body of a proposal at the compose tier.
+    ///
+    /// Per `docs/EXECUTION-AUTHORITY-MODEL-2026-07.md` §Phase 7 a proposal
+    /// carries the finding, the proposed action, which limb failed, and the
+    /// expected outcome — and, for an operator request where the mechanism
+    /// exists but authority does not, a draft of the artifact itself.
+    async fn compose_proposal(
+        &self,
+        context: &CognitiveContext,
+        kind: crate::intent::ProposalKind,
+        seed: &str,
+    ) -> Result<Intent, RegentError> {
+        use crate::intent::ProposalKind;
+
+        let persona_fragment = self.persona.system_prompt_fragment();
+        let user_prompt = self.build_user_prompt(context);
+
+        let sovereign_section = match &context.sovereign {
+            Some(sov) => format!(
+                "IDENTITY: You serve operator {} (genesis: {}…).",
+                sov.operator_name,
+                &sov.genesis_pubkey[..8.min(sov.genesis_pubkey.len())]
+            ),
+            None => "IDENTITY: No sovereign identity loaded.".to_string(),
+        };
+
+        let kind_guidance = match kind {
+            ProposalKind::Action => {
+                "A mechanism for this exists — you simply are not authorised to \
+                 invoke it. You are asking for authority, not for a capability. \
+                 failed_limb is one of: no authority | no precedent | novel context. \
+                 If the thing being asked for is an artifact the substrate stores, \
+                 draft it."
+            }
+            ProposalKind::Mechanism => {
+                "No mechanism for this exists anywhere in the substrate. You are \
+                 asking for a capability to be built, not for permission. \
+                 failed_limb is: no mechanism. Leave draft empty unless you can \
+                 describe the shape the mechanism would take. Do not propose a \
+                 workaround using a tool that does something adjacent — say what \
+                 is missing."
+            }
+        };
+
+        let system_prompt = PROMPT_PROPOSE
+            .replace("{persona}", &persona_fragment)
+            .replace("{sovereign_section}", &sovereign_section)
+            .replace(
+                "{standing_corrections_section}",
+                &build_standing_corrections_section(context),
+            )
+            .replace("{available_actions}", &Self::build_available_actions(context))
+            .replace(
+                "{proposal_kind}",
+                match kind {
+                    ProposalKind::Action => "propose an action (asking for authority)",
+                    ProposalKind::Mechanism => "propose a mechanism (asking for capability)",
+                },
+            )
+            .replace("{proposal_seed}", seed)
+            .replace("{kind_guidance}", kind_guidance);
+
+        let route = self.resolve_model(
+            &crate::routing::IntentCategory::Conversation,
+            context.system_awareness.as_ref(),
+        );
+
+        info!(
+            model = %route.model,
+            kind = ?kind,
+            seed = seed,
+            "regent PROPOSE tier"
+        );
+
+        let request = InferenceRequest {
+            model: route.model,
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: system_prompt,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: user_prompt,
+                },
+            ],
+            // Structured output: the four fields are a contract, not prose.
+            format: Some(serde_json::json!("json")),
+            temperature: 0.3,
+            stream: false,
+            options: Some(serde_json::json!({ "num_predict": 512 })),
+            keep_alive: Some(serde_json::json!(-1)),
+            think: Some(false),
+        };
+
+        let raw = self.infer(&request, &route.tier).await?;
+        let v: serde_json::Value = serde_json::from_str(strip_markdown_fences(&raw).trim())
+            .map_err(|e| RegentError::Inference(format!("proposal parse failed: {e} — {raw}")))?;
+
+        let field = |k: &str| {
+            v.get(k)
+                .and_then(|x| x.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+        };
+
+        let proposed_action = field("proposed_action").unwrap_or_else(|| seed.to_string());
+        let reason = field("failed_limb")
+            .map(|l| format!("{l}: {proposed_action}"))
+            .unwrap_or_else(|| "approval required".to_string());
+
+        Ok(Intent::RequestApproval {
+            kind,
+            proposed_action,
+            reason,
+            finding: field("finding"),
+            failed_limb: field("failed_limb"),
+            expected_outcome: field("expected_outcome"),
+            draft: field("draft"),
+        })
     }
 
     /// Single-model fast path: one inference call handles both routing
@@ -1856,9 +2012,19 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("no reason given")
                 .to_string();
+            // The router fills `kind` and `proposed_action`. Everything
+            // else is written by the compose tier — see `compose_proposal`.
+            let kind = crate::intent::ProposalKind::parse(
+                value.get("kind").and_then(|v| v.as_str()).unwrap_or("action"),
+            );
             Ok(Intent::RequestApproval {
+                kind,
                 proposed_action,
                 reason,
+                finding: None,
+                failed_limb: None,
+                expected_outcome: None,
+                draft: None,
             })
         }
 

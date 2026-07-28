@@ -938,8 +938,41 @@ async fn run_cycle(
                 let response = match &intent {
                     Intent::Respond { content, .. } => content.clone(),
                     Intent::Observe { observation } => observation.clone(),
-                    Intent::RequestApproval { proposed_action, reason } => {
-                        format!("[approval requested] {}: {}", proposed_action, reason)
+                    Intent::RequestApproval {
+                        kind,
+                        proposed_action,
+                        finding,
+                        failed_limb,
+                        expected_outcome,
+                        draft,
+                        ..
+                    } => {
+                        // Render the proposal the operator has to act on.
+                        // A bare "[approval requested] x: y" was the floor
+                        // EXECUTION-AUTHORITY-MODEL Phase 7 forbids — it
+                        // names a limitation without giving anything to
+                        // approve or reject.
+                        let header = match kind {
+                            crate::intent::ProposalKind::Action => "PROPOSAL (needs your approval)",
+                            crate::intent::ProposalKind::Mechanism => "PROPOSAL (capability request)",
+                        };
+                        let mut out = format!("{header}\n{proposed_action}");
+                        if let Some(f) = finding {
+                            out.push_str(&format!("\n\nWhy: {f}"));
+                        }
+                        if let Some(l) = failed_limb {
+                            out.push_str(&format!("\nBlocked by: {l}"));
+                        }
+                        if let Some(o) = expected_outcome {
+                            out.push_str(&format!("\nIf approved: {o}"));
+                        }
+                        if let Some(d) = draft {
+                            out.push_str(&format!(
+                                "\n\nDraft (unsigned — honoured this session only, \
+                                 will not survive a restart):\n{d}"
+                            ));
+                        }
+                        out
                     }
                     _ => format!("{:?}", intent.receipt_event()),
                 };

@@ -98,6 +98,9 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // Intent::RequestApproval. Seeds the precedent corpus.
     "regent:approval:granted",
     "regent:approval:denied",
+    // Phase 7 terminal states — propose an action, propose a mechanism.
+    "regent:proposal:",
+    "improvement:proposed",
     "improvement:tieoff:declared",
     "improvement:reopen:eligible",
     "improvement:reopen:review_due",

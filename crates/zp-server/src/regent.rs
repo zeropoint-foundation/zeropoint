@@ -1300,12 +1300,46 @@ impl IntentExecutor for ServerIntentExecutor {
                 Ok(IntentOutcome::Observed)
             }
 
-            Intent::RequestApproval { proposed_action, reason } => {
+            Intent::RequestApproval {
+                kind,
+                proposed_action,
+                reason,
+                finding,
+                failed_limb,
+                expected_outcome,
+                draft,
+            } => {
                 info!(
                     action = proposed_action.as_str(),
                     reason = reason.as_str(),
-                    "regent: requesting operator approval"
+                    kind = ?kind,
+                    "regent: proposal"
                 );
+
+                // Two terminal states, two receipt families. Per
+                // EXECUTION-AUTHORITY-MODEL Phase 7, proposing an action
+                // asks for authority and proposing a mechanism asks for a
+                // capability; conflating them would put capability
+                // requests through a review path built for one-off
+                // approvals.
+                let detail = format!(
+                    "action={} limb={} finding={} outcome={} draft={}",
+                    proposed_action,
+                    failed_limb.as_deref().unwrap_or("unstated"),
+                    finding.as_deref().unwrap_or("unstated"),
+                    expected_outcome.as_deref().unwrap_or("unstated"),
+                    if draft.is_some() { "yes" } else { "no" },
+                );
+                match kind {
+                    zp_regent::intent::ProposalKind::Action => {
+                        self.emit_receipt("regent:proposal:action", Some(&detail));
+                    }
+                    zp_regent::intent::ProposalKind::Mechanism => {
+                        self.emit_receipt("improvement:proposed", Some(&detail));
+                    }
+                }
+                // Retained: the approval queue keys on this prefix, and it
+                // is what `zp approval list` joins resolutions against.
                 self.emit_receipt(
                     "regent:intent:request_approval",
                     Some(&format!("action={}", proposed_action)),
