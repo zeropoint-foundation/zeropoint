@@ -1,3 +1,34 @@
+# DEPLOY — read this before deploying. Diagnosed 2026-07-27 after ~3h lost.
+#
+#   1. Be on the RIGHT CLOUDFLARE ACCOUNT: ken@thinkstreamlabs.ai
+#          npx wrangler whoami   ->  must say "Ken@thinkstreamlabs.ai's Account"
+#      A second account, kenrom@thinkstreamlabs.ai, contains a worker with the
+#      SAME NAME (zeropoint-global) that is not routed to anything. Deploying
+#      under it succeeds, reports versions and deployments, and changes nothing
+#      on the live site. There is no error to tell you this has happened.
+#      Symptoms: `wrangler deployments list` shows recent deploys while the
+#      dashboard shows the active version months old; asset edits never appear;
+#      `Could not find zone for zeropoint.global` on any route operation.
+#
+#   2. Publish with the versions flow, not `wrangler deploy`:
+#          npx wrangler versions upload
+#          npx wrangler versions deploy <version-id>@100% -y
+#      Plain `wrangler deploy` uploads the version and then ABORTS before
+#      publishing it, because there are no `routes` here and workers.dev is
+#      declined -- it has no publish target it can see. The custom domain is
+#      attached to the Worker in the dashboard and works fine; wrangler just
+#      cannot see it from config. Adding a `routes` entry does not help.
+#
+#   3. Verify with a canary, not by eye:
+#          printf 'canary-%s\n' "$(date +%s)" > lab/canary.txt   (before upload)
+#          curl -s https://zeropoint.global/lab/canary.txt        (after deploy)
+#      If the canary does not echo back, the deploy did not reach production
+#      regardless of what wrangler printed. Delete it afterwards.
+#
+#   Note when curling pages: Workers Assets uses html_handling
+#   auto-trailing-slash, so /lab/sim01.html 301s to /lab/sim01. Use `curl -sL`
+#   or the extensionless URL, or you will grep an empty redirect body.
+
 name = "zeropoint-global"
 main = "src/worker.js"
 compatibility_date = "2025-04-01"
