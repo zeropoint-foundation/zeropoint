@@ -17,8 +17,11 @@ surface). Default theme is `zp-dark`, matching the ZP web palette pulled from
 | `rfab-ai-chat-review-2026-07.json` | `rfab.ai/blog/ai-chat-review` capture | Historical (Tier 3) |
 | `butlerian-jihad-ai-girlfriends-2026-07.json` | Collins podcast transcript | Historical (Tier 3) |
 | `hot-girl-service-economy-2026-07.json` | Collins podcast transcript | Historical (Tier 3) |
+| `freenet-no-servers-clarke-2026-07.json` | Ian Clarke FUTO talk transcript (`youtu.be/3RBNboYUlVI`) | Historical (Tier 3) |
+| `webassembly-2025-shift-2026-07.json` | YouTube explainer on Wasm 3.0 / WASI 0.2 (`youtu.be/VQHRUQDCh_Q`) | Historical (Tier 3) |
+| `data-structures-shape-is-the-trade-2026-07.json` | YouTube survey of 14 data structures (`youtu.be/vVL6NFzr0Rg`) | Historical (Tier 3) |
 
-The five above land as Tier-3 historical per
+The entries above land as Tier-3 historical per
 `docs/CANONICAL-CORPUS-INDEX-2026-07.md` conventions — reasoning trail, not
 canonical claims. A future mindmap rendered to argue a Tier-2 elaboration
 would sit alongside the doc it argues for, not here.
