@@ -1,8 +1,20 @@
-# Hardware Self-Observer
+# Hardware Coprocessor Self-Observer
 
-**Tier 2 canonical elaboration.** Companion to `SOVEREIGN-HARDWARE-2026-07.md`. Details the hardware self-observer subsystem — a first-class component of canonical sovereign hardware. Elaborates `KEEL-2026-07.md` §II (adds physical observation tier) and Part XIV (Substrate Realization at hardware level). Canonical claims live in KEEL.
+**Tier 2 canonical elaboration.** Companion to `SOVEREIGN-HARDWARE-2026-07.md`. Details the **hardware coprocessor self-observer subsystem** — a Tier 1+ physical-state MCU observer, one of three observer classes per `HARDWARE-ROLE-SEPARATION-2026-07.md`. Elaborates `KEEL-2026-07.md` §II (adds physical observation tier) and Part XIV (Substrate Realization at hardware level). Canonical claims live in KEEL.
 
-Draft — 2026-07-10 — internal audience only. Composes with `SOVEREIGN-HARDWARE-2026-07.md` (hardware architecture), `OBSERVATION-PLANE-2026-07.md` (adds physical observation as seventh surface), `CIRCUIT-BREAKER-2026-07.md` (observer findings feed trigger sources), `BLAST-RADIUS-AND-RECOVERY-2026-07.md`.
+Draft — 2026-07-10, **revised 2026-07-27** to name this observer as one of three sibling classes (see §"Composition with sibling observers" below). Composes with `HARDWARE-ROLE-SEPARATION-2026-07.md` (three-observer taxonomy), `SOVEREIGN-HARDWARE-2026-07.md` (hardware architecture), `OBSERVATION-PLANE-2026-07.md` (adds physical observation as seventh surface), `CIRCUIT-BREAKER-2026-07.md` (observer findings feed trigger sources), `BLAST-RADIUS-AND-RECOVERY-2026-07.md`.
+
+## Composition with sibling observers
+
+Per `HARDWARE-ROLE-SEPARATION-2026-07.md`, the sovereign node's observation surface is served by three complementary observer classes with distinct attack-surface visibility. This doc details the first (hardware coprocessor); the other two are named here for cross-reference.
+
+1. **Hardware coprocessor observer (this doc).** A dedicated MCU on the Tier 1+ custom carrier board, watching physical state — power rails, thermals, RF emissions, tamper switches — independently of the main SoC. Not present on Tier 0 Pi 5 (commodity SBC) or on Regent-Tier 0 M4 Pro Mac Mini (commodity Apple hardware); a first-class subsystem when the operator graduates to custom carrier board work.
+
+2. **In-process inference-output observer** (on the Regent node — reference hardware: M4 Pro Mac Mini). A rule-based watcher inside the Regent, reading llama.cpp or MLX output at IPC level, watching for banned-phrase matches, output-length blowups, high-entropy token sequences, refusal-cadence anomalies. Content-level visibility before TLS wrap. Compute budget under 5% of one core. Details in `mac-mini-regent-standup-checklist-2026-07-27.md` §Phase 3.
+
+3. **Network sentinel observer** (on the Sentinel node — reference hardware: Pi 5 8GB). Adjacent to the router, sees all network traffic to and from the Regent. Cannot be subverted by anything on the Regent because it lives on a physically separate SoC with its own TPM measurement, its own boot chain, its own chain of TPM-signed events. Visibility limited to connection metadata (destinations, timing, sizes, protocol families) rather than TLS content — precisely the complementary surface to the in-process observer's content-level visibility. Details in `tools/sentinel/zp_sentinel/` and the forthcoming Sentinel v1 MVP handoff.
+
+The three observers are complementary rather than redundant. The hardware coprocessor sees physical state the software observers cannot. The in-process observer sees model outputs before TLS wrapping. The network sentinel sees connection behavior after TLS wrapping. Defensive triggers gain confidence when observers agree; the substrate's constitutional discipline rewards this multi-observer confirmation.
 
 ## Framing
 

@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration.** Elaborates `KEEL-2026-07.md` §II.17 (cognitive discipline sandwich), §III.22 (verify before commit), Part VIII (bounded operator sovereignty). Specifies the substrate's model-switching protocol: when an operator requests a model change, the substrate shadow-evaluates the candidate model before cutting over, preserving cognitive continuity on the groomed model until the candidate proves prompt-compatible. Canonical claims live in KEEL.
 
-Draft — 2026-07-13 — internal audience only. Composes with `SHADOW-EVALUATION-PRIMITIVE-2026-07.md` (Context 1 specialization), `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (routing envelope discipline), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (model dossiers, Phase 5), the workflow heuristic *A model and its prompts are an atomic pair; changing one without the other is a half-state.*
+Draft — 2026-07-13 — internal audience only. Composes with `SHADOW-EVALUATION-PRIMITIVE-2026-07.md` (Context 1 specialization), `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (routing envelope discipline), `MODEL-DOSSIER-2026-07.md` (the switching ceremony extends to drafter switching under one discipline — a drafter is a serialization of the same characterization, per that spec's §Two serializations, one artifact), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (Phase 5 empirical program), the workflow heuristic *A model and its prompts are an atomic pair; changing one without the other is a half-state.*
 
 ## Framing
 

@@ -1,0 +1,251 @@
+{
+  "title": "Agents and Ontologies — Frank Coyle",
+  "subtitle": "A ~21-minute conference talk by Berkeley CS educator Frank Coyle arguing that LLM-driven agents are probabilistic and drift-prone, and should be paired with formal ontologies — the neuro-symbolic move — to give them guardrails and a shared conceptualization of their domain.",
+  "center": {
+    "label": "Neuro-Symbolic Guardrails for Agents",
+    "emoji": "🛡️"
+  },
+  "branches": [
+    {
+      "label": "Two Lineages Converge",
+      "emoji": "🧭",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Agent lineage from 1956",
+          "children": [
+            {"label": "\"McCarthy, Selfridge, Minsky\""},
+            {"label": "Society of Mind as reference"},
+            {"label": "Agents \"perceive, decide, act\""}
+          ]
+        },
+        {
+          "label": "Ontology lineage from Aristotle",
+          "children": [
+            {"label": "\"Aristotle: philosophy of being\""},
+            {"label": "Van Quine, then Gruber 1993"},
+            {"label": "\"Categories of being\""}
+          ]
+        },
+        {
+          "label": "The convergence term",
+          "children": [
+            {"label": "\"Neuro-symbolic AI\""},
+            {"label": "Probabilistic meets formal"},
+            {"label": "LLMs plus knowledge graphs"}
+          ]
+        },
+        {
+          "label": "Why now",
+          "children": [
+            {"label": "\"Nvidia off making GPUs\""},
+            {"label": "Scaled neural nets after '60s"},
+            {"label": "Symbolic AI is back"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "What an Ontology Actually Is",
+      "emoji": "📚",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Gruber's definition",
+          "children": [
+            {"label": "\"A formal specification\""},
+            {"label": "\"Of a shared conceptualization\""},
+            {"label": "\"Give it to our agents\""}
+          ]
+        },
+        {
+          "label": "Entities, properties, relationships",
+          "children": [
+            {"label": "\"Representation of entities\""},
+            {"label": "Properties on entities"},
+            {"label": "Relationships between them"}
+          ]
+        },
+        {
+          "label": "Graph beats relational",
+          "children": [
+            {"label": "\"Tables was too restrictive\""},
+            {"label": "Add column → redo structure"},
+            {"label": "\"Just attach another item\""}
+          ]
+        },
+        {
+          "label": "Ontology as data structure",
+          "children": [
+            {"label": "\"Think of it as a graph\""},
+            {"label": "Big word, simple shape"},
+            {"label": "\"Used in many ways\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Building the Graph",
+      "emoji": "🌱",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Top-down approach",
+          "children": [
+            {"label": "Experts analyze the domain"},
+            {"label": "\"Purchase orders, customers\""},
+            {"label": "Modeled '80s expert systems"}
+          ]
+        },
+        {
+          "label": "Bottom-up approach",
+          "children": [
+            {"label": "Grow from \"customer reactions\""},
+            {"label": "Add entities as observed"},
+            {"label": "Append relationships as learned"}
+          ]
+        },
+        {
+          "label": "Reuse existing taxonomies",
+          "children": [
+            {"label": "schema.org"},
+            {"label": "\"FOAF — Friend of a Friend\""},
+            {"label": "\"Dublin Core,\" DBpedia"}
+          ]
+        },
+        {
+          "label": "Cautionary echo of the '80s",
+          "children": [
+            {"label": "Expert systems \"couldn't scale\""},
+            {"label": "Millions spent, \"AI winter\""},
+            {"label": "Japanese Fifth-Gen project"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "RDFS and OWL as Reasoners",
+      "emoji": "🔗",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "RDFS domain and range",
+          "children": [
+            {"label": "\"Teaches has domain of teacher\""},
+            {"label": "\"Bob teaches Scooter\" → teacher"},
+            {"label": "Range implies Scooter is student"}
+          ]
+        },
+        {
+          "label": "OWL transitive properties",
+          "children": [
+            {"label": "Ancestor of ancestor is ancestor"},
+            {"label": "\"Sue is ancestor of Ann\""},
+            {"label": "\"Augment system with extra data\""}
+          ]
+        },
+        {
+          "label": "OWL functional properties",
+          "children": [
+            {"label": "\"Has father — only one\""},
+            {"label": "Bob and BB collapse to one"},
+            {"label": "Serves as identity constraint"}
+          ]
+        },
+        {
+          "label": "OWL disjoint properties",
+          "children": [
+            {"label": "Customer ≠ support rep"},
+            {"label": "Catches \"payout sent to support\""},
+            {"label": "Enums: paid / shipped / refunded"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Agent Loops and Their Dangers",
+      "emoji": "🌀",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "Bohm & Jacopini 1966",
+          "children": [
+            {"label": "Sequence, conditional, loop"},
+            {"label": "\"The language is Turing complete\""},
+            {"label": "The missing piece for agents"}
+          ]
+        },
+        {
+          "label": "The while-true pattern",
+          "children": [
+            {"label": "\"Classic Python loop\""},
+            {"label": "stop_reason → tool use"},
+            {"label": "\"get_tool\" executes action"}
+          ]
+        },
+        {
+          "label": "The LLM's real job",
+          "children": [
+            {"label": "\"LLMs can't do anything\""},
+            {"label": "\"Next word with high probability\""},
+            {"label": "\"I'm just locked in this box\""}
+          ]
+        },
+        {
+          "label": "Three loop failure modes",
+          "children": [
+            {"label": "Infinite loops"},
+            {"label": "\"Loops can drift\" — off the rails"},
+            {"label": "\"Loops can cost you money\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Guardrails Architecture",
+      "emoji": "🚧",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Reasoner as validator",
+          "children": [
+            {"label": "Ontology \"checks the response\""},
+            {"label": "\"Keep the LLM on track\""},
+            {"label": "\"Keep it honest\""}
+          ]
+        },
+        {
+          "label": "Pydantic at the door",
+          "children": [
+            {"label": "Types on inputs"},
+            {"label": "Python is \"unstructured type\""},
+            {"label": "\"Check your types with Pydantic\""}
+          ]
+        },
+        {
+          "label": "Ontology at the ledger",
+          "children": [
+            {"label": "\"Check results with the ontology\""},
+            {"label": "Domain-aware validation"},
+            {"label": "The \"extra brain\" beside the loop"}
+          ]
+        },
+        {
+          "label": "Pure agents, no side effects",
+          "children": [
+            {"label": "\"Have no side effects\""},
+            {"label": "Don't mutate DB directly"},
+            {"label": "\"Run through ontology first\""}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "Frank Coyle, 30+ years teaching CS, currently at UC Berkeley. ~21-minute conference talk to a ~5,000-person developer audience.",
+    "Opens and closes with Sister Corita Kent / John Cage: \"Nothing is a mistake. There is no win. There's no fail. There's only make.\"",
+    "Historical thread: neuro-symbolic AI is not a new invention — it's the return of 1980s expert systems, dressed for LLM-era problems (~14:16). The AI winter's ghost frames the whole talk as recursive history.",
+    "Load-bearing prescription (~18:25): \"Pydantic at the door, ontology at the ledger, and pure agents — your agents should try to have no side effects.\"",
+    "For the ZP corpus: partial resonance. Coyle's \"run them through the ontology first\" is a per-domain semantic-validation gate — architecturally analogous to a chain-anchored audit substrate that refuses ill-formed delegation acts. Different content, same structural role."
+  ]
+}

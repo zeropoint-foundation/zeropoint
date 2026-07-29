@@ -2,11 +2,11 @@
 
 **Document type:** Operational plan. Captures the ZeroPoint testbed inventory, node and participant allocation, phased build-up with go/no-go gates, design gaps whose resolution is deliberately deferred until phase findings inform them, and the product engineering explicitly out of investigation-phase scope.
 
-**Status:** Draft.
+**Status:** Draft. **Revised 2026-07-27** to reflect the two-role sovereign topology per `HARDWARE-ROLE-SEPARATION-2026-07.md` — APOLLO gains an explicit Regent-role designation; Raspberry Pi allocation gains an explicit Sentinel-role designation distinct from the "constrained-hardware persona" testbed usage; Phase 4 gains a Sentinel↔Regent split gate.
 
 **Author:** Ken Romero, with synthesis assistance from Claude.
 
-**Date:** 2026-07-08.
+**Date:** 2026-07-08 (revised 2026-07-27).
 
 ---
 
@@ -22,13 +22,13 @@ Investigation phase throughout — real product engineering (mobile apps, produc
 
 ## Part II — Hardware Inventory
 
-APOLLO. Primary coordinator, 64GB RAM. Ken's daily-driver Mac — both source-of-truth for source code and runtime home for the ZP daemon. Hosts multiple ZP nodes as VMs from Phase 1 onward. Retains the coordinator role through every phase; other machines join as peers.
+APOLLO. Primary coordinator, 64GB RAM. Ken's daily-driver Mac Mini (M4 Pro) — both source-of-truth for source code and runtime home for the ZP daemon. Hosts multiple ZP nodes as VMs from Phase 1 onward. Retains the coordinator role through every phase; other machines join as peers. **Regent-role sovereign designation** (per `HARDWARE-ROLE-SEPARATION-2026-07.md`) once its Regent stand-up ceremony completes per `mac-mini-regent-standup-checklist-2026-07-27.md`; hosts LLM inference, LoRA adapter workload, and the in-process output observer for the two-node sovereign topology.
 
 M4 Pro MacBook. 24GB RAM. Compute infrastructure — hosts a local Ollama inference resource that other nodes can rally, replacing cloud inference for cost and sovereignty reasons once Phase 2 begins. Doubles as sensor gateway host (camera, microphone) once specialized participant provisioning lands in Phase 4.
 
 Older MacBook. ~16GB RAM. Takes the ARTEMIS-designated clean-install and portable-system role from operator memory — Touch ID sovereignty testing runs here, and this is the machine that verifies onboarding flow from a clean environment without APOLLO's accumulated state.
 
-Raspberry Pis (2-3 units). 8GB each, ARM64. Constrained-hardware testbed for Phase 3 — does the substrate hold up on single-board computers with a fraction of APOLLO's resources? Native install, not VM.
+Raspberry Pis (2-3 units). 8GB each, ARM64. Two distinct roles under the two-role topology per `HARDWARE-ROLE-SEPARATION-2026-07.md`: (a) **Sentinel-role sovereign** — one Pi 5 stood up per `pi5-sovereign-standup-checklist-2026-07-17.md` becomes the network-adjacent Sentinel node, coordinating with the ASUS router for allowlist enforcement, destination monitoring, and chain-anchored egress attestation. This Pi is not a constrained-hardware persona; it is a role-specialized sovereign at the Sentinel-role Tier 0 entry point. (b) **Constrained-hardware persona testbed** — the remaining 1-2 Pis test whether the substrate holds up on single-board computers with a fraction of APOLLO's resources (the original framing for Phase 3). Native install, not VM.
 
 Ubuntu laptop. x86_64 architecture. Adds architectural diversity — catches endianness, alignment, or platform assumptions the Apple Silicon testbed would miss. One or two nodes.
 
@@ -50,7 +50,7 @@ M4 Pro hosts 2-3 general ZP nodes alongside the local Ollama inference resource.
 
 Older MacBook hosts 2-3 nodes with heterogeneous personas — some honest, some adversarial framings that don't require constrained-hardware realism. Also the clean-install verification substrate.
 
-Each Raspberry Pi hosts one native (not VM) ZP node, chosen to represent constrained-operator personas — someone running the substrate on a small home server or edge device rather than a workstation.
+Raspberry Pi allocation follows the two-role split named in Part II. One Pi 5 hosts the Sentinel-role sovereign — native install, adjacent to the ASUS router, running `tools/sentinel/zp_sentinel/` under Linux-systemd profile plus the chain-anchor discipline established in the Pi 5 stand-up ceremony. The remaining 1-2 Pis host constrained-operator persona nodes as originally planned. Sentinel Pi does not double as a constrained-operator persona; its role is bounded and specialized.
 
 Ubuntu laptop hosts 1-2 nodes as the x86_64 diversity anchor.
 
@@ -102,15 +102,17 @@ Go/no-go: does the substrate hold up on constrained hardware? If not, either the
 
 Deliverable: architectural validation findings — what parts of the substrate depend on hardware assumptions, and whether those assumptions hold.
 
-### Phase 4 — Specialized participants
+### Phase 4 — Specialized participants + Sentinel↔Regent split gate
 
 Adds Watcher plus mobile devices, roughly 18-20 participants total. Watcher reprogrammed to disable cloud dependency and provisioned as sensor gateway rallying inference from M4. iPhones and S5 provisioned as scoped-capability participants via minimal companion mechanism (URL schemes, WebKit views, or minimal companion app — whichever proves lowest-effort while sufficient).
 
-Scenarios: sensor access capability exercised. Provenance capture with real hardware. Rally with heterogeneous participants. Cross-network operation — mobile on cellular, rest on WiFi.
+**Sentinel↔Regent split gate (added 2026-07-27):** this phase also stands up the two-role sovereign topology per `HARDWARE-ROLE-SEPARATION-2026-07.md`. Pi 5 Sentinel comes online per `pi5-sovereign-standup-checklist-2026-07-17.md` (adjacent to the ASUS router over Ethernet, mirror mode or VLAN tap, allowlist enforcement active). APOLLO Regent comes online per `mac-mini-regent-standup-checklist-2026-07-27.md` (in-process output observer wired, adapter scaffolding in place, Secure Enclave-derived Genesis bound). The two nodes exchange the mesh handshake and cross-reference each other's chain segments. This is a first-class exercise of the role-separation topology and the substrate primitives that support it (independent Genesis roots, cross-referenced chain events, complementary observer visibility).
 
-Go/no-go: does the sensor access capability class actually work in practice? Does the rally primitive compose meaningfully with heterogeneous participants? Either finding shapes the deferred design notes.
+Scenarios: sensor access capability exercised. Provenance capture with real hardware. Rally with heterogeneous participants. Cross-network operation — mobile on cellular, rest on WiFi. **Sentinel-detected egress anomaly triggers a chain-anchored defensive-swap request against the Regent; observer-agreement confidence threshold verified.**
 
-Deliverable: sensor access and rally validation findings, plus enough empirical grounding to write the two deferred design notes with confidence.
+Go/no-go: does the sensor access capability class actually work in practice? Does the rally primitive compose meaningfully with heterogeneous participants? **Does the Sentinel↔Regent split cleanly separate attack surfaces without introducing coordination brittleness?** Any of these findings shapes the deferred design notes.
+
+Deliverable: sensor access and rally validation findings, **Sentinel↔Regent topology empirical grounding for the two-role framing in `HARDWARE-ROLE-SEPARATION-2026-07.md`**, plus enough empirical grounding to write the two deferred design notes with confidence.
 
 ### Phase 5 — Coordinated governed surface demonstration
 

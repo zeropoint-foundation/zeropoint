@@ -470,6 +470,14 @@ def check_doc_paths(docs, root):
                        ("does not exist", "no such", "never existed", "does not resolve",
                         "dangl", "absent from", "unbuilt", "not present")):
                     continue
+                # A11 annotations, same convention check_doc_crossrefs honours:
+                # `(not yet written)` declares prospective, `(external)` declares
+                # a path in someone else's tree. Both are statements of status,
+                # which is what the discipline asks an author for.
+                low2 = line.lower()
+                if ("not yet written" in low2 or "(external" in low2
+                        or "external —" in low2 or "external --" in low2):
+                    continue
                 if ref.endswith("/"):
                     finding("doc-path-prospective", doc,
                             f"cites directory {ref}, which does not exist", i)

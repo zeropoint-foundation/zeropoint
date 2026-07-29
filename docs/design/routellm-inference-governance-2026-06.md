@@ -34,7 +34,7 @@ This document defines the integration shape that closes the gap: inference becom
 - **`LlmProvider` trait** — IronClaw uses trait objects throughout; `LlmProvider` is the seam. ZP can provide a wrapper implementation that intercepts calls without changing IronClaw's internal logic.
 - **`openai_compatible` backend** — `llm_backend = "openai_compatible"` with `LLM_BASE_URL` + `LLM_API_KEY` env vars already routes to RouteLLM. The backend reads `selected_model` from config or `LLM_MODEL` env var for the per-request model field.
 - **Response `model` field** — RouteLLM's response carries the actual `model` used (which may differ from the requested model when `route-llm` auto-routes). This is the auditable fact that must land on chain.
-- **Cost guard** — `src/agent/cost_guard.rs` enforces daily budgets and hourly rate limits internally. These numbers should feed into receipts.
+- **Cost guard** — `src/agent/cost_guard.rs` (external — RouteLLM's tree, not this one) enforces daily budgets and hourly rate limits internally. These numbers should feed into receipts.
 
 ### RouteLLM side
 - **OpenAI-compatible API** at `https://routellm.abacus.ai/v1` — standard `/v1/chat/completions`.

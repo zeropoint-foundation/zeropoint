@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration.** Elaborates `KEEL-2026-07.md` §II.5 (Genesis-derived signing), §II.17 (cognitive discipline sandwich), §III.9 (delegation narrowing), §III.22 (verify before commit), Part VIII (bounded operator sovereignty), Part XIV.5 (Inference Sourcing). Specifies how the substrate composes with commercial inference-routing providers (Abacus RouteLLM, OpenRouter, and their successors) without ceding routing authority to the provider. Canonical claims live in KEEL.
 
-Draft — 2026-07-11 — internal audience only. Composes with `EXECUTION-AUTHORITY-MODEL-2026-07.md` (Regent cognitive authority, model dossiers, Phase 5), `COGNITIVE-INPUT-PLANE-2026-07.md` (precedent-lookup discipline), `COGNITIVE-SELF-OBSERVER-2026-07.md` (ground-truth verification requires known served model), `inference-routing-2026-07.md` (earlier inference-source routing framework), `CIRCUIT-BREAKER-2026-07.md` (routing anomalies as trigger class), the workflow heuristic *A model and its prompts are an atomic pair*.
+Draft — 2026-07-11 — internal audience only. Composes with `MODEL-DOSSIER-2026-07.md` (the canonical dossier spec — this doc consumes it at dispatch time), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (Regent cognitive authority, Phase 5 empirical program), `COGNITIVE-INPUT-PLANE-2026-07.md` (precedent-lookup discipline), `COGNITIVE-SELF-OBSERVER-2026-07.md` (ground-truth verification requires known served model), `CIRCUIT-BREAKER-2026-07.md` (routing anomalies as trigger class), the workflow heuristic *A model and its prompts are an atomic pair*.
 
 ## Framing
 
@@ -50,7 +50,7 @@ Ceremony shape:
 
 This is provider-independent. Works over any OpenAI-compatible inference provider — Abacus RouteLLM (calling specific models bypasses their router), OpenRouter (same), direct provider access (Anthropic, OpenAI, Google, xAI), on-prem models. The substrate-side classifier can be a small local model or a rule-based policy; classifier decisions are themselves chain-anchored.
 
-Composes with EXECUTION-AUTHORITY-MODEL Phase 5 (model dossiers) — the envelope is a set of dossiered models, and the classifier picks among them per operator-declared policy.
+Composes with MODEL-DOSSIER-2026-07.md (canonical dossier spec, consumed by EAM Phase 5 empirical program) — the envelope is a set of dossiered models, and the classifier picks among them per operator-declared policy.
 
 ### Configuration 1 — Router as informational, not authoritative (provider-dependent, not currently offered)
 
@@ -99,7 +99,7 @@ If `envelope_authorized == false`, the substrate additionally emits a warning re
 Operator-declared inference envelope with substrate-side selection. Ceremony-anchored per Envelope changes. Requires:
 
 - Envelope declaration ceremony (composed with CloudMandate)
-- Substrate-side classifier runtime (`crates/zp-regent/src/inference/classifier.rs`)
+- Substrate-side classifier runtime (`crates/zp-regent/src/inference/classifier.rs`, not yet written)
 - Per-decision chain-anchoring (`regent:inference:classifier_decision:<decision_id>`)
 - Envelope-versioning discipline (envelope changes are ceremony receipts)
 - Model dossier integration (classifier's decisions weighted by dossier evidence)
@@ -234,7 +234,7 @@ The substrate does not silently promote novel models to full-dossier status base
 
 Operator has four canonical responses to novel-model detection:
 
-- **Bootstrap dossier**: authorize dossier-building ceremony per EXECUTION-AUTHORITY-MODEL Phase 5. Substrate runs the model against the full model-evaluation battery (intent classification, sovereign identity, adversarial resistance, think-suppression, model-prompt coupling probes). Chain-anchored evaluation receipts produce a full dossier. Model becomes envelope-eligible.
+- **Bootstrap dossier**: authorize the bootstrap ceremony per MODEL-DOSSIER-2026-07 §"Bootstrap ceremony" (running under EAM Phase 5 empirical program authority). Substrate runs the model against the full evaluation battery (intent classification, sovereign identity, adversarial resistance suite, think-suppression profile, model-prompt coupling probes). Chain-anchored evaluation receipts produce a full dossier. Model becomes envelope-eligible.
 - **Add to envelope with provisional dossier**: accept model for use with the provisional dossier as its trust basis. Documented reduced-trust posture. Suitable when operator has independent knowledge of the model and doesn't need full evaluation battery.
 - **Reject and quarantine**: add model to negative envelope — the classifier explicitly refuses to select this model; if the provider routes to it anyway, envelope-violation emergency response triggers. Emit `regent:inference:model_rejected:<model_id>` receipt.
 - **Reject provider**: broader response — the fact that this provider routed to an unauthorized model is a peer-trust-anchor concern. Operator may revoke provider CloudMandate entirely.
@@ -249,7 +249,7 @@ Under this composition, Regent's cognitive substrate treats "novel model served"
 
 ## Composition with existing specs
 
-- **EXECUTION-AUTHORITY-MODEL-2026-07.md** (Phase 5 — model dossiers): each envelope entry is a dossiered model. Classifier's decisions weighted by dossier evidence per model.
+- **MODEL-DOSSIER-2026-07.md** (canonical dossier spec): each envelope entry is a dossiered model. Classifier's decisions weighted by dossier evidence per model.
 - **COGNITIVE-INPUT-PLANE-2026-07.md**: precedent-lookup incorporates served-model identity. Precedent under model X carries higher weight when current cycle is served by model X; precedent under a divergent model is advisory but weighted lower.
 - **COGNITIVE-SELF-OBSERVER-2026-07.md**: ground-truth verification requires known served-model. Cognitive Self-Observer's confidence assessment is now model-conditioned — a claim from `claude-sonnet-4-6` and a claim from `gpt-5-nano` are weighted differently against ground truth.
 - **CIRCUIT-BREAKER-2026-07.md**: unauthorized routing (served model outside operator's envelope) is a triggerable event class. Severity per operator declaration.
@@ -268,7 +268,7 @@ Under this composition, Regent's cognitive substrate treats "novel model served"
 - **Attacker exploits routing divergence to inject prompt from a different model's context window**: served-model identity chain-anchored per turn. Cross-turn context injection detected by turn-boundary discipline.
 - **Attacker forces silent tier degradation via provider outage**: substrate reports outage to operator; does not silently substitute. Operator decides whether to authorize substitution or defer work.
 - **Attacker manipulates substrate-side classifier**: classifier decisions chain-anchored. Anomalous classifier patterns detectable. Classifier can be replaced or its decisions overridden via ceremony.
-- **Provider changes underlying model identity behind stable name (silent version drift)**: provider's naming is opaque to substrate. Model dossiers per Phase 5 detect behavioral divergence; substrate flags dossier-inconsistency for operator review.
+- **Provider changes underlying model identity behind stable name (silent version drift)**: provider's naming is opaque to substrate. Model dossiers (per MODEL-DOSSIER-2026-07 §"Continuous drift signal", operated on by EAM Phase 5's empirical program) detect behavioral divergence; substrate flags dossier-inconsistency for operator review.
 - **Provider routes to novel/unreleased/experimental model**: novel-model detection triggers; response quarantined from precedent; operator ceremony required for admission. Substrate treats this as expected commercial-provider behavior — Abacus adds models weekly — not as attack, but as admission event requiring operator authorization.
 - **Attacker exploits novel-model quarantine to force degraded posture**: if attacker can trigger novel-model responses at scale, Regent's cognition operates in quarantine posture (provisional cognition, no precedent accumulation). Substrate reports the sustained-novel-model pattern to operator; may propose emergency envelope-narrowing to a known-good pinning until investigation.
 - **Novel model's provisional dossier is manipulated by attacker's queries**: provisional dossier accumulation is bounded — behavioral probes are operator-declared, not attacker-controllable. Ratification ceremony requires operator judgment on the accumulated evidence, not automatic promotion.

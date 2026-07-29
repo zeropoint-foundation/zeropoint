@@ -1,0 +1,252 @@
+{
+  "title": "Thin Agents on a Smarter Shared Substrate — Neo4j Keynote",
+  "subtitle": "A ~10-minute conference keynote by Neo4j proposing a three-pillar ontology-based semantic layer — business ontology, technical ontology, runtime execution traces — so enterprise agents can be thin, composable, and learn across each other rather than rewiring data from scratch every time.",
+  "center": {
+    "label": "Thin Agents on a Smarter Substrate",
+    "emoji": "🧱"
+  },
+  "branches": [
+    {
+      "label": "The Thick-Agent Problem",
+      "emoji": "⚠️",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Rediscovery from scratch",
+          "children": [
+            {"label": "100+ DBs, Snowflake, Databricks, S3"},
+            {"label": "Every team maps data by hand"},
+            {"label": "Not a startup Postgres world"}
+          ]
+        },
+        {
+          "label": "Trust and version confusion",
+          "children": [
+            {"label": "\"Is this the right data?\""},
+            {"label": "\"Is it the right version?\""},
+            {"label": "\"Can I trust it? Allowed to access?\""}
+          ]
+        },
+        {
+          "label": "Violates DRY",
+          "children": [
+            {"label": "Same wiring in N codebases"},
+            {"label": "Change → manual re-wire everywhere"},
+            {"label": "\"Works, but a lot of work\""}
+          ]
+        },
+        {
+          "label": "No agent learning",
+          "children": [
+            {"label": "\"Agent tomorrow same as today\""},
+            {"label": "No cross-agent learning"},
+            {"label": "Wiring locked in code + prompts"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Business-Facing Ontology",
+      "emoji": "💬",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Key concepts of the org",
+          "children": [
+            {"label": "Customers, accounts, cards"},
+            {"label": "Checks, transactions, credit history"},
+            {"label": "How they relate to each other"}
+          ]
+        },
+        {
+          "label": "Human-readable naming",
+          "children": [
+            {"label": "\"Not f_name — first name\""},
+            {"label": "Makes sense to people in the co."},
+            {"label": "\"Core concepts are super simple\""}
+          ]
+        },
+        {
+          "label": "Encodes business processes",
+          "children": [
+            {"label": "Process-guided agent needs process"},
+            {"label": "Ontology carries the workflow"},
+            {"label": "Bank account opening as example"}
+          ]
+        },
+        {
+          "label": "Cuts through the hype",
+          "children": [
+            {"label": "\"Palantir made this hype\""},
+            {"label": "\"People make it too complex\""},
+            {"label": "The move: keep it simple"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Technical Ontology",
+      "emoji": "🗄️",
+      "color": "sage",
+      "children": [
+        {
+          "label": "Metadata of all data sources",
+          "children": [
+            {"label": "\"14 Oracle DBs, 15 Neo4j DBs\""},
+            {"label": "Snowflake, Databricks, S3 buckets"},
+            {"label": "Where they sit, what the schemas are"}
+          ]
+        },
+        {
+          "label": "Mapping to business concepts",
+          "children": [
+            {"label": "Customer.first_name → system of record"},
+            {"label": "→ Oracle column f_name"},
+            {"label": "The bridge the agent walks"}
+          ]
+        },
+        {
+          "label": "Built three ways",
+          "children": [
+            {"label": "Constructed \"three key ways\""},
+            {"label": "Not covered in this talk"},
+            {"label": "Come to booth P3 for full version"}
+          ]
+        },
+        {
+          "label": "Single governed place",
+          "children": [
+            {"label": "Cascades one change across all"},
+            {"label": "Business intent ↔ data mapping"},
+            {"label": "One truth, not N wirings"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Runtime Execution Traces",
+      "emoji": "👣",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "Agents walk graph, leave traces",
+          "children": [
+            {"label": "Third pillar of the substrate"},
+            {"label": "\"What have I tried?\""},
+            {"label": "\"Was I successful?\""}
+          ]
+        },
+        {
+          "label": "Trace shape",
+          "children": [
+            {"label": "Where was I? What did I do?"},
+            {"label": "\"What is my context?\""},
+            {"label": "Success signal → outcome score"}
+          ]
+        },
+        {
+          "label": "Feeds next-invocation choice",
+          "children": [
+            {"label": "\"DMV worked last time\""},
+            {"label": "→ more likely to pick DMV again"},
+            {"label": "Context-aware selection"}
+          ]
+        },
+        {
+          "label": "Bottom-up trust signal",
+          "children": [
+            {"label": "Complements top-down curation"},
+            {"label": "\"What actually worked in practice\""},
+            {"label": "Empirical trust, not just declared"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "What the Semantic Layer Delivers",
+      "emoji": "🎯",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Discoverability",
+          "children": [
+            {"label": "\"Very easy way to discover sources\""},
+            {"label": "Answers \"where does X live?\""},
+            {"label": "Once, not N times"}
+          ]
+        },
+        {
+          "label": "Trustworthiness",
+          "children": [
+            {"label": "Top-down: admin curates"},
+            {"label": "Bottom-up: traces confirm"},
+            {"label": "Both sides speak"}
+          ]
+        },
+        {
+          "label": "Self-learning",
+          "children": [
+            {"label": "Agent tomorrow > agent today"},
+            {"label": "Not just per-agent — cross-agent"},
+            {"label": "Substrate does the accumulating"}
+          ]
+        },
+        {
+          "label": "Not just markdown files",
+          "children": [
+            {"label": "Skills: part of solution, not it"},
+            {"label": "\"Learn your databases\" — Swyx"},
+            {"label": "\"Can't vibe code with markdown\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Substrate Reframe",
+      "emoji": "🪶",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Thick → thin agents",
+          "children": [
+            {"label": "Manually-wired data → shared graph"},
+            {"label": "Business logic stays in agent"},
+            {"label": "Substrate carries the rest"}
+          ]
+        },
+        {
+          "label": "Scale claim",
+          "children": [
+            {"label": "\"Ton more agents\""},
+            {"label": "Without re-engineering each"},
+            {"label": "Composability at enterprise scale"}
+          ]
+        },
+        {
+          "label": "Who this is for",
+          "children": [
+            {"label": "Fortune 20 global bank"},
+            {"label": "Bay Area tech platform co."},
+            {"label": "Leading fintech company"}
+          ]
+        },
+        {
+          "label": "The load-bearing phrase",
+          "children": [
+            {"label": "\"Thin agents on smarter substrate\""},
+            {"label": "Repeated verbatim as thesis"},
+            {"label": "Enterprise vocabulary now"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "Neo4j conference keynote (~10:50), delivered by an unnamed speaker who identifies as a Neo4j employee. Short-slot format, pitch-shaped, plugging the Neo4j startup program at the end.",
+    "The load-bearing phrase — \"thin agents on a smarter shared substrate\" — is repeated verbatim as the thesis and delivered as the vocabulary import the audience should walk out with.",
+    "Three-pillar architecture: (1) business-facing ontology in human vocabulary, (2) technical ontology of every data source and its schema, (3) runtime execution traces from agents walking the graph. The mapping between (1) and (2) plus the traces from (3) form the substrate.",
+    "Explicit target market: Fortune 20 global bank, a large Bay Area tech platform company, and a leading fintech — problem framed as enterprise-scale, not startup-scale.",
+    "Notable — cites Swyx / latent space podcast (~1 week prior): \"You cannot vibe code with just markdown files.\" Positioned as validation that skills-as-markdown is part of the solution but not sufficient at scale.",
+    "For the ZP corpus: strongly resonant vocabulary at the substrate-abstraction level. Neo4j's substrate is semantic (where does data live, and did the last agent succeed with it); ZeroPoint's is trust (who authorized this act, and can we prove it). Complementary layers, not competing. The phrase \"thin agents on a smarter shared substrate\" is exactly the position ZP is claiming at a different layer."
+  ]
+}

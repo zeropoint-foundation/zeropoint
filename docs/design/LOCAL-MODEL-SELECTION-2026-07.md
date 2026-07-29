@@ -1,6 +1,6 @@
 # Local Model Selection — APOLLO (M4 Pro Mini) + PI5 (2026-07)
 
-**Decision record + benchmark plan. Analysis input, not a canonical elaboration.** Records which local models ZeroPoint will benchmark on the named fleet nodes, why, and the license posture. Does not amend KEEL. Composes with `INFERENCE-ROUTING-DISCIPLINE-2026-07`, `AI-LANDSCAPE-SIGNAL-2026-07` (the latency-floor framing), `MULTI-DEVICE-OPERATION-2026-07` (every device a scoped Genesis delegation), and `DEPENDENCY-POSTURE` (license-capture risk). Companion harness: `tools/local-model-bench/zp_local_model_bench.py`.
+**Decision record + benchmark plan. Analysis input, not a canonical elaboration.** Records which local models ZeroPoint will benchmark on the named fleet nodes, why, and the license posture. Does not amend KEEL. Composes with `HARDWARE-ROLE-SEPARATION-2026-07` (canonical two-role topology — closed the Regent-vs-Sentinel node question in this doc at line 20 on 2026-07-27), `INFERENCE-ROUTING-DISCIPLINE-2026-07`, `AI-LANDSCAPE-SIGNAL-2026-07` (the latency-floor framing), `MULTI-DEVICE-OPERATION-2026-07` (every device a scoped Genesis delegation), and `DEPENDENCY-POSTURE` (license-capture risk). Companion harness: `tools/local-model-bench/zp_local_model_bench.py`.
 
 ## Named hardware targets
 
@@ -17,7 +17,11 @@ Reference these names, not "the Mini" or "a Pi" — abstract references are how 
 
 **Runtime split (important):** the MLX harness (`zp_local_model_bench.py`) is **APOLLO-only** — MLX needs Apple Silicon/Metal. **PI5 benchmarking is a separate llama.cpp/GGUF track** — same five measures, different runtime — to be scaffolded when PI5 joins the loop.
 
-**One topology decision (yours):** which node holds the always-on Regent presence + Genesis — **PI5** as the low-power sovereign node rallying heavy inference to **APOLLO**, or **APOLLO** as primary with **PI5** as edge sensor/classifier. `MULTI-DEVICE-OPERATION` (Regent-follows-operator) governs either way; naming the nodes is the prerequisite for declaring the delegation.
+**Topology decision (closed 2026-07-27 per `HARDWARE-ROLE-SEPARATION-2026-07.md`):** APOLLO is the **Regent-role sovereign** — the always-on Regent presence with its own Genesis, held by Secure Enclave, hosting the LLM inference and adapter workload. PI5 is the **Sentinel-role sovereign** — network-adjacent to the router, allowlist enforcement, destination monitoring, chain-anchored egress attestation. The pivot away from "PI5 as always-on Regent" was made because PI5 inference throughput on 3B–4B models (~7–9 tok/s at Q4_K_M) is a poor fit for the Regent role, while it is genuinely well-suited to the Sentinel role (cheap sustained pattern matching, NEON-accelerated hashing/regex). PI5's model shortlist in this doc is therefore downshifted: a small classifier (Qwen3-0.6B or Liquid LFM2.5-230M if Tier B is elected) is sufficient for Sentinel-role work; the "light edge cognition" tier (Qwen3-1.7B) is deferred as an optional add-on rather than a primary target. LoRA and X-LoRA adapter workloads live on APOLLO (see §"Adapter workflow" below and the forthcoming Regent adapter design doc). `MULTI-DEVICE-OPERATION` (Regent-follows-operator) governs the Regent's rally behavior on APOLLO; the Sentinel does not need to follow the operator — it stays at the network boundary.
+
+### Adapter workflow on APOLLO
+
+Regent-role adapter work — LoRA fine-tuning ceremony, adapter loading, hot-swap primitives, X-LoRA experimentation — lives on APOLLO because the M4 Pro's 64GB unified memory and Metal backend support: (a) multiple adapters loaded concurrently via S-LoRA-style batching; (b) X-LoRA token-level blending as research prototype; (c) on-device shadow-evaluation of candidate adapters against controls; (d) sub-100ms hot-swap latency for adapter transitions. None of these are feasible on PI5. The adapter artifact format (LoRAAdapter = safetensors + provenance manifest + Ed25519 signature envelope), `FineTuningAuthorization` two-phase ceremony, and load/swap primitives are specified in `REGENT-ADAPTER-WORKFLOW-2026-07.md`; this doc's contribution is naming APOLLO as their target hardware.
 
 ## Selection criteria
 

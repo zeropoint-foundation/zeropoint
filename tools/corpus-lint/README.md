@@ -34,7 +34,11 @@ corpus mid-construction, not faults in it.
 Per `AUTHORING-DISCIPLINE-2026-07.md` A11, an author can declare status and
 the tool will stop asking:
 
-- a reference annotated `(not yet written)` is a declaration, not a dangle
+- a reference annotated `(not yet written)` is a declaration, not a dangle.
+  The annotation is matched by head, so it may carry a detail clause —
+  `(not yet written; neither function exists as of 2026-07-27)` still counts
+- a path annotated `(external — …)` is declared to live in someone else's
+  tree and is never resolved against this one
 - a receipt near an `Implementation status: specified, not shipped` marker is
   exempt from drift reporting
 - a document whose header declares Tier 3 historical or superseded is excluded

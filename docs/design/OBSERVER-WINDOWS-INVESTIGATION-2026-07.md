@@ -196,7 +196,7 @@ The investigation halts and re-scopes rather than continuing if any of these occ
 
 At each phase exit, one chain-anchored `investigation:phase_N:{passed,informative_fail,rescoped}` receipt citing the evidence.
 
-At full investigation completion, one summary artifact `docs/design/OBSERVER-WINDOWS-FINDINGS-2026-07.md` — separate from this entry doc — that consolidates evidence and recommends design amendments to `EXECUTION-AUTHORITY-MODEL-2026-07.md` §Phase 6 (if any). The findings doc is a Tier-2 elaboration in its own right.
+At full investigation completion, one summary artifact `docs/design/OBSERVER-WINDOWS-FINDINGS-2026-07.md` (not yet written) — separate from this entry doc — that consolidates evidence and recommends design amendments to `EXECUTION-AUTHORITY-MODEL-2026-07.md` §Phase 6 (if any). The findings doc is a Tier-2 elaboration in its own right.
 
 Amendments to KEEL, if any, go through `SUPERSESSION-FRAMEWORK-2026-07.md` ceremony — not through this investigation directly.
 

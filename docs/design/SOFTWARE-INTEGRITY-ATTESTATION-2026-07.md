@@ -205,7 +205,19 @@ The software integrity attestation pattern applies to many runtime behavioral cl
 
 The non-recording attestation is a specific case of "no persistence of session content beyond declared retention." Persistent sessions have declared retention (encrypted to participant chains); ephemeral sessions have declared zero retention. The attestation is that no undeclared persistence is happening — no out-of-band recording, no unauthorized backup, no hidden logging.
 
-### 5.7 The pattern extends further
+### 5.7 Drafter checkpoint integrity attestation
+
+**Context:** Speculative-decoding drafters (per MODEL-DOSSIER-2026-07's operational serialization) are lightweight models that participate in every inference call once activated. Their integrity is a runtime behavioral claim in exactly the same class as the applications above.
+
+**Claim:** "The drafter running against this target model is the specific checkpoint the operator ratified — same weights hash, same training provenance, same byte-identical parity attestation as when adopted."
+
+**Attestation:** Build attests to the drafter's checkpoint hash and training-corpus hash (per the training-run receipt on chain); runtime attests to which drafter checkpoint is currently loaded in the inference server; hardware attests to inference-server state where available; continuous re-attestation via the acceleration-ablation shadow scenario (per SHADOW-EVALUATION-PRIMITIVE Context 1) periodically re-establishes the byte-identical parity claim on the substrate's actual workloads.
+
+**Applications:** Regent's cognitive path (a swapped drafter under a stable name changes the operational characterization of a model without the operator's knowledge — same failure class as INFERENCE-ROUTING-DISCIPLINE's silent-version-drift, one layer down). Any cognitive work that dispatches through an accelerated inference path inherits the drafter's integrity claim as part of its chain evidence.
+
+**Composition:** The `drafter.checkpoint_hash`, `drafter.training_run_receipt`, and `drafter.byte_identical_parity_receipt` fields on MODEL-DOSSIER's drafter sub-record are the specific fields this attestation binds to. Under this pattern, MODEL-DOSSIER's characterization ceremony IS a build attestation for the drafter, and OBSERVATION-PLANE's `observation:inference:drafter_acceptance` telemetry IS the runtime attestation surface.
+
+### 5.8 The pattern extends further
 
 Each of these applications shares the same underlying structure:
 
