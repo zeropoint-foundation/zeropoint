@@ -1,6 +1,6 @@
 # Architecture Map
 
-**Generated** by `tools/architecture-map/architecture_map.py` from commit `8195a1e`. Derived, not authored — regenerate rather than edit.
+**Generated** by `tools/architecture-map/architecture_map.py` from commit `9877dc5`. Derived, not authored — regenerate rather than edit.
 
 44 crates · 194,526 lines · 41 workspace members
 
@@ -18,9 +18,9 @@
 | `monte-carlo-engine` | Extensible Monte Carlo simulation engine for ZeroPoint | member | consumed | 1 | — | zp-server | 3,495 | yes |
 | `zp-sensors` | Event-driven sensor layer for ZeroPoint governance — kqueue process/file watches and port discovery | member | consumed | 1 | — | zp-server | 1,407 | yes |
 | `zp-verbs` | Generated Rust types for the ZeroPoint v1 verb set (protobuf schema → Rust via tonic-build) | member | consumed | 1 | — | zp-server | 77 | yes |
-| `zp-bench` | F4 — performance falsifiers (Criterion benchmarks) for ZeroPoint's governance gate | member | unwired | 0 | — | — | 515 | **no** |
+| `zp-bench` | F4 — performance falsifiers (Criterion benchmarks) for ZeroPoint's governance gate | member | bench | 0 | — | — | 515 | **no** |
 | `zp-cloudflare` | Adapter crate — implements ZeroPoint port traits using Cloudflare primitives | member | unwired | 0 | — | — | 109 | **no** |
-| `zp-discipline` | Discipline-pin tests: structural conventions enforced as build-failing tests | member | unwired | 0 | — | — | 2,752 | yes |
+| `zp-discipline` | Discipline-pin tests: structural conventions enforced as build-failing tests | member | test | 0 | — | — | 2,752 | yes |
 | `zp-emission-coherence` | Regent emission-coherence detection: Heuristics 1–3 (n-gram repetition, length-distribution collapse, token… | standalone | entrypoint | 0 | — | — | 1,067 | yes |
 | `zp-inference-observer` | Tails DFlash observation JSONL events and exposes them as typed values for substrate-side receipt emission. | standalone | entrypoint | 0 | — | — | 457 | yes |
 | `zp-memory-index` | `zp-memory-index` — vector index wrapper for substrate-governed memory retrieval. | member | unwired | 0 | — | — | 409 | yes |
@@ -66,7 +66,7 @@
 | `zp-host` | Host-function boundary — the typed contract through which all privileged side effects must pass. | member | consumed | 4 | zp-audit, zp-core, zp-policy | execution-engine, zp-cli, zp-pipeline, zp-server | 767 | yes |
 | `zp-configure` | ZeroPoint tool configuration engine — the Semantic Sed library shared by CLI and server | member | consumed | 2 | zp-core, zp-engine, zp-net, zp-trust | zp-cli, zp-server | 4,478 | yes |
 | `zp-regent` | The Regent — ZeroPoint's apex cognitive entity, governing on behalf of the sovereign operator | member | consumed | 1 | zp-audit, zp-config, zp-core, zp-officers, zp-receipt | zp-server | 12,113 | yes |
-| `trust-triangle` | Trust Triangle — ZeroPoint reference implementation demonstrating cross-domain governance | orphan | unwired | 0 | zp-core, zp-introduction, zp-keys, zp-policy, zp-receipt | — | 1,348 | **no** |
+| `trust-triangle` | Trust Triangle — ZeroPoint reference implementation demonstrating cross-domain governance | orphan | entrypoint | 0 | zp-core, zp-introduction, zp-keys, zp-policy, zp-receipt | — | 1,348 | **no** |
 
 ## Layer 5
 
@@ -85,18 +85,19 @@
 | Crate | Purpose | Status | Wiring | Fan-in | Depends on | Used by | LOC | Doc'd |
 |---|---|---|---|---:|---|---|---:|---|
 | `zp-server` | ZeroPoint v2 Server Library | member | consumed | 2 | mle-star-engine, monte-carlo-engine, zp-anchor, zp-artifacts, zp-audit, zp-config, zp-configure, zp-content, zp-core, zp-engine, zp-gate-envelope, zp-host, zp-keys, zp-memory, zp-mesh, zp-net, zp-observation, zp-officers, zp-pipeline, zp-policy, zp-receipt, zp-regent, zp-sensors, zp-trust, zp-verbs | zp-cli, zp-hardening-tests | 38,456 | yes |
-| `course-examples` | ZeroPoint Builder Course — compilable lab examples | member | unwired | 0 | zp-audit, zp-core, zp-keys, zp-mesh, zp-pipeline, zp-policy, zp-receipt, zp-trust | — | 1,436 | **no** |
+| `course-examples` | ZeroPoint Builder Course — compilable lab examples | member | example | 0 | zp-audit, zp-core, zp-keys, zp-mesh, zp-pipeline, zp-policy, zp-receipt, zp-trust | — | 1,436 | **no** |
 
 ## Layer 8
 
 | Crate | Purpose | Status | Wiring | Fan-in | Depends on | Used by | LOC | Doc'd |
 |---|---|---|---|---:|---|---|---:|---|
 | `zp-cli` | ZeroPoint v2 CLI — primary interface for developers | member | entrypoint | 0 | zp-anchor, zp-audit, zp-config, zp-configure, zp-core, zp-engine, zp-host, zp-keys, zp-mesh, zp-net, zp-officers, zp-pipeline, zp-policy, zp-receipt, zp-server, zp-trust, zp-verify | — | 19,188 | yes |
-| `zp-hardening-tests` | Regression replay test harness for Shannon pentest vulnerabilities | member | unwired | 0 | zp-audit, zp-config, zp-core, zp-keys, zp-net, zp-server, zp-verify | — | 3,352 | yes |
+| `zp-hardening-tests` | Regression replay test harness for Shannon pentest vulnerabilities | member | test | 0 | zp-audit, zp-config, zp-core, zp-keys, zp-net, zp-server, zp-verify | — | 3,352 | yes |
 
 ## Attention
 
 - **Load-bearing** (fan-in ≥ 3, 14): `zp-core` (23), `zp-receipt` (15), `zp-audit` (10), `zp-trust` (7), `zp-keys` (6), `zp-policy` (6), `zp-config` (4), `zp-host` (4), `zp-mesh` (4), `zp-net` (4), `zp-engine` (3), `zp-officers` (3), `zp-pipeline` (3), `zp-verify` (3)
-- **Unwired** (8): `course-examples`, `trust-triangle`, `zp-bench`, `zp-cloudflare`, `zp-discipline`, `zp-gossip`, `zp-hardening-tests`, `zp-memory-index`
+- **Unwired** (3): `zp-cloudflare`, `zp-gossip`, `zp-memory-index` — fan-in 0 *and* no bin, test, bench or example target. This is the C2 set; the harness-reached crates below are not in it.
+- **Reached by harness only** (4): `zp-bench` (bench), `course-examples` (example), `zp-discipline` (test), `zp-hardening-tests` (test). A test target on a workspace member runs under `cargo test --workspace` in CI; a bench target runs only if something invokes `cargo bench`, and nothing in `.github/workflows` does.
 - **Not described by any governed document** (8): `course-examples`, `trust-triangle`, `zp-artifacts`, `zp-bench`, `zp-cloudflare`, `zp-content`, `zp-net`, `zp-preflight`
 - **Outside the workspace** (3): `trust-triangle` (orphan), `zp-emission-coherence` (standalone), `zp-inference-observer` (standalone)

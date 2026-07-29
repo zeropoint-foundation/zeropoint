@@ -20,9 +20,21 @@ orphan      present under crates/ and in neither of the above
 
 WIRING
 ------
+A dependency edge is only one of five ways a crate can be reached, and a
+measure that assumes otherwise will call a project's own enforcement layer
+detritus. On 2026-07-29 the fan-in-only test reported 8 crates "unwired";
+5 were false positives.
+
 consumed    at least one other crate depends on it
-entrypoint  no dependents, but ships a binary (src/main.rs)
-unwired     no dependents and no binary -- C2 territory per
+entrypoint  no dependents, but ships a [[bin]] target
+test        no dependents, but carries tests/ -- reached by the test harness,
+            which for a workspace member means CI runs it on every push
+bench       no dependents, but carries benches/. NOTE: this is reachable, not
+            reached -- nothing in .github/workflows runs `cargo bench`, so a
+            bench-only crate is dead in practice while looking alive here
+example     no dependents, but carries examples/ -- compiled by `cargo test
+            --workspace`, not by `cargo build --workspace`
+unwired     none of the above -- C2 territory per
             docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md
 
 LAYER
@@ -82,6 +94,32 @@ def real_deps(man):
     return deps
 
 
+def targets(c, man):
+    """Every way this crate can be entered, not just the dependency edge.
+
+    The check this replaces was `(c / "src/main.rs").exists()`, which asks one
+    narrow question -- does a binary live at the default path -- and treats a
+    "no" as evidence of nothing depending on the crate. That is a different
+    claim, and on 2026-07-29 it was wrong five times out of eight.
+
+    The expensive miss was `zp-discipline`: 19 structural pins under tests/
+    that `cargo test --workspace` runs in CI on every push, filed as detritus
+    because a test target creates no dependency edge. The crate that
+    mechanically enforces architecture across the tree read as unreachable to
+    the architecture map. `zp-bench` was worse in the other direction -- it has
+    no src/ at all, so fan-in 0 is the only value it could ever have held.
+    """
+    kinds = set()
+    if (c / "src/main.rs").exists() or re.search(r"^\s*\[\[bin\]\]", man, re.M):
+        kinds.add("bin")
+    if (c / "src" / "bin").is_dir():
+        kinds.add("bin")
+    for d, kind in (("tests", "test"), ("benches", "bench"), ("examples", "example")):
+        if any((c / d).glob("*.rs")):
+            kinds.add(kind)
+    return kinds
+
+
 def main():
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     ws = read(root / "Cargo.toml")
@@ -103,7 +141,7 @@ def main():
             "loc": loc,
             "status": ("member" if c.name in members
                        else "standalone" if "[workspace]" in man else "orphan"),
-            "bin": (c / "src/main.rs").exists(),
+            "targets": targets(c, man),
         }
 
     # dependents: reverse edges, keyed by directory name
@@ -143,7 +181,11 @@ def main():
 
     def wiring(v):
         if v["dependents"]: return "consumed"
-        return "entrypoint" if v["bin"] else "unwired"
+        for kind, label in (("bin", "entrypoint"), ("test", "test"),
+                            ("bench", "bench"), ("example", "example")):
+            if kind in v["targets"]:
+                return label
+        return "unwired"
 
     out = [f"# Architecture Map\n",
            f"**Generated** by `tools/architecture-map/architecture_map.py` from commit `{commit}`. "
@@ -177,7 +219,23 @@ def main():
     out.append("\n## Attention\n")
     out.append(f"- **Load-bearing** (fan-in \u2265 3, {len(load_bearing)}): "
                + ", ".join(f"`{k}` ({len(info[k]['dependents'])})" for k in load_bearing))
-    out.append(f"- **Unwired** ({len(unwired)}): {', '.join(f'`{u}`' for u in unwired) or 'none'}")
+    out.append(f"- **Unwired** ({len(unwired)}): {', '.join(f'`{u}`' for u in unwired) or 'none'}"
+               " — fan-in 0 *and* no bin, test, bench or example target. This is the C2 set;"
+               " the harness-reached crates below are not in it.")
+    # Reported separately because these look identical to unwired under a fan-in
+    # test and are not the same fact. Kept visible rather than folded into
+    # "consumed": a harness edge is real but weaker than a dependency edge, and
+    # a bench edge may not be exercised at all.
+    harness = sorted((k for k, v in info.items()
+                      if not v["dependents"] and wiring(v) in ("test", "bench", "example")),
+                     key=lambda n: wiring(info[n]))
+    if harness:
+        out.append("- **Reached by harness only** ({}): {}. A test target on a workspace"
+                   " member runs under `cargo test --workspace` in CI; a bench target runs"
+                   " only if something invokes `cargo bench`, and nothing in"
+                   " `.github/workflows` does.".format(
+                       len(harness),
+                       ", ".join(f"`{k}` ({wiring(info[k])})" for k in harness)))
     out.append(f"- **Not described by any governed document** ({len(undoc)}): "
                f"{', '.join(f'`{u}`' for u in undoc) or 'none'}")
     non_member = sorted(k for k, v in info.items() if v["status"] != "member")
