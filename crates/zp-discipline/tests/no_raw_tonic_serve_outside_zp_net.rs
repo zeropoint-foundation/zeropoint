@@ -14,7 +14,7 @@
 //! `CancellationToken` so all listener tasks drain coherently.
 //!
 //! See
-//! `docs/handoffs/singular-loopback-binding-design-2026-05.md`.
+//! `docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md`.
 //!
 //! # Why this pin forbids only `.serve(` (and not `Server::builder()`)
 //!

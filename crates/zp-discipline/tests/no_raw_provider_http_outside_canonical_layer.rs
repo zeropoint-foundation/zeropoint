@@ -15,7 +15,7 @@
 //! (at best) or no receipts at all, breaking the chain's authority over
 //! "what ran and what it cost."
 //!
-//! See `docs/handoffs/inference-architecture-consolidation-design-2026-05.md`.
+//! See `docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md`.
 //!
 //! # Allowlist
 //!

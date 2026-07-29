@@ -3,7 +3,7 @@
 //!
 //! # Why (storage abstraction, 2026-05-25)
 //!
-//! The storage abstraction design (`docs/handoffs/storage-abstraction-design-2026-05.md`)
+//! The storage abstraction design (`docs/design/STORAGE-ABSTRACTION-2026-05.md`)
 //! establishes `ContentStore` in `zp-content` as the singular substrate primitive
 //! for signed, content-addressed artifact storage — the same singular-X pattern
 //! applied previously to networking (`zp-net`) and inference (proxy).
@@ -34,7 +34,7 @@
 //!   implementations of `ContentStore`. This is NOT a bypass: `zp-cloudflare`
 //!   implements the trait; it is not an alternative data path that skips it.
 //!
-//! See `docs/handoffs/storage-abstraction-design-2026-05.md` and the analogous
+//! See `docs/design/STORAGE-ABSTRACTION-2026-05.md` and the analogous
 //! `no_raw_tcp_bind_outside_zp_net` pin for the structural pattern.
 
 use zp_discipline::Discipline;

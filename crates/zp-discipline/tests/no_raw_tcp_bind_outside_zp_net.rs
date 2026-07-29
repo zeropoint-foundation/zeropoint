@@ -15,7 +15,7 @@
 //! repeat the trap.
 //!
 //! See
-//! `docs/handoffs/singular-loopback-binding-design-2026-05.md`.
+//! `docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md`.
 //!
 //! # Allowlist
 //!

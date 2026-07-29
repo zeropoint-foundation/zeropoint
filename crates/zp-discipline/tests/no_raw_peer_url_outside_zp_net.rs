@@ -15,7 +15,7 @@
 //! side: anywhere substrate code constructs a URL pointing at a
 //! loopback peer, the host is canonicalized to `127.0.0.1` so the
 //! choice is structural rather than scattered across N call sites.
-//! See `docs/handoffs/singular-loopback-binding-design-2026-05.md`.
+//! See `docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md`.
 //!
 //! # Allowlist
 //!
