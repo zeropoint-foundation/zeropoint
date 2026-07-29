@@ -125,7 +125,13 @@ def main():
     # documented: named in any governed doc
     idx = read(root / "docs/CANONICAL-CORPUS-INDEX-2026-07.md")
     listed = sorted(set(re.findall(r"\(((?:design/)?[A-Za-z0-9\-_.]+\.md)\)", idx)))
-    corpus = "\n".join(read(root / "docs" / rel) for rel in listed)
+    # The architecture documents enumerate every crate by construction, so
+    # counting them makes the check self-satisfying: on 2026-07-27 the
+    # undocumented count fell 8 -> 1 purely because ARCHITECTURE-LAYERING
+    # listed the undocumented crates by name. A mention is not a description.
+    SELF = ("ARCHITECTURE-MAP", "ARCHITECTURE-LAYERING")
+    corpus = "\n".join(read(root / "docs" / rel) for rel in listed
+                       if not any(tag in rel for tag in SELF))
     for k, v in info.items():
         v["documented"] = bool(re.search(rf"\b{re.escape(v['name'])}\b", corpus))
 
@@ -149,20 +155,28 @@ def main():
         names = sorted(k for k, v in info.items() if v["layer"] == layer)
         label = "cycle" if layer < 0 else f"Layer {layer}"
         out.append(f"\n## {label}\n")
-        out.append("| Crate | Purpose | Status | Wiring | Depends on | Used by | LOC | Doc'd |")
-        out.append("|---|---|---|---|---|---|---|---|")
-        for k in names:
+        out.append("| Crate | Purpose | Status | Wiring | Fan-in | Depends on | Used by | LOC | Doc'd |")
+        out.append("|---|---|---|---|---:|---|---|---:|---|")
+        # Sorted by fan-in, not alphabetically: depth alone does not separate
+        # bedrock from detritus. zp-receipt and zp-cloudflare are both depth 0.
+        # The pair (depth, fan-in) is what makes the distinction legible.
+        for k in sorted(names, key=lambda n: (-len(info[n]["dependents"]), n)):
             v = info[k]
             purpose = (v["desc"] or v["doc"] or "—").replace("|", "\\|")
             if len(purpose) > 110: purpose = purpose[:107] + "…"
             deps = ", ".join(sorted(d for d in v["deps"] if d in info)) or "—"
             used = ", ".join(v["dependents"]) or "—"
-            out.append(f"| `{k}` | {purpose} | {v['status']} | {wiring(v)} | {deps} | {used} "
+            out.append(f"| `{k}` | {purpose} | {v['status']} | {wiring(v)} "
+                       f"| {len(v['dependents'])} | {deps} | {used} "
                        f"| {v['loc']:,} | {'yes' if v['documented'] else '**no**'} |")
 
+    load_bearing = sorted((k for k, v in info.items() if len(v["dependents"]) >= 3),
+                          key=lambda n: -len(info[n]["dependents"]))
     unwired = sorted(k for k, v in info.items() if wiring(v) == "unwired")
     undoc = sorted(k for k, v in info.items() if not v["documented"])
     out.append("\n## Attention\n")
+    out.append(f"- **Load-bearing** (fan-in \u2265 3, {len(load_bearing)}): "
+               + ", ".join(f"`{k}` ({len(info[k]['dependents'])})" for k in load_bearing))
     out.append(f"- **Unwired** ({len(unwired)}): {', '.join(f'`{u}`' for u in unwired) or 'none'}")
     out.append(f"- **Not described by any governed document** ({len(undoc)}): "
                f"{', '.join(f'`{u}`' for u in undoc) or 'none'}")
