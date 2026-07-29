@@ -83,13 +83,21 @@ This number is the thing vigilance cannot produce at any level of skill. It also
 
 **Coverage is 331 of 987 declared connections: 33.5%,** at commit `b548fb8`, across 122 governed documents, with 9 frozen documents dropped explicitly rather than silently. The figure is `connection_map`'s own maturity computation; this document contributes the reading of it as a coverage measure and the denominator ruling above.
 
-Three things the first run established that the design did not anticipate.
+Four things the first run established that the design did not anticipate.
 
 **The number was never going to be zero.** This document's m0 predicted publishing a denominator with an empty numerator. That was wrong: `CONNECTION-INTEGRITY-PROGRAM`'s P1 had already computed both halves, and its rule that an unwatched edge lands as `defect` and never as *unknown* means its statuses are already triage verdicts. The 656 defects are not 656 broken things — they are 656 declared dependencies that nothing would notice breaking. m0 turned out to be a reading task, not a building task.
 
 **The measure moves the wrong way under authoring.** Coverage fell from 33.6% to 33.5% across the five documents written on 2026-07-27, because each new document declares connections and ships no detectors. That is correct behaviour — a claim genuinely is unwatched the moment it is written — but it means **maturity must never become a target.** Anyone optimising the percentage is incentivised to stop writing things down, which inverts the discipline. The number moves honestly in one direction only: by building detectors.
 
 **The queue is not heterogeneous, which weakens the case for an elaborate ranking rule.** Of 656 defects, **498 are `corpus_to_chain`** — documents naming receipt types with no emitting code. One shape holds 76% of the unwatched surface, and `corpus-lint receipt-coverage` already measures it. The remaining 158 divide as 127 `code_to_artifact`, 28 `corpus_to_code`, 3 `derived_artifact`. So the ranking rule in §The ranking rule governs a minority of the queue, and the majority is a single bulk problem with an existing instrument. Rank the 158; measure the 498.
+
+**Every measure introduced on 2026-07-27 moved for a reason other than the reality it names — and each was caught only by reading the delta, never the number.** Three instances in one day, which is enough to call it a property of new measures rather than three unlucky bugs:
+
+1. **Maturity fell 33.6% → 33.5%** because five documents were written. The measure moved *down* on a day the corpus got better, because authoring adds unwatched claims faster than detectors watch them. Recorded above as correct behaviour, and it is — but the direction is the opposite of the intuition anyone reading the number alone would bring.
+2. **Coverage was never going to be zero,** because `CONNECTION-INTEGRITY-PROGRAM` had already computed both halves under a different name. A first figure that looked like a new measurement was a rename of an existing one.
+3. **The undocumented-crate count fell 8 → 1** on adding `ARCHITECTURE-LAYERING-2026-07.md` — a document that *lists the undocumented crates by name*, thereby satisfying a check that only tests for a mention. The measure was gamed, correctly and accidentally, by the document written to explain it. See AL-C.
+
+The common shape: **a new measure's first reading is not evidence about the system, it is evidence about the measure.** Only the second reading — the delta against a known change — says whether the instrument is pointed at anything. None of the three was visible in the figure itself; all three were visible the moment someone asked *why did it move.* This bears directly on TC3, which requires coverage to be reported including when it is unflattering: a measure whose direction is not understood is unflattering and flattering at random, and reporting it without the delta is reporting noise with a decimal point. **First publication of any measure in this corpus should carry the change that produced it, or it should not be published.**
 
 ---
 
@@ -118,7 +126,7 @@ None of these needs the receipt family, the four states, or any part of this doc
 
 ## What is specified vs. what is shipped
 
-Per A11: **the ranking rule, the four states and the receipt family are unimplemented.** The coverage figure in §First run is not — it is `connection_map`'s existing output, read through this document's denominator ruling. The ranking rule, the four states, the receipt family and the coverage measure are all proposals. What exists and is being composed with rather than duplicated: `CONNECTION-INTEGRITY-PROGRAM`'s C1–C9 taxonomy, its connection object and tie-off, its P0/P1 detectors shipped 2026-07-26, and `corpus-lint`'s `receipt-coverage`, `check_doc_crossrefs` and `connection-map` `derived_artifact` checks. No `coherence:triaged:*` receipt exists. No coverage figure has ever been computed.
+Per A11: **the ranking rule, the four states and the receipt family are unimplemented.** The coverage figure in §First run is not — it is `connection_map`'s existing output, read through this document's denominator ruling. The ranking rule, the four states, the receipt family and the coverage measure are all proposals. What exists and is being composed with rather than duplicated: `CONNECTION-INTEGRITY-PROGRAM`'s C1–C9 taxonomy, its connection object and tie-off, its P0/P1 detectors shipped 2026-07-26, and `corpus-lint`'s `receipt-coverage`, `check_doc_crossrefs` and `connection-map` `derived_artifact` checks. No `coherence:triaged:*` receipt exists. **Correction 2026-07-27:** this section previously ended *"No coverage figure has ever been computed"* — written before §First run computed one, and left standing for the rest of the day inside the document that contradicts it. A stale sentence in the section whose whole job is separating specified from shipped is the failure mode A11 describes, committed by the document describing it.
 
 ---
 
