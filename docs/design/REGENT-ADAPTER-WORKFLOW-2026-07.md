@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration.** Specifies how LoRA adapters (and future adapter classes) are authored, attested, stored, loaded, swapped, and audited on Regent-role sovereign nodes. Elaborates `HARDWARE-ROLE-SEPARATION-2026-07.md` (Regent role), `SUBSTRATE-FORM-2026-07.md` (adapter behavior differs across Sovereign/Appliance/Companion forms), and `KEEL-2026-07.md` §XIV (Substrate Realization at the Regent's cognitive layer). Does not amend KEEL; adapter design lives at the extension-surface layer.
 
-Draft — 2026-07-27. Composes with `HARDWARE-ROLE-SEPARATION-2026-07.md` (canonical two-role topology; adapters are Regent-role artifacts), `LOCAL-MODEL-SELECTION-2026-07.md` (base model choice per Regent hardware), `mac-mini-regent-standup-checklist-2026-07-27.md` (Phase 4 references this doc for adapter scaffolding), `SUBSTRATE-FORM-2026-07.md` (Sovereign/Appliance/Companion adapter semantics), `VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md` (encrypted storage via Secure Enclave-derived keys), and the officer-cadre docs (`SYSTEM-OFFICER-CADRE-2026-06.md`, `TRAJECTORY-AWARE-CONSTITUTIONAL-ENFORCEMENT-2026-07.md`) for the discipline layer.
+Draft — 2026-07-27. Composes with `HARDWARE-ROLE-SEPARATION-2026-07.md` (canonical two-role topology; adapters are Regent-role artifacts), `LOCAL-MODEL-SELECTION-2026-07.md` (base model choice per Regent hardware), `docs/handoffs/mac-mini-regent-standup-checklist-2026-07-27.md` (Phase 4 references this doc for adapter scaffolding), `SUBSTRATE-FORM-2026-07.md` (Sovereign/Appliance/Companion adapter semantics), `VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md` (encrypted storage via Secure Enclave-derived keys), and the officer-cadre docs (`SYSTEM-OFFICER-CADRE-2026-06.md`, `TRAJECTORY-AWARE-CONSTITUTIONAL-ENFORCEMENT-2026-07.md`) for the discipline layer.
 
 ## Framing
 
@@ -179,7 +179,7 @@ The minimum viable adapter workflow the substrate should ship. Everything else i
 - `SOVEREIGN-HARDWARE-2026-07.md` — Regent-role hardware axis; APOLLO as Regent-Tier 0 entry point
 - `LOCAL-MODEL-SELECTION-2026-07.md` — base model choice; adapters compose atop these bases
 - `SUBSTRATE-FORM-2026-07.md` — form-specific adapter semantics (Sovereign/Appliance/Companion)
-- `mac-mini-regent-standup-checklist-2026-07-27.md` — Phase 4 references this doc for adapter scaffolding
+- `docs/handoffs/mac-mini-regent-standup-checklist-2026-07-27.md` — Phase 4 references this doc for adapter scaffolding
 - `SYSTEM-OFFICER-CADRE-2026-06.md` — officer roles that touch adapter lifecycle
 - `TRAJECTORY-AWARE-CONSTITUTIONAL-ENFORCEMENT-2026-07.md` — Aegis's role in post-load drift monitoring
 - `VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md` — encrypted storage via Secure Enclave-derived keys

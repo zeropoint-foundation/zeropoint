@@ -8,10 +8,12 @@
 > point into `docs/handoffs/` and are still local-only: those are working notes, and
 > deliberately not promoted.
 
+**Document type:** Design record, 2026-05-25. **Status:** Implemented — inference routes through `crates/zp-server/src/proxy.rs`; `no_raw_provider_http_outside_canonical_layer` enforces it.
+
 # Design — Inference Architecture Consolidation
 
 *2026-05-25. Sonnet tier — design only; no implementation.
-Follows investigation at `inference-architecture-consolidation-investigation-2026-05.md`.*
+Follows investigation at `docs/handoffs/inference-architecture-consolidation-investigation-2026-05.md`.*
 
 ---
 

@@ -1,6 +1,8 @@
 # Discipline Pins Map
 
-**Generated** by `tools/discipline-pins/discipline_pins.py` from commit `7a85056`. Derived, not authored — regenerate rather than edit.
+**Document type:** Derived registry — generated, not authored. **Status:** current as of the commit below.
+
+**Generated** by `tools/discipline-pins/discipline_pins.py` from commit `d1d1abb`. Derived, not authored — regenerate rather than edit.
 
 19 pin files · 19 assertions · 43 forbidden patterns · 2,400 lines
 
@@ -29,7 +31,7 @@ These run under `cargo test --workspace`, which `.github/workflows/ci.yml` invok
 | `no_raw_tonic_serve_outside_zp_net` | tonic gRPC servers MUST NOT use the address-passing `.serve(<addr>)` form. All loopback gRPC binds must route through… | Principle 8 (one canonical path) — singular loopback binding | 1 | `docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md` |
 | `no_serde_preserve_order` | `serde_json/preserve_order` MUST NOT be enabled. | Seam 17 (ZP-canonical-v1 determinism) | 0 | — |
 | `no_sh_c_in_tool_launch` | tool-launch code MUST NOT use `Command::new("sh")` / `Command::new("bash")` patterns chained with `.arg("-c")`. | Seam 9a — argv-form tool launch (no sh -c) | 0 | — |
-| `no_std_fs_write_in_keyring` | `std::fs::write` MUST NOT appear inside `zp-keys/keyring.rs`. | Seam 7 (atomic mode-0600 secret writes) | 0 | — |
+| `no_std_fs_write_in_keyring` | `std::fs::write` MUST NOT appear inside `zp-keys/src/keyring.rs`. | Seam 7 (atomic mode-0600 secret writes) | 0 | — |
 | `verbs_must_match_schema` | every public function whose return type references a `zp_verbs` type must produce one of the verb-set's response cate… | **hand-rolled** | 0 | — |
 
 ## Inline pins (outside `zp-discipline`)

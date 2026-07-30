@@ -104,7 +104,7 @@ pub enum ContentError {
 /// `R2Backend`, `D1Backend` (in `zp-cloudflare`).
 ///
 /// No `delete`, `update`, or `encrypt`. See design rationale in
-/// `docs/handoffs/storage-abstraction-design-2026-05.md`.
+/// `docs/design/STORAGE-ABSTRACTION-2026-05.md`.
 #[async_trait]
 pub trait ContentStore: Send + Sync {
     /// Store `content` with the given `meta`; return its content-addressed id.

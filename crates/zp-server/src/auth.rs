@@ -591,7 +591,7 @@ fn extract_cookie_token(req: &Request) -> Option<String> {
 ///      is `Some` (i.e. post-Genesis).
 ///   2. `Authorization: Bearer <token>` — legacy bearer-token path retained
 ///      during the genesis-signed-gate-requests migration (kept until Step 4
-///      of `docs/handoffs/genesis-signed-gate-requests-design-2026-05.md`).
+///      of `docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md`).
 ///   3. `Cookie: zp_session=<token>` — browser HttpOnly cookie path
 ///      (out-of-scope for this migration; tracked under #139).
 ///   4. `?token=<token>` query param — **only for /ws/* upgrades** because

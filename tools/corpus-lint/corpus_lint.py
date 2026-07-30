@@ -18,7 +18,7 @@ ROOT = None
 # the pre-convention stratum and the specified-not-shipped receipt surface are
 # properties of a corpus mid-construction, not defects in it.
 INFORMATIONAL = {"index-coverage", "receipt-coverage", "stated-count",
-                 "doc-path-prospective", "pub-consumer"}
+                 "doc-path-prospective", "doc-path-as-proposed", "pub-consumer"}
 
 # The corpus index declares its own establishment date in its opening
 # line ("Established 2026-07-10"). Documents authored on or after it were
@@ -123,8 +123,21 @@ def check_numbered_section_sequence(docs):
                 finding("section-sequence", d, f"section {b} at line {lb} follows section {a} at line {la}")
 
 def check_doc_crossrefs(docs, root):
-    """SC1/SC6 — a referenced .md must exist somewhere in the repo."""
-    names = {p.name for p in root.rglob("*.md")}
+    """SC1/SC6 — a referenced .md must exist somewhere in the repo.
+
+    Deliberately-untracked trees are excluded from the resolution set, not
+    skipped. A bare-name citation of a `docs/handoffs/` file resolved on the
+    author's machine -- where rglob finds it -- and failed in CI and in the
+    temp worktree the pre-push hook builds, which made the verdict depend on
+    which clone the check ran in. Excluding them here makes a bare handoff
+    citation fail consistently everywhere, which is what pushes the author to
+    the path form `docs/handoffs/x.md`. That form is the convention: it states
+    in the citation itself that the target is a local note, and both this check
+    and check_doc_paths honour it. Twenty citations were converted 2026-07-29.
+    """
+    IGNORED = ("docs/handoffs/", "graphify-out/", "target/", "node_modules/")
+    names = {p.name for p in root.rglob("*.md")
+             if not any(seg in p.as_posix() for seg in IGNORED)}
     pat = re.compile(r"`([A-Za-z0-9][A-Za-z0-9\-_.]*\.md)`")
     unwritten = re.compile(r"not yet written|\(planned\)|to be written|does not exist yet|"
                            r"not yet authored|placeholder", re.I)
@@ -452,13 +465,29 @@ def check_doc_paths(docs, root):
             lines = doc.read_text(errors="replace").splitlines()
         except Exception:
             continue
+        # A dated design record asserts its paths as *plan*, not as fact. The
+        # check's premise -- "a file path is far more often asserted as fact" --
+        # is right for current documents and wrong for a record of what was
+        # proposed on a date. Declaring `**Paths as proposed**` in the header
+        # downgrades this document's file misses to a measurement, so they stay
+        # counted and visible but stop reading as present-tense claims.
+        # Deliberately not silence: the count still appears under
+        # doc-path-as-proposed, and a document that uses this to hide a genuine
+        # stale claim is making that choice in public, in its own header.
+        as_proposed = any("Paths as proposed" in l for l in lines[:25])
+        kind = "doc-path-as-proposed" if as_proposed else "doc-path"
         for i, line in enumerate(lines, 1):
             for ref in pat.findall(line):
                 if ref.startswith(("http", "/", "~")) or "*" in ref or "{" in ref:
                     continue
                 if ref.split("/")[0] not in TOP and not ref.endswith(EXT):
                     continue
-                if ref.startswith("docs/handoffs/"):
+                # Deliberately-untracked trees. .gitignore excludes both, so a
+                # citation into them cannot resolve in any clone -- including the
+                # temp worktree the pre-push hook materializes. Flagging them made
+                # the check's verdict depend on which clone it ran in, which is the
+                # one thing a structural check must never do.
+                if ref.startswith(("docs/handoffs/", "graphify-out/")):
                     continue
                 if resolves(ref):
                     continue
@@ -482,7 +511,7 @@ def check_doc_paths(docs, root):
                     finding("doc-path-prospective", doc,
                             f"cites directory {ref}, which does not exist", i)
                 else:
-                    finding("doc-path", doc,
+                    finding(kind, doc,
                             f"cites {ref}, which does not exist", i)
 
 

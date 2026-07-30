@@ -8,6 +8,8 @@
 > point into `docs/handoffs/` and are still local-only: those are working notes, and
 > deliberately not promoted.
 
+**Document type:** Design record, 2026-05-25. **Status:** Implemented — `crates/zp-content/` shipped; `no_raw_storage_calls_outside_zp_content` enforces it. Layout described below is the May proposal; the pin landed as a test file, not `src/pins/`.
+
 # Design — Substrate storage abstraction (`zp-content`)
 
 *2026-05-25. Sonnet tier — substrate-layer architecture design.*
@@ -246,7 +248,7 @@ Cloudflare deps confined to zp-cloudflare; ContentStore impls
 in zp-cloudflare are the legitimate consumer of those deps.
 ```
 
-Files: `crates/zp-discipline/src/pins/no_raw_storage.rs` (or equivalent)
+Files: `crates/zp-discipline/tests/no_raw_storage_calls_outside_zp_content.rs` *(landed 2026-05 as a test file; this section proposed `src/pins/`, which is not how the discipline framework was built)*
 
 ---
 
@@ -254,7 +256,7 @@ Files: `crates/zp-discipline/src/pins/no_raw_storage.rs` (or equivalent)
 
 ### Conformance test suite
 
-`tests/conformance.rs` — parametrized macro expands one test body for each backend. Any backend added in v0.1+ must be added to the macro; CI fails if a new backend isn't in the conformance suite.
+`tests/conformance.rs` (not yet written) — parametrized macro expands one test body for each backend. Any backend added in v0.1+ must be added to the macro; CI fails if a new backend isn't in the conformance suite.
 
 ```rust
 macro_rules! conformance_suite {
@@ -295,7 +297,7 @@ conformance_suite!(memory, make_memory_backend());
 
 ### Integration smoke test
 
-`tests/integration.rs` — artifact library's intended usage pattern:
+`tests/integration.rs` (not yet written) — artifact library's intended usage pattern:
 
 ```rust
 let store = LocalFsBackend::new(tmp_dir).await?;

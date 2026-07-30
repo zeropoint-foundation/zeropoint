@@ -1,4 +1,4 @@
-//! Discipline: `std::fs::write` MUST NOT appear inside `zp-keys/keyring.rs`.
+//! Discipline: `std::fs::write` MUST NOT appear inside `zp-keys/src/keyring.rs`.
 //!
 //! # Why (Seam 7 / CRIT-8)
 //!

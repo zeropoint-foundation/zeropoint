@@ -8,6 +8,8 @@
 > point into `docs/handoffs/` and are still local-only: those are working notes, and
 > deliberately not promoted.
 
+**Document type:** Design record, 2026-05-21. **Status:** Implemented — `zp_net::bind_loopback` and `zp_net::serve_loopback_grpc_with_shutdown` shipped; three discipline pins enforce it. Layout described below is the May proposal and differs in places from what landed.
+
 # Design — Singular loopback binding (structural sweep)
 
 *2026-05-21. Companion to
@@ -111,7 +113,7 @@ crate cost. `CancellationToken` lives in `tokio_util::sync`.
 - Phase 1 callers: `zp-server`, `crates/trust-triangle` (demo binaries).
 - Phase 2 callers: `zp-server`, `zp-cli`, `zp-configure`, `zp-server`'s
   `tool_proxy.rs` / `launch_inference.rs`, `zp-server`'s
-  `onboard/detect.rs` and `onboard/verify.rs`.
+  `crates/zp-server/src/onboard/detect.rs` and `crates/zp-server/src/onboard/verify.rs`.
 - Both phases have callers in multiple crates. Putting the helpers in
   `zp-server` forces dependency inversion (zp-cli would need to depend
   on zp-server for a URL builder). Putting them in `zp-config` is

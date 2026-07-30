@@ -1,5 +1,7 @@
 # ZeroPoint Discipline Pins
 
+**Document type:** Working discipline — the authored companion to the generated `DISCIPLINE-PINS-MAP.md`. **Status:** current; the registry itself is derived.
+
 *Discipline pins are structural rules for the ZeroPoint codebase that
 cannot be expressed as type-system constraints but are load-bearing for
 correctness or security. Each pin names a rule, specifies what it

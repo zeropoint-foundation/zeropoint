@@ -52,7 +52,7 @@
 //!    that the HTTP grant handler does not write a delegation:granted chain
 //!    entry (Boundary 1→2 gap).
 //!
-//! Ref: docs/handoffs/receipt-lifecycle-2026-06.md
+//! Ref: docs/design/RECEIPT-LIFECYCLE-2026-06.md
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};

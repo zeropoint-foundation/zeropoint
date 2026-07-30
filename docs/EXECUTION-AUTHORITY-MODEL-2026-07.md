@@ -336,7 +336,7 @@ Operator requests evaluate against the same limbs with different terminals:
 
 *Worked example, 2026-07-25.* The operator said "Please call me Kenrom." `CorrectionType::Preference` exists and is rendered into Tier 1 context every cycle; standing corrections are operator-issued, so the Regent holds no authority to write one. That is case 2. The correct output is a drafted `cognitive:correction:standing` of type Preference awaiting signature, honoured for the session and marked unsigned. The observed output was a byte-identical repeat of the previous turn's persona recitation — which this procedure's absence permitted.
 
-**Composition with §III.27.** A standing correction the Regent proposes about operator preference is Class 2 self-affecting material under `ZEP-self-referential-authorship-2026-07.md`: it enters her own cognitive context, so it decays unless adopted, and adoption retains her attribution and continues counting toward the self-authorship ratio. No separate mechanism is required — the proposal pattern is the same one that axiom already specifies.
+**Composition with §III.27.** A standing correction the Regent proposes about operator preference is Class 2 self-affecting material under `docs/handoffs/ZEP-self-referential-authorship-2026-07.md`: it enters her own cognitive context, so it decays unless adopted, and adoption retains her attribution and continues counting toward the self-authorship ratio. No separate mechanism is required — the proposal pattern is the same one that axiom already specifies.
 
 #### Remediation Receipt Schema
 

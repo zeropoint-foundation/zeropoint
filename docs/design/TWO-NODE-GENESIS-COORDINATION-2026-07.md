@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration.** Specifies the ceremony by which two role-specialized sovereigns — a Sentinel-role node and a Regent-role node, each holding its own independent Genesis root — recognize each other as sovereign peers of the same operator, cross-reference each other's chain segments, and enter ongoing mesh-mediated coordination. Elaborates `HARDWARE-ROLE-SEPARATION-2026-07.md` (canonical two-role topology) at the ceremony layer. Does not amend KEEL.
 
-Draft — 2026-07-27. Composes with `HARDWARE-ROLE-SEPARATION-2026-07.md` (canonical topology), `pi5-sovereign-standup-checklist-2026-07-17.md` (Sentinel-side prerequisite), `mac-mini-regent-standup-checklist-2026-07-27.md` (Regent-side prerequisite), `PEER-DISCOVERY-AS-OUTREACH-2026-07.md` (peer protocols this ceremony extends for co-sovereign framing), `PORTABLE-CHAIN-EXPORT-CEREMONY-2026-07.md` (chain segment preservation), `SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md` (bright-line invariants), and the existing mesh protocol in `tools/sentinel/zp_sentinel/mesh.py` plus the AgentAnnounce envelope described in the March 2026 Sentinel v0.3 release.
+Draft — 2026-07-27. Composes with `HARDWARE-ROLE-SEPARATION-2026-07.md` (canonical topology), `docs/handoffs/pi5-sovereign-standup-checklist-2026-07-17.md` (Sentinel-side prerequisite), `docs/handoffs/mac-mini-regent-standup-checklist-2026-07-27.md` (Regent-side prerequisite), `PEER-DISCOVERY-AS-OUTREACH-2026-07.md` (peer protocols this ceremony extends for co-sovereign framing), `PORTABLE-CHAIN-EXPORT-CEREMONY-2026-07.md` (chain segment preservation), `SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md` (bright-line invariants), and the existing mesh protocol in `tools/sentinel/zp_sentinel/mesh.py` plus the AgentAnnounce envelope described in the March 2026 Sentinel v0.3 release.
 
 ## Framing
 
@@ -16,8 +16,8 @@ The ceremony is small — four phases, roughly thirty minutes of wall-clock — 
 
 Both nodes must be individually stood up before the coordination ceremony runs:
 
-- **Pi 5 Sentinel** completed `pi5-sovereign-standup-checklist-2026-07-17.md` through §6.5 (Form Disclosure discipline). Sentinel-role Sovereign Form asserted, TPM 2.0-attested boot chain established, Trezor-held Genesis derivation bound, mesh subsystem active.
-- **APOLLO Regent** completed `mac-mini-regent-standup-checklist-2026-07-27.md` through §5.2 (form graduation). Regent-role Sovereign Form asserted, Secure Enclave-attested boot chain, Trezor-held Genesis derivation bound (using a distinct Keychain identifier from any Companion-Form Genesis to avoid collision — see L1 empirical lesson), mesh subsystem active.
+- **Pi 5 Sentinel** completed `docs/handoffs/pi5-sovereign-standup-checklist-2026-07-17.md` through §6.5 (Form Disclosure discipline). Sentinel-role Sovereign Form asserted, TPM 2.0-attested boot chain established, Trezor-held Genesis derivation bound, mesh subsystem active.
+- **APOLLO Regent** completed `docs/handoffs/mac-mini-regent-standup-checklist-2026-07-27.md` through §5.2 (form graduation). Regent-role Sovereign Form asserted, Secure Enclave-attested boot chain, Trezor-held Genesis derivation bound (using a distinct Keychain identifier from any Companion-Form Genesis to avoid collision — see L1 empirical lesson), mesh subsystem active.
 - **Network reachability**: both nodes on the same LAN segment, or with route-and-firewall-permitted TCP connectivity. Mesh WebSocket transport per `tools/sentinel/zp_sentinel/mesh.py` conventions.
 - **Trezor available**: the operator's Trezor (or equivalent hardware signing device) is connected to *one* of the two nodes for the operator confirmation signature in Phase 3. The other node receives the confirmation via mesh; direct Trezor-to-both-nodes is not required.
 - **Time sync**: both nodes have NTP or manual clock agreement within ~30 seconds. The ceremony's chain events include timestamps and the substrate rejects wildly divergent clocks.
@@ -152,8 +152,8 @@ Substrate consumers (Cartographer, officer cadre, defensive-swap coordinators) s
 ## Cross-references
 
 - `HARDWARE-ROLE-SEPARATION-2026-07.md` — canonical two-role topology (this ceremony realises the coordination between the two roles)
-- `pi5-sovereign-standup-checklist-2026-07-17.md` — Sentinel-side prerequisite
-- `mac-mini-regent-standup-checklist-2026-07-27.md` — Regent-side prerequisite
+- `docs/handoffs/pi5-sovereign-standup-checklist-2026-07-17.md` — Sentinel-side prerequisite
+- `docs/handoffs/mac-mini-regent-standup-checklist-2026-07-27.md` — Regent-side prerequisite
 - `PEER-DISCOVERY-AS-OUTREACH-2026-07.md` — general peer protocols this ceremony extends for co-sovereign framing
 - `PORTABLE-CHAIN-EXPORT-CEREMONY-2026-07.md` — chain preservation before and after this ceremony
 - `SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md` — bright-line invariants that inform this ceremony's failure modes
