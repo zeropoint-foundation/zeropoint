@@ -1678,9 +1678,17 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // ANSI only when a human is watching. Redirected to a file, the escape
+    // codes land *between* the message and its field names — so
+    // `turns=1` is stored as `turns\x1b[0m=1` and no grep for `turns=` ever
+    // matches. Observed 2026-07-31: three separate field-level queries against
+    // /tmp/zp-serve.log returned empty against 239k lines that plainly
+    // contained the fields, because the terminal renders the escapes
+    // invisibly on paste. A log that cannot be queried is not a log.
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .init();
 
     // Serve runs the HTTP server with verification surface
@@ -5872,6 +5880,45 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // ── Approval surface — handled ahead of pipeline construction ────────
+    //
+    // Everything below this point unlocks the sovereign root:
+    // `load_genesis_secret_composed()` prompts a hardware touch, to derive an
+    // audit signer these three commands never use. `zp approval list` reads a
+    // token file and issues an HTTP GET. It has no business asking the
+    // operator to press a button.
+    //
+    // Observed 2026-07-31: `zp approval list` printed the Trezor banner, took
+    // the touch, and *then* failed `session_stale` — the operator paid a
+    // physical confirmation for a command that never reached the network.
+    //
+    // This is a P9 surface, which is why it matters past the annoyance. The
+    // signature is the operator's act, so the queue of things awaiting it is
+    // something they must be able to check freely and often. A queue that
+    // costs a ceremony to read is a queue that stops being read, and an
+    // unread approval queue is indistinguishable from no approval queue at
+    // all — which is the exact failure the Regent's confabulated "it needs
+    // your signature" was already simulating.
+    //
+    // `zp regent` sits above for the same reason; this is the second member
+    // of a group that will keep growing. The general form — commands declaring
+    // whether they need the sovereign root, rather than paying for it by
+    // position in main() — is the right fix and is not this one.
+    if let Some(Commands::Approval(cmd)) = &args.command {
+        match cmd {
+            ApprovalCmd::List { json } => run_approval_list(*json).await?,
+            ApprovalCmd::Grant {
+                request_hash,
+                reason,
+            } => run_approval_resolve(request_hash, "granted", reason.as_deref()).await?,
+            ApprovalCmd::Deny {
+                request_hash,
+                reason,
+            } => run_approval_resolve(request_hash, "denied", reason.as_deref()).await?,
+        }
+        std::process::exit(0);
+    }
+
     let config = PipelineConfig {
         operator_identity: OperatorIdentity::default(),
         trust_tier,
@@ -5954,15 +6001,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Correction(CorrectionCmd::List { json })) => {
             run_correction_list(json).await?;
         }
-        Some(Commands::Approval(ApprovalCmd::List { json })) => {
-            run_approval_list(json).await?;
-        }
-        Some(Commands::Approval(ApprovalCmd::Grant { request_hash, reason })) => {
-            run_approval_resolve(&request_hash, "granted", reason.as_deref()).await?;
-        }
-        Some(Commands::Approval(ApprovalCmd::Deny { request_hash, reason })) => {
-            run_approval_resolve(&request_hash, "denied", reason.as_deref()).await?;
-        }
+        Some(Commands::Approval(_)) => unreachable!(), // handled above
         Some(Commands::Correction(CorrectionCmd::Revoke {
             correction_id,
             json,

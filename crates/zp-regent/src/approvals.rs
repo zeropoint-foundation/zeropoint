@@ -6,8 +6,9 @@
 //! `regent:intent:request_approval` to the chain and broadcasts to cockpit
 //! surfaces. What did not exist was any representation of the *answer*:
 //! no receipt citing the request, no pending state, nothing a later cycle
-//! could read. A request was fire-and-forget, so she could not follow up,
-//! could not be reminded, and could not learn she had been told yes.
+//! could read. A request was fire-and-forget, so the Regent could not
+//! follow up, could not be reminded, and could not learn it had been told
+//! yes.
 //!
 //! That is why the precedent corpus is empty. `CLAUDE.md`'s *act on
 //! precedent, escalate on novelty* describes querying prior
@@ -20,8 +21,8 @@
 //! # Why resolution is an operator act, not an inference
 //!
 //! Resolution could have been conversational: the Regent reads "yes
-//! please" and records approval herself. That was rejected. It would make
-//! the precedent corpus depend on her reading of the operator's tone,
+//! please" and records the approval itself. That was rejected. It would
+//! make the precedent corpus depend on its reading of the operator's tone,
 //! which is the confabulation surface `COGNITIVE-SELF-OBSERVER` exists to
 //! catch, and a single misread sentence would become permanent autonomous
 //! authority.
@@ -42,7 +43,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use zp_core::{AuditAction, AuditEntry};
 
-/// Receipt the Regent emits when she asks. Already emitted today by
+/// Receipt the Regent emits when it asks. Already emitted today by
 /// `ServerIntentExecutor` — this module reads it, it does not introduce it.
 pub const EVENT_PREFIX_REQUEST: &str = "regent:intent:request_approval";
 
@@ -112,19 +113,81 @@ fn parse_resolution(event: &str) -> Option<(Resolution, String)> {
 
 /// Extract the proposed action from a request receipt.
 ///
-/// The executor writes `regent:intent:request_approval action={...}` — a
-/// flat `key=value` tail rather than JSON, matching the inline-encoded
-/// pattern the other Regent receipts use. Parsed permissively: an
-/// unreadable action still yields a request, because a request whose text
-/// cannot be parsed is still a request awaiting an answer, and dropping it
-/// would hide an outstanding obligation.
+/// # The encoding, as it actually is
+///
+/// The call site reads `emit_receipt(EVENT_PREFIX_REQUEST, Some(&format!(
+/// "action={}", proposed_action)))`, which is why this parser was first
+/// written to expect `"{prefix} action={...}"`. It isn't that.
+/// `ServerIntentExecutor::emit_receipt` joins event and detail as
+/// `"{event} | {detail}"`, so what reaches the chain is:
+///
+/// ```text
+/// regent:intent:request_approval | action=Record the operator's preferred name…
+/// ```
+///
+/// The pipe is the house encoding for every `regent:*` receipt with a detail
+/// tail, so the producer is right and this parser was wrong. Observed
+/// 2026-07-31: the first real escalated proposal reached the queue and
+/// rendered as `(unparsed request)` — the obligation was visible, its content
+/// was not. Both forms are accepted here, because the bare form appears in
+/// receipts written directly rather than through the executor, and because a
+/// parser for a chain must read the history the chain already holds.
+///
+/// Parsed permissively: an unreadable action still yields a request. A
+/// request whose text cannot be parsed is still a request awaiting an answer,
+/// and dropping it would hide an outstanding obligation — which is strictly
+/// worse than showing one you cannot yet read.
 fn parse_request_action(event: &str) -> String {
     event
         .strip_prefix(EVENT_PREFIX_REQUEST)
-        .and_then(|t| t.trim_start().strip_prefix("action="))
+        .map(|tail| {
+            let tail = tail.trim_start();
+            tail.strip_prefix('|').unwrap_or(tail).trim_start()
+        })
+        .and_then(|tail| tail.strip_prefix("action="))
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "(unparsed request)".to_string())
+}
+
+#[cfg(test)]
+mod request_encoding_tests {
+    use super::*;
+
+    /// The form the executor actually writes.
+    #[test]
+    fn reads_the_piped_form_the_executor_emits() {
+        let event = "regent:intent:request_approval | action=Record the operator's \
+                     preferred name as Kenrom in the standing corrections";
+        assert!(parse_request_action(event).starts_with("Record the operator's"));
+    }
+
+    /// The bare form, for receipts written without the executor's joiner.
+    #[test]
+    fn reads_the_bare_form() {
+        let event = "regent:intent:request_approval action=Grant browser_use";
+        assert_eq!(parse_request_action(event), "Grant browser_use");
+    }
+
+    /// An action containing a pipe must survive — only the separator is eaten.
+    #[test]
+    fn keeps_pipes_inside_the_action_text() {
+        let event = "regent:intent:request_approval | action=grep foo | wc -l";
+        assert_eq!(parse_request_action(event), "grep foo | wc -l");
+    }
+
+    /// Unreadable is still outstanding — never dropped, never silently blank.
+    #[test]
+    fn unreadable_tail_still_yields_a_request() {
+        for event in [
+            "regent:intent:request_approval",
+            "regent:intent:request_approval | ",
+            "regent:intent:request_approval | action=",
+            "regent:intent:request_approval | reason=something else",
+        ] {
+            assert_eq!(parse_request_action(event), "(unparsed request)");
+        }
+    }
 }
 
 /// A request and, if it has one, its answer.
@@ -134,7 +197,7 @@ pub struct ApprovalRequest {
     pub request_hash: String,
     /// What the Regent proposed.
     pub action: String,
-    /// When she asked.
+    /// When the Regent asked.
     pub requested_at: DateTime<Utc>,
     /// `None` while outstanding.
     pub resolution: Option<Resolution>,
