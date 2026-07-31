@@ -651,7 +651,7 @@ impl InferenceBackend {
 
         info!(
             raw_len = raw_body.len(),
-            raw_preview = %if raw_body.len() > 500 { &raw_body[..500] } else { &raw_body },
+            raw_preview = %crate::text::preview(&raw_body, 500),
             "regent raw ollama response"
         );
 
@@ -768,12 +768,12 @@ impl InferenceBackend {
 
         info!(
             raw_len = raw_body.len(),
-            raw_preview = %if raw_body.len() > 500 { &raw_body[..500] } else { &raw_body },
+            raw_preview = %crate::text::preview(&raw_body, 500),
             "regent raw openai response"
         );
 
         let openai_resp: OpenAIResponse = serde_json::from_str(&raw_body)
-            .map_err(|e| RegentError::Inference(format!("parse error: {} — body: {}", e, &raw_body[..raw_body.len().min(200)])))?;
+            .map_err(|e| RegentError::Inference(format!("parse error: {} — body: {}", e, crate::text::preview(&raw_body, 200))))?;
 
         let content = openai_resp
             .choices

@@ -787,7 +787,7 @@ impl<'a> ModelEvaluator<'a> {
         let latency_ms = t0.elapsed().as_millis() as u64;
 
         let preview = if response.len() > 300 {
-            format!("{}…", &response[..300])
+            format!("{}…", crate::text::preview(&response, 300))
         } else {
             response.clone()
         };

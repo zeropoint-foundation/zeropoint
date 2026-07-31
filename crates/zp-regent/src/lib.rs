@@ -34,6 +34,7 @@ pub mod persona;
 pub mod regent;
 pub mod routing;
 pub mod shadow_validation;
+pub mod text;
 
 // Re-export key types for ergonomic access from downstream crates.
 pub use regent::{OperatorModelPin, PinStatus, ShadowCandidate, ShadowCandidateState};

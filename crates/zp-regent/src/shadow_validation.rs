@@ -309,7 +309,7 @@ async fn check_prompt_structural(
             response.len()
         )
     } else {
-        let preview = &response[..response.len().min(120)];
+        let preview = crate::text::preview(&response, 120);
         format!("not valid JSON intent: {}...", preview)
     };
 
@@ -467,7 +467,7 @@ async fn check_tool_dispatch(
             (false, format!(
                 "responded instead of dispatching (mentions_tool={}): {}...",
                 mentions_tool,
-                &content[..content.len().min(80)]
+                crate::text::preview(&content, 80)
             ))
         }
         Ok(_) => (false, "unexpected intent type".to_string()),
@@ -542,7 +542,7 @@ async fn check_self_configure(
             (false, format!(
                 "responded instead of dispatching self_configure (knows_something={}): {}...",
                 knows_something,
-                &content[..content.len().min(80)]
+                crate::text::preview(&content, 80)
             ))
         }
         Ok(_) => (false, "unexpected intent type".to_string()),
