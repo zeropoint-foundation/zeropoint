@@ -64,6 +64,21 @@ static TOUCH_PROMPTED: AtomicBool = AtomicBool::new(false);
 /// record of what happened; this is an instruction to a person standing
 /// at a keyboard, and routing it through the same channel is what caused
 /// the problem in the first place.
+/// # Why this never names the gesture
+///
+/// It used to read "Press its button." A Trezor Model T handles PIN entry
+/// on-device, in an exchange the host never sees — no `PinMatrixRequest`
+/// reaches this process, so at the moment the banner prints there is no way
+/// to know whether the device will ask for a press or a PIN.
+///
+/// Observed 2026-07-31: the operator read "press the button", waited for a
+/// button prompt that was never coming, and the device cancelled with
+/// `PIN entry cancelled`, taking the boot with it. A confident instruction
+/// about a state the process cannot observe is the same defect as a Regent
+/// claiming an act it did not perform — and it costs more, because a person
+/// acts on it.
+///
+/// Say what is known: the device wants something. Let the device say what.
 pub fn prompt_operator_touch(device: &str) {
     use std::io::IsTerminal;
 
@@ -77,7 +92,7 @@ pub fn prompt_operator_touch(device: &str) {
     let r = "\x1b[0m";
 
     if TOUCH_PROMPTED.swap(true, Ordering::SeqCst) {
-        eprintln!("{y}   … still waiting on your {device} — press the button{r}");
+        eprintln!("{y}   … still waiting on your {device} — check the device screen{r}");
         return;
     }
 
@@ -97,7 +112,8 @@ pub fn prompt_operator_touch(device: &str) {
     eprintln!();
     eprintln!("{y}        ▶  Y O U R   {spaced}{r}");
     eprintln!();
-    eprintln!("   The device is asking you to confirm. Press its button.");
+    eprintln!("   Look at the device and do what it asks — that may be a button");
+    eprintln!("   press, or entering your PIN. The gesture is the device\'s to choose.");
     eprintln!();
     eprintln!("   ZeroPoint is unlocking the sovereign root — every signature this");
     eprintln!("   session traces back to this one touch.");

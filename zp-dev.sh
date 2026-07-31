@@ -16,6 +16,7 @@ TARGET_DIR=$(sed -n 's/^target-dir *= *"\(.*\)"/\1/p' "$REPO/.cargo/config.toml"
 TARGET_DIR="${TARGET_DIR:-$REPO/target}"
 PORT=17010
 LOG="/tmp/zp-serve.log"
+LOG_KEEP=5   # rotated server logs retained
 
 # ── STALE BINARY GUARD ──────────────────────────────────────────────
 # If a copy exists outside target/, it WILL cause confusion. Kill it.
@@ -108,8 +109,19 @@ start_server() {
     echo "→ Starting server from $bin"
     echo "  commit: $commit"
 
+    # Rotate, do not truncate. `> "$LOG"` destroyed three days of diagnostic
+    # history on 2026-07-31 — including the only record of the boot whose
+    # behaviour was under investigation. Evidence that survives exactly until
+    # the next attempt to reproduce is not evidence.
+    if [ -s "$LOG" ]; then
+        mv "$LOG" "$LOG.$(date +%Y%m%dT%H%M%S)" 2>/dev/null || true
+        ls -1t "$LOG".2* 2>/dev/null | tail -n +$((LOG_KEEP + 1)) | while read -r old; do
+            rm -f "$old"
+        done
+    fi
+
     ZP_ASSETS_DIR="$REPO/crates/zp-server/assets" \
-    RUST_LOG=info nohup "$bin" serve --foreground --port "$PORT" > "$LOG" 2>&1 &
+    RUST_LOG="${RUST_LOG:-info}" nohup "$bin" serve --foreground --port "$PORT" >> "$LOG" 2>&1 &
     local server_pid=$!
 
     # Boot latency baselines:
@@ -209,7 +221,8 @@ start_server() {
             printf "${Y}        ▶  Y O U R   %s${Rst}\n" \
                 "$(echo "$device" | tr '[:lower:]' '[:upper:]' | sed 's/./& /g')"
             echo ""
-            echo "   The device is asking you to confirm. Press its button."
+            echo "   Look at the device and do what it asks — that may be a button"
+            echo "   press, or entering your PIN. The gesture is the device's to choose."
             echo ""
             echo "   ZeroPoint is unlocking the sovereign root — every signature this"
             echo "   session traces back to this one touch."
@@ -225,7 +238,7 @@ start_server() {
         # live instruction rather than a wall of scrollback.
         if [ $prompted -eq 1 ] && [ $((tries - last_nag)) -ge 40 ]; then
             printf '\a'
-            printf "     \033[1;33m… still waiting on your %s — press the button to continue\033[0m\n" "$device"
+            printf "     \033[1;33m… still waiting on your %s — check the device screen\033[0m\n" "$device"
             last_nag=$tries
         fi
 
