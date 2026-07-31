@@ -585,11 +585,17 @@ fn find_subject_after_anchor(text: &str, anchor: &str) -> Vec<SubjectHit> {
 pub fn extract_pubkey_claims(response: &str) -> Vec<SemanticClaim> {
     let mut out: Vec<SemanticClaim> = Vec::new();
 
+    // No trailing space on the anchors. Carrying one made the anchor itself
+    // the separator, so `pubkey: <hex>` never matched — the anchor scan failed
+    // before the punctuation-skipping below ever ran, which is why that code
+    // documented `":"` and `"="` as handled while no input could reach it.
+    // Separator handling belongs in one place; this is that place's
+    // precondition.
     let anchors: &[(&str, &str)] = &[
-        ("pubkey ", "pubkey"),
-        ("public key ", "pubkey"),
-        ("fingerprint ", "fingerprint"),
-        ("signed by ", "pubkey"),
+        ("pubkey", "pubkey"),
+        ("public key", "pubkey"),
+        ("fingerprint", "fingerprint"),
+        ("signed by", "pubkey"),
     ];
 
     for (anchor, kind) in anchors {
@@ -615,6 +621,52 @@ struct HexHit {
     offset: usize,
 }
 
+/// Advance past punctuation and whitespace that commonly separates an anchor
+/// from its hex payload.
+fn skip_hex_prefix_punct(text: &str, mut cursor: usize) -> usize {
+    let b = text.as_bytes();
+    while cursor < b.len() {
+        match b[cursor] {
+            b' ' | b'\t' | b'`' | b'\'' | b'"' | b':' | b'=' => cursor += 1,
+            _ => break,
+        }
+    }
+    cursor
+}
+
+/// Advance past a copula between the anchor and the hex — "pubkey **is**
+/// 539839ff…".
+///
+/// This function's caller documented `"is "` as a skipped prefix from the day
+/// it was written, and never implemented it: the skip loop only ever consumed
+/// single punctuation bytes. The cost was invisible in the anchors where
+/// nothing intervenes (`fingerprint <hex>`, `signed by <hex>`) and total in
+/// the one that matters — `pubkey is <hex>` is how the phrase is actually
+/// written, in the prompts and in Regent's output both.
+///
+/// Three tests asserted the correct behaviour and failed, including
+/// `extracts_confabulated_pubkey_case_from_session_log`, which reproduces the
+/// 2026-07-24 confabulation this extractor exists to catch. A detector whose
+/// own motivating case does not fire, with a red test standing over it, is not
+/// a gap in coverage — it is a gate that was never run. Found 2026-07-31 while
+/// landing the Class 5 enactment verifier.
+///
+/// Byte-wise on purpose: `cursor` may sit anywhere in a UTF-8 string, so this
+/// must not slice. ASCII case folding via `| 0x20` is sound here because the
+/// only bytes that can match are `i`/`I` and `s`/`S`.
+fn skip_copula(text: &str, cursor: usize) -> usize {
+    let b = text.as_bytes();
+    if cursor + 2 <= b.len()
+        && (b[cursor] | 0x20) == b'i'
+        && (b[cursor + 1] | 0x20) == b's'
+        // Must be the whole word — not the head of "island" or "issuer".
+        && (cursor + 2 == b.len() || !b[cursor + 2].is_ascii_alphanumeric())
+    {
+        return skip_hex_prefix_punct(text, cursor + 2);
+    }
+    cursor
+}
+
 fn find_hex_after_anchor(text: &str, anchor: &str) -> Vec<HexHit> {
     let mut out: Vec<HexHit> = Vec::new();
     let text_lower = text.to_lowercase();
@@ -626,15 +678,8 @@ fn find_hex_after_anchor(text: &str, anchor: &str) -> Vec<HexHit> {
         let hex_start = anchor_start + anchor.len();
 
         // Skip optional prefix characters commonly preceding hex ("is ", ":", "= ", "'", etc.).
-        let mut cursor = hex_start;
-        while cursor < text.len() {
-            let b = text.as_bytes()[cursor];
-            if b == b' ' || b == b'`' || b == b'\'' || b == b'"' || b == b':' || b == b'=' {
-                cursor += 1;
-            } else {
-                break;
-            }
-        }
+        let mut cursor = skip_hex_prefix_punct(text, hex_start);
+        cursor = skip_copula(text, cursor);
         let hex_actual_start = cursor;
 
         // Read hex chars.
@@ -986,5 +1031,64 @@ Pubkey deadbeef12345678 is invalid.\
         assert_eq!(claims.len(), 1);
         // Excerpt should be a valid str.
         assert!(!claims[0].excerpt.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod copula_tests {
+    use super::*;
+
+    fn hexes(response: &str) -> Vec<String> {
+        extract_pubkey_claims(response)
+            .into_iter()
+            .filter_map(|c| match c.payload {
+                SemanticClaimPayload::Pubkey(pk) => Some(pk.claimed_hex),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The separators that actually appear between anchor and hex.
+    #[test]
+    fn every_separator_form_reaches_the_hex() {
+        for s in [
+            "Your Genesis pubkey is 539839ff1234abcd.",
+            "Your Genesis pubkey: 539839ff1234abcd.",
+            "Your Genesis pubkey = 539839ff1234abcd.",
+            "Your Genesis pubkey 539839ff1234abcd.",
+            "Your Genesis pubkey is: 539839ff1234abcd.",
+            "Your Genesis pubkey IS 539839ff1234abcd.",
+            "Your Genesis pubkey is `539839ff1234abcd`.",
+        ] {
+            assert_eq!(hexes(s), vec!["539839ff1234abcd".to_string()], "failed on: {s}");
+        }
+    }
+
+    /// The copula skip must be a whole word, not a prefix.
+    #[test]
+    fn does_not_eat_words_beginning_with_is() {
+        assert!(hexes("The pubkey issuer 539839ff1234abcd is downstream.").is_empty());
+        assert!(hexes("The pubkey island 539839ff1234abcd.").is_empty());
+    }
+
+    /// Absence still reads as absence.
+    #[test]
+    fn no_hex_after_copula_yields_nothing() {
+        assert!(hexes("Your Genesis pubkey is stored in the vault.").is_empty());
+        assert!(hexes("Your Genesis pubkey is unknown to me.").is_empty());
+    }
+
+    /// `cursor` walks bytes, so a multi-byte character immediately after the
+    /// anchor must not panic — it may simply fail to match.
+    #[test]
+    fn multibyte_after_anchor_does_not_panic() {
+        for s in [
+            "Your pubkey — 539839ff1234abcd.",
+            "Your pubkey “539839ff1234abcd”.",
+            "Your pubkey is — 539839ff1234abcd.",
+            "Your pubkey is 日本語",
+        ] {
+            let _ = extract_pubkey_claims(s);
+        }
     }
 }
