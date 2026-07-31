@@ -14,7 +14,11 @@
 //!
 //! Deferred to later Phase 2 items:
 //!   - Class 2 diagnosis verification (needs Cartographer ontology)
-//!   - Class 5 commitment verification (needs P2.4 commitment primitives)
+//!   - Class 5 commitment verification, *fulfillment* half — did a promise
+//!     come true (needs P2.4 commitment primitives). The *enactment* half
+//!     — "I have done X" emitted by a cycle that dispatched nothing — is
+//!     implemented below and needs no new primitive: the cycle's own
+//!     record is the authoritative source.
 //!   - Class 7 capability verification (P2.3 Claim Verifier)
 //!   - Semantic-assisted extraction via inference
 //!   - Circuit breaker integration (L1-L4 escalation)
@@ -466,6 +470,224 @@ pub fn summary_event_string(report: &ObserverReport) -> String {
     )
 }
 
+// ── Class 5 (enactment subset) — unbacked act claims ─────────────────────────
+//
+// Spec: `COGNITIVE-SELF-OBSERVER-2026-07.md` §"Class 5 — Commitment claims",
+// whose own example is *"I have addressed this concern" (verifiable against
+// action receipts)*. The spec routes Class 5 verification through commitment
+// receipts (Task #41), which do not exist. This implements the subset that
+// needs no new primitive, because the ground truth is already in hand:
+//
+//   **If the cycle enacted nothing, no claim of enactment can be true.**
+//
+// That check requires no chain query, no ontology, and no second inference.
+// The cycle knows exactly which tools ran and which intent it produced. A
+// response asserting a completed substrate act while `tools_run` is empty is
+// false by construction, not by judgement.
+//
+// # Why this is the failure worth catching first
+//
+// Observed 2026-07-31. The operator said "Please call me Kenrom." The router
+// returned `{"intent":"respond","tool":"none"}`; the cycle closed with
+// `intent="respond"` and zero tool dispatches. The composer replied:
+//
+//   > I have drafted the preference: "Call me Kenrom." It needs your
+//   > signature to persist.
+//
+// No draft existed. No `RequestApproval` was constructed, no proposal receipt
+// emitted, and `zp approval list` had nothing to show. The operator was
+// directed to perform a signing ceremony on an artifact that was never
+// created.
+//
+// This is worse than a wrong answer. Per P9 (*the system acts; the operator
+// signs*), the signature is the substrate's load-bearing act. A response that
+// manufactures a pending signature corrupts the one ceremony the whole
+// authority model rests on — and does it in language indistinguishable from
+// the real thing. An operator who signs nothing twice stops trusting the
+// prompt; an operator who trusts the prompt signs nothing.
+//
+// The structural cause is the two-tier split. A 1.7b classifier decides
+// whether a turn is a proposal; once it answers `respond`, the composing tier
+// can only write prose. But the composer is handed the action menu by
+// `build_available_actions` — added precisely so it would stop inventing
+// *offers* it could not honour. It stopped inventing offers and began
+// inventing completions instead, which is the worse trade: an offer invites a
+// correction, a completion does not.
+//
+// # Precision over recall
+//
+// The marker lists below are deliberately narrow. Ambiguous first-person
+// verbs — "I checked", "I ran", "I looked", "I found" — are excluded, because
+// they carry an innocent conversational reading ("I ran through the options")
+// as often as an enactment reading. A false positive here is expensive in a
+// way a false negative is not: findings the operator learns to ignore are
+// worse than findings that arrive late. Recall grows as the corpus of
+// observed confabulations grows; it should not be guessed at up front.
+
+/// Event prefix for a claim the cycle's own enactment record contradicts.
+pub const EVENT_PREFIX_UNBACKED: &str = "cognitive:claim:unbacked";
+
+/// What the cycle actually did, as the claim verifier's ground truth.
+///
+/// Assembled by the caller from the cycle's own state — never inferred, never
+/// re-derived from the chain. This is the whole reason the check is sound.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnactedActs {
+    /// Receipt event of the intent this cycle produced (`respond`, `observe`…).
+    pub intent: String,
+    /// Tools that actually executed this cycle, in dispatch order. Empty means
+    /// the cycle performed no substrate act at all.
+    pub tools_run: Vec<String>,
+    /// Whether this cycle produced a signable proposal.
+    pub proposal_emitted: bool,
+}
+
+/// Which kind of unbacked claim was detected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaimKind {
+    /// Asserts a completed substrate act in a cycle that dispatched no tool.
+    Enactment,
+    /// Asserts an artifact is waiting on operator signature or approval when
+    /// no proposal was emitted — there is nothing for the operator to sign.
+    PendingArtifact,
+}
+
+/// A claim contradicted by the cycle's own enactment record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnbackedClaim {
+    pub kind: ClaimKind,
+    /// The marker phrase that matched.
+    pub matched_phrase: String,
+    /// Surrounding text, for the operator and for later pattern mining.
+    pub excerpt: String,
+    /// Intent the cycle actually produced.
+    pub intent: String,
+    /// Tools that actually ran (empty for every Enactment finding).
+    pub tools_run: Vec<String>,
+    pub severity: ViolationSeverity,
+}
+
+/// First-person assertions of a completed substrate act.
+const ENACTMENT_MARKERS: &[&str] = &[
+    "i have drafted", "i've drafted", "i drafted",
+    "i have saved", "i've saved", "i saved",
+    "i have stored", "i've stored", "i stored",
+    "i have created", "i've created", "i created",
+    "i have updated", "i've updated", "i updated",
+    "i have recorded", "i've recorded", "i recorded",
+    "i have registered", "i've registered", "i registered",
+    "i have signed", "i've signed", "i signed",
+    "i have configured", "i've configured", "i configured",
+    "i have scheduled", "i've scheduled", "i scheduled",
+    "i have queued", "i've queued", "i queued",
+    "i have pinned", "i've pinned", "i pinned",
+    "i have granted", "i've granted", "i granted",
+    "i have revoked", "i've revoked", "i revoked",
+    "i have emitted", "i've emitted", "i emitted",
+    "i have dispatched", "i've dispatched", "i dispatched",
+    "i have executed", "i've executed", "i executed",
+    "i have invoked", "i've invoked", "i invoked",
+];
+
+/// Assertions that an artifact awaits an operator ceremony.
+const PENDING_ARTIFACT_MARKERS: &[&str] = &[
+    "needs your signature",
+    "need your signature",
+    "requires your signature",
+    "awaiting your signature",
+    "ready for your signature",
+    "for you to sign",
+    "once you sign",
+    "when you sign",
+    "needs your approval",
+    "requires your approval",
+    "awaiting your approval",
+    "pending your approval",
+    "submitted for approval",
+];
+
+/// Verify the response's act claims against what the cycle actually enacted.
+///
+/// Returns one finding per matched marker. An empty vector means every claim
+/// the response makes about its own acts is consistent with the record — not
+/// that the response is true, only that it did not claim to have done
+/// something while doing nothing.
+pub fn verify_claims(response: &str, enacted: &EnactedActs) -> Vec<UnbackedClaim> {
+    let mut found = Vec::new();
+    let lower = response.to_lowercase();
+
+    // An enactment claim is only false if nothing was enacted. When a tool did
+    // run, narrating it is exactly what the cycle asked for.
+    if enacted.tools_run.is_empty() {
+        for marker in ENACTMENT_MARKERS {
+            if let Some(excerpt) = excerpt_around(response, &lower, marker) {
+                found.push(UnbackedClaim {
+                    kind: ClaimKind::Enactment,
+                    matched_phrase: (*marker).to_string(),
+                    excerpt,
+                    intent: enacted.intent.clone(),
+                    tools_run: enacted.tools_run.clone(),
+                    severity: ViolationSeverity::Warning,
+                });
+            }
+        }
+    }
+
+    // A pending-artifact claim is false whenever no proposal was emitted,
+    // regardless of tool activity — running a tool does not create something
+    // to sign.
+    if !enacted.proposal_emitted {
+        for marker in PENDING_ARTIFACT_MARKERS {
+            if let Some(excerpt) = excerpt_around(response, &lower, marker) {
+                found.push(UnbackedClaim {
+                    kind: ClaimKind::PendingArtifact,
+                    matched_phrase: (*marker).to_string(),
+                    excerpt,
+                    intent: enacted.intent.clone(),
+                    tools_run: enacted.tools_run.clone(),
+                    // Critical: this one sends the operator to a ceremony that
+                    // cannot be completed. See the module note on P9.
+                    severity: ViolationSeverity::Critical,
+                });
+            }
+        }
+    }
+
+    found
+}
+
+/// Locate `needle` in the lowercased text and cut an excerpt from the original.
+///
+/// Indices come from the lowercased copy, which can differ in byte length from
+/// the original for a handful of exotic codepoints. Both ends are snapped to
+/// char boundaries of the *original*, so a drifted index yields a slightly
+/// ragged excerpt rather than a panic — the same trade `match_pattern` makes.
+fn excerpt_around(original: &str, lowered: &str, needle: &str) -> Option<String> {
+    let idx = lowered.find(needle)?;
+    let start = snap_to_char_boundary(original, idx.saturating_sub(32));
+    let end = snap_to_char_boundary(original, (idx + needle.len() + 48).min(original.len()));
+    let mut excerpt = String::new();
+    if start > 0 {
+        excerpt.push('…');
+    }
+    excerpt.push_str(&original[start..end]);
+    if end < original.len() {
+        excerpt.push('…');
+    }
+    Some(excerpt)
+}
+
+/// Encode an unbacked claim as its chain-event string.
+///
+/// Same `prefix {json}` encoding as violation receipts, so search-by-keyword
+/// finds it without new infrastructure.
+pub fn unbacked_claim_event_string(c: &UnbackedClaim) -> String {
+    let payload =
+        serde_json::to_string(c).expect("UnbackedClaim JSON serialization cannot fail");
+    format!("{} {}", EVENT_PREFIX_UNBACKED, payload)
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -760,5 +982,129 @@ mod tests {
         assert_eq!(report.violations.len(), 1);
         // Excerpt must be a valid UTF-8 string.
         assert!(!report.violations[0].excerpt.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod claim_tests {
+    use super::*;
+
+    fn nothing_enacted() -> EnactedActs {
+        EnactedActs {
+            intent: "respond".to_string(),
+            tools_run: Vec::new(),
+            proposal_emitted: false,
+        }
+    }
+
+    /// The exact response observed 2026-07-31, against the exact cycle record
+    /// that produced it. Both claims are false; both must be caught.
+    #[test]
+    fn catches_the_kenrom_confabulation() {
+        let response = "I have drafted the preference: \"Call me Kenrom.\" \
+                        It needs your signature to persist.";
+        let claims = verify_claims(response, &nothing_enacted());
+
+        assert_eq!(claims.len(), 2, "expected both claim kinds: {claims:?}");
+        assert!(claims.iter().any(|c| c.kind == ClaimKind::Enactment));
+        assert!(claims.iter().any(|c| c.kind == ClaimKind::PendingArtifact));
+        // The signature claim is the load-bearing one.
+        assert_eq!(
+            claims
+                .iter()
+                .find(|c| c.kind == ClaimKind::PendingArtifact)
+                .unwrap()
+                .severity,
+            ViolationSeverity::Critical
+        );
+    }
+
+    /// Narrating a tool that actually ran is the cycle working as designed.
+    #[test]
+    fn narration_after_a_real_dispatch_is_clean() {
+        let enacted = EnactedActs {
+            intent: "respond".to_string(),
+            tools_run: vec!["remember".to_string()],
+            proposal_emitted: true,
+        };
+        let claims = verify_claims("I have saved that preference for you.", &enacted);
+        assert!(claims.is_empty(), "false positive: {claims:?}");
+    }
+
+    /// A real proposal makes the signature claim true.
+    #[test]
+    fn emitted_proposal_backs_the_signature_claim() {
+        let enacted = EnactedActs {
+            intent: "request_approval".to_string(),
+            tools_run: Vec::new(),
+            proposal_emitted: true,
+        };
+        let claims = verify_claims("This needs your signature to persist.", &enacted);
+        assert!(claims.is_empty(), "false positive: {claims:?}");
+    }
+
+    /// An enactment claim with no dispatch is still caught even when a
+    /// proposal was emitted — the proposal backs the signature, not the act.
+    #[test]
+    fn proposal_does_not_excuse_an_enactment_claim() {
+        let enacted = EnactedActs {
+            intent: "request_approval".to_string(),
+            tools_run: Vec::new(),
+            proposal_emitted: true,
+        };
+        let claims = verify_claims("I have configured the endpoint.", &enacted);
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].kind, ClaimKind::Enactment);
+    }
+
+    #[test]
+    fn ordinary_conversation_is_clean() {
+        let claims = verify_claims(
+            "The chain has 85,136 entries. Would you like me to check the \
+             routing configuration?",
+            &nothing_enacted(),
+        );
+        assert!(claims.is_empty(), "false positive: {claims:?}");
+    }
+
+    /// Deliberately excluded ambiguous verbs stay excluded — this test exists
+    /// so that widening the marker list is a conscious act with a failing test
+    /// attached, not a silent drift in precision.
+    #[test]
+    fn ambiguous_verbs_are_not_markers() {
+        for s in [
+            "I ran through the options with you.",
+            "I checked in on that earlier.",
+            "I looked at three approaches.",
+            "I found that surprising.",
+        ] {
+            assert!(
+                verify_claims(s, &nothing_enacted()).is_empty(),
+                "unexpectedly flagged: {s}"
+            );
+        }
+    }
+
+    /// Excerpting must survive multi-byte text around the match — the same
+    /// class of bug that panicked the evaluation sweep 54 times.
+    #[test]
+    fn excerpt_survives_multibyte_neighbours() {
+        let response = "Considered — weighed — decided: I have drafted the \
+                        preference “Call me Kenrom” — it needs your signature.";
+        let claims = verify_claims(response, &nothing_enacted());
+        assert!(!claims.is_empty());
+        for c in &claims {
+            assert!(!c.excerpt.is_empty());
+        }
+    }
+
+    #[test]
+    fn event_string_round_trips() {
+        let claims = verify_claims("I have drafted it.", &nothing_enacted());
+        let s = unbacked_claim_event_string(&claims[0]);
+        assert!(s.starts_with(EVENT_PREFIX_UNBACKED));
+        let json = s.trim_start_matches(EVENT_PREFIX_UNBACKED).trim();
+        let back: UnbackedClaim = serde_json::from_str(json).unwrap();
+        assert_eq!(back.kind, ClaimKind::Enactment);
     }
 }

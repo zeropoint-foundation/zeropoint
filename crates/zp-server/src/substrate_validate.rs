@@ -86,6 +86,11 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "cognitive:correction:standing",
     "cognitive:correction:revoked",
     "cognitive:correction:violated",
+    // Class 5 enactment verification — per COGNITIVE-SELF-OBSERVER-2026-07.md
+    // §"Class 5 — Commitment claims". Emitted only on divergence, so a long
+    // silence here is health rather than drift; it is declared because an
+    // undeclared family that fires leaves the inventory blind to it.
+    "cognitive:claim:unbacked",
     // Cognitive act accounting (v0) — per COGNITIVE-ACT-ACCOUNTING-2026-07.md §6
     "cognitive:act:recorded",
     // Tie-off watch (Stage 1t) — per IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md

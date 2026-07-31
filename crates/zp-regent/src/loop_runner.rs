@@ -990,7 +990,19 @@ async fn run_cycle(
                 // bearing intents (Respond / Observe); skip for tool-dispatch
                 // envelope strings that aren't operator-facing content.
                 if matches!(&intent, Intent::Respond { .. } | Intent::Observe { .. }) {
-                    run_cognitive_observer(&audit_store, &response, &context.standing_corrections);
+                    // Ground truth for claim verification, taken from this
+                    // cycle directly — never re-derived from the chain.
+                    let enacted = crate::cognitive_observer::EnactedActs {
+                        intent: intent.receipt_event().to_string(),
+                        tools_run: tool_results.iter().map(|r| r.tool.clone()).collect(),
+                        proposal_emitted: matches!(&intent, Intent::RequestApproval { .. }),
+                    };
+                    run_cognitive_observer(
+                        &audit_store,
+                        &response,
+                        &context.standing_corrections,
+                        &enacted,
+                    );
                 }
 
                 emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
@@ -1244,6 +1256,72 @@ fn emit_cognitive_act_receipt(
 
 // ── Cognitive Self-Observer runtime (P2.2) ───────────────────────────────────
 
+/// Emit chain receipts for act claims the cycle's own record contradicts.
+///
+/// Runs on every content-bearing response, independent of the standing
+/// correction corpus, because its ground truth is the cycle rather than the
+/// corpus. Emits nothing when the response is clean — unlike the corrections
+/// observer, which anchors a summary every time. The asymmetry is deliberate:
+/// the corrections observer's summary proves *it ran* against a corpus that
+/// may be empty, whereas this check's inputs are always present, so a receipt
+/// here always means a real divergence.
+///
+/// Per `COGNITIVE-SELF-OBSERVER-2026-07.md` §"Class 5 — Commitment claims".
+/// Detection only in this slice: the finding is chain-anchored and logged, and
+/// the response still reaches the operator unaltered. Suppression, annotation,
+/// and escalation to the propose tier are the natural next moves and are
+/// deliberately not taken here — rewriting an emitted response is an authority
+/// decision (P9), not an observer's call to make on its own.
+fn emit_unbacked_claim_receipts(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    response: &str,
+    enacted: &crate::cognitive_observer::EnactedActs,
+) {
+    let claims = crate::cognitive_observer::verify_claims(response, enacted);
+    if claims.is_empty() {
+        return;
+    }
+
+    for c in &claims {
+        warn!(
+            kind = ?c.kind,
+            phrase = %c.matched_phrase,
+            intent = %c.intent,
+            tools_run = c.tools_run.len(),
+            severity = ?c.severity,
+            excerpt = %c.excerpt,
+            "regent claimed an act this cycle did not perform"
+        );
+    }
+
+    let mut store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("unbacked claim receipt: audit store lock poisoned: {}", e);
+            return;
+        }
+    };
+    for c in &claims {
+        let entry = zp_audit::UnsealedEntry {
+            actor: zp_core::ActorId::System("regent".to_string()),
+            action: zp_core::AuditAction::SystemEvent {
+                event: crate::cognitive_observer::unbacked_claim_event_string(c),
+            },
+            conversation_id: zp_core::ConversationId(
+                uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+            ),
+            policy_decision: zp_core::PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "cognitive-self-observer".to_string(),
+            receipt: None,
+        };
+        if let Err(e) = store.append(entry) {
+            warn!("unbacked claim receipt emission failed: {}", e);
+        }
+    }
+}
+
 /// Run the Cognitive Self-Observer against Regent's response and chain-anchor
 /// findings.
 ///
@@ -1257,7 +1335,15 @@ fn run_cognitive_observer(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     response: &str,
     corrections: &[crate::corrections::ActiveStandingCorrection],
+    enacted: &crate::cognitive_observer::EnactedActs,
 ) {
+    // Class 5 (enactment subset) runs first and unconditionally. Its ground
+    // truth is the cycle's own record, not the correction corpus, so an empty
+    // corpus must not skip it — which is exactly what would have happened had
+    // this been folded in below the fast path. See
+    // `cognitive_observer.rs` §"Class 5 (enactment subset)".
+    emit_unbacked_claim_receipts(audit_store, response, enacted);
+
     // Fast path — no active corrections means nothing to verify. Skip the
     // summary receipt too to avoid chain bloat during pre-issuance operation.
     if corrections.is_empty() {

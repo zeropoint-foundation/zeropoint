@@ -740,13 +740,10 @@ impl Regent {
 
             Intent::Respond { .. } => {
                 let composed = self.compose(context).await?;
-                Ok(Intent::Respond {
-                    content: composed,
-                    target_surface: None,
-                })
+                Ok(self.escalate_if_unbacked(context, composed).await)
             }
 
-            // A proposal is reasoning prose. Routing decided *that* she
+            // A proposal is reasoning prose. Routing decided *that* it
             // proposes; the composer writes *what* the proposal says. This
             // arm previously fell through, which left the four fields the
             // authority model requires being authored by the 1.7b
@@ -994,7 +991,7 @@ impl Regent {
 
         info!(
             response_len = response.len(),
-            response_preview = %if response.len() > 200 { &response[..200] } else { &response },
+            response_preview = %crate::text::preview(&response, 200),
             "regent UNIFIED response"
         );
 
@@ -1009,6 +1006,21 @@ impl Regent {
         // Try to parse as JSON intent first; if that fails, treat the
         // entire response as a natural-language answer.
         match parse_intent(&response) {
+            // Same Phase 7 guard as the two-tier path. Without this the
+            // escalation silently disappears whenever routing_model ==
+            // reasoning_model — a mechanism present in one path and absent in
+            // the other is the failure shape this whole subsystem exists to
+            // catch.
+            Ok(Intent::Respond {
+                content,
+                target_surface,
+            }) => Ok(match self.escalate_if_unbacked(context, content).await {
+                Intent::Respond { content, .. } => Intent::Respond {
+                    content,
+                    target_surface,
+                },
+                escalated => escalated,
+            }),
             Ok(intent) => Ok(intent),
             Err(_) => {
                 debug!(raw = %response, "unified response not valid JSON — treating as natural language");
@@ -1016,6 +1028,92 @@ impl Regent {
                     content: response,
                     target_surface: None,
                 })
+            }
+        }
+    }
+
+    /// Phase 7 escalation — turn a false claim of having proposed into a real
+    /// proposal.
+    ///
+    /// Per `docs/EXECUTION-AUTHORITY-MODEL-2026-07.md` §Phase 7 a cycle has
+    /// three terminal states: act, propose an action, propose a mechanism.
+    /// When the composing tier writes *"it needs your signature to persist"*
+    /// it has chosen the second — it simply had no way to enact that choice,
+    /// because routing already decided this turn was a plain response and the
+    /// composer cannot dispatch.
+    ///
+    /// So the prose is not merely wrong; it is a correct terminal state
+    /// expressed by the only means available to a tier that can only write.
+    /// This reads that signal and honours it: re-run at the propose tier so
+    /// the sentence becomes true and the operator has something to sign.
+    ///
+    /// # Why the composer overrides the router here
+    ///
+    /// Routing is a 1.7b classifier working from a ~245-character prompt;
+    /// composition is the reasoning model with full context. When they
+    /// disagree about whether a turn is a proposal, the composer is the better
+    /// evidence. This is the one place that disagreement is detectable, since
+    /// it surfaces as a claim the cycle's own record contradicts.
+    ///
+    /// # Scope
+    ///
+    /// Escalates only on `PendingArtifact` — a response that directs the
+    /// operator to sign or approve something. A bare enactment claim ("I have
+    /// configured the endpoint") is left to detection: it asserts a completed
+    /// act rather than a pending one, so there is no proposal to construct
+    /// from it, and manufacturing one would invent an intent the model never
+    /// expressed. Escalation happens at most once per cycle and never
+    /// recurses — `compose_proposal` yields `RequestApproval`, which is not a
+    /// content-bearing intent and is not re-checked.
+    ///
+    /// Falls back to the original prose on any failure. A proposal that cannot
+    /// be composed must not cost the operator the answer they asked for.
+    async fn escalate_if_unbacked(&self, context: &CognitiveContext, composed: String) -> Intent {
+        let enacted = crate::cognitive_observer::EnactedActs {
+            intent: "respond".to_string(),
+            tools_run: context
+                .tool_results
+                .iter()
+                .map(|r| r.tool.clone())
+                .collect(),
+            proposal_emitted: false,
+        };
+
+        let directs_operator_to_sign = crate::cognitive_observer::verify_claims(&composed, &enacted)
+            .iter()
+            .any(|c| c.kind == crate::cognitive_observer::ClaimKind::PendingArtifact);
+
+        if !directs_operator_to_sign {
+            return Intent::Respond {
+                content: composed,
+                target_surface: None,
+            };
+        }
+
+        // Seed from the operator's own words where we have them. The composed
+        // prose describes an artifact that does not exist; the request does
+        // not, and it is what the proposal should be about.
+        let seed = match context.pending_input.as_ref() {
+            Some(input) => input.content.clone(),
+            None => composed.clone(),
+        };
+
+        warn!(
+            seed = %crate::text::preview(&seed, 120),
+            "response directed the operator to sign nothing — escalating to propose tier"
+        );
+
+        match self
+            .compose_proposal(context, crate::intent::ProposalKind::Action, &seed)
+            .await
+        {
+            Ok(proposal) => proposal,
+            Err(e) => {
+                warn!("escalation failed, returning composed prose: {}", e);
+                Intent::Respond {
+                    content: composed,
+                    target_surface: None,
+                }
             }
         }
     }
@@ -1165,7 +1263,7 @@ impl Regent {
 
         info!(
             response_len = response.len(),
-            response_preview = %if response.len() > 200 { &response[..200] } else { &response },
+            response_preview = %crate::text::preview(&response, 200),
             "regent COMPOSE response"
         );
 
@@ -1332,7 +1430,7 @@ impl Regent {
                 let q = prior.operator_question.as_deref().unwrap_or_default();
                 // Truncate long responses to avoid burning context on the mirror.
                 let r = if prior.response_content.len() > 300 {
-                    format!("{}…", &prior.response_content[..300])
+                    format!("{}…", crate::text::preview(&prior.response_content, 300))
                 } else {
                     prior.response_content.clone()
                 };
@@ -2156,7 +2254,7 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
         if raw.contains(tool) {
             warn!(
                 tool,
-                raw_preview = &raw[..raw.len().min(120)],
+                raw_preview = crate::text::preview(&raw, 120),
                 "parse_intent: recovered execute intent from malformed JSON"
             );
             return Some(Intent::Execute {

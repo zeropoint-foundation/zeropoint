@@ -86,6 +86,10 @@ Examples:
 
 **Verification source**: commitment receipts (per Task #41 chain-watcher + commitment primitives) and their fulfillment receipts.
 
+**Implementation status (2026-07-31)**: the *enactment* half of this class is implemented as `cognitive_observer::verify_claims`, emitting `cognitive:claim:unbacked`. It does not wait on Task #41, because the subset it covers needs no commitment receipt: if the cycle dispatched no tool and emitted no proposal, then any assertion of a completed act is false by construction, and the cycle's own `tool_results` and intent are the authoritative record. The *fulfillment* half — verifying that a promise made was later kept — still requires commitment primitives and remains deferred.
+
+The case that motivated it: an operator asked the Regent to remember a preferred form of address; the router returned `respond` with `tool: none`; the composer answered *"I have drafted the preference… It needs your signature to persist."* No draft existed and `zp approval list` had nothing to show. A manufactured pending signature is the sharpest form of this failure, because P9 makes the operator's signature the substrate's load-bearing act — so that claim is scored Critical while a bare enactment claim is scored Warning. Detection is chain-anchored and logged; the response still reaches the operator unaltered, since rewriting an emitted response is an authority decision rather than an observer's.
+
 **Detection method**: extract commitment. Verify commitment receipt was emitted. After fulfillment window, verify fulfillment receipt exists. Emit finding if commitment was made without receipt, or if commitment was made with receipt but not fulfilled.
 
 ### Class 6 — Self-state claims
