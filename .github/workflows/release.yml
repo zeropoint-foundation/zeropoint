@@ -58,7 +58,7 @@ jobs:
           tar czf zeropoint-${{ matrix.target }}.tar.gz -C dist .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zeropoint-${{ matrix.target }}
           path: zeropoint-${{ matrix.target }}.tar.gz
@@ -89,7 +89,7 @@ jobs:
             configurator.html
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zp-sentinel
           path: zp-sentinel-${{ github.ref_name }}.tar.gz
