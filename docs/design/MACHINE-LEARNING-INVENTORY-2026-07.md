@@ -76,11 +76,11 @@ None contains a fitting step. Several say so in their own doc comments.
 
 ### Model artifacts
 
-`models/*/model_dossier.toml` ×6 — descriptive characterization only (identity, quirks with severity, prompt compatibility, measured tok/s, bench results, tier suitability, and a `[drafter]` block). Real weights present: `models/kokoro/kokoro-v1.0.onnx` (325MB) and `models/piper/*.onnx` ×9 (~63MB each) — **TTS inference only**. `miniCPM-o-4_5/` holds 18GB of safetensors, vendored and explicitly retired (`// DELETED — MiniCPM-o removed from runtime stack. See ADR-031`). No `.gguf`, `.pt` or `.pth` exists anywhere in the tree.
+`models/*/model_dossier.toml` ×6 — descriptive characterization only (identity, quirks with severity, prompt compatibility, measured tok/s, bench results, tier suitability, and a `[drafter]` block). Real weights present on APOLLO — deliberately gitignored, so not present in any clone: `models/kokoro/kokoro-v1.0.onnx` (325MB) and `models/piper/*.onnx` ×9 (~63MB each) — **TTS inference only**. `miniCPM-o-4_5/` holds 18GB of safetensors, vendored and explicitly retired (`// DELETED — MiniCPM-o removed from runtime stack. See ADR-031`). No `.gguf`, `.pt` or `.pth` exists anywhere in the tree.
 
 ### Tooling around models
 
-`scripts/bench-local-models.py` (Ollama over HTTP; timing plus string/JSON scoring) · `scripts/dflash-parity-check.py` (imports external `dflash_mlx`, diffs token-ID lists byte-for-byte) · `scripts/dflash-observation-emitter.py` (polls `/metrics`, computes deltas and rolling means) · `tools/local-model-bench/` (imports `mlx_lm`, downloads pre-quantized checkpoints, times generation) · `crates/zp-inference-observer` (JSONL tailer that performs no arithmetic at all, and is deliberately outside the workspace). `scripts/parity-corpora/starter-24.jsonl` is 24 hand-written prompts — not a training set.
+`scripts/bench-local-models.py` (Ollama over HTTP; timing plus string/JSON scoring) · `scripts/dflash-parity-check.py` (imports external `dflash_mlx`, diffs token-ID lists byte-for-byte) · `scripts/dflash-observation-emitter.py` (polls `/metrics`, computes deltas and rolling means) · `tools/local-model-bench/` (imports `mlx_lm`, downloads pre-quantized checkpoints, times generation) · `crates/zp-inference-observer` (JSONL tailer that performs no arithmetic at all, and is deliberately outside the workspace; committed 2026-07-30 — until then it existed only on APOLLO). `scripts/parity-corpora/starter-24.jsonl` is 24 hand-written prompts — not a training set.
 
 ---
 

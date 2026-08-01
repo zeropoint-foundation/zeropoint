@@ -55,6 +55,8 @@ Mapped to the horizon × capability routing tiers. Exact `mlx-community` tags ev
 
 Note the pattern: every resident pick is **small-active MoE** — the architecture that's ideal for mid-bandwidth UMA (big capability, tiny per-token bandwidth read).
 
+**GLM-5.2 defensive-inference proof point (added 2026-07-31).** CNBC piece by Deirdre Bosa (`youtube.com/watch?v=lWMebfCc5f4`) reports that in July 2026, when Hugging Face investigated an OpenAI closed-model rogue incident, closed frontier models could not perform the forensic investigation because their own guardrails prevented it — Hugging Face turned to GLM-5.2 (the open-weight model already in this doc's mondo tier), which succeeded. Bosa's framing: "a closed American model caused the incident, and a Chinese open weight model helped defend against it." Real-world corroboration of GLM-5.2's usefulness for the specific class of security-adjacent inference where closed-model guardrails cut against the operator's investigative interest. Does not change GLM's Tier A / MIT positioning in this doc — reinforces the mondo tier selection with an external incident that's now mainstream-financial-media-canonical. Composition note: informs `INFERENCE-ROUTING-DISCIPLINE-2026-07` on the guardrail-cuts-against-operator failure mode that argues for open-weight availability at the mondo tier.
+
 ### Operator-electable (Tier B — license-gated, opt-in)
 
 Not shipped in the reference stack; benchmarkable via `--include-license-gated`. Listed so the election is informed, not hidden.
