@@ -5,7 +5,7 @@
 > in place locally. References below to companion *investigation* documents still point
 > into `docs/handoffs/` and are still local-only.
 
-**Document type:** Design record, 2026-05-16. **Status:** the ZP half is implemented in `crates/zp-server/src/auth.rs`, which cites this document. **Paths as proposed** — file paths below are the May-2026 plan, not the current tree, and sixteen of them no longer resolve. Most name the IronClaw side (`src/zp/client.rs`, `src/zp/hook.rs`, `crates/ironclaw/`), and IronClaw was removed from the stack on 2026-07-27; that half of this design is retired and will not be built. One more, `crates/zp-discipline/tests/no_inline_gate_signer_derivation.rs`, is a pin this document proposed and nobody landed — still open, and now visible in `DISCIPLINE-PINS-MAP.md` terms as a promised-not-landed rule.
+**Document type:** Design record, 2026-05-16. **Status:** the ZP half is implemented in `crates/zp-server/src/auth.rs`, which cites this document. **Paths as proposed** — file paths below are the May-2026 plan, not the current tree, and sixteen of them no longer resolve. Most name the IronClaw side (its `src/zp/client.rs`, `src/zp/hook.rs`, and other files under the retired `crates/ironclaw/` tree), and IronClaw was removed from the stack on 2026-07-27; that half of this design is retired and will not be built. One more, the pin proposed in §10 (name `no_inline_gate_signer_derivation`, to live under `crates/zp-discipline/tests/`), was never landed — still open, and now visible in `DISCIPLINE-PINS-MAP.md` terms as a promised-not-landed rule.
 
 # Design — Genesis-signed gate requests
 
@@ -28,8 +28,8 @@ synchronized. Composes with #152 (singular sovereign root).*
 
 Exact file/line citations for every site the new path supersedes. (One
 correction to the investigation brief: the `max_age_secs` constant lives
-in `crates/zp-server/src/auth.rs:129`, not `crates/zp-keys/src/auth.rs`.
-The brief's citation pre-dates the auth module's move into `zp-server`.)
+in `crates/zp-server/src/auth.rs:129`; the brief cited a `zp-keys`
+location that pre-dates the auth module's move into `zp-server`.)
 
 ### 1.1 Token issuance (`zp serve` → `~/ZeroPoint/session.json`)
 
@@ -203,9 +203,11 @@ Fields explicitly excluded:
 - **Other request headers** — none are load-bearing for authorization.
   Binding `Content-Type` invites mismatches between IronClaw's
   serialization and what `axum::Json` re-emits.
-- **agent name** — IronClaw's `agent_name` field is already in the
-  request body (`crates/ironclaw/src/zp/client.rs:95`). It enters the
-  preimage via `body_hash`.
+- **agent name** — the cognition-side `agent_name` field is already in
+  the request body (originally cited at `crates/ironclaw/src/zp/client.rs:95`;
+  ironclaw has since been absorbed — the field is now carried by whichever
+  caller composes the request payload, e.g. `tools/gate-ping/src/main.rs`
+  for the demonstrator path). It enters the preimage via `body_hash`.
 
 ---
 
@@ -836,9 +838,11 @@ matches the new parser's `ZP-Sig` prefix).
 
 ### 8.7 Discipline pin
 
-The new discipline pin (§10) is itself a test:
-`crates/zp-discipline/tests/no_inline_gate_signer_derivation.rs`.
-Runs as part of `cargo test -p zp-discipline`.
+The new discipline pin (§10) is itself a test —
+**proposed name** `no_inline_gate_signer_derivation`, to live under
+`crates/zp-discipline/tests/` alongside the other pins in that crate
+(status: **not yet written** as of 2026-08; see §10 for the pattern).
+Would run as part of `cargo test -p zp-discipline` once landed.
 
 ---
 
@@ -902,8 +906,8 @@ not delete automatically (operator may want to inspect for forensics).
 
 **Name:** `no_inline_gate_signer_derivation`
 
-**Lives at:**
-`crates/zp-discipline/tests/no_inline_gate_signer_derivation.rs`
+**Status:** proposed — not yet written. Would live under
+`crates/zp-discipline/tests/` alongside the other pins in that crate.
 
 **Why:** The correctness of the entire scheme depends on both sides
 deriving the same key. The structural enforcement is "one helper, one
@@ -999,5 +1003,10 @@ Cross-reference against the brief's seven criteria:
 - `crates/zp-receipt/src/canonical.rs` — Seam 17 canonical-bytes pipeline
 - `crates/zp-receipt/src/signable.rs` — Seam 20 Signable trait
 - `crates/zp-receipt/src/verify.rs:85–96` — Seam 5 verify_signature primitive
-- `crates/ironclaw/src/zp/client.rs` — single insertion point for envelope signing
-- `crates/ironclaw/src/app.rs:1171–1196` — startup signer-load insertion point
+- `crates/zp-gate-envelope/src/lib.rs` — single insertion point for envelope
+  signing helpers (superseded the historical ironclaw client path when
+  ironclaw was absorbed; both signer and verifier now import from this
+  shared crate)
+- `crates/zp-server/src/lib.rs` — startup signer-load insertion point
+  (around the `derive_gate_signer_seed(&genesis_secret)` call; superseded
+  the historical ironclaw app.rs:1171–1196 citation)

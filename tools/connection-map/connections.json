@@ -1,12 +1,12 @@
 {
-  "generated_from_commit": "bdab640",
+  "generated_from_commit": "1dc2cea",
   "governed_docs": 133,
   "totals": {
-    "connections": 1041,
-    "live": 358,
+    "connections": 1039,
+    "live": 360,
     "tied_off": 42,
-    "defect": 641,
-    "maturity": 0.3842
+    "defect": 637,
+    "maturity": 0.3869
   },
   "by_kind": {
     "code_to_artifact/defect": 127,
@@ -14,11 +14,11 @@
     "code_to_corpus/live": 5,
     "corpus_to_chain/defect": 508,
     "corpus_to_chain/live": 69,
-    "corpus_to_code/defect": 3,
-    "corpus_to_code/live": 65,
+    "corpus_to_code/live": 66,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 127,
-    "derived_artifact/defect": 3,
+    "derived_artifact/defect": 2,
+    "derived_artifact/live": 1,
     "derived_artifact/tied_off": 1,
     "pin/live": 19,
     "pin_exception/tied_off": 41
@@ -1401,15 +1401,6 @@
     {
       "kind": "corpus_to_code",
       "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
-      "target": "crates/ironclaw/src/zp/client.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "claimed implementing path does not exist",
-      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
-    },
-    {
-      "kind": "corpus_to_code",
-      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
       "target": "crates/zp-cli/src/main.rs",
       "status": "live",
       "detector": "connection-map check_doc_code_paths",
@@ -1419,10 +1410,10 @@
     {
       "kind": "corpus_to_code",
       "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
-      "target": "crates/zp-discipline/tests/no_inline_gate_signer_derivation.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "claimed implementing path does not exist",
+      "target": "crates/zp-gate-envelope/src/lib.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
     },
     {
@@ -1441,15 +1432,6 @@
       "status": "live",
       "detector": "connection-map check_doc_code_paths",
       "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
-      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
-    },
-    {
-      "kind": "corpus_to_code",
-      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
-      "target": "crates/zp-keys/src/auth.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "claimed implementing path does not exist",
       "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
     },
     {
@@ -9379,7 +9361,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "128 relevant files changed since it was written (64 commits)",
+      "note": "128 relevant files changed since it was written (65 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -9388,16 +9370,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "107 relevant files changed since it was written (53 commits)",
+      "note": "107 relevant files changed since it was written (54 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
       "target": "bdab640",
-      "status": "defect",
-      "detector": null,
-      "note": "95 relevant files changed since it was written (36 commits), declared source bdab640 dated 2026-07-31",
+      "status": "live",
+      "detector": "connection-map derived_artifact",
+      "note": "no relevant inputs changed since it was written (0 commits ago)",
       "site": "tools/connection-map/connections.json"
     }
   ]
