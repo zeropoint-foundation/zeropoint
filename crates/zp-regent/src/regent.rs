@@ -1110,9 +1110,12 @@ impl Regent {
     /// evidence. This is the one place that disagreement is detectable, since
     /// it surfaces as a claim the cycle's own record contradicts.
     ///
-    /// # Scope
+    /// # Two triggers
     ///
-    /// Escalates only on `PendingArtifact` — a response that directs the
+    /// A `ToolRefusedUnsigned` in this cycle's results escalates
+    /// structurally, carrying the refused call into the proposal. Everything
+    /// else goes through the language check below, which escalates only on
+    /// `PendingArtifact` — a response that directs the
     /// operator to sign or approve something. A bare enactment claim ("I have
     /// configured the endpoint") is left to detection: it asserts a completed
     /// act rather than a pending one, so there is no proposal to construct
@@ -1124,6 +1127,94 @@ impl Regent {
     /// Falls back to the original prose on any failure. A proposal that cannot
     /// be composed must not cost the operator the answer they asked for.
     async fn escalate_if_unbacked(&self, context: &CognitiveContext, composed: String) -> Intent {
+        // ── Structural trigger, checked first ────────────────────────────
+        //
+        // A `ToolRefusedUnsigned` is the substrate saying: the capability is
+        // yours, this call is not, and a signature is the missing thing. That
+        // is not a matter of interpretation the way prose is, so it does not
+        // go through the marker list below.
+        //
+        // Observed 2026-08-01: asked to open a URL, the Regent was refused
+        // for want of a signature and answered "Would you like me to draft a
+        // request to open example.com?" — an offer to propose. Per
+        // EXECUTION-AUTHORITY-MODEL Phase 7 proposing *is* a terminal state,
+        // so offering to do it is the floor Phase 7 forbids: the operator has
+        // to say yes before anything signable exists, and `zp approval list`
+        // stays empty in the meantime.
+        //
+        // The proposal carries the refused call verbatim. The operator then
+        // signs the same tool and the same parameters that were actually
+        // attempted, rather than a second model's paraphrase of what the
+        // first one wanted — which is the difference between a signature that
+        // authorises an act and one that authorises a description.
+        if let Some(call) = context
+            .tool_results
+            .iter()
+            .rev()
+            .find_map(|r| r.refused_call.clone())
+        {
+            // Seed from the *call*, not the directive.
+            //
+            // Seeding from `cycle_directive` produced a proposal whose prose
+            // described the operator's request while its enactment carried
+            // whatever the router had reached for. Observed 2026-08-01: asked
+            // for the receipt chain, the router dispatched
+            // `browser_use goto_url example.com`; the refusal escalated; and
+            // the queued proposal read "Provide the receipt chain" with a
+            // browser navigation attached. Signing it would have authorised
+            // an act its own text did not describe — the exact failure this
+            // subsystem exists to prevent, one layer further in.
+            //
+            // The prose must be about the call, because the call is what a
+            // signature authorises. Where the router chose badly, that now
+            // shows up as a visibly absurd proposal the operator denies,
+            // rather than a plausible one that does something else.
+            let seed = format!(
+                "call {} with parameters {} — attempted in service of: {}",
+                call.tool,
+                serde_json::to_string(&call.params)
+                    .unwrap_or_else(|_| "{}".to_string()),
+                context
+                    .cycle_directive
+                    .as_deref()
+                    .unwrap_or("(no operator directive this cycle)")
+            );
+            warn!(
+                tool = %call.tool,
+                "call refused for want of a signature — proposing it rather than offering to"
+            );
+            match self
+                .compose_proposal(context, crate::intent::ProposalKind::Action, &seed)
+                .await
+            {
+                Ok(Intent::RequestApproval {
+                    kind,
+                    proposed_action,
+                    reason,
+                    finding,
+                    failed_limb,
+                    expected_outcome,
+                    draft,
+                    ..
+                }) => {
+                    return Intent::RequestApproval {
+                        kind,
+                        proposed_action,
+                        reason,
+                        finding,
+                        failed_limb,
+                        expected_outcome,
+                        draft,
+                        enactment: Some(call),
+                    }
+                }
+                Ok(other) => return other,
+                Err(e) => {
+                    warn!("refusal escalation failed, falling back to prose: {}", e);
+                }
+            }
+        }
+
         let enacted = crate::cognitive_observer::EnactedActs {
             intent: "respond".to_string(),
             tools_run: context
@@ -1344,6 +1435,14 @@ impl Regent {
                 "browser_use(action:\"goto_url|page_info|js|list_tabs|wait_for_element\",url?,expression?,selector?)"
                     .to_string()
             }
+            "chart_generate" => {
+                "chart_generate(type:\"bar|line|pie\",title?,labels:[\"...\"],series:[{name,values:[...]}])"
+                    .to_string()
+            }
+            "report_assemble" => {
+                "report_assemble(fragments:[{heading?,body_html,chart_svg?}])"
+                    .to_string()
+            }
             other => format!("{other}()"),
         }
     }
@@ -1360,6 +1459,12 @@ impl Regent {
             ),
             "browser_use" => Some(
                 "- Operator asks you to open, visit, navigate to, or read a web page → {\"intent\":\"execute\",\"tool\":\"browser_use\",\"params\":{\"action\":\"goto_url\",\"url\":\"https://…\"}}",
+            ),
+            "chart_generate" => Some(
+                "- Operator asks you to visualize data as a chart / graph / plot → {\"intent\":\"execute\",\"tool\":\"chart_generate\",\"params\":{\"type\":\"bar\",\"title\":\"…\",\"labels\":[\"A\",\"B\"],\"series\":[{\"name\":\"…\",\"values\":[10,20]}]}}",
+            ),
+            "report_assemble" => Some(
+                "- Operator asks you to assemble a report / writeup / summary from findings → {\"intent\":\"execute\",\"tool\":\"report_assemble\",\"params\":{\"fragments\":[{\"heading\":\"…\",\"body_html\":\"<p>…</p>\"}]}}",
             ),
             _ => None,
         }
@@ -2490,7 +2595,22 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
             // Try to find a JSON object in the remainder.
             if let Some(brace_start) = remainder.find('{') {
                 let params_candidate = &remainder[brace_start..];
-                if let Ok(params) = serde_json::from_str::<serde_json::Value>(params_candidate) {
+                // qwen3 emits Python dict syntax about as often as JSON:
+                //   browser_use','params':{'action':'goto_url','url':'...'}
+                // Observed 2026-08-01 — the tool name recovered, the params
+                // did not, and the proposal that followed read
+                // "would run: browser_use {}". An enactment missing its
+                // parameters is not a smaller version of the act; it is a
+                // different one, and it is the one the operator would sign.
+                //
+                // Naive and deliberately so: an apostrophe inside a value
+                // defeats it, and the fallback is the same empty params we
+                // already had. Better to recover the common case than to
+                // drop every one of them.
+                let requoted = params_candidate.replace('\'', "\"");
+                if let Ok(params) = serde_json::from_str::<serde_json::Value>(params_candidate)
+                    .or_else(|_| serde_json::from_str::<serde_json::Value>(&requoted))
+                {
                     // Successfully recovered params from the tool string.
                     debug!(
                         tool,
