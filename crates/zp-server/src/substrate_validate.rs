@@ -123,6 +123,46 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "substrate:validation:regent:",
     // Sentinel-specific benign classifications
     "unregistered_known_app",
+    // ── Path A registry additions (2026-08) ──────────────────────────
+    //
+    // Registered from the connection-map's `registry gap` breakdown —
+    // receipts that governed docs describe AND code emits, but this
+    // registry never declared. Adding them closes 32 corpus_to_chain
+    // defects mechanically without changing any emission behaviour.
+    //
+    // See tools/connection-map/connection_map.py::collect_emitted_receipts
+    // for the scan that surfaces this gap in future.
+    //
+    // Coherence receipts (crates/zp-server/src/coherence.rs).
+    "coherence:",
+    // Delegation renewal — the fourth lifecycle state alongside the
+    // granted/revoked/expired trio above.
+    "delegation:",
+    // Gate decisions — allow/deny with optional per-tool detail.
+    // Emitted by tool_chain, narration, anchor_pipeline.
+    "gate:",
+    // Improvement-loop family — narrow prefixes above cover the specific
+    // events; this bare-namespace prefix closes the `improvement:*`
+    // doc wildcard without superseding them (max-length-wins in the
+    // matcher below).
+    "improvement:",
+    // Port lifecycle (tool_ports).
+    "port:lifecycle",
+    // Preference family — model selection, LLM routing policy,
+    // capability preferences.
+    "preference:",
+    // Regent configuration — inference endpoint/model/key, model
+    // selection, vault migration. Distinct from `regent:config:model`
+    // which lands as a sub-event.
+    "regent:config:",
+    // Regent memory — cognitive-tier memory recall/store/review.
+    "regent:memory:",
+    // System-wide sweeps — officer health rollups.
+    "system:sweep",
+    // Tool lifecycle — the widest namespace, covering launch, run,
+    // completion, adaptation, capability probing, preflight, and
+    // provenance events across zp-server + zp-cli.
+    "tool:",
 ];
 
 /// Run the canonical substrate validation.
