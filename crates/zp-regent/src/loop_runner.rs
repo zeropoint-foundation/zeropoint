@@ -300,6 +300,23 @@ pub fn start_loop(
                     // Updated after each cycle so the Regent always sees her
                     // most recent output in the next perceive().
                     let mut cycle_prior = last_prior_response.take();
+                    // Whether the answer came from the substrate rather than
+                    // from the Regent. A stall notice and a budget-exhausted
+                    // notice are written here, by the loop, about the Regent —
+                    // they are the correct thing to tell an *operator* and the
+                    // wrong thing to hand back to the Regent as "what you
+                    // said", because it never said it.
+                    //
+                    // Observed 2026-08-01: after an arc stalled, the mirror
+                    // presented the stall notice as the Regent's own prior
+                    // turn. The next message was "hi", and routing answered
+                    // {"intent":"continue","progress":"I started on ",
+                    // "tool":"chain_compact"} — lifting the opening words of
+                    // the notice verbatim into its plan. Rewording the
+                    // mirror's instructions did not stop it, because the
+                    // problem was never the instruction: a small model given
+                    // text in the "you said this" slot will continue it.
+                    let mut substrate_authored = false;
                     let response = loop {
                         let awareness = monitor.lock().await.snapshot().await;
 
@@ -391,6 +408,7 @@ pub fn start_loop(
                                         &progress,
                                         current.cycles_completed,
                                     );
+                                    substrate_authored = true;
                                     break format!(
                                         "I started on \"{progress}\" and then made no \
                                          progress on it — {} cycles with the same plan and \
@@ -407,6 +425,7 @@ pub fn start_loop(
                                         cycles = current.cycles_completed,
                                         "work arc hit budget — forcing stop"
                                     );
+                                    substrate_authored = true;
                                     break format!(
                                         "Work arc stopped after {} cycles (budget). Last: {}",
                                         current.cycles_completed, progress
@@ -455,7 +474,15 @@ pub fn start_loop(
                     };
 
                     // Mirror: capture the Regent's response for the next cycle.
-                    last_prior_response = if !response.starts_with("error:") {
+                    //
+                    // Only what the Regent actually composed. Errors were
+                    // already excluded; substrate-authored notices are too,
+                    // for the same reason — the mirror's contract is "this is
+                    // what you said", and putting anything else in that slot
+                    // makes it a suggestion instead of a memory.
+                    last_prior_response = if !substrate_authored
+                        && !response.starts_with("error:")
+                    {
                         let model = {
                             let rg = regent.lock().await;
                             rg.model_label()

@@ -1484,7 +1484,25 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
         // (KEEL §II.17), which is implemented and running. Doing it here too
         // violates P8 (one canonical path per substrate concern) and the
         // prompt-side copy degrades cognition while the real one works.
-        // This block is now neutral continuity context.
+        //
+        // This comment described the block as "neutral continuity context"
+        // while the text it rendered read "If your previous turn offered to
+        // do something and the operator has now accepted, do that thing."
+        // That is not neutral, and it fired on messages that accepted
+        // nothing.
+        //
+        // Observed 2026-08-01: after an arc stalled on "compact the chain
+        // down to the last 1000 entries", the operator said "hi". The mirror
+        // presented the compaction request and the stall report as the
+        // conversation, with an instruction to act on acceptance. Routing
+        // opened a fresh arc on chain compaction, then dispatched
+        // `chain_compact` — off a greeting. The prior turn had not offered
+        // anything; it had reported a failure. The mirror could not tell the
+        // difference, and neither clause checked the message actually in
+        // front of it.
+        //
+        // The exchange is memory. The current message governs. That
+        // distinction is now in the text rather than only in this comment.
         if context.pending_input.is_some() {
             // Only mirror an actual conversational turn. `last_prior_response`
             // captures every non-error cycle response, including an autonomous
@@ -1510,13 +1528,15 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
                     prior.response_content.clone()
                 };
                 parts.push(format!(
-                    "CONVERSATION SO FAR:\n\
+                    "CONVERSATION SO FAR — this is memory. The operator's current \
+                     message is at the top of this prompt and governs the turn.\n\
                      Operator: \"{}\"\n\
                      You: \"{}\"\n\
-                     Continue this conversation. If your previous turn offered to do \
-                     something and the operator has now accepted, do that thing — do \
-                     not offer again. Treat the exchange above as what you remember \
-                     saying, not as something to evaluate.",
+                     Treat that exchange as what you remember saying, not as something \
+                     to evaluate. If the operator's current message accepts something \
+                     you offered above, do that thing and do not offer again. If it \
+                     opens a different subject — or is only a greeting — follow the \
+                     current message and let the previous one go.",
                     q, r,
                 ));
             }
@@ -1525,8 +1545,8 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
         // Work arc context — if resuming a multi-cycle task.
         if let Some(ref arc) = context.work_arc {
             parts.push(format!(
-                "{}WORK ARC IN PROGRESS (cycle {}/{}): {}\n\
-                 You are mid-task. Do one concrete thing now:\n\
+                "{}WORK ARC IN PROGRESS (cycle {}/{}): {}\n{}\
+                 Do one concrete thing now:\n\
                  - \"execute\" a tool, if a step remains that you can take\n\
                  - \"request_approval\", if the next step needs the operator to sign\n\
                  - \"respond\", to tell the operator what you accomplished\n\
@@ -1536,7 +1556,32 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
                     Some(q) => format!("THE OPERATOR ASKED: {q}\n"),
                     None => String::new(),
                 },
-                arc.cycles_completed + 1, arc.max_cycles, arc.progress
+                arc.cycles_completed + 1, arc.max_cycles, arc.progress,
+                // One informed turn before the hard stop.
+                //
+                // The stall detector ends an arc that repeats itself, which
+                // is right, but it ended it *silently from the model's side*:
+                // nothing in the prompt ever said continuing was failing, so
+                // the model had no reason to try a different route. Observed
+                // 2026-08-01 — a router with `request_approval` available
+                // answered `continue` on every cycle of every attempt, and
+                // filled `progress` by copying the nearest salient string in
+                // its context. That is not a plan, it is a completion. Tell
+                // it plainly that this move is exhausted and name the ones
+                // that are not.
+                if arc.stall_count > 0 {
+                    format!(
+                        "You have already answered \"continue\" {} time(s) with this \
+                         same plan and dispatched no tool. Continuing again ends this \
+                         arc with nothing done. Do not answer \"continue\". If the \
+                         next step needs the operator to sign, answer \
+                         \"request_approval\" and name the tool. If you cannot \
+                         proceed at all, answer \"respond\" and say why.\n",
+                        arc.stall_count
+                    )
+                } else {
+                    String::new()
+                }
             ));
         }
 
@@ -2368,6 +2413,8 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
         "self_configure",
         "memory_list",
         "memory_review",
+        // Was missing from both lists while the capability was granted.
+        "substrate_validate",
     ];
 
     for tool in TOOLS {
@@ -2398,6 +2445,20 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
 /// embedded params, it attempts to recover those too.
 ///
 /// Returns (sanitized_tool_name, optional_recovered_params).
+///
+/// # Drift
+///
+/// This is the *third* declaration of the granted tool set. `REGENT_TOOLS`
+/// in `zp-server` is the one that actually confers capability;
+/// `recover_execute_intent` above carries a second copy; this is the third.
+/// All three had already diverged the same way — `substrate_validate` was
+/// granted and missing from both copies here, so a malformed emission of it
+/// fell through unsanitized and dispatched as an unknown tool.
+///
+/// Neither crate depends on the other in the direction that would let them
+/// share a const, so the duplication is structural and only a pin can hold
+/// the three together. Until that exists, granting a capability means
+/// editing three places, and nothing fails if you edit one.
 fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
     const TOOLS: &[&str] = &[
         "chain_query",
@@ -2410,6 +2471,8 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
         "self_configure",
         "memory_list",
         "memory_review",
+        // Was missing from both lists while the capability was granted.
+        "substrate_validate",
     ];
 
     for tool in TOOLS {
