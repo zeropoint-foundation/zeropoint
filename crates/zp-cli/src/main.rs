@@ -7508,6 +7508,24 @@ async fn run_approval_list(json_out: bool) -> anyhow::Result<()> {
             let at = item["requested_at"].as_str().unwrap_or("?");
             println!("  \x1b[1m{}\x1b[0m", &hash[..hash.len().min(12)]);
             println!("    {}", action);
+            // What granting this actually runs. Never summarised — the
+            // operator signs a call, and a summary of a call is not the call.
+            match item.get("enactment") {
+                Some(e) if !e.is_null() => {
+                    let tool = e["tool"].as_str().unwrap_or("?");
+                    let params = e
+                        .get("params")
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| "{}".to_string());
+                    println!("    \x1b[1mwould run:\x1b[0m {} {}", tool, params);
+                }
+                _ => {
+                    println!(
+                        "    \x1b[2mno automatic action — approving records \
+                         consent only\x1b[0m"
+                    );
+                }
+            }
             println!("    \x1b[2masked {}\x1b[0m", at);
             println!();
         }

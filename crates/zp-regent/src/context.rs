@@ -415,6 +415,18 @@ pub struct WorkArc {
     /// Grows monotonically — the Regent sees the full history.
     pub tool_history: Vec<ToolResult>,
 
+    /// The operator directive this arc was opened to satisfy.
+    ///
+    /// `cycle_directive` is derived from a cycle's own input, and an arc
+    /// continuation has none — `arc_input.take()` yields the message once, to
+    /// the opening cycle. So every later cycle of an arc forgot what it was
+    /// for, which showed up in a queued proposal reading "attempted in
+    /// service of: (no operator directive this cycle)".
+    ///
+    /// The arc is the right owner: the directive is what the arc exists to
+    /// satisfy, and it should outlive any single cycle within it.
+    pub directive: Option<String>,
+
     /// Consecutive cycles that changed nothing.
     ///
     /// A `Continue` is a claim that the arc advanced. When the progress
@@ -444,6 +456,15 @@ pub struct ToolResult {
     pub output: String,
     /// Whether the tool succeeded.
     pub succeeded: bool,
+
+    /// The exact call, when this result was a refusal an operator signature
+    /// would lift.
+    ///
+    /// Carried so the proposal that follows can be *this* call rather than a
+    /// re-derivation of it. The operator then signs what was actually
+    /// attempted — same tool, same parameters — instead of a second model's
+    /// paraphrase of what the first one wanted.
+    pub refused_call: Option<crate::intent::Enactment>,
 }
 
 /// Compressed chain entry for context window efficiency.
