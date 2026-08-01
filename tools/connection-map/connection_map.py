@@ -162,8 +162,79 @@ def collect_keel_refs(root, governed_docs):
 REGISTRY_RE = re.compile(r'KNOWN_RECEIPT_PREFIXES[^=]*=\s*&\[(.*?)\];', re.S)
 RECEIPT_IN_DOC_RE = re.compile(r'`([a-z][a-z0-9_]*(?::[a-z0-9_*]+){1,3})`')
 
+# Emission-site patterns for the reverse-direction check: what receipt
+# names does the codebase actually emit? Restricted to identifiers with
+# at least one colon so bare tokens like `capability` don't false-match.
+# Three shapes cover 2026-08 emission conventions:
+#   emit_receipt("regent:tool:completed", ...)  — the executor-side call
+#   SystemEvent { event: "regent:intent:respond" }  — direct construction
+#   format!("regent:tool:completed:{}", tool)  — dynamic-suffix pattern
+# The format! variant captures the literal prefix before the {} so
+# `regent:tool:completed:web_search` at runtime is recorded as the
+# family `regent:tool:completed`.
+EMIT_LITERAL_RE = re.compile(
+    r'emit_receipt(?:_to_store)?\s*\(\s*(?:[^,]*,\s*)?"([a-z][a-z0-9_]*(?::[a-z0-9_*]+)+)"'
+)
+EMIT_SYSTEMEVENT_RE = re.compile(
+    r'SystemEvent\s*\{\s*event\s*:\s*"([a-z][a-z0-9_]*(?::[a-z0-9_*]+)+)"'
+)
+EMIT_FORMAT_RE = re.compile(
+    r'format!\s*\(\s*"([a-z][a-z0-9_]*(?::[a-z0-9_*]+)+)(?::\{|(?=[":,]))'
+)
 
-def collect_receipts(root, governed_docs):
+
+def collect_emitted_receipts(root):
+    """Scan crates/**/*.rs for receipt-emission sites.
+
+    Returns a set of receipt names literally found in the source.
+    Used to split corpus_to_chain defects into:
+      - registry gap:  code emits it but KNOWN_RECEIPT_PREFIXES omits it.
+                       Fix by adding to the registry.
+      - aspirational:  doc mentions a receipt no code emits.
+                       Fix by implementing OR reclassifying the doc.
+
+    Not a complete emission audit — a receipt name synthesised entirely
+    at runtime (e.g. constructed from a variable prefix) will be missed.
+    Empirically covers the three patterns above, which handle
+    ~all observed emit sites in 2026-08.
+    """
+    emitted = set()
+    crates_dir = root / "crates"
+    if not crates_dir.exists():
+        return emitted
+    for path in crates_dir.rglob("*.rs"):
+        try:
+            txt = path.read_text(errors="replace")
+        except OSError:
+            continue
+        for pat in (EMIT_LITERAL_RE, EMIT_SYSTEMEVENT_RE, EMIT_FORMAT_RE):
+            for m in pat.finditer(txt):
+                emitted.add(m.group(1))
+    return emitted
+
+
+def _has_emitter(receipt, emitted):
+    """Does any emit-site name match this documented receipt?
+
+    A match either way:
+      - emit `regent:tool:completed:foo` matches doc `regent:tool:completed:*`
+      - emit `regent:tool:completed` matches doc `regent:tool:*`
+      - emit `regent:tool:completed:foo` matches doc `regent:tool:completed:foo`
+    Wildcards are stripped from either side before comparison.
+    """
+    r_norm = receipt.rstrip(':*')
+    for name in emitted:
+        n_norm = name.rstrip(':*')
+        if r_norm == n_norm:
+            return True
+        if name.startswith(r_norm + ':'):
+            return True
+        if receipt.startswith(n_norm + ':'):
+            return True
+    return False
+
+
+def collect_receipts(root, governed_docs, emitted):
     reg_file = root / "crates/zp-server/src/substrate_validate.rs"
     if not reg_file.exists():
         drop("registry missing", str(reg_file))
@@ -193,11 +264,32 @@ def collect_receipts(root, governed_docs):
     for receipt, site in sorted(documented.items()):
         implemented = any(receipt.startswith(p) or p.startswith(receipt)
                           for p in registry)
-        edge("corpus_to_chain", site, receipt,
-             "live" if implemented else "defect",
-             detector="corpus-lint check_receipt_vocabulary" if implemented else None,
-             note=None if implemented else "documented with no family in the code registry",
-             site=site)
+        if implemented:
+            edge("corpus_to_chain", site, receipt,
+                 "live",
+                 detector="corpus-lint check_receipt_vocabulary",
+                 note=None,
+                 site=site)
+            continue
+        # Registry doesn't cover it. Split by whether code emits it anyway.
+        if _has_emitter(receipt, emitted):
+            # Registry gap — fixable by adding to KNOWN_RECEIPT_PREFIXES.
+            edge("corpus_to_chain", site, receipt,
+                 "defect",
+                 detector="connection-map collect_emitted_receipts",
+                 note=("registry gap: code emits this receipt but "
+                       "KNOWN_RECEIPT_PREFIXES does not declare it — "
+                       "fix by adding to the registry"),
+                 site=site)
+        else:
+            # Aspirational — no emitter found anywhere in crates/.
+            edge("corpus_to_chain", site, receipt,
+                 "defect",
+                 detector=None,
+                 note=("aspirational: no code emitter found for this "
+                       "receipt name — fix by implementing the emitter, "
+                       "reclassifying the doc, or rewording the mention"),
+                 site=site)
 
 
 # ── 6. code → runtime artifact ──────────────────────────────────────────
@@ -509,11 +601,13 @@ def main():
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     gov = governed_docs(root)
 
+    emitted = collect_emitted_receipts(root)
+
     collect_crate_deps(root)
     collect_spec_citations(root)
     collect_doc_code_claims(root, gov)
     collect_keel_refs(root, gov)
-    collect_receipts(root, gov)
+    collect_receipts(root, gov, emitted)
     collect_artifact_reads(root)
     collect_pin_tieoffs(root)
     collect_derived_artifacts(root)
@@ -561,6 +655,23 @@ def main():
     print()
     for (k, s), n in sorted(by_kind.items()):
         print(f"  {k:<20} {s:<9} {n:>5}")
+
+    # Split corpus_to_chain defects by fixability class so an operator
+    # scanning the summary sees which slice is registry-hygiene work
+    # (mechanical) vs which is aspirational-substrate work (per-doc
+    # governance). Both are still `defect` in the aggregate — this is
+    # extra visibility on top, not a status-model change.
+    chain_defects = [e for e in EDGES
+                     if e["kind"] == "corpus_to_chain" and e["status"] == "defect"]
+    if chain_defects:
+        registry_gap = sum(1 for e in chain_defects
+                           if (e.get("note") or "").startswith("registry gap"))
+        aspirational = sum(1 for e in chain_defects
+                           if (e.get("note") or "").startswith("aspirational"))
+        print("\n  corpus_to_chain defect breakdown:")
+        print(f"    registry gap (code emits, registry omits) — mechanical fix: {registry_gap:>5}")
+        print(f"    aspirational (no emitter found) — governance decision:      {aspirational:>5}")
+
     if DROPPED:
         print("\n  dropped (not silently):")
         for d in DROPPED:
