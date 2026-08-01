@@ -29,20 +29,28 @@
 //!
 //! # Safety posture
 //!
-//! The five Phase 1 dispatch arms (`web_search`, `web_fetch`,
-//! `image_generate`, `chart_generate`, `report_assemble`) exist in
-//! `regent.rs`'s `dispatch_tool()` and call these utilities. However,
-//! **none of them are added to `REGENT_TOOLS` yet** — meaning Regent has
-//! no delegation to invoke them, and the gate blocks any attempt.
-//! Even now that three utilities are real, the runtime dispatch path
-//! stays gated: adding to `REGENT_TOOLS` is an operator-signed
-//! delegation act, kept explicitly separate from function-shipping so
-//! function correctness and delegation posture are reviewed
-//! independently. Once operator lands a delegation ceremony for
-//! `chart_generate` / `report_assemble`, the dispatch arms in
-//! `regent.rs` become live (the arms already thread through these
-//! helpers via `not_yet_implemented(...)`; converting them is a
-//! one-line change per tool).
+//! Delegation state (2026-08-01):
+//!
+//! - **`chart_generate` and `report_assemble` are wired.** They appear
+//!   in `REGENT_TOOLS`, the gate honours them, and the dispatch arms
+//!   in `regent.rs` call these utilities. Each dispatch emits a
+//!   `regent:tool:artifact:<name>` receipt carrying the blake3 hash of
+//!   the produced bytes, per the design doc §1.6 content-address-
+//!   anchoring intent.
+//! - **Not on `APPROVAL_REQUIRED_TOOLS`.** These are pure functions
+//!   that return strings to Regent — no external I/O, no disk writes
+//!   (see `save_to_artifacts` below). The approval-required precedent
+//!   (`browser_use`) targets tools that "act outside the substrate";
+//!   these do not. When `save_to_artifacts` lands and these tools
+//!   begin writing to the operator's artifact library, revisit that
+//!   decision.
+//! - **`web_search`, `web_fetch`, `image_generate` remain unlisted.**
+//!   Their dispatch arms in `regent.rs` return
+//!   `not_yet_implemented(...)`. The arms are belt-and-suspenders
+//!   "gate somehow bypassed" failure mode — the gate itself blocks
+//!   invocation because these are not in `REGENT_TOOLS`.
+//! - **`strip_html`** is a pure utility with no dispatch arm; it will
+//!   be used inline by `web_fetch` when that tool ships.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;

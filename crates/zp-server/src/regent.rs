@@ -60,6 +60,17 @@ const REGENT_TOOLS: &[(&str, &str)] = &[
     ("memory_review", "cognition:memory_promotion:review_remembered"),
     ("substrate_validate", "substrate:validation:regent"),
     ("browser_use", "web:allowed_domains"),
+    // Phase 1 report-generation tools (see docs/REGENT-PHASE-0-1-DESIGN-2026-07.md).
+    // Both are pure functions returning strings to Regent — no external I/O,
+    // no disk writes today (`save_to_artifacts` remains scaffold). They are
+    // NOT in APPROVAL_REQUIRED_TOOLS because the browser_use precedent for
+    // per-call operator signatures targets tools that "act outside the
+    // substrate"; these do not. When `save_to_artifacts` lands and these
+    // tools begin writing to the operator's artifact library, revisit that
+    // decision — matches the pattern that put browser_use behind approval
+    // after an observed confusion incident, not preemptively.
+    ("chart_generate", "artifact:chart"),
+    ("report_assemble", "artifact:report"),
 ];
 
 /// Capabilities the Regent may *propose* but never dispatch on its own.
@@ -88,6 +99,13 @@ const APPROVAL_REQUIRED_TOOLS: &[&str] = &["browser_use"];
 /// UUID `00000000-0002-7000-8001-000000000001` — regent namespace.
 fn regent_conv_id() -> ConversationId {
     ConversationId(Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap())
+}
+
+/// Dedicated `ConversationId` for inference-observer JSONL events per
+/// OBSERVATION-PLANE-2026-07 §"Inference telemetry" (Surface 7).
+/// UUID `00000000-0002-7000-8001-000000000003` — inference-observer namespace.
+fn inference_observer_conv_id() -> ConversationId {
+    ConversationId(Uuid::parse_str("00000000-0002-7000-8001-000000000003").unwrap())
 }
 
 /// Actor identity for the Regent in all gate evaluations and receipts.
@@ -121,6 +139,109 @@ fn emit_receipt_to_store(store: &Arc<std::sync::Mutex<AuditStore>>, event: &str)
     if let Err(e) = guard.append(entry) {
         warn!("shadow battery receipt emission failed: {}", e);
     }
+}
+
+// ── Inference-observer receipt emission (OBSERVATION-PLANE §7) ─────────────
+
+/// Append one inference-observer JSONL event to the audit chain under the
+/// inference-observer conversation namespace. Called from the tail loop
+/// spawned by `spawn_inference_observer_tail`.
+///
+/// The `raw` argument is the exact JSONL line the emitter wrote — passed
+/// through verbatim so downstream chain readers can re-parse via
+/// `zp_inference_observer::InferenceObservation` and see byte-identical
+/// evidence to what the Python-side emitter observed.
+fn emit_inference_observer_receipt(store: &Arc<std::sync::Mutex<AuditStore>>, raw: &str) {
+    let mut guard = match store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("inference observer receipt: audit store lock poisoned: {}", e);
+            return;
+        }
+    };
+    let entry = UnsealedEntry {
+        actor: regent_actor(),
+        action: AuditAction::SystemEvent {
+            event: raw.to_string(),
+        },
+        conversation_id: inference_observer_conv_id(),
+        policy_decision: PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "inference-observer".to_string(),
+        receipt: None,
+    };
+    if let Err(e) = guard.append(entry) {
+        warn!("inference observer receipt emission failed: {}", e);
+    }
+}
+
+/// Spawn the inference-observer tail as a background blocking task.
+///
+/// Reads DFlash observation JSONL events produced by
+/// `scripts/dflash-observation-emitter.py` and appends each one as a
+/// `SystemEvent` audit entry under the inference-observer conversation
+/// namespace.
+///
+/// Tolerates a missing observation file (emitter not running, no events
+/// today yet) with a 60-second retry loop. Follows the emitter's daily
+/// UTC rotation — reopens against today's file when the date rolls.
+///
+/// The observation directory defaults to
+/// `~/projects/zeropoint/.observations/inference/` matching the emitter's
+/// default. Override via `ZP_INFERENCE_OBSERVATION_DIR` env for testing.
+fn spawn_inference_observer_tail(audit_store: Arc<std::sync::Mutex<AuditStore>>) {
+    tokio::task::spawn_blocking(move || {
+        let base = std::env::var("ZP_INFERENCE_OBSERVATION_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::var_os("HOME")
+                    .map(|h| {
+                        std::path::PathBuf::from(h)
+                            .join("projects/zeropoint/.observations/inference")
+                    })
+                    .unwrap_or_else(|| {
+                        std::path::PathBuf::from("/tmp/zp-observations/inference")
+                    })
+            });
+
+        info!(observations_dir = ?base, "inference observer tail: starting");
+
+        loop {
+            // Emitter rotates daily by UTC date; match that.
+            let now = chrono::Utc::now();
+            let filename = format!("drafter_acceptance-{}.jsonl", now.format("%Y%m%d"));
+            let path = base.join(&filename);
+
+            if !path.exists() {
+                // Emitter not running or no events today. Retry.
+                std::thread::sleep(std::time::Duration::from_secs(60));
+                continue;
+            }
+
+            info!(?path, "inference observer tail: opened");
+
+            let audit_store_cb = audit_store.clone();
+            let config = zp_inference_observer::TailConfig {
+                path: path.clone(),
+                poll_interval: std::time::Duration::from_secs(2),
+                from_beginning: false,
+                stop_at_eof: false,
+            };
+
+            let result = zp_inference_observer::tail(config, move |tailed| {
+                emit_inference_observer_receipt(&audit_store_cb, &tailed.raw_line);
+            });
+
+            if let Err(e) = result {
+                warn!(
+                    "inference observer tail returned error, retrying in 60s: {}",
+                    e
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_secs(60));
+        }
+    });
 }
 
 // ── IntentExecutor ──────────────────────────────────────────────────────────
@@ -1243,8 +1364,309 @@ impl ServerIntentExecutor {
                 Ok(report)
             }
 
+            // ── Phase 1 tools ─────────────────────────────────────────
+            // Per docs/REGENT-PHASE-0-1-DESIGN-2026-07.md.
+            //
+            // Status split (2026-08):
+            //   - `chart_generate` and `report_assemble` are wired: they
+            //     appear in REGENT_TOOLS, the gate honours them, and
+            //     these arms call real pure-function implementations in
+            //     `regent_tools.rs`. Their outputs are returned to
+            //     Regent as JSON strings (no disk write yet) with a
+            //     blake3 content hash for anchoring per design doc §1.6.
+            //   - `web_search`, `web_fetch`, `image_generate` remain
+            //     scaffold: NOT in REGENT_TOOLS, so the gate blocks any
+            //     attempt. These arms are belt-and-suspenders "gate
+            //     somehow bypassed" failure mode returning a clear
+            //     scaffold error rather than the confusing "unknown
+            //     tool" fallback.
+            "web_search" => Err(crate::regent_tools::not_yet_implemented("web_search")),
+            "web_fetch" => Err(crate::regent_tools::not_yet_implemented("web_fetch")),
+            "image_generate" => {
+                Err(crate::regent_tools::not_yet_implemented("image_generate"))
+            }
+            "chart_generate" => self.dispatch_chart_generate(params).await,
+            "report_assemble" => self.dispatch_report_assemble(params).await,
+
             _ => Err(RegentError::Execution(format!("unknown tool: {}", tool))),
         }
+    }
+
+    /// Dispatch `chart_generate`: parse params into `ChartSpec`, produce
+    /// a deterministic SVG chart, emit an `artifact` receipt carrying
+    /// the blake3 hash of the SVG so the chain records the exact bytes
+    /// produced. Returns `{ "svg": <string>, "content_hash": <hex>,
+    /// "type": <string> }` to Regent.
+    ///
+    /// Expected params shape (all fields required unless noted):
+    /// ```json
+    /// {
+    ///   "type": "bar" | "line" | "pie",
+    ///   "title": "optional title string",
+    ///   "labels": ["A", "B", "C"],
+    ///   "series": [
+    ///     {"name": "series 1", "values": [10.0, 20.0, 15.0]},
+    ///     ...
+    ///   ]
+    /// }
+    /// ```
+    async fn dispatch_chart_generate(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, RegentError> {
+        let spec = parse_chart_spec(params)?;
+        let svg = crate::regent_tools::generate_chart_html(&spec)?;
+        let hash = blake3::hash(svg.as_bytes()).to_hex().to_string();
+        self.emit_receipt(
+            "regent:tool:artifact:chart_generate",
+            Some(&format!(
+                "hash={}, type={}, bytes={}",
+                hash,
+                spec.chart_type,
+                svg.len()
+            )),
+        );
+        Ok(serde_json::json!({
+            "svg": svg,
+            "content_hash": hash,
+            "type": spec.chart_type,
+        }))
+    }
+
+    /// Dispatch `report_assemble`: parse params into fragments, produce
+    /// a deterministic dark-themed HTML report, emit an `artifact`
+    /// receipt carrying the blake3 hash of the HTML per design doc §1.6
+    /// content-address-anchoring intent. Returns `{ "html": <string>,
+    /// "content_hash": <hex>, "fragment_count": <number> }` to Regent.
+    ///
+    /// Expected params shape:
+    /// ```json
+    /// {
+    ///   "fragments": [
+    ///     {
+    ///       "heading": "optional",
+    ///       "body_html": "<p>content</p>",
+    ///       "chart_svg": "<svg>...</svg>"  // optional; usually the
+    ///                                       // return of chart_generate
+    ///     },
+    ///     ...
+    ///   ]
+    /// }
+    /// ```
+    async fn dispatch_report_assemble(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, RegentError> {
+        let fragments = parse_report_fragments(params)?;
+        let html = crate::regent_tools::assemble_report_html(&fragments)?;
+        let hash = blake3::hash(html.as_bytes()).to_hex().to_string();
+        self.emit_receipt(
+            "regent:tool:artifact:report_assemble",
+            Some(&format!(
+                "hash={}, fragments={}, bytes={}",
+                hash,
+                fragments.len(),
+                html.len()
+            )),
+        );
+        Ok(serde_json::json!({
+            "html": html,
+            "content_hash": hash,
+            "fragment_count": fragments.len(),
+        }))
+    }
+}
+
+// ── Phase 1 tool parameter parsers ──────────────────────────────────────────
+//
+// serde_json → typed spec. Kept in this file so `regent_tools.rs` stays a
+// pure-function module with no JSON-parsing surface. Rejects malformed input
+// with `RegentError::Execution` carrying a message that names the missing
+// or wrong-shaped field, so Regent gets a diagnostic it can act on rather
+// than a bare "expected string" error.
+
+fn parse_chart_spec(
+    params: &serde_json::Value,
+) -> Result<crate::regent_tools::ChartSpec, RegentError> {
+    let chart_type = params
+        .get("type")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "chart_generate: missing required 'type' string (bar|line|pie)".to_string(),
+            )
+        })?
+        .to_string();
+    let title = params
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let labels = params
+        .get("labels")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "chart_generate: missing required 'labels' array".to_string(),
+            )
+        })?
+        .iter()
+        .map(|v| v.as_str().unwrap_or("").to_string())
+        .collect::<Vec<_>>();
+    let series_raw = params
+        .get("series")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "chart_generate: missing required 'series' array (\
+                 [{\"name\":..., \"values\":[...]}])"
+                    .to_string(),
+            )
+        })?;
+    let mut series = Vec::with_capacity(series_raw.len());
+    for (i, entry) in series_raw.iter().enumerate() {
+        let name = entry
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                RegentError::Execution(format!(
+                    "chart_generate: series[{}] missing 'name'",
+                    i
+                ))
+            })?
+            .to_string();
+        let values = entry
+            .get("values")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                RegentError::Execution(format!(
+                    "chart_generate: series[{}] missing 'values' array",
+                    i
+                ))
+            })?
+            .iter()
+            .map(|v| v.as_f64().unwrap_or(0.0))
+            .collect::<Vec<_>>();
+        series.push(crate::regent_tools::ChartSeries { name, values });
+    }
+    Ok(crate::regent_tools::ChartSpec {
+        chart_type,
+        title,
+        labels,
+        series,
+    })
+}
+
+fn parse_report_fragments(
+    params: &serde_json::Value,
+) -> Result<Vec<crate::regent_tools::ReportFragment>, RegentError> {
+    let raw = params
+        .get("fragments")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "report_assemble: missing required 'fragments' array".to_string(),
+            )
+        })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for (i, entry) in raw.iter().enumerate() {
+        let heading = entry
+            .get("heading")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let body_html = entry
+            .get("body_html")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                RegentError::Execution(format!(
+                    "report_assemble: fragments[{}] missing 'body_html' string",
+                    i
+                ))
+            })?
+            .to_string();
+        let chart_svg = entry
+            .get("chart_svg")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        out.push(crate::regent_tools::ReportFragment {
+            heading,
+            body_html,
+            chart_svg,
+        });
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod phase1_dispatch_tests {
+    use super::*;
+
+    #[test]
+    fn parse_chart_spec_valid_bar() {
+        let params = serde_json::json!({
+            "type": "bar",
+            "title": "Q3",
+            "labels": ["A", "B"],
+            "series": [{"name": "s1", "values": [1.0, 2.0]}]
+        });
+        let spec = parse_chart_spec(&params).unwrap();
+        assert_eq!(spec.chart_type, "bar");
+        assert_eq!(spec.title.as_deref(), Some("Q3"));
+        assert_eq!(spec.labels, vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(spec.series.len(), 1);
+        assert_eq!(spec.series[0].values, vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn parse_chart_spec_missing_type() {
+        let params = serde_json::json!({
+            "labels": ["A"],
+            "series": [{"name": "s", "values": [1.0]}]
+        });
+        let err = parse_chart_spec(&params).unwrap_err();
+        assert!(err.to_string().contains("'type'"));
+    }
+
+    #[test]
+    fn parse_chart_spec_missing_series_name() {
+        let params = serde_json::json!({
+            "type": "bar",
+            "labels": ["A"],
+            "series": [{"values": [1.0]}]
+        });
+        let err = parse_chart_spec(&params).unwrap_err();
+        assert!(err.to_string().contains("series[0]"));
+        assert!(err.to_string().contains("'name'"));
+    }
+
+    #[test]
+    fn parse_report_fragments_valid() {
+        let params = serde_json::json!({
+            "fragments": [
+                {"heading": "H", "body_html": "<p>b</p>"},
+                {"body_html": "<p>c</p>", "chart_svg": "<svg/>"}
+            ]
+        });
+        let frags = parse_report_fragments(&params).unwrap();
+        assert_eq!(frags.len(), 2);
+        assert_eq!(frags[0].heading.as_deref(), Some("H"));
+        assert!(frags[1].heading.is_none());
+        assert_eq!(frags[1].chart_svg.as_deref(), Some("<svg/>"));
+    }
+
+    #[test]
+    fn parse_report_fragments_missing_body_html() {
+        let params = serde_json::json!({
+            "fragments": [{"heading": "H"}]
+        });
+        let err = parse_report_fragments(&params).unwrap_err();
+        assert!(err.to_string().contains("body_html"));
+    }
+
+    #[test]
+    fn parse_report_fragments_missing_fragments_array() {
+        let params = serde_json::json!({});
+        let err = parse_report_fragments(&params).unwrap_err();
+        assert!(err.to_string().contains("fragments"));
     }
 }
 
@@ -1361,7 +1783,7 @@ impl IntentExecutor for ServerIntentExecutor {
                         "regent:tool:refused:unsigned",
                         Some(&format!("tool={}", tool)),
                     );
-                    return Ok(IntentOutcome::ToolDenied {
+                    return Ok(IntentOutcome::ToolRefusedUnsigned {
                         tool: tool.clone(),
                         reason,
                     });
@@ -1974,6 +2396,14 @@ pub async fn spawn_regent(
             expires_at: None,
         })
         .collect();
+
+    // Inference-observer tail — reads DFlash observation JSONL events
+    // (from scripts/dflash-observation-emitter.py) and appends each event
+    // as a SystemEvent under the inference-observer conversation namespace.
+    // See OBSERVATION-PLANE-2026-07 §"Inference telemetry" (Surface 7) and
+    // MODEL-DOSSIER-2026-07 §"Continuous drift signal". Tolerates missing
+    // observation file (emitter not running); retries every 60s.
+    spawn_inference_observer_tail(audit_store.clone());
 
     let handle = zp_regent::loop_runner::start_loop(
         regent,
