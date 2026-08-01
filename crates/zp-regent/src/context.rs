@@ -113,6 +113,31 @@ pub struct CognitiveContext {
     /// visible as a gap between what was asked and what was answered.
     pub prior_response: Option<PriorResponse>,
 
+    /// The operator question this cycle is answering, carried across every
+    /// turn of it.
+    ///
+    /// `pending_input` is consumed once, on turn 0, so that a tool-dispatch
+    /// turn is not re-read as a fresh directive. The side effect was that
+    /// every later turn of the same cycle lost the question entirely: both
+    /// the OPERATOR REQUEST block and the CONVERSATION SO FAR block are
+    /// gated on `pending_input.is_some()`, and `prior_response` is only
+    /// passed on turn 0. The narration turn therefore received a tool result
+    /// and an instruction to answer, with nothing saying what had been asked.
+    ///
+    /// Observed 2026-07-31: the operator asked what the start of the receipt
+    /// chain was. `chain_query` ran, the narration turn arrived with no
+    /// question attached, the router dispatched `chain_query` again — three
+    /// times, to MAX_TOOL_TURNS — and the max-turns fallback handed the
+    /// operator the raw JSON of the last call. A model told to answer, and
+    /// not told the question, acts instead.
+    ///
+    /// Deliberately not part of `CompositionSummary`: `pending_input` is not
+    /// summarised either, so adding this would change what
+    /// `cognitive:input:composed` anchors and move the matrix version for a
+    /// field the receipt has never carried on turn 0 either. The receipt
+    /// already distinguishes these turns by `reason=tool_dispatch_narration`.
+    pub cycle_directive: Option<String>,
+
     /// Composition provenance — per-class source hashes and matrix version.
     /// Populated by `perceive()`; consumed by the caller when emitting the
     /// `cognitive:input:composed` chain receipt per COGNITIVE-INPUT-PLANE spec.
@@ -389,6 +414,22 @@ pub struct WorkArc {
     /// Tool results accumulated across all cycles in this arc.
     /// Grows monotonically — the Regent sees the full history.
     pub tool_history: Vec<ToolResult>,
+
+    /// Consecutive cycles that changed nothing.
+    ///
+    /// A `Continue` is a claim that the arc advanced. When the progress
+    /// string is byte-identical to the last one and no new tool result
+    /// arrived, nothing advanced — the arc restated its intention and
+    /// consumed a cycle.
+    ///
+    /// Observed 2026-08-01: an arc opened on "compact the chain down to the
+    /// last 1000 entries" ran its full ten-cycle budget emitting that exact
+    /// string ten times, dispatched no tool, and terminated with "Work arc
+    /// stopped after 10 cycles (budget)" — which reads to an operator like
+    /// work was attempted. The budget was the only thing that stopped it,
+    /// and a budget is a backstop, not a detector: it bounds the damage
+    /// without ever naming what went wrong.
+    pub stall_count: u32,
 }
 
 /// A tool execution result from a prior turn in the same cycle.

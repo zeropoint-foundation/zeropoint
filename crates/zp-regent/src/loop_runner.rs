@@ -164,6 +164,14 @@ const MAX_TOOL_TURNS: u32 = 3;
 /// so the theoretical max is 10 × 3 = 30 tool invocations per arc.
 const MAX_ARC_CYCLES: u32 = 10;
 
+/// Consecutive no-change cycles before an arc is declared stalled.
+///
+/// Two, not one: a single repeat can be a model restating itself on the way
+/// to acting, and cutting an arc off at the first repetition would kill
+/// legitimate slow starts. Two identical cycles with no tool dispatched is
+/// not a slow start — it is a loop.
+const ARC_STALL_LIMIT: u32 = 2;
+
 /// Default idle threshold before the Regent considers background maintenance.
 /// The Regent won't start heavy work (model evaluation) until the operator
 /// has been idle for at least this long.
@@ -256,6 +264,12 @@ pub fn start_loop(
                 }
 
                 RegentMessage::OperatorInput { content, source, reply_tx } => {
+                    // Enact whatever the operator has granted since the last
+                    // tick, before reasoning about anything new. A signature
+                    // that has been sitting unhonoured is the oldest
+                    // outstanding instruction in the system.
+                    drain_enactable_approvals(&audit_store, &executor).await;
+
                     let is_operator = !content.is_empty();
                     // Capture operator question for the mirror before content is moved.
                     let operator_question_for_mirror = if is_operator {
@@ -325,7 +339,14 @@ pub fn start_loop(
                                     cycles_completed: 0,
                                     max_cycles: MAX_ARC_CYCLES,
                                     tool_history: Vec::new(),
+                                    stall_count: 0,
                                 });
+                                // Read the arc's prior state before overwriting it.
+                                let no_advance = !is_new_arc
+                                    && current.progress == progress
+                                    && current.tool_history.len() == tool_results.len();
+                                current.stall_count =
+                                    if no_advance { current.stall_count + 1 } else { 0 };
                                 current.progress = progress.clone();
                                 current.cycles_completed += 1;
                                 current.tool_history = tool_results;
@@ -347,6 +368,38 @@ pub fn start_loop(
                                         "{}/{}: {}",
                                         current.cycles_completed, MAX_ARC_CYCLES, progress
                                     )));
+
+                                // Stall check, ahead of the budget check —
+                                // an arc that is going nowhere should say so
+                                // rather than spend nine more cycles proving
+                                // it, and "stopped after 10 cycles (budget)"
+                                // is indistinguishable from work attempted.
+                                if current.stall_count >= ARC_STALL_LIMIT {
+                                    warn!(
+                                        cycles = current.cycles_completed,
+                                        stalls = current.stall_count,
+                                        progress = progress.as_str(),
+                                        "work arc stalled — same plan, no tool dispatched"
+                                    );
+                                    emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
+                                        .with_detail(format!(
+                                            "stalled after {} cycles: {}",
+                                            current.cycles_completed, progress
+                                        )));
+                                    emit_arc_stalled_receipt(
+                                        &audit_store,
+                                        &progress,
+                                        current.cycles_completed,
+                                    );
+                                    break format!(
+                                        "I started on \"{progress}\" and then made no \
+                                         progress on it — {} cycles with the same plan and \
+                                         no tool run. I have stopped rather than keep \
+                                         going in circles. Tell me what to do differently, \
+                                         or ask me to try a specific step.",
+                                        current.cycles_completed
+                                    );
+                                }
 
                                 // Budget check.
                                 if current.cycles_completed >= MAX_ARC_CYCLES {
@@ -471,7 +524,13 @@ pub fn start_loop(
                             cycles_completed: 0,
                             max_cycles: MAX_ARC_CYCLES,
                             tool_history: Vec::new(),
+                            stall_count: 0,
                         });
+                        let no_advance = !is_new_arc
+                            && current.progress == progress
+                            && current.tool_history.len() == tool_results.len();
+                        current.stall_count =
+                            if no_advance { current.stall_count + 1 } else { 0 };
                         current.progress = progress.clone();
                         current.cycles_completed += 1;
                         current.tool_history = tool_results;
@@ -485,6 +544,22 @@ pub fn start_loop(
                                 "{}/{}: {}",
                                 current.cycles_completed, MAX_ARC_CYCLES, progress
                             )));
+
+                        if current.stall_count >= ARC_STALL_LIMIT {
+                            warn!(
+                                cycles = current.cycles_completed,
+                                progress = progress.as_str(),
+                                "critical finding arc stalled — same plan, no tool dispatched"
+                            );
+                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
+                                .with_detail("stalled"));
+                            emit_arc_stalled_receipt(
+                                &audit_store,
+                                &progress,
+                                current.cycles_completed,
+                            );
+                            break;
+                        }
 
                         if current.cycles_completed >= MAX_ARC_CYCLES {
                             warn!("critical finding arc hit budget");
@@ -664,6 +739,11 @@ async fn run_cycle(
     work_arc: Option<WorkArc>,
     prior_response: Option<crate::context::PriorResponse>,
 ) -> CycleOutcome {
+    // Retained for every turn of this cycle. `current_input.take()` below
+    // hands the operator's message to perceive exactly once, so that a
+    // narration turn is not re-read as a new directive — correct, but it
+    // also left later turns with no idea what was asked.
+    let cycle_directive: Option<String> = initial_input.as_ref().map(|i| i.content.clone());
     let mut current_input = initial_input;
     // If resuming a work arc, seed tool_results with the arc's history
     // so the Regent sees what she's already done across prior cycles.
@@ -713,6 +793,9 @@ async fn run_cycle(
                 // Mirror: only show prior response on first turn of the cycle.
                 // Subsequent turns (tool dispatch → narration) don't need it.
                 if turn == 0 { prior_response.clone() } else { None },
+                // Unlike the mirror above, this is passed on *every* turn.
+                // It is the one thing a narration turn cannot do without.
+                cycle_directive.clone(),
             ) {
                 Ok(ctx) => ctx,
                 Err(e) => {
@@ -1255,6 +1338,184 @@ fn emit_cognitive_act_receipt(
 }
 
 // ── Cognitive Self-Observer runtime (P2.2) ───────────────────────────────────
+
+/// Chain-anchor an arc that went nowhere.
+///
+/// A stall is a real outcome and belongs on the chain next to the acts that
+/// succeeded. Without a receipt the only trace is a `warn` in a log that
+/// rotates, and the substrate's record shows an arc opening and then simply
+/// ceasing — indistinguishable from one that finished.
+fn emit_arc_stalled_receipt(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    progress: &str,
+    cycles: u32,
+) {
+    let event = format!(
+        "regent:arc:stalled cycles={} progress={}",
+        cycles,
+        crate::text::preview(progress, 160)
+    );
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-work-arc".to_string(),
+        receipt: None,
+    };
+    match audit_store.lock() {
+        Ok(mut store) => {
+            if let Err(e) = store.append(entry) {
+                warn!("arc stall receipt emission failed: {}", e);
+            }
+        }
+        Err(e) => warn!("arc stall receipt: audit store lock poisoned: {}", e),
+    }
+}
+
+// ── Enactment of granted approvals ───────────────────────────────────────────
+
+/// Turn operator signatures into substrate acts.
+///
+/// # Why this exists
+///
+/// Observed 2026-07-31. A proposal was escalated, queued, rendered, granted,
+/// and chain-anchored — and the standing correction it proposed was never
+/// created. `ApprovalIndex` appeared in exactly two places outside its own
+/// module, both HTTP handlers, and `regent:approval:granted` was read only to
+/// stop resolved requests showing in the queue. Nothing consumed a grant.
+///
+/// The operator signed and the system did not act. That is the mirror of the
+/// defect that produced the proposal in the first place — a claimed act
+/// without authority, then authority without an act — and it is the worse
+/// half, because the first was caught by a verifier and this one presented as
+/// success at every visible surface: the queue emptied, the receipt anchored,
+/// the command printed a tick.
+///
+/// # Why it dispatches rather than reasons
+///
+/// The enactment carried on the request is dispatched verbatim. No model is
+/// consulted. The operator signed a specific call, and re-deriving that call
+/// from the proposal's prose at enactment time would reintroduce exactly the
+/// confabulation surface the Class 5 verifier exists to catch — with the
+/// operator's signature already attached to it.
+///
+/// # Runs on the idle tick
+///
+/// Called from the message loop, which ticks every ~60s with empty content,
+/// so an approval signed while nothing else is happening is honoured within
+/// the minute rather than waiting for the next conversation.
+async fn drain_enactable_approvals(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    executor: &Arc<dyn IntentExecutor>,
+) {
+    let work: Vec<(String, crate::intent::Enactment)> = {
+        let store = match audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("approval enactment: audit store lock poisoned: {}", e);
+                return;
+            }
+        };
+        let mut entries = Vec::new();
+        for prefix in [
+            crate::approvals::EVENT_PREFIX_REQUEST,
+            crate::approvals::EVENT_PREFIX_GRANTED,
+            crate::approvals::EVENT_PREFIX_DENIED,
+            crate::approvals::EVENT_PREFIX_ENACTED,
+        ] {
+            entries.extend(
+                store
+                    .search_chain_by_action_keyword(prefix, 1024)
+                    .unwrap_or_default(),
+            );
+        }
+        crate::approvals::ApprovalIndex::build(&entries)
+            .enactable()
+            .iter()
+            .filter_map(|r| {
+                r.enactment
+                    .clone()
+                    .map(|e| (r.request_hash.clone(), e))
+            })
+            .collect()
+    };
+
+    if work.is_empty() {
+        return;
+    }
+
+    for (request_hash, enactment) in work {
+        let short = &request_hash[..12.min(request_hash.len())];
+        info!(
+            tool = %enactment.tool,
+            request = short,
+            "enacting granted approval"
+        );
+
+        let intent = Intent::Execute {
+            tool: enactment.tool.clone(),
+            params: enactment.params.clone(),
+        };
+
+        // The gate still runs. An operator's signature authorises the act; it
+        // does not exempt it from policy, and a disagreement between the two
+        // is worth a receipt rather than a bypass.
+        let outcome = match executor.execute(&intent).await {
+            Ok(IntentOutcome::ToolCompleted { .. }) => "completed".to_string(),
+            Ok(IntentOutcome::ToolDenied { reason, .. }) => {
+                warn!(
+                    tool = %enactment.tool,
+                    request = short,
+                    reason = %reason,
+                    "granted approval denied at the gate — operator authority and \
+                     gate policy disagree about the same act"
+                );
+                format!("denied: {reason}")
+            }
+            Ok(_) => "unexpected_outcome".to_string(),
+            Err(e) => {
+                warn!(
+                    tool = %enactment.tool,
+                    request = short,
+                    "enactment failed: {}", e
+                );
+                format!("error: {e}")
+            }
+        };
+
+        // Receipt regardless of outcome. A failed enactment that leaves no
+        // trace would be retried on every tick forever, and an operator
+        // reading the chain would see a grant with nothing after it — the
+        // same silence this function was written to end.
+        let event =
+            crate::approvals::enacted_event_string(&request_hash, &enactment.tool, &outcome);
+        let entry = zp_audit::UnsealedEntry {
+            actor: zp_core::ActorId::System("regent".to_string()),
+            action: zp_core::AuditAction::SystemEvent { event },
+            conversation_id: zp_core::ConversationId(
+                uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+            ),
+            policy_decision: zp_core::PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "regent-approval-enactment".to_string(),
+            receipt: None,
+        };
+        match audit_store.lock() {
+            Ok(mut store) => {
+                if let Err(e) = store.append(entry) {
+                    warn!("enactment receipt emission failed: {}", e);
+                }
+            }
+            Err(e) => warn!("enactment receipt: audit store lock poisoned: {}", e),
+        }
+    }
+}
 
 /// Emit chain receipts for act claims the cycle's own record contradicts.
 ///
