@@ -1,5 +1,5 @@
 {
-  "generated_from_commit": "5032b97",
+  "generated_from_commit": "d363c20",
   "governed_docs": 133,
   "totals": {
     "connections": 1039,
@@ -9360,7 +9360,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "130 relevant files changed since it was written (72 commits)",
+      "note": "150 relevant files changed since it was written (81 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -9369,16 +9369,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "109 relevant files changed since it was written (61 commits)",
+      "note": "129 relevant files changed since it was written (70 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "1dc2cea",
+      "target": "5032b97",
       "status": "defect",
       "detector": null,
-      "note": "14 relevant files changed since it was written (6 commits), declared source 1dc2cea dated 2026-08-01",
+      "note": "30 relevant files changed since it was written (8 commits), declared source 5032b97 dated 2026-08-01",
       "site": "tools/connection-map/connections.json"
     }
   ]
