@@ -1,12 +1,12 @@
 {
-  "generated_from_commit": "1dc2cea",
+  "generated_from_commit": "5032b97",
   "governed_docs": 133,
   "totals": {
     "connections": 1039,
-    "live": 360,
+    "live": 359,
     "tied_off": 42,
-    "defect": 637,
-    "maturity": 0.3869
+    "defect": 638,
+    "maturity": 0.3859
   },
   "by_kind": {
     "code_to_artifact/defect": 127,
@@ -17,8 +17,7 @@
     "corpus_to_code/live": 66,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 127,
-    "derived_artifact/defect": 2,
-    "derived_artifact/live": 1,
+    "derived_artifact/defect": 3,
     "derived_artifact/tied_off": 1,
     "pin/live": 19,
     "pin_exception/tied_off": 41
@@ -8074,7 +8073,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-regent/src/routing.rs:226"
+      "site": "crates/zp-regent/src/routing.rs:270"
     },
     {
       "kind": "code_to_artifact",
@@ -8083,7 +8082,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-regent/src/routing.rs:262"
+      "site": "crates/zp-regent/src/routing.rs:306"
     },
     {
       "kind": "code_to_artifact",
@@ -9361,7 +9360,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "128 relevant files changed since it was written (65 commits)",
+      "note": "130 relevant files changed since it was written (72 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -9370,16 +9369,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "107 relevant files changed since it was written (54 commits)",
+      "note": "109 relevant files changed since it was written (61 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "bdab640",
-      "status": "live",
-      "detector": "connection-map derived_artifact",
-      "note": "no relevant inputs changed since it was written (0 commits ago)",
+      "target": "1dc2cea",
+      "status": "defect",
+      "detector": null,
+      "note": "14 relevant files changed since it was written (6 commits), declared source 1dc2cea dated 2026-08-01",
       "site": "tools/connection-map/connections.json"
     }
   ]
