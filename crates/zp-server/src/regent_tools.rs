@@ -1,18 +1,22 @@
 //! Phase 1 tool utilities per `docs/REGENT-PHASE-0-1-DESIGN-2026-07.md`.
 //!
-//! # Status: three pure-function tools shipped, two remain scaffold
+//! # Status
 //!
-//! **Shipped as real implementations (2026-08-01):**
+//! **Pure-function utilities (this module):**
 //! - `strip_html` — HTML → plain text via a small state machine.
 //! - `generate_chart_html` — self-contained SVG chart (no external
 //!   dependencies, no CDN, no JS; deterministic given input).
 //! - `assemble_report_html` — dark-themed HTML report with inline SVG
 //!   charts and sections.
 //!
-//! **Still scaffold (returns `Err(not_yet_implemented(...))`):**
-//! - `save_to_artifacts` — file I/O + `artifact:library:candidate`
-//!   receipt emission; depends on `ARTIFACT-LIBRARY-2026-05.md`
-//!   supersession lifecycle. Ships next.
+//! **I/O + receipt-emitting tools (owned by `regent.rs` dispatch layer):**
+//! - `save_to_artifacts` — implemented as
+//!   `ServerIntentExecutor::dispatch_save_to_artifacts` in `regent.rs`.
+//!   Deliberately not here: pairing filesystem I/O with `AuditStore`
+//!   receipt emission wants `&self` access to the executor, and this
+//!   module holds a firm "deterministic pure functions only" line so
+//!   its outputs match the design doc's content-address-anchoring
+//!   invariant.
 //!
 //! # Design-doc deviation: SVG instead of Chart.js
 //!
@@ -37,13 +41,24 @@
 //!   `regent:tool:artifact:<name>` receipt carrying the blake3 hash of
 //!   the produced bytes, per the design doc §1.6 content-address-
 //!   anchoring intent.
-//! - **Not on `APPROVAL_REQUIRED_TOOLS`.** These are pure functions
-//!   that return strings to Regent — no external I/O, no disk writes
-//!   (see `save_to_artifacts` below). The approval-required precedent
-//!   (`browser_use`) targets tools that "act outside the substrate";
-//!   these do not. When `save_to_artifacts` lands and these tools
-//!   begin writing to the operator's artifact library, revisit that
-//!   decision.
+//! - **Not on `APPROVAL_REQUIRED_TOOLS`.** `chart_generate` and
+//!   `report_assemble` are pure functions returning strings to Regent.
+//!   `save_to_artifacts` (in `regent.rs`) does write to disk, but the
+//!   destination is a fixed operator-owned directory
+//!   (`~/ZeroPoint/artifacts/`), the filename is content-addressed
+//!   (blake3 of bytes), and each write emits an
+//!   `artifact:library:candidate` receipt. The approval-required
+//!   precedent (`browser_use`) targets tools reaching outside the
+//!   substrate to unbounded destinations (arbitrary URLs); a bounded
+//!   write to operator-owned space with a chain-anchored receipt is
+//!   a different risk class.
+//! - **`save_to_artifacts` is wired.** In `REGENT_TOOLS` as
+//!   `artifact:library:write`; dispatched by
+//!   `dispatch_save_to_artifacts` in `regent.rs`; emits
+//!   `artifact:library:candidate` receipts with hash + path + name +
+//!   bytes per the design doc's ARTIFACT-LIBRARY-2026-05 candidate
+//!   lifecycle. Path-traversal-checked. Atomic write (tempfile +
+//!   rename). Idempotent for identical bytes.
 //! - **`web_search`, `web_fetch`, `image_generate` remain unlisted.**
 //!   Their dispatch arms in `regent.rs` return
 //!   `not_yet_implemented(...)`. The arms are belt-and-suspenders
@@ -51,9 +66,20 @@
 //!   invocation because these are not in `REGENT_TOOLS`.
 //! - **`strip_html`** is a pure utility with no dispatch arm; it will
 //!   be used inline by `web_fetch` when that tool ships.
+//!
+//! # Future migration: full `zp-artifacts` Library integration
+//!
+//! Today `save_to_artifacts` is a bare filesystem-write matching the
+//! design doc §1.6 mental model. The `zp-artifacts` crate has a
+//! richer `Library` trait (async, source-manifest + render-config
+//! metadata, Ed25519 signing lifecycle, superseded-by tracking) but
+//! its `ArtifactKind` enum is currently `ChainNarration`-only and its
+//! candidate → signed → superseded workflow is heavier than Phase 1
+//! needs. When operator-visible artifact-review UX arrives, migrate
+//! `save_to_artifacts` to call `LocalArtifactLibrary::store_candidate`
+//! and add `ArtifactKind::Chart` / `ArtifactKind::Report` variants.
 
 use std::fmt::Write as _;
-use std::path::PathBuf;
 
 use zp_regent::error::RegentError;
 
@@ -757,30 +783,13 @@ code, pre { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0
 .footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid #1c1c22; color: var(--muted); font-size: 0.88em; }
 ";
 
-// ── Still-scaffold: save_to_artifacts ───────────────────────────────────────
-
-/// Persist a completed artifact under the operator's artifact library
-/// and return the on-disk path.
-///
-/// **Scaffold** — returns `Err`. Real implementation will:
-/// 1. Compute the artifact's content hash (blake3).
-/// 2. Write to `~/.zeropoint/artifacts/<hash>.<ext>` (or the operator's
-///    configured artifact directory).
-/// 3. Emit an `artifact:library:candidate` receipt via the audit store
-///    per `docs/design/ARTIFACT-LIBRARY-2026-05.md` supersession
-///    lifecycle.
-///
-/// Deferred because the audit-store integration requires either
-/// threading `&Arc<Mutex<AuditStore>>` through this function (breaking
-/// the pure-utility discipline of this module) or introducing a
-/// callback surface. That decision is small but wants to be made
-/// explicitly rather than during a tool-shipping sprint.
-pub fn save_to_artifacts(
-    _name: &str,
-    _content: &[u8],
-) -> Result<PathBuf, RegentError> {
-    Err(scaffold_error("save_to_artifacts"))
-}
+// `save_to_artifacts` intentionally does not live here. It is I/O plus a
+// receipt emission, both of which want `&Arc<Mutex<AuditStore>>` access;
+// threading that through this module would break its pure-function
+// discipline (every function above is deterministic, no I/O, no receipts).
+// The dispatch layer in `regent.rs` owns `save_to_artifacts` as
+// `ServerIntentExecutor::dispatch_save_to_artifacts`, which is where the
+// audit store already lives.
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
@@ -1047,12 +1056,6 @@ mod tests {
     }
 
     // ── still-scaffold ─────────────────────────────────────────────────
-
-    #[test]
-    fn save_to_artifacts_still_scaffold() {
-        let err = save_to_artifacts("test.html", b"content").unwrap_err();
-        assert!(err.to_string().contains(NOT_YET_IMPLEMENTED_PREFIX));
-    }
 
     #[test]
     fn not_yet_implemented_names_the_tool() {

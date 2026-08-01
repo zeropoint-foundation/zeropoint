@@ -61,16 +61,21 @@ const REGENT_TOOLS: &[(&str, &str)] = &[
     ("substrate_validate", "substrate:validation:regent"),
     ("browser_use", "web:allowed_domains"),
     // Phase 1 report-generation tools (see docs/REGENT-PHASE-0-1-DESIGN-2026-07.md).
-    // Both are pure functions returning strings to Regent — no external I/O,
-    // no disk writes today (`save_to_artifacts` remains scaffold). They are
-    // NOT in APPROVAL_REQUIRED_TOOLS because the browser_use precedent for
-    // per-call operator signatures targets tools that "act outside the
-    // substrate"; these do not. When `save_to_artifacts` lands and these
-    // tools begin writing to the operator's artifact library, revisit that
-    // decision — matches the pattern that put browser_use behind approval
-    // after an observed confusion incident, not preemptively.
+    // - chart_generate / report_assemble: pure functions returning strings
+    //   to Regent, no I/O.
+    // - save_to_artifacts: writes to ~/ZeroPoint/artifacts/<hash>.<ext> and
+    //   emits an artifact:library:candidate receipt. Content-addressed,
+    //   bounded destination, chain-anchored.
+    // None are on APPROVAL_REQUIRED_TOOLS: the browser_use precedent for
+    // per-call operator signatures targets tools reaching unbounded
+    // destinations (arbitrary URLs); a bounded write to operator-owned
+    // artifact space with a chain-anchored receipt is a different risk
+    // class. Revisit if a confusion incident argues otherwise, matching
+    // the pattern that put browser_use behind approval after an observed
+    // event, not preemptively.
     ("chart_generate", "artifact:chart"),
     ("report_assemble", "artifact:report"),
+    ("save_to_artifacts", "artifact:library:write"),
 ];
 
 /// Capabilities the Regent may *propose* but never dispatch on its own.
@@ -1368,12 +1373,16 @@ impl ServerIntentExecutor {
             // Per docs/REGENT-PHASE-0-1-DESIGN-2026-07.md.
             //
             // Status split (2026-08):
-            //   - `chart_generate` and `report_assemble` are wired: they
-            //     appear in REGENT_TOOLS, the gate honours them, and
-            //     these arms call real pure-function implementations in
-            //     `regent_tools.rs`. Their outputs are returned to
-            //     Regent as JSON strings (no disk write yet) with a
-            //     blake3 content hash for anchoring per design doc §1.6.
+            //   - `chart_generate`, `report_assemble`, `save_to_artifacts`
+            //     are wired: they appear in REGENT_TOOLS, the gate
+            //     honours them, and these arms dispatch to real
+            //     implementations. chart_generate and report_assemble
+            //     emit `regent:tool:artifact:*` receipts with a blake3
+            //     content hash for anchoring per design doc §1.6.
+            //     save_to_artifacts persists bytes to
+            //     ~/ZeroPoint/artifacts/<hash>.<ext> and emits an
+            //     `artifact:library:candidate` receipt per
+            //     ARTIFACT-LIBRARY-2026-05 candidate lifecycle.
             //   - `web_search`, `web_fetch`, `image_generate` remain
             //     scaffold: NOT in REGENT_TOOLS, so the gate blocks any
             //     attempt. These arms are belt-and-suspenders "gate
@@ -1387,6 +1396,7 @@ impl ServerIntentExecutor {
             }
             "chart_generate" => self.dispatch_chart_generate(params).await,
             "report_assemble" => self.dispatch_report_assemble(params).await,
+            "save_to_artifacts" => self.dispatch_save_to_artifacts(params).await,
 
             _ => Err(RegentError::Execution(format!("unknown tool: {}", tool))),
         }
@@ -1475,6 +1485,113 @@ impl ServerIntentExecutor {
             "fragment_count": fragments.len(),
         }))
     }
+
+    /// Dispatch `save_to_artifacts`: persist bytes under
+    /// `~/ZeroPoint/artifacts/<hash>.<ext>`, emit an
+    /// `artifact:library:candidate` receipt per ARTIFACT-LIBRARY-2026-05
+    /// candidate lifecycle, return the on-disk path plus hash.
+    ///
+    /// Expected params shape:
+    /// ```json
+    /// {
+    ///   "name": "competitive-analysis.html",  // used only for extension
+    ///                                          // and receipt narration;
+    ///                                          // filename is <hash>.<ext>
+    ///   "content_base64": "PGh0bWw+..."       // OR "content" for raw text
+    /// }
+    /// ```
+    /// Exactly one of `content_base64` or `content` must be present.
+    /// `content_base64` is required for any bytes that are not UTF-8
+    /// (images, PDFs); `content` is a convenience for HTML/SVG/text.
+    ///
+    /// Path safety: `name` must be a bare filename (no `/`, no `..`,
+    /// non-empty). The tool rejects anything else — the file always
+    /// lands directly under `~/ZeroPoint/artifacts/`, never in a
+    /// subdirectory or elsewhere on disk.
+    ///
+    /// Idempotency: filename is `<blake3-hash>.<ext>`. Writing the
+    /// same content twice is a no-op-in-effect; the receipt is emitted
+    /// each time so the chain records every call.
+    ///
+    /// Returns `{ "path": "<abs-path>", "content_hash": "<hex>",
+    ///            "bytes": N, "already_existed": true|false }`.
+    async fn dispatch_save_to_artifacts(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, RegentError> {
+        let (name, content) = parse_save_to_artifacts(params)?;
+        validate_artifact_name(&name)?;
+        let hash = blake3::hash(&content).to_hex().to_string();
+
+        // Resolve destination — canonical ZP data root, no raw home lookup.
+        let dir = zp_core::paths::home()
+            .map_err(|e| {
+                RegentError::Execution(format!(
+                    "save_to_artifacts: could not resolve ZeroPoint home: {}",
+                    e
+                ))
+            })?
+            .join("artifacts");
+        std::fs::create_dir_all(&dir).map_err(|e| {
+            RegentError::Execution(format!(
+                "save_to_artifacts: mkdir {:?} failed: {}",
+                dir, e
+            ))
+        })?;
+
+        // Filename is content-addressed. Extension comes from `name`
+        // (mime hint); falls back to ".bin" if `name` has none.
+        let ext = std::path::Path::new(&name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("bin");
+        let filename = format!("{}.{}", hash, ext);
+        let final_path = dir.join(&filename);
+
+        let already_existed = final_path.exists();
+        let bytes_len = content.len();
+
+        if !already_existed {
+            // Atomic write: tempfile in the same dir (same filesystem)
+            // → rename. Avoids partial-write visibility if the process
+            // is killed mid-write.
+            let tmp_path = dir.join(format!("{}.tmp", filename));
+            std::fs::write(&tmp_path, &content).map_err(|e| {
+                RegentError::Execution(format!(
+                    "save_to_artifacts: write to {:?} failed: {}",
+                    tmp_path, e
+                ))
+            })?;
+            std::fs::rename(&tmp_path, &final_path).map_err(|e| {
+                // Best-effort cleanup of the tempfile on rename failure.
+                let _ = std::fs::remove_file(&tmp_path);
+                RegentError::Execution(format!(
+                    "save_to_artifacts: rename {:?} -> {:?} failed: {}",
+                    tmp_path, final_path, e
+                ))
+            })?;
+        }
+
+        // Chain-anchor the candidate. Receipt name follows
+        // ARTIFACT-LIBRARY-2026-05 candidate lifecycle. The summary
+        // carries hash + filename + bytes + suggested-name so an
+        // operator reading the chain can locate the file and know what
+        // Regent claimed it was.
+        self.emit_receipt(
+            "artifact:library:candidate",
+            Some(&format!(
+                "hash={}, filename={}, bytes={}, name={}, already_existed={}",
+                hash, filename, bytes_len, name, already_existed
+            )),
+        );
+
+        Ok(serde_json::json!({
+            "path": final_path.to_string_lossy(),
+            "content_hash": hash,
+            "bytes": bytes_len,
+            "already_existed": already_existed,
+        }))
+    }
 }
 
 // ── Phase 1 tool parameter parsers ──────────────────────────────────────────
@@ -1554,6 +1671,85 @@ fn parse_chart_spec(
         labels,
         series,
     })
+}
+
+/// Parse `save_to_artifacts` params. Returns (name, content_bytes).
+///
+/// Accepts either `content_base64` (required for non-UTF-8 bytes) or
+/// `content` (convenience for HTML/SVG/text). If both are present,
+/// `content_base64` wins with a diagnostic — a Regent that provides
+/// both is likely confused about which to send, and picking the more
+/// general form (bytes) is the safer default.
+fn parse_save_to_artifacts(
+    params: &serde_json::Value,
+) -> Result<(String, Vec<u8>), RegentError> {
+    let name = params
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "save_to_artifacts: missing required 'name' string \
+                 (used for extension + receipt narration; filename is <hash>.<ext>)"
+                    .to_string(),
+            )
+        })?
+        .to_string();
+
+    if let Some(b64) = params.get("content_base64").and_then(|v| v.as_str()) {
+        use base64::Engine as _;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|e| {
+                RegentError::Execution(format!(
+                    "save_to_artifacts: 'content_base64' failed to decode: {}",
+                    e
+                ))
+            })?;
+        return Ok((name, bytes));
+    }
+
+    if let Some(text) = params.get("content").and_then(|v| v.as_str()) {
+        return Ok((name, text.as_bytes().to_vec()));
+    }
+
+    Err(RegentError::Execution(
+        "save_to_artifacts: missing content — provide either \
+         'content_base64' (any bytes, base64-encoded) or 'content' \
+         (UTF-8 text like HTML/SVG)"
+            .to_string(),
+    ))
+}
+
+/// Reject anything other than a bare filename. Guards against path
+/// traversal and against wandering out of the artifact directory. The
+/// content-addressed filename is derived downstream; `name` contributes
+/// only extension + receipt narration.
+fn validate_artifact_name(name: &str) -> Result<(), RegentError> {
+    if name.is_empty() {
+        return Err(RegentError::Execution(
+            "save_to_artifacts: 'name' must not be empty".to_string(),
+        ));
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err(RegentError::Execution(format!(
+            "save_to_artifacts: 'name' must be a bare filename (no path \
+             separators); got {:?}",
+            name
+        )));
+    }
+    if name == "." || name == ".." || name.starts_with('/') {
+        return Err(RegentError::Execution(format!(
+            "save_to_artifacts: 'name' must be a bare filename; got {:?}",
+            name
+        )));
+    }
+    // Reject NUL byte (would truncate the filename on some platforms).
+    if name.contains('\0') {
+        return Err(RegentError::Execution(
+            "save_to_artifacts: 'name' contains NUL byte".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn parse_report_fragments(
@@ -1667,6 +1863,99 @@ mod phase1_dispatch_tests {
         let params = serde_json::json!({});
         let err = parse_report_fragments(&params).unwrap_err();
         assert!(err.to_string().contains("fragments"));
+    }
+
+    // ── save_to_artifacts parser + validator ───────────────────────────
+
+    #[test]
+    fn parse_save_to_artifacts_accepts_content_text() {
+        let params = serde_json::json!({
+            "name": "report.html",
+            "content": "<p>hi</p>",
+        });
+        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(name, "report.html");
+        assert_eq!(bytes, b"<p>hi</p>");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_accepts_content_base64() {
+        // Base64 of "hello"
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "aGVsbG8=",
+        });
+        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(name, "test.bin");
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_base64_wins_over_content_when_both_present() {
+        // If Regent sends both, prefer bytes (safer default).
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "aGVsbG8=",  // "hello"
+            "content": "goodbye",
+        });
+        let (_, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_missing_name() {
+        let params = serde_json::json!({"content": "x"});
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("'name'"));
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_missing_content() {
+        let params = serde_json::json!({"name": "x.html"});
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("missing content"));
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_bad_base64() {
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "not_valid_base64!!!",
+        });
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("failed to decode"));
+    }
+
+    #[test]
+    fn validate_artifact_name_accepts_plain_filenames() {
+        assert!(validate_artifact_name("report.html").is_ok());
+        assert!(validate_artifact_name("chart.svg").is_ok());
+        assert!(validate_artifact_name("data.bin").is_ok());
+        assert!(validate_artifact_name("no-extension").is_ok());
+        assert!(validate_artifact_name("with_underscore.txt").is_ok());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_path_separators() {
+        assert!(validate_artifact_name("sub/file.html").is_err());
+        assert!(validate_artifact_name("windows\\file.html").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_traversal() {
+        assert!(validate_artifact_name("..").is_err());
+        assert!(validate_artifact_name(".").is_err());
+        assert!(validate_artifact_name("/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_empty() {
+        assert!(validate_artifact_name("").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_nul_byte() {
+        assert!(validate_artifact_name("file\0.html").is_err());
     }
 }
 

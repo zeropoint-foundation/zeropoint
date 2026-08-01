@@ -1443,6 +1443,10 @@ impl Regent {
                 "report_assemble(fragments:[{heading?,body_html,chart_svg?}])"
                     .to_string()
             }
+            "save_to_artifacts" => {
+                "save_to_artifacts(name:\"filename.ext\",content:\"...\" OR content_base64:\"...\")"
+                    .to_string()
+            }
             other => format!("{other}()"),
         }
     }
@@ -1465,6 +1469,9 @@ impl Regent {
             ),
             "report_assemble" => Some(
                 "- Operator asks you to assemble a report / writeup / summary from findings → {\"intent\":\"execute\",\"tool\":\"report_assemble\",\"params\":{\"fragments\":[{\"heading\":\"…\",\"body_html\":\"<p>…</p>\"}]}}",
+            ),
+            "save_to_artifacts" => Some(
+                "- Operator asks you to save / persist / write out an artifact you have produced → {\"intent\":\"execute\",\"tool\":\"save_to_artifacts\",\"params\":{\"name\":\"report.html\",\"content\":\"<!DOCTYPE html>…\"}}",
             ),
             _ => None,
         }
