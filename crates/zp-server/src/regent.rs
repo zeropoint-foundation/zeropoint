@@ -62,6 +62,26 @@ const REGENT_TOOLS: &[(&str, &str)] = &[
     ("browser_use", "web:allowed_domains"),
 ];
 
+/// Capabilities the Regent may *propose* but never dispatch on its own.
+///
+/// Delegation says a capability exists and the Regent may reach for it.
+/// This says reaching is not enough — an operator signature is required for
+/// the specific call, every time, until precedent says otherwise.
+///
+/// `browser_use` is here because it is the one tool that acts outside the
+/// substrate. Observed 2026-08-01: a work arc opened on "compact the chain
+/// down to the last 1000 entries" lost the thread, copied fragments of its
+/// own chain receipts into its plan for four cycles, and then dispatched
+/// `browser_use` with `goto_url https://example.com` — a URL nothing in the
+/// conversation had mentioned, in a request that had nothing to do with the
+/// web. The model's own leaked reasoning called it "a placeholder". Only the
+/// harness timing out after 15s stopped the navigation.
+///
+/// The domain allowlist bounds *where* it can go. It says nothing about
+/// whether going was ever asked for, and a confused cycle is exactly the
+/// condition under which that question matters most.
+const APPROVAL_REQUIRED_TOOLS: &[&str] = &["browser_use"];
+
 // ── Conversation namespace ──────────────────────────────────────────────────
 
 /// Dedicated `ConversationId` for all Regent receipts.
@@ -172,6 +192,51 @@ impl ServerIntentExecutor {
             .get()
             .and_then(|k| k.as_ref())
             .map(|resolved| *resolved.key)
+    }
+
+    /// Is there an operator signature authorising this exact tool right now?
+    ///
+    /// True only while a granted approval carrying an enactment for `tool`
+    /// is still unenacted. Deliberately keyed on the tool rather than the
+    /// full call: matching parameters exactly would let a whitespace
+    /// difference void a signature the operator plainly gave, and the
+    /// enactment drain dispatches the stored call verbatim anyway, so the
+    /// parameters that run are the ones that were signed.
+    ///
+    /// The residual window is narrow and worth naming: between a grant and
+    /// its enactment, a *different* cycle guessing the same tool would pass
+    /// this check. The drain runs at the top of the message loop and emits
+    /// the enactment receipt immediately, so that window is milliseconds
+    /// wide in practice — but it is real, and closing it properly means
+    /// carrying the request hash through dispatch.
+    fn has_granted_approval_for(&self, tool: &str) -> bool {
+        let entries = {
+            let store = match self.audit_store.lock() {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("approval check: audit store lock poisoned: {}", e);
+                    return false;
+                }
+            };
+            let mut acc = Vec::new();
+            for prefix in [
+                zp_regent::approvals::EVENT_PREFIX_REQUEST,
+                zp_regent::approvals::EVENT_PREFIX_GRANTED,
+                zp_regent::approvals::EVENT_PREFIX_DENIED,
+                zp_regent::approvals::EVENT_PREFIX_ENACTED,
+            ] {
+                acc.extend(
+                    store
+                        .search_chain_by_action_keyword(prefix, 1024)
+                        .unwrap_or_default(),
+                );
+            }
+            acc
+        };
+        zp_regent::approvals::ApprovalIndex::build(&entries)
+            .enactable()
+            .iter()
+            .any(|r| r.enactment.as_ref().is_some_and(|e| e.tool == tool))
     }
 
     /// Emit a Regent intent as a chain receipt.
@@ -1269,6 +1334,33 @@ impl IntentExecutor for ServerIntentExecutor {
                         _ => "policy denied".to_string(),
                     };
                     debug!(tool = tool.as_str(), reason = reason.as_str(), "regent: gate denied tool");
+                    return Ok(IntentOutcome::ToolDenied {
+                        tool: tool.clone(),
+                        reason,
+                    });
+                }
+
+                // 4.5 Approval-required capabilities.
+                //
+                // Checked against the chain rather than a flag, because the
+                // chain is where the signature lives. A granted, dispatchable,
+                // not-yet-enacted approval naming this tool is the authority;
+                // nothing else is. The enactment drain emits
+                // `regent:approval:enacted` immediately after dispatching,
+                // which closes the window.
+                if APPROVAL_REQUIRED_TOOLS.contains(&tool.as_str())
+                    && !self.has_granted_approval_for(tool)
+                {
+                    let reason = format!(
+                        "{tool} requires an operator signature for the specific call. \
+                         Propose it with request_approval, naming the tool and its \
+                         parameters, and it will run once signed."
+                    );
+                    warn!(tool = tool.as_str(), "regent: unsigned dispatch of an approval-required tool refused");
+                    self.emit_receipt(
+                        "regent:tool:refused:unsigned",
+                        Some(&format!("tool={}", tool)),
+                    );
                     return Ok(IntentOutcome::ToolDenied {
                         tool: tool.clone(),
                         reason,

@@ -108,6 +108,8 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // A work arc that restated its plan without advancing. Silence here is
     // health; a receipt means the Regent looped and said so.
     "regent:arc:stalled",
+    // An approval-required capability reached for without a signature.
+    "regent:tool:refused:unsigned",
     "regent:approval:denied",
     // Phase 7 terminal states — propose an action, propose a mechanism.
     "regent:proposal:",
