@@ -163,6 +163,12 @@ fn parse_resolution(event: &str) -> Option<(Resolution, String)> {
 /// request whose text cannot be parsed is still a request awaiting an answer,
 /// and dropping it would hide an outstanding obligation — which is strictly
 /// worse than showing one you cannot yet read.
+///
+/// Test-only. Production callers want the enactment too and go through
+/// [`parse_request_tail`] directly (see line 298); this wrapper exists
+/// so `request_encoding_tests` reads as "verify the action extraction"
+/// rather than "verify tuple `.0` of the tail parser."
+#[cfg(test)]
 fn parse_request_action(event: &str) -> String {
     parse_request_tail(event).0
 }
