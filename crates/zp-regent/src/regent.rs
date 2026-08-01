@@ -555,7 +555,7 @@ impl Regent {
         debug!(cycle = self.cycle_count, "regent cycle starting");
 
         // ── Phase 1: Perceive ──────────────────────────────────────────
-        let context = self.perceive(chain, findings, operator_input, delegations, system_awareness, Vec::new(), None, None)?;
+        let context = self.perceive(chain, findings, operator_input, delegations, system_awareness, Vec::new(), None, None, None)?;
 
         // ── Phase 2: Reason ────────────────────────────────────────────
         let intent = self.reason(&context).await?;
@@ -589,6 +589,7 @@ impl Regent {
         tool_results: Vec<crate::context::ToolResult>,
         work_arc: Option<crate::context::WorkArc>,
         prior_response: Option<crate::context::PriorResponse>,
+        cycle_directive: Option<String>,
     ) -> Result<CognitiveContext, RegentError> {
         // Read recent chain entries (compressed for context efficiency).
         let recent_entries = chain
@@ -688,6 +689,7 @@ impl Regent {
             tool_results,
             work_arc,
             prior_response,
+            cycle_directive,
             composition_summary,
         })
     }
@@ -713,9 +715,30 @@ impl Regent {
             .any(|f| f.severity == "Error" || f.severity == "Critical");
 
         // Skip inference only when there's genuinely nothing to do:
-        // no operator input, no urgent findings, and no tool results
-        // from a prior turn that need narration.
-        if context.pending_input.is_none() && !has_urgent && context.tool_results.is_empty() {
+        // no operator input, no urgent findings, no tool results from a
+        // prior turn that need narration — and no work arc.
+        //
+        // The arc clause was missing, and its absence was operator-visible.
+        // Observed 2026-08-01: the operator asked to compact the chain and
+        // be asked first. Routing returned `continue`, which opens an arc.
+        // The arc loop re-entered `run_cycle` with the input already
+        // consumed and no tool having run, so all three original conditions
+        // held and this returned `Observe` without inferring at all —
+        // `reason_ms=0`. The loop then handed the operator the observation
+        // string as their answer: "cycle 0: 50 chain entries, 0 findings,
+        // no input, no urgency."
+        //
+        // A cycle resuming an arc always has something to do; the arc's
+        // `progress` is a standing instruction from the cycle that opened
+        // it. Treating that as "no input" mistakes *who is speaking* for
+        // *whether anything was said*. `perception_invocation_reason`
+        // already tells these apart as `work_arc_continuation`; this guard
+        // simply never asked.
+        if context.pending_input.is_none()
+            && !has_urgent
+            && context.tool_results.is_empty()
+            && context.work_arc.is_none()
+        {
             return Ok(Intent::Observe {
                 observation: format!(
                     "cycle {}: {} chain entries, {} findings, no input, no urgency",
@@ -770,6 +793,7 @@ impl Regent {
                             failed_limb: None,
                             expected_outcome: None,
                             draft: None,
+                            enactment: None,
                         })
                     }
                 }
@@ -891,6 +915,36 @@ impl Regent {
             .map(|l| format!("{l}: {proposed_action}"))
             .unwrap_or_else(|| "approval required".to_string());
 
+        // The dispatchable form, when the model named one. Validated against
+        // the delegation set the Regent actually holds: a proposal naming a
+        // tool it cannot call would produce a grant the substrate cannot
+        // honour, which is the same broken promise one layer further down.
+        let enactment = v.get("enactment").and_then(|e| {
+            let tool = e.get("tool")?.as_str()?.trim();
+            if tool.is_empty() || tool.eq_ignore_ascii_case("none") {
+                return None;
+            }
+            if !context
+                .active_delegations
+                .iter()
+                .any(|d| d.capability == tool)
+            {
+                warn!(
+                    tool,
+                    "proposal named a tool the Regent does not hold — enactment dropped, \
+                     proposal stands on its prose"
+                );
+                return None;
+            }
+            Some(crate::intent::Enactment {
+                tool: tool.to_string(),
+                params: e
+                    .get("params")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null),
+            })
+        });
+
         Ok(Intent::RequestApproval {
             kind,
             proposed_action,
@@ -899,6 +953,7 @@ impl Regent {
             failed_limb: field("failed_limb"),
             expected_outcome: field("expected_outcome"),
             draft: field("draft"),
+            enactment,
         })
     }
 
@@ -1373,6 +1428,26 @@ impl Regent {
         caps.join(", ")
     }
 
+/// Is this chain entry the Regent's own reasoning rather than evidence?
+///
+/// Deliberately narrow. Only the receipts a cycle writes *about itself* are
+/// filtered — the composition it reasoned from, the intent it chose, the act
+/// it recorded, and the observer's verdict on it. Everything else the Regent
+/// emits, including `regent:tool:completed:*` and gate decisions, is a fact
+/// about the substrate and stays.
+///
+/// The distinction that matters is not "did the Regent write it" but "is it
+/// evidence, or is it an echo".
+fn is_own_bookkeeping(action_summary: &str) -> bool {
+    const SELF_REFERENTIAL: &[&str] = &[
+        "cognitive:input:composed",
+        "cognitive:act:recorded",
+        "cognitive:observer:verified",
+        "regent:intent:",
+    ];
+    SELF_REFERENTIAL.iter().any(|p| action_summary.contains(p))
+}
+
     /// Build the user prompt from cognitive context.
     fn build_user_prompt(&self, context: &CognitiveContext) -> String {
         let mut parts = Vec::new();
@@ -1450,10 +1525,17 @@ impl Regent {
         // Work arc context — if resuming a multi-cycle task.
         if let Some(ref arc) = context.work_arc {
             parts.push(format!(
-                "WORK ARC IN PROGRESS (cycle {}/{}): {}\n\
-                 You are mid-task. Use your tools to continue, then either:\n\
-                 - \"continue\" with updated progress if more work remains\n\
-                 - \"respond\" to tell the operator what you accomplished",
+                "{}WORK ARC IN PROGRESS (cycle {}/{}): {}\n\
+                 You are mid-task. Do one concrete thing now:\n\
+                 - \"execute\" a tool, if a step remains that you can take\n\
+                 - \"request_approval\", if the next step needs the operator to sign\n\
+                 - \"respond\", to tell the operator what you accomplished\n\
+                 Repeating the plan is not progress. Answering \"continue\" with \
+                 the same text twice stops the arc.",
+                match context.cycle_directive.as_deref() {
+                    Some(q) => format!("THE OPERATOR ASKED: {q}\n"),
+                    None => String::new(),
+                },
                 arc.cycles_completed + 1, arc.max_cycles, arc.progress
             ));
         }
@@ -1470,11 +1552,19 @@ impl Regent {
                     format!("[{}] {} → {}", status, r.tool, r.output)
                 })
                 .collect();
+            // Restate the question. Without it this block instructs the
+            // model to answer something it can no longer see, and the
+            // observed response to that is another tool call.
+            let asked = match context.cycle_directive.as_deref() {
+                Some(q) => format!("THE OPERATOR ASKED: {q}\n\n"),
+                None => String::new(),
+            };
             parts.push(format!(
-                "YOUR PRIOR ACTIONS THIS CYCLE:\n{}\n\
-                 Now tell the operator the SPECIFIC results from your tool calls above. \
+                "{asked}YOUR PRIOR ACTIONS THIS CYCLE:\n{}\n\
+                 Now answer using the SPECIFIC results above. \
                  Include actual data: URLs, titles, status codes, counts — whatever the tool returned. \
-                 Do NOT give a generic summary. Relay what you actually observed.",
+                 Do NOT give a generic summary. Relay what you actually observed. \
+                 Do NOT repeat a tool call you have already made above — you have its result.",
                 results.join("\n")
             ));
         }
@@ -1528,11 +1618,32 @@ impl Regent {
                     context.recent_chain.len()
                 ));
             } else {
-                // Stewardship mode — full chain context for autonomous reasoning.
+                // Stewardship mode — chain context for autonomous reasoning,
+                // minus the Regent's own cognitive bookkeeping.
+                //
+                // The chain is both the substrate's memory and the Regent's
+                // context, so anything written during a cycle is read back in
+                // the next one. For substrate events that is the point. For
+                // the Regent's own intent and composition receipts it is a
+                // mirror, and a mirror in a feedback path is an oscillator.
+                //
+                // Observed 2026-08-01: a stalled arc emitted three receipts a
+                // cycle — composed, intent:continue, act:recorded. Ten cycles
+                // filled the fifty-entry window, so the last ten entries
+                // rendered to the model were its own "continue" decisions.
+                // It continued. A greeting afterwards opened a fresh arc on
+                // the same subject, because that is what the chain said the
+                // Regent had been doing.
+                //
+                // Tool completions and gate decisions stay: those are
+                // evidence about the world. Intents and compositions are the
+                // Regent's own reasoning, and it does not need to read its
+                // own mind to know it.
                 let recent: Vec<String> = context
                     .recent_chain
                     .iter()
                     .rev()
+                    .filter(|e| !Self::is_own_bookkeeping(&e.action_summary))
                     .take(10)
                     .map(|e| {
                         format!(
@@ -1544,7 +1655,15 @@ impl Regent {
                         )
                     })
                     .collect();
-                parts.push(format!("Recent chain:\n{}", recent.join("\n")));
+                let omitted = context.recent_chain.len().saturating_sub(recent.len());
+                parts.push(format!(
+                    "Recent chain ({} of {} entries; {} of your own cognitive \
+                     bookkeeping omitted):\n{}",
+                    recent.len(),
+                    context.recent_chain.len(),
+                    omitted,
+                    recent.join("\n")
+                ));
             }
         }
 
@@ -2123,6 +2242,7 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
                 failed_limb: None,
                 expected_outcome: None,
                 draft: None,
+                enactment: None,
             })
         }
 
