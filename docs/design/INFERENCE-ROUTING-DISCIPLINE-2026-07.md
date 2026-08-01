@@ -99,7 +99,7 @@ If `envelope_authorized == false`, the substrate additionally emits a warning re
 Operator-declared inference envelope with substrate-side selection. Ceremony-anchored per Envelope changes. Requires:
 
 - Envelope declaration ceremony (composed with CloudMandate)
-- Substrate-side classifier runtime (`crates/zp-regent/src/inference/classifier.rs`, not yet written)
+- Substrate-side classifier runtime (`crates/zp-regent/src/inference_classifier.rs`, advisory-only until envelope ceremony ships)
 - Per-decision chain-anchoring (`regent:inference:classifier_decision:<decision_id>`)
 - Envelope-versioning discipline (envelope changes are ceremony receipts)
 - Model dossier integration (classifier's decisions weighted by dossier evidence)

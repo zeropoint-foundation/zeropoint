@@ -1,24 +1,24 @@
 {
-  "generated_from_commit": "32ca343",
-  "governed_docs": 120,
+  "generated_from_commit": "bdab640",
+  "governed_docs": 133,
   "totals": {
-    "connections": 982,
-    "live": 288,
+    "connections": 1041,
+    "live": 358,
     "tied_off": 42,
-    "defect": 652,
-    "maturity": 0.336
+    "defect": 641,
+    "maturity": 0.3842
   },
   "by_kind": {
-    "code_to_artifact/defect": 125,
-    "code_to_artifact/live": 33,
+    "code_to_artifact/defect": 127,
+    "code_to_artifact/live": 34,
     "code_to_corpus/live": 5,
-    "corpus_to_chain/defect": 498,
-    "corpus_to_chain/live": 66,
-    "corpus_to_code/defect": 27,
+    "corpus_to_chain/defect": 508,
+    "corpus_to_chain/live": 69,
+    "corpus_to_code/defect": 3,
+    "corpus_to_code/live": 65,
     "corpus_to_keel/live": 39,
-    "crate_dep/live": 125,
-    "derived_artifact/defect": 2,
-    "derived_artifact/live": 1,
+    "crate_dep/live": 127,
+    "derived_artifact/defect": 3,
     "derived_artifact/tied_off": 1,
     "pin/live": 19,
     "pin_exception/tied_off": 41
@@ -896,6 +896,15 @@
     },
     {
       "kind": "crate_dep",
+      "source": "crates/zp-regent",
+      "target": "zp-emission-coherence",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-regent/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
       "source": "crates/zp-server",
       "target": "zp-config",
       "status": "live",
@@ -1077,6 +1086,15 @@
     {
       "kind": "crate_dep",
       "source": "crates/zp-server",
+      "target": "zp-inference-observer",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-server/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
+      "source": "crates/zp-server",
       "target": "zp-artifacts",
       "status": "live",
       "detector": "cargo build --workspace",
@@ -1202,246 +1220,615 @@
     },
     {
       "kind": "corpus_to_code",
+      "source": "docs/DISCIPLINE-PINS.md",
+      "target": "crates/zp-keys/src/keyring.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/DISCIPLINE-PINS.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/DISCIPLINE-PINS.md",
+      "target": "crates/zp-keys/src/sovereignty/fingerprint.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/DISCIPLINE-PINS.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/DISCIPLINE-PINS.md",
+      "target": "crates/zp-keys/src/sovereignty/mod.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/DISCIPLINE-PINS.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/DISCIPLINE-PINS.md",
+      "target": "crates/zp-keys/src/sovereignty/touchid.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/DISCIPLINE-PINS.md"
+    },
+    {
+      "kind": "corpus_to_code",
       "source": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md",
       "target": "crates/zp-regent/src/awareness.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md",
       "target": "crates/zp-regent/src/error.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md",
       "target": "crates/zp-regent/src/loop_runner.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md",
       "target": "crates/zp-regent/src/regent.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md",
       "target": "crates/zp-server/src/regent.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md",
       "target": "crates/zp-server/src/regent_tools.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "claimed implementing path does not exist",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/CHAIN-STORYTELLING-AND-CLEO-2026-06.md",
+      "target": "crates/zp-server/src/officers.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/CHAIN-STORYTELLING-AND-CLEO-2026-06.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md",
       "target": "crates/zp-server/src/regent.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md",
       "target": "crates/zp-server/src/substrate_validate.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
       "target": "crates/zp-host/src/context.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
       "target": "crates/zp-mesh/src/reputation.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
       "target": "crates/zp-officers/src/officer.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md",
       "target": "crates/zp-policy/src/wasm_runtime.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/EXECUTABLE-ARTIFACTS-OPPORTUNITY-MAPPING-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md",
       "target": "crates/zp-mesh/src/discovery.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md",
       "target": "crates/zp-mesh/src/interface.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md",
       "target": "crates/zp-pipeline/src/mesh_bridge.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/ironclaw/src/zp/client.rs",
       "status": "defect",
       "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
-      "site": "docs/design/FREENET-TRANSPORT-CONFORMANCE-2026-07.md"
+      "note": "claimed implementing path does not exist",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-cli/src/main.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-discipline/tests/no_inline_gate_signer_derivation.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "claimed implementing path does not exist",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-hardening-tests/tests/phase_session_token.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-keys/src/audit_signer.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-keys/src/auth.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "claimed implementing path does not exist",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-keys/src/gate_signer.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-keys/src/vault_key.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-receipt/src/canonical.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-receipt/src/signable.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-server/src/auth.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-server/src/envelope_state.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md",
+      "target": "crates/zp-server/src/lib.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md",
       "target": "crates/zp-server/src/canary.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-configure/src/lib.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-engine/src/providers.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-llm/src/providers/anthropic.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-llm/src/providers/ollama.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-llm/src/providers/proxy.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-server/src/onboard/detect.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-server/src/onboard/inference.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
+      "target": "crates/zp-server/src/proxy.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
       "source": "docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md",
-      "target": "crates/zp-regent/src/inference/classifier.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "claimed implementing path does not exist",
+      "target": "crates/zp-regent/src/inference_classifier.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/MACHINE-LEARNING-INVENTORY-2026-07.md",
+      "target": "crates/zp-keys/src/sovereignty/face.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/MACHINE-LEARNING-INVENTORY-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/PORTABLE-CHAIN-EXPORT-CEREMONY-2026-07.md",
       "target": "crates/zp-server/src/anchor_pipeline.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/PORTABLE-CHAIN-EXPORT-CEREMONY-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md",
-      "target": "crates/zp-regent/src/emission_coherence.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "claimed implementing path does not exist",
-      "site": "docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md"
-    },
-    {
-      "kind": "corpus_to_code",
-      "source": "docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md",
       "target": "crates/zp-regent/src/loop_runner.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
       "target": "crates/zp-officers/src/aegis.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "crates/zp-discipline/tests/no_raw_peer_url_outside_zp_net.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "crates/zp-discipline/tests/no_raw_tcp_bind_outside_zp_net.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "crates/zp-discipline/tests/no_raw_tonic_serve_outside_zp_net.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "crates/zp-net/src/peer.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "crates/zp-server/src/onboard/detect.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "crates/zp-server/src/onboard/verify.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "crates/zp-server/src/tool_ports.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
+      "target": "crates/zp-content/src/backends/local_fs.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/STORAGE-ABSTRACTION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
+      "target": "crates/zp-content/src/backends/memory.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/STORAGE-ABSTRACTION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
+      "target": "crates/zp-content/src/index.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/STORAGE-ABSTRACTION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
+      "target": "crates/zp-content/src/lib.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/STORAGE-ABSTRACTION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
+      "target": "crates/zp-content/tests/conformance.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/STORAGE-ABSTRACTION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
+      "target": "crates/zp-discipline/tests/no_raw_storage_calls_outside_zp_content.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/STORAGE-ABSTRACTION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/STRUCTURAL-FIT-INVENTORY-2026-07.md",
+      "target": "crates/zp-receipt/src/epoch.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/STRUCTURAL-FIT-INVENTORY-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07.md",
       "target": "crates/zp-core/src/capability_grant.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07.md",
       "target": "crates/zp-server/src/lib.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md",
       "target": "crates/zp-cli/src/emit.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/tool-version-provenance-2026-06.md",
       "target": "crates/zp-cli/src/emit.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/tool-version-provenance-2026-06.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/tool-version-provenance-2026-06.md",
       "target": "crates/zp-cli/src/main.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/tool-version-provenance-2026-06.md"
     },
     {
       "kind": "corpus_to_code",
       "source": "docs/design/tool-version-provenance-2026-06.md",
       "target": "crates/zp-server/src/tool_ports.rs",
-      "status": "defect",
-      "detector": null,
-      "note": "path exists but nothing verifies the claim (check_spec_citations is code\u2192doc only)",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/tool-version-provenance-2026-06.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/whitepaper-v8.md",
+      "target": "crates/zp-server/src/onboard/genesis.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/whitepaper-v8.md"
     },
     {
       "kind": "corpus_to_keel",
@@ -1850,6 +2237,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
+      "target": "artifact:supersedes",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/STORAGE-ABSTRACTION-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/KEEL-2026-07.md",
       "target": "boot:generation",
       "status": "defect",
@@ -2255,6 +2651,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/COGNITIVE-SELF-OBSERVER-2026-07.md",
+      "target": "cognitive:claim:unbacked",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/COGNITIVE-SELF-OBSERVER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/COGNITIVE-TOOLS-OPPORTUNITY-MAPPING-2026-07.md",
       "target": "cognitive:construction:*",
       "status": "defect",
@@ -2351,6 +2756,15 @@
       "detector": null,
       "note": "documented with no family in the code registry",
       "site": "docs/design/OBSERVER-COHERENCE-DISCIPLINE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRIAGE-FOR-COHERENCE-2026-07.md",
+      "target": "coherence:triaged:*",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/TRIAGE-FOR-COHERENCE-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -2621,6 +3035,15 @@
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/design/EXTENSION-SURFACE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/RECEIPT-LIFECYCLE-2026-06.md",
+      "target": "delegation:granted:ironclaw",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/RECEIPT-LIFECYCLE-2026-06.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3083,12 +3506,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-ORCHESTRATION-ARCHITECTURE-2026-07.md",
+      "source": "docs/design/RECEIPT-LIFECYCLE-2026-06.md",
       "target": "gate:allowed",
       "status": "defect",
       "detector": null,
       "note": "documented with no family in the code registry",
-      "site": "docs/design/REGENT-ORCHESTRATION-ARCHITECTURE-2026-07.md"
+      "site": "docs/design/RECEIPT-LIFECYCLE-2026-06.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3679,9 +4102,9 @@
       "kind": "corpus_to_chain",
       "source": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md",
       "target": "improvement:proposed",
-      "status": "defect",
-      "detector": null,
-      "note": "documented with no family in the code registry",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md"
     },
     {
@@ -4316,6 +4739,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/DASHBOARD-CONNECTORS-STACK-DECISION-2026-07.md",
+      "target": "lens:declared:dashboard_connectors_stack",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/DASHBOARD-CONNECTORS-STACK-DECISION-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/DECENTRALIZED-TRANSPORT-OPPORTUNITY-MAPPING-2026-07.md",
       "target": "lens:declared:decentralized_transport",
       "status": "defect",
@@ -4442,6 +4874,33 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "localhost:11434",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "localhost:17770",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "localhost:8473",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/BLAST-RADIUS-AND-RECOVERY-2026-07.md",
       "target": "lock:force_released",
       "status": "defect",
@@ -4466,6 +4925,33 @@
       "detector": null,
       "note": "documented with no family in the code registry",
       "site": "docs/design/MEDIA-PROVENANCE-INTEROP-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TURBOVEC-INTEGRATION-2026-06.md",
+      "target": "memory:index:rebuild:triggered",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/TURBOVEC-INTEGRATION-2026-06.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TURBOVEC-INTEGRATION-2026-06.md",
+      "target": "memory:indexed:turbovec",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/TURBOVEC-INTEGRATION-2026-06.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/ARCHITECTURE-LAYERING-2026-07.md",
+      "target": "memory:retrieve",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/ARCHITECTURE-LAYERING-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5360,6 +5846,24 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "port:allocated",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md",
+      "target": "port:lifecycle:port",
+      "status": "defect",
+      "detector": null,
+      "note": "documented with no family in the code registry",
+      "site": "docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/BUILD-PROCESS-DESIGN-2026-07.md",
       "target": "port_registry:snapshot",
       "status": "defect",
@@ -5603,12 +6107,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
+      "source": "docs/design/DASHBOARD-CONNECTORS-STACK-DECISION-2026-07.md",
       "target": "regent:build:proposed:*",
       "status": "defect",
       "detector": null,
       "note": "documented with no family in the code registry",
-      "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+      "site": "docs/design/DASHBOARD-CONNECTORS-STACK-DECISION-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6940,7 +7444,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3019"
+      "site": "crates/zp-cli/src/main.rs:3060"
     },
     {
       "kind": "code_to_artifact",
@@ -6949,7 +7453,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3266"
+      "site": "crates/zp-cli/src/main.rs:3307"
     },
     {
       "kind": "code_to_artifact",
@@ -6958,7 +7462,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:6747"
+      "site": "crates/zp-cli/src/main.rs:6828"
     },
     {
       "kind": "code_to_artifact",
@@ -6967,7 +7471,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7288"
+      "site": "crates/zp-cli/src/main.rs:7369"
     },
     {
       "kind": "code_to_artifact",
@@ -6976,7 +7480,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7291"
+      "site": "crates/zp-cli/src/main.rs:7372"
     },
     {
       "kind": "code_to_artifact",
@@ -6985,7 +7489,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7507"
+      "site": "crates/zp-cli/src/main.rs:7728"
     },
     {
       "kind": "code_to_artifact",
@@ -6994,7 +7498,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:9225"
+      "site": "crates/zp-cli/src/main.rs:9446"
     },
     {
       "kind": "code_to_artifact",
@@ -7214,6 +7718,15 @@
     },
     {
       "kind": "code_to_artifact",
+      "source": "crates/zp-emission-coherence/src/main.rs",
+      "target": "read_to_string",
+      "status": "defect",
+      "detector": null,
+      "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
+      "site": "crates/zp-emission-coherence/src/main.rs:100"
+    },
+    {
+      "kind": "code_to_artifact",
       "source": "crates/zp-engine/src/capability.rs",
       "target": "read_to_string",
       "status": "defect",
@@ -7322,6 +7835,15 @@
     },
     {
       "kind": "code_to_artifact",
+      "source": "crates/zp-inference-observer/src/lib.rs",
+      "target": "File::open",
+      "status": "defect",
+      "detector": null,
+      "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
+      "site": "crates/zp-inference-observer/src/lib.rs:180"
+    },
+    {
+      "kind": "code_to_artifact",
       "source": "crates/zp-keys/src/keyring.rs",
       "target": "read_dir",
       "status": "defect",
@@ -7399,7 +7921,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-keys/src/sovereignty/hardware/mod.rs:399"
+      "site": "crates/zp-keys/src/sovereignty/hardware/mod.rs:497"
     },
     {
       "kind": "code_to_artifact",
@@ -7553,6 +8075,15 @@
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
       "site": "crates/zp-regent/src/regent.rs:17"
+    },
+    {
+      "kind": "code_to_artifact",
+      "source": "crates/zp-regent/src/regent.rs",
+      "target": "include_str!",
+      "status": "live",
+      "detector": "rustc (compile-time embed)",
+      "note": "content embedded at build time; cannot break at runtime",
+      "site": "crates/zp-regent/src/regent.rs:18"
     },
     {
       "kind": "code_to_artifact",
@@ -7732,7 +8263,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:243"
+      "site": "crates/zp-server/src/lib.rs:244"
     },
     {
       "kind": "code_to_artifact",
@@ -7741,7 +8272,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1638"
+      "site": "crates/zp-server/src/lib.rs:1648"
     },
     {
       "kind": "code_to_artifact",
@@ -7750,7 +8281,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1799"
+      "site": "crates/zp-server/src/lib.rs:1809"
     },
     {
       "kind": "code_to_artifact",
@@ -7759,7 +8290,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1980"
+      "site": "crates/zp-server/src/lib.rs:1990"
     },
     {
       "kind": "code_to_artifact",
@@ -7768,7 +8299,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:3457"
+      "site": "crates/zp-server/src/lib.rs:3467"
     },
     {
       "kind": "code_to_artifact",
@@ -7777,7 +8308,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:3770"
+      "site": "crates/zp-server/src/lib.rs:3970"
     },
     {
       "kind": "code_to_artifact",
@@ -7786,7 +8317,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4048"
+      "site": "crates/zp-server/src/lib.rs:4248"
     },
     {
       "kind": "code_to_artifact",
@@ -7795,7 +8326,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4490"
+      "site": "crates/zp-server/src/lib.rs:4690"
     },
     {
       "kind": "code_to_artifact",
@@ -7804,7 +8335,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6129"
+      "site": "crates/zp-server/src/lib.rs:6329"
     },
     {
       "kind": "code_to_artifact",
@@ -7813,7 +8344,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6130"
+      "site": "crates/zp-server/src/lib.rs:6330"
     },
     {
       "kind": "code_to_artifact",
@@ -7822,7 +8353,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6131"
+      "site": "crates/zp-server/src/lib.rs:6331"
     },
     {
       "kind": "code_to_artifact",
@@ -7831,7 +8362,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6132"
+      "site": "crates/zp-server/src/lib.rs:6332"
     },
     {
       "kind": "code_to_artifact",
@@ -7840,7 +8371,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6134"
+      "site": "crates/zp-server/src/lib.rs:6334"
     },
     {
       "kind": "code_to_artifact",
@@ -7849,7 +8380,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6135"
+      "site": "crates/zp-server/src/lib.rs:6335"
     },
     {
       "kind": "code_to_artifact",
@@ -7858,7 +8389,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6136"
+      "site": "crates/zp-server/src/lib.rs:6336"
     },
     {
       "kind": "code_to_artifact",
@@ -7867,7 +8398,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6137"
+      "site": "crates/zp-server/src/lib.rs:6337"
     },
     {
       "kind": "code_to_artifact",
@@ -7876,7 +8407,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6138"
+      "site": "crates/zp-server/src/lib.rs:6338"
     },
     {
       "kind": "code_to_artifact",
@@ -7885,7 +8416,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6139"
+      "site": "crates/zp-server/src/lib.rs:6339"
     },
     {
       "kind": "code_to_artifact",
@@ -7894,7 +8425,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6141"
+      "site": "crates/zp-server/src/lib.rs:6341"
     },
     {
       "kind": "code_to_artifact",
@@ -7903,7 +8434,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6142"
+      "site": "crates/zp-server/src/lib.rs:6342"
     },
     {
       "kind": "code_to_artifact",
@@ -7912,7 +8443,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6143"
+      "site": "crates/zp-server/src/lib.rs:6343"
     },
     {
       "kind": "code_to_artifact",
@@ -7921,7 +8452,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6144"
+      "site": "crates/zp-server/src/lib.rs:6344"
     },
     {
       "kind": "code_to_artifact",
@@ -7930,7 +8461,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6146"
+      "site": "crates/zp-server/src/lib.rs:6346"
     },
     {
       "kind": "code_to_artifact",
@@ -7939,7 +8470,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6147"
+      "site": "crates/zp-server/src/lib.rs:6347"
     },
     {
       "kind": "code_to_artifact",
@@ -7948,7 +8479,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6148"
+      "site": "crates/zp-server/src/lib.rs:6348"
     },
     {
       "kind": "code_to_artifact",
@@ -7957,7 +8488,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6186"
+      "site": "crates/zp-server/src/lib.rs:6386"
     },
     {
       "kind": "code_to_artifact",
@@ -7966,7 +8497,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6324"
+      "site": "crates/zp-server/src/lib.rs:6524"
     },
     {
       "kind": "code_to_artifact",
@@ -8848,7 +9379,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "55 relevant files changed since it was written (27 commits)",
+      "note": "128 relevant files changed since it was written (64 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -8857,16 +9388,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "23 relevant files changed since it was written (16 commits)",
+      "note": "107 relevant files changed since it was written (53 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "32ca343",
-      "status": "live",
-      "detector": "connection-map derived_artifact",
-      "note": "no relevant inputs changed since it was written (0 commits ago)",
+      "target": "bdab640",
+      "status": "defect",
+      "detector": null,
+      "note": "95 relevant files changed since it was written (36 commits), declared source bdab640 dated 2026-07-31",
       "site": "tools/connection-map/connections.json"
     }
   ]
