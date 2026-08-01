@@ -205,6 +205,66 @@ chain_validated = false
 last_empirical_test = "pending"
 candidate_tiers = ["reasoning"]        # 27b-mlx awaiting bench
 
+# ── Drafter (operational serialization) ─────────────────────────────
+#
+# Per MODEL-DOSSIER-2026-07.md §"Two serializations, one artifact",
+# a speculative-decoding drafter is a second serialization of this
+# dossier — a lightweight model that learned this target's behavior
+# by teacher-forcing on the target's own emissions. When a drafter
+# has been trained and byte-identical parity established on this
+# substrate, populate [drafter] with the fields below.
+#
+# For qwen3.6, DFlash has shipped drafters on Hugging Face under
+# z-lab/Qwen3.6-* — see docs/design/MODEL-DOSSIER-2026-07.md.
+
+[drafter]
+# Fill this section when a drafter is adopted per MODEL-DOSSIER's
+# bootstrap-ceremony §"Bootstrap ceremony". State stays "not_yet_trained"
+# until a candidate has been shadow-evaluated with byte-identical parity.
+state = "not_yet_trained"
+architecture = "dflash"                  # dflash | eagle-3 | mtp | dspark | ...
+target_variant = "qwen3.6:35b-a3b"       # which of this dossier's variants the drafter targets
+checkpoint_id = ""                       # e.g., "z-lab/Qwen3.6-35B-A3B-DFlash"
+checkpoint_hash = ""                     # SHA-256 of the drafter weights
+checkpoint_license = ""                  # may differ from base license
+training_corpus_hash = ""                # hash of the corpus the drafter was teacher-forced against
+training_run_receipt = ""                # chain receipt for the training run
+trained_at = ""                          # ISO-8601 timestamp
+byte_identical_parity_receipt = ""       # required for state="active"; from acceleration_ablation shadow scenario
+
+# Populated by observation:inference:drafter_acceptance rollups from
+# OBSERVATION-PLANE §"Inference telemetry" once the drafter is active.
+# See MODEL-DOSSIER-2026-07 §"Continuous drift signal".
+
+[drafter.acceptance_rate]
+# Rolling window mean acceptance rate. Below drift_threshold triggers
+# substrate:characterization:drift_suspected against this dossier.
+window_size_tokens = 1000
+current_window_mean = 0.0                # not-yet-measured
+drift_threshold = 0.55                   # per-dossier operator-declared floor
+
+[drafter.acceptance_rate.by_workload]
+# Drafters are workload-fit-varying (DFlash paper: math/code ~4-5x speedup,
+# chat ~2.5x). Track per class so mismatch surfaces before dispatch failure.
+math = 0.0
+code = 0.0
+chat = 0.0
+reasoning = 0.0
+tool_dispatch = 0.0
+
+[drafter.acceptance_rate.by_position]
+# Position-wise decay curve. DFlash's confidence head profiles this;
+# a shallow curve means the drafter is guessing far ahead reliably.
+# Populated at rollup boundaries once the drafter is active.
+position_0 = 0.0
+position_1 = 0.0
+position_2 = 0.0
+position_3 = 0.0
+position_4 = 0.0
+position_5 = 0.0
+position_6 = 0.0
+position_7 = 0.0
+
 # ── Research Notes ──────────────────────────────────────────────────
 
 [research]
@@ -255,3 +315,33 @@ vs gemma4:26b-mlx (officer fast-path):
   - Qwen family has proven JSON compliance for regent use
   - gemma4 has the context-dump failure mode that blocks it from regent
   - If qwen3.6:27b works for regent, no reason to try gemma4 again"""
+
+# ── Entropy baseline (H3 in zp-emission-coherence) ──────────────────
+#
+# H3 (token entropy anomaly) in zp-emission-coherence compares observed
+# per-token surprise = mean(-log P(chosen)) against this baseline.
+# Populated by running a calibration battery of representative prompts
+# against this model and computing the sample mean and standard
+# deviation of per-token surprise across the responses.
+#
+# State stays "not_yet_calibrated" until real calibration data lands.
+# When state="calibrated", the loader in zp-regent/loop_runner.rs
+# inserts this baseline into AnalyzerConfig.entropy_baselines keyed
+# by target_variant. H3 then fires with severity Warning if observed
+# mean drops 2σ below mean, Critical if 3σ+ below. See
+# REGENT-DOOM-LOOP-DETECTION-2026-07.md §Heuristic 3.
+#
+# Baselines are variant-specific: identical prompts to a 1.7B and an
+# 8B of the same family produce measurably different surprise
+# distributions. First-shipping schema targets the primary_variant;
+# multi-variant families can migrate to [[entropy_baseline]] array
+# once calibration expands.
+
+[entropy_baseline]
+state = "not_yet_calibrated"
+target_variant = "qwen3.6:27b-mlx"
+mean = 0.0                    # mean(-log P(chosen)) over the battery
+std_dev = 0.0                 # sample std dev
+battery_prompt_count = 0      # number of prompts in the calibration set
+battery_receipt = ""          # chain receipt for the calibration run
+calibrated_at = ""            # ISO-8601 timestamp when calibration ran

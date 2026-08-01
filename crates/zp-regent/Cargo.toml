@@ -14,6 +14,7 @@ zp-receipt = { path = "../zp-receipt" }
 zp-audit = { path = "../zp-audit" }
 zp-officers = { path = "../zp-officers" }
 zp-config = { path = "../zp-config" }
+zp-emission-coherence = { path = "../zp-emission-coherence" }
 
 # Async
 tokio = { workspace = true }
@@ -43,3 +44,6 @@ toml = { workspace = true }
 
 # SHA-256 for cognitive-input composition-summary hashing
 sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

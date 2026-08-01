@@ -46,6 +46,18 @@ pub enum IntentOutcome {
         tool: String,
         reason: String,
     },
+    /// The capability exists and is delegated, but this specific call has
+    /// no operator signature.
+    ///
+    /// Distinct from `ToolDenied` on purpose. A gate denial says the act is
+    /// not permitted; this says it is not permitted *yet*, and names the
+    /// thing that would permit it. That difference is the whole basis for
+    /// escalating to a proposal, and deriving it by matching words in a
+    /// denial string would make a control-flow decision out of prose.
+    ToolRefusedUnsigned {
+        tool: String,
+        reason: String,
+    },
     /// Response was delivered to a cockpit surface.
     Delivered,
     /// Observation recorded (no visible effect).
@@ -198,8 +210,40 @@ pub fn start_loop(
     operator_name: String,
     genesis_prefix: String,
     delegations: Vec<DelegationSummary>,
+    // H3 (token-entropy anomaly) baselines per model variant. Built by
+    // the caller from the dossier corpus so start_loop stays free of
+    // TOML-schema knowledge. Empty map → H3 stays silent.
+    entropy_baselines: std::collections::HashMap<
+        String,
+        zp_emission_coherence::EntropyBaseline,
+    >,
 ) -> RegentHandle {
     let (tx, mut rx) = mpsc::channel::<RegentMessage>(64);
+
+    // Emission-coherence analyzer per REGENT-DOOM-LOOP-DETECTION §Part II.
+    // Holds the rolling window for H2 (length-distribution collapse) and
+    // entropy baselines for H3 across cycles. Config defaults: 20-cycle
+    // window, CV threshold 0.15. H3 baselines come from `entropy_baselines`
+    // (this parameter), extracted at the caller site from the dossier
+    // corpus — every `[entropy_baseline]` section with `state = "calibrated"`
+    // and non-zero `std_dev` becomes an entry keyed by `target_variant`.
+    // Dossiers without a calibrated baseline are skipped: H3 simply doesn't
+    // fire for models whose baselines aren't measured yet.
+    //
+    // First-shipping discipline per the doc: instrumentation only. Findings
+    // are chain-anchored via SystemEvent receipts; response classification
+    // does NOT yet gate delivery or trigger retries. The R1/R2 wiring lands
+    // after the substrate has accumulated evidence of false-positive rates.
+    let mut analyzer_config = zp_emission_coherence::AnalyzerConfig::default();
+    analyzer_config.entropy_baselines = entropy_baselines;
+    info!(
+        h3_baselines = analyzer_config.entropy_baselines.len(),
+        "emission-coherence analyzer starting"
+    );
+    let emission_analyzer: Arc<std::sync::Mutex<zp_emission_coherence::EmissionAnalyzer>> =
+        Arc::new(std::sync::Mutex::new(
+            zp_emission_coherence::EmissionAnalyzer::new(analyzer_config),
+        ));
 
     tokio::spawn(async move {
         let mut latest_findings: Vec<Finding> = Vec::new();
@@ -294,6 +338,8 @@ pub fn start_loop(
                     };
 
                     // ── Arc loop: run cycles until Done or budget exhausted ──
+                    let cycle_directive_for_arc: Option<String> =
+                        operator_input.as_ref().map(|i| i.content.clone());
                     let mut arc: Option<WorkArc> = None;
                     let mut arc_input = operator_input;
                     // Mirror: carry the prior response into the first cycle.
@@ -331,6 +377,7 @@ pub fn start_loop(
                             &delegations,
                             arc.clone(),
                             cycle_prior.take(),
+                            &emission_analyzer,
                         ).await;
 
                         match outcome {
@@ -357,6 +404,7 @@ pub fn start_loop(
                                     max_cycles: MAX_ARC_CYCLES,
                                     tool_history: Vec::new(),
                                     stall_count: 0,
+                                    directive: cycle_directive_for_arc.clone(),
                                 });
                                 // Read the arc's prior state before overwriting it.
                                 let no_advance = !is_new_arc
@@ -531,6 +579,7 @@ pub fn start_loop(
                     &delegations,
                     arc.clone(),
                     None, // No mirror for autonomous cycles — no operator question to reflect on.
+                    &emission_analyzer,
                 ).await;
 
                 match outcome {
@@ -552,6 +601,8 @@ pub fn start_loop(
                             max_cycles: MAX_ARC_CYCLES,
                             tool_history: Vec::new(),
                             stall_count: 0,
+                            // Findings-triggered: no operator directive.
+                            directive: None,
                         });
                         let no_advance = !is_new_arc
                             && current.progress == progress
@@ -765,12 +816,18 @@ async fn run_cycle(
     delegations: &[DelegationSummary],
     work_arc: Option<WorkArc>,
     prior_response: Option<crate::context::PriorResponse>,
+    emission_analyzer: &Arc<std::sync::Mutex<zp_emission_coherence::EmissionAnalyzer>>,
 ) -> CycleOutcome {
     // Retained for every turn of this cycle. `current_input.take()` below
     // hands the operator's message to perceive exactly once, so that a
     // narration turn is not re-read as a new directive — correct, but it
     // also left later turns with no idea what was asked.
-    let cycle_directive: Option<String> = initial_input.as_ref().map(|i| i.content.clone());
+    let cycle_directive: Option<String> = initial_input
+        .as_ref()
+        .map(|i| i.content.clone())
+        // An arc continuation has no input of its own; the directive it is
+        // serving belongs to the arc.
+        .or_else(|| work_arc.as_ref().and_then(|a| a.directive.clone()));
     let mut current_input = initial_input;
     // If resuming a work arc, seed tool_results with the arc's history
     // so the Regent sees what she's already done across prior cycles.
@@ -925,6 +982,45 @@ async fn run_cycle(
             }
         }
 
+        // ── Layer 2 classifier decision ────────────────────────
+        // Per INFERENCE-ROUTING-DISCIPLINE-2026-07 §Layer 2 — every
+        // inference call generates a classifier decision. Advisory-only
+        // in first-shipping: envelopes today are single-model, so every
+        // decision is SoleAuthorized. Chain-anchoring even the trivial
+        // case builds the empirical foundation for evidence-based
+        // routing when multi-model envelopes ship via operator ceremony.
+        if let Some(decision) = regent_guard.inference().take_classifier_decision() {
+            let event = serde_json::to_string(&serde_json::json!({
+                "class": "inference:classifier_decision",
+                "receipt_type": decision.receipt_type(),
+                "decision_id": decision.decision_id,
+                "chosen_model": decision.chosen_model,
+                "envelope_size": decision.envelope_size,
+                "routable_count": decision.routable_count,
+                "selection_reason": decision.selection_reason,
+                "query_hint": decision.query_hint,
+                "timestamp": decision.timestamp,
+            }))
+            .unwrap_or_else(|_| "{}".to_string());
+            let entry = zp_audit::UnsealedEntry {
+                actor: zp_core::ActorId::System("regent".to_string()),
+                action: zp_core::AuditAction::SystemEvent { event },
+                conversation_id: zp_core::ConversationId(
+                    uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000004").unwrap(),
+                ),
+                policy_decision: zp_core::PolicyDecision::Allow {
+                    conditions: Vec::new(),
+                },
+                policy_module: "regent-inference-classifier".to_string(),
+                receipt: None,
+            };
+            if let Ok(mut s) = audit_store.lock() {
+                if let Err(e) = s.append(entry) {
+                    warn!("classifier decision receipt emission failed: {}", e);
+                }
+            }
+        }
+
         // Post-cycle memory maintenance.
         if let Err(e) = regent_guard.flush_memory() {
             warn!("memory flush failed: {}", e);
@@ -979,6 +1075,7 @@ async fn run_cycle(
                     .with_detail(format!("{}  turn={}", tool, turn)));
                 let tool_t0 = std::time::Instant::now();
 
+                let mut refused_call: Option<crate::intent::Enactment> = None;
                 let (response, succeeded) = match executor.execute(&intent).await {
                     Ok(IntentOutcome::ToolCompleted { tool: _, output }) => {
                         let s = serde_json::to_string_pretty(&output)
@@ -987,6 +1084,16 @@ async fn run_cycle(
                     }
                     Ok(IntentOutcome::ToolDenied { tool, reason }) => {
                         (format!("{} denied: {}", tool, reason), false)
+                    }
+                    Ok(IntentOutcome::ToolRefusedUnsigned { tool, reason }) => {
+                        // Keep the call itself, not just the fact of refusal.
+                        if let Intent::Execute { tool: t, params } = &intent {
+                            refused_call = Some(crate::intent::Enactment {
+                                tool: t.clone(),
+                                params: params.clone(),
+                            });
+                        }
+                        (format!("{} refused: {}", tool, reason), false)
                     }
                     Ok(_) => ("completed".to_string(), true),
                     Err(e) => {
@@ -1005,6 +1112,7 @@ async fn run_cycle(
                     tool: tool.clone(),
                     output: response,
                     succeeded,
+                    refused_call,
                 });
 
                 info!(
@@ -1055,6 +1163,7 @@ async fn run_cycle(
                         failed_limb,
                         expected_outcome,
                         draft,
+                        enactment,
                         ..
                     } => {
                         // Render the proposal the operator has to act on.
@@ -1080,6 +1189,19 @@ async fn run_cycle(
                             out.push_str(&format!(
                                 "\n\nDraft (unsigned — honoured this session only, \
                                  will not survive a restart):\n{d}"
+                            ));
+                        }
+                        // The call itself, verbatim. A signature authorises an
+                        // act, not a description of one, and the operator
+                        // cannot weigh what they are not shown — least of all
+                        // when the prose and the call come from different
+                        // sources and can disagree.
+                        if let Some(e) = enactment {
+                            out.push_str(&format!(
+                                "\n\nWould run: {} {}",
+                                e.tool,
+                                serde_json::to_string(&e.params)
+                                    .unwrap_or_else(|_| "{}".to_string())
                             ));
                         }
                         out
@@ -1112,6 +1234,19 @@ async fn run_cycle(
                         &response,
                         &context.standing_corrections,
                         &enacted,
+                    );
+
+                    // Emission-coherence hook (H1/H2/H3) per
+                    // REGENT-DOOM-LOOP-DETECTION-2026-07 §Part III. Same
+                    // post-emission slot as the cognitive observer. First-
+                    // shipping discipline: findings are chain-anchored;
+                    // response delivery is unaffected (log-and-continue
+                    // for all classes). R1 retry / R2 escalate wiring
+                    // lands after false-positive rates are measured.
+                    run_emission_coherence(
+                        audit_store,
+                        emission_analyzer,
+                        &response,
                     );
                 }
 
@@ -1696,5 +1831,139 @@ fn run_cognitive_observer(
     };
     if let Err(e) = store_guard.append(summary_entry) {
         warn!("observer summary receipt emission failed: {}", e);
+    }
+}
+
+/// Emission-coherence hook — runs H1/H2/H3 heuristics against Regent's
+/// response and chain-anchors the outcome per REGENT-DOOM-LOOP-DETECTION-
+/// 2026-07 §Part III (receipt shapes) and §Part IV (immediate shipping
+/// discipline: instrumentation before remediation).
+///
+/// Emits at most one summary receipt per cycle plus one per-finding receipt
+/// per fired heuristic. When no heuristic fires, no receipts are emitted
+/// (chain hygiene — silent-when-clean matches CSO's fast path).
+///
+/// Current shipping shape does NOT gate delivery on the outcome. R1 retry
+/// and R2 escalate wiring lands once the substrate has accumulated enough
+/// evidence to calibrate false-positive rates per DL6 in Part IX.
+///
+/// Token IDs and log-probs are unavailable at this integration site today:
+/// - `token_ids: &[]` — H1's token-level n-gram check silently skips
+///   (word-level check still runs against the response text).
+/// - `log_probs: None` — H3 silently skips regardless of baseline
+///   availability. Enable when the inference backend surfaces per-token
+///   log-probability.
+fn run_emission_coherence(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    analyzer: &Arc<std::sync::Mutex<zp_emission_coherence::EmissionAnalyzer>>,
+    response: &str,
+) {
+    // Model identifier is not threaded through this slot today — the
+    // response has already been produced by the inference backend and the
+    // downstream H3 lookup keys on model name. Use "unknown" as a
+    // placeholder; H3 silently skips when no baseline matches the key.
+    // Wire actual model identity through once the inference-served-model
+    // identity per INFERENCE-ROUTING-DISCIPLINE Layer 1 lands here.
+    let em_response = zp_emission_coherence::Response {
+        cycle_id: "regent",
+        model: "unknown",
+        token_ids: &[],
+        text: response,
+        log_probs: None,
+        sampling_params: zp_emission_coherence::SamplingParams::default(),
+    };
+
+    let outcome = match analyzer.lock() {
+        Ok(mut guard) => guard.analyze(&em_response),
+        Err(e) => {
+            warn!("emission-coherence analyzer lock poisoned: {}", e);
+            return;
+        }
+    };
+
+    // Silent when clean.
+    if outcome.findings.is_empty() {
+        return;
+    }
+
+    info!(
+        findings = outcome.findings.len(),
+        response_class = ?outcome.response_class,
+        receipt_family = ?outcome.receipt_family,
+        "emission-coherence flagged"
+    );
+
+    let mut store_guard = match audit_store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("emission-coherence receipt: audit store lock poisoned: {}", e);
+            return;
+        }
+    };
+
+    // Per-finding receipts.
+    for finding in &outcome.findings {
+        let event = match serde_json::to_string(&serde_json::json!({
+            "class": "emission_coherence:finding",
+            "heuristic": finding.name,
+            "severity": finding.severity,
+            "evidence": finding.evidence,
+        })) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("emission-coherence event serialization failed: {}", e);
+                continue;
+            }
+        };
+        let entry = zp_audit::UnsealedEntry {
+            actor: zp_core::ActorId::System("regent".to_string()),
+            action: zp_core::AuditAction::SystemEvent { event },
+            conversation_id: zp_core::ConversationId(
+                uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000002").unwrap(),
+            ),
+            policy_decision: zp_core::PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "regent-emission-coherence".to_string(),
+            receipt: None,
+        };
+        if let Err(e) = store_guard.append(entry) {
+            warn!("emission-coherence finding receipt emission failed: {}", e);
+        }
+    }
+
+    // Summary receipt — receipt-family identifies the composed class.
+    let summary_event = match serde_json::to_string(&serde_json::json!({
+        "class": "emission_coherence:summary",
+        "receipt_family": outcome.receipt_family,
+        "receipt_type": outcome.receipt_family.receipt_type(),
+        "response_class": outcome.response_class,
+        "cycle_id": outcome.cycle_id,
+        "model": outcome.model,
+        "finding_count": outcome.findings.len(),
+        "deliverable": outcome.deliverable,
+    })) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("emission-coherence summary serialization failed: {}", e);
+            return;
+        }
+    };
+    let summary_entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent {
+            event: summary_event,
+        },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000002").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-emission-coherence".to_string(),
+        receipt: None,
+    };
+    if let Err(e) = store_guard.append(summary_entry) {
+        warn!("emission-coherence summary receipt emission failed: {}", e);
     }
 }

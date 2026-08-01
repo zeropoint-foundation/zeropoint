@@ -2416,6 +2416,19 @@ pub async fn spawn_regent(
         .map(|root| root.join("models"))
         .unwrap_or_else(|| data_path.join("models"));
     let dossier_corpus = Arc::new(zp_regent::routing::DossierCorpus::load_from_dir(&models_dir));
+
+    // Extract H3 entropy baselines from the corpus for the emission
+    // analyzer. Dossiers without a calibrated `[entropy_baseline]` are
+    // silently skipped: H3 (token-entropy anomaly) simply doesn't fire
+    // for models whose baselines aren't measured yet. See
+    // docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md §Heuristic 3.
+    let entropy_baselines = dossier_corpus.entropy_baselines();
+    info!(
+        h3_baselines = entropy_baselines.len(),
+        dossiers_scanned = dossier_corpus.dossiers.len(),
+        "H3 entropy-baseline scan complete"
+    );
+
     regent.set_dossier_corpus(dossier_corpus);
 
     // Reconstitute operator pin from chain — chain supersedes config.toml.
@@ -2705,6 +2718,7 @@ pub async fn spawn_regent(
         operator_name,
         genesis_prefix,
         delegations,
+        entropy_baselines,
     );
 
     info!("Regent cognitive loop started (models preloaded)");

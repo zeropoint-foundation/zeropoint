@@ -328,3 +328,73 @@ vs phi4-reasoning:
   - Different strengths: Scout = structured output reliability,
     Phi4 = reasoning depth per parameter
   - Both are diversity candidates against the Qwen primary"""
+
+# ── Drafter (operational serialization) ─────────────────────────────
+#
+# Per MODEL-DOSSIER-2026-07.md §"Two serializations, one artifact".
+# DFlash has NOT shipped a Llama-4 drafter (only Llama-3.1-8B-Instruct
+# as of dossier mtime). Revisit if DFlash's roadmap adds Llama-4.
+
+[drafter]
+state = "no_drafter_shipped"
+architecture = "dflash"
+target_variant = "llama4:scout"
+checkpoint_id = ""
+checkpoint_hash = ""
+checkpoint_license = ""
+training_corpus_hash = ""
+training_run_receipt = ""
+trained_at = ""
+byte_identical_parity_receipt = ""
+
+[drafter.acceptance_rate]
+window_size_tokens = 1000
+current_window_mean = 0.0
+drift_threshold = 0.55
+
+[drafter.acceptance_rate.by_workload]
+math = 0.0
+code = 0.0
+chat = 0.0
+reasoning = 0.0
+tool_dispatch = 0.0
+
+[drafter.acceptance_rate.by_position]
+position_0 = 0.0
+position_1 = 0.0
+position_2 = 0.0
+position_3 = 0.0
+position_4 = 0.0
+position_5 = 0.0
+position_6 = 0.0
+position_7 = 0.0
+
+# ── Entropy baseline (H3 in zp-emission-coherence) ──────────────────
+#
+# H3 (token entropy anomaly) in zp-emission-coherence compares observed
+# per-token surprise = mean(-log P(chosen)) against this baseline.
+# Populated by running a calibration battery of representative prompts
+# against this model and computing the sample mean and standard
+# deviation of per-token surprise across the responses.
+#
+# State stays "not_yet_calibrated" until real calibration data lands.
+# When state="calibrated", the loader in zp-regent/loop_runner.rs
+# inserts this baseline into AnalyzerConfig.entropy_baselines keyed
+# by target_variant. H3 then fires with severity Warning if observed
+# mean drops 2σ below mean, Critical if 3σ+ below. See
+# REGENT-DOOM-LOOP-DETECTION-2026-07.md §Heuristic 3.
+#
+# Baselines are variant-specific: identical prompts to a 1.7B and an
+# 8B of the same family produce measurably different surprise
+# distributions. First-shipping schema targets the primary_variant;
+# multi-variant families can migrate to [[entropy_baseline]] array
+# once calibration expands.
+
+[entropy_baseline]
+state = "not_yet_calibrated"
+target_variant = "llama4:scout"
+mean = 0.0                    # mean(-log P(chosen)) over the battery
+std_dev = 0.0                 # sample std dev
+battery_prompt_count = 0      # number of prompts in the calibration set
+battery_receipt = ""          # chain receipt for the calibration run
+calibrated_at = ""            # ISO-8601 timestamp when calibration ran
