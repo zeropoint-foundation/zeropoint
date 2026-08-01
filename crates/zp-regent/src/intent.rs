@@ -71,6 +71,34 @@ impl ProposalKind {
 /// `observe` is emitted by the loop rather than the model — the
 /// early-return in `reason()` when there is no input and no urgency — and
 /// is not a prompt-selectable intent. That is why it dominates the chain.
+/// The dispatchable form of a proposal.
+///
+/// A proposal's prose says what the Regent wants done; this says how the
+/// substrate would do it. Without it, a granted approval records consent to
+/// a *sentence* — the operator signs, and there is nothing to run.
+///
+/// Observed 2026-07-31: an escalated proposal was queued, rendered, granted,
+/// and chain-anchored, and the standing correction it proposed was never
+/// created, because nothing downstream could turn "Record the operator's
+/// preferred name as Kenrom" into a call. That is the mirror of the defect
+/// that produced the proposal — first a claimed act without authority, then
+/// authority without an act.
+///
+/// Optional on purpose. Proposing a *mechanism* asks for a capability that
+/// does not exist yet, so by definition no tool can enact it; and an action
+/// whose tool is outside the current delegation set cannot name one
+/// honestly. In both cases the proposal stands on its prose and enacting it
+/// is the operator's to do by hand — which is a real terminal state, not a
+/// gap.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Enactment {
+    /// Tool to dispatch. Must be one the Regent already holds.
+    pub tool: String,
+    /// Arguments, exactly as that tool's dispatch site expects them.
+    #[serde(default)]
+    pub params: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Intent {
     /// Respond to the operator through a cockpit surface.
@@ -148,6 +176,10 @@ pub enum Intent {
         /// substrate already knows how to store. Honoured in-session as an
         /// unsigned candidate; does not survive a restart unsigned.
         draft: Option<String>,
+        /// The dispatchable form, when the proposed action maps to a tool
+        /// the Regent already holds. `None` means the proposal stands on
+        /// its prose and enacting it is the operator's by hand.
+        enactment: Option<Enactment>,
     },
 
     /// No action needed — the Regent observed but has nothing to do.

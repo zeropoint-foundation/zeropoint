@@ -43,6 +43,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use zp_core::{AuditAction, AuditEntry};
 
+use crate::intent::Enactment;
+
 /// Receipt the Regent emits when it asks. Already emitted today by
 /// `ServerIntentExecutor` — this module reads it, it does not introduce it.
 pub const EVENT_PREFIX_REQUEST: &str = "regent:intent:request_approval";
@@ -52,6 +54,30 @@ pub const EVENT_PREFIX_GRANTED: &str = "regent:approval:granted";
 
 /// Operator refused the request.
 pub const EVENT_PREFIX_DENIED: &str = "regent:approval:denied";
+
+/// A granted request was carried out.
+///
+/// The receipt that makes enactment idempotent. Without it a grant would be
+/// re-enacted on every tick, because "granted" is a permanent fact and
+/// "already done" is not derivable from it.
+pub const EVENT_PREFIX_ENACTED: &str = "regent:approval:enacted";
+
+/// Compose an enactment receipt.
+pub fn enacted_event_string(request_hash: &str, tool: &str, outcome: &str) -> String {
+    let payload = serde_json::json!({
+        "request_hash": request_hash,
+        "tool": tool,
+        "outcome": outcome,
+    });
+    format!("{} {}", EVENT_PREFIX_ENACTED, payload)
+}
+
+/// Extract the request hash from an enactment receipt.
+fn parse_enacted(event: &str) -> Option<String> {
+    let tail = event.strip_prefix(EVENT_PREFIX_ENACTED)?;
+    let v: serde_json::Value = serde_json::from_str(tail.trim_start()).ok()?;
+    Some(v.get("request_hash")?.as_str()?.to_string())
+}
 
 /// How a request was resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,16 +164,50 @@ fn parse_resolution(event: &str) -> Option<(Resolution, String)> {
 /// and dropping it would hide an outstanding obligation — which is strictly
 /// worse than showing one you cannot yet read.
 fn parse_request_action(event: &str) -> String {
-    event
-        .strip_prefix(EVENT_PREFIX_REQUEST)
-        .map(|tail| {
-            let tail = tail.trim_start();
-            tail.strip_prefix('|').unwrap_or(tail).trim_start()
-        })
-        .and_then(|tail| tail.strip_prefix("action="))
-        .map(|s| s.trim().to_string())
+    parse_request_tail(event).0
+}
+
+/// Extract the proposed action and its dispatchable form.
+///
+/// Two encodings, both live. The JSON tail is what the executor writes now
+/// and is the only one that can carry an enactment; the flat `action=…` form
+/// is what the chain's existing history holds and must keep parsing, since a
+/// reader of a chain does not get to choose which past it reads.
+fn parse_request_tail(event: &str) -> (String, Option<Enactment>) {
+    let unparsed = "(unparsed request)".to_string();
+
+    let tail = match event.strip_prefix(EVENT_PREFIX_REQUEST) {
+        Some(t) => {
+            let t = t.trim_start();
+            t.strip_prefix('|').unwrap_or(t).trim_start()
+        }
+        None => return (unparsed, None),
+    };
+
+    if tail.starts_with('{') {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(tail) {
+            let action = v
+                .get("action")
+                .and_then(|a| a.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from);
+            let enact = v
+                .get("enact")
+                .filter(|e| !e.is_null())
+                .and_then(|e| serde_json::from_value::<Enactment>(e.clone()).ok());
+            return (action.unwrap_or(unparsed), enact);
+        }
+    }
+
+    match tail
+        .strip_prefix("action=")
+        .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "(unparsed request)".to_string())
+    {
+        Some(a) => (a.to_string(), None),
+        None => (unparsed, None),
+    }
 }
 
 #[cfg(test)]
@@ -203,6 +263,10 @@ pub struct ApprovalRequest {
     pub resolution: Option<Resolution>,
     /// When it was answered.
     pub resolved_at: Option<DateTime<Utc>>,
+    /// The dispatchable form, if the proposal carried one.
+    pub enactment: Option<Enactment>,
+    /// Whether an enactment receipt already cites this request.
+    pub enacted: bool,
 }
 
 impl ApprovalRequest {
@@ -224,25 +288,32 @@ impl ApprovalIndex {
     pub fn build(entries: &[AuditEntry]) -> Self {
         let mut resolutions: Vec<(Resolution, String, DateTime<Utc>)> = Vec::new();
         let mut requests: Vec<ApprovalRequest> = Vec::new();
+        let mut enacted: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for e in entries {
             let AuditAction::SystemEvent { ref event } = e.action else {
                 continue;
             };
             if event.starts_with(EVENT_PREFIX_REQUEST) {
+                let (action, enactment) = parse_request_tail(event);
                 requests.push(ApprovalRequest {
                     request_hash: e.entry_hash.clone(),
-                    action: parse_request_action(event),
+                    action,
                     requested_at: e.timestamp,
                     resolution: None,
                     resolved_at: None,
+                    enactment,
+                    enacted: false,
                 });
+            } else if let Some(hash) = parse_enacted(event) {
+                enacted.insert(hash);
             } else if let Some((res, hash)) = parse_resolution(event) {
                 resolutions.push((res, hash, e.timestamp));
             }
         }
 
         for r in &mut requests {
+            r.enacted = enacted.contains(&r.request_hash);
             // First resolution wins. A second answer to the same request is
             // not a correction — it is a new fact about operator intent, and
             // silently letting it overwrite would make the record depend on
@@ -281,6 +352,27 @@ impl ApprovalIndex {
         self.requests
             .iter()
             .filter(|r| r.resolution == Some(Resolution::Granted))
+            .collect()
+    }
+
+    /// Granted, dispatchable, and not yet carried out.
+    ///
+    /// The work list for turning an operator signature into a substrate act.
+    /// Ordered oldest first: an approval signed earlier was authorised
+    /// earlier, and enacting out of order would let a later grant overtake a
+    /// standing one for no reason a reader could reconstruct.
+    ///
+    /// A granted request with no enactment never appears here. That is not a
+    /// backlog — it is a proposal whose action the substrate has no call for,
+    /// and the operator carrying it out by hand is the intended path.
+    pub fn enactable(&self) -> Vec<&ApprovalRequest> {
+        self.requests
+            .iter()
+            .filter(|r| {
+                r.resolution == Some(Resolution::Granted)
+                    && !r.enacted
+                    && r.enactment.is_some()
+            })
             .collect()
     }
 

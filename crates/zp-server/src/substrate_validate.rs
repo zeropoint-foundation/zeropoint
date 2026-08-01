@@ -102,6 +102,12 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // Approval resolution — the operator's answer to
     // Intent::RequestApproval. Seeds the precedent corpus.
     "regent:approval:granted",
+    // Enactment of a granted approval — the receipt that makes carrying one
+    // out idempotent, and the evidence that a signature became an act.
+    "regent:approval:enacted",
+    // A work arc that restated its plan without advancing. Silence here is
+    // health; a receipt means the Regent looped and said so.
+    "regent:arc:stalled",
     "regent:approval:denied",
     // Phase 7 terminal states — propose an action, propose a mechanism.
     "regent:proposal:",

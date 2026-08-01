@@ -1308,6 +1308,7 @@ impl IntentExecutor for ServerIntentExecutor {
                 failed_limb,
                 expected_outcome,
                 draft,
+                enactment,
             } => {
                 info!(
                     action = proposed_action.as_str(),
@@ -1340,9 +1341,20 @@ impl IntentExecutor for ServerIntentExecutor {
                 }
                 // Retained: the approval queue keys on this prefix, and it
                 // is what `zp approval list` joins resolutions against.
+                //
+                // JSON tail rather than `action=…` so the enactment travels
+                // *with* the request. Whatever enacts a grant has to find
+                // what it authorises without re-asking a model — the
+                // operator signed a specific call, not a fresh
+                // interpretation of a sentence. `parse_request_tail` reads
+                // both this and the flat form the chain's history holds.
+                let request_tail = serde_json::json!({
+                    "action": proposed_action,
+                    "enact": enactment,
+                });
                 self.emit_receipt(
                     "regent:intent:request_approval",
-                    Some(&format!("action={}", proposed_action)),
+                    Some(&request_tail.to_string()),
                 );
 
                 // Broadcast approval request to cockpit surfaces.
