@@ -92,10 +92,30 @@ def collect_spec_citations(root):
 
 
 # ── 3. corpus doc → code (the reverse direction — C1's real surface) ────
-# A governed doc naming an implementing path. NOTHING checks these.
-# check_spec_citations only walks code→doc; a doc can claim any module it
-# likes and no instrument disagrees.
+# A governed doc naming an implementing path.
+#
+# Two-tier verification per 2026-07-27 handoff:
+# - Structural: does the claimed path exist in the repo tree? If yes, the
+#   doc's assertion "this file is an implementing site" is at least
+#   structurally upheld — a file exists at the named location. We flip
+#   these to `live` with the STRUCTURAL_ONLY_NOTE below.
+# - Semantic: does the file's content actually implement what the doc says
+#   it implements? That requires either a back-reference comment in the
+#   code (already checked by `check_spec_citations` in the code→doc
+#   direction), a per-doc assertion catalog, or full semantic analysis.
+#   We do NOT attempt semantic verification here.
+#
+# Rationale for `live` rather than a new intermediate status: the
+# structural check IS a real verification that either succeeds or fails.
+# Consumers who need semantic verification can filter on the note. Keeping
+# to the existing three-state model (live / tied_off / defect) avoids
+# surface churn in the aggregate maturity number's meaning.
 PATH_CLAIM_RE = re.compile(r'`(crates/[A-Za-z0-9\-_]+/(?:src/)?[A-Za-z0-9\-_/]*\.rs)`')
+
+STRUCTURAL_ONLY_NOTE = (
+    "structural verification only — path exists in repo tree; content "
+    "not semantically checked against the doc's claim"
+)
 
 
 def collect_doc_code_claims(root, governed_docs):
@@ -103,13 +123,17 @@ def collect_doc_code_claims(root, governed_docs):
         text = doc.read_text(errors="replace")
         for claimed in sorted(set(PATH_CLAIM_RE.findall(text))):
             exists = (root / claimed).exists()
-            edge("corpus_to_code", str(doc.relative_to(root)), claimed,
-                 "defect",
-                 detector=None,
-                 note=("path exists but nothing verifies the claim "
-                       "(check_spec_citations is code→doc only)")
-                      if exists else "claimed implementing path does not exist",
-                 site=str(doc.relative_to(root)))
+            edge(
+                "corpus_to_code",
+                str(doc.relative_to(root)),
+                claimed,
+                "live" if exists else "defect",
+                detector="connection-map check_doc_code_paths" if exists else None,
+                note=STRUCTURAL_ONLY_NOTE
+                if exists
+                else "claimed implementing path does not exist",
+                site=str(doc.relative_to(root)),
+            )
 
 
 # ── 4. doc → KEEL section ───────────────────────────────────────────────
