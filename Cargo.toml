@@ -45,6 +45,8 @@ members = [
     "crates/zp-sensors",
     "crates/zp-regent",
     "crates/zp-gossip",
+    "crates/zp-emission-coherence",
+    "crates/zp-inference-observer",
 ]
 
 [workspace.package]

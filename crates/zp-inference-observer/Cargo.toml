@@ -1,0 +1,22 @@
+[package]
+name = "zp-inference-observer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tails DFlash observation JSONL events and exposes them as typed values for substrate-side receipt emission."
+
+[[bin]]
+name = "zp-inference-observer"
+path = "src/main.rs"
+
+[lib]
+name = "zp_inference_observer"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"

@@ -324,6 +324,22 @@ pub struct InferenceBackend {
     /// Drained by the cognitive loop after each inference call to emit
     /// a chain receipt. Interior mutability because `chat()` takes `&self`.
     last_fallback: std::sync::Mutex<Option<FallbackEvent>>,
+    /// Layer 2 classifier per INFERENCE-ROUTING-DISCIPLINE-2026-07. Runs
+    /// on every inference call. Advisory-only in first-shipping: records
+    /// which model would have been chosen from the (currently single-
+    /// model) envelope and emits `regent:inference:classifier_decision`
+    /// receipts. Does NOT alter routing today — that lands when operator
+    /// envelope-declaration ceremony ships and envelopes carry multiple
+    /// authorized models.
+    classifier: std::sync::Arc<
+        dyn crate::inference_classifier::InferenceClassifier + Send + Sync,
+    >,
+    /// Side channel for the classifier's most recent decision. Same
+    /// drain-and-emit pattern as `last_fallback`. Interior mutability
+    /// because `chat()` takes `&self`.
+    last_classifier_decision: std::sync::Mutex<
+        Option<crate::inference_classifier::ClassifierDecision>,
+    >,
 }
 
 impl InferenceBackend {
@@ -365,6 +381,10 @@ impl InferenceBackend {
             fallback_endpoint: "http://127.0.0.1:11434".to_string(),
             fallback_model,
             last_fallback: std::sync::Mutex::new(None),
+            classifier: std::sync::Arc::new(
+                crate::inference_classifier::DefaultClassifier::new(),
+            ),
+            last_classifier_decision: std::sync::Mutex::new(None),
         }
     }
 
@@ -412,6 +432,46 @@ impl InferenceBackend {
         self.last_fallback.lock().ok()?.take()
     }
 
+    /// Drain the last classifier decision, if any. Returns `Some` exactly
+    /// once per decision — the caller (cognitive loop) emits a
+    /// `regent:inference:classifier_decision:<id>` receipt and the value
+    /// is consumed. See INFERENCE-ROUTING-DISCIPLINE-2026-07 §Layer 2.
+    pub fn take_classifier_decision(
+        &self,
+    ) -> Option<crate::inference_classifier::ClassifierDecision> {
+        self.last_classifier_decision.lock().ok()?.take()
+    }
+
+    /// Record a classifier decision for the given request. Called at the
+    /// entry to every `chat()` invocation. Advisory-only in first-
+    /// shipping — the envelope is constructed from the caller's requested
+    /// model (single-model envelope), so the decision is always
+    /// `SoleAuthorized`. When operator envelope-declaration ceremony ships
+    /// and the caller passes a multi-model envelope, this hook flips to
+    /// producing meaningful selections without changing its signature.
+    fn record_classifier_decision(&self, request: &InferenceRequest) {
+        let envelope =
+            crate::inference_classifier::InferenceEnvelope::single(&request.model);
+        // Concatenated prompt text for workload classification. Cheap:
+        // one allocation over N message bodies.
+        let concatenated: String = request
+            .messages
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let hint = crate::inference_classifier::QueryHint {
+            caller: Some("regent:inference".to_string()),
+            prompt_length: Some(concatenated.len()),
+            workload_class:
+                crate::inference_classifier::infer_workload_class(&concatenated),
+        };
+        let decision = self.classifier.choose(&envelope, &hint);
+        if let Ok(mut guard) = self.last_classifier_decision.lock() {
+            *guard = Some(decision);
+        }
+    }
+
     /// Reconfigure the backend at runtime (for self_configure tool).
     ///
     /// API key changes go through the vault — use `set_api_key_source()`
@@ -437,6 +497,10 @@ impl InferenceBackend {
 
     /// Run a chat completion.
     pub async fn chat(&self, request: &InferenceRequest) -> Result<String, RegentError> {
+        // Layer 2 classifier hook — records a decision for every inference
+        // call. Advisory-only today; substrate-observable via the drain
+        // path in loop_runner.rs.
+        self.record_classifier_decision(request);
         match self.protocol {
             InferenceProtocol::Ollama => self.chat_ollama(request).await,
             InferenceProtocol::OpenAI => {
@@ -591,6 +655,8 @@ impl InferenceBackend {
     /// Used by the router when a RouteDecision selects a local model,
     /// bypassing the cloud provider entirely.
     pub async fn chat_local(&self, request: &InferenceRequest) -> Result<String, RegentError> {
+        // Layer 2 classifier hook — mirrors chat(). See classifier note there.
+        self.record_classifier_decision(request);
         match self.chat_ollama_at(&self.fallback_endpoint, request).await {
             Ok(response) => Ok(response),
             Err(ref e) if Self::is_ollama_not_running(e) => {

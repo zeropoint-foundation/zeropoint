@@ -27,6 +27,7 @@ pub mod error;
 pub mod evaluation;
 pub mod events;
 pub mod inference;
+pub mod inference_classifier;
 pub mod intent;
 pub mod loop_runner;
 pub mod memory;

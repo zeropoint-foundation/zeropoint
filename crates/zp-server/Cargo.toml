@@ -37,6 +37,7 @@ zp-gate-envelope = { path = "../zp-gate-envelope" }
 zp-anchor = { path = "../zp-anchor" }
 zp-verbs = { path = "../zp-verbs" }
 zp-net = { path = "../zp-net" }
+zp-inference-observer = { path = "../zp-inference-observer" }
 zp-artifacts = { path = "../zp-artifacts" }
 zp-content = { path = "../zp-content" }
 zp-regent = { path = "../zp-regent" }

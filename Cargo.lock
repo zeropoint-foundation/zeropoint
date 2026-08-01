@@ -7864,6 +7864,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-emission-coherence"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "zp-engine"
 version = "0.1.0"
 dependencies = [
@@ -7953,6 +7963,16 @@ dependencies = [
  "zp-audit",
  "zp-core",
  "zp-policy",
+]
+
+[[package]]
+name = "zp-inference-observer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8231,6 +8251,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "toml",
@@ -8239,6 +8260,7 @@ dependencies = [
  "zp-audit",
  "zp-config",
  "zp-core",
+ "zp-emission-coherence",
  "zp-officers",
  "zp-receipt",
 ]
@@ -8306,6 +8328,7 @@ dependencies = [
  "zp-engine",
  "zp-gate-envelope",
  "zp-host",
+ "zp-inference-observer",
  "zp-keys",
  "zp-memory",
  "zp-mesh",

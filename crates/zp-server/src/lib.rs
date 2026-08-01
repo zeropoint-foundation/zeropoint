@@ -34,6 +34,7 @@ pub mod tool_ports;
 pub mod tool_proxy;
 pub mod tool_state;
 pub mod regent;
+pub mod regent_tools;
 
 /// gRPC service handlers — Phase 2b foothold (NodeStatus pilot).
 ///
