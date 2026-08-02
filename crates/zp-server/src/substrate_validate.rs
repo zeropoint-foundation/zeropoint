@@ -275,13 +275,16 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     "lock:force_released",
     // Lock released cleanly by arrest handoff.
     "lock:released_by_arrest",
-    // Trajectory-map primitive — declared in
-    // TRAJECTORY-MAP-PRIMITIVE-2026-08 (sketch, a7bbcad). Extends
-    // WorkArc into a map when waypoints grow. Map lifecycle receipts
+    // Trajectory-map primitive — declared in canonical Tier-2
+    // elaboration TRAJECTORY-MAP-PRIMITIVE-2026-08. Extends WorkArc
+    // into a map when waypoints grow. Map lifecycle receipts
     // (opened, proposed, priority_hint, destination_proposed/accepted/
     // superseded, settled_with_destination, settled_without_destination,
-    // abandoned). WorkArc extension not yet landed; reserved so the
-    // vocabulary is stable before implementation begins.
+    // abandoned). Waypoint data structure landed in
+    // crates/zp-regent/src/context.rs (28 tests); MapReceipt returns
+    // are values today, wiring through emit_receipt is pending.
+    // Reserved so vocabulary is stable while emission integration
+    // lands.
     "arc:map:",
     // Waypoint lifecycle inside a trajectory map — opened, resolved,
     // rejected, split. Each waypoint dispatches through builder

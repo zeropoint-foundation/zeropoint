@@ -161,6 +161,6 @@ Flows themselves are artifacts. Regent-authored subflows land as candidates; ope
 
 ## Next step
 
-Promotion path: (a) operator review; (b) implementation-design phase per the open questions above; (c) landing as a canonical Tier-2 elaboration alongside the TRAJECTORY-MAP-PRIMITIVE sketch it composes with; (d) PoC — fork `@node-red/runtime`, implement a minimal chain-storage plugin, run a hello-world flow that generates typed receipts per node transition, prove the seam.
+Promotion path: (a) operator review; (b) implementation-design phase per the open questions above; (c) landing as a canonical Tier-2 elaboration (TRAJECTORY-MAP-PRIMITIVE promoted 2026-08-02, ready to compose with); (d) PoC — fork `@node-red/runtime`, implement a minimal chain-storage plugin, run a hello-world flow that generates typed receipts per node transition, prove the seam.
 
 Nothing lands until (a). Sketch does not obligate implementation.

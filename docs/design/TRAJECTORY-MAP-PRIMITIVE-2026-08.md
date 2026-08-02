@@ -1,8 +1,8 @@
 # Trajectory Map Primitive
 
-**Tier 2 canonical elaboration (SKETCH — 2026-08-02).** Proposes a substrate primitive for coordinating multi-cycle, multi-arc work whose destination may be unknown or emergent. Elaborates `KEEL-2026-07.md` §II (WorkArc / cognitive loop) and §II.18 (chain-watcher and commitments). Composes with `TRAJECTORY-AWARE-CONSTITUTIONAL-ENFORCEMENT-2026-07.md` (Aegis observes map trajectory), `OFFICER-ACTION-SURFACES-2026-07.md` (five-phase ceremony per waypoint), `SUBSTRATE-SELF-CONSTRUCTION-2026-07.md` (builder dispatch executes waypoints), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (novel-vs-precedent gate for waypoint types), `SHADOW-EVALUATION-PRIMITIVE-2026-07.md` (prototype waypoints dispatch to shadow-eval), `ARTIFACT-LIBRARY-2026-05.md` (destinations are artifacts under the standard lifecycle), `CHAIN-WATCHER-AND-COMMITMENTS-2026-07.md` (blocking relationships are commitments). Canonical claims live in KEEL; this sketch would need promotion + KEEL amendment to become canon.
+**Tier 2 canonical elaboration.** Substrate primitive for coordinating multi-cycle, multi-arc work whose destination may be unknown or emergent. Elaborates `KEEL-2026-07.md` §IV.4 (**Trajectory** as ontology object; this doc defines the coordination structure that carries a trajectory — the map, its waypoints, its heading, and the fog/frontier/destination projections over it — and how the whole thing composes with the append-only chain), §II.17 (cognitive discipline sandwich — the Aegis surface reads per-map trajectory continuously), §II.18 (chain-anchored commitments — blocking relationships between waypoints are commitments at map scope), §III.13 (chain is truth; destinations transition only via receipt, never mutable state). Composes with `TRAJECTORY-AWARE-CONSTITUTIONAL-ENFORCEMENT-2026-07.md` (Aegis observes map trajectory), `OFFICER-ACTION-SURFACES-2026-07.md` (five-phase ceremony per waypoint), `SUBSTRATE-SELF-CONSTRUCTION-2026-07.md` (builder dispatch executes waypoints), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (novel-vs-precedent gate for waypoint types), `SHADOW-EVALUATION-PRIMITIVE-2026-07.md` (prototype waypoints dispatch to shadow-eval), `ARTIFACT-LIBRARY-2026-05.md` (destinations are artifacts under the standard lifecycle), `CHAIN-WATCHER-AND-COMMITMENTS-2026-07.md` (blocking relationships are commitments).
 
-**Status.** Sketch, not committed spec. Emerged from a 2026-08-02 conversation about Matt Pocock's Wayfinder skill (a session-scoped agent planning tool) and the question of how ZP handles ambitious multi-cycle work when the destination is fog. The Wayfinder shape is instructive; the ZP version diverges around chain-anchored truth, sovereignty, and trajectory-aware constitutional enforcement.
+**Status.** Canonical Tier-2 elaboration, promoted from sketch 2026-08-02. Waypoint data structure landed in `crates/zp-regent/src/context.rs` with 28 unit tests. Receipt families reserved in `RESERVED_RECEIPT_PREFIXES` (`arc:map:`, `arc:waypoint:`). `MapReceipt` emission through `emit_receipt`, Regent dispatch integration for map-shape ceremony, map-shape classification at directive intake, operator surface, and Aegis integration pending — see §"Implementation status" below. Emerged from a 2026-08-02 conversation about Matt Pocock's Wayfinder skill (a session-scoped agent planning tool) and the question of how ZP handles ambitious multi-cycle work when the destination is fog. The Wayfinder shape is instructive; the ZP version diverges around chain-anchored truth, sovereignty, and trajectory-aware constitutional enforcement.
 
 ## Framing
 
@@ -163,13 +163,30 @@ Some of the questions raised during the 2026-08-02 conversation have provisional
 
 **Retirement / archival.** A settled map has value as evidence, but at what point does it stop mattering as active context? Never (all maps forever queryable)? By heading area (superseded maps in heading X archived when a new map opens)? Operator-declared? Deferred until enough maps exist to feel the operational shape of the question.
 
-## Not-in-scope for this sketch
+## Not-in-scope for this landing
 
-- Specific receipt-family names beyond the sketch above (they'll want per-family review during full spec).
+- Specific receipt-family names beyond the reservations above (per-family review lands as each family's emission wires through `emit_receipt`).
 - Cockpit UI for the operator-visible map view (a spec concern for the cockpit surface, not this primitive).
-- Multi-Regent coordination on the same map (two Regent instances working the same map — a genuine question but bigger than this sketch).
+- Multi-Regent coordination on the same map (two Regent instances working the same map — a genuine question but bigger than this landing).
 - Cross-map dependencies (map A blocks on map B settling — probably worth a follow-up primitive).
 
-## Next step for this sketch
+## Implementation status
 
-Promotion path: (a) operator review, (b) if approved, KEEL amendment adding trajectory-map to §II WorkArc section, (c) implementation-design phase per the open questions above, (d) landing as a canonical Tier-2 elaboration.
+**Landed 2026-08-02:**
+
+- Waypoint data structure on `WorkArc` (`crates/zp-regent/src/context.rs`) with 28 unit tests covering `open_waypoint` / `resolve_waypoint` lifecycle, `frontier` / `fog` / `resolved_waypoints` queries, `waypoint_by_id` lookup, settled-map ceremony gates, and destination hypothesis lifecycle.
+- Receipt families reserved in `RESERVED_RECEIPT_PREFIXES` (`arc:map:`, `arc:waypoint:`) per Path C discipline. Graduation from RESERVED to KNOWN when emitters land.
+
+**Pending:**
+
+- Wire `MapReceipt` returns from `open_waypoint` / `resolve_waypoint` / destination-hypothesis methods through `emit_receipt` so the receipts anchor on chain (currently returned as values, not emitted).
+- Regent dispatch integration: cycle logic that reads the frontier, picks a takable waypoint (heuristic per §"Still open" above), dispatches per type (research / task → SUBSTRATE-SELF-CONSTRUCTION builder dispatch, prototype → SHADOW-EVALUATION-PRIMITIVE, grilling → operator approval-request).
+- Map-shape classification at directive intake: per §"A practical trigger for map-shape classification" above, Regent emits a `regent:proposal` claiming map-shape; operator confirms via existing Phase-7 EXECUTION-AUTHORITY-MODEL ceremony.
+- Operator surface: cockpit view of a map (heading, frontier, fog, resolved trajectory, current destination). Spec concern for cockpit; consumes this primitive's chain data.
+- Aegis integration: read per-map trajectory continuously per TRAJECTORY-AWARE-CONSTITUTIONAL-ENFORCEMENT; emit `aegis:action:trajectory_alert` on divergence.
+
+**Composition follow-ups** (own future work, not gated by this landing):
+
+- Cross-map dependencies primitive (map-to-map blocking) — noted in §"Not-in-scope."
+- Multi-Regent coordination on the same map — noted in §"Not-in-scope."
+- Retirement / archival discipline for settled maps — see §"Still open."
