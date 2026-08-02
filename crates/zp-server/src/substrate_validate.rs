@@ -275,6 +275,28 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     "lock:force_released",
     // Lock released cleanly by arrest handoff.
     "lock:released_by_arrest",
+    // Trajectory-map primitive — declared in
+    // TRAJECTORY-MAP-PRIMITIVE-2026-08 (sketch, a7bbcad). Extends
+    // WorkArc into a map when tickets grow. Map lifecycle receipts
+    // (opened, proposed, priority_hint, destination_proposed/accepted/
+    // superseded, settled_with_destination, settled_without_destination,
+    // abandoned). WorkArc extension not yet landed; reserved so the
+    // vocabulary is stable before implementation begins.
+    "arc:map:",
+    // Ticket lifecycle inside a trajectory map — opened, resolved,
+    // rejected, split. Each ticket dispatches through builder
+    // machinery per SUBSTRATE-SELF-CONSTRUCTION; resolution closes
+    // the ticket and may open new fog tickets. Reserved alongside
+    // the map primitive.
+    "arc:ticket:",
+    // Node-RED-orchestration receipts — declared in
+    // REGENT-ORCHESTRATION-ARTIFACTS-2026-08 (sketch, c67e327).
+    // Emitted by Node-RED runtime's pluggable message-routing seam
+    // (message:sent, subflow:completed) when Regent dispatches flow-
+    // shaped work. Regent-side dispatch/completion receipts use the
+    // already-registered `regent:tool:*` prefix. Runtime not yet
+    // integrated; reserved so vocabulary is stable pre-integration.
+    "flow:",
 ];
 
 /// Run the canonical substrate validation.
