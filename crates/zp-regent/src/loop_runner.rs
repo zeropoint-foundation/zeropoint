@@ -407,6 +407,7 @@ pub fn start_loop(
                                     directive: cycle_directive_for_arc.clone(),
                                     tickets: Vec::new(),
                                     destination_hypotheses: Vec::new(),
+                                    settlement: crate::context::SettlementState::Open,
                                 });
                                 // Read the arc's prior state before overwriting it.
                                 let no_advance = !is_new_arc
@@ -607,6 +608,7 @@ pub fn start_loop(
                             directive: None,
                             tickets: Vec::new(),
                             destination_hypotheses: Vec::new(),
+                            settlement: crate::context::SettlementState::Open,
                         });
                         let no_advance = !is_new_arc
                             && current.progress == progress

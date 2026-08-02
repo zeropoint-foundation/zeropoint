@@ -473,6 +473,16 @@ pub struct WorkArc {
     /// `#[serde(default)]` for backward compat.
     #[serde(default)]
     pub destination_hypotheses: Vec<DestinationHypothesis>,
+
+    /// Terminal-state marker for the map (or arc — arc-shaped work
+    /// simply stays `Open` for its whole lifetime, which is fine).
+    /// Three terminal states per the sketch: settled with destination,
+    /// settled without destination, abandoned.
+    ///
+    /// `#[serde(default)]` — defaults to `Open` for backward compat
+    /// with any WorkArc serialized before this field existed.
+    #[serde(default)]
+    pub settlement: SettlementState,
 }
 
 // ── Trajectory map primitives (data-structure landing) ─────────────────
@@ -645,6 +655,330 @@ impl WorkArc {
     pub fn destination_by_id(&self, id: &str) -> Option<&DestinationHypothesis> {
         self.destination_hypotheses.iter().find(|h| h.id == id)
     }
+
+    /// True if the map has reached a terminal state (settled or
+    /// abandoned). Mutations that would advance map state error with
+    /// `MapAlreadySettled` when this returns true.
+    pub fn is_settled(&self) -> bool {
+        !matches!(self.settlement, SettlementState::Open)
+    }
+}
+
+// ── Trajectory-map settlement + receipt-shape helpers (A2) ─────────────
+//
+// The methods below mutate WorkArc AND return a `MapReceipt` describing
+// the event+detail the caller should pipe through `emit_receipt`. This
+// preserves the pure-data spirit of WorkArc (no audit-store access from
+// context.rs) while giving the future dispatch layer a single canonical
+// place to look up "what does opening a ticket look like on the chain."
+//
+// Receipt event names follow the RESERVED_RECEIPT_PREFIXES additions in
+// crates/zp-server/src/substrate_validate.rs (commit 0389792):
+//   arc:map:destination_proposed
+//   arc:map:destination_accepted
+//   arc:map:destination_superseded
+//   arc:map:settled_with_destination
+//   arc:map:settled_without_destination
+//   arc:map:abandoned
+//   arc:ticket:opened
+//   arc:ticket:resolved
+//
+// Timestamps are caller-provided (parameter `now: DateTime<Utc>`) so
+// tests can be deterministic and callers control the anchor time.
+
+/// Terminal-state marker for a trajectory map. `Open` is the working
+/// state (default); the three variants below are the three ways a map
+/// closes per TRAJECTORY-MAP-PRIMITIVE-2026-08 §"Closing a map".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum SettlementState {
+    /// Map is still working (or arc-shaped — same variant covers both).
+    Open,
+    /// Destination reached and signed. Downstream work proceeds under
+    /// a new arc; this map is preserved as evidence.
+    SettledWithDestination {
+        destination_id: String,
+        settled_at: DateTime<Utc>,
+    },
+    /// Exploration converged; operator learned enough about the heading
+    /// area to close the map without a destination. Rationale is
+    /// operator-authored — what was learned, why no destination
+    /// crystallized.
+    SettledWithoutDestination {
+        rationale: String,
+        settled_at: DateTime<Utc>,
+    },
+    /// Map closed without settlement — operator changed priorities, the
+    /// space turned out to be different than expected, etc. Rationale
+    /// distinguishes abandonment-with-reason from silent dropping.
+    Abandoned {
+        rationale: String,
+        abandoned_at: DateTime<Utc>,
+    },
+}
+
+impl Default for SettlementState {
+    fn default() -> Self {
+        SettlementState::Open
+    }
+}
+
+/// The event+detail pair a WorkArc mutation produces for chain
+/// anchoring. The caller (typically the dispatch layer) pipes this
+/// through `emit_receipt(event, Some(detail))` to actually write to
+/// the chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapReceipt {
+    pub event: String,
+    pub detail: String,
+}
+
+/// Errors from map-lifecycle mutations. Every method that could fail
+/// returns `Result<MapReceipt, MapError>`; the caller decides whether
+/// to propagate, escalate, or narrate the failure.
+#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
+pub enum MapError {
+    #[error("ticket id already exists in this arc: {0}")]
+    DuplicateTicket(String),
+    #[error("ticket not found in this arc: {0}")]
+    TicketNotFound(String),
+    #[error("ticket already resolved: {0}")]
+    TicketAlreadyResolved(String),
+    #[error("destination hypothesis id already exists in this arc: {0}")]
+    DuplicateDestination(String),
+    #[error("destination not found in this arc: {0}")]
+    DestinationNotFound(String),
+    #[error("destination not accepted (cannot settle on unaccepted hypothesis): {0}")]
+    DestinationNotAccepted(String),
+    #[error("destination already superseded: {0}")]
+    DestinationAlreadySuperseded(String),
+    #[error("map is already settled or abandoned; mutation refused")]
+    MapAlreadySettled,
+}
+
+impl WorkArc {
+    /// Open a new ticket. Ticket id must be unique within this arc.
+    /// Errors on duplicate id or if the map is already settled.
+    pub fn open_ticket(
+        &mut self,
+        ticket: Ticket,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        if self.tickets.iter().any(|t| t.id == ticket.id) {
+            return Err(MapError::DuplicateTicket(ticket.id));
+        }
+        let id = ticket.id.clone();
+        let ticket_type = ticket.ticket_type;
+        let blocking = ticket.blocking.join(",");
+        let rationale = ticket.rationale.clone();
+        self.tickets.push(ticket);
+        let type_str = match ticket_type {
+            TicketType::Research => "research",
+            TicketType::Prototype => "prototype",
+            TicketType::Grilling => "grilling",
+            TicketType::Task => "task",
+        };
+        Ok(MapReceipt {
+            event: "arc:ticket:opened".to_string(),
+            detail: format!(
+                "id={}, type={}, blocking=[{}], rationale={}",
+                id, type_str, blocking, rationale
+            ),
+        })
+    }
+
+    /// Resolve a ticket. Errors if the ticket doesn't exist, is
+    /// already resolved, or if the map is already settled.
+    pub fn resolve_ticket(
+        &mut self,
+        id: &str,
+        outcome_summary: String,
+        now: DateTime<Utc>,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        let ticket = self
+            .tickets
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| MapError::TicketNotFound(id.to_string()))?;
+        if ticket.resolution.is_some() {
+            return Err(MapError::TicketAlreadyResolved(id.to_string()));
+        }
+        ticket.resolution = Some(TicketResolution {
+            resolved_at: now,
+            outcome_summary: outcome_summary.clone(),
+            resolution_receipt_id: None,
+        });
+        Ok(MapReceipt {
+            event: "arc:ticket:resolved".to_string(),
+            detail: format!("id={}, outcome={}", id, outcome_summary),
+        })
+    }
+
+    /// Propose a destination hypothesis. Hypothesis id must be unique.
+    /// The hypothesis is stored `accepted: false`; a subsequent
+    /// `accept_destination` promotes it. Errors on duplicate id or
+    /// settled map.
+    pub fn propose_destination(
+        &mut self,
+        hypothesis: DestinationHypothesis,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        if self.destination_hypotheses.iter().any(|h| h.id == hypothesis.id) {
+            return Err(MapError::DuplicateDestination(hypothesis.id));
+        }
+        let id = hypothesis.id.clone();
+        let description = hypothesis.description.clone();
+        // Force accepted=false on proposal — acceptance is a separate ceremony.
+        let mut h = hypothesis;
+        h.accepted = false;
+        h.superseded_by = None;
+        self.destination_hypotheses.push(h);
+        Ok(MapReceipt {
+            event: "arc:map:destination_proposed".to_string(),
+            detail: format!("id={}, description={}", id, description),
+        })
+    }
+
+    /// Accept a proposed destination. The hypothesis must exist, not
+    /// be superseded, and the map must not be settled. Idempotent —
+    /// accepting an already-accepted hypothesis succeeds without
+    /// changing state (but still emits a receipt for the operator's
+    /// signature).
+    pub fn accept_destination(
+        &mut self,
+        id: &str,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        let hypothesis = self
+            .destination_hypotheses
+            .iter_mut()
+            .find(|h| h.id == id)
+            .ok_or_else(|| MapError::DestinationNotFound(id.to_string()))?;
+        if hypothesis.superseded_by.is_some() {
+            return Err(MapError::DestinationAlreadySuperseded(id.to_string()));
+        }
+        hypothesis.accepted = true;
+        Ok(MapReceipt {
+            event: "arc:map:destination_accepted".to_string(),
+            detail: format!("id={}", id),
+        })
+    }
+
+    /// Supersede a destination with a newer one. Both must exist; the
+    /// superseder must not itself be superseded. Marks the older as
+    /// `superseded_by = new_id`. Emits the receipt naming both.
+    pub fn supersede_destination(
+        &mut self,
+        old_id: &str,
+        new_id: &str,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        // Both must exist.
+        if !self.destination_hypotheses.iter().any(|h| h.id == new_id) {
+            return Err(MapError::DestinationNotFound(new_id.to_string()));
+        }
+        let old = self
+            .destination_hypotheses
+            .iter_mut()
+            .find(|h| h.id == old_id)
+            .ok_or_else(|| MapError::DestinationNotFound(old_id.to_string()))?;
+        if old.superseded_by.is_some() {
+            return Err(MapError::DestinationAlreadySuperseded(old_id.to_string()));
+        }
+        old.superseded_by = Some(new_id.to_string());
+        Ok(MapReceipt {
+            event: "arc:map:destination_superseded".to_string(),
+            detail: format!("old_id={}, new_id={}", old_id, new_id),
+        })
+    }
+
+    /// Settle the map with an accepted destination. Terminal state
+    /// transition. The destination must exist and be `accepted` and
+    /// not superseded.
+    pub fn settle_with_destination(
+        &mut self,
+        destination_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        let hypothesis = self
+            .destination_hypotheses
+            .iter()
+            .find(|h| h.id == destination_id)
+            .ok_or_else(|| MapError::DestinationNotFound(destination_id.to_string()))?;
+        if hypothesis.superseded_by.is_some() {
+            return Err(MapError::DestinationAlreadySuperseded(
+                destination_id.to_string(),
+            ));
+        }
+        if !hypothesis.accepted {
+            return Err(MapError::DestinationNotAccepted(destination_id.to_string()));
+        }
+        self.settlement = SettlementState::SettledWithDestination {
+            destination_id: destination_id.to_string(),
+            settled_at: now,
+        };
+        Ok(MapReceipt {
+            event: "arc:map:settled_with_destination".to_string(),
+            detail: format!("destination_id={}", destination_id),
+        })
+    }
+
+    /// Settle the map without a destination. Exploration converged;
+    /// no build follows. Rationale is operator-authored, captures what
+    /// was learned about the heading area.
+    pub fn settle_without_destination(
+        &mut self,
+        rationale: String,
+        now: DateTime<Utc>,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        let detail = format!("rationale={}", rationale);
+        self.settlement = SettlementState::SettledWithoutDestination {
+            rationale,
+            settled_at: now,
+        };
+        Ok(MapReceipt {
+            event: "arc:map:settled_without_destination".to_string(),
+            detail,
+        })
+    }
+
+    /// Abandon the map. Rationale distinguishes abandonment-with-reason
+    /// from silent dropping. Terminal state; no further mutations.
+    pub fn abandon_map(
+        &mut self,
+        rationale: String,
+        now: DateTime<Utc>,
+    ) -> Result<MapReceipt, MapError> {
+        if self.is_settled() {
+            return Err(MapError::MapAlreadySettled);
+        }
+        let detail = format!("rationale={}", rationale);
+        self.settlement = SettlementState::Abandoned {
+            rationale,
+            abandoned_at: now,
+        };
+        Ok(MapReceipt {
+            event: "arc:map:abandoned".to_string(),
+            detail,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -661,6 +995,23 @@ mod trajectory_map_tests {
             stall_count: 0,
             tickets: Vec::new(),
             destination_hypotheses: Vec::new(),
+            settlement: SettlementState::Open,
+        }
+    }
+
+    fn t0() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-08-02T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    fn mk_dest(id: &str, description: &str) -> DestinationHypothesis {
+        DestinationHypothesis {
+            id: id.to_string(),
+            description: description.to_string(),
+            proposed_at: t0(),
+            accepted: false,
+            superseded_by: None,
         }
     }
 
@@ -841,7 +1192,7 @@ mod trajectory_map_tests {
     fn workarc_deserializes_without_new_fields() {
         // Guards backward compat: a serialized WorkArc from before
         // the trajectory-map extension landed should still deserialize
-        // (missing fields default to empty vecs).
+        // (missing fields default to empty vecs, settlement = Open).
         let json = r#"{
             "progress": "",
             "cycles_completed": 0,
@@ -854,6 +1205,269 @@ mod trajectory_map_tests {
         assert!(!arc.is_map_shaped());
         assert!(arc.tickets.is_empty());
         assert!(arc.destination_hypotheses.is_empty());
+        assert_eq!(arc.settlement, SettlementState::Open);
+        assert!(!arc.is_settled());
+    }
+
+    // ── Lifecycle mutations + receipt-shape helpers (A2) ───────────
+
+    #[test]
+    fn open_ticket_appends_and_returns_receipt() {
+        let mut a = empty_arc();
+        let r = a.open_ticket(mk_ticket("t1", vec![])).unwrap();
+        assert_eq!(r.event, "arc:ticket:opened");
+        assert!(r.detail.contains("id=t1"));
+        assert!(r.detail.contains("type=research"));
+        assert_eq!(a.tickets.len(), 1);
+    }
+
+    #[test]
+    fn open_ticket_rejects_duplicate_id() {
+        let mut a = empty_arc();
+        a.open_ticket(mk_ticket("t1", vec![])).unwrap();
+        let err = a.open_ticket(mk_ticket("t1", vec![])).unwrap_err();
+        assert_eq!(err, MapError::DuplicateTicket("t1".to_string()));
+    }
+
+    #[test]
+    fn open_ticket_rejected_on_settled_map() {
+        let mut a = empty_arc();
+        a.abandon_map("done".to_string(), t0()).unwrap();
+        let err = a.open_ticket(mk_ticket("t1", vec![])).unwrap_err();
+        assert_eq!(err, MapError::MapAlreadySettled);
+    }
+
+    #[test]
+    fn resolve_ticket_marks_resolution_and_returns_receipt() {
+        let mut a = empty_arc();
+        a.open_ticket(mk_ticket("t1", vec![])).unwrap();
+        let r = a
+            .resolve_ticket("t1", "found it".to_string(), t0())
+            .unwrap();
+        assert_eq!(r.event, "arc:ticket:resolved");
+        assert!(r.detail.contains("id=t1"));
+        assert!(r.detail.contains("outcome=found it"));
+        assert!(a.ticket_by_id("t1").unwrap().resolution.is_some());
+    }
+
+    #[test]
+    fn resolve_ticket_not_found() {
+        let mut a = empty_arc();
+        let err = a
+            .resolve_ticket("nope", "x".to_string(), t0())
+            .unwrap_err();
+        assert_eq!(err, MapError::TicketNotFound("nope".to_string()));
+    }
+
+    #[test]
+    fn resolve_ticket_already_resolved() {
+        let mut a = empty_arc();
+        a.open_ticket(mk_ticket("t1", vec![])).unwrap();
+        a.resolve_ticket("t1", "first".to_string(), t0()).unwrap();
+        let err = a
+            .resolve_ticket("t1", "second".to_string(), t0())
+            .unwrap_err();
+        assert_eq!(err, MapError::TicketAlreadyResolved("t1".to_string()));
+    }
+
+    #[test]
+    fn propose_destination_appends_and_forces_unaccepted() {
+        let mut a = empty_arc();
+        let mut h = mk_dest("d1", "the target");
+        h.accepted = true; // caller lies; propose_destination must reset
+        let r = a.propose_destination(h).unwrap();
+        assert_eq!(r.event, "arc:map:destination_proposed");
+        assert!(r.detail.contains("id=d1"));
+        assert!(r.detail.contains("description=the target"));
+        // Even though caller passed accepted=true, propose forces false.
+        assert!(!a.destination_by_id("d1").unwrap().accepted);
+    }
+
+    #[test]
+    fn propose_destination_rejects_duplicate() {
+        let mut a = empty_arc();
+        a.propose_destination(mk_dest("d1", "x")).unwrap();
+        let err = a.propose_destination(mk_dest("d1", "y")).unwrap_err();
+        assert_eq!(err, MapError::DuplicateDestination("d1".to_string()));
+    }
+
+    #[test]
+    fn accept_destination_flips_flag_and_returns_receipt() {
+        let mut a = empty_arc();
+        a.propose_destination(mk_dest("d1", "target")).unwrap();
+        let r = a.accept_destination("d1").unwrap();
+        assert_eq!(r.event, "arc:map:destination_accepted");
+        assert!(r.detail.contains("id=d1"));
+        assert!(a.destination_by_id("d1").unwrap().accepted);
+        assert_eq!(a.current_destination().map(|h| h.id.as_str()), Some("d1"));
+    }
+
+    #[test]
+    fn accept_destination_not_found() {
+        let mut a = empty_arc();
+        let err = a.accept_destination("nope").unwrap_err();
+        assert_eq!(err, MapError::DestinationNotFound("nope".to_string()));
+    }
+
+    #[test]
+    fn accept_destination_rejects_superseded() {
+        let mut a = empty_arc();
+        a.propose_destination(mk_dest("d1", "old")).unwrap();
+        a.propose_destination(mk_dest("d2", "new")).unwrap();
+        a.supersede_destination("d1", "d2").unwrap();
+        let err = a.accept_destination("d1").unwrap_err();
+        assert_eq!(
+            err,
+            MapError::DestinationAlreadySuperseded("d1".to_string())
+        );
+    }
+
+    #[test]
+    fn supersede_destination_marks_old_and_returns_receipt() {
+        let mut a = empty_arc();
+        a.propose_destination(mk_dest("d1", "old")).unwrap();
+        a.propose_destination(mk_dest("d2", "new")).unwrap();
+        let r = a.supersede_destination("d1", "d2").unwrap();
+        assert_eq!(r.event, "arc:map:destination_superseded");
+        assert!(r.detail.contains("old_id=d1"));
+        assert!(r.detail.contains("new_id=d2"));
+        assert_eq!(
+            a.destination_by_id("d1").unwrap().superseded_by.as_deref(),
+            Some("d2")
+        );
+    }
+
+    #[test]
+    fn supersede_destination_errors_when_new_missing() {
+        let mut a = empty_arc();
+        a.propose_destination(mk_dest("d1", "old")).unwrap();
+        let err = a.supersede_destination("d1", "d2").unwrap_err();
+        assert_eq!(err, MapError::DestinationNotFound("d2".to_string()));
+    }
+
+    #[test]
+    fn settle_with_destination_requires_accepted() {
+        let mut a = empty_arc();
+        a.propose_destination(mk_dest("d1", "target")).unwrap();
+        // d1 exists but not accepted yet.
+        let err = a.settle_with_destination("d1", t0()).unwrap_err();
+        assert_eq!(err, MapError::DestinationNotAccepted("d1".to_string()));
+        // After acceptance, settle succeeds.
+        a.accept_destination("d1").unwrap();
+        let r = a.settle_with_destination("d1", t0()).unwrap();
+        assert_eq!(r.event, "arc:map:settled_with_destination");
+        assert!(r.detail.contains("destination_id=d1"));
+        assert!(a.is_settled());
+    }
+
+    #[test]
+    fn settle_with_destination_rejects_superseded() {
+        let mut a = empty_arc();
+        a.propose_destination(mk_dest("d1", "old")).unwrap();
+        a.propose_destination(mk_dest("d2", "new")).unwrap();
+        a.accept_destination("d1").unwrap();
+        a.supersede_destination("d1", "d2").unwrap();
+        let err = a.settle_with_destination("d1", t0()).unwrap_err();
+        assert_eq!(
+            err,
+            MapError::DestinationAlreadySuperseded("d1".to_string())
+        );
+    }
+
+    #[test]
+    fn settle_without_destination_terminates() {
+        let mut a = empty_arc();
+        let r = a
+            .settle_without_destination(
+                "exploration converged, no build".to_string(),
+                t0(),
+            )
+            .unwrap();
+        assert_eq!(r.event, "arc:map:settled_without_destination");
+        assert!(r.detail.contains("rationale=exploration converged"));
+        assert!(a.is_settled());
+        match a.settlement {
+            SettlementState::SettledWithoutDestination { ref rationale, .. } => {
+                assert!(rationale.contains("converged"));
+            }
+            _ => panic!("expected SettledWithoutDestination"),
+        }
+    }
+
+    #[test]
+    fn abandon_map_terminates() {
+        let mut a = empty_arc();
+        let r = a
+            .abandon_map("space turned out different".to_string(), t0())
+            .unwrap();
+        assert_eq!(r.event, "arc:map:abandoned");
+        assert!(r.detail.contains("rationale=space turned out different"));
+        assert!(a.is_settled());
+        match a.settlement {
+            SettlementState::Abandoned { ref rationale, .. } => {
+                assert!(rationale.contains("different"));
+            }
+            _ => panic!("expected Abandoned"),
+        }
+    }
+
+    #[test]
+    fn settled_map_refuses_further_mutations() {
+        let mut a = empty_arc();
+        a.settle_without_destination("done exploring".to_string(), t0())
+            .unwrap();
+        assert_eq!(
+            a.open_ticket(mk_ticket("t1", vec![])).unwrap_err(),
+            MapError::MapAlreadySettled
+        );
+        assert_eq!(
+            a.resolve_ticket("t1", "x".to_string(), t0()).unwrap_err(),
+            MapError::MapAlreadySettled
+        );
+        assert_eq!(
+            a.propose_destination(mk_dest("d1", "x")).unwrap_err(),
+            MapError::MapAlreadySettled
+        );
+        assert_eq!(
+            a.abandon_map("try again".to_string(), t0()).unwrap_err(),
+            MapError::MapAlreadySettled
+        );
+    }
+
+    #[test]
+    fn full_lifecycle_walkthrough() {
+        // Represents a plausible map lifecycle end-to-end. Verifies the
+        // receipt sequence a caller would emit through emit_receipt.
+        let mut a = empty_arc();
+        a.directive = Some("figure out how Layer 2 should behave".to_string());
+
+        let receipts = vec![
+            a.open_ticket(mk_ticket("t1", vec![])).unwrap(),
+            a.open_ticket(mk_ticket("t2", vec!["t1"])).unwrap(),
+            a.resolve_ticket("t1", "found precedent".to_string(), t0())
+                .unwrap(),
+            a.resolve_ticket("t2", "candidate design emerged".to_string(), t0())
+                .unwrap(),
+            a.propose_destination(mk_dest("d1", "the Layer 2 spec"))
+                .unwrap(),
+            a.accept_destination("d1").unwrap(),
+            a.settle_with_destination("d1", t0()).unwrap(),
+        ];
+
+        let events: Vec<&str> = receipts.iter().map(|r| r.event.as_str()).collect();
+        assert_eq!(
+            events,
+            vec![
+                "arc:ticket:opened",
+                "arc:ticket:opened",
+                "arc:ticket:resolved",
+                "arc:ticket:resolved",
+                "arc:map:destination_proposed",
+                "arc:map:destination_accepted",
+                "arc:map:settled_with_destination",
+            ]
+        );
+        assert!(a.is_settled());
     }
 }
 
