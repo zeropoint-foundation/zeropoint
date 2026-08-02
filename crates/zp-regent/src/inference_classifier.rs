@@ -344,6 +344,103 @@ impl InferenceClassifier for DefaultClassifier {
 ///   than the mathematical objects being reasoned about — "Prove that the
 ///   sum of two evens is even" is asking for reasoning even though it
 ///   mentions "sum of".
+/// Sub-classify a code-classified prompt by scope. Called only from
+/// `infer_workload_class` after generic code markers have matched.
+///
+/// Scope categories (broadest wins):
+///   - `code:repo_wide` — repository-level scope keywords
+///     ("codebase", "the repo", "whole codebase", "across the project").
+///   - `code:multi_file` — two or more distinct file-path-shaped tokens
+///     mentioned, OR keywords like "across files" / "these files".
+///   - `code:local_transform` — single-file mechanical work keywords
+///     ("refactor", "rename", "extract", "convert this").
+///   - `code` (catch-all) — no scope signal.
+///
+/// Scope precedence is broadest-first: a prompt with both a repo-wide
+/// keyword and a local-transform verb classifies as `code:repo_wide`.
+/// This matches the routing intent — bigger scope wants a bigger-
+/// context model regardless of whether the operation itself is
+/// mechanically simple.
+fn classify_code_scope(original: &str, lower: &str) -> String {
+    // repo_wide — strongest scope signal.
+    let repo_wide_markers = [
+        "codebase",
+        "the repo",
+        "the repository",
+        "whole codebase",
+        "entire codebase",
+        "across the project",
+        "throughout the code",
+        "throughout the codebase",
+        "every occurrence",
+        "everywhere in the",
+    ];
+    if repo_wide_markers.iter().any(|m| lower.contains(m)) {
+        return "code:repo_wide".to_string();
+    }
+
+    // multi_file — two-or-more distinct file paths OR explicit
+    // multi-file language. Count file-path-shaped tokens (word ending
+    // in a known code extension) on the ORIGINAL (case-preserved)
+    // text so paths like `MyModule.rs` still match.
+    let multi_file_markers = [
+        "across files",
+        "these files",
+        "multiple files",
+        "both files",
+        "each of these files",
+    ];
+    if multi_file_markers.iter().any(|m| lower.contains(m)) {
+        return "code:multi_file".to_string();
+    }
+    // File-path detection: count tokens matching *.{rs,py,ts,tsx,js,jsx,go,java,rb,md,toml,yaml,yml,json,html,css,c,cpp,h,hpp,sh}
+    // via simple regex-free scan. Two or more distinct extensions-
+    // bearing tokens → multi-file scope.
+    let exts = [
+        ".rs", ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rb",
+        ".md", ".toml", ".yaml", ".yml", ".json", ".html", ".css",
+        ".c", ".cpp", ".h", ".hpp", ".sh",
+    ];
+    let mut distinct_paths: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for token in original.split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == ',' || c == ';' || c == '\'' || c == '"' || c == '`') {
+        if token.len() < 3 {
+            continue;
+        }
+        for ext in &exts {
+            if token.ends_with(ext) && token.len() > ext.len() {
+                distinct_paths.insert(token);
+                break;
+            }
+        }
+        if distinct_paths.len() >= 2 {
+            return "code:multi_file".to_string();
+        }
+    }
+
+    // local_transform — single-file mechanical work verbs.
+    let local_transform_markers = [
+        "refactor",
+        "rename",
+        "extract this",
+        "extract into",
+        "extract a function",
+        "extract a method",
+        "convert this to",
+        "convert it to",
+        "change this to",
+        "replace this with",
+        "inline this",
+        "inline the",
+        "pull this into",
+    ];
+    if local_transform_markers.iter().any(|m| lower.contains(m)) {
+        return "code:local_transform".to_string();
+    }
+
+    // Fallback: generic code work with no scope signal.
+    "code".to_string()
+}
+
 pub fn infer_workload_class(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
 
@@ -383,7 +480,19 @@ pub fn infer_workload_class(text: &str) -> Option<String> {
     if code_markers.iter().any(|m| lower.contains(m))
         || code_langs.iter().any(|m| lower.contains(m))
     {
-        return Some("code".to_string());
+        // Sub-classify by scope. Motivated by 2026-08-02 external signal
+        // (Qwen 30B-A3B commercial-adopter framing video): the routing
+        // decision within `code` benefits from knowing scope, because
+        // local MoE models handle single-file/local work at near-frontier
+        // quality but degrade on multi-file reasoning and long
+        // autonomous chains where per-step reliability compounds.
+        //
+        // Scope precedence (broadest wins): repo_wide > multi_file >
+        // local_transform > code (catch-all). A prompt saying "refactor
+        // this function across the codebase" is repo_wide despite
+        // carrying the local_transform "refactor" verb — the scope
+        // signal is what decides routing.
+        return Some(classify_code_scope(text, &lower));
     }
 
     // reasoning — multi-step logic, deduction, puzzle framing. Checked
@@ -682,6 +791,91 @@ mod tests {
         assert_eq!(
             infer_workload_class("CALCULATE the DERIVATIVE."),
             Some("math".to_string())
+        );
+    }
+
+    // ── Code scope sub-classification (2026-08-02) ──────────────────────
+
+    #[test]
+    fn code_scope_repo_wide_beats_local_transform() {
+        // A prompt with both a repo-wide keyword and a local-transform
+        // verb classifies as repo_wide. Motivated by the "scope wins
+        // over operation" routing principle.
+        assert_eq!(
+            infer_workload_class("Refactor this function across the codebase."),
+            Some("code:repo_wide".to_string())
+        );
+    }
+
+    #[test]
+    fn code_scope_repo_wide_from_keyword_alone() {
+        assert_eq!(
+            infer_workload_class(
+                "How is this typescript pattern used throughout the codebase?"
+            ),
+            Some("code:repo_wide".to_string())
+        );
+    }
+
+    #[test]
+    fn code_scope_multi_file_from_explicit_language() {
+        assert_eq!(
+            infer_workload_class(
+                "Update the rust imports across files where this trait is used."
+            ),
+            Some("code:multi_file".to_string())
+        );
+    }
+
+    #[test]
+    fn code_scope_multi_file_from_two_paths() {
+        // Two distinct file paths mentioned → multi_file. The " rust"
+        // marker triggers the outer code detector; the .rs paths trigger
+        // the sub-classifier's path count.
+        assert_eq!(
+            infer_workload_class(
+                "Compare `src/foo.rs` with `src/bar.rs` — these rust files diverge, why?"
+            ),
+            Some("code:multi_file".to_string())
+        );
+    }
+
+    #[test]
+    fn code_scope_single_path_stays_local() {
+        // Only one file mentioned → not multi_file. Falls to local_transform
+        // because "refactor" is present.
+        assert_eq!(
+            infer_workload_class(
+                "Refactor `src/foo.rs` — this rust function should use async."
+            ),
+            Some("code:local_transform".to_string())
+        );
+    }
+
+    #[test]
+    fn code_scope_local_transform_from_verb() {
+        assert_eq!(
+            infer_workload_class("Refactor this rust function to be more idiomatic."),
+            Some("code:local_transform".to_string())
+        );
+        assert_eq!(
+            infer_workload_class("Rename this variable in the python function."),
+            Some("code:local_transform".to_string())
+        );
+    }
+
+    #[test]
+    fn code_scope_generic_fallback() {
+        // Existing "just code" prompts with no scope signal fall through
+        // to the generic code bucket. Guards backward compat with the
+        // pre-2026-08-02 classifier output for common prompts.
+        assert_eq!(
+            infer_workload_class("Write a rust function that reverses a string."),
+            Some("code".to_string())
+        );
+        assert_eq!(
+            infer_workload_class("Here's my code:\n```python\ndef f(): pass\n```"),
+            Some("code".to_string())
         );
     }
 }

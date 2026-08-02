@@ -67,6 +67,35 @@ Not shipped in the reference stack; benchmarkable via `--include-license-gated`.
 | Classifier / Pi-edge | LFM2.5-230M | LFM Open License v1.0 | dense 230M | ~1GB | Runs on a Pi 5; strong data-extraction/routing for its size |
 | Extreme context | Llama 4 Scout | Llama 4 Community | MoE 109B/17B | ~55–60GB | 10M-token context (tight fit, prefill-bound) |
 
+## Hardware math — the two numbers that decide it
+
+Two hardware numbers determine what can run locally and how fast. Almost every argument about local models confuses them; being precise about the distinction is what makes the shortlist above defensible.
+
+**Capacity** — how much unified memory the machine has. This is a wall: if the weights (plus KV cache for the target context) don't fit, nothing runs. There is no partial credit. Formula: `parameter_count × bytes_per_weight`. 16-bit precision costs 2 bytes/weight; 4-bit K quant costs ~4.5 bits/weight = ~0.56 bytes. A 30B model at 4-bit lands around 18GB on disk (empirically 18.6GB for Qwen3.6-30B-A3B; see LFM2.5 dossier for cross-check). KV cache is *extra* and grows with context — a 262K-context claim on a model card is a theoretical maximum that requires memory allocation beyond the weights budget.
+
+**Bandwidth** — how fast unified memory can be read. This is a speed limit on decode: for each token generated, the runtime reads its active weights out of memory exactly once. Ceiling: `bandwidth ÷ bytes_read_per_token`. On APOLLO's M4 Pro (273 GB/s published):
+
+- A dense 14B at 4-bit reads ~8GB per token → ceiling ~34 tok/s.
+- Qwen3.6-30B-A3B at 4-bit reads only its **active** parameters per token: 3.3B × ~0.56 bytes ≈ 1.85GB → ceiling ~148 tok/s.
+
+The napkin math is why small-active MoE is the ideal architecture for mid-bandwidth UMA: **capacity cost scales with total parameters (the wall), bandwidth cost scales with active parameters (the ceiling).** A 30B MoE with 3B active can generate *faster* than a 14B dense model on the same hardware, while having 2× the total capability to draw from. Parameter count stopped being the unit of measurement; **bytes touched per token became the unit of measurement.**
+
+Real engines land meaningfully below their ceiling — attention overhead, sampling cost, quantization decode overhead, the OS being an OS. Treat the ceiling as an upper bound and the harness numbers below as the empirical reality-check. But the ceiling formula is what makes the shortlist choices legible: every resident pick is a small-active MoE for exactly this reason.
+
+For comparison hardware (referenced in AI-LANDSCAPE-SIGNAL-2026-07 Signal 5 pending):
+
+| Hardware | Bandwidth | Ceiling for 3B-active MoE @ 4-bit |
+|---|---|---|
+| M4 base | 120 GB/s | ~65 tok/s |
+| M4 Pro (APOLLO) | 273 GB/s | ~148 tok/s |
+| M4 Max | 546 GB/s | ~295 tok/s |
+| RTX 4090 (dGPU, 24GB) | ~1 TB/s | ~540 tok/s but capacity-capped |
+| RTX 5090 (dGPU, 32GB) | ~1.8 TB/s | ~970 tok/s but capacity-capped |
+
+Discrete GPUs win the bandwidth race by an order of magnitude but pay in capacity — a 30B model at 4-bit fits on a 4090 with almost no headroom for KV cache. Unified memory trades peak bandwidth for capacity that lets you actually load the model and its working set. The APOLLO choice sits at the "enough bandwidth to be interactive, enough capacity to hold the state" intersection.
+
+**Composition note.** The `workload_class` sub-classifier in `crates/zp-regent/src/inference_classifier.rs` uses this framing indirectly — `code:multi_file` and `code:repo_wide` classifications are exactly the workloads where KV-cache growth matters most and where local-vs-frontier routing needs the honest bandwidth-÷-active-params ceiling as a prediction input. Signal-4 (2026-07-31, mainstream-media canonicalisation of the sovereignty thesis) and this hardware-math framing land in the same spot from different angles: the substrate has both the vocabulary and the arithmetic to route work honestly across tiers.
+
 ## Expected on APOLLO (to be replaced by measured numbers)
 
 Ballparks only — the harness exists to replace these with real numbers from APOLLO:
