@@ -47,13 +47,21 @@ Adopted for its fit with substrate discipline:
 - **Subflows as capabilities.** Node-RED's subflow primitive (reusable flow compositions acting as single nodes) maps directly onto ZP's capability/delegation model. A subflow IS a capability. Instantiating it IS a delegation.
 - **Message routing on path to pluggable** (Node-RED roadmap). When it lands, this is the seam for generating trajectory receipts at map scope per TRAJECTORY-MAP-PRIMITIVE-2026-08.
 
-### Optional durability layer: Temporal (Apache 2.0 / MIT core)
+### Durability layer: Temporal (Apache 2.0 / MIT core) — default on
 
 Node-RED's event loop does not survive process crashes with exact-once resumption. A ticket in flight that disappears without a resolution receipt is exactly the class of un-anchored substrate event the chain discipline was built to eliminate. Temporal's durable execution guarantee — workflows survive crashes, resume exactly where they left off, produce receipts at deterministic points — fills that gap.
 
-Adopting Temporal is a bigger engineering surface (workers, scheduler, schema). This sketch marks it as **conditional**: if operator review determines the durability guarantee is required for the primary use cases (trajectory-map tickets, long-running builder dispatches, cross-cycle work arcs), Temporal beneath Node-RED is the shape. If not, defer.
+The safety-net posture across the substrate is durability-on-by-default. This sketch adopts the same posture for the flow-orchestration layer specifically: **Temporal beneath Node-RED is default on whenever Node-RED runtime is active.** The operator can opt out for local/dev/light deployments where operational simplicity is preferred over exact-once guarantee, but opting out is an operator-signed receipt with rationale — same discipline as tieoffs.toml or any other declared exception. Silent absence of the safety net is not a posture the substrate allows.
 
-The trade-off named in DASHBOARD-CONNECTORS-STACK-DECISION-2026-07 (Trigger.dev's at-least-once + idempotency vs Temporal's exact-once) partially resolves under Regent-is-UX framing: the receipt chain IS the idempotency layer (every action produces a receipt; duplicates de-dupe by hash). Temporal's exact-once is belt to the chain's suspenders, not replacement. But belt-and-suspenders is what the substrate wants for the specific class of receipts operator sovereignty depends on.
+Layering clarifies the "always on" claim without pretending Temporal covers cases it doesn't:
+
+- **Chain-anchored idempotency: always on** (property of the substrate; not opt-outable). Every action produces a receipt; duplicates dedupe by hash. This is the substrate's foundational durability floor.
+- **Node-RED runtime with receipt-chain-backed storage: on when flow-orchestration is being used** (presence of open trajectory maps or Regent-dispatched flow work signals it).
+- **Temporal beneath Node-RED: default on when Node-RED is active.** Opt-out is a `regent:config:durability:temporal_disabled` receipt (or equivalent) carrying operator signature and rationale. Audit trail then shows the reduced-posture choice explicitly; future operators or the operator's future self can reason about the rationale and reopen the question if it no longer holds.
+
+What Temporal specifically adds beyond the chain's idempotency floor is *mid-flow exact-once resumption for multi-step flows with side effects between steps* — a workflow that crashes at step 3 of 5 resumes at step 3, not from scratch. This is the class of guarantee that matters for flow-orchestration workloads (Node-RED runtime, trajectory-map tickets, long-running builder dispatches). For linear WorkArc and individual tool dispatches, the chain's idempotency floor is already sufficient — Temporal is not consulted for those.
+
+Trade-off note on Trigger.dev vs Temporal (a decision named as still-open in earlier substrate thinking): Trigger.dev's at-least-once + idempotency composes cleanly with the chain (which already provides idempotency by hash). Temporal's exact-once is belt to the chain's suspenders, not replacement. This sketch defaults to Temporal because belt-and-suspenders is what the substrate wants for the specific class of receipts operator sovereignty depends on — but the opt-out path lets operators choose Trigger.dev-or-equivalent if operational simplicity is more important than the exact-once guarantee.
 
 ### Rendering layer: FlowFuse Dashboard 2.0 (Apache 2.0)
 
@@ -122,7 +130,7 @@ Flows themselves are artifacts. Regent-authored subflows land as candidates; ope
 
 - **Node-RED runtime, yes.** Adopted for the reasons above.
 - **Node-RED Dashboard 2.0, as a rendering target only.** Not adopted as "the dashboard the operator visits."
-- **Temporal, conditional.** Adopt if durability guarantees are load-bearing for primary use cases; defer otherwise.
+- **Temporal beneath Node-RED, default on.** Adopted as the substrate's flow-orchestration durability layer. Operator opt-out is an operator-signed receipt with rationale — declared exception, not silent absence. Aligns with substrate discipline: safety-off-by-default is the wrong posture for infrastructure that must survive operator death and hardware failure.
 - **Visualization discipline is authoritative.** Every Regent-produced visualization is a `lens:declared:*` receipt per LENS-DISCIPLINE. Non-negotiable.
 - **Four canonical lenses are the operator-facing question framework.** Node-RED-embedded widgets fit within them or introduce new ones via the declaration ceremony.
 - **Molecular notation is the rendering vocabulary for CodeFlow-shaped artifacts.** Not aspirational; Phase 2 of its adoption (edge-type schema) is a prerequisite for CodeFlow-lens artifacts to reach their designed fidelity.
@@ -139,7 +147,7 @@ Flows themselves are artifacts. Regent-authored subflows land as candidates; ope
 
 ## Open questions
 
-1. **Temporal-or-not decision.** Requires understanding of primary use cases' durability needs. Deferred pending trajectory-map primitive being spec'd enough to know what its dispatched-ticket durability needs actually are.
+1. **Opt-out receipt schema for Temporal disable.** Default is on; opt-out is an operator-signed receipt with rationale. Exact receipt shape (family name, required rationale fields, whether it's per-deployment or per-map or global) needs spec. Suggested family: `regent:config:durability:*`.
 
 2. **Which node-registry seam extends to substrate capabilities.** Node-RED discovers nodes from npm `node-red` entries in package.json. Substrate capabilities aren't npm packages; they're chain-declared delegations. The registry-extension shape (Node-RED plugin? capability-to-node adapter? substrate-native replacement?) needs design.
 
