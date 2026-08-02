@@ -165,6 +165,68 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "tool:",
 ];
 
+/// Receipt vocabulary declared by governed documents (typically KEEL and
+/// Tier-2 elaborations) but with no code emitter yet.
+///
+/// The distinction from `KNOWN_RECEIPT_PREFIXES`:
+///
+/// - `KNOWN_RECEIPT_PREFIXES` names families the substrate emits at
+///   runtime. If code emits a receipt whose prefix isn't declared here,
+///   substrate_validate's receipt-type inventory flags the drift.
+/// - `RESERVED_RECEIPT_PREFIXES` names families the corpus has
+///   *committed to* but the substrate does not yet emit. Each entry is
+///   an outstanding implementation task, formally acknowledged so the
+///   connection-map tool can distinguish "reserved, deferred" from
+///   "aspirational, unclassified" — both look identical without this
+///   list.
+///
+/// # Semantics for the connection-map
+///
+/// A documented receipt matching an entry here reads as `tied_off` with
+/// note "reserved: vocabulary declared by canonical corpus; substrate
+/// emission deferred". Same rules the tool uses for tieoffs.toml
+/// declarations, applied at the family level rather than per-edge.
+///
+/// # Rules for adding here
+///
+/// 1. The receipt family must be declared in a Tier-1 or Tier-2 doc
+///    (not Tier-3 speculation). Tier-3 mentions stay aspirational
+///    because Tier-3 has no substrate commitment.
+/// 2. Every entry should carry a comment naming the source doc(s) and
+///    the phase or condition under which implementation lands. Reserved
+///    ≠ forgotten; it means "the corpus has this on the roadmap."
+/// 3. Moving an entry from here to `KNOWN_RECEIPT_PREFIXES` is the
+///    graduation ceremony when the emitter lands. The move is the
+///    receipt-of-record that the reservation was honoured.
+const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
+    // Regent handoff protocol — declared in KEEL §II (handoff between
+    // Regent instances during operator device changes or Regent-role
+    // upgrades). No handoff mechanism ships yet; the vocabulary is
+    // reserved so any future implementation uses these exact names.
+    "regent:handoff:",
+    // Commitment primitives — declared in KEEL §II.18 and elaborated in
+    // CHAIN-WATCHER-AND-COMMITMENTS-2026-07 (three classes: notify-on,
+    // check-at, promised-action). Chain-anchored commitments that
+    // survive cognitive-cycle boots. The elaboration doc exists; the
+    // Rust implementation of the three primitive types is not landed.
+    "regent:commitment:",
+    // Hardware observer receipts — declared in KEEL §II.13 P6 and
+    // HARDWARE-OBSERVER-2026-07. TPM-signed attestations of hardware
+    // state, thermal envelope, tamper-evident sensors. The observer
+    // scaffold exists; the receipt-emitting integration does not.
+    "observation:hardware:",
+    // Boot generation — declared in KEEL bootstrap semantics. Each
+    // substrate boot advances a monotonic generation counter; the
+    // receipt records the transition. Boot machinery ships but does
+    // not yet emit this receipt.
+    "boot:generation",
+    // Config application — declared in KEEL config-lifecycle
+    // semantics. Distinct from `regent:config:*` (which is Regent's
+    // OWN configuration self-modifications); this is substrate-wide
+    // config-application events.
+    "config:apply",
+];
+
 /// Run the canonical substrate validation.
 ///
 /// Emits a `substrate:validation:regent:<id>` receipt with the report hash
@@ -686,6 +748,14 @@ fn check_receipt_inventory(
         "observed_distinct": counts_by_prefix.len(),
         "silent_in_window": silent.len(),
         "silent_prefixes": silent,
+        // Reserved vocabulary — receipt families the corpus committed to
+        // but that the substrate does not yet emit. Distinct from
+        // "silent" (which is `KNOWN_RECEIPT_PREFIXES` families that
+        // simply didn't fire in this window). Reserved is a formal
+        // acknowledgement of outstanding implementation work; silent is
+        // legitimate quiet.
+        "reserved_total": RESERVED_RECEIPT_PREFIXES.len(),
+        "reserved_prefixes": RESERVED_RECEIPT_PREFIXES.iter().copied().collect::<Vec<_>>(),
     })
 }
 

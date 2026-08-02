@@ -160,6 +160,7 @@ def collect_keel_refs(root, governed_docs):
 
 # ── 5. receipt vocabulary: docs ↔ code registry ─────────────────────────
 REGISTRY_RE = re.compile(r'KNOWN_RECEIPT_PREFIXES[^=]*=\s*&\[(.*?)\];', re.S)
+RESERVED_RE = re.compile(r'RESERVED_RECEIPT_PREFIXES[^=]*=\s*&\[(.*?)\];', re.S)
 RECEIPT_IN_DOC_RE = re.compile(r'`([a-z][a-z0-9_]*(?::[a-z0-9_*]+){1,3})`')
 
 # Emission-site patterns for the reverse-direction check: what receipt
@@ -243,18 +244,21 @@ def collect_receipts(root, governed_docs, emitted):
     # words in them, and a blanket findall reads those as declared
     # prefixes. Found 2026-07-26 when `reopen_watch — the two tiers`
     # showed up in the declared set.
-    body = REGISTRY_RE.search(reg_file.read_text(errors="replace"))
-    if not body:
+    reg_body = REGISTRY_RE.search(reg_file.read_text(errors="replace"))
+    if not reg_body:
         drop("registry unparsed", "KNOWN_RECEIPT_PREFIXES not matched")
         return
-    registry = set()
-    for line in body.group(1).split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("//"):
-            continue
-        entry = re.fullmatch(r'"([^"]+)"\s*,?', stripped)
-        if entry:
-            registry.add(entry.group(1))
+    registry = _parse_prefix_list(reg_body.group(1))
+
+    # Reserved vocabulary — receipt families declared in canon (KEEL /
+    # Tier-2) but not yet emitted. Presence in this list is a formal
+    # governance acknowledgement of outstanding implementation work, so
+    # matched receipts read as `tied_off` rather than `defect`. Missing
+    # RESERVED_RECEIPT_PREFIXES is not fatal — an older tree without
+    # the const simply has no reservations, and every unregistered
+    # receipt is still classified as gap or aspirational.
+    reserved_body = RESERVED_RE.search(reg_file.read_text(errors="replace"))
+    reserved = _parse_prefix_list(reserved_body.group(1)) if reserved_body else set()
 
     documented = {}
     for doc in governed_docs:
@@ -271,7 +275,22 @@ def collect_receipts(root, governed_docs, emitted):
                  note=None,
                  site=site)
             continue
-        # Registry doesn't cover it. Split by whether code emits it anyway.
+        # Not in KNOWN_RECEIPT_PREFIXES. Check reservation next — a
+        # reserved family is a declared deferral, not an unresolved gap.
+        is_reserved = any(receipt.startswith(p) or p.startswith(receipt)
+                          for p in reserved)
+        if is_reserved:
+            edge("corpus_to_chain", site, receipt,
+                 "tied_off",
+                 detector="connection-map RESERVED_RECEIPT_PREFIXES",
+                 note=("reserved: vocabulary declared by canonical corpus; "
+                       "substrate emission deferred — see "
+                       "RESERVED_RECEIPT_PREFIXES in "
+                       "crates/zp-server/src/substrate_validate.rs"),
+                 site=site)
+            continue
+        # Registry doesn't cover it and it isn't reserved. Split by
+        # whether code emits it anyway.
         if _has_emitter(receipt, emitted):
             # Registry gap — fixable by adding to KNOWN_RECEIPT_PREFIXES.
             edge("corpus_to_chain", site, receipt,
@@ -288,8 +307,27 @@ def collect_receipts(root, governed_docs, emitted):
                  detector=None,
                  note=("aspirational: no code emitter found for this "
                        "receipt name — fix by implementing the emitter, "
-                       "reclassifying the doc, or rewording the mention"),
+                       "reserving via RESERVED_RECEIPT_PREFIXES, or "
+                       "rewording the doc mention"),
                  site=site)
+
+
+def _parse_prefix_list(body_text):
+    """Extract quoted string entries from a Rust &[&str] literal body.
+
+    Ignores `//` comment lines. Handles trailing comma on each entry.
+    Same behaviour the KNOWN_RECEIPT_PREFIXES parser has always used —
+    factored out so RESERVED_RECEIPT_PREFIXES can share it.
+    """
+    out = set()
+    for line in body_text.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("//"):
+            continue
+        entry = re.fullmatch(r'"([^"]+)"\s*,?', stripped)
+        if entry:
+            out.add(entry.group(1))
+    return out
 
 
 # ── 6. code → runtime artifact ──────────────────────────────────────────
@@ -671,6 +709,19 @@ def main():
         print("\n  corpus_to_chain defect breakdown:")
         print(f"    registry gap (code emits, registry omits) — mechanical fix: {registry_gap:>5}")
         print(f"    aspirational (no emitter found) — governance decision:      {aspirational:>5}")
+
+    # Reserved receipt families — corpus commitments explicitly deferred
+    # via RESERVED_RECEIPT_PREFIXES. Shown separately so the operator
+    # sees how many defects were converted from unresolved to
+    # governance-acknowledged. Not double-counted in tied_off totals
+    # above — the aggregate already includes these; this is just a
+    # readable slice.
+    chain_reserved = [e for e in EDGES
+                      if e["kind"] == "corpus_to_chain"
+                      and e["status"] == "tied_off"
+                      and (e.get("note") or "").startswith("reserved:")]
+    if chain_reserved:
+        print(f"\n  corpus_to_chain tied_off (reserved vocabulary):            {len(chain_reserved):>5}")
 
     if DROPPED:
         print("\n  dropped (not silently):")
