@@ -2,9 +2,9 @@
 
 **Tier 2 canonical elaboration (SKETCH — 2026-08-02).** Proposes adoption of `@node-red/runtime` as a flow-orchestration artifact the Regent dispatches, with Temporal as an optional durability substrate beneath, composing with the existing visualization discipline (LENS-DISCIPLINE, four canonical lenses, molecular notation, Cartographer) and the Regent-is-UX architectural stance (AGENT-AS-UX-ARCHITECTURE, AGENTIC-SURFACE, SURFACE-BOUNDARIES). Elaborates `KEEL-2026-07.md` §II.13 P6, §II.19, Part V, Part VIII, Part XIV.
 
-Composes with: `LENS-DISCIPLINE-2026-07.md` (all Regent-produced visualizations are `lens:declared:*` receipts), `zp-visual-language.md` (four canonical view-in lenses), `RECEIPT-MOLECULAR-NOTATION-2026-05.md` (rendering vocabulary for CodeFlow-shaped artifacts), `AGENT-AS-UX-ARCHITECTURE-2026-05.md` and `AGENTIC-SURFACE-2026-05.md` (Regent is the operator's UX; no HTML surface the operator visits), `SURFACE-BOUNDARIES-2026-05.md` (canonical reference for what surface serves what concern), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map tickets dispatched through Node-RED runtime; map-shape composes with subflow-shape), `ARTIFACT-LIBRARY-2026-05.md` (all Regent-produced flow runs, visualizations, and reports are artifacts under standard lifecycle), `OFFICER-ACTION-SURFACES-2026-07.md` (five-phase ceremony per flow run), `SUBSTRATE-SELF-CONSTRUCTION-2026-07.md` (Regent-dispatched builders execute flows), `DASHBOARD-CONNECTORS-STACK-DECISION-2026-07.md` (this sketch supersedes the Node-RED rejection in that decision — see §Reconciliation).
+Composes with: `LENS-DISCIPLINE-2026-07.md` (all Regent-produced visualizations are `lens:declared:*` receipts), `zp-visual-language.md` (four canonical view-in lenses), `RECEIPT-MOLECULAR-NOTATION-2026-05.md` (rendering vocabulary for CodeFlow-shaped artifacts), `AGENT-AS-UX-ARCHITECTURE-2026-05.md` and `AGENTIC-SURFACE-2026-05.md` (Regent is the operator's UX; no HTML surface the operator visits), `SURFACE-BOUNDARIES-2026-05.md` (canonical reference for what surface serves what concern), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map tickets dispatched through Node-RED runtime; map-shape composes with subflow-shape), `ARTIFACT-LIBRARY-2026-05.md` (all Regent-produced flow runs, visualizations, and reports are artifacts under standard lifecycle), `OFFICER-ACTION-SURFACES-2026-07.md` (five-phase ceremony per flow run), `SUBSTRATE-SELF-CONSTRUCTION-2026-07.md` (Regent-dispatched builders execute flows).
 
-**Status.** Sketch, not committed spec. Emerged from a 2026-08-02 conversation reconciling: (a) the DASHBOARD-CONNECTORS-STACK-DECISION doc's Node-RED rejection, which was based on outdated architectural information; (b) a fresh comparative analysis (2026-07-30) showing Node-RED IS decomposable and Dashboard 2.0 is Vue-based; (c) the trajectory-map primitive sketch's composition with flow-engine primitives; (d) the corpus visualization discipline (LENS-DISCIPLINE + four lenses + molecular notation + MorphoHDL patterns as bookmark); (e) the Regent-is-UX architectural stance across AGENT-AS-UX and AGENTIC-SURFACE. The load-bearing reframe from that conversation: **Node-RED and the rest are artifacts the Regent uses to be the operator's UX, not user interfaces the operator visits directly.**
+**Status.** Sketch, not committed spec. Load-bearing framing: **Node-RED and the rest are artifacts the Regent uses to be the operator's UX, not user interfaces the operator visits directly.**
 
 ## Framing
 
@@ -118,21 +118,6 @@ Regent decides a widget-shaped visualization serves the current interaction. Reg
 
 Flows themselves are artifacts. Regent-authored subflows land as candidates; operator signs to promote to signed; a newer version supersedes an old one via the standard ARTIFACT-LIBRARY lifecycle. Node-RED's storage plugin persists subflows as chain-anchored artifacts, not local JSON files.
 
-## Reconciliation with DASHBOARD-CONNECTORS-STACK-DECISION-2026-07
-
-DASHBOARD-CONNECTORS-STACK-DECISION-2026-07 (committed 2026-08-01, a1aa089) rejected Node-RED with reasoning "standalone architecture, jQuery-era editor, not decomposable." Both reasons are factually incorrect as of 2026-08-02:
-
-- Node-RED IS decomposable — `@node-red/runtime` is explicitly published as a standalone npm package designed to operate without the editor. The comparative analysis dated 2026-07-30 documents this.
-- The jQuery editor is only the legacy editor; Dashboard 2.0 (FlowFuse) is a from-scratch Vue.js rebuild.
-
-The rejection stands on wrong ground. This sketch (once promoted from sketch to canon) supersedes the Node-RED rejection in that decision. The DASHBOARD doc's broader framing (Workflow Builder + Trigger.dev-or-Temporal + custom widgets) partly stands and partly needs amendment:
-
-- Workflow Builder → replaced by Node-RED runtime (this sketch).
-- Trigger.dev or Temporal → this sketch defers the durability decision but leans toward Temporal-if-durability-is-load-bearing.
-- Custom ZP-native widgets on Vue foundation → aligns with this sketch (Dashboard 2.0 is that Vue foundation).
-
-Promotion of this sketch requires either amending DASHBOARD-CONNECTORS-STACK-DECISION-2026-07 in place or superseding it via a new decision doc. Recommend the latter (append-only discipline).
-
 ## Design decisions carried from the 2026-08-02 conversation
 
 - **Node-RED runtime, yes.** Adopted for the reasons above.
@@ -168,6 +153,6 @@ Promotion of this sketch requires either amending DASHBOARD-CONNECTORS-STACK-DEC
 
 ## Next step
 
-Promotion path: (a) operator review; (b) if approved, either amend DASHBOARD-CONNECTORS-STACK-DECISION-2026-07 or supersede it with an explicit decision doc; (c) implementation-design phase per the open questions above; (d) landing as a canonical Tier-2 elaboration alongside the TRAJECTORY-MAP-PRIMITIVE sketch it composes with; (e) PoC — fork `@node-red/runtime`, implement a minimal chain-storage plugin, run a hello-world flow that generates typed receipts per node transition, prove the seam.
+Promotion path: (a) operator review; (b) implementation-design phase per the open questions above; (c) landing as a canonical Tier-2 elaboration alongside the TRAJECTORY-MAP-PRIMITIVE sketch it composes with; (d) PoC — fork `@node-red/runtime`, implement a minimal chain-storage plugin, run a hello-world flow that generates typed receipts per node transition, prove the seam.
 
-Nothing lands until (a) and (b). Sketch does not obligate implementation.
+Nothing lands until (a). Sketch does not obligate implementation.
