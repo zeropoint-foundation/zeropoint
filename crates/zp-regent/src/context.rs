@@ -442,6 +442,419 @@ pub struct WorkArc {
     /// and a budget is a backstop, not a detector: it bounds the damage
     /// without ever naming what went wrong.
     pub stall_count: u32,
+
+    /// Trajectory-map ticket set. Empty for arc-shaped work (the vast
+    /// majority of WorkArcs); non-empty when the arc has grown into a
+    /// map per TRAJECTORY-MAP-PRIMITIVE-2026-08.
+    ///
+    /// Framing per that sketch: **every WorkArc is a map with zero
+    /// tickets**. Ticket-set growth is what promotes an arc into map
+    /// mode. This field is `#[serde(default)]` so existing serialized
+    /// WorkArcs deserialize as arc-shaped (empty ticket set) without
+    /// migration.
+    ///
+    /// No dispatch behaviour reads this field yet — this landing is
+    /// data-structure-only. The dispatch loop, receipt-emission, and
+    /// operator surface come in follow-on commits.
+    #[serde(default)]
+    pub tickets: Vec<Ticket>,
+
+    /// Destination hypotheses proposed for this map. Empty for arc-
+    /// shaped work OR for map-shaped work in pure-fog state (heading
+    /// declared, no destination has crystallized yet).
+    ///
+    /// Per the sketch's load-bearing principle: **destination is a
+    /// diagnostic, not a goal**. The current destination is a query
+    /// over this vector — the most recent hypothesis that is
+    /// `accepted` and not `superseded_by` any later one. That query
+    /// returns `None` when the trajectory hasn't converged to a
+    /// nameable target, which is a valid state.
+    ///
+    /// `#[serde(default)]` for backward compat.
+    #[serde(default)]
+    pub destination_hypotheses: Vec<DestinationHypothesis>,
+}
+
+// ── Trajectory map primitives (data-structure landing) ─────────────────
+
+/// The type of work a ticket represents. Dispatch mechanism varies per
+/// type; the enum is a scheduling signal for the future dispatch loop.
+///
+/// - `Research` — investigation task, dispatches to builder per
+///   SUBSTRATE-SELF-CONSTRUCTION-2026-07 §"builder dispatch."
+/// - `Prototype` — shadow-eval-shaped ticket, dispatches to
+///   SHADOW-EVALUATION-PRIMITIVE-2026-07 for high-fidelity feedback.
+/// - `Grilling` — operator conversation, dispatches to the approval-
+///   request machinery for interactive dialogue.
+/// - `Task` — concrete construction work, dispatches to builder like
+///   Research but produces artifacts rather than findings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TicketType {
+    Research,
+    Prototype,
+    Grilling,
+    Task,
+}
+
+/// A ticket in a trajectory map. Scoped sub-arc of work with typed
+/// dispatch, explicit blocking relationships, and (once resolved)
+/// an outcome that may open new tickets.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Ticket {
+    /// Stable id within the parent WorkArc. Used by other tickets'
+    /// `blocking` sets to name this ticket as a prerequisite.
+    pub id: String,
+
+    /// Dispatch-scheduling signal. See `TicketType`.
+    pub ticket_type: TicketType,
+
+    /// Human-readable rationale — why this ticket, what fog it clears.
+    /// One-line preferred; the Regent uses this as the ticket's cockpit
+    /// label.
+    pub rationale: String,
+
+    /// Other tickets in this map that must resolve before this one is
+    /// takable. Named by their `id`. Empty vec means the ticket is on
+    /// the frontier immediately.
+    #[serde(default)]
+    pub blocking: Vec<String>,
+
+    /// What the ticket's resolution receipt is expected to contain.
+    /// Used by future Aegis integration to detect trajectory divergence
+    /// when actual outcomes don't match. Optional — some tickets are
+    /// open-ended exploration where an expected outcome would be
+    /// premature.
+    #[serde(default)]
+    pub expected_outcome: Option<String>,
+
+    /// Resolution state. `None` while the ticket is unresolved
+    /// (frontier or fog); `Some` when the dispatched work completed.
+    #[serde(default)]
+    pub resolution: Option<TicketResolution>,
+}
+
+/// A resolved ticket's outcome. Captured when the dispatched work
+/// completes; the resolution receipt (in the future) references this
+/// snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TicketResolution {
+    /// Wall-clock time the ticket resolved.
+    pub resolved_at: DateTime<Utc>,
+
+    /// One-line outcome summary. What was learned, decided, or produced.
+    pub outcome_summary: String,
+
+    /// Receipt id (or entry hash) of the `arc:ticket:resolved` receipt
+    /// that anchored this resolution on chain. Optional today because
+    /// receipt emission for map primitives hasn't landed yet; will be
+    /// required once the receipt families are live.
+    #[serde(default)]
+    pub resolution_receipt_id: Option<String>,
+}
+
+/// A proposed destination for a trajectory map. Multiple hypotheses may
+/// coexist (proposed but not-yet-accepted, or accepted-then-superseded);
+/// the current destination is a query over this vector — see
+/// `WorkArc::current_destination`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DestinationHypothesis {
+    /// Stable id within the parent WorkArc.
+    pub id: String,
+
+    /// Description of the target — spec artifact reference, code-change
+    /// target, operator-facing goal. Free-form today; will type-check
+    /// against ARTIFACT-LIBRARY in the future.
+    pub description: String,
+
+    /// Wall-clock time the hypothesis was proposed.
+    pub proposed_at: DateTime<Utc>,
+
+    /// Whether an operator signature has accepted this hypothesis. A
+    /// hypothesis can be proposed but unaccepted (the substrate has
+    /// noted a candidate direction; the operator hasn't confirmed) —
+    /// which is a valid state.
+    #[serde(default)]
+    pub accepted: bool,
+
+    /// If this hypothesis has been superseded by a later one, the id
+    /// of the superseding hypothesis. `None` while current.
+    #[serde(default)]
+    pub superseded_by: Option<String>,
+}
+
+impl WorkArc {
+    /// True if this arc has grown into a map — has any tickets OR any
+    /// destination hypotheses. Arc-shaped work (the vast majority of
+    /// WorkArcs) returns false; map-shaped work returns true.
+    pub fn is_map_shaped(&self) -> bool {
+        !self.tickets.is_empty() || !self.destination_hypotheses.is_empty()
+    }
+
+    /// Tickets currently takable — empty `blocking` set AND unresolved.
+    /// This is the primary "what can we do next in this map" query.
+    pub fn frontier(&self) -> Vec<&Ticket> {
+        self.tickets
+            .iter()
+            .filter(|t| t.resolution.is_none() && t.blocking.is_empty())
+            .collect()
+    }
+
+    /// Tickets in fog — non-empty `blocking` set AND unresolved. Named
+    /// uncertainty awaiting blocker resolution. Legitimate state per
+    /// the sketch (not a defect).
+    pub fn fog(&self) -> Vec<&Ticket> {
+        self.tickets
+            .iter()
+            .filter(|t| t.resolution.is_none() && !t.blocking.is_empty())
+            .collect()
+    }
+
+    /// Tickets that have resolved. Contributes to the trajectory
+    /// projection Aegis will observe.
+    pub fn resolved_tickets(&self) -> Vec<&Ticket> {
+        self.tickets
+            .iter()
+            .filter(|t| t.resolution.is_some())
+            .collect()
+    }
+
+    /// The current destination, if the trajectory has converged enough
+    /// to name one. Query definition: the most recent accepted
+    /// hypothesis that has no `superseded_by`. Returns `None` when the
+    /// map is in pure-fog state (no accepted destination yet), which is
+    /// a valid state per the sketch.
+    ///
+    /// "Most recent" is by position in the vector — hypotheses are
+    /// appended in chronological order, so the last matching entry
+    /// wins.
+    pub fn current_destination(&self) -> Option<&DestinationHypothesis> {
+        self.destination_hypotheses
+            .iter()
+            .rev()
+            .find(|h| h.accepted && h.superseded_by.is_none())
+    }
+
+    /// Look up a ticket by id. Utility for blocking-set resolution and
+    /// operator queries.
+    pub fn ticket_by_id(&self, id: &str) -> Option<&Ticket> {
+        self.tickets.iter().find(|t| t.id == id)
+    }
+
+    /// Look up a destination hypothesis by id.
+    pub fn destination_by_id(&self, id: &str) -> Option<&DestinationHypothesis> {
+        self.destination_hypotheses.iter().find(|h| h.id == id)
+    }
+}
+
+#[cfg(test)]
+mod trajectory_map_tests {
+    use super::*;
+
+    fn empty_arc() -> WorkArc {
+        WorkArc {
+            progress: String::new(),
+            cycles_completed: 0,
+            max_cycles: 10,
+            tool_history: Vec::new(),
+            directive: None,
+            stall_count: 0,
+            tickets: Vec::new(),
+            destination_hypotheses: Vec::new(),
+        }
+    }
+
+    fn mk_ticket(id: &str, blocking: Vec<&str>) -> Ticket {
+        Ticket {
+            id: id.to_string(),
+            ticket_type: TicketType::Research,
+            rationale: format!("test ticket {}", id),
+            blocking: blocking.into_iter().map(|s| s.to_string()).collect(),
+            expected_outcome: None,
+            resolution: None,
+        }
+    }
+
+    fn mk_resolution() -> TicketResolution {
+        TicketResolution {
+            resolved_at: Utc::now(),
+            outcome_summary: "resolved".to_string(),
+            resolution_receipt_id: None,
+        }
+    }
+
+    #[test]
+    fn empty_arc_is_not_map_shaped() {
+        assert!(!empty_arc().is_map_shaped());
+    }
+
+    #[test]
+    fn arc_with_ticket_is_map_shaped() {
+        let mut a = empty_arc();
+        a.tickets.push(mk_ticket("t1", vec![]));
+        assert!(a.is_map_shaped());
+    }
+
+    #[test]
+    fn arc_with_only_destination_hypothesis_is_map_shaped() {
+        let mut a = empty_arc();
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d1".to_string(),
+            description: "target".to_string(),
+            proposed_at: Utc::now(),
+            accepted: false,
+            superseded_by: None,
+        });
+        assert!(a.is_map_shaped());
+    }
+
+    #[test]
+    fn frontier_contains_only_unblocked_unresolved_tickets() {
+        let mut a = empty_arc();
+        a.tickets.push(mk_ticket("t1", vec![]));         // frontier
+        a.tickets.push(mk_ticket("t2", vec!["t1"]));      // fog
+        let mut t3 = mk_ticket("t3", vec![]);
+        t3.resolution = Some(mk_resolution());            // resolved
+        a.tickets.push(t3);
+
+        let frontier: Vec<&str> = a.frontier().iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(frontier, vec!["t1"]);
+    }
+
+    #[test]
+    fn fog_contains_only_blocked_unresolved_tickets() {
+        let mut a = empty_arc();
+        a.tickets.push(mk_ticket("t1", vec![]));         // frontier
+        a.tickets.push(mk_ticket("t2", vec!["t1"]));      // fog
+        a.tickets.push(mk_ticket("t3", vec!["t1", "t2"])); // fog
+
+        let fog: Vec<&str> = a.fog().iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(fog, vec!["t2", "t3"]);
+    }
+
+    #[test]
+    fn resolved_ticket_appears_in_neither_frontier_nor_fog() {
+        let mut a = empty_arc();
+        let mut t = mk_ticket("t1", vec![]);
+        t.resolution = Some(mk_resolution());
+        a.tickets.push(t);
+
+        assert!(a.frontier().is_empty());
+        assert!(a.fog().is_empty());
+        assert_eq!(a.resolved_tickets().len(), 1);
+    }
+
+    #[test]
+    fn current_destination_returns_none_when_no_hypothesis_accepted() {
+        let mut a = empty_arc();
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d1".to_string(),
+            description: "candidate".to_string(),
+            proposed_at: Utc::now(),
+            accepted: false,       // proposed but not accepted
+            superseded_by: None,
+        });
+        assert!(a.current_destination().is_none());
+    }
+
+    #[test]
+    fn current_destination_returns_accepted_unsuperseded() {
+        let mut a = empty_arc();
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d1".to_string(),
+            description: "first".to_string(),
+            proposed_at: Utc::now(),
+            accepted: true,
+            superseded_by: None,
+        });
+        assert_eq!(a.current_destination().map(|h| h.id.as_str()), Some("d1"));
+    }
+
+    #[test]
+    fn current_destination_skips_superseded_hypothesis() {
+        let mut a = empty_arc();
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d1".to_string(),
+            description: "first".to_string(),
+            proposed_at: Utc::now(),
+            accepted: true,
+            superseded_by: Some("d2".to_string()),
+        });
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d2".to_string(),
+            description: "second".to_string(),
+            proposed_at: Utc::now(),
+            accepted: true,
+            superseded_by: None,
+        });
+        assert_eq!(a.current_destination().map(|h| h.id.as_str()), Some("d2"));
+    }
+
+    #[test]
+    fn current_destination_prefers_latest_when_multiple_current() {
+        // Guards the "most recent by position" semantic — if two
+        // hypotheses are both accepted+unsuperseded (should be rare;
+        // suggests ceremony bug), we pick the latest-appended.
+        let mut a = empty_arc();
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d1".to_string(),
+            description: "earlier".to_string(),
+            proposed_at: Utc::now(),
+            accepted: true,
+            superseded_by: None,
+        });
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d2".to_string(),
+            description: "later".to_string(),
+            proposed_at: Utc::now(),
+            accepted: true,
+            superseded_by: None,
+        });
+        assert_eq!(a.current_destination().map(|h| h.id.as_str()), Some("d2"));
+    }
+
+    #[test]
+    fn ticket_by_id_lookup() {
+        let mut a = empty_arc();
+        a.tickets.push(mk_ticket("t1", vec![]));
+        a.tickets.push(mk_ticket("t2", vec![]));
+        assert!(a.ticket_by_id("t1").is_some());
+        assert!(a.ticket_by_id("t2").is_some());
+        assert!(a.ticket_by_id("t3").is_none());
+    }
+
+    #[test]
+    fn destination_by_id_lookup() {
+        let mut a = empty_arc();
+        a.destination_hypotheses.push(DestinationHypothesis {
+            id: "d1".to_string(),
+            description: "target".to_string(),
+            proposed_at: Utc::now(),
+            accepted: false,
+            superseded_by: None,
+        });
+        assert!(a.destination_by_id("d1").is_some());
+        assert!(a.destination_by_id("d2").is_none());
+    }
+
+    #[test]
+    fn workarc_deserializes_without_new_fields() {
+        // Guards backward compat: a serialized WorkArc from before
+        // the trajectory-map extension landed should still deserialize
+        // (missing fields default to empty vecs).
+        let json = r#"{
+            "progress": "",
+            "cycles_completed": 0,
+            "max_cycles": 10,
+            "tool_history": [],
+            "directive": null,
+            "stall_count": 0
+        }"#;
+        let arc: WorkArc = serde_json::from_str(json).expect("deserialize");
+        assert!(!arc.is_map_shaped());
+        assert!(arc.tickets.is_empty());
+        assert!(arc.destination_hypotheses.is_empty());
+    }
 }
 
 /// A tool execution result from a prior turn in the same cycle.

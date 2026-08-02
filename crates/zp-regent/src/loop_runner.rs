@@ -405,6 +405,8 @@ pub fn start_loop(
                                     tool_history: Vec::new(),
                                     stall_count: 0,
                                     directive: cycle_directive_for_arc.clone(),
+                                    tickets: Vec::new(),
+                                    destination_hypotheses: Vec::new(),
                                 });
                                 // Read the arc's prior state before overwriting it.
                                 let no_advance = !is_new_arc
@@ -603,6 +605,8 @@ pub fn start_loop(
                             stall_count: 0,
                             // Findings-triggered: no operator directive.
                             directive: None,
+                            tickets: Vec::new(),
+                            destination_hypotheses: Vec::new(),
                         });
                         let no_advance = !is_new_arc
                             && current.progress == progress
