@@ -277,18 +277,18 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     "lock:released_by_arrest",
     // Trajectory-map primitive — declared in
     // TRAJECTORY-MAP-PRIMITIVE-2026-08 (sketch, a7bbcad). Extends
-    // WorkArc into a map when tickets grow. Map lifecycle receipts
+    // WorkArc into a map when waypoints grow. Map lifecycle receipts
     // (opened, proposed, priority_hint, destination_proposed/accepted/
     // superseded, settled_with_destination, settled_without_destination,
     // abandoned). WorkArc extension not yet landed; reserved so the
     // vocabulary is stable before implementation begins.
     "arc:map:",
-    // Ticket lifecycle inside a trajectory map — opened, resolved,
-    // rejected, split. Each ticket dispatches through builder
+    // Waypoint lifecycle inside a trajectory map — opened, resolved,
+    // rejected, split. Each waypoint dispatches through builder
     // machinery per SUBSTRATE-SELF-CONSTRUCTION; resolution closes
-    // the ticket and may open new fog tickets. Reserved alongside
+    // the waypoint and may open new fog waypoints. Reserved alongside
     // the map primitive.
-    "arc:ticket:",
+    "arc:waypoint:",
     // Node-RED-orchestration receipts — declared in
     // REGENT-ORCHESTRATION-ARTIFACTS-2026-08 (sketch, c67e327).
     // Emitted by Node-RED runtime's pluggable message-routing seam

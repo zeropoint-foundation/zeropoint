@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration (SKETCH — 2026-08-02).** Proposes adoption of `@node-red/runtime` as a flow-orchestration artifact the Regent dispatches, with Temporal as an optional durability substrate beneath, composing with the existing visualization discipline (LENS-DISCIPLINE, four canonical lenses, molecular notation, Cartographer) and the Regent-is-UX architectural stance (AGENT-AS-UX-ARCHITECTURE, AGENTIC-SURFACE, SURFACE-BOUNDARIES). Elaborates `KEEL-2026-07.md` §II.13 P6, §II.19, Part V, Part VIII, Part XIV.
 
-Composes with: `LENS-DISCIPLINE-2026-07.md` (all Regent-produced visualizations are `lens:declared:*` receipts), `zp-visual-language.md` (four canonical view-in lenses), `RECEIPT-MOLECULAR-NOTATION-2026-05.md` (rendering vocabulary for CodeFlow-shaped artifacts), `AGENT-AS-UX-ARCHITECTURE-2026-05.md` and `AGENTIC-SURFACE-2026-05.md` (Regent is the operator's UX; no HTML surface the operator visits), `SURFACE-BOUNDARIES-2026-05.md` (canonical reference for what surface serves what concern), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map tickets dispatched through Node-RED runtime; map-shape composes with subflow-shape), `ARTIFACT-LIBRARY-2026-05.md` (all Regent-produced flow runs, visualizations, and reports are artifacts under standard lifecycle), `OFFICER-ACTION-SURFACES-2026-07.md` (five-phase ceremony per flow run), `SUBSTRATE-SELF-CONSTRUCTION-2026-07.md` (Regent-dispatched builders execute flows).
+Composes with: `LENS-DISCIPLINE-2026-07.md` (all Regent-produced visualizations are `lens:declared:*` receipts), `zp-visual-language.md` (four canonical view-in lenses), `RECEIPT-MOLECULAR-NOTATION-2026-05.md` (rendering vocabulary for CodeFlow-shaped artifacts), `AGENT-AS-UX-ARCHITECTURE-2026-05.md` and `AGENTIC-SURFACE-2026-05.md` (Regent is the operator's UX; no HTML surface the operator visits), `SURFACE-BOUNDARIES-2026-05.md` (canonical reference for what surface serves what concern), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map waypoints dispatched through Node-RED runtime; map-shape composes with subflow-shape), `ARTIFACT-LIBRARY-2026-05.md` (all Regent-produced flow runs, visualizations, and reports are artifacts under standard lifecycle), `OFFICER-ACTION-SURFACES-2026-07.md` (five-phase ceremony per flow run), `SUBSTRATE-SELF-CONSTRUCTION-2026-07.md` (Regent-dispatched builders execute flows).
 
 **Status.** Sketch, not committed spec. Load-bearing framing: **Node-RED and the rest are artifacts the Regent uses to be the operator's UX, not user interfaces the operator visits directly.**
 
@@ -18,7 +18,7 @@ This sketch names the shape of that adoption. The pieces already exist in corpus
 - **Four canonical lenses** (zp-visual-language): Abacus (temporal), Weave (authority), CodeFlow (derivation), Walk (transport). Each is a view-in lens the Regent instantiates.
 - **Molecular notation** (RECEIPT-MOLECULAR-NOTATION Tier 3): the rendering vocabulary the Regent uses inside CodeFlow-shaped artifacts. Chemistry-inspired: atoms, heteroatoms, bonds, aromatic rings, functional groups, valence.
 - **MorphoHDL patterns** (bookmarked): grammar-shape constraints on how visual elements compose (rewrite composition, dimensional inference, growth-driven rendering).
-- **Trajectory-map primitive** (2026-08 sketch): map tickets that need dispatch semantics beyond linear WorkArc.
+- **Trajectory-map primitive** (2026-08 sketch): map waypoints that need dispatch semantics beyond linear WorkArc.
 
 What's been missing is the runtime that lets the Regent actually dispatch flow-shaped work with the durability and message-passing guarantees the substrate needs. This sketch proposes Node-RED's `@node-red/runtime` as that primitive, with Temporal as an optional durability substrate beneath.
 
@@ -49,7 +49,7 @@ Adopted for its fit with substrate discipline:
 
 ### Durability layer: Temporal (Apache 2.0 / MIT core) — default on
 
-Node-RED's event loop does not survive process crashes with exact-once resumption. A ticket in flight that disappears without a resolution receipt is exactly the class of un-anchored substrate event the chain discipline was built to eliminate. Temporal's durable execution guarantee — workflows survive crashes, resume exactly where they left off, produce receipts at deterministic points — fills that gap.
+Node-RED's event loop does not survive process crashes with exact-once resumption. A waypoint in flight that disappears without a resolution receipt is exactly the class of un-anchored substrate event the chain discipline was built to eliminate. Temporal's durable execution guarantee — workflows survive crashes, resume exactly where they left off, produce receipts at deterministic points — fills that gap.
 
 The safety-net posture across the substrate is durability-on-by-default. This sketch adopts the same posture for the flow-orchestration layer specifically: **Temporal beneath Node-RED is default on whenever Node-RED runtime is active.** The operator can opt out for local/dev/light deployments where operational simplicity is preferred over exact-once guarantee, but opting out is an operator-signed receipt with rationale — same discipline as tieoffs.toml or any other declared exception. Silent absence of the safety net is not a posture the substrate allows.
 
@@ -59,7 +59,7 @@ Layering clarifies the "always on" claim without pretending Temporal covers case
 - **Node-RED runtime with receipt-chain-backed storage: on when flow-orchestration is being used** (presence of open trajectory maps or Regent-dispatched flow work signals it).
 - **Temporal beneath Node-RED: default on when Node-RED is active.** Opt-out is a `regent:config:durability:temporal_disabled` receipt (or equivalent) carrying operator signature and rationale. Audit trail then shows the reduced-posture choice explicitly; future operators or the operator's future self can reason about the rationale and reopen the question if it no longer holds.
 
-What Temporal specifically adds beyond the chain's idempotency floor is *mid-flow exact-once resumption for multi-step flows with side effects between steps* — a workflow that crashes at step 3 of 5 resumes at step 3, not from scratch. This is the class of guarantee that matters for flow-orchestration workloads (Node-RED runtime, trajectory-map tickets, long-running builder dispatches). For linear WorkArc and individual tool dispatches, the chain's idempotency floor is already sufficient — Temporal is not consulted for those.
+What Temporal specifically adds beyond the chain's idempotency floor is *mid-flow exact-once resumption for multi-step flows with side effects between steps* — a workflow that crashes at step 3 of 5 resumes at step 3, not from scratch. This is the class of guarantee that matters for flow-orchestration workloads (Node-RED runtime, trajectory-map waypoints, long-running builder dispatches). For linear WorkArc and individual tool dispatches, the chain's idempotency floor is already sufficient — Temporal is not consulted for those.
 
 Trade-off note on Trigger.dev vs Temporal (a decision named as still-open in earlier substrate thinking): Trigger.dev's at-least-once + idempotency composes cleanly with the chain (which already provides idempotency by hash). Temporal's exact-once is belt to the chain's suspenders, not replacement. This sketch defaults to Temporal because belt-and-suspenders is what the substrate wants for the specific class of receipts operator sovereignty depends on — but the opt-out path lets operators choose Trigger.dev-or-equivalent if operational simplicity is more important than the exact-once guarantee.
 
@@ -90,12 +90,12 @@ Concretely:
 
 ## Composition with the trajectory-map primitive
 
-The 2026-08 trajectory-map sketch proposes map-shaped work with tickets, blocking relationships, frontier, fog, and emergent destinations. Node-RED's runtime is a strong fit:
+The 2026-08 trajectory-map sketch proposes map-shaped work with waypoints, blocking relationships, frontier, fog, and emergent destinations. Node-RED's runtime is a strong fit:
 
-- **Tickets dispatch as subflow invocations.** Each map ticket becomes a subflow instantiation with typed inputs and typed outputs. Ticket resolution IS the subflow completing.
-- **Blocking relationships as message dependencies.** A ticket blocked-on another ticket's resolution is a Node-RED node waiting on an inbound message from the resolution node. Native to the runtime.
+- **Waypoints dispatch as subflow invocations.** Each map waypoint becomes a subflow instantiation with typed inputs and typed outputs. Waypoint resolution IS the subflow completing.
+- **Blocking relationships as message dependencies.** A waypoint blocked-on another waypoint's resolution is a Node-RED node waiting on an inbound message from the resolution node. Native to the runtime.
 - **Frontier is the set of takable subflows** — subflows whose inbound-message dependencies are all satisfied. Node-RED already knows how to compute this; the trajectory-map primitive queries the runtime for its frontier per cycle.
-- **Fog visualization** — the map's un-takeable tickets render as un-fired Node-RED nodes; Dashboard 2.0 can show the flow graph with fired vs unfired distinguished. This is the operator-visible surface for a map-in-progress, if the Regent judges the operator wants to see it.
+- **Fog visualization** — the map's un-takeable waypoints render as un-fired Node-RED nodes; Dashboard 2.0 can show the flow graph with fired vs unfired distinguished. This is the operator-visible surface for a map-in-progress, if the Regent judges the operator wants to see it.
 - **Aegis trajectory observation** — Node-RED's message-routing seam (when pluggable) intercepts every node-to-node message; the interceptor emits trajectory receipts Aegis reads.
 
 Landing Node-RED and the trajectory-map primitive together means neither has to bespoke-implement the other's mechanism. They co-design cleanly.

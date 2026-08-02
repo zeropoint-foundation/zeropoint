@@ -405,7 +405,7 @@ pub fn start_loop(
                                     tool_history: Vec::new(),
                                     stall_count: 0,
                                     directive: cycle_directive_for_arc.clone(),
-                                    tickets: Vec::new(),
+                                    waypoints: Vec::new(),
                                     destination_hypotheses: Vec::new(),
                                     settlement: crate::context::SettlementState::Open,
                                 });
@@ -606,7 +606,7 @@ pub fn start_loop(
                             stall_count: 0,
                             // Findings-triggered: no operator directive.
                             directive: None,
-                            tickets: Vec::new(),
+                            waypoints: Vec::new(),
                             destination_hypotheses: Vec::new(),
                             settlement: crate::context::SettlementState::Open,
                         });

@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration (SKETCH — 2026-08-02).** Proposes per-node hardware dossiers as first-class corpus data, parallel to `models/*/model_dossier.toml`, informing every inference-routing decision the Regent makes. Elaborates `KEEL-2026-07.md` §II.13 P6 (physical foundation), §II.19 (composition contract), and Part XIV (inference envelope).
 
-Composes with: `MODEL-DOSSIER-2026-07.md` (fit predictions cross-reference model dossier + hardware dossier), `HARDWARE-ROLE-SEPARATION-2026-07.md` (which nodes exist and what role each plays; this doc names their capabilities), `HARDWARE-OBSERVER-2026-07.md` (partially reserved via `observation:hardware:*`; hardware profile is one facet of what HARDWARE-OBSERVER watches), `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (fit + ceiling feed the Layer 2 classifier's routing decisions), `LOCAL-MODEL-SELECTION-2026-07.md` (its hardware-math section is the theoretical basis for the fit-prediction functions this sketch specifies), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (capacity-fit failure escalates as an operator-approval ceremony), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map-shaped work with heavy-context tickets consults fit predictions before dispatch).
+Composes with: `MODEL-DOSSIER-2026-07.md` (fit predictions cross-reference model dossier + hardware dossier), `HARDWARE-ROLE-SEPARATION-2026-07.md` (which nodes exist and what role each plays; this doc names their capabilities), `HARDWARE-OBSERVER-2026-07.md` (partially reserved via `observation:hardware:*`; hardware profile is one facet of what HARDWARE-OBSERVER watches), `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (fit + ceiling feed the Layer 2 classifier's routing decisions), `LOCAL-MODEL-SELECTION-2026-07.md` (its hardware-math section is the theoretical basis for the fit-prediction functions this sketch specifies), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (capacity-fit failure escalates as an operator-approval ceremony), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map-shaped work with heavy-context waypoints consults fit predictions before dispatch).
 
 **Status.** Sketch, not committed spec. Load-bearing framing: **hardware capability is first-class corpus data. Every inference routing decision consults it. A model that would not fit on current hardware hard-blocks with an escalation receipt asking operator to disposition — never auto-escalates silently.**
 
@@ -175,7 +175,7 @@ The hardware dossier + fit prediction primitive lands cleanly with existing corp
 - **INFERENCE-ROUTING-DISCIPLINE-2026-07** — Layer 2 classifier extended with fit predictions. No canon change; adds a routing input.
 - **LOCAL-MODEL-SELECTION-2026-07** — its hardware-math section (2026-08 addition) is the theoretical basis for the fit-prediction functions here.
 - **EXECUTION-AUTHORITY-MODEL-2026-07** — capacity failure hard-blocks via Phase 7 proposal ceremony. Existing machinery, new class of proposal.
-- **TRAJECTORY-MAP-PRIMITIVE-2026-08** — map tickets whose dispatched work has heavy context (code:repo_wide) consult FitPrediction before dispatch. If dispatch would fit-fail, escalate before running any work.
+- **TRAJECTORY-MAP-PRIMITIVE-2026-08** — map waypoints whose dispatched work has heavy context (code:repo_wide) consult FitPrediction before dispatch. If dispatch would fit-fail, escalate before running any work.
 - **ARTIFACT-LIBRARY-2026-05** — hardware dossiers land as artifacts under candidate → signed → superseded lifecycle. Same discipline as model dossiers.
 
 ## Reserved receipt families

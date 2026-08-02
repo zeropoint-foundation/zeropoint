@@ -443,21 +443,21 @@ pub struct WorkArc {
     /// without ever naming what went wrong.
     pub stall_count: u32,
 
-    /// Trajectory-map ticket set. Empty for arc-shaped work (the vast
+    /// Trajectory-map waypoint set. Empty for arc-shaped work (the vast
     /// majority of WorkArcs); non-empty when the arc has grown into a
     /// map per TRAJECTORY-MAP-PRIMITIVE-2026-08.
     ///
     /// Framing per that sketch: **every WorkArc is a map with zero
-    /// tickets**. Ticket-set growth is what promotes an arc into map
+    /// waypoints**. Waypoint-set growth is what promotes an arc into map
     /// mode. This field is `#[serde(default)]` so existing serialized
-    /// WorkArcs deserialize as arc-shaped (empty ticket set) without
+    /// WorkArcs deserialize as arc-shaped (empty waypoint set) without
     /// migration.
     ///
     /// No dispatch behaviour reads this field yet — this landing is
     /// data-structure-only. The dispatch loop, receipt-emission, and
     /// operator surface come in follow-on commits.
     #[serde(default)]
-    pub tickets: Vec<Ticket>,
+    pub waypoints: Vec<Waypoint>,
 
     /// Destination hypotheses proposed for this map. Empty for arc-
     /// shaped work OR for map-shaped work in pure-fog state (heading
@@ -487,12 +487,12 @@ pub struct WorkArc {
 
 // ── Trajectory map primitives (data-structure landing) ─────────────────
 
-/// The type of work a ticket represents. Dispatch mechanism varies per
+/// The type of work a waypoint represents. Dispatch mechanism varies per
 /// type; the enum is a scheduling signal for the future dispatch loop.
 ///
 /// - `Research` — investigation task, dispatches to builder per
 ///   SUBSTRATE-SELF-CONSTRUCTION-2026-07 §"builder dispatch."
-/// - `Prototype` — shadow-eval-shaped ticket, dispatches to
+/// - `Prototype` — shadow-eval-shaped waypoint, dispatches to
 ///   SHADOW-EVALUATION-PRIMITIVE-2026-07 for high-fidelity feedback.
 /// - `Grilling` — operator conversation, dispatches to the approval-
 ///   request machinery for interactive dialogue.
@@ -500,62 +500,62 @@ pub struct WorkArc {
 ///   Research but produces artifacts rather than findings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum TicketType {
+pub enum WaypointKind {
     Research,
     Prototype,
     Grilling,
     Task,
 }
 
-/// A ticket in a trajectory map. Scoped sub-arc of work with typed
+/// A waypoint in a trajectory map. Scoped sub-arc of work with typed
 /// dispatch, explicit blocking relationships, and (once resolved)
-/// an outcome that may open new tickets.
+/// an outcome that may open new waypoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Ticket {
-    /// Stable id within the parent WorkArc. Used by other tickets'
-    /// `blocking` sets to name this ticket as a prerequisite.
+pub struct Waypoint {
+    /// Stable id within the parent WorkArc. Used by other waypoints'
+    /// `blocking` sets to name this waypoint as a prerequisite.
     pub id: String,
 
-    /// Dispatch-scheduling signal. See `TicketType`.
-    pub ticket_type: TicketType,
+    /// Dispatch-scheduling signal. See `WaypointKind`.
+    pub waypoint_kind: WaypointKind,
 
-    /// Human-readable rationale — why this ticket, what fog it clears.
-    /// One-line preferred; the Regent uses this as the ticket's cockpit
+    /// Human-readable rationale — why this waypoint, what fog it clears.
+    /// One-line preferred; the Regent uses this as the waypoint's cockpit
     /// label.
     pub rationale: String,
 
-    /// Other tickets in this map that must resolve before this one is
-    /// takable. Named by their `id`. Empty vec means the ticket is on
+    /// Other waypoints in this map that must resolve before this one is
+    /// takable. Named by their `id`. Empty vec means the waypoint is on
     /// the frontier immediately.
     #[serde(default)]
     pub blocking: Vec<String>,
 
-    /// What the ticket's resolution receipt is expected to contain.
+    /// What the waypoint's resolution receipt is expected to contain.
     /// Used by future Aegis integration to detect trajectory divergence
-    /// when actual outcomes don't match. Optional — some tickets are
+    /// when actual outcomes don't match. Optional — some waypoints are
     /// open-ended exploration where an expected outcome would be
     /// premature.
     #[serde(default)]
     pub expected_outcome: Option<String>,
 
-    /// Resolution state. `None` while the ticket is unresolved
+    /// Resolution state. `None` while the waypoint is unresolved
     /// (frontier or fog); `Some` when the dispatched work completed.
     #[serde(default)]
-    pub resolution: Option<TicketResolution>,
+    pub resolution: Option<WaypointResolution>,
 }
 
-/// A resolved ticket's outcome. Captured when the dispatched work
+/// A resolved waypoint's outcome. Captured when the dispatched work
 /// completes; the resolution receipt (in the future) references this
 /// snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TicketResolution {
-    /// Wall-clock time the ticket resolved.
+pub struct WaypointResolution {
+    /// Wall-clock time the waypoint resolved.
     pub resolved_at: DateTime<Utc>,
 
     /// One-line outcome summary. What was learned, decided, or produced.
     pub outcome_summary: String,
 
-    /// Receipt id (or entry hash) of the `arc:ticket:resolved` receipt
+    /// Receipt id (or entry hash) of the `arc:waypoint:resolved` receipt
     /// that anchored this resolution on chain. Optional today because
     /// receipt emission for map primitives hasn't landed yet; will be
     /// required once the receipt families are live.
@@ -594,36 +594,36 @@ pub struct DestinationHypothesis {
 }
 
 impl WorkArc {
-    /// True if this arc has grown into a map — has any tickets OR any
+    /// True if this arc has grown into a map — has any waypoints OR any
     /// destination hypotheses. Arc-shaped work (the vast majority of
     /// WorkArcs) returns false; map-shaped work returns true.
     pub fn is_map_shaped(&self) -> bool {
-        !self.tickets.is_empty() || !self.destination_hypotheses.is_empty()
+        !self.waypoints.is_empty() || !self.destination_hypotheses.is_empty()
     }
 
-    /// Tickets currently takable — empty `blocking` set AND unresolved.
+    /// Waypoints currently takable — empty `blocking` set AND unresolved.
     /// This is the primary "what can we do next in this map" query.
-    pub fn frontier(&self) -> Vec<&Ticket> {
-        self.tickets
+    pub fn frontier(&self) -> Vec<&Waypoint> {
+        self.waypoints
             .iter()
             .filter(|t| t.resolution.is_none() && t.blocking.is_empty())
             .collect()
     }
 
-    /// Tickets in fog — non-empty `blocking` set AND unresolved. Named
+    /// Waypoints in fog — non-empty `blocking` set AND unresolved. Named
     /// uncertainty awaiting blocker resolution. Legitimate state per
     /// the sketch (not a defect).
-    pub fn fog(&self) -> Vec<&Ticket> {
-        self.tickets
+    pub fn fog(&self) -> Vec<&Waypoint> {
+        self.waypoints
             .iter()
             .filter(|t| t.resolution.is_none() && !t.blocking.is_empty())
             .collect()
     }
 
-    /// Tickets that have resolved. Contributes to the trajectory
+    /// Waypoints that have resolved. Contributes to the trajectory
     /// projection Aegis will observe.
-    pub fn resolved_tickets(&self) -> Vec<&Ticket> {
-        self.tickets
+    pub fn resolved_waypoints(&self) -> Vec<&Waypoint> {
+        self.waypoints
             .iter()
             .filter(|t| t.resolution.is_some())
             .collect()
@@ -645,10 +645,10 @@ impl WorkArc {
             .find(|h| h.accepted && h.superseded_by.is_none())
     }
 
-    /// Look up a ticket by id. Utility for blocking-set resolution and
+    /// Look up a waypoint by id. Utility for blocking-set resolution and
     /// operator queries.
-    pub fn ticket_by_id(&self, id: &str) -> Option<&Ticket> {
-        self.tickets.iter().find(|t| t.id == id)
+    pub fn waypoint_by_id(&self, id: &str) -> Option<&Waypoint> {
+        self.waypoints.iter().find(|t| t.id == id)
     }
 
     /// Look up a destination hypothesis by id.
@@ -670,7 +670,7 @@ impl WorkArc {
 // the event+detail the caller should pipe through `emit_receipt`. This
 // preserves the pure-data spirit of WorkArc (no audit-store access from
 // context.rs) while giving the future dispatch layer a single canonical
-// place to look up "what does opening a ticket look like on the chain."
+// place to look up "what does opening a waypoint look like on the chain."
 //
 // Receipt event names follow the RESERVED_RECEIPT_PREFIXES additions in
 // crates/zp-server/src/substrate_validate.rs (commit 0389792):
@@ -680,8 +680,8 @@ impl WorkArc {
 //   arc:map:settled_with_destination
 //   arc:map:settled_without_destination
 //   arc:map:abandoned
-//   arc:ticket:opened
-//   arc:ticket:resolved
+//   arc:waypoint:opened
+//   arc:waypoint:resolved
 //
 // Timestamps are caller-provided (parameter `now: DateTime<Utc>`) so
 // tests can be deterministic and callers control the anchor time.
@@ -738,12 +738,12 @@ pub struct MapReceipt {
 /// to propagate, escalate, or narrate the failure.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum MapError {
-    #[error("ticket id already exists in this arc: {0}")]
-    DuplicateTicket(String),
-    #[error("ticket not found in this arc: {0}")]
-    TicketNotFound(String),
-    #[error("ticket already resolved: {0}")]
-    TicketAlreadyResolved(String),
+    #[error("waypoint id already exists in this arc: {0}")]
+    DuplicateWaypoint(String),
+    #[error("waypoint not found in this arc: {0}")]
+    WaypointNotFound(String),
+    #[error("waypoint already resolved: {0}")]
+    WaypointAlreadyResolved(String),
     #[error("destination hypothesis id already exists in this arc: {0}")]
     DuplicateDestination(String),
     #[error("destination not found in this arc: {0}")]
@@ -757,31 +757,31 @@ pub enum MapError {
 }
 
 impl WorkArc {
-    /// Open a new ticket. Ticket id must be unique within this arc.
+    /// Open a new waypoint. Waypoint id must be unique within this arc.
     /// Errors on duplicate id or if the map is already settled.
-    pub fn open_ticket(
+    pub fn open_waypoint(
         &mut self,
-        ticket: Ticket,
+        waypoint: Waypoint,
     ) -> Result<MapReceipt, MapError> {
         if self.is_settled() {
             return Err(MapError::MapAlreadySettled);
         }
-        if self.tickets.iter().any(|t| t.id == ticket.id) {
-            return Err(MapError::DuplicateTicket(ticket.id));
+        if self.waypoints.iter().any(|t| t.id == waypoint.id) {
+            return Err(MapError::DuplicateWaypoint(waypoint.id));
         }
-        let id = ticket.id.clone();
-        let ticket_type = ticket.ticket_type;
-        let blocking = ticket.blocking.join(",");
-        let rationale = ticket.rationale.clone();
-        self.tickets.push(ticket);
-        let type_str = match ticket_type {
-            TicketType::Research => "research",
-            TicketType::Prototype => "prototype",
-            TicketType::Grilling => "grilling",
-            TicketType::Task => "task",
+        let id = waypoint.id.clone();
+        let waypoint_kind = waypoint.waypoint_kind;
+        let blocking = waypoint.blocking.join(",");
+        let rationale = waypoint.rationale.clone();
+        self.waypoints.push(waypoint);
+        let type_str = match waypoint_kind {
+            WaypointKind::Research => "research",
+            WaypointKind::Prototype => "prototype",
+            WaypointKind::Grilling => "grilling",
+            WaypointKind::Task => "task",
         };
         Ok(MapReceipt {
-            event: "arc:ticket:opened".to_string(),
+            event: "arc:waypoint:opened".to_string(),
             detail: format!(
                 "id={}, type={}, blocking=[{}], rationale={}",
                 id, type_str, blocking, rationale
@@ -789,9 +789,9 @@ impl WorkArc {
         })
     }
 
-    /// Resolve a ticket. Errors if the ticket doesn't exist, is
+    /// Resolve a waypoint. Errors if the waypoint doesn't exist, is
     /// already resolved, or if the map is already settled.
-    pub fn resolve_ticket(
+    pub fn resolve_waypoint(
         &mut self,
         id: &str,
         outcome_summary: String,
@@ -800,21 +800,21 @@ impl WorkArc {
         if self.is_settled() {
             return Err(MapError::MapAlreadySettled);
         }
-        let ticket = self
-            .tickets
+        let waypoint = self
+            .waypoints
             .iter_mut()
             .find(|t| t.id == id)
-            .ok_or_else(|| MapError::TicketNotFound(id.to_string()))?;
-        if ticket.resolution.is_some() {
-            return Err(MapError::TicketAlreadyResolved(id.to_string()));
+            .ok_or_else(|| MapError::WaypointNotFound(id.to_string()))?;
+        if waypoint.resolution.is_some() {
+            return Err(MapError::WaypointAlreadyResolved(id.to_string()));
         }
-        ticket.resolution = Some(TicketResolution {
+        waypoint.resolution = Some(WaypointResolution {
             resolved_at: now,
             outcome_summary: outcome_summary.clone(),
             resolution_receipt_id: None,
         });
         Ok(MapReceipt {
-            event: "arc:ticket:resolved".to_string(),
+            event: "arc:waypoint:resolved".to_string(),
             detail: format!("id={}, outcome={}", id, outcome_summary),
         })
     }
@@ -993,7 +993,7 @@ mod trajectory_map_tests {
             tool_history: Vec::new(),
             directive: None,
             stall_count: 0,
-            tickets: Vec::new(),
+            waypoints: Vec::new(),
             destination_hypotheses: Vec::new(),
             settlement: SettlementState::Open,
         }
@@ -1015,19 +1015,19 @@ mod trajectory_map_tests {
         }
     }
 
-    fn mk_ticket(id: &str, blocking: Vec<&str>) -> Ticket {
-        Ticket {
+    fn mk_waypoint(id: &str, blocking: Vec<&str>) -> Waypoint {
+        Waypoint {
             id: id.to_string(),
-            ticket_type: TicketType::Research,
-            rationale: format!("test ticket {}", id),
+            waypoint_kind: WaypointKind::Research,
+            rationale: format!("test waypoint {}", id),
             blocking: blocking.into_iter().map(|s| s.to_string()).collect(),
             expected_outcome: None,
             resolution: None,
         }
     }
 
-    fn mk_resolution() -> TicketResolution {
-        TicketResolution {
+    fn mk_resolution() -> WaypointResolution {
+        WaypointResolution {
             resolved_at: Utc::now(),
             outcome_summary: "resolved".to_string(),
             resolution_receipt_id: None,
@@ -1040,9 +1040,9 @@ mod trajectory_map_tests {
     }
 
     #[test]
-    fn arc_with_ticket_is_map_shaped() {
+    fn arc_with_waypoint_is_map_shaped() {
         let mut a = empty_arc();
-        a.tickets.push(mk_ticket("t1", vec![]));
+        a.waypoints.push(mk_waypoint("t1", vec![]));
         assert!(a.is_map_shaped());
     }
 
@@ -1060,39 +1060,39 @@ mod trajectory_map_tests {
     }
 
     #[test]
-    fn frontier_contains_only_unblocked_unresolved_tickets() {
+    fn frontier_contains_only_unblocked_unresolved_waypoints() {
         let mut a = empty_arc();
-        a.tickets.push(mk_ticket("t1", vec![]));         // frontier
-        a.tickets.push(mk_ticket("t2", vec!["t1"]));      // fog
-        let mut t3 = mk_ticket("t3", vec![]);
+        a.waypoints.push(mk_waypoint("t1", vec![]));         // frontier
+        a.waypoints.push(mk_waypoint("t2", vec!["t1"]));      // fog
+        let mut t3 = mk_waypoint("t3", vec![]);
         t3.resolution = Some(mk_resolution());            // resolved
-        a.tickets.push(t3);
+        a.waypoints.push(t3);
 
         let frontier: Vec<&str> = a.frontier().iter().map(|t| t.id.as_str()).collect();
         assert_eq!(frontier, vec!["t1"]);
     }
 
     #[test]
-    fn fog_contains_only_blocked_unresolved_tickets() {
+    fn fog_contains_only_blocked_unresolved_waypoints() {
         let mut a = empty_arc();
-        a.tickets.push(mk_ticket("t1", vec![]));         // frontier
-        a.tickets.push(mk_ticket("t2", vec!["t1"]));      // fog
-        a.tickets.push(mk_ticket("t3", vec!["t1", "t2"])); // fog
+        a.waypoints.push(mk_waypoint("t1", vec![]));         // frontier
+        a.waypoints.push(mk_waypoint("t2", vec!["t1"]));      // fog
+        a.waypoints.push(mk_waypoint("t3", vec!["t1", "t2"])); // fog
 
         let fog: Vec<&str> = a.fog().iter().map(|t| t.id.as_str()).collect();
         assert_eq!(fog, vec!["t2", "t3"]);
     }
 
     #[test]
-    fn resolved_ticket_appears_in_neither_frontier_nor_fog() {
+    fn resolved_waypoint_appears_in_neither_frontier_nor_fog() {
         let mut a = empty_arc();
-        let mut t = mk_ticket("t1", vec![]);
+        let mut t = mk_waypoint("t1", vec![]);
         t.resolution = Some(mk_resolution());
-        a.tickets.push(t);
+        a.waypoints.push(t);
 
         assert!(a.frontier().is_empty());
         assert!(a.fog().is_empty());
-        assert_eq!(a.resolved_tickets().len(), 1);
+        assert_eq!(a.resolved_waypoints().len(), 1);
     }
 
     #[test]
@@ -1165,13 +1165,13 @@ mod trajectory_map_tests {
     }
 
     #[test]
-    fn ticket_by_id_lookup() {
+    fn waypoint_by_id_lookup() {
         let mut a = empty_arc();
-        a.tickets.push(mk_ticket("t1", vec![]));
-        a.tickets.push(mk_ticket("t2", vec![]));
-        assert!(a.ticket_by_id("t1").is_some());
-        assert!(a.ticket_by_id("t2").is_some());
-        assert!(a.ticket_by_id("t3").is_none());
+        a.waypoints.push(mk_waypoint("t1", vec![]));
+        a.waypoints.push(mk_waypoint("t2", vec![]));
+        assert!(a.waypoint_by_id("t1").is_some());
+        assert!(a.waypoint_by_id("t2").is_some());
+        assert!(a.waypoint_by_id("t3").is_none());
     }
 
     #[test]
@@ -1203,7 +1203,7 @@ mod trajectory_map_tests {
         }"#;
         let arc: WorkArc = serde_json::from_str(json).expect("deserialize");
         assert!(!arc.is_map_shaped());
-        assert!(arc.tickets.is_empty());
+        assert!(arc.waypoints.is_empty());
         assert!(arc.destination_hypotheses.is_empty());
         assert_eq!(arc.settlement, SettlementState::Open);
         assert!(!arc.is_settled());
@@ -1212,62 +1212,62 @@ mod trajectory_map_tests {
     // ── Lifecycle mutations + receipt-shape helpers (A2) ───────────
 
     #[test]
-    fn open_ticket_appends_and_returns_receipt() {
+    fn open_waypoint_appends_and_returns_receipt() {
         let mut a = empty_arc();
-        let r = a.open_ticket(mk_ticket("t1", vec![])).unwrap();
-        assert_eq!(r.event, "arc:ticket:opened");
+        let r = a.open_waypoint(mk_waypoint("t1", vec![])).unwrap();
+        assert_eq!(r.event, "arc:waypoint:opened");
         assert!(r.detail.contains("id=t1"));
         assert!(r.detail.contains("type=research"));
-        assert_eq!(a.tickets.len(), 1);
+        assert_eq!(a.waypoints.len(), 1);
     }
 
     #[test]
-    fn open_ticket_rejects_duplicate_id() {
+    fn open_waypoint_rejects_duplicate_id() {
         let mut a = empty_arc();
-        a.open_ticket(mk_ticket("t1", vec![])).unwrap();
-        let err = a.open_ticket(mk_ticket("t1", vec![])).unwrap_err();
-        assert_eq!(err, MapError::DuplicateTicket("t1".to_string()));
+        a.open_waypoint(mk_waypoint("t1", vec![])).unwrap();
+        let err = a.open_waypoint(mk_waypoint("t1", vec![])).unwrap_err();
+        assert_eq!(err, MapError::DuplicateWaypoint("t1".to_string()));
     }
 
     #[test]
-    fn open_ticket_rejected_on_settled_map() {
+    fn open_waypoint_rejected_on_settled_map() {
         let mut a = empty_arc();
         a.abandon_map("done".to_string(), t0()).unwrap();
-        let err = a.open_ticket(mk_ticket("t1", vec![])).unwrap_err();
+        let err = a.open_waypoint(mk_waypoint("t1", vec![])).unwrap_err();
         assert_eq!(err, MapError::MapAlreadySettled);
     }
 
     #[test]
-    fn resolve_ticket_marks_resolution_and_returns_receipt() {
+    fn resolve_waypoint_marks_resolution_and_returns_receipt() {
         let mut a = empty_arc();
-        a.open_ticket(mk_ticket("t1", vec![])).unwrap();
+        a.open_waypoint(mk_waypoint("t1", vec![])).unwrap();
         let r = a
-            .resolve_ticket("t1", "found it".to_string(), t0())
+            .resolve_waypoint("t1", "found it".to_string(), t0())
             .unwrap();
-        assert_eq!(r.event, "arc:ticket:resolved");
+        assert_eq!(r.event, "arc:waypoint:resolved");
         assert!(r.detail.contains("id=t1"));
         assert!(r.detail.contains("outcome=found it"));
-        assert!(a.ticket_by_id("t1").unwrap().resolution.is_some());
+        assert!(a.waypoint_by_id("t1").unwrap().resolution.is_some());
     }
 
     #[test]
-    fn resolve_ticket_not_found() {
+    fn resolve_waypoint_not_found() {
         let mut a = empty_arc();
         let err = a
-            .resolve_ticket("nope", "x".to_string(), t0())
+            .resolve_waypoint("nope", "x".to_string(), t0())
             .unwrap_err();
-        assert_eq!(err, MapError::TicketNotFound("nope".to_string()));
+        assert_eq!(err, MapError::WaypointNotFound("nope".to_string()));
     }
 
     #[test]
-    fn resolve_ticket_already_resolved() {
+    fn resolve_waypoint_already_resolved() {
         let mut a = empty_arc();
-        a.open_ticket(mk_ticket("t1", vec![])).unwrap();
-        a.resolve_ticket("t1", "first".to_string(), t0()).unwrap();
+        a.open_waypoint(mk_waypoint("t1", vec![])).unwrap();
+        a.resolve_waypoint("t1", "first".to_string(), t0()).unwrap();
         let err = a
-            .resolve_ticket("t1", "second".to_string(), t0())
+            .resolve_waypoint("t1", "second".to_string(), t0())
             .unwrap_err();
-        assert_eq!(err, MapError::TicketAlreadyResolved("t1".to_string()));
+        assert_eq!(err, MapError::WaypointAlreadyResolved("t1".to_string()));
     }
 
     #[test]
@@ -1417,11 +1417,11 @@ mod trajectory_map_tests {
         a.settle_without_destination("done exploring".to_string(), t0())
             .unwrap();
         assert_eq!(
-            a.open_ticket(mk_ticket("t1", vec![])).unwrap_err(),
+            a.open_waypoint(mk_waypoint("t1", vec![])).unwrap_err(),
             MapError::MapAlreadySettled
         );
         assert_eq!(
-            a.resolve_ticket("t1", "x".to_string(), t0()).unwrap_err(),
+            a.resolve_waypoint("t1", "x".to_string(), t0()).unwrap_err(),
             MapError::MapAlreadySettled
         );
         assert_eq!(
@@ -1442,11 +1442,11 @@ mod trajectory_map_tests {
         a.directive = Some("figure out how Layer 2 should behave".to_string());
 
         let receipts = vec![
-            a.open_ticket(mk_ticket("t1", vec![])).unwrap(),
-            a.open_ticket(mk_ticket("t2", vec!["t1"])).unwrap(),
-            a.resolve_ticket("t1", "found precedent".to_string(), t0())
+            a.open_waypoint(mk_waypoint("t1", vec![])).unwrap(),
+            a.open_waypoint(mk_waypoint("t2", vec!["t1"])).unwrap(),
+            a.resolve_waypoint("t1", "found precedent".to_string(), t0())
                 .unwrap(),
-            a.resolve_ticket("t2", "candidate design emerged".to_string(), t0())
+            a.resolve_waypoint("t2", "candidate design emerged".to_string(), t0())
                 .unwrap(),
             a.propose_destination(mk_dest("d1", "the Layer 2 spec"))
                 .unwrap(),
@@ -1458,10 +1458,10 @@ mod trajectory_map_tests {
         assert_eq!(
             events,
             vec![
-                "arc:ticket:opened",
-                "arc:ticket:opened",
-                "arc:ticket:resolved",
-                "arc:ticket:resolved",
+                "arc:waypoint:opened",
+                "arc:waypoint:opened",
+                "arc:waypoint:resolved",
+                "arc:waypoint:resolved",
                 "arc:map:destination_proposed",
                 "arc:map:destination_accepted",
                 "arc:map:settled_with_destination",
