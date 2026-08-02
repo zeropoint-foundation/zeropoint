@@ -297,6 +297,54 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     // already-registered `regent:tool:*` prefix. Runtime not yet
     // integrated; reserved so vocabulary is stable pre-integration.
     "flow:",
+    // Hardware profile lifecycle — declared in
+    // HARDWARE-DOSSIER-2026-08 (sketch, 579bc18). Emitted by the
+    // Regent's layered-lookup hardware perception ceremony (declared,
+    // resolved, measured, drift_suspected). Distinct from
+    // observation:hardware:* (which is the HARDWARE-OBSERVER's TPM-
+    // signed attestation surface); the layered lookup produces
+    // fresh measurements and drift signals, the observer produces
+    // attestations. Layered-lookup implementation not yet landed.
+    "hardware:profile:",
+    // Hardware family catalog — declared in
+    // HARDWARE-DOSSIER-2026-08. Emitted by Layer 2 of the layered
+    // lookup when a hardware family is not yet characterized in
+    // hardware/catalog/. Invites operator (or community) contribution
+    // back to the shared catalog. Not yet emitted.
+    "hardware:catalog:",
+    // Regent hardware perception — declared in
+    // HARDWARE-DOSSIER-2026-08. Regent-side counterpart to
+    // hardware:profile:*; records the Regent's resolved view of its
+    // own hardware after the layered lookup completes. Perception
+    // ceremony not yet landed.
+    "regent:hardware:",
+    // Inference-routing fit denial — declared in
+    // HARDWARE-DOSSIER-2026-08. Emitted when a routing decision
+    // hard-blocks because the target model cannot fit on current
+    // hardware (weights + KV context exceeds effective memory).
+    // Carries the fit failure, provenance of the numbers, available
+    // alternatives, and an operator disposition request per
+    // EXECUTION-AUTHORITY-MODEL Phase 7. Strong-sovereignty ceremony
+    // — never auto-escalates. Routing integration not yet landed.
+    "regent:routing:fit_denied",
+    // Inference-routing fit projection — declared in
+    // HARDWARE-DOSSIER-2026-08. Optional per-decision receipt naming
+    // the FitPrediction the classifier consulted. Higher-volume than
+    // fit_denied; may be gated by an operator preference when
+    // integration lands. Not yet emitted.
+    "regent:routing:fit_predicted",
+    // Fleet-rally primitive — declared in HARDWARE-DOSSIER-2026-08
+    // as a reserved namespace for governed multi-node hardware
+    // rallying. The rally primitive itself is a deferred follow-up
+    // sketch; workload routing is the likely first shape. Reserved
+    // now so the fit-prediction API's HardwareSource abstraction and
+    // the Provenance enum's PeerChainMeasured / PeerCanonPublished
+    // variants (Rust-side reservations, not this list's concern) can
+    // compose without renaming. Composes with MULTI-DEVICE-OPERATION,
+    // SUBSTRATE-COORDINATION-DISCIPLINE, PEER-TRUST-ANCHOR,
+    // SOVEREIGN-KINSHIP-PRIMITIVES, HOUSEHOLD-COMPOSITION,
+    // COMMUNITY-COORDINATION-ON-ZEROPOINT.
+    "regent:rally:",
 ];
 
 /// Run the canonical substrate validation.
