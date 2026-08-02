@@ -81,6 +81,17 @@ When an operational drafter has been trained for this target, the dossier carrie
 
 Both serializations of the same characterization are carried in one dossier record. A dossier may have no drafter sub-record (declarative-only characterization); a dossier with a drafter sub-record is a characterization that has been compiled to operational form.
 
+### Deployment fields
+
+Per-variant runtime shape used by consumers that need to reason about hardware fit and inference planning (added 2026-08-02 per HARDWARE-DOSSIER-2026-08).
+
+- `deployment.footprint_gb_by_variant` — quantized weight size in GB per variant identifier (e.g., `"qwen3.6:27b-mlx" = 15.3`, `"qwen3.6:27b-q4_K_M" = 16.5`). Consumed by `predict_fit` to compute `weights_gb`. Static per (weights_hash, quantization) — the same weights file produces the same footprint on any hardware.
+- `deployment.kv_cost_per_1k_tokens_by_variant` — KV-cache cost in GB per 1000 context tokens, per variant identifier. Determined by architecture (`num_layers × num_kv_heads × head_dim × 2 (K+V) × bytes_per_kv`) and quantization. Consumed by `predict_fit` to compute `kv_gb = kv_cost_per_1k_tokens × (context_tokens / 1000)`. Static per (architecture, quantization) — populate from vendor specs or standard architecture calculation, not measured post-hoc.
+
+Both fields are populated at dossier candidate time and travel with the dossier through its lifecycle. Missing fields on an existing dossier degrade `predict_fit`'s `confidence` to Low rather than blocking the prediction — the substrate can operate against un-annotated dossiers, but its fit predictions warn about their limits.
+
+Existing TOML dossiers under `models/*/model_dossier.toml` grew a `[deployment]` section organically (with `active_tiers`, `chain_validated`, `last_empirical_test`, `candidate_tiers`); those fields formalize separately. The two above are the specific additions HARDWARE-DOSSIER's `predict_fit` requires.
+
 ## Two serializations, one artifact
 
 ### Where they meet
@@ -245,6 +256,7 @@ Two shadow scenarios newly enabled:
 - **SHADOW-MODEL-SWITCHING** — the switching protocol extends to drafter switching under one discipline. A drafter is a serialization of the same characterization; switching it follows the same ceremony.
 - **SOFTWARE-INTEGRITY-ATTESTATION** — drafter checkpoints are a first-class attestation surface. Checkpoint hash + training-provenance hash + license attestation attested via the ceremony that already covers dossier evidence.
 - **OBSERVATION-PLANE** — new observation class `observation:inference:drafter_acceptance` per §Continuous drift signal above.
+- **HARDWARE-DOSSIER-2026-08** — `predict_fit(model, hardware_source, context_tokens)` reads `deployment.footprint_gb_by_variant` to derive `weights_gb` and `deployment.kv_cost_per_1k_tokens_by_variant` to derive `kv_gb`. Missing values degrade fit-prediction confidence rather than block dispatch; present values enable strong-sovereignty hard-block ceremony when weights + KV budget exceed effective hardware memory.
 
 ## Non-goals
 
