@@ -225,6 +225,21 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     // OWN configuration self-modifications); this is substrate-wide
     // config-application events.
     "config:apply",
+    // Officer action surfaces — declared in
+    // OFFICER-ACTION-SURFACES-2026-07 §"Per-officer action
+    // characterizations". Officers have two surfaces: passive
+    // observation (canonical, emits `officer:<abbrev>:*` findings)
+    // and ephemeral action (this reservation, per-officer verb sets
+    // for concrete work). The five namespaces below name the action
+    // vocabulary each officer commits to. None emit yet — action
+    // surfaces await the five-phase ceremony machinery (written,
+    // executed, tested, verified, signed) that composes with
+    // SUBSTRATE-SELF-CONSTRUCTION's builder-dispatch discipline.
+    "steward:action:",
+    "sentinel:action:",
+    "forge:action:",
+    "cleo:action:",
+    "aegis:action:",
 ];
 
 /// Run the canonical substrate validation.
