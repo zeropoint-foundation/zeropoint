@@ -1,10 +1,10 @@
 # Hardware Dossier — Regent perceives its hardware via a layered lookup, routing hard-blocks on capacity
 
-**Tier 2 canonical elaboration (SKETCH — 2026-08-02, revised).** Proposes hardware capability as first-class corpus data reached through a **three-tier layered lookup** (identity → canon catalog → chain lookup → fresh probe), with the operator-declared dossier confined to what only the operator can know. Elaborates `KEEL-2026-07.md` §II.13 P6 (physical foundation), §II.19 (composition contract), and Part XIV (inference envelope).
+**Tier 2 canonical elaboration.** Hardware capability as first-class corpus data reached through a **three-tier layered lookup** (identity → canon catalog → chain lookup → fresh probe), with the operator-declared dossier confined to what only the operator can know. Elaborates `KEEL-2026-07.md` §II.13 P6 (physical foundation — hardware capability is first-class corpus data, characterized once per family and refined per node), §II.19 (canonical composition primitive — hardware dossiers and catalog entries integrate as Layer B artifacts via existing ARTIFACT-LIBRARY discipline), Part V (composition contract — the layered lookup's `HardwareSource` abstraction and `Provenance` enum define the trait seams fit-prediction consumers depend on), Part VIII (bounded operator sovereignty — operator overrides trump all other provenance layers; Temporal-disable-shaped opt-outs are receipt ceremonies, never silent config).
 
-Composes with: `MODEL-DOSSIER-2026-07.md` (fit predictions cross-reference model dossier + hardware dossier), `HARDWARE-ROLE-SEPARATION-2026-07.md` (which nodes exist and what role each plays), `HARDWARE-OBSERVER-2026-07.md` (partially reserved via `observation:hardware:*`; hardware profile is one facet of what HARDWARE-OBSERVER watches), `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (fit + ceiling feed the Layer 2 classifier's routing decisions), `LOCAL-MODEL-SELECTION-2026-07.md` (its hardware-math section is the theoretical basis for the fit-prediction functions this sketch specifies), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (capacity-fit failure escalates as an operator-approval ceremony), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map-shaped work with heavy-context waypoints consults fit predictions before dispatch), `MULTI-DEVICE-OPERATION-2026-05.md` + `SUBSTRATE-COORDINATION-DISCIPLINE-2026-05.md` + `PEER-TRUST-ANCHOR-2026-05.md` + `SOVEREIGN-KINSHIP-PRIMITIVES-2026-06.md` + `HOUSEHOLD-COMPOSITION-2026-06.md` + `COMMUNITY-COORDINATION-ON-ZEROPOINT-2026-06.md` (fleet-extension seam — this sketch reserves the surface where these earlier commitments about multi-node substrate compose in).
+Composes with: `MODEL-DOSSIER-2026-07.md` (fit predictions cross-reference model dossier + hardware dossier), `HARDWARE-ROLE-SEPARATION-2026-07.md` (which nodes exist and what role each plays), `HARDWARE-OBSERVER-2026-07.md` (partially reserved via `observation:hardware:*`; hardware profile is one facet of what HARDWARE-OBSERVER watches), `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (fit + ceiling feed the Layer 2 classifier's routing decisions), `LOCAL-MODEL-SELECTION-2026-07.md` (its hardware-math section is the theoretical basis for the fit-prediction functions this sketch specifies), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (capacity-fit failure escalates as an operator-approval ceremony), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map-shaped work with heavy-context waypoints consults fit predictions before dispatch), `MULTI-DEVICE-OPERATION-2026-07.md` + `SUBSTRATE-COORDINATION-DISCIPLINE-2026-07.md` + `PEER-TRUST-ANCHOR-2026-07.md` + `SOVEREIGN-KINSHIP-PRIMITIVES-2026-07.md` + `HOUSEHOLD-COMPOSITION-2026-07.md` + `COMMUNITY-COORDINATION-ON-ZEROPOINT-2026-07.md` (fleet-extension seam — this sketch reserves the surface where these earlier commitments about multi-node substrate compose in).
 
-**Status.** Sketch, not committed spec. Load-bearing framing: **the substrate reads hardware capability through a layered lookup so it costs the operator nothing to declare on a well-known machine. Every inference routing decision consults the resolved profile. A model that would not fit hard-blocks with an escalation receipt asking operator to disposition — never auto-escalates silently. The primitive is designed today with a seam where governed multi-node hardware rallying (deferred) will compose in without a redesign.**
+**Status.** Canonical Tier-2 elaboration, promoted from sketch 2026-08-02. Six receipt families reserved in `RESERVED_RECEIPT_PREFIXES` per Path C discipline: `hardware:profile:`, `hardware:catalog:`, `regent:hardware:`, `regent:routing:fit_denied`, `regent:routing:fit_predicted`, `regent:rally:`. Implementation entirely pending — no data structures, calibration script, or routing integration landed yet. See §"Implementation status" below. Load-bearing framing: **the substrate reads hardware capability through a layered lookup so it costs the operator nothing to declare on a well-known machine. Every inference routing decision consults the resolved profile. A model that would not fit hard-blocks with an escalation receipt asking operator to disposition — never auto-escalates silently. The primitive is designed today with a seam where governed multi-node hardware rallying (deferred) will compose in without a redesign.**
 
 ## Framing
 
@@ -221,7 +221,7 @@ The hardware dossier + fit prediction primitive lands cleanly with existing corp
 - **EXECUTION-AUTHORITY-MODEL-2026-07** — capacity failure hard-blocks via Phase 7 proposal ceremony. Existing machinery, new class of proposal.
 - **TRAJECTORY-MAP-PRIMITIVE-2026-08** — map waypoints whose dispatched work has heavy context (code:repo_wide) consult FitPrediction before dispatch. If dispatch would fit-fail, escalate before running any work.
 - **ARTIFACT-LIBRARY-2026-05** — hardware dossiers and catalog entries land as artifacts under candidate → signed → superseded lifecycle. Same discipline as model dossiers.
-- **MULTI-DEVICE-OPERATION-2026-05 / SUBSTRATE-COORDINATION-DISCIPLINE-2026-05 / PEER-TRUST-ANCHOR-2026-05 / SOVEREIGN-KINSHIP-PRIMITIVES-2026-06 / HOUSEHOLD-COMPOSITION-2026-06 / COMMUNITY-COORDINATION-ON-ZEROPOINT-2026-06** — fleet-extension seam preserves the API surface these earlier commitments will need when the rally primitive lands. This sketch does not implement any of them; it doesn't break them either.
+- **MULTI-DEVICE-OPERATION-2026-07 / SUBSTRATE-COORDINATION-DISCIPLINE-2026-07 / PEER-TRUST-ANCHOR-2026-07 / SOVEREIGN-KINSHIP-PRIMITIVES-2026-07 / HOUSEHOLD-COMPOSITION-2026-07 / COMMUNITY-COORDINATION-ON-ZEROPOINT-2026-07** — fleet-extension seam preserves the API surface these earlier commitments will need when the rally primitive lands. This sketch does not implement any of them; it doesn't break them either.
 
 ## Reserved receipt families
 
@@ -243,9 +243,9 @@ Additions to RESERVED_RECEIPT_PREFIXES per Path C discipline (declare vocabulary
 - **Fleet-extension seam explicit.** Hardware source abstraction, provenance variants reserved, chain-lookup takes node_id, `regent:rally:*` reserved. Rally primitive itself deferred with corpus breadcrumbs named.
 - **Rally shape most likely to compose first: workload routing.** Most adaptable foundation. Named here so future rally sketch has a starting point.
 
-## Not-in-scope for this sketch
+## Not-in-scope for this landing
 
-- The rally primitive itself (own future Tier-2 elaboration).
+- The rally primitive itself (own future Tier-2 elaboration; `regent:rally:` reserved here so its receipt vocabulary is stable when it does land).
 - Specific hardware micro-benchmark implementations for Layer 4 (implementation-phase concern; every platform has its own tools).
 - Migration path for existing operators — greenfield, no existing hardware dossiers to migrate.
 - Cost estimation for cloud escalation (adjacent concern; belongs in INFERENCE-ROUTING-DISCIPLINE follow-up).
@@ -264,8 +264,29 @@ Additions to RESERVED_RECEIPT_PREFIXES per Path C discipline (declare vocabulary
 
 6. **Chain-lookup performance.** Scanning the full chain for `hardware:profile:measured` receipts at every Regent startup is O(chain). Almost certainly needs a maintained index — a materialized view of "latest measurement per (node, field)". Where does the index live? Same shape as the receipt-tag indexes in `zp-server/src/receipt_index.rs`?
 
-## Next step
+## Implementation status
 
-Promotion path: (a) operator review; (b) implementation-design phase per open questions above; (c) landing as canonical Tier-2 elaboration alongside a MODEL-DOSSIER amendment adding the KV-cost field; (d) first `hardware/catalog/apple-m4-pro-mac-mini.toml` + narrow `hardware/apollo/hardware_dossier.toml`; (e) layered-lookup implementation + Regent perception; (f) classifier wiring; (g) hard-block ceremony wiring through the approvals machinery.
+**Landed 2026-08-02:**
 
-Nothing lands until (a). Sketch does not obligate implementation. Rally primitive is a separate sketch, not gated by this one.
+- Six receipt families reserved in `RESERVED_RECEIPT_PREFIXES` per Path C discipline: `hardware:profile:` (declared / resolved / measured / drift_suspected), `hardware:catalog:` (Layer 2 catalog-miss), `regent:hardware:` (Regent-side perception ceremony), `regent:routing:fit_denied` (strong-sovereignty hard-block), `regent:routing:fit_predicted` (per-decision projection), `regent:rally:` (deferred fleet-rally namespace). Vocabulary stable, emitters pending.
+
+**Pending — this landing declares the shape; the work is entirely ahead:**
+
+- MODEL-DOSSIER schema amendment adding `kv_cost_per_1k_tokens` per quantization level (prerequisite for `predict_fit` derivations).
+- First `hardware/catalog/apple-m4-pro-mac-mini.toml` — the sovereign contribution flywheel starts with one entry that other operators can lean on.
+- First narrow `hardware/apollo/hardware_dossier.toml` — operator-declared identity, reserved-for-other, quirks, overrides for this specific unit.
+- Layered-lookup implementation (`layered_lookup(node_id) -> ResolvedHardwareProfile` with the four layers and provenance ranking).
+- `hardware:catalog:missing` emission from Layer 2 when a novel family is encountered.
+- Fresh-probe implementation for Layer 4 (per-platform micro-benchmarks — sysinfo for capacity, bandwidth probe, prefill timing).
+- `hardware:profile:measured` emission from Layer 4 and from post-inference drift checks.
+- Regent perception ceremony at startup — the five-step sequence in §"Regent perceives its hardware."
+- `predict_fit` pure function + `FitPrediction` / `FitFailure` / `HardwareSource` / `Provenance` types in Rust (currently only spec'd here).
+- Classifier wiring — `QueryHint.estimated_context_tokens`, `ClassifierDecision.fit_predictions` / `routing_rationale`, routing algorithm consulting fit predictions.
+- Hard-block ceremony wiring through `zp-regent/src/approvals.rs` — `regent:routing:fit_denied` as a specific proposal class.
+- Continuous drift signal in `inference.rs`'s post-dispatch hook — observed decode/prefill vs prediction, emitting `hardware:profile:drift_suspected` on persistent divergence.
+- Calibration battery — `scripts/calibrate-hardware.py` (or a Rust binary in a new crate; open question 3).
+
+**Composition follow-ups** (own future work, not gated by this landing):
+
+- Rally primitive as its own Tier-2 sketch. The reserved namespace `regent:rally:*`, the `HardwareSource` abstraction, and the `PeerChainMeasured` / `PeerCanonPublished` Provenance variants preserve the composition surface — the rally primitive lands as an implementation of those seams, not a redesign of this one. Workload routing is the likely first shape.
+- Community catalog contribution flow: when an operator on novel hardware runs the layered lookup and Layer 4 fills a full profile, the substrate invites (via receipt-attached prompt) contribution back to `hardware/catalog/`. Discipline for validating community catalog PRs is separate work.

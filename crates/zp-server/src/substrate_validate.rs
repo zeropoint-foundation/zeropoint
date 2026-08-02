@@ -292,22 +292,22 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     // the waypoint and may open new fog waypoints. Reserved alongside
     // the map primitive.
     "arc:waypoint:",
-    // Node-RED-orchestration receipts — declared in
-    // REGENT-ORCHESTRATION-ARTIFACTS-2026-08 (sketch, c67e327).
-    // Emitted by Node-RED runtime's pluggable message-routing seam
-    // (message:sent, subflow:completed) when Regent dispatches flow-
-    // shaped work. Regent-side dispatch/completion receipts use the
-    // already-registered `regent:tool:*` prefix. Runtime not yet
-    // integrated; reserved so vocabulary is stable pre-integration.
+    // Node-RED-orchestration receipts — declared in canonical Tier-2
+    // elaboration REGENT-ORCHESTRATION-ARTIFACTS-2026-08. Emitted by
+    // Node-RED runtime's pluggable message-routing seam (message:sent,
+    // subflow:completed) when Regent dispatches flow-shaped work.
+    // Regent-side dispatch/completion receipts use the already-
+    // registered `regent:tool:*` prefix. Runtime not yet integrated;
+    // reserved so vocabulary is stable pre-integration.
     "flow:",
-    // Hardware profile lifecycle — declared in
-    // HARDWARE-DOSSIER-2026-08 (sketch, 579bc18). Emitted by the
-    // Regent's layered-lookup hardware perception ceremony (declared,
-    // resolved, measured, drift_suspected). Distinct from
-    // observation:hardware:* (which is the HARDWARE-OBSERVER's TPM-
-    // signed attestation surface); the layered lookup produces
-    // fresh measurements and drift signals, the observer produces
-    // attestations. Layered-lookup implementation not yet landed.
+    // Hardware profile lifecycle — declared in canonical Tier-2
+    // elaboration HARDWARE-DOSSIER-2026-08. Emitted by the Regent's
+    // layered-lookup hardware perception ceremony (declared, resolved,
+    // measured, drift_suspected). Distinct from observation:hardware:*
+    // (which is the HARDWARE-OBSERVER's TPM-signed attestation
+    // surface); the layered lookup produces fresh measurements and
+    // drift signals, the observer produces attestations. Layered-
+    // lookup implementation not yet landed.
     "hardware:profile:",
     // Hardware family catalog — declared in
     // HARDWARE-DOSSIER-2026-08. Emitted by Layer 2 of the layered
