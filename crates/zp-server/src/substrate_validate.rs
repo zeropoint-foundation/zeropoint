@@ -240,6 +240,41 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     "forge:action:",
     "cleo:action:",
     "aegis:action:",
+    // Blast-radius / circuit-breaker / recovery — declared in
+    // BLAST-RADIUS-AND-RECOVERY-2026-07 (companion to
+    // CIRCUIT-BREAKER-2026-07). Emergency-response and forward-only
+    // recovery discipline: termination semantics for in-flight
+    // actions, WASM modules, tokio tasks, HTTP requests; scope-of-
+    // arrest cascade; graduated escalation ladder; derived-state
+    // checkpoint model. The subsystem's Rust implementation ships in
+    // partial form (breaker primitives exist) but none of these
+    // receipt families emit yet — the ceremony vocabulary is reserved
+    // pending the full breaker+recovery machinery landing.
+    //
+    // Circuit-breaker lifecycle: tripped, escalation, reset.
+    "circuit:",
+    // Recovery lifecycle: progress, verified, verification_failed,
+    // derived_state_from_checkpoint.
+    "recovery:",
+    // Per-cache derived-state checkpoint receipts
+    // (delegation_cache, ontology, port_registry, vault_cache).
+    "checkpoint:derived_state:",
+    // In-flight action terminated by breaker trip.
+    "action:arrested_by_breaker",
+    // Action allowed to finish under arrest.
+    "action:completed_during_arrest",
+    // Cognitive-cycle arrests. Bare prefix matches sub-forms
+    // like _after_inference, _mid_tool_dispatch, _urgent, and the
+    // wildcard :* — all declared in the doc.
+    "regent:cycle:arrested",
+    // WASM module cooperative-then-forced termination.
+    "wasm:arrested:",
+    // In-flight HTTP request aborted by breaker.
+    "http:aborted_by_breaker:",
+    // Forcibly-released resource lock during arrest.
+    "lock:force_released",
+    // Lock released cleanly by arrest handoff.
+    "lock:released_by_arrest",
 ];
 
 /// Run the canonical substrate validation.

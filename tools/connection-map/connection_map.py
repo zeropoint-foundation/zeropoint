@@ -316,14 +316,26 @@ def _parse_prefix_list(body_text):
     """Extract quoted string entries from a Rust &[&str] literal body.
 
     Ignores `//` comment lines. Handles trailing comma on each entry.
-    Same behaviour the KNOWN_RECEIPT_PREFIXES parser has always used —
-    factored out so RESERVED_RECEIPT_PREFIXES can share it.
+    Tolerates trailing inline `// comment` on the entry line itself —
+    strips it before matching so `"foo:",  // some note` still yields
+    `foo:`. The Rust file's own convention prefers comments on their
+    own lines, but a stray inline comment silently dropping an entry
+    is worse than the parser tolerating both.
     """
     out = set()
-    for line in body_text.split("\n"):
-        stripped = line.strip()
+    for raw in body_text.split("\n"):
+        stripped = raw.strip()
         if stripped.startswith("//"):
             continue
+        # Strip any trailing inline comment. The `//` must live outside
+        # the quoted string — split on the first `//` after the string
+        # closes. Simplest tolerant form: if we see `// ` after the
+        # last `"` on the line, drop from there.
+        last_quote = stripped.rfind('"')
+        if last_quote >= 0:
+            comment_at = stripped.find("//", last_quote)
+            if comment_at >= 0:
+                stripped = stripped[:comment_at].rstrip()
         entry = re.fullmatch(r'"([^"]+)"\s*,?', stripped)
         if entry:
             out.add(entry.group(1))
