@@ -18,6 +18,7 @@
 //! and `docs/design/OFFICER-LENS-DECLARATIONS-2026-07.md` for full specs.
 
 pub mod aegis;
+pub mod chain_reads;
 pub mod cleo;
 pub mod finding;
 pub mod forge;
