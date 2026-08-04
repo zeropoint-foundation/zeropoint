@@ -320,49 +320,96 @@ impl ServerIntentExecutor {
             .map(|resolved| *resolved.key)
     }
 
-    /// Is there an operator signature authorising this exact tool right now?
+    /// May this call proceed without asking?
     ///
-    /// True only while a granted approval carrying an enactment for `tool`
-    /// is still unenacted. Deliberately keyed on the tool rather than the
-    /// full call: matching parameters exactly would let a whitespace
-    /// difference void a signature the operator plainly gave, and the
-    /// enactment drain dispatches the stored call verbatim anyway, so the
-    /// parameters that run are the ones that were signed.
+    /// Two ways, and they are different in kind. **Precedent** — the operator
+    /// signed this exact call before, so §III.10's autonomous envelope
+    /// already covers it and it may proceed indefinitely. **A pending
+    /// grant** — the operator signed it just now and it has not yet been
+    /// enacted, which is a single-use authorisation the enactment drain
+    /// consumes.
     ///
-    /// The residual window is narrow and worth naming: between a grant and
-    /// its enactment, a *different* cycle guessing the same tool would pass
-    /// this check. The drain runs at the top of the message loop and emits
-    /// the enactment receipt immediately, so that window is milliseconds
-    /// wide in practice — but it is real, and closing it properly means
-    /// carrying the request hash through dispatch.
-    fn has_granted_approval_for(&self, tool: &str) -> bool {
-        let entries = {
-            let store = match self.audit_store.lock() {
-                Ok(s) => s,
-                Err(e) => {
-                    warn!("approval check: audit store lock poisoned: {}", e);
-                    return false;
-                }
-            };
-            let mut acc = Vec::new();
-            for prefix in [
-                zp_regent::approvals::EVENT_PREFIX_REQUEST,
-                zp_regent::approvals::EVENT_PREFIX_GRANTED,
-                zp_regent::approvals::EVENT_PREFIX_DENIED,
-                zp_regent::approvals::EVENT_PREFIX_ENACTED,
-            ] {
-                acc.extend(
-                    store
-                        .search_chain_by_action_keyword(prefix, 1024)
-                        .unwrap_or_default(),
-                );
-            }
-            acc
-        };
+    /// Precedent is checked first because it is the cheaper answer and the
+    /// more permanent one, and because an act covered by precedent should not
+    /// consume a pending grant that was meant for something else.
+    fn is_authorised_call(&self, tool: &str, params: &serde_json::Value) -> bool {
+        let entries = self.approval_window();
+
+        if let Some(p) =
+            zp_regent::precedent::PrecedentIndex::build(&entries).authorises(tool, params)
+        {
+            // An autonomous act names the signature it relies on. Without
+            // this the envelope grows silently, and §III.10 requires every
+            // extension of autonomous scope to trace to a specific operator
+            // signature at a specific moment — which is only true if the
+            // trace is written down at the moment it is used.
+            info!(
+                tool,
+                granted_request = %zp_regent::text::preview(&p.granted_request, 12),
+                granted_at = %p.granted_at.to_rfc3339(),
+                "regent: acting on operator precedent"
+            );
+            self.emit_receipt(
+                "regent:precedent:cited",
+                Some(&format!(
+                    "tool={} context={} granted_request={}",
+                    tool, p.context_signature, p.granted_request
+                )),
+            );
+            return true;
+        }
+
         zp_regent::approvals::ApprovalIndex::build(&entries)
             .enactable()
             .iter()
             .any(|r| r.enactment.as_ref().is_some_and(|e| e.tool == tool))
+    }
+
+    /// An unanswered request for this same call, if one is already queued.
+    ///
+    /// Returns the existing request hash. Only *pending* requests count — a
+    /// previously denied call may legitimately be proposed again, since a
+    /// denial answers one moment rather than settling a question forever, and
+    /// a granted one is handled by precedent instead.
+    fn pending_duplicate_of(&self, enactment: &zp_regent::intent::Enactment) -> Option<String> {
+        let sig = zp_regent::precedent::context_signature(&enactment.tool, &enactment.params);
+        let entries = self.approval_window();
+        zp_regent::approvals::ApprovalIndex::build(&entries)
+            .pending()
+            .iter()
+            .find(|r| {
+                r.enactment.as_ref().is_some_and(|e| {
+                    e.tool == enactment.tool
+                        && zp_regent::precedent::context_signature(&e.tool, &e.params) == sig
+                })
+            })
+            .map(|r| r.request_hash.clone())
+    }
+
+    /// The chain slice both the approval index and the precedent index read.
+    fn approval_window(&self) -> Vec<zp_core::AuditEntry> {
+        let store = match self.audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("approval window: audit store lock poisoned: {}", e);
+                return Vec::new();
+            }
+        };
+        let mut acc = Vec::new();
+        for prefix in [
+            zp_regent::approvals::EVENT_PREFIX_REQUEST,
+            zp_regent::approvals::EVENT_PREFIX_GRANTED,
+            zp_regent::approvals::EVENT_PREFIX_DENIED,
+            zp_regent::approvals::EVENT_PREFIX_ENACTED,
+            zp_regent::precedent::EVENT_PREFIX_REVOKED,
+        ] {
+            acc.extend(
+                store
+                    .search_chain_by_action_keyword(prefix, 1024)
+                    .unwrap_or_default(),
+            );
+        }
+        acc
     }
 
     /// Emit a Regent intent as a chain receipt.
@@ -401,10 +448,21 @@ impl ServerIntentExecutor {
 
     /// Emit a structured remediation receipt.
     ///
-    /// These are the chain's memory of autonomous Regent actions —
-    /// the foundation for the precedent system. Future cycles query
-    /// for `regent:remediation:*` events to determine whether the
-    /// Regent has precedent for autonomous action.
+    /// The chain's memory of autonomous Regent actions: evidence that an act
+    /// happened.
+    ///
+    /// **Not precedent.** This doc used to instruct future cycles to query
+    /// `regent:remediation:*` "to determine whether the Regent has precedent
+    /// for autonomous action", and the emission below logged "precedent
+    /// established". Both were wrong in the same way: this receipt is emitted
+    /// by the Regent, `actor: System("regent")`, about its own act. Reading
+    /// it as authority would let the Regent widen its own envelope by having
+    /// acted once — the inversion of P9, and invisible, because the resulting
+    /// system looks like it works.
+    ///
+    /// KEEL §III.10 and the glossary are explicit that precedent is
+    /// *operator-signed*. See `zp_regent::precedent`, which sources it from
+    /// `regent:approval:granted` (`actor: ActorId::Operator`) instead.
     fn emit_remediation_receipt(
         &self,
         tool: &str,
@@ -445,7 +503,7 @@ impl ServerIntentExecutor {
                 tool,
                 finding_type,
                 entries_affected,
-                "regent: remediation receipt emitted — precedent established"
+                "regent: remediation receipt emitted"
             );
         }
     }
@@ -758,39 +816,82 @@ impl ServerIntentExecutor {
                 /// through the same path before its expression is allowed to
                 /// run — the domain gate has to be enforced substrate-side,
                 /// not by the generated Python.
-                fn run_harness(py_code: &str) -> std::io::Result<std::process::Output> {
-                    std::process::Command::new("browser-harness")
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                    .and_then(|mut child| {
-                        use std::io::Write;
-                        // Write script then DROP stdin to signal EOF.
-                        // Without this, browser-harness waits for more input.
-                        {
-                            let stdin = child.stdin.take().unwrap();
-                            let mut writer = std::io::BufWriter::new(stdin);
-                            writer.write_all(py_code.as_bytes())?;
-                            // writer + stdin dropped here → EOF sent
+                async fn run_harness(py_code: &str) -> std::io::Result<std::process::Output> {
+                    use tokio::io::AsyncWriteExt;
+
+                    // Longer than `browser-harness` takes to fail on its own,
+                    // which is the whole point.
+                    //
+                    // Measured 2026-08-04: with no debuggable browser
+                    // reachable, the harness spends ~61s trying to bring up
+                    // its daemon and then exits with a precise diagnosis —
+                    // `DevToolsActivePort not found`, naming every profile
+                    // directory it searched and the setting to enable. At 15s,
+                    // and then at 60s, this timeout killed it just before it
+                    // could say any of that, and the operator got "timed out"
+                    // instead. A supervisor that cuts its child off
+                    // mid-sentence turns every diagnosable failure into an
+                    // undiagnosable one.
+                    //
+                    // So the ceiling sits above the harness's own, and the
+                    // harness's own stderr is what reaches the operator.
+                    // Configurable because the right number is a property of
+                    // the operator's machine, not of this substrate.
+                    let secs = std::env::var("ZP_BROWSER_TIMEOUT_SECS")
+                        .ok()
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .unwrap_or(90);
+
+                    // Async spawn, not `std::process`. The previous form
+                    // polled `try_wait` with `thread::sleep` inside an async
+                    // fn, which parks a tokio worker for the entire timeout —
+                    // so a slow browser stalled the cognitive loop rather than
+                    // just the call. Raising the timeout without fixing that
+                    // would have made the substrate less responsive the more
+                    // patience it was given.
+                    //
+                    // `kill_on_drop` is what makes the timeout real: when the
+                    // timeout future is dropped it takes the child with it,
+                    // so no orphaned browser survives a slow call.
+                    let mut child = tokio::process::Command::new("browser-harness")
+                        .stdin(std::process::Stdio::piped())
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::piped())
+                        .kill_on_drop(true)
+                        .spawn()?;
+
+                    {
+                        let mut stdin = child.stdin.take().ok_or_else(|| {
+                            std::io::Error::other("browser-harness stdin was not piped")
+                        })?;
+                        stdin.write_all(py_code.as_bytes()).await?;
+                        // EOF — without it browser-harness waits for more input.
+                        stdin.shutdown().await?;
+                    }
+
+                    let started = std::time::Instant::now();
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(secs),
+                        child.wait_with_output(),
+                    )
+                    .await
+                    {
+                        Ok(result) => {
+                            debug!(
+                                elapsed_ms = started.elapsed().as_millis() as u64,
+                                "browser-harness completed"
+                            );
+                            result
                         }
-                        // Timeout: 15 seconds max for any browser action.
-                        let start = std::time::Instant::now();
-                        let timeout = std::time::Duration::from_secs(15);
-                        loop {
-                            match child.try_wait()? {
-                                Some(_) => return child.wait_with_output(),
-                                None if start.elapsed() > timeout => {
-                                    let _ = child.kill();
-                                    return Err(std::io::Error::new(
-                                        std::io::ErrorKind::TimedOut,
-                                        "browser-harness timed out after 15s",
-                                    ));
-                                }
-                                None => std::thread::sleep(std::time::Duration::from_millis(100)),
-                            }
-                        }
-                    })
+                        Err(_) => Err(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            format!(
+                                "browser-harness did not finish within {secs}s. \
+                                 Raise ZP_BROWSER_TIMEOUT_SECS if this machine \
+                                 needs longer to start a browser."
+                            ),
+                        )),
+                    }
                 }
 
                 /// Encode a parameter as a Python string literal.
@@ -896,7 +997,8 @@ impl ServerIntentExecutor {
                         // host-anchored allowlist every other action obeys.
                         let probe = run_harness(
                             "ensure_real_tab()\ncdp(\"Page.bringToFront\")\ninfo = page_info()\nimport json; print(json.dumps(info))",
-                        );
+                        )
+                        .await;
                         let current_url = match probe {
                             Ok(out) if out.status.success() => {
                                 let stdout = String::from_utf8_lossy(&out.stdout);
@@ -953,7 +1055,7 @@ impl ServerIntentExecutor {
                     }
                 };
 
-                let output = run_harness(&py_code);
+                let output = run_harness(&py_code).await;
 
                 match output {
                     Ok(out) => {
@@ -2060,7 +2162,7 @@ impl IntentExecutor for ServerIntentExecutor {
                 // `regent:approval:enacted` immediately after dispatching,
                 // which closes the window.
                 if APPROVAL_REQUIRED_TOOLS.contains(&tool.as_str())
-                    && !self.has_granted_approval_for(tool)
+                    && !self.is_authorised_call(tool, params)
                 {
                     let reason = format!(
                         "{tool} requires an operator signature for the specific call. \
@@ -2113,6 +2215,41 @@ impl IntentExecutor for ServerIntentExecutor {
                 draft,
                 enactment,
             } => {
+                // Already waiting on an answer for this exact call?
+                //
+                // Observed 2026-08-04: four pending proposals carried
+                // `browser_use {"action":"goto_url","url":"https://zeropoint.global"}`
+                // — byte-identical, raised across three days, because asking
+                // again always minted a new one. Seven pending in total, most
+                // of them the same question.
+                //
+                // A duplicate authorises nothing new. Granting one creates
+                // precedent for that context signature and the rest become
+                // redundant while still demanding attention, so the queue
+                // grows monotonically with re-asking. The operator's reading
+                // of that queue is the scarce resource the whole approval
+                // surface runs on.
+                //
+                // Keyed on the context signature rather than the prose,
+                // because the prose is model-authored and varies —
+                // "Approve the use of browser_use to navigate to X" and
+                // "Open X and tell me what's there" are the same act.
+                if let Some(existing) = enactment
+                    .as_ref()
+                    .and_then(|e| self.pending_duplicate_of(e))
+                {
+                    info!(
+                        existing = %zp_regent::text::preview(&existing, 12),
+                        action = proposed_action.as_str(),
+                        "regent: identical proposal already pending — not queueing another"
+                    );
+                    self.emit_receipt(
+                        "regent:proposal:duplicate",
+                        Some(&format!("existing={existing}")),
+                    );
+                    return Ok(IntentOutcome::ApprovalRequested);
+                }
+
                 info!(
                     action = proposed_action.as_str(),
                     reason = reason.as_str(),

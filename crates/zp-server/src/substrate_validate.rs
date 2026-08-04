@@ -110,6 +110,15 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "regent:arc:stalled",
     // An approval-required capability reached for without a signature.
     "regent:tool:refused:unsigned",
+    // Precedent — the autonomous envelope. `cited` is an act taken under a
+    // prior operator signature and naming it; `revoked` narrows the envelope
+    // back, and is itself a chain event per KEEL §III.10.
+    // A proposal suppressed because an identical call was already queued.
+    // Silence here means re-asking is rare; volume means the routing tier is
+    // reaching for the same thing repeatedly.
+    "regent:proposal:duplicate",
+    "regent:precedent:cited",
+    "regent:precedent:revoked",
     "regent:approval:denied",
     // Phase 7 terminal states — propose an action, propose a mechanism.
     "regent:proposal:",
