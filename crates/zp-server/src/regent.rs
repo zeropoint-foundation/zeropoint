@@ -1067,9 +1067,46 @@ impl ServerIntentExecutor {
                                 .unwrap_or_else(|_| serde_json::json!({"output": stdout}));
                             Ok(result)
                         } else {
+                            // Name the remedy, don't just relay the traceback.
+                            //
+                            // The harness's stderr for the common failure is a
+                            // Python traceback ending in `DevToolsActivePort
+                            // not found in [...]` with twenty-five profile
+                            // paths inline. Passed verbatim into the model's
+                            // context it crowds out everything else and gets
+                            // narrated as a story about directories — the
+                            // operator hears that something failed and not
+                            // what to do about it.
+                            //
+                            // Exactly one browser_use failure has a remedy the
+                            // operator can act on in ten seconds, so that one
+                            // gets said plainly and the traceback is kept,
+                            // truncated, underneath it.
+                            //
+                            // Truncated through `text::preview` rather than a
+                            // byte slice: this stderr is Python output and
+                            // carries typographic quotes — "Can't get
+                            // application" arrived with a multi-byte
+                            // apostrophe on 2026-08-04, which is precisely
+                            // the shape that panicked the evaluation sweep 54
+                            // times before `preview` existed.
+                            let remedy = if stderr.contains("DevToolsActivePort not found")
+                                || stderr.contains("remote-debugging")
+                            {
+                                Some(
+                                    "No debuggable browser is reachable. In your browser, \
+                                     open chrome://inspect/#remote-debugging, enable \
+                                     \"Allow remote debugging for this browser instance\", \
+                                     and accept the prompt. Alternatively set BU_CDP_WS to \
+                                     a remote browser's websocket URL.",
+                                )
+                            } else {
+                                None
+                            };
                             Ok(serde_json::json!({
                                 "error": "browser_harness_failed",
-                                "stderr": stderr,
+                                "remedy": remedy,
+                                "stderr": zp_regent::text::preview(&stderr, 600),
                                 "exit_code": out.status.code(),
                             }))
                         }
