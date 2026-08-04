@@ -924,24 +924,43 @@ impl Regent {
             if tool.is_empty() || tool.eq_ignore_ascii_case("none") {
                 return None;
             }
-            if !context
+            let Some(delegation) = context
                 .active_delegations
                 .iter()
-                .any(|d| d.capability == tool)
-            {
+                .find(|d| d.capability == tool)
+            else {
                 warn!(
                     tool,
                     "proposal named a tool the Regent does not hold — enactment dropped, \
                      proposal stands on its prose"
                 );
                 return None;
+            };
+
+            let params = e
+                .get("params")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+
+            // Holding the tool is not enough. A proposal may only ask for a
+            // signature on a call the tool can actually perform — otherwise
+            // the operator signs something that reaches a no-op branch and
+            // reports success. Observed 2026-08-04: an enactment of
+            // `self_configure {"config": ...}` for a tool with no `config`
+            // parameter, carrying a corrupted value inside it.
+            if let Some(why) = delegation.params_violation(&params) {
+                warn!(
+                    tool,
+                    reason = %why,
+                    "proposal named parameters the tool cannot read — enactment dropped, \
+                     proposal stands on its prose"
+                );
+                return None;
             }
+
             Some(crate::intent::Enactment {
                 tool: tool.to_string(),
-                params: e
-                    .get("params")
-                    .cloned()
-                    .unwrap_or(serde_json::Value::Null),
+                params,
             })
         });
 
@@ -1018,13 +1037,21 @@ impl Regent {
             // Constrained decoding — forces the model to produce valid JSON
             // matching this schema. Without this, small models output tool
             // names as plain text or produce malformed JSON with unescaped
-            // quotes. The schema covers both respond and execute intents.
+            // quotes.
+            //
+            // The enum is the reachable-intent set, not a hint: constrained
+            // decoding makes an absent variant literally unemittable.
+            // `remember` was missing while `parse_intent` had an arm for it
+            // and the executor had a handler — so `Intent::Remember` was
+            // unreachable by construction, and the substrate could not be
+            // told to keep anything. Adding a variant here is what makes the
+            // rest of that path load-bearing.
             format: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
                     "intent": {
                         "type": "string",
-                        "enum": ["execute", "respond", "observe", "continue", "request_approval"]
+                        "enum": ["execute", "respond", "observe", "continue", "request_approval", "remember"]
                     },
                     "tool": { "type": "string" },
                     "params": { "type": "object" },
@@ -1339,7 +1366,7 @@ impl Regent {
                 "properties": {
                     "intent": {
                         "type": "string",
-                        "enum": ["execute", "respond", "observe", "continue", "request_approval"]
+                        "enum": ["execute", "respond", "observe", "continue", "request_approval", "remember"]
                     },
                     "tool": { "type": "string" },
                     "params": { "type": "object" },

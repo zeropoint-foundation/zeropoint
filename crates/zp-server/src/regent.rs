@@ -98,6 +98,25 @@ const REGENT_TOOLS: &[(&str, &str)] = &[
 /// condition under which that question matters most.
 const APPROVAL_REQUIRED_TOOLS: &[&str] = &["browser_use"];
 
+/// What each capability actually reads: `(tool, required, optional)`.
+///
+/// The dispatch arms below are the only place that knows this, and until now
+/// they were the only place that stated it — so a proposal could name
+/// parameters no arm would ever look at, and the operator would be asked to
+/// sign a call the tool could not perform.
+///
+/// Projected onto `DelegationSummary`, so the Regent validates against what
+/// the server told it rather than against a copy it keeps. A tool absent from
+/// this table is not validated: unknown contract, not empty contract.
+const TOOL_PARAMS: &[(&str, &[&str], &[&str])] = &[
+    ("browser_use", &["action"], &["url", "expression", "selector"]),
+    ("self_configure", &[], &["endpoint", "model", "api_key", "routing_model", "force"]),
+    ("chain_query", &[], &["limit", "filter", "since"]),
+    ("chain_compact", &[], &["retain"]),
+    ("memory_list", &[], &["stage"]),
+    ("memory_review", &["action"], &["review_id", "reason"]),
+];
+
 // ── Conversation namespace ──────────────────────────────────────────────────
 
 /// Dedicated `ConversationId` for all Regent receipts.
@@ -2233,13 +2252,107 @@ impl IntentExecutor for ServerIntentExecutor {
                 })
             }
 
-            Intent::Remember { key, content: _ } => {
+            Intent::Remember { key, content } => {
                 debug!(key = key.as_str(), "regent: remember intent");
-                self.emit_receipt(
-                    "regent:intent:remember",
-                    Some(&format!("key={}", key)),
+
+                // This arm used to read `content: _`. It emitted a receipt
+                // naming the key and dropped what the Regent was trying to
+                // remember on the floor — so the substrate could not record
+                // anything it was deliberately told, only what it happened to
+                // observe of itself through the receipt pipeline. Asked to
+                // remember an operator's preferred name on 2026-07-31, it
+                // said it had; nothing was stored, and nothing could be.
+                if content.trim().is_empty() {
+                    warn!(key = key.as_str(), "regent: remember with empty content — nothing to record");
+                    return Ok(IntentOutcome::Observed);
+                }
+
+                // Receipt first, because the memory cites it. A memory entry
+                // whose provenance receipt does not exist is an assertion, not
+                // a record.
+                let receipt_id = {
+                    let event = format!("regent:intent:remember key={key}");
+                    let entry = UnsealedEntry {
+                        actor: regent_actor(),
+                        action: AuditAction::SystemEvent { event },
+                        conversation_id: regent_conv_id(),
+                        policy_decision: PolicyDecision::Allow {
+                            conditions: Vec::new(),
+                        },
+                        policy_module: "regent".to_string(),
+                        receipt: None,
+                    };
+                    let mut store = self
+                        .audit_store
+                        .lock()
+                        .map_err(|e| RegentError::ChainRead(e.to_string()))?;
+                    match store.append(entry) {
+                        Ok(sealed) => sealed.entry_hash,
+                        Err(e) => {
+                            warn!("remember receipt emission failed: {}", e);
+                            return Ok(IntentOutcome::Observed);
+                        }
+                    }
+                };
+
+                // Through the existing door, not a second one.
+                // `register_from_observation` is how every other memory in the
+                // substrate comes into being; routing this through it means
+                // deliberate memory obeys the same lifecycle, expiry and
+                // promotion rules as observed memory, and `memory_list` sees
+                // it without knowing it is different.
+                //
+                // Enters at `Observed`, which carries a 24h expiry. That is
+                // the honest stage: the Regent heard something once. Durability
+                // is earned the same way authority is — by reinforcement, or by
+                // promotion through the review queue to `IdentityBearing`,
+                // which takes an operator signature. A thing said once and
+                // never again is allowed to fade.
+                //
+                // Confidence 0.5: stated, unverified, unreinforced. Not 1.0 —
+                // the operator saying something makes the *observation*
+                // reliable, not the Regent's rendering of it, and this content
+                // is the Regent's paraphrase of what it heard.
+                const REGENT_STATED_CONFIDENCE: f64 = 0.5;
+                let memory_id = {
+                    let mut engine = self.promotion_engine.lock().map_err(|e| {
+                        RegentError::Execution(format!("promotion engine lock: {e}"))
+                    })?;
+                    engine.register_from_observation(
+                        &receipt_id,
+                        content,
+                        key,
+                        REGENT_STATED_CONFIDENCE,
+                        &receipt_id,
+                    )
+                };
+
+                info!(
+                    key = key.as_str(),
+                    memory_id = memory_id.as_str(),
+                    "regent: recorded a memory at Observed"
                 );
-                Ok(IntentOutcome::Observed)
+                self.emit_receipt(
+                    "regent:memory:recorded",
+                    Some(&format!(
+                        "key={key} memory_id={memory_id} stage=Observed receipt={receipt_id}"
+                    )),
+                );
+
+                Ok(IntentOutcome::ToolCompleted {
+                    tool: "remember".to_string(),
+                    output: serde_json::json!({
+                        "recorded": true,
+                        "memory_id": memory_id,
+                        "key": key,
+                        "stage": "Observed",
+                        "provenance_receipt": receipt_id,
+                        "note": "Provisional. Observed-stage memories expire in 24h \
+                                 unless reinforced, and become durable only through \
+                                 promotion — which reaches IdentityBearing on an \
+                                 operator signature.",
+                    }),
+                })
             }
 
             Intent::RequestApproval {
@@ -2865,11 +2978,20 @@ pub async fn spawn_regent(
     // list; see REGENT_TOOLS for the drift that motivated collapsing them.
     let delegations: Vec<zp_regent::context::DelegationSummary> = REGENT_TOOLS
         .iter()
-        .map(|(capability, scope)| zp_regent::context::DelegationSummary {
-            capability: capability.to_string(),
-            scope: scope.to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
+        .map(|(capability, scope)| {
+            let (required, optional) = TOOL_PARAMS
+                .iter()
+                .find(|(t, _, _)| t == capability)
+                .map(|(_, r, o)| (*r, *o))
+                .unwrap_or((&[], &[]));
+            zp_regent::context::DelegationSummary {
+                capability: capability.to_string(),
+                scope: scope.to_string(),
+                granted_at: chrono::Utc::now(),
+                expires_at: None,
+                required_params: required.iter().map(|s| s.to_string()).collect(),
+                optional_params: optional.iter().map(|s| s.to_string()).collect(),
+            }
         })
         .collect();
 

@@ -1598,6 +1598,95 @@ pub struct DelegationSummary {
     pub scope: String,
     pub granted_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
+
+    /// Parameters this capability requires, if any.
+    ///
+    /// Carried on the delegation rather than declared here, because the
+    /// dispatch arms in `zp-server` are the only place that knows what a tool
+    /// actually reads. A fourth copy of tool knowledge in this crate would
+    /// drift the way the other three did.
+    ///
+    /// Empty means "unknown, do not validate" rather than "takes nothing" —
+    /// a delegation assembled without a contract must not cause a legitimate
+    /// call to be rejected.
+    #[serde(default)]
+    pub required_params: Vec<String>,
+
+    /// Parameters this capability accepts beyond the required ones.
+    #[serde(default)]
+    pub optional_params: Vec<String>,
+}
+
+impl DelegationSummary {
+    /// Check a proposed parameter set against this capability's contract.
+    ///
+    /// Returns the reason it fails, or `None` if it holds. Silent when no
+    /// contract is declared: absence of a contract is absence of knowledge,
+    /// and refusing on that basis would break every tool not yet described.
+    ///
+    /// # Why an enactment is validated at all
+    ///
+    /// Observed 2026-08-04. Asked to record a preferred name, the compose
+    /// tier produced a proposal whose enactment was
+    /// `self_configure {"config": "...\"value\": \"Ken,rom\"..."}`.
+    /// `self_configure` has no `config` parameter — it reads `endpoint`,
+    /// `model`, `api_key`, `routing_model` — so granting it would have
+    /// reached the no-parameters branch, returned the current configuration,
+    /// and reported success while recording nothing. The operator's name was
+    /// also corrupted inside it.
+    ///
+    /// `compose_proposal` checked that the *tool* was held and nothing about
+    /// the parameters, so a signature could be requested for a call the tool
+    /// could not perform. Unknown-field rejection catches that whole class:
+    /// no schema can tell "Ken,rom" from "Kenrom", but a payload living
+    /// entirely inside a field that does not exist is decidable.
+    pub fn params_violation(&self, params: &serde_json::Value) -> Option<String> {
+        if self.required_params.is_empty() && self.optional_params.is_empty() {
+            return None;
+        }
+        let obj = match params.as_object() {
+            Some(o) => o,
+            // Null or a bare value where an object is expected.
+            None if params.is_null() && self.required_params.is_empty() => return None,
+            None => {
+                return Some(format!(
+                    "{} takes named parameters; got {}",
+                    self.capability, params
+                ))
+            }
+        };
+        let unknown: Vec<&str> = obj
+            .keys()
+            .map(|k| k.as_str())
+            .filter(|k| {
+                !self.required_params.iter().any(|r| r == k)
+                    && !self.optional_params.iter().any(|o| o == k)
+            })
+            .collect();
+        if !unknown.is_empty() {
+            return Some(format!(
+                "{} has no parameter{} {:?} — it takes {:?}",
+                self.capability,
+                if unknown.len() == 1 { "" } else { "s" },
+                unknown,
+                [&self.required_params[..], &self.optional_params[..]].concat()
+            ));
+        }
+        let missing: Vec<&String> = self
+            .required_params
+            .iter()
+            .filter(|r| !obj.contains_key(r.as_str()))
+            .collect();
+        if !missing.is_empty() {
+            return Some(format!(
+                "{} requires {:?}, which {} missing",
+                self.capability,
+                missing,
+                if missing.len() == 1 { "is" } else { "are" }
+            ));
+        }
+        None
+    }
 }
 
 // ── System Awareness ──────────────────────────────────────────────────

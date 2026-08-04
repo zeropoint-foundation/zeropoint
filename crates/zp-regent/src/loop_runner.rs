@@ -1212,6 +1212,25 @@ async fn run_cycle(
                         }
                         out
                     }
+                    // Rendered before execution, so it must not claim an
+                    // outcome execution can refuse. Observed 2026-08-04: a
+                    // routing turn produced `remember` with no content, the
+                    // executor correctly declined to record it, and this
+                    // still told the operator "Noted, under \"unnamed\"" —
+                    // a claim of an act that did not happen, in the same
+                    // shape the Class 5 verifier exists to catch.
+                    Intent::Remember { content, .. } if content.trim().is_empty() => {
+                        "I moved to record something and had nothing to record — no \
+                         content came through. Tell me what you would like me to keep."
+                            .to_string()
+                    }
+                    Intent::Remember { key, content } => format!(
+                        "Noted, under \"{key}\":\n{content}\n\n\
+                         Provisional — this is an Observed-stage memory. It \
+                         expires in 24 hours unless reinforced, and becomes \
+                         durable only through promotion, which reaches \
+                         identity-bearing on your signature."
+                    ),
                     _ => format!("{:?}", intent.receipt_event()),
                 };
                 if let Err(e) = executor.execute(&intent).await {

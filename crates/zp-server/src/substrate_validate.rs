@@ -116,6 +116,9 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // A proposal suppressed because an identical call was already queued.
     // Silence here means re-asking is rare; volume means the routing tier is
     // reaching for the same thing repeatedly.
+    // A memory the Regent was deliberately told to keep, as distinct from
+    // one the observation pipeline distilled from receipts.
+    "regent:memory:recorded",
     "regent:proposal:duplicate",
     "regent:precedent:cited",
     "regent:precedent:revoked",
@@ -172,6 +175,10 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // completion, adaptation, capability probing, preflight, and
     // provenance events across zp-server + zp-cli.
     "tool:",
+    // Cartographer ontology materialization (per ONTOLOGY-AND-CARTOGRAPHER-2026-07
+    // + CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07 §Section 6). Emissions
+    // land as Cartographer processes chain into materialized ontology.
+    "ontology:",
 ];
 
 /// Receipt vocabulary declared by governed documents (typically KEEL and
