@@ -178,6 +178,26 @@ fn parse_revocation(event: &str) -> Option<(String, String)> {
     ))
 }
 
+/// Does a revocation at `revoked_at` withdraw a signature given at `granted_at`?
+///
+/// Only if the revocation came after. A revocation withdraws the consent that
+/// existed when it was made; it is not a standing ban on the call.
+///
+/// The first implementation removed revoked keys unconditionally, which made
+/// revocation permanent and irreversible. Observed 2026-08-04: a precedent was
+/// revoked, the same call was proposed and granted again, the drain enacted it
+/// — the browser really did navigate — and then this index deleted the new
+/// grant on the way out because the old revocation still matched the key.
+/// `zp precedent list` read zero while the operator had just signed.
+///
+/// That failure is quiet in the worst way. The grant succeeds, the act happens
+/// once through the pending-grant path, and autonomy never accrues — so the
+/// operator sees a working system that simply never learns, with nothing
+/// anywhere saying why.
+fn revocation_supersedes(granted_at: DateTime<Utc>, revoked_at: DateTime<Utc>) -> bool {
+    revoked_at >= granted_at
+}
+
 /// The Regent's current autonomous envelope.
 #[derive(Debug, Clone, Default)]
 pub struct PrecedentIndex {
@@ -210,11 +230,14 @@ impl PrecedentIndex {
             let at = req.resolved_at.unwrap_or(req.requested_at);
             by_key
                 .entry((tool.clone(), sig.clone()))
-                // Earliest grant wins: precedent dates from when the operator
-                // first authorised this call, not from the most recent time
-                // they happened to repeat themselves.
+                // Latest grant wins. This was "earliest wins" on the reasoning
+                // that precedent dates from when the operator *first*
+                // authorised a call — which is true only while nothing ever
+                // withdraws it. Once revocation exists, the grant that matters
+                // is the most recent one, because that is the one a revocation
+                // has to be measured against.
                 .and_modify(|p| {
-                    if at < p.granted_at {
+                    if at > p.granted_at {
                         p.granted_at = at;
                         p.granted_request = req.request_hash.clone();
                     }
@@ -227,16 +250,30 @@ impl PrecedentIndex {
                 });
         }
 
-        // Revocations last, so a withdrawal always beats a grant regardless
-        // of chain order.
+        // Latest revocation per key.
+        let mut revoked: HashMap<(String, String), DateTime<Utc>> = HashMap::new();
         for e in entries {
             let AuditAction::SystemEvent { ref event } = e.action else {
                 continue;
             };
             if let Some(key) = parse_revocation(event) {
-                by_key.remove(&key);
+                revoked
+                    .entry(key)
+                    .and_modify(|t| {
+                        if e.timestamp > *t {
+                            *t = e.timestamp;
+                        }
+                    })
+                    .or_insert(e.timestamp);
             }
         }
+
+        // A revocation withdraws the consent that stood when it was made.
+        // A signature given afterwards is new consent and stands on its own.
+        by_key.retain(|key, p| match revoked.get(key) {
+            Some(revoked_at) => !revocation_supersedes(p.granted_at, *revoked_at),
+            None => true,
+        });
 
         Self { by_key }
     }
@@ -313,6 +350,36 @@ mod tests {
         let (tool, sig) = parse_revocation(&s).expect("parses");
         assert_eq!(tool, "browser_use");
         assert_eq!(sig, "abc123");
+    }
+
+    /// Revocation withdraws what stood at the time; it is not a permanent ban.
+    #[test]
+    fn a_later_grant_survives_an_earlier_revocation() {
+        let t = |s: &str| {
+            DateTime::parse_from_rfc3339(s)
+                .unwrap()
+                .with_timezone(&Utc)
+        };
+        // granted, then revoked → withdrawn
+        assert!(revocation_supersedes(
+            t("2026-08-04T10:00:00Z"),
+            t("2026-08-04T11:00:00Z")
+        ));
+        // revoked, then granted again → stands
+        assert!(!revocation_supersedes(
+            t("2026-08-04T12:00:00Z"),
+            t("2026-08-04T11:00:00Z")
+        ));
+    }
+
+    /// Same instant resolves against the grant: a revocation is a deliberate
+    /// operator act, and ambiguity should fall on the side of less authority.
+    #[test]
+    fn a_tie_goes_to_the_revocation() {
+        let at = DateTime::parse_from_rfc3339("2026-08-04T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(revocation_supersedes(at, at));
     }
 
     #[test]
