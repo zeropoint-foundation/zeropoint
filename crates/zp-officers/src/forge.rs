@@ -14,9 +14,9 @@ use chrono::Utc;
 use serde_json::json;
 use tracing::debug;
 
+use crate::chain_reads::{classify_tool_lifecycle, ToolLifecycleKind};
 use crate::finding::{Finding, Severity};
 use crate::officer::{ChainReader, Officer, VaultKeyLister};
-use zp_core::AuditAction;
 
 /// The Forge officer — watches process lifecycle, resource health,
 /// and operational coherence.
@@ -44,21 +44,18 @@ impl Forge {
             HashMap::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                // Match tool lifecycle events
-                if let Some(tool) = event.strip_prefix("tool:launched:") {
+            // Match any launch-shaped lifecycle event; all three
+            // (launched / started / restarted) contribute to the
+            // crash-loop count for a tool.
+            if let Some(ev) = classify_tool_lifecycle(entry) {
+                if matches!(
+                    ev.kind,
+                    ToolLifecycleKind::Launched
+                        | ToolLifecycleKind::Started
+                        | ToolLifecycleKind::Restarted
+                ) {
                     launches_per_tool
-                        .entry(tool.to_string())
-                        .or_default()
-                        .push(entry.timestamp);
-                } else if let Some(tool) = event.strip_prefix("tool:started:") {
-                    launches_per_tool
-                        .entry(tool.to_string())
-                        .or_default()
-                        .push(entry.timestamp);
-                } else if let Some(tool) = event.strip_prefix("tool:restarted:") {
-                    launches_per_tool
-                        .entry(tool.to_string())
+                        .entry(ev.tool_name)
                         .or_default()
                         .push(entry.timestamp);
                 }
@@ -122,28 +119,18 @@ impl Forge {
             HashMap::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:health:up:") {
-                    tool_states
-                        .entry(tool.to_string())
-                        .or_default()
-                        .push(("up", entry.timestamp));
-                } else if let Some(tool) = event.strip_prefix("tool:health:down:") {
-                    tool_states
-                        .entry(tool.to_string())
-                        .or_default()
-                        .push(("down", entry.timestamp));
-                } else if let Some(tool) = event.strip_prefix("tool:stopped:") {
-                    tool_states
-                        .entry(tool.to_string())
-                        .or_default()
-                        .push(("stopped", entry.timestamp));
-                } else if let Some(tool) = event.strip_prefix("tool:failed:") {
-                    tool_states
-                        .entry(tool.to_string())
-                        .or_default()
-                        .push(("failed", entry.timestamp));
-                }
+            if let Some(ev) = classify_tool_lifecycle(entry) {
+                let state = match ev.kind {
+                    ToolLifecycleKind::HealthUp => "up",
+                    ToolLifecycleKind::HealthDown => "down",
+                    ToolLifecycleKind::Stopped => "stopped",
+                    ToolLifecycleKind::Failed => "failed",
+                    _ => continue,
+                };
+                tool_states
+                    .entry(ev.tool_name)
+                    .or_default()
+                    .push((state, entry.timestamp));
             }
         }
 
@@ -233,15 +220,16 @@ impl Forge {
         let mut launch_failure: HashMap<String, usize> = HashMap::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:launched:")
-                    .or_else(|| event.strip_prefix("tool:started:"))
-                {
-                    *launch_success.entry(tool.to_string()).or_insert(0) += 1;
-                } else if let Some(tool) = event.strip_prefix("tool:launch_failed:")
-                    .or_else(|| event.strip_prefix("tool:preflight:failed:"))
-                {
-                    *launch_failure.entry(tool.to_string()).or_insert(0) += 1;
+            if let Some(ev) = classify_tool_lifecycle(entry) {
+                match ev.kind {
+                    ToolLifecycleKind::Launched | ToolLifecycleKind::Started => {
+                        *launch_success.entry(ev.tool_name).or_insert(0) += 1;
+                    }
+                    ToolLifecycleKind::LaunchFailed
+                    | ToolLifecycleKind::PreflightFailed => {
+                        *launch_failure.entry(ev.tool_name).or_insert(0) += 1;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -290,13 +278,21 @@ impl Forge {
         let mut known_tools: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = extract_tool_from_event(event) {
-                    known_tools.insert(tool.to_string());
-                    let ts = last_activity.entry(tool.to_string()).or_insert(entry.timestamp);
-                    if entry.timestamp > *ts {
-                        *ts = entry.timestamp;
-                    }
+            // Only activity events (launched / started / restarted /
+            // stopped / failed / health / launch_failed / preflight_failed).
+            // `configured` and `port_assigned` are setup ceremony, not
+            // ongoing activity — a tool that was configured six hours ago
+            // and never launched isn't "silent" in the activity-tracking
+            // sense that this check is looking for.
+            if let Some(ev) =
+                classify_tool_lifecycle(entry).filter(|ev| ev.kind.is_activity_event())
+            {
+                known_tools.insert(ev.tool_name.clone());
+                let ts = last_activity
+                    .entry(ev.tool_name)
+                    .or_insert(entry.timestamp);
+                if entry.timestamp > *ts {
+                    *ts = entry.timestamp;
                 }
             }
         }
@@ -514,29 +510,10 @@ impl Forge {
     }
 }
 
-/// Extract tool name from a tool-related chain event, if present.
-fn extract_tool_from_event(event: &str) -> Option<&str> {
-    let prefixes = [
-        "tool:launched:",
-        "tool:started:",
-        "tool:restarted:",
-        "tool:stopped:",
-        "tool:failed:",
-        "tool:health:up:",
-        "tool:health:down:",
-        "tool:launch_failed:",
-        "tool:preflight:failed:",
-        "tool:preflight:passed:",
-    ];
-
-    for prefix in &prefixes {
-        if let Some(rest) = event.strip_prefix(prefix) {
-            return Some(rest);
-        }
-    }
-
-    None
-}
+// (former `extract_tool_from_event` helper deleted 2026-08-04; use
+// `crate::chain_reads::classify_tool_lifecycle` and read the
+// `tool_name` field on the returned event. Its coverage of receipt
+// prefixes is a superset of what this helper had.)
 
 impl Forge {
     /// Generate structured proposals from chain evidence (Band 2).
@@ -561,13 +538,15 @@ impl Forge {
             std::collections::HashMap::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:launched:")
-                    .or_else(|| event.strip_prefix("tool:started:"))
-                    .or_else(|| event.strip_prefix("tool:restarted:"))
-                {
+            if let Some(ev) = classify_tool_lifecycle(entry) {
+                if matches!(
+                    ev.kind,
+                    ToolLifecycleKind::Launched
+                        | ToolLifecycleKind::Started
+                        | ToolLifecycleKind::Restarted
+                ) {
                     launches_per_tool
-                        .entry(tool.to_string())
+                        .entry(ev.tool_name)
                         .or_default()
                         .push(entry.timestamp);
                 }
@@ -622,18 +601,15 @@ impl Forge {
             std::collections::HashMap::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:health:down:") {
-                    last_states.insert(tool.to_string(), ("down", entry.timestamp));
-                } else if let Some(tool) = event.strip_prefix("tool:failed:") {
-                    last_states.insert(tool.to_string(), ("failed", entry.timestamp));
-                } else if let Some(tool) = event.strip_prefix("tool:health:up:") {
-                    last_states.insert(tool.to_string(), ("up", entry.timestamp));
-                } else if let Some(tool) = event.strip_prefix("tool:launched:")
-                    .or_else(|| event.strip_prefix("tool:started:"))
-                {
-                    last_states.insert(tool.to_string(), ("up", entry.timestamp));
-                }
+            if let Some(ev) = classify_tool_lifecycle(entry) {
+                let state = match ev.kind {
+                    ToolLifecycleKind::HealthDown => "down",
+                    ToolLifecycleKind::Failed => "failed",
+                    ToolLifecycleKind::HealthUp => "up",
+                    ToolLifecycleKind::Launched | ToolLifecycleKind::Started => "up",
+                    _ => continue,
+                };
+                last_states.insert(ev.tool_name, (state, entry.timestamp));
             }
         }
 
@@ -748,15 +724,10 @@ mod tests {
         assert!(findings.is_empty());
     }
 
-    #[test]
-    fn extract_tool_from_events() {
-        assert_eq!(extract_tool_from_event("tool:launched:ironclaw"), Some("ironclaw"));
-        assert_eq!(extract_tool_from_event("tool:health:up:ironclaw"), Some("ironclaw"));
-        assert_eq!(extract_tool_from_event("tool:health:down:ironclaw"), Some("ironclaw"));
-        assert_eq!(extract_tool_from_event("tool:launch_failed:ironclaw"), Some("ironclaw"));
-        assert_eq!(extract_tool_from_event("gate:denied:foo"), None);
-        assert_eq!(extract_tool_from_event("delegation:granted:bar"), None);
-    }
+    // (extract_tool_from_events test removed 2026-08-04 with the helper.
+    // Equivalent coverage now lives in `chain_reads::tests::
+    // classify_tool_lifecycle_identifies_each_kind` and
+    // `classify_tool_lifecycle_returns_none_for_non_matching_events`.)
 
     #[test]
     fn finding_event_key_format() {

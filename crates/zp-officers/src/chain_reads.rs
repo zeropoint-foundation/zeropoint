@@ -131,6 +131,16 @@ impl ToolLifecycleKind {
             Self::HealthDown => "tool:health:down:",
         }
     }
+
+    /// True if this kind represents active tool activity (start / stop
+    /// / health / failure) rather than setup ceremony (configured,
+    /// port assignment). Consumers tracking operational silence use
+    /// this to filter classified events to activity-generating ones —
+    /// a tool that was configured six hours ago but never launched
+    /// isn't "silent" in the activity-tracking sense.
+    pub fn is_activity_event(self) -> bool {
+        !matches!(self, Self::Configured | Self::PortAssigned)
+    }
 }
 
 /// A tool lifecycle event with the tool name and stage already
@@ -192,6 +202,67 @@ pub fn tool_lifecycle_events(
         });
     }
     Ok(out)
+}
+
+/// Classify an already-fetched entry as a tool-lifecycle event.
+///
+/// Companion to `tool_lifecycle_events` (which queries the chain).
+/// Use this when you're already iterating a set of entries (e.g., from
+/// `ChainReader::recent_entries`) and need per-entry classification
+/// instead of a keyword-scoped query. Same extraction logic — the
+/// receipt-format coupling stays contained in this file.
+///
+/// Returns `Some(ToolLifecycleEvent)` if the entry's event matches any
+/// tool lifecycle prefix; `None` otherwise. First match wins; since the
+/// twelve prefixes are non-overlapping (no prefix is a prefix of any
+/// other), first-match equals only-match. Order is not correctness-
+/// critical.
+///
+/// For `PortAssigned`, extracts the tool name as the segment before the
+/// first colon after the prefix (matching `tool_lifecycle_events`
+/// behavior). For every other kind, the tool name is the entire suffix.
+pub fn classify_tool_lifecycle(entry: &AuditEntry) -> Option<ToolLifecycleEvent> {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return None;
+    };
+    const ALL_KINDS: [ToolLifecycleKind; 12] = [
+        ToolLifecycleKind::Configured,
+        ToolLifecycleKind::PortAssigned,
+        ToolLifecycleKind::PreflightPassed,
+        ToolLifecycleKind::PreflightFailed,
+        ToolLifecycleKind::Launched,
+        ToolLifecycleKind::Started,
+        ToolLifecycleKind::Restarted,
+        ToolLifecycleKind::Stopped,
+        ToolLifecycleKind::Failed,
+        ToolLifecycleKind::LaunchFailed,
+        ToolLifecycleKind::HealthUp,
+        ToolLifecycleKind::HealthDown,
+    ];
+    for kind in ALL_KINDS {
+        let prefix = kind.receipt_prefix();
+        let Some(rest) = event.strip_prefix(prefix) else {
+            continue;
+        };
+        let tool_name = match kind {
+            ToolLifecycleKind::PortAssigned => match rest.split(':').next() {
+                Some(name) if !name.is_empty() => name.to_string(),
+                _ => continue,
+            },
+            _ => {
+                if rest.is_empty() {
+                    continue;
+                }
+                rest.to_string()
+            }
+        };
+        return Some(ToolLifecycleEvent {
+            tool_name,
+            kind,
+            entry: entry.clone(),
+        });
+    }
+    None
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -756,6 +827,88 @@ mod tests {
             system_lifecycle_events(&chain, SystemLifecycleKind::ServerStopped, 100)
                 .unwrap();
         assert_eq!(stopped.len(), 1);
+    }
+
+    #[test]
+    fn classify_tool_lifecycle_identifies_each_kind() {
+        // Round-trip every kind: build an event with its prefix,
+        // classify, expect back the same kind and tool name.
+        // Order-agnostic — the underlying store returns entries in
+        // newest-first order (verified by other tests in this module),
+        // so we check by set membership rather than index alignment.
+        let cases: &[(ToolLifecycleKind, &str, &str, &str)] = &[
+            (ToolLifecycleKind::Configured, "tool:configured:", "alpha", "alpha"),
+            (ToolLifecycleKind::PortAssigned, "tool:port:assigned:", "beta:8080", "beta"),
+            (ToolLifecycleKind::PreflightPassed, "tool:preflight:passed:", "gamma", "gamma"),
+            (ToolLifecycleKind::PreflightFailed, "tool:preflight:failed:", "delta", "delta"),
+            (ToolLifecycleKind::Launched, "tool:launched:", "eps", "eps"),
+            (ToolLifecycleKind::Started, "tool:started:", "zeta", "zeta"),
+            (ToolLifecycleKind::Restarted, "tool:restarted:", "eta", "eta"),
+            (ToolLifecycleKind::Stopped, "tool:stopped:", "theta", "theta"),
+            (ToolLifecycleKind::Failed, "tool:failed:", "iota", "iota"),
+            (ToolLifecycleKind::LaunchFailed, "tool:launch_failed:", "kappa", "kappa"),
+            (ToolLifecycleKind::HealthUp, "tool:health:up:", "lambda", "lambda"),
+            (ToolLifecycleKind::HealthDown, "tool:health:down:", "mu", "mu"),
+        ];
+        let mut store = appending_store();
+        for (_, prefix, suffix, _) in cases {
+            append_event(&mut store, &format!("{}{}", prefix, suffix));
+        }
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+        assert_eq!(entries.len(), cases.len());
+
+        // Classify every entry and collect (kind, tool_name) pairs.
+        let classified: Vec<(ToolLifecycleKind, String)> = entries
+            .iter()
+            .map(|e| {
+                let ev = classify_tool_lifecycle(e).expect("classifier should match");
+                (ev.kind, ev.tool_name)
+            })
+            .collect();
+
+        // Each expected pair must be present, regardless of order.
+        for (expected_kind, _prefix, _suffix, expected_tool) in cases {
+            assert!(
+                classified.contains(&(*expected_kind, expected_tool.to_string())),
+                "expected pair ({:?}, {:?}) not found in classified events",
+                expected_kind,
+                expected_tool
+            );
+        }
+    }
+
+    #[test]
+    fn classify_tool_lifecycle_returns_none_for_non_matching_events() {
+        let mut store = appending_store();
+        append_event(&mut store, "delegation:granted:mytool");
+        append_event(&mut store, "gate:denied:foo");
+        append_event(&mut store, "officer:steward:attested:x");
+        append_event(&mut store, "unrelated");
+        append_event(&mut store, "tool:configured:"); // empty suffix
+        append_event(&mut store, "tool:port:assigned::9090"); // empty tool
+
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+        for entry in entries {
+            assert!(
+                classify_tool_lifecycle(&entry).is_none(),
+                "expected None for event {:?}",
+                entry.action
+            );
+        }
+    }
+
+    #[test]
+    fn is_activity_event_filters_setup_events() {
+        assert!(!ToolLifecycleKind::Configured.is_activity_event());
+        assert!(!ToolLifecycleKind::PortAssigned.is_activity_event());
+        assert!(ToolLifecycleKind::Launched.is_activity_event());
+        assert!(ToolLifecycleKind::Started.is_activity_event());
+        assert!(ToolLifecycleKind::HealthUp.is_activity_event());
+        assert!(ToolLifecycleKind::HealthDown.is_activity_event());
+        assert!(ToolLifecycleKind::Failed.is_activity_event());
+        assert!(ToolLifecycleKind::Stopped.is_activity_event());
     }
 
     #[test]
