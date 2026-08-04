@@ -14,9 +14,12 @@ use chrono::Utc;
 use serde_json::json;
 use tracing::debug;
 
+use crate::chain_reads::{
+    classify_delegation, classify_gate, DelegationKind, GateOutcome,
+};
 use crate::finding::{Finding, Severity};
 use crate::officer::{ChainReader, Officer, VaultKeyLister};
-use zp_core::{AuditAction, AuditEntry};
+use zp_core::AuditEntry;
 
 /// The Sentinel officer — watches credential lifecycle, auth integrity,
 /// and access anomalies.
@@ -45,13 +48,16 @@ impl Sentinel {
         let mut denied_by_actor: HashMap<String, usize> = HashMap::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if event.starts_with("gate:denied:") {
-                    denied_entries.push(entry);
-                    let actor = actor_label(&entry.actor);
-                    *denied_by_actor.entry(actor).or_insert(0) += 1;
-                } else if event.starts_with("gate:allowed:") {
-                    allowed_count += 1;
+            if let Some(ev) = classify_gate(entry) {
+                match ev.outcome {
+                    GateOutcome::Denied => {
+                        denied_entries.push(entry);
+                        let actor = actor_label(&entry.actor);
+                        *denied_by_actor.entry(actor).or_insert(0) += 1;
+                    }
+                    GateOutcome::Allowed => {
+                        allowed_count += 1;
+                    }
                 }
             }
         }
@@ -156,15 +162,20 @@ impl Sentinel {
         let mut total_grants = 0usize;
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(subject) = event.strip_prefix("delegation:granted:") {
-                    *active_grants.entry(subject.to_string()).or_insert(0) += 1;
-                    total_grants += 1;
-                } else if let Some(subject) = event.strip_prefix("delegation:revoked:") {
-                    active_grants.remove(subject);
-                    revocations += 1;
-                } else if let Some(subject) = event.strip_prefix("delegation:expired:") {
-                    active_grants.remove(subject);
+            if let Some(ev) = classify_delegation(entry) {
+                match ev.kind {
+                    DelegationKind::Granted => {
+                        *active_grants.entry(ev.target).or_insert(0) += 1;
+                        total_grants += 1;
+                    }
+                    DelegationKind::Revoked => {
+                        active_grants.remove(&ev.target);
+                        revocations += 1;
+                    }
+                    DelegationKind::Expired => {
+                        active_grants.remove(&ev.target);
+                    }
+                    DelegationKind::Renewed => {}
                 }
             }
         }
