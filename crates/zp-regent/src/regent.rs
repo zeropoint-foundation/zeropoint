@@ -1169,6 +1169,41 @@ impl Regent {
             // signature authorises. Where the router chose badly, that now
             // shows up as a visibly absurd proposal the operator denies,
             // rather than a plausible one that does something else.
+            // A degenerate call is not a proposal.
+            //
+            // Observed 2026-08-03: the operator said "hi"; routing reached for
+            // `browser_use` with no parameters; the guard refused it; and this
+            // escalation faithfully turned that into "PROPOSAL: Call
+            // browser_use with parameters {}". Saying "approved" produced a
+            // second one. The escalation was working exactly as written and
+            // the result was queue spam.
+            //
+            // There is nothing here for an operator to weigh — the call names
+            // no target and would fail its own parameter validation if it ran.
+            // Proposing it spends operator attention on router noise, and an
+            // operator who reads enough meaningless proposals stops reading
+            // them, which is the habit the whole approval surface depends on.
+            //
+            // Refusal still happened, is still logged, and still emitted
+            // `regent:tool:refused:unsigned`. What is suppressed is the
+            // *request for a signature*, not the record of the reach.
+            let degenerate = call
+                .params
+                .as_object()
+                .map(|o| o.is_empty())
+                .unwrap_or(call.params.is_null());
+            if degenerate {
+                warn!(
+                    tool = %call.tool,
+                    "refused call carries no parameters — not proposing a call the \
+                     operator cannot weigh"
+                );
+                return Intent::Respond {
+                    content: composed,
+                    target_surface: None,
+                };
+            }
+
             let seed = format!(
                 "call {} with parameters {} — attempted in service of: {}",
                 call.tool,
@@ -2527,6 +2562,14 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
         "memory_review",
         // Was missing from both lists while the capability was granted.
         "substrate_validate",
+        // Phase 1 artifact tools. Granted 2026-08-02 in REGENT_TOOLS and not
+        // added here — so a malformed emission arrived as
+        // `report_assemble','params':{...}` and dispatched as "unknown tool"
+        // while the tool existed and was reachable. Two days between the
+        // grant and the drift biting.
+        "chart_generate",
+        "report_assemble",
+        "save_to_artifacts",
     ];
 
     for tool in TOOLS {
@@ -2585,6 +2628,14 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
         "memory_review",
         // Was missing from both lists while the capability was granted.
         "substrate_validate",
+        // Phase 1 artifact tools. Granted 2026-08-02 in REGENT_TOOLS and not
+        // added here — so a malformed emission arrived as
+        // `report_assemble','params':{...}` and dispatched as "unknown tool"
+        // while the tool existed and was reachable. Two days between the
+        // grant and the drift biting.
+        "chart_generate",
+        "report_assemble",
+        "save_to_artifacts",
     ];
 
     for tool in TOOLS {

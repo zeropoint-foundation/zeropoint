@@ -32,6 +32,7 @@ pub mod intent;
 pub mod loop_runner;
 pub mod memory;
 pub mod persona;
+pub mod precedent;
 pub mod regent;
 pub mod routing;
 pub mod shadow_validation;
