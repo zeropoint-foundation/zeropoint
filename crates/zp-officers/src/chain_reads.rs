@@ -641,6 +641,41 @@ pub struct SystemLifecycleEvent {
     pub entry: AuditEntry,
 }
 
+/// True if the entry's event starts with `officer:` — matches any
+/// current or future officer-shaped event (heartbeats, attestations,
+/// findings, operations, etc.). Broader than any specific classifier;
+/// use when the check is "is this from any officer at all?"
+pub fn is_officer_event(entry: &AuditEntry) -> bool {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return false;
+    };
+    event.starts_with("officer:")
+}
+
+/// True if the entry's event is a system-startup signal in any of its
+/// forms: `system:startup`, `server:started`, or a longer variant
+/// beginning with either (e.g. `system:startup:extra_context`).
+/// Broader than `system_lifecycle_events`/`classify_system_lifecycle`
+/// (which are exact-match). Use for narration or "any startup-shaped
+/// event" categorization.
+pub fn is_system_startup_event(entry: &AuditEntry) -> bool {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return false;
+    };
+    event.starts_with("system:startup") || event.starts_with("server:started")
+}
+
+/// True if the entry's event is a system-shutdown signal in any of
+/// its forms: `system:shutdown`, `server:stopped`, or a longer
+/// variant beginning with either. Broad companion to
+/// `is_system_startup_event`.
+pub fn is_system_shutdown_event(entry: &AuditEntry) -> bool {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return false;
+    };
+    event.starts_with("system:shutdown") || event.starts_with("server:stopped")
+}
+
 /// Query the chain for system-lifecycle events of one specific kind.
 /// These are bare event names (no colon suffix), so an exact match on
 /// the event string filters after the substring search.
@@ -1115,6 +1150,35 @@ mod tests {
             deleg_classified, 1,
             "classifier only matches known DelegationKind"
         );
+    }
+
+    #[test]
+    fn is_officer_and_system_lifecycle_broad_matchers() {
+        let mut store = appending_store();
+        append_event(&mut store, "officer:steward:heartbeat");
+        append_event(&mut store, "officer:cleo:operations:sweep");
+        append_event(&mut store, "system:startup");
+        append_event(&mut store, "system:startup:extra_context"); // longer form
+        append_event(&mut store, "server:started");
+        append_event(&mut store, "system:shutdown");
+        append_event(&mut store, "server:stopped");
+        append_event(&mut store, "tool:launched:mytool"); // none of the above
+
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+
+        let officer_count = entries.iter().filter(|e| is_officer_event(e)).count();
+        assert_eq!(officer_count, 2);
+        let startup_count = entries
+            .iter()
+            .filter(|e| is_system_startup_event(e))
+            .count();
+        assert_eq!(startup_count, 3, "system:startup + longer form + server:started");
+        let shutdown_count = entries
+            .iter()
+            .filter(|e| is_system_shutdown_event(e))
+            .count();
+        assert_eq!(shutdown_count, 2, "system:shutdown + server:stopped");
     }
 
     #[test]
