@@ -1353,6 +1353,11 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // chain-anchored; this is the half that records the answer, so a
         // proposal stops being fire-and-forget and can become precedent.
         .route("/api/v1/regent/approvals", get(regent_approvals_handler))
+        .route("/api/v1/regent/precedents", get(regent_precedents_handler))
+        .route(
+            "/api/v1/regent/precedents/:signature/revoke",
+            post(regent_precedent_revoke_handler),
+        )
         .route(
             "/api/v1/regent/approvals/:request_hash/resolve",
             post(regent_approval_resolve_handler),
@@ -3651,6 +3656,160 @@ async fn regent_approvals_handler(
             "all": index.all(),
         })),
     )
+}
+
+/// The Regent's current autonomous envelope, as the operator can see it.
+///
+/// Precedent is the one thing in the substrate that widens what may happen
+/// without asking. If the operator cannot enumerate it, they cannot consent
+/// to it — a scope you can only discover by watching it get exercised is not
+/// a scope anyone agreed to.
+async fn regent_precedents_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let entries = precedent_window(&state);
+    let index = zp_regent::precedent::PrecedentIndex::build(&entries);
+    let active = index.active();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "count": active.len(),
+            "precedents": active,
+        })),
+    )
+}
+
+/// Narrow the envelope back.
+///
+/// Per KEEL §III.10: "Revoking a precedent narrows the autonomous scope back
+/// and is itself a chain event." Not a deletion — the grant stays on chain as
+/// the historical fact that it is, and this receipt records that it no longer
+/// authorises anything. A substrate that could quietly forget having been
+/// permitted could also quietly forget having been refused.
+///
+/// Actor is `ActorId::Operator`, as with approval resolution: withdrawing
+/// consent is the operator's act.
+async fn regent_precedent_revoke_handler(
+    State(state): State<AppState>,
+    AxumPath(signature): AxumPath<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let reason = payload.get("reason").and_then(|v| v.as_str());
+
+    let entries = precedent_window(&state);
+    let index = zp_regent::precedent::PrecedentIndex::build(&entries);
+
+    // Prefix resolution, ambiguity is an error. Same discipline as
+    // `ApprovalIndex::resolve_prefix`: revoking the wrong precedent silently
+    // widens the envelope somewhere the operator was not looking.
+    let hits: Vec<_> = index
+        .active()
+        .into_iter()
+        .filter(|p| p.context_signature.starts_with(&signature))
+        .collect();
+
+    let target = match hits.len() {
+        0 => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": format!("no active precedent matching {signature}"),
+                })),
+            )
+        }
+        1 => hits[0].clone(),
+        n => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": format!("{n} precedents match {signature} — use more characters"),
+                })),
+            )
+        }
+    };
+
+    let revoked_at = chrono::Utc::now();
+    let event = zp_regent::precedent::revocation_event_string(
+        &target.tool,
+        &target.context_signature,
+        reason,
+        revoked_at,
+    );
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::Operator,
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "operator-precedent-revocation".to_string(),
+        receipt: None,
+    };
+
+    let anchored = {
+        let mut store = match state.0.audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("Audit store lock poisoned: {e}"),
+                    })),
+                )
+            }
+        };
+        match store.append(entry) {
+            Ok(sealed) => sealed.entry_hash,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("revocation receipt append failed: {e}"),
+                    })),
+                )
+            }
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "revoked": true,
+            "tool": target.tool,
+            "context_signature": target.context_signature,
+            "granted_request": target.granted_request,
+            "anchored": anchored,
+        })),
+    )
+}
+
+/// The chain slice precedent is read from.
+fn precedent_window(state: &AppState) -> Vec<zp_core::AuditEntry> {
+    use zp_regent::approvals::{
+        EVENT_PREFIX_DENIED, EVENT_PREFIX_ENACTED, EVENT_PREFIX_GRANTED, EVENT_PREFIX_REQUEST,
+    };
+    let store = match state.0.audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let mut acc = Vec::new();
+    for prefix in [
+        EVENT_PREFIX_REQUEST,
+        EVENT_PREFIX_GRANTED,
+        EVENT_PREFIX_DENIED,
+        EVENT_PREFIX_ENACTED,
+        zp_regent::precedent::EVENT_PREFIX_REVOKED,
+    ] {
+        acc.extend(
+            store
+                .search_chain_by_action_keyword(prefix, 1024)
+                .unwrap_or_default(),
+        );
+    }
+    acc
 }
 
 /// Record the operator's answer to a request.

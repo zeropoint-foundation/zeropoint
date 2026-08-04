@@ -126,6 +126,16 @@ enum Commands {
     /// not the Regent's reading of a conversation.
     #[command(subcommand)]
     Approval(ApprovalCmd),
+
+    /// The Regent's autonomous envelope — what it may do without asking.
+    ///
+    /// Precedent is the only thing that widens that envelope, and it widens
+    /// permanently until withdrawn. Per KEEL §III.10 the envelope grows
+    /// through operator-signed precedent and narrows through revocation, and
+    /// both are chain events. These verbs are how an operator sees the first
+    /// and performs the second.
+    #[command(subcommand)]
+    Precedent(PrecedentCmd),
     /// Audit trail operations
     #[command(subcommand)]
     Audit(AuditCmd),
@@ -724,6 +734,24 @@ enum VaultCmd {
         /// Emit result as raw JSON instead of formatted text
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum PrecedentCmd {
+    /// List every call the Regent may now make without asking.
+    List {
+        /// Emit raw JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Withdraw a precedent. Accepts a context-signature prefix.
+    Revoke {
+        /// Context signature (from `zp precedent list`); a unique prefix is enough.
+        context_signature: String,
+        /// Optional note recorded with the revocation.
+        #[arg(long)]
+        reason: Option<String>,
     },
 }
 
@@ -5904,6 +5932,23 @@ async fn main() -> anyhow::Result<()> {
     // of a group that will keep growing. The general form — commands declaring
     // whether they need the sovereign root, rather than paying for it by
     // position in main() — is the right fix and is not this one.
+    // Same early-exit reasoning as the approval verbs below: these are HTTP
+    // reads and writes over the session token, and everything past pipeline
+    // construction unlocks the sovereign root. Seeing what the substrate may
+    // do unasked should cost nothing; withdrawing it should cost nothing
+    // either, because a revocation an operator hesitates to perform is a
+    // safety mechanism that does not work.
+    if let Some(Commands::Precedent(cmd)) = &args.command {
+        match cmd {
+            PrecedentCmd::List { json } => run_precedent_list(*json).await?,
+            PrecedentCmd::Revoke {
+                context_signature,
+                reason,
+            } => run_precedent_revoke(context_signature, reason.as_deref()).await?,
+        }
+        std::process::exit(0);
+    }
+
     if let Some(Commands::Approval(cmd)) = &args.command {
         match cmd {
             ApprovalCmd::List { json } => run_approval_list(*json).await?,
@@ -6002,6 +6047,7 @@ async fn main() -> anyhow::Result<()> {
             run_correction_list(json).await?;
         }
         Some(Commands::Approval(_)) => unreachable!(), // handled above
+        Some(Commands::Precedent(_)) => unreachable!(), // handled above
         Some(Commands::Correction(CorrectionCmd::Revoke {
             correction_id,
             json,
@@ -7457,6 +7503,127 @@ async fn run_correction_issue(
 }
 
 /// List all currently active standing corrections (priority-sorted descending).
+/// Show the Regent's autonomous envelope.
+///
+/// Prints the whole call, never a summary of it — the same discipline the
+/// approval queue follows. A precedent is standing permission for a specific
+/// call, and an operator reviewing what they have permitted needs to read it
+/// as precisely as they read it when they granted it.
+async fn run_precedent_list(json_out: bool) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+    let url =
+        zp_net::peer_url_with_path("127.0.0.1", cfg.port.value, "/api/v1/regent/precedents");
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let body = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?
+        .text()
+        .await?;
+
+    if json_out {
+        println!("{body}");
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {err}");
+        std::process::exit(1);
+    }
+
+    let count = v["count"].as_u64().unwrap_or(0);
+    println!();
+    println!("\x1b[1mCalls the Regent may make without asking: {count}\x1b[0m");
+    println!("\x1b[2m──────────────────────────────────────\x1b[0m");
+    if count == 0 {
+        println!("\x1b[2mNone. Every act requiring a signature will be proposed.\x1b[0m");
+        println!();
+        return Ok(());
+    }
+    if let Some(list) = v["precedents"].as_array() {
+        for p in list {
+            let sig = p["context_signature"].as_str().unwrap_or("?");
+            let tool = p["tool"].as_str().unwrap_or("?");
+            let granted_at = p["granted_at"].as_str().unwrap_or("?");
+            let req = p["granted_request"].as_str().unwrap_or("?");
+            println!("  \x1b[1m{sig}\x1b[0m");
+            println!("    {tool}");
+            println!(
+                "    \x1b[2mfrom your signature on {} at {}\x1b[0m",
+                &req[..12.min(req.len())],
+                granted_at
+            );
+            println!();
+        }
+    }
+    println!("\x1b[2mzp precedent revoke <signature> --reason \"...\"\x1b[0m");
+    println!();
+    Ok(())
+}
+
+/// Withdraw a precedent, narrowing the autonomous envelope.
+async fn run_precedent_revoke(context_signature: &str, reason: Option<&str>) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+    let url = zp_net::peer_url_with_path(
+        "127.0.0.1",
+        cfg.port.value,
+        &format!("/api/v1/regent/precedents/{context_signature}/revoke"),
+    );
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let body = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&serde_json::json!({ "reason": reason.unwrap_or("") }))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?
+        .text()
+        .await?;
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {err}");
+        std::process::exit(1);
+    }
+
+    println!();
+    println!(
+        "\x1b[32m✓\x1b[0m  revoked — {} may no longer run unasked",
+        v["tool"].as_str().unwrap_or("?")
+    );
+    println!(
+        "    \x1b[2msignature {}\x1b[0m",
+        v["context_signature"].as_str().unwrap_or("?")
+    );
+    println!(
+        "    \x1b[2manchored {}\x1b[0m",
+        v["anchored"].as_str().unwrap_or("?")
+    );
+    println!();
+    Ok(())
+}
+
 /// List approval requests awaiting an operator answer.
 async fn run_approval_list(json_out: bool) -> anyhow::Result<()> {
     let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
