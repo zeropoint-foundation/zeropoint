@@ -343,6 +343,54 @@ pub fn is_delegation_target_hash_shaped(target: &str) -> bool {
     target.len() == 64 && target.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// Classify an already-fetched entry as a delegation event.
+///
+/// Companion to `delegation_events` (which queries the chain) — use
+/// this when you're iterating a pre-fetched set of entries and need
+/// per-entry classification. First-match wins; the four prefixes are
+/// non-overlapping (`granted` / `revoked` / `renewed` / `expired`).
+///
+/// The classifier does not filter by target shape; callers use the
+/// `is_tool_target()` / `is_officer_target()` / `is_hash_target()`
+/// helpers on the returned event as they need.
+pub fn classify_delegation(entry: &AuditEntry) -> Option<DelegationEvent> {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return None;
+    };
+    const ALL_KINDS: [DelegationKind; 4] = [
+        DelegationKind::Granted,
+        DelegationKind::Revoked,
+        DelegationKind::Renewed,
+        DelegationKind::Expired,
+    ];
+    for kind in ALL_KINDS {
+        let prefix = kind.receipt_prefix();
+        let Some(target) = event.strip_prefix(prefix) else {
+            continue;
+        };
+        return Some(DelegationEvent {
+            target: target.to_string(),
+            kind,
+            entry: entry.clone(),
+        });
+    }
+    None
+}
+
+/// True if the entry's event starts with `delegation:` — matches any
+/// current or future delegation-shaped event, including kinds not yet
+/// modeled in `DelegationKind`. Broader than
+/// `classify_delegation(entry).is_some()` (which matches only the four
+/// modeled kinds). Use this helper when the check should include
+/// future/unknown kinds (e.g., counting unsigned governance events);
+/// use the classifier when the specific kind matters.
+pub fn is_delegation_event(entry: &AuditEntry) -> bool {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return false;
+    };
+    event.starts_with("delegation:")
+}
+
 /// Query the chain for delegation events of one specific kind.
 pub fn delegation_events(
     chain: &ChainReader<'_>,
@@ -494,6 +542,46 @@ pub struct GateEvent {
     pub subject: String,
     pub outcome: GateOutcome,
     pub entry: AuditEntry,
+}
+
+/// Classify an already-fetched entry as a gate decision event.
+///
+/// Companion to `gate_events` (which queries the chain). Preserves
+/// the same empty-subject filter — a gate event with no subject
+/// suffix is skipped (returns None). First-match wins; the two
+/// prefixes (`gate:allowed:` / `gate:denied:`) are non-overlapping.
+pub fn classify_gate(entry: &AuditEntry) -> Option<GateEvent> {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return None;
+    };
+    const ALL_OUTCOMES: [GateOutcome; 2] =
+        [GateOutcome::Allowed, GateOutcome::Denied];
+    for outcome in ALL_OUTCOMES {
+        let prefix = outcome.receipt_prefix();
+        let Some(subject) = event.strip_prefix(prefix) else {
+            continue;
+        };
+        if subject.is_empty() {
+            continue;
+        }
+        return Some(GateEvent {
+            subject: subject.to_string(),
+            outcome,
+            entry: entry.clone(),
+        });
+    }
+    None
+}
+
+/// True if the entry's event starts with `gate:` — matches any
+/// current or future gate-shaped event. Broader than
+/// `classify_gate(entry).is_some()` (which matches only `gate:allowed:`
+/// and `gate:denied:`). Same use-case as `is_delegation_event`.
+pub fn is_gate_event(entry: &AuditEntry) -> bool {
+    let AuditAction::SystemEvent { event } = &entry.action else {
+        return false;
+    };
+    event.starts_with("gate:")
 }
 
 /// Query the chain for gate decisions of one specific outcome kind.
@@ -909,6 +997,124 @@ mod tests {
         assert!(ToolLifecycleKind::HealthDown.is_activity_event());
         assert!(ToolLifecycleKind::Failed.is_activity_event());
         assert!(ToolLifecycleKind::Stopped.is_activity_event());
+    }
+
+    #[test]
+    fn classify_delegation_identifies_all_four_kinds() {
+        let cases: &[(DelegationKind, &str, &str)] = &[
+            (DelegationKind::Granted, "delegation:granted:", "mytool"),
+            (DelegationKind::Revoked, "delegation:revoked:", "othertool"),
+            (DelegationKind::Renewed, "delegation:renewed:", "third"),
+            (DelegationKind::Expired, "delegation:expired:", "fourth"),
+        ];
+        let mut store = appending_store();
+        for (_, prefix, target) in cases {
+            append_event(&mut store, &format!("{}{}", prefix, target));
+        }
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+        assert_eq!(entries.len(), cases.len());
+
+        let classified: Vec<(DelegationKind, String)> = entries
+            .iter()
+            .map(|e| {
+                let ev = classify_delegation(e).expect("classifier should match");
+                (ev.kind, ev.target)
+            })
+            .collect();
+
+        for (expected_kind, _prefix, expected_target) in cases {
+            assert!(
+                classified.contains(&(*expected_kind, expected_target.to_string())),
+                "expected ({:?}, {:?}) not found",
+                expected_kind,
+                expected_target
+            );
+        }
+    }
+
+    #[test]
+    fn classify_delegation_returns_none_for_non_delegation() {
+        let mut store = appending_store();
+        append_event(&mut store, "gate:allowed:mytool");
+        append_event(&mut store, "tool:launched:mytool");
+        append_event(&mut store, "unrelated");
+
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+        for entry in entries {
+            assert!(
+                classify_delegation(&entry).is_none(),
+                "expected None for {:?}",
+                entry.action
+            );
+        }
+    }
+
+    #[test]
+    fn classify_gate_identifies_both_outcomes() {
+        let mut store = appending_store();
+        append_event(&mut store, "gate:allowed:mytool");
+        append_event(&mut store, "gate:denied:badtool");
+
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+
+        let classified: Vec<(GateOutcome, String)> = entries
+            .iter()
+            .map(|e| {
+                let ev = classify_gate(e).expect("classifier should match");
+                (ev.outcome, ev.subject)
+            })
+            .collect();
+        assert!(classified.contains(&(GateOutcome::Allowed, "mytool".to_string())));
+        assert!(classified.contains(&(GateOutcome::Denied, "badtool".to_string())));
+    }
+
+    #[test]
+    fn classify_gate_skips_empty_subject_and_non_gate() {
+        let mut store = appending_store();
+        append_event(&mut store, "gate:allowed:"); // empty subject
+        append_event(&mut store, "delegation:granted:mytool");
+        append_event(&mut store, "gate:something_else:x"); // wrong middle
+
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+        for entry in entries {
+            assert!(
+                classify_gate(&entry).is_none(),
+                "expected None for {:?}",
+                entry.action
+            );
+        }
+    }
+
+    #[test]
+    fn is_delegation_and_gate_event_broad_matchers() {
+        let mut store = appending_store();
+        append_event(&mut store, "delegation:granted:mytool");
+        append_event(&mut store, "delegation:some_future_kind:x"); // unmodeled
+        append_event(&mut store, "gate:allowed:mytool");
+        append_event(&mut store, "gate:something_new:y"); // unmodeled
+        append_event(&mut store, "tool:launched:mytool"); // neither
+
+        let chain = ChainReader::new(&store);
+        let entries = chain.recent_entries(100).unwrap();
+
+        let deleg_count = entries.iter().filter(|e| is_delegation_event(e)).count();
+        assert_eq!(deleg_count, 2, "both delegation:* variants should match");
+        let gate_count = entries.iter().filter(|e| is_gate_event(e)).count();
+        assert_eq!(gate_count, 2, "both gate:* variants should match");
+
+        // Confirm the broad matcher catches more than the classifier.
+        let deleg_classified = entries
+            .iter()
+            .filter(|e| classify_delegation(e).is_some())
+            .count();
+        assert_eq!(
+            deleg_classified, 1,
+            "classifier only matches known DelegationKind"
+        );
     }
 
     #[test]
