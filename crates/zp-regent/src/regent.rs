@@ -1055,6 +1055,21 @@ impl Regent {
                     },
                     "tool": { "type": "string" },
                     "params": { "type": "object" },
+                    // Fields the non-execute intents carry. Absent from
+                    // `properties`, constrained decoding gives the model no
+                    // slot to put them in — so 2026-08-04, with the larger
+                    // model finally selecting the right intents, `remember`
+                    // arrived with no `key` ("unnamed") and
+                    // `request_approval` with no `action` ("unspecified
+                    // action"). Both parsed, both defaulted, both useless.
+                    //
+                    // Same defect as the intent enum one layer down: the
+                    // schema is the reachable surface, not documentation of
+                    // it, and anything it omits cannot be emitted no matter
+                    // how well the prompt asks.
+                    "key": { "type": "string" },
+                    "action": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["action", "mechanism"] },
                     "content": { "type": "string" },
                     "progress": { "type": "string" }
                 },
@@ -1370,6 +1385,25 @@ impl Regent {
                     },
                     "tool": { "type": "string" },
                     "params": { "type": "object" },
+                    // Fields the non-execute intents carry. Absent from
+                    // `properties`, constrained decoding gives the model no
+                    // slot to put them in — so 2026-08-04, with the larger
+                    // model finally selecting the right intents, `remember`
+                    // arrived with no `key` ("unnamed") and
+                    // `request_approval` with no `action` ("unspecified
+                    // action"). Both parsed, both defaulted, both useless.
+                    //
+                    // Same defect as the intent enum one layer down: the
+                    // schema is the reachable surface, not documentation of
+                    // it, and anything it omits cannot be emitted no matter
+                    // how well the prompt asks.
+                    "key": { "type": "string" },
+                    "action": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["action", "mechanism"] },
+                    // Present in the unified schema and missing here, which
+                    // would silently drop the body of every `remember` if the
+                    // substrate returned to two-tier routing.
+                    "content": { "type": "string" },
                     "progress": { "type": "string" }
                 },
                 "required": ["intent"]

@@ -60,3 +60,14 @@ Officer finding: "3 memories due for review" → {"intent":"execute","tool":"mem
 "Assemble a report on today's findings" → {"intent":"execute","tool":"report_assemble","params":{"fragments":[{"heading":"Overview","body_html":"<p>...</p>"},{"heading":"Details","body_html":"<p>...</p>"}]}}
 "Save that report to my artifacts" → {"intent":"execute","tool":"save_to_artifacts","params":{"name":"todays-findings.html","content":"<!DOCTYPE html>..."}}
 After report_assemble, persist the result → {"intent":"execute","tool":"save_to_artifacts","params":{"name":"chain-analysis.html","content":"<the html string returned by report_assemble>"}}
+
+When the operator tells you something to keep about them, the substrate, or your
+work, use "remember" — do not propose a standing correction for it.
+"Please call me Kenrom" → {"intent":"remember","key":"operator_preferred_name","content":"The operator prefers to be called Kenrom."}
+"Remember that ARTEMIS runs the Sovereign Form" → {"intent":"remember","key":"artemis_form","content":"ARTEMIS runs the Sovereign Form."}
+
+When the act needs the operator's signature — they said "ask me first", or the
+tool refused for want of one — use "request_approval". Name the specific act.
+"Compact the chain, but ask me before you do it" → {"intent":"request_approval","kind":"action","action":"compact the chain, retaining the most recent 10000 entries"}
+A tool refused the call for want of a signature → {"intent":"request_approval","kind":"action","action":"the exact call that was refused"}
+No tool here could do it at all → {"intent":"request_approval","kind":"mechanism","action":"the capability that is missing"}

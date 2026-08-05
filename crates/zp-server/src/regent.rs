@@ -2602,12 +2602,48 @@ pub async fn spawn_regent(
         }
     };
 
+    // Env overrides for the two model tiers.
+    //
+    // The routing tier is the substrate's least examined and most
+    // consequential component: a 1.7b classifier picking one of six intents
+    // from a long prompt, upstream of every guard. Across 2026-08-01..04 it
+    // proposed a standing correction for a memory, chose `remember` for a
+    // question, invented a `self_configure` parameter, reached for a browser
+    // mid-chain-compaction, and never once selected `request_approval` on its
+    // own. Nearly every downstream defect traced back to it.
+    //
+    // `reason()` already collapses to a single call when the two models
+    // match, so setting ZP_REGENT_ROUTING_MODEL equal to the reasoning model
+    // puts the larger model in charge of intent selection with no code
+    // change. That makes the hypothesis testable in one restart and
+    // reversible in another, which is worth more than an argument about it.
+    let reasoning_model = std::env::var("ZP_REGENT_REASONING_MODEL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(config.reasoning_model);
+    let routing_model = std::env::var("ZP_REGENT_ROUTING_MODEL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(config.routing_model);
+    if routing_model == reasoning_model {
+        info!(
+            model = routing_model.as_str(),
+            "regent: single-tier inference — one model for routing and composition"
+        );
+    } else {
+        info!(
+            routing = routing_model.as_str(),
+            reasoning = reasoning_model.as_str(),
+            "regent: two-tier inference"
+        );
+    }
+
     let regent_config = RegentConfig {
         enabled: true,
         inference_endpoint: config.inference_endpoint,
         api_key_source: api_key_source.clone(),
-        reasoning_model: config.reasoning_model,
-        routing_model: config.routing_model,
+        reasoning_model,
+        routing_model,
         max_context_tokens: 8192,
         loop_interval_secs: config.loop_interval_secs,
         cloud_mandate: None,
