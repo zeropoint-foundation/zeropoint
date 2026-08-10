@@ -608,6 +608,69 @@ Why staged rather than canonical: this is arguably principle-shaped, and the nin
 
 Related and separate: §III.19 (*"silence is the enemy, not compromise"*) is currently scoped to security boundaries, but the same move — convert absence into a record — now recurs in tie-off dispositions, silent-drop detection, confabulation gaps, `canonicalization_rejected`, canary misses, and silent-lens-over-window. That argues for **widening an existing Layer B axiom at the next ceremony** rather than adding a principle, and is the cheaper of the two available moves.
 
+### Diagnosis stops too early exactly when the evidence starts agreeing.
+
+Investigation has a natural stopping point that is not the same as the correct
+one. Evidence accumulates, a story forms, the story explains the symptom — and
+the search ends there, because it feels finished. That moment is the point of
+highest risk in the whole process, not the point of highest confidence. The
+story explains the evidence gathered *so far*, and the reason gathering stopped
+is that it started agreeing.
+
+Two sub-forms, both cheap to catch once named:
+
+**Reading to the confirming sentence.** Open a document, find the passage that
+supports the current hypothesis, stop. The refutation is frequently in the next
+line, because documents that raise a claim tend to qualify it immediately.
+
+**Reasoning from a leaf instead of tracing from the entry point.** Inspect the
+function that obviously implements the behaviour, find it clean, conclude the
+behaviour cannot occur. Locally valid, globally wrong whenever something
+upstream is responsible. "Why does X happen" is a question about a *path*, and a
+path is traced, not inferred from one node on it.
+
+The discipline: before asserting a cause, state what would be observable if the
+story were false, and go look for that specific thing. Not "verify more" —
+verify the *disconfirming* case. And when the question is why some behaviour
+occurs, start at the entry point and walk down, rather than at the leaf and
+reason up.
+
+Example (2026-08-05): a Trezor-ceremony diagnosis was called wrong three times
+in one session. First an internal deadlock (process alive, port refused, chain
+frozen — consistent, and wrong). Then a CLI ceremony blocking the chain append
+path, built into a structural argument about resource semantics. Then, on
+finding `run_correction_list` made no sovereign-root call, an over-correction to
+"two processes interleaved in one terminal." The fourth attempt began with grep
+instead of a hypothesis — mapping every credential call between `main()`'s entry
+and pipeline construction — and found the cause in one pass: an unconditional
+`load_genesis_secret_composed()` at `main.rs:5993` that every command below it
+paid for. Two adjacent errors in the same session shared the shape: reading
+`DISCIPLINE-PINS.md` to the line confirming a pin was unlanded, three lines
+above "It is real"; and repeating `zp session login` from an error string
+without checking the `Commands` enum, where no such verb exists.
+
+Cost of the pattern: several wrong commands handed to the operator, one handoff
+document that had to be rewritten twice, and a task nearly filed against an
+append-path defect that does not exist. Cost of the fix: three greps, run first
+instead of fourth.
+
+This is the confabulation shape the substrate already names — plausible
+narrative, real evidence at the edges, invented middle — arriving in the
+reasoning layer rather than the cognitive one. Worth noticing that Regent's
+fabricated `150 trajectories / last_processed_sequence 150` and these
+misdiagnoses are the same failure at different altitudes, and that the
+substrate's answer for Regent was structural rather than exhortative: *state
+that the surface is not observable.* The analogue here is not "be more careful"
+but "trace the path, and name the disconfirming observation before committing to
+a cause."
+
+Connects to *verify before commit* (this is the specific mechanism by which
+verification gets skipped — not neglect, but premature sufficiency), *stated
+destination is not current state* (same error applied to plans rather than
+causes), and the Cognitive Self-Observer's reason for existing (post-emission
+verification exists because confident wrong output is indistinguishable from
+correct output at emission time).
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

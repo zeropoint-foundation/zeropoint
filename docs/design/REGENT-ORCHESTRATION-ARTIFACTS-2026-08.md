@@ -1,10 +1,10 @@
 # Regent Orchestration Artifacts — Node-RED, Temporal, and the Visualization Stack
 
-**Tier 2 canonical elaboration (SKETCH — 2026-08-02).** Proposes adoption of `@node-red/runtime` as a flow-orchestration artifact the Regent dispatches, with Temporal as an optional durability substrate beneath, composing with the existing visualization discipline (LENS-DISCIPLINE, four canonical lenses, molecular notation, Cartographer) and the Regent-is-UX architectural stance (AGENT-AS-UX-ARCHITECTURE, AGENTIC-SURFACE, SURFACE-BOUNDARIES). Elaborates `KEEL-2026-07.md` §II.13 P6, §II.19, Part V, Part VIII, Part XIV.
+**Tier 2 canonical elaboration.** Adoption of `@node-red/runtime` as a flow-orchestration artifact the Regent dispatches, with Temporal as a default-on durability substrate beneath, composing with the existing visualization discipline (LENS-DISCIPLINE, four canonical lenses, molecular notation, Cartographer) and the Regent-is-UX architectural stance (AGENT-AS-UX-ARCHITECTURE, AGENTIC-SURFACE, SURFACE-BOUNDARIES). Elaborates `KEEL-2026-07.md` §II.19 (canonical composition primitive — Node-RED and Temporal integrate as Layer B artifacts through defined trait seams), §II.5 (Genesis-as-single-root — Regent's flow dispatches trace authority back to Genesis), Part V (composition contract — Node-RED's storage / message-routing / auth / node-registry seams are the substrate integration surface), Part VIII (bounded operator sovereignty — Temporal-disable is an operator-signed receipt with rationale, not a silent config toggle).
 
 Composes with: `LENS-DISCIPLINE-2026-07.md` (all Regent-produced visualizations are `lens:declared:*` receipts), `zp-visual-language.md` (four canonical view-in lenses), `RECEIPT-MOLECULAR-NOTATION-2026-05.md` (rendering vocabulary for CodeFlow-shaped artifacts), `AGENT-AS-UX-ARCHITECTURE-2026-05.md` and `AGENTIC-SURFACE-2026-05.md` (Regent is the operator's UX; no HTML surface the operator visits), `SURFACE-BOUNDARIES-2026-05.md` (canonical reference for what surface serves what concern), `TRAJECTORY-MAP-PRIMITIVE-2026-08.md` (map waypoints dispatched through Node-RED runtime; map-shape composes with subflow-shape), `ARTIFACT-LIBRARY-2026-05.md` (all Regent-produced flow runs, visualizations, and reports are artifacts under standard lifecycle), `OFFICER-ACTION-SURFACES-2026-07.md` (five-phase ceremony per flow run), `SUBSTRATE-SELF-CONSTRUCTION-2026-07.md` (Regent-dispatched builders execute flows).
 
-**Status.** Sketch, not committed spec. Load-bearing framing: **Node-RED and the rest are artifacts the Regent uses to be the operator's UX, not user interfaces the operator visits directly.**
+**Status.** Canonical Tier-2 elaboration, promoted from sketch 2026-08-02. Receipt family `flow:` reserved in `RESERVED_RECEIPT_PREFIXES`. No code landed yet — this is a stack-adoption decision recording which third-party runtimes the substrate composes with and through what seams. PoC (fork `@node-red/runtime`, minimal chain-storage plugin), receipt-chain-backed storage implementation, Officer/Regent auth adapter, Temporal integration for opt-out-is-a-receipt durability, and Dashboard 2.0 widget conventions for the four canonical lenses are all pending — see §"Implementation status" below. **Load-bearing framing**: Node-RED and the rest are artifacts the Regent uses to be the operator's UX, not user interfaces the operator visits directly.
 
 ## Framing
 
@@ -18,7 +18,7 @@ This sketch names the shape of that adoption. The pieces already exist in corpus
 - **Four canonical lenses** (zp-visual-language): Abacus (temporal), Weave (authority), CodeFlow (derivation), Walk (transport). Each is a view-in lens the Regent instantiates.
 - **Molecular notation** (RECEIPT-MOLECULAR-NOTATION Tier 3): the rendering vocabulary the Regent uses inside CodeFlow-shaped artifacts. Chemistry-inspired: atoms, heteroatoms, bonds, aromatic rings, functional groups, valence.
 - **MorphoHDL patterns** (bookmarked): grammar-shape constraints on how visual elements compose (rewrite composition, dimensional inference, growth-driven rendering).
-- **Trajectory-map primitive** (2026-08 sketch): map waypoints that need dispatch semantics beyond linear WorkArc.
+- **Trajectory-map primitive** (TRAJECTORY-MAP-PRIMITIVE-2026-08, canonical Tier-2): map waypoints that need dispatch semantics beyond linear WorkArc.
 
 What's been missing is the runtime that lets the Regent actually dispatch flow-shaped work with the durability and message-passing guarantees the substrate needs. This sketch proposes Node-RED's `@node-red/runtime` as that primitive, with Temporal as an optional durability substrate beneath.
 
@@ -90,7 +90,7 @@ Concretely:
 
 ## Composition with the trajectory-map primitive
 
-The 2026-08 trajectory-map sketch proposes map-shaped work with waypoints, blocking relationships, frontier, fog, and emergent destinations. Node-RED's runtime is a strong fit:
+The trajectory-map primitive (TRAJECTORY-MAP-PRIMITIVE-2026-08) defines map-shaped work with waypoints, blocking relationships, frontier, fog, and emergent destinations. Node-RED's runtime is a strong fit:
 
 - **Waypoints dispatch as subflow invocations.** Each map waypoint becomes a subflow instantiation with typed inputs and typed outputs. Waypoint resolution IS the subflow completing.
 - **Blocking relationships as message dependencies.** A waypoint blocked-on another waypoint's resolution is a Node-RED node waiting on an inbound message from the resolution node. Native to the runtime.
@@ -137,9 +137,9 @@ Flows themselves are artifacts. Regent-authored subflows land as candidates; ope
 - **MorphoHDL patterns as design constraints, not code adoption.** Rewrite composition, dimensional inference, growth-driven rendering.
 - **Regent-is-UX is the architectural stance.** No HTML surface the operator visits. Dashboard 2.0 exists in service of Regent-mediated interactions.
 
-## Not-in-scope for this sketch
+## Not-in-scope for this landing
 
-- Specific receipt-family names beyond the sketch above (want per-family review during full spec).
+- Specific receipt-family names beyond the reservations above (per-family review lands as each family's emission wires through `emit_receipt`).
 - Concrete Vue component designs for Dashboard 2.0 widgets rendering the four lenses (a spec concern for the visualization surface, not this integration primitive).
 - Implementation of Phase 2 of molecular notation adoption (edge-type schema — its own change).
 - Migration path from any current Node-RED-adjacent tooling (there is none in ZP today; this is greenfield).
@@ -159,8 +159,25 @@ Flows themselves are artifacts. Regent-authored subflows land as candidates; ope
 
 6. **Rendering-runtime portability.** Dashboard 2.0 is one runtime; SVG-in-artifact-library is another; ASCII-for-CLI is a third. All should consume the same lens declarations. The renderer-interface spec is a needed sibling to this doc.
 
-## Next step
+## Implementation status
 
-Promotion path: (a) operator review; (b) implementation-design phase per the open questions above; (c) landing as a canonical Tier-2 elaboration (TRAJECTORY-MAP-PRIMITIVE promoted 2026-08-02, ready to compose with); (d) PoC — fork `@node-red/runtime`, implement a minimal chain-storage plugin, run a hello-world flow that generates typed receipts per node transition, prove the seam.
+**Landed 2026-08-02:**
 
-Nothing lands until (a). Sketch does not obligate implementation.
+- Receipt family `flow:` reserved in `RESERVED_RECEIPT_PREFIXES` per Path C discipline. Graduation from RESERVED to KNOWN when Node-RED runtime integration lands and starts emitting.
+- Composition surface with TRAJECTORY-MAP-PRIMITIVE-2026-08 (canonical) documented in §"Composition with the trajectory-map primitive" — waypoint dispatch → subflow invocation, blocking relationships → message dependencies, frontier → takable-subflow query.
+
+**Pending:**
+
+- Fork `@node-red/runtime`, implement a minimal chain-storage plugin, run a hello-world flow that generates typed receipts per node transition — proof-of-concept the seam.
+- Receipt-chain-backed storage plugin (subflows, credentials, flow-run metadata as artifacts under ARTIFACT-LIBRARY lifecycle rather than local JSON files).
+- Officer/Regent auth adapter replacing Node-RED's built-in auth.
+- Node-registry seam extending to substrate capabilities (open question 2).
+- Temporal integration with `regent:config:durability:*` opt-out receipt family (open question 1).
+- Message-routing interceptor wiring `flow:message:sent` and `flow:subflow:completed` receipt emission (currently reserved, not emitted).
+- Dashboard 2.0 widget conventions for Abacus / Weave / CodeFlow / Walk lenses.
+- Molecular notation Phase 2 (edge-type schema) as prerequisite for full-fidelity CodeFlow rendering (open question 5).
+- Renderer-interface spec so SVG / ASCII / Dashboard-2.0 embeddings all consume the same lens declarations (open question 6).
+
+**Composition follow-ups** (own future work, not gated by this landing):
+
+- DASHBOARD-CONNECTORS-STACK-DECISION-2026-07 reached different Node-RED conclusions under different framing (dashboard operator visits vs. artifact Regent uses); reconciliation deferred per the 2026-08-02 conversation. If a formal supersession is wanted, that's separate corpus work.
