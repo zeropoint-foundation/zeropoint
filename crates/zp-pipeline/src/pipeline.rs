@@ -145,6 +145,73 @@ impl Pipeline {
         Ok(())
     }
 
+    /// Populate the provider pool.
+    ///
+    /// Until this is called the pool is empty and every request fails with
+    /// `PipelineError::NoProvider` — `Pipeline::new` deliberately constructs an
+    /// empty pool, mirroring `init_execution_engine`'s post-construction shape.
+    ///
+    /// Providers are `ProxyLlmProvider`, which routes through the ZP inference
+    /// proxy at `zp_port` so every completion picks up receipt signing, cost
+    /// tracking and policy gating. Wiring a backend client directly would work
+    /// and would be an unobserved inference path — the one thing the substrate
+    /// exists to prevent. Don't.
+    ///
+    /// Two tiers are registered when `escalation_model` is non-empty: the
+    /// default at strength 0.6 and the escalation at 0.8. `ModelClass::Strong`
+    /// selects the higher, and `RequireStrong` needs `> 0.7`, so a single-tier
+    /// pool cannot satisfy `RequireStrong` at all — that is intentional and
+    /// visible rather than silently downgraded.
+    ///
+    /// Returns the number of providers registered. Does not verify the backend
+    /// is reachable; call `provider_pool.health_check()` for that.
+    pub async fn init_providers(
+        &self,
+        zp_port: u16,
+        provider_id: &str,
+        model: &str,
+        escalation_model: &str,
+        supports_tools: bool,
+    ) -> Result<usize, PipelineError> {
+        if model.trim().is_empty() {
+            return Err(PipelineError::Internal(
+                "llm.model is empty — nothing to register".to_string(),
+            ));
+        }
+
+        let mut pool = self.provider_pool.write().await;
+
+        let make = |m: &str, strength: f64| -> Box<dyn zp_llm::LlmProvider> {
+            // `local()` marks the provider is_local, which ModelClass::LocalOnly
+            // routes on; `new()` does not. Keep them distinct.
+            let p = if provider_id == "ollama" {
+                zp_llm::ProxyLlmProvider::local(zp_port, m)
+            } else {
+                zp_llm::ProxyLlmProvider::new(zp_port, provider_id, m)
+            };
+            Box::new(p.with_strength(strength).with_tools(supports_tools))
+        };
+
+        pool.add_provider(make(model, 0.6));
+        let mut count = 1;
+
+        if !escalation_model.trim().is_empty() && escalation_model != model {
+            pool.add_provider(make(escalation_model, 0.8));
+            count += 1;
+        }
+
+        info!(
+            provider = %provider_id,
+            model = %model,
+            escalation = %escalation_model,
+            zp_port,
+            supports_tools,
+            "Provider pool initialized with {} provider(s)",
+            count
+        );
+        Ok(count)
+    }
+
     /// Attach a mesh node to this pipeline for cross-agent governance.
     ///
     /// Once attached, receipts produced by the pipeline will be forwarded

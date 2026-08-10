@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use tracing::info;
 
 use crate::certificate::KeyRole;
+use zp_core::receipt_extensions as ext;
 use crate::error::KeyError;
 
 // ============================================================================
@@ -139,27 +140,30 @@ impl RotationCertificate {
     ) -> Result<(Self, zp_receipt::Receipt, zp_receipt::Receipt), KeyError> {
         let cert = Self::issue(old_signing_key, new_public_key, role, sequence, prev_rotation_hash, reason)?;
 
-        let delegation_receipt = zp_receipt::Receipt::delegation(&cert.body.old_public_key)
-            .status(zp_receipt::Status::Success)
-            .claim_semantics(zp_receipt::ClaimSemantics::AuthorizationGrant)
-            .claim_metadata(zp_receipt::ClaimMetadata::Delegation {
-                capability_id: format!("signing:{}", cert.body.role),
-                delegator_id: cert.body.old_public_key.clone(),
-                delegate_id: cert.body.new_public_key.clone(),
-                max_depth: 0,
-            })
-            .parent(&cert.body.id)
-            .finalize();
+        // Both receipts previously set no extensions at all, so
+        // `zp_audit::reconstitute` — which reads `zp.certificate.public_key`,
+        // `zp.certificate.role` and `zp.revocation.revoked_key` to rebuild
+        // `valid_operator_keys` / `valid_agent_keys` — had nothing to read from
+        // a rotation. Key-lifecycle reconstitution could not work.
+        // See docs/design/CHANNEL-BOUNDARY-2026-08.md.
+        //
+        // The role is mapped explicitly rather than serialised. `KeyRole`
+        // derives `Serialize` with no `rename_all`, so serde would emit
+        // "Operator"/"Agent" while the consumer matches "operator"/"agent" and
+        // silently drops anything else. An exhaustive match here means adding a
+        // variant fails to compile rather than emitting a role nothing reads.
+        let role = match cert.body.role {
+            KeyRole::Operator => ext::ROLE_OPERATOR,
+            KeyRole::Agent => ext::ROLE_AGENT,
+            KeyRole::Genesis => ext::ROLE_GENESIS,
+        };
 
-        let revocation_receipt = zp_receipt::Receipt::revocation(&cert.body.old_public_key)
-            .status(zp_receipt::Status::Success)
-            .claim_semantics(zp_receipt::ClaimSemantics::IntegrityAttestation)
-            .claim_metadata(zp_receipt::ClaimMetadata::Revocation {
-                revoked_receipt_id: cert.body.old_public_key.clone(),
-                reason: "key_rotation".to_string(),
-                revoker_id: cert.body.old_public_key.clone(),
-            })
-            .finalize();
+        let (delegation_receipt, revocation_receipt) = zp_core::certificate_rotation_receipts(
+            &cert.body.old_public_key,
+            &cert.body.new_public_key,
+            role,
+            &cert.body.id,
+        );
 
         Ok((cert, delegation_receipt, revocation_receipt))
     }

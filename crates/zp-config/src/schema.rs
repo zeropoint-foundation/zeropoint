@@ -67,6 +67,19 @@ pub struct ZpConfig {
 
     // ── LLM ──
     pub llm_enabled: Sourced<bool>,
+    /// Proxy provider segment the pipeline routes completions through.
+    /// Must be a key known to `zp_server::proxy::provider_base_url`.
+    /// "ollama" is the local backend.
+    pub llm_provider: Sourced<String>,
+    /// Default-tier model name, passed through to the provider verbatim.
+    pub llm_model: Sourced<String>,
+    /// Escalation-tier model. Registered as a second pool provider with a
+    /// higher declared strength so `ModelClass::Strong` / `RequireStrong` can
+    /// select it. Empty string disables the escalation tier.
+    pub llm_escalation_model: Sourced<String>,
+    /// Whether the configured models implement the OpenAI tool-call format.
+    /// The pipeline's tool-invocation loop never fires when this is false.
+    pub llm_supports_tools: Sourced<bool>,
 
     // ── Node topology ──
     /// Node role: "genesis" (default) or "delegate".
@@ -128,6 +141,14 @@ impl Default for ZpConfig {
             operator_name: Sourced::default_value(whoami()),
 
             llm_enabled: Sourced::default_value(false),
+            llm_provider: Sourced::default_value("ollama".into()),
+            // Defaults mirror officer-inference.toml, which validated this
+            // pair on APOLLO against the full bench matrix. Both tags must be
+            // pulled locally (`ollama pull <tag>`) or the provider health
+            // check fails at startup with a 404 from the backend.
+            llm_model: Sourced::default_value("gemma4:26b-mlx".into()),
+            llm_escalation_model: Sourced::default_value("qwen3.6:35b-a3b".into()),
+            llm_supports_tools: Sourced::default_value(true),
 
             node_role: Sourced::default_value("genesis".into()),
             node_upstream: Sourced::default_value(None),
@@ -210,6 +231,22 @@ impl ZpConfig {
         lines.push(format!(
             "  enabled = {}  # {}",
             self.llm_enabled.value, self.llm_enabled.source
+        ));
+        lines.push(format!(
+            "  provider = \"{}\"  # {}",
+            self.llm_provider.value, self.llm_provider.source
+        ));
+        lines.push(format!(
+            "  model = \"{}\"  # {}",
+            self.llm_model.value, self.llm_model.source
+        ));
+        lines.push(format!(
+            "  escalation_model = \"{}\"  # {}",
+            self.llm_escalation_model.value, self.llm_escalation_model.source
+        ));
+        lines.push(format!(
+            "  supports_tools = {}  # {}",
+            self.llm_supports_tools.value, self.llm_supports_tools.source
         ));
         lines.push(String::new());
 
@@ -353,6 +390,14 @@ pub struct IdentitySection {
 #[serde(deny_unknown_fields)]
 pub struct LlmSection {
     pub enabled: Option<bool>,
+    /// Proxy provider segment (must be known to the server's provider registry).
+    pub provider: Option<String>,
+    /// Default-tier model name.
+    pub model: Option<String>,
+    /// Escalation-tier model name. Empty string disables the tier.
+    pub escalation_model: Option<String>,
+    /// Whether these models implement the OpenAI tool-call format.
+    pub supports_tools: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -435,6 +480,10 @@ impl From<&ZpConfig> for ConfigFile {
             },
             llm: LlmSection {
                 enabled: Some(cfg.llm_enabled.value),
+                provider: Some(cfg.llm_provider.value.clone()),
+                model: Some(cfg.llm_model.value.clone()),
+                escalation_model: Some(cfg.llm_escalation_model.value.clone()),
+                supports_tools: Some(cfg.llm_supports_tools.value),
             },
             node: NodeSection {
                 role: Some(cfg.node_role.value.clone()),

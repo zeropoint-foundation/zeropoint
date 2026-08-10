@@ -158,8 +158,32 @@ pub fn emit_tool_receipt(
 ) -> Option<String> {
     let mut store = audit_store.lock().ok()?;
 
+    // Detail rides in the event string, after the prefix.
+    //
+    // It went only into `policy_decision.conditions` until 2026-08-06 — a
+    // different column, and not one any query for receipt content reads. Every
+    // caller of this helper was therefore emitting a bare prefix:
+    // `system:keychain:accessed` without its source, `vault:secret:stored`
+    // without its key name, `invariant:vault_custody:violated` without the
+    // reason it was violated. The detail was computed at every call site and
+    // then filed where nobody looks.
+    //
+    // Third instance of this shape found in one day, after the Layer 2
+    // classifier receipts (bare JSON, no prefix) and officer findings (prefix,
+    // no payload). The `chain_events_carry_a_prefix` pin catches the first
+    // kind; this one is its mirror and is not statically detectable, because
+    // passing an argument that is silently misfiled looks identical to not
+    // having one.
+    //
+    // Safe for consumers: readers of these families match by `starts_with`,
+    // and callers passing `None` produce a byte-identical event to before.
+    // `conditions` keeps its copy — removing it would break anything reading
+    // that column today, and the event string is canonical going forward.
     let action = AuditAction::SystemEvent {
-        event: event.to_string(),
+        event: match detail {
+            Some(d) if !d.is_empty() => format!("{} {}", event, d),
+            _ => event.to_string(),
+        },
     };
 
     let policy_decision = PolicyDecision::Allow {

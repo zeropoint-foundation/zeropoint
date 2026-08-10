@@ -20,7 +20,9 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use tracing::info;
+use tracing::{info, warn};
+
+use zp_core::receipt_extensions as ext;
 
 use crate::reconstitute::ReconstitutionEntry;
 
@@ -225,6 +227,24 @@ pub struct RecoveryEngine {
     grants: HashMap<String, InFlightGrant>,
     /// Active observations.
     observations: HashMap<String, ActiveObservation>,
+    /// How many replayed entries actually carried receipt extensions.
+    ///
+    /// Every read in [`RecoveryEngine::process_extensions`] draws from
+    /// `entry.receipt_extensions`; if that is `None` the whole body is skipped.
+    /// Measured 2026-08-08 against the live chain: of 285,071 entries, **zero**
+    /// carried a receipt at all, so none of the seventeen `zp.*` keys this
+    /// engine reads has ever been present. Producers write their payload into
+    /// the `action` event string; this consumer reads receipt extensions. Two
+    /// channels, no bridge.
+    ///
+    /// The failure mode is the dangerous one: recovery replays every entry,
+    /// finds nothing, and reports `success: true` having reconstituted no
+    /// capability grants, no certificates, no pending tool invocations and no
+    /// observations. It looks like a clean recovery of a quiet chain. This
+    /// counter exists so that it stops looking like one — see the warning in
+    /// [`RecoveryEngine::finalize`]. It does not fix the mismatch; it makes the
+    /// mismatch impossible to mistake for health.
+    entries_with_extensions: usize,
 }
 
 impl RecoveryEngine {
@@ -236,6 +256,7 @@ impl RecoveryEngine {
             conversations: HashSet::new(),
             grants: HashMap::new(),
             observations: HashMap::new(),
+            entries_with_extensions: 0,
         }
     }
 
@@ -246,6 +267,7 @@ impl RecoveryEngine {
         self.state.entries_replayed += 1;
 
         if let Some(ref extensions) = entry.receipt_extensions {
+            self.entries_with_extensions += 1;
             self.process_extensions(extensions, &entry.id, entry.timestamp);
         }
     }
@@ -258,9 +280,9 @@ impl RecoveryEngine {
         timestamp: DateTime<Utc>,
     ) {
         // Tool invocations.
-        if let Some(tool_name) = extensions.get("zp.tool.name").and_then(|v| v.as_str()) {
+        if let Some(tool_name) = extensions.get(ext::TOOL_NAME).and_then(|v| v.as_str()) {
             let conversation_id = extensions
-                .get("zp.tool.conversation_id")
+                .get(ext::TOOL_CONVERSATION_ID)
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
@@ -281,7 +303,7 @@ impl RecoveryEngine {
 
         // Tool completions.
         if let Some(invocation_id) = extensions
-            .get("zp.tool.completed_invocation_id")
+            .get(ext::TOOL_COMPLETED_INVOCATION_ID)
             .and_then(|v| v.as_str())
         {
             self.pending_tools.remove(invocation_id);
@@ -289,7 +311,7 @@ impl RecoveryEngine {
 
         // Conversation activity.
         if let Some(conv_id) = extensions
-            .get("zp.conversation.id")
+            .get(ext::CONVERSATION_ID)
             .and_then(|v| v.as_str())
         {
             self.conversations.insert(conv_id.to_string());
@@ -297,7 +319,7 @@ impl RecoveryEngine {
 
         // Conversation ended.
         if let Some(conv_id) = extensions
-            .get("zp.conversation.ended")
+            .get(ext::CONVERSATION_ENDED)
             .and_then(|v| v.as_str())
         {
             self.conversations.remove(conv_id);
@@ -305,16 +327,16 @@ impl RecoveryEngine {
 
         // Capability grants.
         if let Some(grant_id) = extensions
-            .get("zp.capability.grant_id")
+            .get(ext::CAPABILITY_GRANT_ID)
             .and_then(|v| v.as_str())
         {
             let scope = extensions
-                .get("zp.capability.scope")
+                .get(ext::CAPABILITY_SCOPE)
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
             let grantee = extensions
-                .get("zp.capability.grantee")
+                .get(ext::CAPABILITY_GRANTEE)
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
@@ -333,16 +355,16 @@ impl RecoveryEngine {
 
         // Capability revocations.
         if let Some(revoked_id) = extensions
-            .get("zp.capability.revoked_grant_id")
+            .get(ext::CAPABILITY_REVOKED_GRANT_ID)
             .and_then(|v| v.as_str())
         {
             self.grants.remove(revoked_id);
         }
 
         // Observations created.
-        if let Some(obs_id) = extensions.get("zp.observation.id").and_then(|v| v.as_str()) {
+        if let Some(obs_id) = extensions.get(ext::OBSERVATION_ID).and_then(|v| v.as_str()) {
             let category = extensions
-                .get("zp.observation.category")
+                .get(ext::OBSERVATION_CATEGORY)
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
@@ -359,7 +381,7 @@ impl RecoveryEngine {
 
         // Observations consumed (by reflection).
         if let Some(consumed_ids) = extensions
-            .get("zp.reflection.consumed_ids")
+            .get(ext::REFLECTION_CONSUMED_IDS)
             .and_then(|v| v.as_array())
         {
             for id_val in consumed_ids {
@@ -425,11 +447,29 @@ impl RecoveryEngine {
 
         info!(
             entries_replayed = self.state.entries_replayed,
+            entries_with_extensions = self.entries_with_extensions,
             active_conversations = self.state.active_conversations.len(),
             pending_tools = self.state.pending_tool_executions.len(),
             discarded = self.state.discarded_entries.len(),
             "Recovery complete"
         );
+
+        // A silent no-op recovery is indistinguishable from a clean one. Say so.
+        // Replaying entries while reading extensions from none of them means the
+        // operational state above is empty because it was never readable, not
+        // because the chain was quiet.
+        if self.state.entries_replayed > 0 && self.entries_with_extensions == 0 {
+            warn!(
+                entries_replayed = self.state.entries_replayed,
+                "Recovery reconstituted NO operational state: none of the replayed \
+                 entries carried receipt extensions, which is the only channel this \
+                 engine reads. Capability grants, certificates, pending tool \
+                 invocations and observations were not recovered — they were not \
+                 looked at. Producers currently emit their payload in the `action` \
+                 event string instead. Treat `success: true` above as 'replay \
+                 completed', not as 'state restored'."
+            );
+        }
 
         (self.state, receipt)
     }
@@ -715,5 +755,91 @@ mod tests {
         assert_eq!(receipt.entries_replayed, 5);
         assert!(receipt.success);
         assert!(receipt.id.starts_with("recovery-"));
+    }
+
+    /// Round trip: the real producer's output, through the real conversion,
+    /// into the real consumer.
+    ///
+    /// Every other test in this module hands the engine a `make_entry` fixture
+    /// with a hand-written extensions map — a shape no emitter had ever
+    /// produced. They passed while capability recovery had never once worked,
+    /// because they supplied the missing half themselves and then asserted the
+    /// other half parsed it. This one starts from
+    /// `zp_core::capability_grant_receipt`, the same function the Regent
+    /// startup delegation calls, and goes through
+    /// `ReconstitutionEntry::from_audit_entry`, the same conversion the
+    /// production replay path uses.
+    ///
+    /// It found a live break the moment it was written: `from_audit_entry` was
+    /// discarding `receipt.extensions` entirely and substituting a
+    /// Debug-formatted `claim_type` string, so a correctly-emitted receipt
+    /// still arrived at the engine with nothing readable on it.
+    ///
+    /// Fixtures may not supply what production does not produce. If this test
+    /// is ever made to pass by editing the fixture rather than the code, it has
+    /// been turned back into the thing it replaced.
+    #[test]
+    fn round_trip_capability_grant_producer_to_recovered_state() {
+        use zp_core::capability_grant::{CapabilityGrant, GrantedCapability};
+        use zp_core::{ActorId, AuditAction, AuditEntry, AuditId, ConversationId, PolicyDecision};
+
+        let grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "regent".to_string(),
+            GrantedCapability::ToolCall {
+                tools: vec!["chain_query".to_string()],
+            },
+            "rcpt-round-trip-test".to_string(),
+        );
+        let scope = "tool:call:chain_query";
+
+        // The producer half — the exact call site used at Regent startup.
+        let receipt = zp_core::capability_grant_receipt(&grant, scope);
+
+        let audit_entry = AuditEntry {
+            id: AuditId::new(),
+            timestamp: Utc::now(),
+            prev_hash: "genesis".to_string(),
+            entry_hash: "round-trip".to_string(),
+            actor: ActorId::System("genesis".to_string()),
+            action: AuditAction::SystemEvent {
+                event: "delegation:granted:regent".to_string(),
+            },
+            conversation_id: ConversationId(uuid::Uuid::nil()),
+            policy_decision: PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "regent-startup".to_string(),
+            receipt: Some(receipt),
+            signatures: Vec::new(),
+        };
+
+        // The production conversion, not a fixture.
+        let entry = ReconstitutionEntry::from_audit_entry(&audit_entry);
+
+        let mut engine = RecoveryEngine::new(RecoveryConfig::default());
+        engine.replay_entry(&entry);
+        let (state, _) = engine.finalize(None);
+
+        assert_eq!(
+            state.in_flight_grants.len(),
+            1,
+            "the grant a real producer emitted did not survive to RecoveredState — \
+             the break is between capability_grant_receipt and RecoveryEngine, not \
+             in either end"
+        );
+        let recovered = &state.in_flight_grants[0];
+        assert_eq!(recovered.grant_id, grant.id);
+        assert_eq!(recovered.grantee, "regent");
+        assert_eq!(recovered.scope, scope);
+    }
+
+    #[test]
+    fn every_recovery_key_is_namespaced() {
+        // Cheap guard on the shared contract itself: the constants the reader
+        // uses and the producers write must stay in one namespace and one list.
+        for k in zp_core::receipt_extensions::RECOVERY_KEYS {
+            assert!(k.starts_with("zp."), "{k} is outside the zp. namespace");
+        }
     }
 }

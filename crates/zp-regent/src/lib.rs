@@ -37,6 +37,7 @@ pub mod regent;
 pub mod routing;
 pub mod shadow_validation;
 pub mod text;
+pub mod tools;
 
 // Re-export key types for ergonomic access from downstream crates.
 pub use regent::{OperatorModelPin, PinStatus, ShadowCandidate, ShadowCandidateState};

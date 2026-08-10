@@ -179,6 +179,106 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     // + CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07 §Section 6). Emissions
     // land as Cartographer processes chain into materialized ontology.
     "ontology:",
+    // Layer 2 inference routing (INFERENCE-ROUTING-DISCIPLINE-2026-07).
+    // One decision receipt per inference call; the uuid suffix is the
+    // decision id. Declared 2026-08-06, when the emitter was corrected to
+    // put `ClassifierDecision::receipt_type()` in the prefix position — it
+    // had been serializing the whole event as bare JSON, so these landed
+    // under the unrecognized prefix `{"chosen_model"`.
+    "regent:inference:classifier_decision:",
+    // Emission-coherence findings and per-cycle summary. Distinct from the
+    // `coherence:` family above, which is a different subsystem — the prefix
+    // matcher is longest-wins and `emission_coherence:` does not start with
+    // `coherence:`, so both are needed. Declared 2026-08-06 alongside the
+    // classifier fix: these had the same bare-JSON defect and landed under
+    // the unrecognized prefix `{"class"`.
+    "emission_coherence:",
+    // ── Systematic sweep additions (2026-08-06) ──────────────────────
+    //
+    // The two bare-JSON emitters found earlier that day were found by
+    // *sampling* — a posture check happened to narrate the inventory and the
+    // numbers did not add up. This block is what a search rather than a sample
+    // returned: every `SystemEvent` construction in the workspace (88 sites),
+    // parsed for its prefix and diffed against this registry.
+    //
+    // All ten below are production emitters whose families this list never
+    // declared. None had fired inside the inventory window, which is why
+    // nothing flagged them — an undeclared family is invisible until the first
+    // time it fires, and then it reports as an unrecognized prefix and degrades
+    // posture for a receipt that was entirely legitimate. The gap is latent by
+    // construction, so it will not surface on its own; it has to be swept for.
+    //
+    // Verified production (not test fixtures) by locating the enclosing fn and
+    // the `#[cfg(test)]` boundary in each file. Four candidates were dropped as
+    // test helpers on that check: `background:noise:` and `bulk:`
+    // (canary.rs probe fixtures), plus assorted `evt-` / `roundtrip-` /
+    // `hardening:` strings in test modules.
+    //
+    // Artifact library — signed-artifact promotion (artifact_library.rs).
+    "artifact:signed",
+    // Slack channel ingress (channels.rs).
+    "channel:slack:inbound:",
+    // Per-tool model routing decision (tool_chain.rs). Distinct from
+    // `regent:inference:classifier_decision:`, which is the Layer 2 envelope
+    // choice; this one records which model a given tool call reached.
+    "cognition:model:routed:",
+    // Operator-authored ad-hoc receipts via `zp emit` (zp-cli/emit.rs).
+    "emit:",
+    // Foundation relay claim forwarding (foundation_relay.rs).
+    "foundation_relay:",
+    // Model registry lifecycle (zp-cli `model register` / `model update`).
+    "model:registered",
+    "model:capability:updated",
+    // Provider pricing refresh (zp-cli `pricing`).
+    "pricing:refresh:",
+    // Pipeline gate refusal and mesh forwarding (zp-pipeline). Both predate the
+    // `prefix + space + JSON` convention and carry a space-then-prose payload
+    // rather than JSON; the prefix is well-formed, so they categorise correctly
+    // and are left as-is rather than reshaped under a chain that already holds
+    // thousands of them.
+    "request_blocked:",
+    "receipt_forwarded:",
+    // ── Second pass, tool-driven (2026-08-06) ────────────────────────
+    //
+    // The block above came from a hand-rolled sweep that scanned only
+    // event-variable bindings. `connection_map.py::collect_undeclared_emissions`
+    // — written immediately after, to make the sweep repeatable — covers
+    // `emit_receipt(…)` call sites and `-> String` event constructors too, and
+    // returned six more families with zero overlap. The manual pass had missed
+    // an entire emission *shape*, which is the argument for the tool existing
+    // rather than the sweep being repeated by hand.
+    //
+    // Artifact-library candidate lifecycle (ARTIFACT-LIBRARY-2026-05).
+    "artifact:library:candidate",
+    // WASM policy module lifecycle (wasm_policy.rs).
+    "policy:wasm:",
+    // Bead-zero canonicalisation. The emitter is
+    // `format!("{}:canonicalized:{}", domain, id)`, so each domain is its own
+    // literal family: `system:` was declared, `provider:` and `node:` were not.
+    // Variable-prefix emitters are the one shape the tool cannot enumerate —
+    // there is no literal to match — so these need declaring by hand, and a
+    // new domain will need the same.
+    "provider:canonicalized:",
+    "node:canonicalized:",
+    // Vault operator surface (2026-08-06). Records the *fact* of a secret
+    // being stored, revealed or removed — key name only. The value never
+    // enters the chain, per the R1 privilege invariant the officers hold.
+    //
+    // `vault:secret:revealed` is the one worth reading: the vault's only
+    // value-emitting verb is auditable by the operator against their own
+    // access, which is what makes providing it defensible under §III.18
+    // delegable safety rather than a hole in the discipline.
+    //
+    // Declared in the same change that added the emitters, after
+    // `connection_map.py::collect_undeclared_emissions` flagged all three —
+    // the check written this morning catching code written this evening.
+    "vault:secret:",
+    // Bedrock invariants (2026-08-06). Emitted at the end of `AppState::init`,
+    // every boot, verified and violated alike — the healthy boots are what make
+    // "the vault was already empty three months ago" a question the chain can
+    // answer. See `bedrock.rs`; first slice of the ceremony specified in
+    // SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.
+    "invariant:",
 ];
 
 /// Receipt vocabulary declared by governed documents (typically KEEL and
@@ -419,21 +519,51 @@ pub fn run_substrate_validation(
     let officer_heartbeats = check_officer_heartbeats(&recent_entries, one_hour_ago);
     let receipt_inventory = check_receipt_inventory(audit_store);
 
+    // Reconciliation invariants run last — they read the assembled results.
+    let invariants = check_invariants(
+        &chain_integrity,
+        &canary_discipline,
+        &cognitive_sandwich,
+        &receipt_inventory,
+    );
+
     // ── Roll-up posture ──────────────────────────────────────────────────
-    let posture = derive_posture(
+    let mut posture = derive_posture(
         &chain_integrity,
         &canary_discipline,
         &cognitive_sandwich,
         &officer_heartbeats,
     );
 
-    let notable_gaps = derive_notable_gaps(
+    // A strict-invariant violation means the report contradicts itself, which
+    // is at least degraded regardless of what the individual checks concluded
+    // — a surface whose own arithmetic does not close cannot be trusted to be
+    // reporting `ok` about anything else. Window-sensitive violations do not
+    // escalate; they are boundary artifacts until they persist.
+    if invariants["strict_violations"].as_u64().unwrap_or(0) > 0 && posture == "healthy" {
+        posture = "degraded".to_string();
+    }
+
+    let mut notable_gaps = derive_notable_gaps(
         &chain_integrity,
         &canary_discipline,
         &cognitive_sandwich,
         &officer_heartbeats,
         &receipt_inventory,
     );
+
+    for inv in invariants["invariants"].as_array().into_iter().flatten() {
+        if inv["holds"] == false && inv["class"] == "strict" {
+            notable_gaps.push(format!(
+                "Reconciliation invariant violated on {} — `{}` ({}). \
+                 The surface contradicts itself; treat its other fields as suspect \
+                 until this closes.",
+                inv["surface"].as_str().unwrap_or("?"),
+                inv["invariant"].as_str().unwrap_or("?"),
+                inv["detail"].as_str().unwrap_or(""),
+            ));
+        }
+    }
 
     // Assemble the full report.
     let report = serde_json::json!({
@@ -447,6 +577,7 @@ pub fn run_substrate_validation(
             "standing_corrections": standing_corrections,
             "officer_heartbeats": officer_heartbeats,
             "receipt_inventory": receipt_inventory,
+            "reconciliation_invariants": invariants,
         },
         "posture": posture,
         "notable_gaps": notable_gaps,
@@ -876,6 +1007,29 @@ fn check_receipt_inventory(
         .copied()
         .collect();
 
+    // Counted over the declared set, not over `counts_by_prefix`.
+    //
+    // The histogram also carries the synthetic `<non-system-event>` bucket,
+    // which is neither declared nor a prefix. Reporting `counts_by_prefix.len()`
+    // as `observed_distinct` folded that bucket in, while `silent` filters the
+    // declared set — so the two were partitions of different universes and the
+    // three numbers did not reconcile. A 2026-08-06 posture check read
+    // "56 declared, 21 observed, 36 silent": 20 declared families had fired,
+    // plus the synthetic bucket, against 36 quiet ones.
+    //
+    // The identity `observed_distinct + silent_in_window == declared_total`
+    // holds now and is the point of the field. The synthetic bucket stays in
+    // `known_prefix_counts`, where it is useful and where nothing sums it.
+    let observed_declared = KNOWN_RECEIPT_PREFIXES
+        .iter()
+        .filter(|p| counts_by_prefix.contains_key(**p))
+        .count();
+    debug_assert_eq!(
+        observed_declared + silent.len(),
+        KNOWN_RECEIPT_PREFIXES.len(),
+        "receipt inventory must partition the declared set exactly"
+    );
+
     let status = if unknown_samples.is_empty() { "ok" } else { "unrecognized_present" };
 
     serde_json::json!({
@@ -884,7 +1038,7 @@ fn check_receipt_inventory(
         "unrecognized_prefix_counts": unknown_samples,
         "window": window_span,
         "declared_total": KNOWN_RECEIPT_PREFIXES.len(),
-        "observed_distinct": counts_by_prefix.len(),
+        "observed_distinct": observed_declared,
         "silent_in_window": silent.len(),
         "silent_prefixes": silent,
         // Reserved vocabulary — receipt families the corpus committed to
@@ -895,6 +1049,177 @@ fn check_receipt_inventory(
         // legitimate quiet.
         "reserved_total": RESERVED_RECEIPT_PREFIXES.len(),
         "reserved_prefixes": RESERVED_RECEIPT_PREFIXES.iter().copied().collect::<Vec<_>>(),
+    })
+}
+
+// ── Reconciliation invariants ────────────────────────────────────────────
+//
+// Per `docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md` §3. Each report
+// surface declares the arithmetic that must hold over its own fields, and a
+// violation becomes a finding rather than a wrong number rendered confidently.
+//
+// # Why these four and not more
+//
+// Most cross-field identities in this report are already implied by a `status`
+// field — `cognitive_sandwich` flags its own imbalance, `officer_heartbeats`
+// derives per-officer staleness. Restating those here would duplicate a check,
+// not add one. What follows is the residue: identities that are *assumed* by
+// surrounding logic or by a reader, and asserted nowhere.
+//
+// # Strict versus window-sensitive
+//
+// Every count here is taken over a bounded window, so an event whose partner
+// fell outside the window can make a true identity read false. That is a
+// boundary artifact, not a defect, and firing at Warning on it would produce
+// exactly the alarm fatigue §III.25 forbids.
+//
+// - **strict** — holds regardless of where the window falls. Violation is a
+//   real inconsistency and degrades posture.
+// - **window_sensitive** — can be violated by an event pair straddling the
+//   window edge. Reported at Info, never degrades posture. Sustained violation
+//   across many windows is the signal; a single one is noise.
+
+/// Outcome of one declared identity.
+fn invariant(
+    surface: &str,
+    name: &str,
+    strict: bool,
+    holds: bool,
+    detail: String,
+) -> serde_json::Value {
+    serde_json::json!({
+        "surface": surface,
+        "invariant": name,
+        "class": if strict { "strict" } else { "window_sensitive" },
+        "holds": holds,
+        "detail": detail,
+    })
+}
+
+/// Evaluate reconciliation invariants over the already-computed check results.
+///
+/// Deliberately a post-pass over the assembled JSON rather than assertions
+/// inside each check. Two reasons. The identities are *between* fields, so they
+/// read most clearly where all the fields are visible at once. And a post-pass
+/// runs in release: the seed instance of this idea was a `debug_assert_eq!`
+/// added to `check_receipt_inventory`, which is compiled out of the binary
+/// `./zp-dev.sh release` ships — an invariant that only holds in development
+/// is not an invariant, it is a test.
+fn check_invariants(
+    chain_integrity: &serde_json::Value,
+    canary: &serde_json::Value,
+    sandwich: &serde_json::Value,
+    inventory: &serde_json::Value,
+) -> serde_json::Value {
+    let g = |v: &serde_json::Value, k: &str| v[k].as_i64();
+    let mut out: Vec<serde_json::Value> = Vec::new();
+
+    // Receipt inventory partitions the declared set exactly. Every declared
+    // family either fired in the window or did not; there is no third state.
+    // Violated 2026-08-06 (56 declared, 21 observed, 36 silent) because the
+    // synthetic `<non-system-event>` bucket was counted as an observed family.
+    if let (Some(d), Some(o), Some(s)) = (
+        g(inventory, "declared_total"),
+        g(inventory, "observed_distinct"),
+        g(inventory, "silent_in_window"),
+    ) {
+        out.push(invariant(
+            "receipt_inventory",
+            "observed_distinct + silent_in_window == declared_total",
+            true,
+            o + s == d,
+            format!("{} + {} vs {}", o, s, d),
+        ));
+    }
+
+    // Chain integrity reports four counts and, before this, compared none of
+    // them against `entries_examined`.
+    //
+    // Only two of the four are identities. Hash validity and link validity are
+    // what `chain_valid` *means*, so "ok" with either count short of the total
+    // is a self-contradiction.
+    //
+    // `signatures_present` is deliberately excluded, and the exclusion is the
+    // interesting part. It looks like the same shape and is not: an unsigned
+    // entry is a health problem, not an arithmetic impossibility.
+    // `AuditStore::open_unsigned` is a supported mode, and production has
+    // carried unsigned entries before — Sentinel reported 12,893 of them at
+    // Critical, which is the mechanism that owns this question. Asserting it
+    // here would restate a Sentinel check as a reconciliation identity and fire
+    // on every unsigned store, which is what it did: it broke
+    // `posture_healthy_requires_all_disciplines_ok` against a fixture whose
+    // chain was entirely valid.
+    //
+    // The distinction this file turns on: an invariant is arithmetic that
+    // cannot fail without something being broken. A property that can be
+    // legitimately false belongs to whichever officer owns the policy.
+    if chain_integrity["status"].as_str() == Some("ok") {
+        if let Some(examined) = g(chain_integrity, "entries_examined") {
+            for field in ["hashes_valid", "chain_links_valid"] {
+                if let Some(v) = g(chain_integrity, field) {
+                    out.push(invariant(
+                        "chain_integrity",
+                        &format!("{} == entries_examined when status is ok", field),
+                        true,
+                        v == examined,
+                        format!("{} = {}, examined = {}", field, v, examined),
+                    ));
+                }
+            }
+        }
+    }
+
+    // A canary must be missed before it can be remediated. The status logic
+    // above relies on this (`missed > 0 && remediated == missed` reads as
+    // self-healed) without asserting it; if remediated exceeded missed the
+    // comparison would silently fail and the branch fall through.
+    if let (Some(m), Some(r), Some(rf)) = (
+        g(canary, "canaries_missed"),
+        g(canary, "canaries_remediated"),
+        g(canary, "canaries_remediation_failed"),
+    ) {
+        out.push(invariant(
+            "canary_discipline",
+            "remediated + remediation_failed <= missed",
+            false,
+            r + rf <= m,
+            format!("{} + {} vs {}", r, rf, m),
+        ));
+    }
+
+    // The observer runs after composition, so it trails and never leads.
+    // Window-sensitive: an observer receipt for a composition that happened
+    // before the window opens lands inside it.
+    if let (Some(c), Some(v)) = (
+        g(sandwich, "cognitive_input_composed_count"),
+        g(sandwich, "cognitive_observer_verified_count"),
+    ) {
+        out.push(invariant(
+            "cognitive_sandwich",
+            "observer_verified <= input_composed",
+            false,
+            v <= c,
+            format!("{} vs {}", v, c),
+        ));
+    }
+
+    let strict_violations = out
+        .iter()
+        .filter(|i| i["class"] == "strict" && i["holds"] == false)
+        .count();
+    let soft_violations = out
+        .iter()
+        .filter(|i| i["class"] == "window_sensitive" && i["holds"] == false)
+        .count();
+
+    serde_json::json!({
+        "status": if strict_violations > 0 { "violated" }
+                  else if soft_violations > 0 { "window_skew" }
+                  else { "ok" },
+        "checked": out.len(),
+        "strict_violations": strict_violations,
+        "window_sensitive_violations": soft_violations,
+        "invariants": out,
     })
 }
 

@@ -703,7 +703,7 @@ mod tests {
     #[test]
     fn narrates_delegation_granted() {
         let entry = make_system_event(
-            "delegation:granted:ironclaw",
+            "delegation:granted:example-tool",
             vec![
                 "capabilities=chain_render".into(),
                 "expires=2026-07-01T00:00:00Z".into(),
@@ -711,7 +711,7 @@ mod tests {
         );
         let seg = narrate_entry(&entry).expect("should produce segment");
         assert_eq!(seg.kind, SegmentKind::DelegationGranted);
-        assert!(seg.text.contains("ironclaw"));
+        assert!(seg.text.contains("example-tool"));
         assert!(seg.text.contains("chain_render"));
     }
 
@@ -765,7 +765,7 @@ mod tests {
             timestamp: Utc::now(),
             prev_hash: "0".repeat(64),
             entry_hash: "f".repeat(64),
-            actor: ActorId::System("agent:ironclaw".into()),
+            actor: ActorId::System("agent:example-tool".into()),
             action: AuditAction::ToolInvoked {
                 tool_name: "memory_write".into(),
                 arguments_hash: "abcdef1234567890".into(),
@@ -786,7 +786,7 @@ mod tests {
     #[test]
     fn story_from_entries_produces_text() {
         let entries = vec![
-            make_system_event("delegation:granted:ironclaw", vec![]),
+            make_system_event("delegation:granted:example-tool", vec![]),
             make_system_event("gate:allowed:chain_render", vec![]),
         ];
         let story = ChainStory::from_entries(&entries);
@@ -795,7 +795,7 @@ mod tests {
 
         let text = story.render_text();
         assert!(text.contains("Chain Story"));
-        assert!(text.contains("ironclaw"));
+        assert!(text.contains("example-tool"));
     }
 
     #[test]
@@ -814,7 +814,7 @@ mod tests {
     #[test]
     fn filter_domain_works() {
         let entries = vec![
-            make_system_event("delegation:granted:ironclaw", vec![]),
+            make_system_event("delegation:granted:example-tool", vec![]),
             make_system_event(
                 "officer:std:heartbeat",
                 vec![

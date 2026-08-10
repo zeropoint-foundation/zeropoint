@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn steward_detects_suspicious_key_names() {
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/api_key".into(),
+            "tools/example-tool/api_key".into(),
             "providers/openai/sk-proj-abc123".into(), // suspicious
             "system/master_key".into(),
         ]);
@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn steward_reports_unnamespaced_keys() {
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/key".into(),
+            "tools/example-tool/key".into(),
             "orphan_key".into(), // no namespace
         ]);
 

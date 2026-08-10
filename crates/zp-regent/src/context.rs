@@ -88,6 +88,14 @@ pub struct CognitiveContext {
     #[serde(default)]
     pub standing_corrections: Vec<ActiveStandingCorrection>,
 
+    /// Bedrock invariants — whether the substrate itself is intact.
+    ///
+    /// Tier 1, alongside standing corrections and above officer findings: these
+    /// are the premises every other input rests on. One entry per distinct
+    /// invariant, carrying its most recent observation. See [`GroundFinding`].
+    #[serde(default)]
+    pub substrate_ground: Vec<GroundFinding>,
+
     /// Active delegations the Regent currently holds.
     pub active_delegations: Vec<DelegationSummary>,
 
@@ -169,6 +177,21 @@ pub struct CompositionSummary {
     /// artifact."
     #[serde(default)]
     pub standing_correction_authorship: ClassAuthorship,
+    /// Number of bedrock invariants in Tier 1, and how many of them failed.
+    ///
+    /// Both counted because they answer different questions. The total says the
+    /// check ran and how much of the substrate it covered; the violation count
+    /// says whether Regent was reasoning over intact premises. A cycle with
+    /// `substrate_ground_count: 0` is not a healthy substrate — it is one where
+    /// nothing checked, which is the state that let a missing vault go unnoticed
+    /// for months and is worth being able to distinguish afterwards.
+    #[serde(default)]
+    pub substrate_ground_count: usize,
+    #[serde(default)]
+    pub substrate_ground_violations: usize,
+    /// Hash of the ground findings in presented order.
+    #[serde(default)]
+    pub substrate_ground_hash: String,
     /// Number of officer findings included in Tier 2.
     pub officer_finding_count: usize,
     /// Hash of the officer findings (in the order presented).
@@ -334,6 +357,22 @@ impl CompositionSummary {
         }
         // Deterministic serialization via serde_json (field order matches struct order).
         let bytes = serde_json::to_vec(corrections).unwrap_or_default();
+        hex_sha256(&bytes)
+    }
+
+    /// Compute a stable content hash for the bedrock-invariant list.
+    ///
+    /// No authorship counterpart: `ClassAuthorship` distinguishes operator,
+    /// officer and Regent, and bedrock invariants are none of those. They are
+    /// the substrate reporting on itself — a fourth author class that does not
+    /// exist and should not be invented for one use. The provenance that
+    /// matters here is the count and the hash: that the check ran, over what,
+    /// and with what result.
+    pub fn hash_ground(ground: &[GroundFinding]) -> String {
+        if ground.is_empty() {
+            return String::new();
+        }
+        let bytes = serde_json::to_vec(ground).unwrap_or_default();
         hex_sha256(&bytes)
     }
 
@@ -982,6 +1021,107 @@ impl WorkArc {
 }
 
 #[cfg(test)]
+mod ground_finding_tests {
+    use super::*;
+
+    /// Fixtures are verbatim from the operator's chain on 2026-08-06 rather
+    /// than invented. `GroundFinding::parse` reads a format defined in
+    /// `zp-server`'s `bedrock` module, and a parser written against a
+    /// remembered shape is the seam that breaks silently — it yields `None`,
+    /// the section renders empty, and an intact-looking substrate is
+    /// indistinguishable from one nothing checked.
+    const VERIFIED: &str =
+        "invariant:vault_custody:verified severity=ok vault holds 176 secrets";
+    const VIOLATED: &str = "invariant:vault_custody:violated severity=CRITICAL \
+         the vault holds nothing, on an established substrate — custody was set \
+         up and has been lost, or was never completed";
+    /// Emitted before `emit_tool_receipt` carried detail in the event string.
+    /// These are on the chain permanently — forward-only recovery — so the
+    /// parser has to keep reading them.
+    const BARE_LEGACY: &str = "invariant:vault_persisted:verified";
+
+    fn at(secs_ago: i64) -> (DateTime<Utc>, DateTime<Utc>) {
+        let now = Utc::now();
+        (now - chrono::Duration::seconds(secs_ago), now)
+    }
+
+    #[test]
+    fn parses_a_verified_receipt() {
+        let (obs, now) = at(0);
+        let g = GroundFinding::parse(VERIFIED, obs, now).expect("should parse");
+        assert_eq!(g.invariant, "vault_custody");
+        assert!(g.holds);
+        assert!(!g.is_violation());
+        assert_eq!(g.severity, "ok");
+        assert_eq!(g.detail, "vault holds 176 secrets");
+    }
+
+    #[test]
+    fn parses_a_violation_with_its_detail_and_age() {
+        let (obs, now) = at(3600);
+        let g = GroundFinding::parse(VIOLATED, obs, now).expect("should parse");
+        assert_eq!(g.invariant, "vault_custody");
+        assert!(g.is_violation());
+        assert_eq!(g.severity, "CRITICAL");
+        assert!(g.detail.starts_with("the vault holds nothing"));
+        assert_eq!(g.age_secs, 3600);
+    }
+
+    /// An invariant name containing no colon must not be confused with the
+    /// verdict segment — `rsplit_once` takes the *last* colon, so a future
+    /// namespaced name like `vault:custody` still parses correctly.
+    #[test]
+    fn namespaced_invariant_names_keep_their_colons() {
+        let (obs, now) = at(0);
+        let g = GroundFinding::parse("invariant:vault:custody:violated severity=CRITICAL x", obs, now)
+            .expect("should parse");
+        assert_eq!(g.invariant, "vault:custody");
+        assert!(g.is_violation());
+    }
+
+    #[test]
+    fn legacy_payloadless_receipts_still_parse() {
+        let (obs, now) = at(0);
+        let g = GroundFinding::parse(BARE_LEGACY, obs, now).expect("should parse");
+        assert_eq!(g.invariant, "vault_persisted");
+        assert!(g.holds);
+        assert_eq!(g.severity, "ok");
+        assert!(g.detail.is_empty());
+    }
+
+    /// Unrecognised shapes yield `None` rather than a plausible-looking
+    /// finding. A malformed receipt should be invisible here and caught by the
+    /// receipt-type inventory — not reshaped into something that reads as
+    /// authoritative in Tier 1.
+    #[test]
+    fn unrecognised_shapes_are_rejected() {
+        let (obs, now) = at(0);
+        for bad in [
+            "officer:sen:security:unauthorized_listener detail",
+            "invariant:vault_custody:maybe severity=ok x",
+            "invariant:no_verdict",
+            "",
+        ] {
+            assert!(
+                GroundFinding::parse(bad, obs, now).is_none(),
+                "should not have parsed: {bad:?}"
+            );
+        }
+    }
+
+    /// The composition record must distinguish "checked and clean" from
+    /// "nothing checked" — a cycle with no ground findings is not a healthy
+    /// substrate, it is one where the premises were never examined.
+    #[test]
+    fn ground_hash_is_empty_only_when_nothing_was_checked() {
+        let (obs, now) = at(0);
+        let g = GroundFinding::parse(VERIFIED, obs, now).unwrap();
+        assert!(CompositionSummary::hash_ground(&[]).is_empty());
+        assert!(!CompositionSummary::hash_ground(&[g]).is_empty());
+    }
+}
+
+#[cfg(test)]
 mod trajectory_map_tests {
     use super::*;
 
@@ -1536,7 +1676,132 @@ impl ChainSnapshot {
     }
 }
 
+/// Chain-event prefix for bedrock invariant results, emitted by the server's
+/// `bedrock` module. Declared here because Regent is the consumer that queries
+/// for it — naming it on the reading side keeps the two ends from drifting.
+pub const GROUND_EVENT_PREFIX: &str = "invariant:";
+
+/// A bedrock invariant as Regent last observed it on the chain.
+///
+/// # Why this is Tier 1
+///
+/// Bedrock invariants are not findings about the world; they are facts about
+/// whether the substrate Regent is running on is intact. *Your vault is gone*
+/// outranks any officer sweep result, because every downstream conclusion rests
+/// on premises these describe.
+///
+/// The operator put it directly on 2026-08-06, after a session in which the
+/// credential vault was found to have been empty for months: *"the same goes
+/// for everything else Regent needs to be aware of. Her agency and
+/// responsibility starts here."* An agent that cannot tell whether its own
+/// substrate is whole cannot be responsible for anything built on top of it —
+/// and, more practically, should be able to decline to act on premises that do
+/// not hold rather than reasoning confidently over a broken foundation.
+///
+/// # Why read them from the chain rather than plumb them through
+///
+/// `bedrock::check` runs in `AppState::init` and chain-anchors each result as
+/// `invariant:<name>:verified|violated`. Regent already reads the chain, so
+/// surfacing these needs no new channel between server and cognitive layer —
+/// the chain is the integration point, which is what §III.13 means by it being
+/// truth. It also means she sees exactly what the operator sees, from the same
+/// evidence, rather than a separately-maintained view that could drift.
+///
+/// Carries `age_secs` for the same reason `FindingSummary` does: a violation
+/// observed at the last boot and one observed three days ago are different
+/// claims, and the summary text is present-tense in both cases.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroundFinding {
+    /// Invariant name, e.g. `vault_custody`.
+    pub invariant: String,
+    /// True when the last observation was `:verified`.
+    pub holds: bool,
+    /// Severity as recorded by the emitter (`ok`, `warning`, `CRITICAL`).
+    pub severity: String,
+    /// Human-readable detail from the receipt.
+    pub detail: String,
+    /// When the invariant was last evaluated.
+    pub observed_at: DateTime<Utc>,
+    /// Age of that evaluation at composition time. Bedrock currently runs only
+    /// at boot, so a large age means the substrate has been up a long while,
+    /// not that the check is failing — worth knowing when reading a violation.
+    pub age_secs: i64,
+}
+
+impl GroundFinding {
+    /// Parse one `invariant:<name>:<verdict> severity=<sev> <detail>` event.
+    ///
+    /// Returns `None` for anything that does not match, rather than guessing.
+    /// A malformed bedrock receipt should be invisible here and caught by the
+    /// receipt-type inventory, not silently reshaped into a finding that reads
+    /// as authoritative.
+    pub fn parse(event: &str, observed_at: DateTime<Utc>, now: DateTime<Utc>) -> Option<Self> {
+        let rest = event.strip_prefix("invariant:")?;
+        // Split off the payload; the verdict is the last colon-segment of the
+        // prefix, so parse the prefix and payload separately.
+        let (prefix, payload) = match rest.split_once(' ') {
+            Some((p, d)) => (p, d),
+            None => (rest, ""),
+        };
+        let (name, verdict) = prefix.rsplit_once(':')?;
+        let holds = match verdict {
+            "verified" => true,
+            "violated" => false,
+            _ => return None,
+        };
+
+        let (severity, detail) = match payload.strip_prefix("severity=") {
+            Some(tail) => match tail.split_once(' ') {
+                Some((s, d)) => (s.to_string(), d.to_string()),
+                None => (tail.to_string(), String::new()),
+            },
+            None => (
+                if holds { "ok".to_string() } else { "unknown".to_string() },
+                payload.to_string(),
+            ),
+        };
+
+        Some(Self {
+            invariant: name.to_string(),
+            holds,
+            severity,
+            detail,
+            observed_at,
+            age_secs: (now - observed_at).num_seconds(),
+        })
+    }
+
+    /// True when this is a violation Regent should weigh before acting.
+    pub fn is_violation(&self) -> bool {
+        !self.holds
+    }
+}
+
 /// Compressed finding for context window efficiency.
+///
+/// # Recency is part of the finding
+///
+/// A finding is an observation made at a moment, and its summary is written in
+/// the present tense — Steward's `chain_silence` reads *"No chain entries in the
+/// last 78 minutes"*. Delivered without a timestamp that sentence is not a
+/// stale fact, it is a **false** one: it asserts about now, and it was true
+/// about then.
+///
+/// This type dropped `Finding::timestamp` until 2026-08-06. Observed that day: a
+/// posture check reported *"std (Steward): ... no entries in last 78 minutes"*
+/// alongside *"std: 12 heartbeats last hour, last seen 28 seconds ago"* — the
+/// two clauses contradicted each other in one paragraph, and Regent was right
+/// to render both, because nothing in her context distinguished a live
+/// observation from an hour-old one. The substrate had been accurate and the
+/// narration had been wrong, and the missing field was the whole difference.
+///
+/// Both `observed_at` and `age_secs` are carried. The absolute timestamp is the
+/// ground truth; the precomputed age is what makes staleness legible without
+/// asking a language model to do date arithmetic against an implicit "now",
+/// which is a step it can get wrong silently.
+///
+/// Per `METACOGNITIVE-FIDELITY-HARNESS-2026-08.md` §4 — the `(value, source,
+/// as_of)` shape, applied at the surface where its absence was observed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FindingSummary {
     pub officer: String,
@@ -1544,17 +1809,44 @@ pub struct FindingSummary {
     pub finding_type: String,
     pub severity: String,
     pub summary: String,
+    /// When the officer made this observation.
+    ///
+    /// `#[serde(default)]` so composition receipts written before this field
+    /// existed still deserialize — the chain is append-only and those receipts
+    /// are history, not a migration target.
+    #[serde(default)]
+    pub observed_at: Option<DateTime<Utc>>,
+    /// Age of the observation, in seconds, at the moment the context was
+    /// composed. Derived from `observed_at`; carried explicitly so the
+    /// staleness of a present-tense summary is readable without arithmetic.
+    #[serde(default)]
+    pub age_secs: Option<i64>,
 }
 
 impl FindingSummary {
-    pub fn from_finding(f: &Finding) -> Self {
+    /// Summarise a finding as of `now`.
+    ///
+    /// Takes `now` rather than reading the clock so a composed context is a
+    /// deterministic function of its inputs — the same discipline
+    /// `CorrectionIndex::build` follows, and what makes the composition hash
+    /// reproducible for a given cycle.
+    pub fn from_finding_at(f: &Finding, now: DateTime<Utc>) -> Self {
         Self {
             officer: f.officer.to_string(),
             domain: f.domain.to_string(),
             finding_type: f.finding_type.clone(),
             severity: format!("{:?}", f.severity),
             summary: f.summary.clone(),
+            observed_at: Some(f.timestamp),
+            age_secs: Some((now - f.timestamp).num_seconds()),
         }
+    }
+
+    /// Convenience wrapper reading the wall clock. Prefer
+    /// [`FindingSummary::from_finding_at`] anywhere the cycle already has a
+    /// `now` in hand.
+    pub fn from_finding(f: &Finding) -> Self {
+        Self::from_finding_at(f, Utc::now())
     }
 }
 

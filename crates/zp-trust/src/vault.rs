@@ -640,6 +640,31 @@ impl CredentialVault {
 
         let tmp_path = path.with_extension("json.tmp");
         std::fs::write(&tmp_path, json.as_bytes())?;
+
+        // Owner-only, set on the temp file before the rename so the vault is
+        // never briefly world-readable at its real path.
+        //
+        // Until 2026-08-06 this was left to the process umask, which produced
+        // mode 644. The contents are ChaCha20-Poly1305 encrypted, so this was
+        // not an exposure of the secrets themselves — but the credential store
+        // was more permissive than the plaintext `.env` files it replaced,
+        // which were 600. Noticed on the `ls` immediately after the first real
+        // migration wrote 176 credentials into it.
+        //
+        // Defence in depth rather than the primary control: an attacker who
+        // can read the file still cannot decrypt without the sovereign root.
+        // The mode matters because it removes the file from the set any local
+        // process can copy and take away to attack offline at leisure.
+        //
+        // `zp-server/src/security.rs` already checks for `0o600` on sensitive
+        // files, and `zp-cli/src/secure.rs` already sets it elsewhere. The
+        // pattern existed; the vault simply never used it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600))?;
+        }
+
         std::fs::rename(&tmp_path, path)?;
 
         info!(

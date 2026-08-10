@@ -336,12 +336,12 @@ mod tests {
 
     #[test]
     fn consolidate_merges_same_tool() {
-        let findings = vec![forge_finding("ironclaw"), sentinel_finding("ironclaw")];
+        let findings = vec![forge_finding("example-tool"), sentinel_finding("example-tool")];
         let requests = consolidate(&findings, &[]);
 
         assert_eq!(requests.len(), 1);
         let req = &requests[0];
-        assert_eq!(req.subject.display_label(), "ironclaw");
+        assert_eq!(req.subject.display_label(), "example-tool");
         assert_eq!(req.concerns.len(), 2);
         // Max severity is Error (from sentinel).
         assert_eq!(req.severity, Severity::Error);
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn consolidate_separates_different_tools() {
-        let findings = vec![forge_finding("ironclaw"), forge_finding("other-tool")];
+        let findings = vec![forge_finding("example-tool"), forge_finding("other-tool")];
         let requests = consolidate(&findings, &[]);
 
         assert_eq!(requests.len(), 2);
@@ -371,11 +371,11 @@ mod tests {
 
     #[test]
     fn consolidate_with_proposals() {
-        let findings = vec![forge_finding("ironclaw")];
+        let findings = vec![forge_finding("example-tool")];
         let proposals = vec![Proposal::new(
-            forge_finding("ironclaw"),
+            forge_finding("example-tool"),
             ProposedMutation::SetPortBinding {
-                tool: "ironclaw".into(),
+                tool: "example-tool".into(),
                 port: 8090,
                 rationale: "observed".into(),
             },
@@ -393,18 +393,18 @@ mod tests {
     fn consolidate_deduplicates_mutations() {
         let proposals = vec![
             Proposal::new(
-                forge_finding("ironclaw"),
+                forge_finding("example-tool"),
                 ProposedMutation::SetPortBinding {
-                    tool: "ironclaw".into(),
+                    tool: "example-tool".into(),
                     port: 8090,
                     rationale: "first".into(),
                 },
                 "forge",
             ),
             Proposal::new(
-                forge_finding("ironclaw"),
+                forge_finding("example-tool"),
                 ProposedMutation::SetPortBinding {
-                    tool: "ironclaw".into(),
+                    tool: "example-tool".into(),
                     port: 8090,
                     rationale: "second".into(),
                 },
@@ -421,7 +421,7 @@ mod tests {
     #[test]
     fn consolidate_mixed_tool_and_process() {
         let findings = vec![
-            forge_finding("ironclaw"),
+            forge_finding("example-tool"),
             process_finding(99999, "rogue"),
         ];
         let requests = consolidate(&findings, &[]);
@@ -429,16 +429,16 @@ mod tests {
         assert_eq!(requests.len(), 2);
         let labels: Vec<String> = requests.iter().map(|r| r.subject.group_key()).collect();
         assert!(labels.contains(&"pid:99999".to_string()));
-        assert!(labels.contains(&"tool:ironclaw".to_string()));
+        assert!(labels.contains(&"tool:example-tool".to_string()));
     }
 
     #[test]
     fn display_summary_format() {
-        let findings = vec![forge_finding("ironclaw"), sentinel_finding("ironclaw")];
+        let findings = vec![forge_finding("example-tool"), sentinel_finding("example-tool")];
         let requests = consolidate(&findings, &[]);
         let summary = requests[0].display_summary();
 
-        assert!(summary.contains("ironclaw"));
+        assert!(summary.contains("example-tool"));
         assert!(summary.contains("2 concerns"));
         assert!(summary.contains("forge"));
         assert!(summary.contains("sentinel"));
@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn concerns_sorted_by_severity() {
-        let findings = vec![forge_finding("ironclaw"), sentinel_finding("ironclaw")];
+        let findings = vec![forge_finding("example-tool"), sentinel_finding("example-tool")];
         let requests = consolidate(&findings, &[]);
         let req = &requests[0];
 
@@ -458,11 +458,11 @@ mod tests {
 
     #[test]
     fn event_key_format() {
-        let findings = vec![sentinel_finding("ironclaw")];
+        let findings = vec![sentinel_finding("example-tool")];
         let requests = consolidate(&findings, &[]);
         assert_eq!(
             requests[0].event_key(),
-            "governance_request:error:tool:ironclaw"
+            "governance_request:error:tool:example-tool"
         );
     }
 

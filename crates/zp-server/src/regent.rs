@@ -48,35 +48,11 @@ use zp_regent::regent::Regent;
 /// `ALLOWED_DOMAINS` is a hardcoded const in the dispatch arm. The grant is
 /// genuinely narrow, but narrower than the delegation advertises; moving the
 /// list onto the delegation is the follow-up that makes the scope real.
-const REGENT_TOOLS: &[(&str, &str)] = &[
-    ("chain_query", "audit_chain"),
-    ("governance_posture", "governance"),
-    ("model_evaluate", "inference"),
-    ("system_status", "system"),
-    ("batch_sign", "audit_chain"),
-    ("chain_compact", "audit_chain"),
-    ("self_configure", "inference:endpoint,model,api_key"),
-    ("memory_list", "cognition:memory_promotion"),
-    ("memory_review", "cognition:memory_promotion:review_remembered"),
-    ("substrate_validate", "substrate:validation:regent"),
-    ("browser_use", "web:allowed_domains"),
-    // Phase 1 report-generation tools (see docs/REGENT-PHASE-0-1-DESIGN-2026-07.md).
-    // - chart_generate / report_assemble: pure functions returning strings
-    //   to Regent, no I/O.
-    // - save_to_artifacts: writes to ~/ZeroPoint/artifacts/<hash>.<ext> and
-    //   emits an artifact:library:candidate receipt. Content-addressed,
-    //   bounded destination, chain-anchored.
-    // None are on APPROVAL_REQUIRED_TOOLS: the browser_use precedent for
-    // per-call operator signatures targets tools reaching unbounded
-    // destinations (arbitrary URLs); a bounded write to operator-owned
-    // artifact space with a chain-anchored receipt is a different risk
-    // class. Revisit if a confusion incident argues otherwise, matching
-    // the pattern that put browser_use behind approval after an observed
-    // event, not preemptively.
-    ("chart_generate", "artifact:chart"),
-    ("report_assemble", "artifact:report"),
-    ("save_to_artifacts", "artifact:library:write"),
-];
+// The Regent's granted tool surface now has ONE declaration, in
+// `zp_regent::tools`. This was the copy that actually conferred capability
+// while two more lived in `zp-regent`; all three drifted twice. See that
+// module for the incidents and for the false premise that kept them apart.
+use zp_regent::tools::REGENT_TOOLS;
 
 /// Capabilities the Regent may *propose* but never dispatch on its own.
 ///
@@ -219,14 +195,21 @@ fn spawn_inference_observer_tail(audit_store: Arc<std::sync::Mutex<AuditStore>>)
         let base = std::env::var("ZP_INFERENCE_OBSERVATION_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| {
-                std::env::var_os("HOME")
-                    .map(|h| {
-                        std::path::PathBuf::from(h)
-                            .join("projects/zeropoint/.observations/inference")
-                    })
-                    .unwrap_or_else(|| {
-                        std::path::PathBuf::from("/tmp/zp-observations/inference")
-                    })
+                // Seam 19: home resolution goes through the paths carrier, not
+                // a raw `HOME` read. `user_home` (the operator's home) rather
+                // than `home` (the ZeroPoint data root, `~/ZeroPoint`) — this
+                // path is a source checkout, not substrate state. Pinned by
+                // `no_raw_home_lookup`, which had been failing on this site
+                // since 2026-08-01.
+                //
+                // Not `user_home_or(fallback)`: the fallback here is a
+                // complete alternative path, not a substitute home, and
+                // joining the suffix onto it would yield
+                // `/tmp/zp-observations/inference/projects/zeropoint/...`.
+                match zp_core::paths::user_home() {
+                    Ok(h) => h.join("projects/zeropoint/.observations/inference"),
+                    Err(_) => std::path::PathBuf::from("/tmp/zp-observations/inference"),
+                }
             });
 
         info!(observations_dir = ?base, "inference observer tail: starting");
@@ -2541,10 +2524,37 @@ pub async fn spawn_regent(
     // Convert raw API key from config.toml to ApiKeySource.
     // If vault is available, migrate the key to vault immediately.
     // Otherwise, use RawLegacy (transition path — key in memory).
-    // Note: vault_key may not be resolved yet (background keychain thread).
-    // We wait briefly here since this is a one-time migration path.
+    //
+    // ── No wait, and nothing to wait for, 2026-08-06 ──────────────────
+    //
+    // This block previously carried the comment "we wait briefly here since
+    // this is a one-time migration path" above a closure that did not wait, and
+    // read an `OnceLock` that `AppState::init` populated from a background
+    // thread. `spawn_regent` runs immediately after `init`, so all four
+    // `resolve_vmk()` call sites below lost that race on every boot and took
+    // the legacy branch.
+    //
+    // The consequence was not a slow migration — it was no migration, ever.
+    // `~/ZeroPoint/vault.json` did not exist on a substrate that had been
+    // running for months, the operator's cloud-inference credential lived in
+    // `config.toml` as plaintext, and `ApiKeySource::RawLegacy` — documented as
+    // a transition path — was the permanent steady state. The vault was
+    // complete and correct the whole time: ChaCha20-Poly1305, per-tier derived
+    // keys, `store_tiered`, `save`. Built, and orphaned by startup ordering.
+    //
+    // The first fix here was a bounded poll with a timeout. That is the same
+    // race with a longer fuse: a magic number, a silent fallback when it
+    // expires, and every consumer still coping with "not yet". It was replaced
+    // by resolving the key synchronously in `AppState::init`, which is correct
+    // because `resolve_vault_key` reads the credential store only through
+    // `load_sovereign_root`'s process-scoped cache — already warmed by the boot
+    // ceremony — so it costs a cache read and a KDF.
+    //
+    // `init` therefore returns fully-formed state, and this read is populated
+    // by construction. There is no race left to lose.
     let resolve_vmk = || -> Option<[u8; 32]> {
-        vault_key.get()
+        vault_key
+            .get()
             .and_then(|k| k.as_ref())
             .map(|resolved| *resolved.key)
     };
@@ -2941,14 +2951,40 @@ pub async fn spawn_regent(
     // Emit a scoped CapabilityGrant for the Regent's Phase 0 tools.
     // The gate checks this grant when evaluating regent tool calls.
     {
-        let _grant = CapabilityGrant::new(
+        let tools: Vec<String> = REGENT_TOOLS.iter().map(|t| t.name.to_string()).collect();
+        let grant = CapabilityGrant::new(
             "genesis".to_string(),                   // grantor: substrate itself
             "regent".to_string(),                     // grantee: regent actor
             GrantedCapability::ToolCall {
-                tools: REGENT_TOOLS.iter().map(|(c, _)| c.to_string()).collect(),
+                tools: tools.clone(),
             },
             format!("rcpt-regent-startup-{}", Uuid::now_v7()),
         );
+
+        // The grant was previously bound to `_grant` and dropped: every field
+        // below existed here and went on the floor, while the comment under it
+        // claimed a delegation receipt was emitted and the entry carried
+        // `receipt: None`. `zp_audit::RecoveryEngine` reads exactly these three
+        // extension keys to rebuild in-flight grants after a restart, so
+        // forward-only recovery has never been able to see this delegation —
+        // measured 2026-08-09: 94 `delegation:granted:regent` entries, zero
+        // carrying a receipt. See docs/design/CHANNEL-BOUNDARY-2026-08.md.
+        //
+        // Not separately signed, and that is deliberate rather than an omission:
+        // `spawn_regent` holds no receipt signing key, `compute_entry_hash`
+        // covers the `receipt` field, and `AuditStore::append` signs the entry.
+        // The receipt is therefore tamper-evident within the chain. Per the
+        // channel boundary, this claim exists to be reconstituted locally, not
+        // to travel — a receipt that leaves the machine would need its own
+        // signature.
+        // Built by the shared helper rather than inline, and that is the whole
+        // point: `zp_core::capability_grant_receipt` is what the round-trip test
+        // in `zp-audit` exercises against the real `RecoveryEngine`. A producer
+        // that assembles the receipt itself is untested by construction — which
+        // is precisely the shape of defect this arc exists to remove, and it was
+        // briefly reintroduced here before being caught.
+        let scope = format!("tool:call:{}", tools.join(","));
+        let delegation_receipt = zp_core::capability_grant_receipt(&grant, &scope);
 
         // Emit delegation receipt on the chain.
         let entry = UnsealedEntry {
@@ -2961,7 +2997,7 @@ pub async fn spawn_regent(
                 conditions: Vec::new(),
             },
             policy_module: "regent-startup".to_string(),
-            receipt: None,
+            receipt: Some(delegation_receipt),
         };
 
         if let Ok(mut store) = audit_store.lock() {
@@ -3014,10 +3050,11 @@ pub async fn spawn_regent(
     // list; see REGENT_TOOLS for the drift that motivated collapsing them.
     let delegations: Vec<zp_regent::context::DelegationSummary> = REGENT_TOOLS
         .iter()
-        .map(|(capability, scope)| {
+        .map(|tool| {
+            let (capability, scope) = (tool.name, tool.scope);
             let (required, optional) = TOOL_PARAMS
                 .iter()
-                .find(|(t, _, _)| t == capability)
+                .find(|(t, _, _)| *t == capability)
                 .map(|(_, r, o)| (*r, *o))
                 .unwrap_or((&[], &[]));
             zp_regent::context::DelegationSummary {

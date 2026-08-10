@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tracing::info;
 
+use zp_core::receipt_extensions as ext;
+
 // ============================================================================
 // Chain entry abstraction
 // ============================================================================
@@ -54,14 +56,30 @@ impl ReconstitutionEntry {
     pub fn from_audit_entry(entry: &zp_core::AuditEntry) -> Self {
         let receipt_extensions = entry.receipt.as_ref().map(|r| {
             let mut ext = HashMap::new();
-            // Extract claim metadata if present.
+            // The receipt's own extensions FIRST — this is the channel the
+            // producers write and `RecoveryEngine` reads (see
+            // `zp_core::receipt_extensions`). Omitting it was a silent break in
+            // the middle of the chain: a producer could attach every key
+            // recovery needs, the entry could land on the chain carrying them,
+            // and this conversion would drop them here — leaving recovery to
+            // report success over an empty map. Found 2026-08-09 while writing
+            // the round-trip test for capability grants; the receipt was
+            // verified present on the chain with all three keys, and recovery
+            // still saw nothing.
+            if let Some(ref extensions) = r.extensions {
+                for (k, v) in extensions {
+                    ext.insert(k.clone(), v.clone());
+                }
+            }
+            // Debug-formatted summaries, kept for the reconstitution engine's
+            // own use. These are lossy by construction and must not be the only
+            // thing carried — they are for display, not for state.
             if let Some(ref meta) = r.claim_metadata {
                 ext.insert(
                     "claim_type".to_string(),
                     serde_json::Value::String(format!("{:?}", meta)),
                 );
             }
-            // Extract action type as an extension.
             ext.insert(
                 "action".to_string(),
                 serde_json::json!(format!("{:?}", entry.action)),
@@ -352,7 +370,7 @@ impl ReconstitutionEngine {
     ) {
         // Key revocation.
         if let Some(revoked_key) = extensions
-            .get("zp.revocation.revoked_key")
+            .get(ext::REVOCATION_REVOKED_KEY)
             .and_then(|v| v.as_str())
         {
             self.state.revoked_keys.insert(revoked_key.to_string());
@@ -368,20 +386,20 @@ impl ReconstitutionEngine {
 
         // Key issuance.
         if let Some(issued_key) = extensions
-            .get("zp.certificate.public_key")
+            .get(ext::CERTIFICATE_PUBLIC_KEY)
             .and_then(|v| v.as_str())
         {
             if let Some(role) = extensions
-                .get("zp.certificate.role")
+                .get(ext::CERTIFICATE_ROLE)
                 .and_then(|v| v.as_str())
             {
                 match role {
-                    "operator" => {
+                    ext::ROLE_OPERATOR => {
                         self.state
                             .valid_operator_keys
                             .insert(issued_key.to_string());
                     }
-                    "agent" => {
+                    ext::ROLE_AGENT => {
                         self.state.valid_agent_keys.insert(issued_key.to_string());
                     }
                     _ => {}
@@ -391,16 +409,16 @@ impl ReconstitutionEngine {
 
         // Capability grants.
         if let Some(grant_id) = extensions
-            .get("zp.capability.grant_id")
+            .get(ext::CAPABILITY_GRANT_ID)
             .and_then(|v| v.as_str())
         {
             let scope = extensions
-                .get("zp.capability.scope")
+                .get(ext::CAPABILITY_SCOPE)
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
             let grantee = extensions
-                .get("zp.capability.grantee")
+                .get(ext::CAPABILITY_GRANTEE)
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
@@ -419,7 +437,7 @@ impl ReconstitutionEngine {
 
         // Capability revocations.
         if let Some(revoked_grant) = extensions
-            .get("zp.capability.revoked_grant_id")
+            .get(ext::CAPABILITY_REVOKED_GRANT_ID)
             .and_then(|v| v.as_str())
         {
             self.state.active_capabilities.remove(revoked_grant);
@@ -430,16 +448,16 @@ impl ReconstitutionEngine {
 
         // Memory promotions.
         if let Some(memory_id) = extensions
-            .get("zp.memory.memory_id")
+            .get(ext::MEMORY_ID)
             .and_then(|v| v.as_str())
         {
             let stage = extensions
-                .get("zp.memory.stage")
+                .get(ext::MEMORY_STAGE)
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string();
             let source_agent = extensions
-                .get("zp.memory.source_agent")
+                .get(ext::MEMORY_SOURCE_AGENT)
                 .and_then(|v| v.as_str())
                 .map(String::from);
 
@@ -457,7 +475,7 @@ impl ReconstitutionEngine {
 
         // Memory quarantines (single).
         if let Some(quarantined_id) = extensions
-            .get("zp.quarantine.memory_id")
+            .get(ext::QUARANTINE_MEMORY_ID)
             .and_then(|v| v.as_str())
         {
             self.state
@@ -470,7 +488,7 @@ impl ReconstitutionEngine {
 
         // Memory quarantines (bulk).
         if let Some(bulk_ids) = extensions
-            .get("zp.quarantine.memory_ids")
+            .get(ext::QUARANTINE_MEMORY_IDS)
             .and_then(|v| v.as_array())
         {
             for id_val in bulk_ids {
@@ -485,7 +503,7 @@ impl ReconstitutionEngine {
 
         // Reinstatements.
         if let Some(reinstated_id) = extensions
-            .get("zp.reinstatement.memory_id")
+            .get(ext::REINSTATEMENT_MEMORY_ID)
             .and_then(|v| v.as_str())
         {
             self.state.quarantined_memories.remove(reinstated_id);
@@ -497,7 +515,7 @@ impl ReconstitutionEngine {
         // Policy version tracking (R6-4: downgrade resistance).
         // Detect any attempt to load a lower policy version in the chain.
         if let Some(version_str) = extensions
-            .get("zp.policy.version")
+            .get(ext::POLICY_VERSION)
             .and_then(|v| v.as_str())
         {
             let parts: Vec<&str> = version_str.split('.').collect();
@@ -1020,5 +1038,70 @@ mod tests {
         );
         engine.process_entry(&entry);
         assert_eq!(engine.anomaly_count(), 0);
+    }
+
+    /// Round trip: a real key rotation, through the real conversion, into the
+    /// real reconstitution engine.
+    ///
+    /// `reconstitute_key_lifecycle` above hand-writes the extensions map, so it
+    /// passed for as long as key reconstitution had never worked — `rotation.rs`
+    /// set no extensions at all until 2026-08-09, and nothing crossed the
+    /// boundary to notice. This starts from `zp_core::certificate_rotation_receipts`,
+    /// the function `zp-keys` actually calls.
+    ///
+    /// It also pins the role vocabulary. `KeyRole` serialises capitalised; this
+    /// engine matches lowercase and drops the rest silently. If the mapping ever
+    /// regresses, the assertion below fails instead of a rotation quietly
+    /// reconstituting nothing.
+    #[test]
+    fn round_trip_key_rotation_producer_to_reconstituted_state() {
+        use zp_core::receipt_extensions as ext;
+        use zp_core::{ActorId, AuditAction, AuditEntry, AuditId, ConversationId, PolicyDecision};
+
+        let (delegation, revocation) = zp_core::certificate_rotation_receipts(
+            "old-operator-key",
+            "new-operator-key",
+            ext::ROLE_OPERATOR,
+            "cert-abc",
+        );
+
+        let entry_for = |r: zp_receipt::Receipt, id: &str| AuditEntry {
+            id: AuditId::new(),
+            timestamp: Utc::now(),
+            prev_hash: "genesis".to_string(),
+            entry_hash: id.to_string(),
+            actor: ActorId::System("zp-keys".to_string()),
+            action: AuditAction::SystemEvent {
+                event: "system:keychain:rotated".to_string(),
+            },
+            conversation_id: ConversationId(uuid::Uuid::nil()),
+            policy_decision: PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "key-rotation".to_string(),
+            receipt: Some(r),
+            signatures: Vec::new(),
+        };
+
+        let mut engine = ReconstitutionEngine::new(ReconstitutionConfig::default());
+
+        // Production conversion, not a fixture.
+        engine.process_entry(&ReconstitutionEntry::from_audit_entry(&entry_for(
+            delegation, "h1",
+        )));
+        assert!(
+            engine.state.valid_operator_keys.contains("new-operator-key"),
+            "the key a real rotation delegated to did not reach reconstituted \
+             state — the break is between certificate_rotation_receipts and \
+             ReconstitutionEngine, not in either end"
+        );
+
+        engine.process_entry(&ReconstitutionEntry::from_audit_entry(&entry_for(
+            revocation, "h2",
+        )));
+        assert!(
+            !engine.state.valid_operator_keys.contains("old-operator-key"),
+            "the revoked key survived reconstitution"
+        );
     }
 }

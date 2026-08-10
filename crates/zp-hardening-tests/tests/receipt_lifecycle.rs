@@ -160,6 +160,21 @@ impl GateHarness {
             officers_enabled: false,
             officers_sweep_interval_secs: 900,
             officers_steward_enabled: true,
+            // Background tasks pinned off explicitly, not left to `Default`.
+            // Everything above is set because this test depends on it;
+            // these two are set because a future default flip must not
+            // silently spawn a task inside a hardening test.
+            cartographer_enabled: false,
+            regent_enabled: false,
+            // Remaining fields take defaults. This fixture previously listed
+            // every field, which is why it stopped compiling: `ServerConfig`
+            // grew 13 fields and an exhaustive literal turns each addition
+            // into a hard error in a `#[cfg(test)]` target — invisible to
+            // `cargo build --workspace`, so it sat broken. Defaulting the
+            // remainder means new fields are adopted rather than blocking,
+            // while the toggles this test actually relies on stay explicit
+            // above. See SEAM-010.
+            ..Default::default()
         };
 
         let state = zp_server::AppState::init(&config).await;
@@ -273,7 +288,7 @@ fn assert_chain_links(entries: &[zp_core::AuditEntry]) {
 #[tokio::test]
 async fn chain_happy_path_three_entry_sequence() {
     let h = ChainHarness::new();
-    let subject = "ironclaw-test-agent";
+    let subject = "example-tool-test-agent";
     let tool = "chain_render";
 
     // Stage 1: delegation grant lands on chain.

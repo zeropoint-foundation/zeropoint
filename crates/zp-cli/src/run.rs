@@ -820,9 +820,9 @@ mod tests {
 
     #[test]
     fn test_manifest_hash_no_baseline_message() {
-        let err = ManifestHashError::NoBaseline("ironclaw".to_string());
+        let err = ManifestHashError::NoBaseline("example-tool".to_string());
         let msg = err.to_string();
-        assert!(msg.contains("ironclaw"), "error must name the tool: {msg}");
+        assert!(msg.contains("example-tool"), "error must name the tool: {msg}");
         assert!(
             msg.contains("zp configure tool"),
             "error must direct user to configure: {msg}"

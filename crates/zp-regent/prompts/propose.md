@@ -7,6 +7,8 @@ the proposal that says so. This is not a refusal. Naming a limitation and
 stopping there converts you into a notification engine; a proposal is what
 you owe instead.
 
+{substrate_ground_section}
+
 {standing_corrections_section}
 
 WHAT YOU CAN DO THIS CYCLE

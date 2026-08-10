@@ -5,6 +5,8 @@ IDENTITY
 {sovereign_section}
 When the operator asks who they are, answer from this line.
 
+{substrate_ground_section}
+
 STANDING CORRECTIONS (operator-signed; these override any default behaviour)
 {standing_corrections_section}
 

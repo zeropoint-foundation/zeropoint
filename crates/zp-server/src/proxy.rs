@@ -250,9 +250,41 @@ pub fn resolve_tier(tier: &InferenceTier) -> Option<(&'static str, &'static str)
 // Provider Registry — maps provider names to real base URLs
 // ============================================================================
 
+/// Base URL for the local Ollama backend.
+///
+/// Resolved once per process from `ZP_OLLAMA_URL`, defaulting to the standard
+/// loopback port. Held in a `OnceLock` so `provider_base_url` can keep its
+/// `&'static str` return type.
+///
+/// SECURITY: this is the one entry in the registry that points at the local
+/// host, which is exactly the shape SSRF guards exist to prevent. It is safe
+/// only because the provider segment is matched against this fixed allowlist
+/// rather than taken from the request, and because `allowed_path_prefixes`
+/// below restricts it to two known inference paths. Do not relax either of
+/// those without revisiting this. Operators who set `ZP_OLLAMA_URL` to a
+/// non-loopback address are choosing to forward through the proxy to that
+/// host and own that decision.
+static OLLAMA_BASE_URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn ollama_base_url() -> &'static str {
+    OLLAMA_BASE_URL
+        .get_or_init(|| {
+            std::env::var("ZP_OLLAMA_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| zp_net::peer_url("localhost", 11434))
+        })
+        .as_str()
+}
+
 /// Known provider endpoints.
 pub fn provider_base_url(provider: &str) -> Option<&'static str> {
     match provider {
+        // Local Ollama backend. Serves the OpenAI-compatible surface under /v1,
+        // so the proxy path is the standard "v1/chat/completions". This is the
+        // `local` tier already declared in `get_routing_config()`, which could
+        // not resolve before this entry existed.
+        "ollama" => Some(ollama_base_url()),
         "openai" => Some("https://api.openai.com"),
         "anthropic" => Some("https://api.anthropic.com"),
         "groq" => Some("https://api.groq.com/openai"),
@@ -286,6 +318,11 @@ pub fn provider_base_url(provider: &str) -> Option<&'static str> {
 /// with one of these prefixes will be forwarded.
 fn allowed_path_prefixes(provider: &str) -> &'static [&'static str] {
     match provider {
+        // Ollama: OpenAI-compatible surface only. Deliberately excludes the
+        // native /api/* routes — /api/pull, /api/create and /api/delete can
+        // fetch arbitrary remote content and mutate local model state, which
+        // must not be reachable through a forwarding proxy.
+        "ollama" => &["v1/chat/completions", "v1/models"],
         "openai" => &[
             "v1/chat/completions",
             "v1/completions",
@@ -563,9 +600,9 @@ pub async fn proxy_handler(
                 StatusCode::BAD_REQUEST,
                 Json(json!({
                     "error": format!("Unknown provider: {}", provider),
-                    "known_providers": ["openai", "anthropic", "groq", "mistral", "together",
-                                       "deepseek", "fireworks", "perplexity", "cohere",
-                                       "google", "openrouter", "siliconflow",
+                    "known_providers": ["ollama", "openai", "anthropic", "groq", "mistral",
+                                       "together", "deepseek", "fireworks", "perplexity",
+                                       "cohere", "google", "openrouter", "siliconflow",
                                        "deepinfra", "abacus"]
                 })),
             )
@@ -947,6 +984,25 @@ mod tests {
             Some("https://routellm.abacus.ai/v1")
         );
         assert_eq!(provider_base_url("unknown"), None);
+    }
+
+    #[test]
+    fn test_ollama_provider_registered() {
+        // The `local` tier in get_routing_config() targets provider "ollama";
+        // before this entry existed the proxy rejected it with 400.
+        assert!(provider_base_url("ollama").is_some());
+    }
+
+    #[test]
+    fn test_ollama_path_allowlist_excludes_native_api() {
+        // Only the OpenAI-compatible surface is reachable. The native /api/*
+        // routes must stay unreachable: /api/pull fetches arbitrary remote
+        // content and /api/delete mutates local model state.
+        assert!(validate_proxy_path("ollama", "v1/chat/completions").is_ok());
+        assert!(validate_proxy_path("ollama", "v1/models").is_ok());
+        assert!(validate_proxy_path("ollama", "api/pull").is_err());
+        assert!(validate_proxy_path("ollama", "api/delete").is_err());
+        assert!(validate_proxy_path("ollama", "api/generate").is_err());
     }
 
     #[test]

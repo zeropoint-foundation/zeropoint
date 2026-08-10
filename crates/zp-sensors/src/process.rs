@@ -444,13 +444,13 @@ mod tests {
 
     #[test]
     fn display_summary_with_user_and_parent() {
-        let mut ctx = ProcessContext::minimal(789, "ironclaw".to_string());
-        ctx.binary_path = Some("/Users/ken/.cargo/bin/ironclaw".to_string());
+        let mut ctx = ProcessContext::minimal(789, "example-tool".to_string());
+        ctx.binary_path = Some("/Users/ken/.cargo/bin/example-tool".to_string());
         ctx.user = Some("ken".to_string());
         ctx.parent_name = Some("zsh".to_string());
         assert_eq!(
             ctx.display_summary(),
-            "/Users/ken/.cargo/bin/ironclaw (user: ken) via zsh [pid 789]"
+            "/Users/ken/.cargo/bin/example-tool (user: ken) via zsh [pid 789]"
         );
     }
 

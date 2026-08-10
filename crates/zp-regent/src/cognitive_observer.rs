@@ -29,16 +29,56 @@
 //! From a correction's `content.negation` field, the observer extracts two
 //! classes of pattern:
 //!
-//! 1. **Quoted phrases** (single or double quotes) — high-confidence markers.
-//!    A prohibition correction with negation `Do not open with 'good morning'`
-//!    yields the pattern `good morning` for case-insensitive substring matching.
-//! 2. **Proper-noun tokens** — capitalized identifiers, version numbers, and
-//!    hyphenated compounds. `Do not claim to be running GLM 5.2` yields the
-//!    pattern `GLM 5.2` for case-sensitive substring matching.
+//! 1. **Quoted phrases** (single or double quotes). The forbidden formulation
+//!    lifted verbatim. A prohibition with negation `Do not open with 'good
+//!    morning'` yields `good morning`. Always a violation when matched — the
+//!    operator quoted it precisely to mark it as the thing not to say.
+//! 2. **Proper-noun tokens** — capitalized identifiers, versions, hyphenated
+//!    compounds. These are *conditionally* violations, per the subject test
+//!    below.
 //!
-//! Neither heuristic is complete; both are fast, deterministic, and produce
-//! meaningful signal for the initial correction corpus. The Layer B pattern
-//! specifications per class in the spec are the natural evolution path.
+//! ## The subject test
+//!
+//! A proper noun from a negation is one of two very different things, and the
+//! correction's own **assertion** tells them apart:
+//!
+//! - `Do not claim to be running GLM 5.2` with assertion *"Regent's inference is
+//!   currently Sonnet 4.6"* — `GLM 5.2` appears nowhere in what Regent is meant
+//!   to say. It is a **forbidden marker**; matching it is a violation.
+//! - `Do not describe Aegis as '…'` with assertion *"Aegis is the fifth officer
+//!   of the substrate cadre…"* — `Aegis` appears in what Regent is *supposed* to
+//!   say. It is the correction's **subject**; matching it means she discussed
+//!   the topic, which is not evidence of anything.
+//!
+//! Hence: **a token appearing in the correction's assertion cannot be evidence
+//! that Regent said the wrong thing.** Subject tokens route to `TopicTouch`;
+//! the rest remain violations.
+//!
+//! ## Why this exists (2026-08-05)
+//!
+//! Until this date every proper-noun match produced a violation, and matches at
+//! priority >= 90 were additionally *upgraded* one severity level on the stated
+//! belief that proper nouns were the higher-confidence class. Five consecutive
+//! `cognitive:correction:violated` receipts followed, all Critical, all false.
+//! Three flagged Regent describing Aegis **correctly** — the exact behaviour the
+//! Aegis correction had been issued to produce. The observer watched compliance
+//! and reported breach, at the highest severity it had.
+//!
+//! Growing the stopword list in `extract_proper_noun_tokens` cannot fix this
+//! class: the offending tokens are not incidental capitalisation, they are the
+//! subject matter, and every correction names its own subject.
+//!
+//! ## Known residual
+//!
+//! The subject test is a heuristic, not a proof. A proper noun that appears in
+//! neither assertion nor legitimate discussion still over-fires — e.g. a negation
+//! reading *"…that is the ZeroPoint project tagline"* makes `ZeroPoint` a
+//! forbidden marker, though Regent names the project constantly. Corrections
+//! should quote forbidden formulations rather than rely on proper nouns; quoted
+//! phrases are the precise instrument. Semantic claim extraction
+//! (`cognitive_observer_semantic.rs`, P2.2.5-Shadow) is the path to catching what
+//! no substring carries at all — a fabricated figure, a confident wrong number —
+//! which pattern matching will never reach.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -60,6 +100,12 @@ pub struct ObserverPattern {
     pub pattern: String,
     /// Whether to match case-sensitively.
     pub case_sensitive: bool,
+    /// True when this token also appears in the correction's *assertion* — the
+    /// text describing what Regent is supposed to say. Such a token names the
+    /// correction's subject rather than a forbidden formulation, so matching it
+    /// is not evidence of violation. See `TopicTouch`.
+    #[serde(default)]
+    pub is_correction_subject: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,6 +115,40 @@ pub enum PatternExtraction {
     QuotedPhrase,
     /// Capitalized identifier / version / hyphenated proper-noun token.
     ProperNoun,
+}
+
+/// A correction's *subject* appearing in Regent's output — not a violation.
+///
+/// Proper-noun tokens extracted from a negation name the topic the correction
+/// governs. A correction about Aegis necessarily contains "Aegis"; any correct
+/// discussion of Aegis also contains "Aegis". The token therefore co-occurs
+/// with compliant and non-compliant output alike and carries no discriminative
+/// power about which one this is.
+///
+/// Recording the touch is still worth something — "Regent discussed a governed
+/// topic" is real telemetry for measuring whether corrections are reaching the
+/// contexts they were issued for. It is Informational by construction and never
+/// escalates: it is counted in the observer summary and emits no receipt of its
+/// own, per *every bit counts*.
+///
+/// Identified by the subject test in `extract_patterns`: the token also appears
+/// in the correction's assertion, so it names what Regent is supposed to discuss.
+///
+/// Empirical basis (2026-08-05): five consecutive `cognitive:correction:violated`
+/// receipts, all Critical, all false. Three flagged Regent describing Aegis
+/// *correctly* — the exact behaviour correction `911ff194606f40f1` was issued to
+/// produce. See `severity_for` for the inverted-confidence assumption that
+/// produced the Critical rating.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopicTouch {
+    /// Correction whose subject was named.
+    pub correction_id: String,
+    /// Correction domain for context.
+    pub domain: String,
+    /// The subject token that appeared.
+    pub matched_pattern: String,
+    /// Short excerpt around the mention.
+    pub excerpt: String,
 }
 
 /// A detected violation of a standing correction.
@@ -112,6 +192,10 @@ pub struct ObserverReport {
     pub patterns_checked: usize,
     /// Detected violations (empty when Regent output is clean).
     pub violations: Vec<Violation>,
+    /// Governed topics Regent named without violating anything. Informational
+    /// telemetry, not findings — see `TopicTouch`. Does not affect `is_clean`.
+    #[serde(default)]
+    pub topic_touches: Vec<TopicTouch>,
     /// Highest severity across all violations (Informational when clean).
     pub max_severity: ViolationSeverity,
 }
@@ -156,6 +240,7 @@ pub fn verify_against_corrections(
     }
 
     let mut violations: Vec<Violation> = Vec::new();
+    let mut topic_touches: Vec<TopicTouch> = Vec::new();
     for pattern in &all_patterns {
         if let Some(excerpt) = match_pattern(response, pattern) {
             // Find the correction so we can capture its domain.
@@ -165,15 +250,26 @@ pub fn verify_against_corrections(
                 .map(|c| (c.correction.domain.clone(), c.correction.priority))
                 .unwrap_or_default();
 
-            violations.push(Violation {
-                correction_id: pattern.correction_id.clone(),
-                correction_type: pattern.correction_type,
-                domain,
-                matched_pattern: pattern.pattern.clone(),
-                extraction: pattern.extraction,
-                severity: severity_for(pattern.correction_type, priority, pattern.extraction),
-                excerpt,
-            });
+            if pattern.is_correction_subject {
+                // The token names what the correction is *about*, so compliant
+                // and violating output carry it alike. Record, don't accuse.
+                topic_touches.push(TopicTouch {
+                    correction_id: pattern.correction_id.clone(),
+                    domain,
+                    matched_pattern: pattern.pattern.clone(),
+                    excerpt,
+                });
+            } else {
+                violations.push(Violation {
+                    correction_id: pattern.correction_id.clone(),
+                    correction_type: pattern.correction_type,
+                    domain,
+                    matched_pattern: pattern.pattern.clone(),
+                    extraction: pattern.extraction,
+                    severity: severity_for(pattern.correction_type, priority, pattern.extraction),
+                    excerpt,
+                });
+            }
         }
     }
 
@@ -188,6 +284,7 @@ pub fn verify_against_corrections(
         corrections_checked: corrections.len(),
         patterns_checked: all_patterns.len(),
         violations,
+        topic_touches,
         max_severity,
     }
 }
@@ -212,16 +309,25 @@ pub fn extract_patterns(correction: &StandingCorrection) -> Vec<ObserverPattern>
             extraction: PatternExtraction::QuotedPhrase,
             pattern: phrase,
             case_sensitive: false,
+            // A quoted phrase is the forbidden formulation verbatim. Even if it
+            // echoes the assertion, the operator quoted it *as the thing not to
+            // say*, and that explicit act outranks the overlap heuristic.
+            is_correction_subject: false,
         });
     }
 
+    // The assertion is what Regent is supposed to say. Any proper noun it
+    // contains is the correction's subject, not a forbidden marker.
+    let assertion = &correction.content.assertion;
     for token in extract_proper_noun_tokens(negation) {
+        let is_correction_subject = assertion.contains(&token);
         patterns.push(ObserverPattern {
             correction_id: correction.correction_id.clone(),
             correction_type: correction.correction_type,
             extraction: PatternExtraction::ProperNoun,
             pattern: token,
             case_sensitive: true,
+            is_correction_subject,
         });
     }
 
@@ -406,34 +512,44 @@ fn snap_to_char_boundary(s: &str, mut idx: usize) -> usize {
     idx
 }
 
-/// Map correction type + priority + extraction confidence to violation severity.
+/// Map correction type + priority to violation severity.
 ///
 /// Rough heuristic:
 ///   - Boundary + high priority → Critical
-///   - Prohibition + high priority → Warning
+///   - Prohibition + high priority → Critical
 ///   - Factual → Warning
 ///   - Preference → Informational
-///   - Proper-noun matches carry higher confidence than long quoted phrases
-///     (fewer false positives), so Factual/Prohibition proper-noun matches
-///     upgrade one level when priority >= 90.
+///
+/// # The removed proper-noun upgrade
+///
+/// This function previously upgraded proper-noun matches one severity level at
+/// priority >= 90, on the stated reasoning that they *"carry higher confidence
+/// than long quoted phrases (fewer false positives)"*. That is backwards, and
+/// the inversion is what made the observer loud and wrong.
+///
+/// A quoted phrase is the forbidden formulation copied verbatim out of the
+/// negation; matching it means Regent emitted the thing she was told not to
+/// emit. A proper noun is the correction's *subject*, and every correction names
+/// its own subject — so the token appears in compliant output just as reliably
+/// as in non-compliant output. Lowest-confidence class, upgraded to the highest
+/// severity.
+///
+/// Proper-noun matches no longer reach this function at all; they route to
+/// `TopicTouch`. The `extraction` parameter is retained because quoted-phrase
+/// severity may yet want to vary by extraction class as new classes land, and
+/// removing it would churn every call site for no gain.
 fn severity_for(
     correction_type: CorrectionType,
     priority: u32,
-    extraction: PatternExtraction,
+    _extraction: PatternExtraction,
 ) -> ViolationSeverity {
-    let base = match correction_type {
+    match correction_type {
         CorrectionType::Boundary if priority >= 90 => ViolationSeverity::Critical,
         CorrectionType::Boundary => ViolationSeverity::Warning,
         CorrectionType::Prohibition if priority >= 90 => ViolationSeverity::Critical,
         CorrectionType::Prohibition => ViolationSeverity::Warning,
         CorrectionType::Factual => ViolationSeverity::Warning,
         CorrectionType::Preference => ViolationSeverity::Informational,
-    };
-    match (base, extraction, priority) {
-        (ViolationSeverity::Warning, PatternExtraction::ProperNoun, p) if p >= 90 => {
-            ViolationSeverity::Critical
-        }
-        _ => base,
     }
 }
 
@@ -461,11 +577,12 @@ pub fn violation_event_string(v: &Violation) -> String {
 /// the observer ran, even when there are no violations.
 pub fn summary_event_string(report: &ObserverReport) -> String {
     format!(
-        "{} corrections={} patterns={} violations={} max_severity={:?}",
+        "{} corrections={} patterns={} violations={} topic_touches={} max_severity={:?}",
         EVENT_PREFIX_VERIFIED,
         report.corrections_checked,
         report.patterns_checked,
         report.violations.len(),
+        report.topic_touches.len(),
         report.max_severity,
     )
 }
@@ -746,11 +863,11 @@ mod tests {
     }
 
     #[test]
-    fn extracts_ironclaw_as_proper_noun() {
+    fn extracts_example_tool_as_proper_noun() {
         let tokens = extract_proper_noun_tokens(
-            "Do not treat IronClaw as current-substrate reference. Do not carry IronClaw framing into current design.",
+            "Do not treat ExampleTool as current-substrate reference. Do not carry ExampleTool framing into current design.",
         );
-        assert!(tokens.iter().any(|t| t == "IronClaw"));
+        assert!(tokens.iter().any(|t| t == "ExampleTool"));
     }
 
     #[test]
@@ -815,7 +932,85 @@ mod tests {
         assert!(!report.is_clean());
         assert_eq!(report.violations.len(), 1);
         assert_eq!(report.violations[0].matched_pattern, "GLM 5.2");
-        assert_eq!(report.max_severity, ViolationSeverity::Critical);
+        // Warning, not Critical: the proper-noun severity upgrade was removed
+        // 2026-08-05. Proper nouns are the *lower*-confidence extraction class,
+        // and upgrading them is what produced the false-Critical flood.
+        assert_eq!(report.max_severity, ViolationSeverity::Warning);
+    }
+
+    #[test]
+    fn proper_noun_absent_from_assertion_is_a_forbidden_marker() {
+        // `GLM 5.2` appears only in the negation — nothing in what Regent is
+        // supposed to say contains it. Genuine violation marker.
+        let c = correction_with(
+            "c-model",
+            CorrectionType::Factual,
+            "cognitive.self_reference.model_state",
+            "Regent's inference is currently Sonnet 4.6.",
+            Some("Do not claim to be running GLM 5.2."),
+            90,
+        );
+        let patterns = extract_patterns(&c.correction);
+        let glm = patterns
+            .iter()
+            .find(|p| p.pattern == "GLM 5.2")
+            .expect("GLM 5.2 must be extracted");
+        assert!(
+            !glm.is_correction_subject,
+            "token absent from the assertion is a forbidden marker, not a subject"
+        );
+    }
+
+    #[test]
+    fn aegis_regression_2026_08_05_correct_description_is_not_a_violation() {
+        // The failure this whole mechanism was rebuilt around. Correction
+        // 911ff194606f40f1 was issued to make Regent describe Aegis correctly.
+        // She then did — and the observer emitted three Critical violations
+        // against the compliant output, because "Aegis" appears in the negation.
+        let c = correction_with(
+            "c-aegis",
+            CorrectionType::Factual,
+            "cognitive.self_reference.aegis_scope",
+            "Aegis is the fifth officer of the substrate cadre. Domain: \
+             constitutional-trajectory monitoring — best-effort detection of \
+             misaligned trajectories. Advisory, not enforcement.",
+            Some(
+                "Do not describe Aegis as 'cryptographic governance infrastructure \
+                 for autonomous agent systems' — that is the project tagline, not \
+                 the Aegis officer's scope.",
+            ),
+            90,
+        );
+
+        // Exactly the shape of her compliant response.
+        let compliant = "Aegis (last heartbeat: 2026-08-05T04:05:52, domain: \
+                         constitutional-trajectory monitoring — best-effort detection \
+                         of misaligned trajectories relative to declared operator \
+                         constitutional invariants).";
+        let report = verify_against_corrections(compliant, &[c.clone()]);
+        assert!(
+            report.is_clean(),
+            "describing Aegis correctly must not be a violation, got: {:?}",
+            report.violations
+        );
+        assert_eq!(
+            report.topic_touches.len(),
+            1,
+            "the mention should still be recorded as a topic touch"
+        );
+        assert_eq!(report.topic_touches[0].matched_pattern, "Aegis");
+
+        // The actual forbidden formulation is still caught, via quoted phrase.
+        let violating = "Aegis is cryptographic governance infrastructure for \
+                         autonomous agent systems.";
+        let report = verify_against_corrections(violating, &[c]);
+        assert!(
+            !report.is_clean(),
+            "the quoted forbidden formulation must still be caught"
+        );
+        assert!(report.violations.iter().any(|v| v
+            .matched_pattern
+            .contains("cryptographic governance infrastructure")));
     }
 
     #[test]
@@ -855,22 +1050,33 @@ mod tests {
     }
 
     #[test]
-    fn ironclaw_detected_in_current_context_response() {
+    fn example_tool_is_a_topic_touch_because_the_assertion_names_it() {
+        // Behaviour change, 2026-08-05. This previously asserted a violation.
+        //
+        // The assertion is *"IronClaw purged from Tier 1 corpus"* — so the token
+        // appears in what Regent is supposed to be able to say. "IronClaw is
+        // Tier 3 historical" is fully compliant and contains it; so does the
+        // violating "consulting IronClaw for current design". Substring matching
+        // cannot separate them, which means the token is not evidence either way
+        // and flagging it produced exactly the Aegis false-positive class.
+        //
+        // Catching the real misuse needs the semantic observer, or a correction
+        // that quotes the forbidden formulation.
         let c = correction_with(
-            "c-ironclaw",
+            "c-example-tool",
             CorrectionType::Factual,
             "substrate.factual.corpus_state",
-            "IronClaw purged from Tier 1 corpus.",
-            Some("Do not treat IronClaw as current-substrate reference."),
+            "ExampleTool purged from Tier 1 corpus.",
+            Some("Do not treat ExampleTool as current-substrate reference."),
             60,
         );
-        let response = "Consulting the IronClaw architecture for current substrate design...";
+        let response = "Consulting the ExampleTool architecture for current substrate design...";
         let report = verify_against_corrections(response, &[c]);
-        assert!(!report.is_clean());
+        assert!(report.is_clean(), "no violation: token is the subject");
         assert!(report
-            .violations
+            .topic_touches
             .iter()
-            .any(|v| v.matched_pattern == "IronClaw"));
+            .any(|t| t.matched_pattern == "ExampleTool"));
     }
 
     #[test]
@@ -957,6 +1163,7 @@ mod tests {
             corrections_checked: 5,
             patterns_checked: 12,
             violations: Vec::new(),
+            topic_touches: Vec::new(),
             max_severity: ViolationSeverity::Informational,
         };
         let s = summary_event_string(&report);
@@ -964,6 +1171,7 @@ mod tests {
         assert!(s.contains("corrections=5"));
         assert!(s.contains("patterns=12"));
         assert!(s.contains("violations=0"));
+        assert!(s.contains("topic_touches=0"));
     }
 
     #[test]

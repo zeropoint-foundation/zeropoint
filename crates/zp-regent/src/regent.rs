@@ -49,6 +49,14 @@ const CORRECTION_SEARCH_LIMIT: usize = 1024;
 /// bounding the context-window impact under adversarial correction floods.
 const TIER1_CORRECTION_LIMIT: usize = 32;
 
+/// Chain-search bound for bedrock invariant receipts.
+///
+/// Every boot emits one per invariant, so this covers roughly the last hundred
+/// boots at the current set size — deep enough that the most recent observation
+/// of each is always present, bounded so a long-lived chain does not make the
+/// query unbounded.
+const GROUND_SEARCH_LIMIT: usize = 512;
+
 /// Cheap categorisation of what triggered this perception, for composition receipts.
 fn perception_invocation_reason(
     operator_input: &Option<OperatorInput>,
@@ -124,11 +132,115 @@ fn build_standing_corrections_section(context: &CognitiveContext) -> String {
     out
 }
 
+/// Render bedrock invariants — whether the substrate she is standing on holds.
+///
+/// Placed above standing corrections in the composed prompt, which is the only
+/// thing in Tier 1 that outranks them. A correction tells her what is true about
+/// the world; a violated invariant tells her the floor is missing. Reasoning
+/// carefully within a corrected frame, on a substrate whose credential store has
+/// vanished, is worse than not reasoning at all — it produces confident output
+/// resting on premises that no longer hold.
+///
+/// Violations only. The verified ones are chain-anchored and counted in the
+/// composition record, and putting six lines of *everything is fine* at the top
+/// of every cycle would push the operator's directive further from the boundary
+/// where attention actually lands (§III.21). Silence here means intact, and the
+/// composition summary is where "the check ran and found nothing" is evidenced.
+///
+/// Returns an empty string when everything holds, so the template placeholder
+/// disappears cleanly — same convention as the corrections section.
+fn build_substrate_ground_section(context: &CognitiveContext) -> String {
+    let violations: Vec<_> =
+        context.substrate_ground.iter().filter(|g| g.is_violation()).collect();
+
+    // Logged before the early return, unconditionally.
+    //
+    // The first version of this sat below the `violations.is_empty()` branch,
+    // which made "never called" and "called, nothing to show" produce the same
+    // silence — an instrument that cannot observe the case it was added for.
+    // Distinguishing them is the whole question: no line means this path is not
+    // the one composing her prompt; `ground_total = 0` means the context
+    // reaching the composer is not the context the summary counted; and
+    // `violations = 1` with a section emitted means it is in the prompt and
+    // carries no weight. Three different fixes.
+    info!(
+        ground_total = context.substrate_ground.len(),
+        violations = violations.len(),
+        "substrate ground section evaluated"
+    );
+
+    if violations.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from(
+        "SUBSTRATE INTEGRITY — the following premises DO NOT currently hold:\n",
+    );
+    for g in violations {
+        // Age matters: bedrock evaluates at boot, so a violation may predate
+        // anything in this cycle. "The vault is missing" and "the vault was
+        // missing when this machine booted nine hours ago" are different
+        // claims, and the detail text is present-tense in both cases.
+        let age = if g.age_secs < 90 {
+            "just now".to_string()
+        } else if g.age_secs < 5400 {
+            format!("{} min ago", g.age_secs / 60)
+        } else {
+            format!("{} h ago", g.age_secs / 3600)
+        };
+        out.push_str(&format!(
+            "  • [{}] {} — {} (observed {})\n",
+            g.severity, g.invariant, g.detail, age
+        ));
+    }
+    out.push_str(
+        "These are facts about your own substrate, not findings about the world. \
+         Do not assert that an affected surface is working, and say plainly that \
+         the premise is broken if asked to act on it.",
+    );
+
+    out
+}
+
 /// The Regent — ZeroPoint's apex cognitive entity.
 ///
 /// Governs on behalf of the sovereign operator. Its authority is
 /// always delegated, never inherent. Every action is chain-anchored
 /// and officer-observed.
+/// Why a cycle deliberates, or that it does not.
+///
+/// Decided once per cycle in [`Regent::begin_cycle`] and reported on the chain,
+/// so the wake policy is legible from the record rather than inferable from a
+/// conjunction of early returns. That opacity is what let 25,335 consecutive
+/// cycles skip inference unnoticed (SEAM-006).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wake {
+    /// Nothing changed and no schedule fired. Short-circuit before inference.
+    Quiet,
+    /// The officer-finding set differs from the previous cycle — something
+    /// appeared, cleared, or changed severity.
+    Novelty,
+    /// Scheduled deliberation. The floor that stops a static substrate from
+    /// going indefinitely without a considered view.
+    Scheduled,
+}
+
+impl Wake {
+    /// Short marker for the chain event string.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Wake::Quiet => "quiet",
+            Wake::Novelty => "novelty",
+            Wake::Scheduled => "scheduled",
+        }
+    }
+
+    /// Whether this cycle should run inference.
+    pub fn deliberates(self) -> bool {
+        !matches!(self, Wake::Quiet)
+    }
+}
+
 pub struct Regent {
     /// Configuration.
     config: RegentConfig,
@@ -148,6 +260,18 @@ pub struct Regent {
 
     /// How many cycles have run since startup.
     cycle_count: u64,
+
+    /// Fingerprint of the officer-finding set as of the previous cycle.
+    ///
+    /// Novelty, not severity, is what wakes the Regent — see `Wake`. `None`
+    /// before the first cycle, which makes the first cycle after every start
+    /// novel by definition and therefore deliberative. That is deliberate: a
+    /// restart is exactly when the standing picture should be re-read.
+    last_finding_fingerprint: Option<u64>,
+
+    /// Why this cycle is deliberating, or that it is not. Set by
+    /// [`Regent::begin_cycle`], read by `reason()`.
+    wake: Wake,
 
     /// Model dossier corpus — the router's evidence base.
     /// Loaded at startup from `models/*/model_dossier.toml`.
@@ -272,6 +396,8 @@ impl Regent {
             inference,
             sovereign,
             cycle_count: 0,
+            last_finding_fingerprint: None,
+            wake: Wake::Quiet,
             dossier_corpus: None,
             operator_pin,
         }
@@ -543,6 +669,83 @@ impl Regent {
     /// The caller (zp-server's loop runner) handles execution of the
     /// Intent: emitting receipts, dispatching to sub-agents, delivering
     /// responses through cockpit surfaces.
+    /// Cadence for scheduled deliberation: think every Nth cycle even when
+    /// nothing has changed.
+    ///
+    /// Novelty alone would let a genuinely static substrate go indefinitely
+    /// without the Regent forming a view — which is the state that produced
+    /// 25,335 consecutive un-thought cycles. The schedule is the floor, not
+    /// the mechanism. Conservative on purpose: each deliberation is a real
+    /// inference call, and the point is a heartbeat of judgement rather than
+    /// continuous reasoning.
+    ///
+    /// Should move to `RegentConfig` — it is a policy number living in code,
+    /// which is the shape of defect that produced SEAM-006.
+    pub const DELIBERATE_EVERY_N_CYCLES: u64 = 20;
+
+    /// Fingerprint the officer-finding set for novelty detection.
+    ///
+    /// Over `(event_key, severity)` only, sorted. Deliberately **excludes**:
+    ///
+    /// - `timestamp` — it changes every cycle, so including it would make
+    ///   every cycle novel and the gate would never close. The failure would
+    ///   look like the Regent working, which is worse than the current state.
+    /// - `summary` and `detail` — findings that carry counts ("50 chain
+    ///   entries, 7 findings") would churn their fingerprint on data that has
+    ///   not changed in kind.
+    ///
+    /// Severity *is* included: a finding escalating from Warning to Error is a
+    /// change worth waking for, even though its identity is the same.
+    fn fingerprint_findings(findings: &[Finding]) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut keys: Vec<String> = findings
+            .iter()
+            .map(|f| format!("{}|{:?}", f.event_key(), f.severity))
+            .collect();
+        keys.sort();
+
+        let mut h = DefaultHasher::new();
+        keys.hash(&mut h);
+        h.finish()
+    }
+
+    /// Advance the cycle counter and return the new value.
+    ///
+    /// `cycle()` increments this itself, but the production loop does not go
+    /// through `cycle()` — `loop_runner::run_cycle` calls `perceive()` and
+    /// `reason()` directly. So the counter never moved: all 25,335 autonomous
+    /// observations on the live chain as of 2026-08-09 read `cycle 0`, and the
+    /// chain could not order the Regent's own cycles or show where restarts
+    /// fell. Callers that drive the phases separately must call this once at
+    /// the top of each cycle.
+    pub fn begin_cycle(&mut self, findings: &[Finding]) -> u64 {
+        self.cycle_count += 1;
+
+        let fingerprint = Self::fingerprint_findings(findings);
+        let novel = self.last_finding_fingerprint != Some(fingerprint);
+        self.last_finding_fingerprint = Some(fingerprint);
+
+        // Novelty first: if the picture changed, that is the reason, and the
+        // schedule is irrelevant. Reporting the weaker reason when a stronger
+        // one applies would make the chain misleading about why she woke.
+        self.wake = if novel {
+            Wake::Novelty
+        } else if self.cycle_count % Self::DELIBERATE_EVERY_N_CYCLES == 0 {
+            Wake::Scheduled
+        } else {
+            Wake::Quiet
+        };
+
+        self.cycle_count
+    }
+
+    /// Why the current cycle is deliberating, or that it is not.
+    pub fn wake(&self) -> Wake {
+        self.wake
+    }
+
     pub async fn cycle(
         &mut self,
         chain: &ChainReader<'_>,
@@ -601,10 +804,18 @@ impl Regent {
             .map(ChainSnapshot::from_entry)
             .collect();
 
-        // Compress officer findings.
+        // One clock read for the whole composition. Findings are stamped with
+        // their age against it and corrections are indexed against it, so every
+        // recency claim in a single context refers to the same instant rather
+        // than to whenever its own line happened to execute.
+        let now = chrono::Utc::now();
+
+        // Compress officer findings, carrying observation age — a finding's
+        // summary is present-tense, so delivering it without recency turns a
+        // stale observation into a false claim. See `FindingSummary`.
         let officer_findings: Vec<FindingSummary> = findings
             .iter()
-            .map(FindingSummary::from_finding)
+            .map(|f| FindingSummary::from_finding_at(f, now))
             .collect();
 
         // Retrieve relevant memories based on current context.
@@ -613,8 +824,8 @@ impl Regent {
         // ── Standing corrections (Tier 1 cognitive input) ────────────────
         // Query the full chain — corrections live indefinitely once issued
         // (until superseded / revoked / expired). Search by both event
-        // prefixes so revocations are included in the index build.
-        let now = chrono::Utc::now();
+        // prefixes so revocations are included in the index build. `now` is
+        // bound above, shared with the finding-recency stamps.
         let mut correction_entries = chain
             .search_by_keyword(
                 crate::corrections::EVENT_PREFIX_STANDING,
@@ -635,6 +846,53 @@ impl Regent {
             .into_iter()
             .cloned()
             .collect();
+
+        // ── Bedrock invariants (Tier 1 cognitive input) ──────────────────
+        //
+        // Whether the substrate she is running on is intact. Read from the
+        // chain rather than plumbed through from the server: `bedrock::check`
+        // anchors `invariant:<name>:verified|violated` at every boot, and the
+        // chain is already an input she has. No new channel, and she sees the
+        // same evidence the operator does.
+        //
+        // One entry per distinct invariant, most recent observation wins.
+        // Receipts accumulate across boots, so taking the latest per name gives
+        // current state without having to reconstruct boot batches — and a
+        // violation that was fixed reads as verified on the next boot, which is
+        // exactly the clearing behaviour an alarm needs to be worth having.
+        let substrate_ground: Vec<crate::context::GroundFinding> = {
+            let entries = chain
+                .search_by_keyword(
+                    crate::context::GROUND_EVENT_PREFIX,
+                    GROUND_SEARCH_LIMIT,
+                )
+                .unwrap_or_default();
+
+            let mut latest: std::collections::BTreeMap<String, crate::context::GroundFinding> =
+                std::collections::BTreeMap::new();
+            for e in &entries {
+                let zp_core::AuditAction::SystemEvent { event } = &e.action else {
+                    continue;
+                };
+                if let Some(g) = crate::context::GroundFinding::parse(event, e.timestamp, now) {
+                    // Keep the newest observation for each invariant. Chain
+                    // order is not relied on — compare timestamps directly.
+                    match latest.get(&g.invariant) {
+                        Some(prev) if prev.observed_at >= g.observed_at => {}
+                        _ => {
+                            latest.insert(g.invariant.clone(), g);
+                        }
+                    }
+                }
+            }
+
+            // Violations first. Per *context is a priority-weighted stream*,
+            // ordering is signal: a violation buried under six verified
+            // invariants is a violation she may not weigh.
+            let mut v: Vec<_> = latest.into_values().collect();
+            v.sort_by_key(|g| (g.holds, g.invariant.clone()));
+            v
+        };
 
         // ── Composition provenance ──────────────────────────────────────
         // Structural hashes only — no content bloat on chain per cycle.
@@ -661,6 +919,11 @@ impl Regent {
             standing_corrections_hash:
                 crate::context::CompositionSummary::hash_corrections(&standing_corrections),
             standing_correction_authorship,
+            substrate_ground_count: substrate_ground.len(),
+            substrate_ground_violations:
+                substrate_ground.iter().filter(|g| g.is_violation()).count(),
+            substrate_ground_hash:
+                crate::context::CompositionSummary::hash_ground(&substrate_ground),
             officer_finding_count: officer_findings.len(),
             officer_findings_hash:
                 crate::context::CompositionSummary::hash_findings(&officer_findings),
@@ -684,6 +947,7 @@ impl Regent {
             pending_input: operator_input,
             memory_fragments,
             standing_corrections,
+            substrate_ground,
             active_delegations: delegations.to_vec(),
             system_awareness,
             tool_results,
@@ -738,13 +1002,36 @@ impl Regent {
             && !has_urgent
             && context.tool_results.is_empty()
             && context.work_arc.is_none()
+            // Novelty and the scheduled floor (SEAM-006, QUESTION-004,
+            // decided 2026-08-09). The four conditions above are all
+            // *reactive* — she thinks when spoken to, when something is
+            // already broken, when a tool returned, or when mid-arc. Nothing
+            // let an accumulated picture cause her to form a view, so seven
+            // standing findings sat unread for 25,335 cycles. `Wake` is the
+            // declared policy; it is decided in `begin_cycle` and named on
+            // the chain rather than implied by this conjunction.
+            && !self.wake.deliberates()
         {
+            // `gate=short_circuit` is the load-bearing part of this string.
+            // This return happens BEFORE any inference — no model call, no
+            // reasoning. A cycle that deliberated and *chose* to observe
+            // produces the same `regent:intent:observe` event, so without this
+            // marker the chain cannot tell "thought about it and stood down"
+            // from "never thought at all". On 2026-08-09 that was 25,335
+            // entries of the latter, indistinguishable from the former.
+            //
+            // Absence of the marker means inference ran. Keep it that way: if
+            // this guard grows another early exit, mark that one too.
             return Ok(Intent::Observe {
                 observation: format!(
-                    "cycle {}: {} chain entries, {} findings, no input, no urgency",
+                    "cycle {}: {} chain entries, {} findings, no input, no urgency \
+                     | gate=short_circuit reason_ms=0 urgent_threshold=Error|Critical \
+                     wake={} deliberate_every={}",
                     self.cycle_count,
                     context.recent_chain.len(),
                     context.officer_findings.len(),
+                    self.wake.as_str(),
+                    Self::DELIBERATE_EVERY_N_CYCLES,
                 ),
             });
         }
@@ -850,6 +1137,10 @@ impl Regent {
         let system_prompt = PROMPT_PROPOSE
             .replace("{persona}", &persona_fragment)
             .replace("{sovereign_section}", &sovereign_section)
+            .replace(
+                "{substrate_ground_section}",
+                &build_substrate_ground_section(context),
+            )
             .replace(
                 "{standing_corrections_section}",
                 &build_standing_corrections_section(context),
@@ -999,9 +1290,11 @@ impl Regent {
         };
 
         let standing_corrections_section = build_standing_corrections_section(context);
+        let substrate_ground_section = build_substrate_ground_section(context);
 
         let system_prompt = PROMPT_UNIFIED_SYSTEM
             .replace("{sovereign_section}", &sovereign_section)
+            .replace("{substrate_ground_section}", &substrate_ground_section)
             .replace(
                 "{standing_corrections_section}",
                 &standing_corrections_section,
@@ -1461,6 +1754,10 @@ impl Regent {
             .replace("{persona}", &persona_fragment)
             .replace("{sovereign_section}", &sovereign_section)
             .replace("{available_actions}", &available_actions)
+            .replace(
+                "{substrate_ground_section}",
+                &build_substrate_ground_section(context),
+            )
             .replace(
                 "{standing_corrections_section}",
                 &standing_corrections_section,
@@ -2610,30 +2907,9 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
     }
 
     // Known tool names — try to find one in the raw text.
-    const TOOLS: &[&str] = &[
-        "chain_query",
-        "system_status",
-        "governance_posture",
-        "model_evaluate",
-        "batch_sign",
-        "chain_compact",
-        "browser_use",
-        "self_configure",
-        "memory_list",
-        "memory_review",
-        // Was missing from both lists while the capability was granted.
-        "substrate_validate",
-        // Phase 1 artifact tools. Granted 2026-08-02 in REGENT_TOOLS and not
-        // added here — so a malformed emission arrived as
-        // `report_assemble','params':{...}` and dispatched as "unknown tool"
-        // while the tool existed and was reachable. Two days between the
-        // grant and the drift biting.
-        "chart_generate",
-        "report_assemble",
-        "save_to_artifacts",
-    ];
-
-    for tool in TOOLS {
+    // One declaration, in `crate::tools`. This was a private copy that
+    // silently disagreed with the granted set twice — see that module.
+    for tool in crate::tools::tool_names() {
         if raw.contains(tool) {
             warn!(
                 tool,
@@ -2671,35 +2947,14 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
 /// granted and missing from both copies here, so a malformed emission of it
 /// fell through unsanitized and dispatched as an unknown tool.
 ///
-/// Neither crate depends on the other in the direction that would let them
-/// share a const, so the duplication is structural and only a pin can hold
-/// the three together. Until that exists, granting a capability means
-/// editing three places, and nothing fails if you edit one.
+/// RESOLVED 2026-08-09. The claim that followed — that neither crate could
+/// see the other's const, so the duplication was structural — was false.
+/// `zp-server` depends on `zp-regent`, so the shared const was always
+/// possible. All three now read `crate::tools::REGENT_TOOLS`.
 fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
-    const TOOLS: &[&str] = &[
-        "chain_query",
-        "system_status",
-        "governance_posture",
-        "model_evaluate",
-        "batch_sign",
-        "chain_compact",
-        "browser_use",
-        "self_configure",
-        "memory_list",
-        "memory_review",
-        // Was missing from both lists while the capability was granted.
-        "substrate_validate",
-        // Phase 1 artifact tools. Granted 2026-08-02 in REGENT_TOOLS and not
-        // added here — so a malformed emission arrived as
-        // `report_assemble','params':{...}` and dispatched as "unknown tool"
-        // while the tool existed and was reachable. Two days between the
-        // grant and the drift biting.
-        "chart_generate",
-        "report_assemble",
-        "save_to_artifacts",
-    ];
-
-    for tool in TOOLS {
+    // One declaration, in `crate::tools`. Prefix-freedom of the names is
+    // asserted there, which is what makes `starts_with` safe here.
+    for tool in crate::tools::tool_names() {
         if raw.starts_with(tool) {
             if raw.len() == tool.len() {
                 // Exact match — no sanitization needed.

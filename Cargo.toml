@@ -47,6 +47,7 @@ members = [
     "crates/zp-gossip",
     "crates/zp-emission-coherence",
     "crates/zp-inference-observer",
+    "crates/zp-ontology",
 ]
 
 [workspace.package]

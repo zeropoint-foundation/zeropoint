@@ -398,7 +398,7 @@ enum Commands {
     /// use `zp configure exec --name <tool> -- <cmd>` first.
     ///
     /// Example:
-    ///   zp update --name ironclaw
+    ///   zp update --name ember
     #[cfg(feature = "embedded-server")]
     Update {
         /// Tool name (must match `zp port list` output)
@@ -456,7 +456,7 @@ enum Commands {
     /// or chain-grounded reasoning about that tool can proceed.
     ///
     /// Example:
-    ///   zp canonicalize --name ironclaw --path ~/projects/ironclaw
+    ///   zp canonicalize --name ember --path ~/projects/ember
     #[cfg(feature = "embedded-server")]
     Canonicalize {
         /// Tool name (must match `zp port list` / `zp discover` output)
@@ -716,6 +716,55 @@ enum SubstrateCmd {
 
 #[derive(Subcommand)]
 enum VaultCmd {
+    /// List key names held in the vault. Never prints values.
+    ///
+    /// Until 2026-08 the vault had no operator surface at all — no way to see
+    /// what it held. The one report on it was Steward's `vault_empty` finding,
+    /// which says "contains no entries" whether the key is unresolved, the
+    /// vault is unreadable, or it is genuinely empty. This distinguishes them.
+    List {
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Store a secret. The value is read from stdin, never from an argument.
+    ///
+    /// Passing a secret on the command line puts it in shell history, the
+    /// process table, and any shell-integration log. Piping keeps it out of
+    /// all three:
+    ///
+    ///   printf %s "$SECRET" | zp vault put system/regent/inference/api_key
+    Put {
+        /// Vault key path, e.g. `system/regent/inference/api_key`.
+        /// The leading segment selects the encryption tier.
+        key: String,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print a secret's value to stdout.
+    ///
+    /// The only verb that emits secret material, and present on purpose.
+    /// Per delegable safety (KEEL §III.18) a restriction with no sanctioned
+    /// path gets bypassed — an operator who cannot recover a secret from the
+    /// vault keeps their secrets somewhere else, which defeats the discipline
+    /// the omission was meant to protect. The read is chain-anchored so it is
+    /// auditable; the value never reaches the chain.
+    Reveal {
+        /// Vault key path.
+        key: String,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a secret by key name.
+    Remove {
+        /// Vault key path.
+        key: String,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Probe a vault-stored provider credential for validity.
     ///
     /// Retrieves credential server-side (never in cognitive layer per aligned
@@ -797,6 +846,9 @@ enum CorrectionCmd {
     ///     --assertion "Regent may mirror day-shape framing when operator sets it" \
     ///     --negation "Do not open with 'good morning'" --priority 70
     ///
+    ///   zp correction issue --type factual --domain cognitive.self_reference.aegis_scope \
+    ///     --assertion "..." --supersedes 911ff194606f40f1 --priority 90
+    ///
     ///   cat correction.json | zp correction issue --json -
     Issue {
         /// Correction type: factual | boundary | prohibition | preference
@@ -817,6 +869,15 @@ enum CorrectionCmd {
         /// Priority (0-100). Default scale: 100=existential, 50-99=high, 10-49=moderate, 1-9=soft.
         #[arg(long, default_value = "50")]
         priority: u32,
+        /// Correction id this one supersedes. Repeat for several.
+        ///
+        /// The superseded correction goes inactive from this receipt forward and
+        /// stays chain-preserved, per the schema's ordered-evolution lifecycle.
+        /// Prefer this over `correction revoke` followed by a fresh issue: revoke
+        /// leaves no link between the old claim and its replacement, so the chain
+        /// records that something was withdrawn but not what replaced it or why.
+        #[arg(long)]
+        supersedes: Vec<String>,
         /// Read full StandingCorrection JSON payload from file path (or "-" for stdin)
         #[arg(long)]
         json: Option<String>,
@@ -947,8 +1008,14 @@ enum PolicySetCmd {
     /// Set the LLM inference policy — backend, routing strategy, allowlist, and cost cap.
     ///
     /// Emits a signed `preference:llm:policy:set` receipt to the audit chain.
-    /// IronClaw reads this receipt at startup; `selected_model` in config.toml
-    /// becomes a true fallback only when no receipt exists yet.
+    /// Governed tools read this receipt at startup; `selected_model` in
+    /// config.toml becomes a true fallback only when no receipt exists yet.
+    ///
+    /// Note: this is the policy for *governed tools*, not for the Regent. Her
+    /// inference tier is chosen by the router from the model dossier corpus and
+    /// pinned by `regent:config:inference` receipts. As of 2026-08-06 there is
+    /// no operator verb for that pin, which is a gap worth closing — the model
+    /// serving cognition should be something the operator signs.
     ///
     /// Examples:
     ///   zp policy set inference --backend https://routellm.abacus.ai/v1 --strategy route-llm
@@ -1377,14 +1444,14 @@ enum ConfigureCmd {
         #[arg(long)]
         value: Option<String>,
     },
-    /// Store a tool-specific env var in the vault (e.g. OPENAI_API_KEY for ironclaw).
+    /// Store a tool-specific env var in the vault (e.g. OPENAI_API_KEY for a governed tool).
     /// The cockpit launch handler reads these via tools/{tool}/{VAR} and injects them
     /// into the process env at launch time — no .env files, no key pasting.
     ///
-    ///   zp configure vault-set-tool-env --tool ironclaw --var OPENAI_API_KEY
-    ///   zp configure vault-set-tool-env --tool ironclaw --var OPENAI_BASE_URL --value https://api.venice.ai/api/v1
+    ///   zp configure vault-set-tool-env --tool ember --var OPENAI_API_KEY
+    ///   zp configure vault-set-tool-env --tool ember --var OPENAI_BASE_URL --value https://api.venice.ai/api/v1
     VaultSetToolEnv {
-        /// Tool name (e.g., ironclaw, ember)
+        /// Tool name (e.g., ember, shannon)
         #[arg(long)]
         tool: String,
 
@@ -1471,7 +1538,7 @@ enum ConfigureCmd {
     /// identically-named vars already in the current environment.
     ///
     /// Example:
-    ///   zp configure exec --name ironclaw -- bash -c 'echo key_len=${#OPENAI_API_KEY}'
+    ///   zp configure exec --name ember -- bash -c 'echo key_len=${#OPENAI_API_KEY}'
     Exec {
         /// Tool name (matches what was used in `configure tool --name`)
         #[arg(long)]
@@ -1754,11 +1821,58 @@ async fn main() -> anyhow::Result<()> {
         let genesis_record_path = commands::resolve_zp_home().join("genesis.json");
         if genesis_record_path.exists() {
             if let Err(e) = zp_keys::load_sovereign_root(&genesis_record_path) {
-                eprintln!("\x1b[31m✗\x1b[0m  Sovereignty authentication failed: {}", e);
-                eprintln!("  Run `zp recover` with your 24-word mnemonic to restore access.");
+                // An operator declining or mistyping is not a lost Genesis.
+                //
+                // Both outcomes previously printed "Run `zp recover` with your
+                // 24-word mnemonic to restore access." Observed 2026-08-06: a
+                // mistyped Trezor PIN produced that line, which is correct
+                // guidance for an unrecoverable sovereign root and dangerous
+                // guidance for a typo — it invites a recovery ceremony in
+                // response to pressing the wrong key, and an operator who
+                // follows it is doing something irreversible for no reason.
+                //
+                // Matching on the message rather than a typed error because the
+                // provider surfaces cancellation as a string today. A typed
+                // `SovereigntyError::Cancelled` would be better and is a
+                // separate change; the message is the part that misleads now.
+                let msg = e.to_string();
+                let cancelled = msg.contains("cancelled")
+                    || msg.contains("canceled")
+                    || msg.contains("PIN entry");
+
+                if cancelled {
+                    eprintln!(
+                        "\x1b[33m✗\x1b[0m  Sovereignty ceremony cancelled on device."
+                    );
+                    eprintln!("  Nothing is wrong and nothing was changed — run the same");
+                    eprintln!("  command again and re-enter when the device asks.");
+                } else {
+                    eprintln!("\x1b[31m✗\x1b[0m  Sovereignty authentication failed: {}", e);
+                    eprintln!("  If the device is connected and unlocked, try again first.");
+                    eprintln!("  `zp recover` with your 24-word mnemonic is the last resort,");
+                    eprintln!("  not the first response — it re-establishes Genesis.");
+                }
                 std::process::exit(1);
             }
         }
+
+        // Bedrock invariants are evaluated in `AppState::init` and surfaced by
+        // `zp-dev.sh`, not here.
+        //
+        // A version of this block briefly lived at this point, on the reasoning
+        // that `zp serve` daemonizes and the child's stderr goes to the logfile,
+        // so the operator-facing report belonged in the parent. That reasoning
+        // was wrong twice over: `zp-dev.sh` launches with `--foreground` under
+        // `nohup … >> "$LOG" 2>&1`, so there is no parent outside the redirect,
+        // and *nothing* the binary writes reaches the terminal. The Trezor block
+        // letters that appear during boot are printed by the script, which greps
+        // the log and renders them — the binary only logs a line the script
+        // recognises.
+        //
+        // So the terminal is the script's to own, and the correct fix was in
+        // `zp-dev.sh`, which already solves exactly this for the touch prompt.
+        // Its comment states the principle: "The prompt existed — at INFO, in a
+        // logfile, where nobody was looking. Put it where the person is."
 
         // Daemonize by default on Unix so `zp serve` returns the terminal immediately.
         // `--foreground` keeps it attached (debug use, or for callers that manage the
@@ -2558,7 +2672,7 @@ async fn main() -> anyhow::Result<()> {
                     eprintln!("  \x1b[31mNo command specified.\x1b[0m");
                     eprintln!();
                     eprintln!("  Usage: zp configure exec --name <tool> -- <command> [args...]");
-                    eprintln!("  Example: zp configure exec --name ironclaw -- bash -c 'echo hi'");
+                    eprintln!("  Example: zp configure exec --name mytool -- bash -c 'echo hi'");
                     eprintln!();
                     1
                 } else {
@@ -5932,36 +6046,25 @@ async fn main() -> anyhow::Result<()> {
     // of a group that will keep growing. The general form — commands declaring
     // whether they need the sovereign root, rather than paying for it by
     // position in main() — is the right fix and is not this one.
-    // Same early-exit reasoning as the approval verbs below: these are HTTP
-    // reads and writes over the session token, and everything past pipeline
-    // construction unlocks the sovereign root. Seeing what the substrate may
-    // do unasked should cost nothing; withdrawing it should cost nothing
-    // either, because a revocation an operator hesitates to perform is a
-    // safety mechanism that does not work.
-    if let Some(Commands::Precedent(cmd)) = &args.command {
-        match cmd {
-            PrecedentCmd::List { json } => run_precedent_list(*json).await?,
-            PrecedentCmd::Revoke {
-                context_signature,
-                reason,
-            } => run_precedent_revoke(context_signature, reason.as_deref()).await?,
+    //
+    // 2026-08-05: the group grew exactly as forecast. `zp correction` landed
+    // after the note above was written, was never added to the early-exit set,
+    // and inherited the defect by position — an operator checking or amending
+    // the corrections that steer Regent's cognition paid a hardware touch per
+    // invocation, for an audit signer none of those three verbs construct.
+    //
+    // Membership is now declared by `is_session_token_only` rather than by
+    // where a block happens to sit in this function, and dispatch runs through
+    // one arm instead of one block per command group. That does not reach the
+    // full general form — every command declaring its own requirement — but it
+    // removes the failure mode that produced this recurrence: a new verb can
+    // no longer inherit the touch silently, because adding it to the session
+    // surface means naming it in one predicate.
+    if let Some(cmd) = &args.command {
+        if is_session_token_only(cmd) {
+            run_session_token_command(cmd).await?;
+            std::process::exit(0);
         }
-        std::process::exit(0);
-    }
-
-    if let Some(Commands::Approval(cmd)) = &args.command {
-        match cmd {
-            ApprovalCmd::List { json } => run_approval_list(*json).await?,
-            ApprovalCmd::Grant {
-                request_hash,
-                reason,
-            } => run_approval_resolve(request_hash, "granted", reason.as_deref()).await?,
-            ApprovalCmd::Deny {
-                request_hash,
-                reason,
-            } => run_approval_resolve(request_hash, "denied", reason.as_deref()).await?,
-        }
-        std::process::exit(0);
     }
 
     let config = PipelineConfig {
@@ -5989,6 +6092,44 @@ async fn main() -> anyhow::Result<()> {
     ));
     let mut pipeline = Pipeline::new(config, audit_store.clone())?;
 
+    // Populate the provider pool.
+    //
+    // HARNESS-SEAM-2026-08 S3: both entry points must behave identically. The
+    // server wires this at AppState::init; without the same call here the CLI
+    // holds a well-formed pipeline that cannot serve, and `zp` fails with
+    // NoProvider while the server works — one substrate, two behaviours.
+    //
+    // Model election is read from zp-config (crossing C1, sole authority).
+    // Providers route through the running server's proxy on cfg.port, so CLI
+    // completions are receipted on the same terms as server completions.
+    //
+    // Unlike the server this is NOT boot-fatal: most CLI verbs never touch
+    // inference, and refusing to run `zp config show` because a model is
+    // missing would be its own incoherence. The failure is reported loudly and
+    // the affected verbs fail at call time with NoProvider.
+    {
+        let llm_cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
+        if llm_cfg.llm_enabled.value {
+            match pipeline
+                .init_providers(
+                    llm_cfg.port.value,
+                    &llm_cfg.llm_provider.value,
+                    &llm_cfg.llm_model.value,
+                    &llm_cfg.llm_escalation_model.value,
+                    llm_cfg.llm_supports_tools.value,
+                )
+                .await
+            {
+                Ok(n) => tracing::debug!(providers = n, "CLI provider pool ready"),
+                Err(e) => eprintln!(
+                    "Warning: provider pool unavailable ({}). \
+                     Inference verbs will fail; other verbs are unaffected.",
+                    e
+                ),
+            }
+        }
+    }
+
     // Initialize execution engine — governed via HostContext so every sandboxed
     // file write and process spawn passes through the governance gate.
     {
@@ -6012,48 +6153,15 @@ async fn main() -> anyhow::Result<()> {
     match args.command {
         None | Some(Commands::Chat) => chat::run(&pipeline).await?,
         Some(Commands::Health) => commands::health(&pipeline).await?,
-        Some(Commands::Officer(OfficerCmd::Sweep { name, json })) => {
-            run_officer_sweep(name.as_deref(), json).await?;
-        }
-        Some(Commands::Vault(VaultCmd::Test { provider, json })) => {
-            run_vault_test(&provider, json).await?;
-        }
-        Some(Commands::Substrate(SubstrateCmd::Validate { json })) => {
-            run_substrate_validate(json).await?;
-        }
-        Some(Commands::Correction(CorrectionCmd::Issue {
-            correction_type,
-            domain,
-            assertion,
-            negation,
-            context,
-            priority,
-            json,
-            json_out,
-        })) => {
-            run_correction_issue(
-                correction_type.as_deref(),
-                domain.as_deref(),
-                assertion.as_deref(),
-                negation.as_deref(),
-                context.as_deref(),
-                priority,
-                json.as_deref(),
-                json_out,
-            )
-            .await?;
-        }
-        Some(Commands::Correction(CorrectionCmd::List { json })) => {
-            run_correction_list(json).await?;
-        }
+        // Session-token surface — handled above, before pipeline construction.
+        Some(Commands::Officer(OfficerCmd::Sweep { .. })) => unreachable!(),
+        Some(Commands::Vault(_)) => unreachable!(), // handled above
+        Some(Commands::Substrate(SubstrateCmd::Validate { .. })) => unreachable!(),
+        // Session-token surface — dispatched before pipeline construction so
+        // it never unlocks the sovereign root. See `is_session_token_only`.
         Some(Commands::Approval(_)) => unreachable!(), // handled above
         Some(Commands::Precedent(_)) => unreachable!(), // handled above
-        Some(Commands::Correction(CorrectionCmd::Revoke {
-            correction_id,
-            json,
-        })) => {
-            run_correction_revoke(&correction_id, json).await?;
-        }
+        Some(Commands::Correction(_)) => unreachable!(), // handled above
         Some(Commands::Audit(AuditCmd::Verify)) => commands::audit_verify(&pipeline).await?,
         Some(Commands::Audit(AuditCmd::Log { limit, category })) => {
             commands::audit_log(&pipeline, limit, category.as_deref()).await?
@@ -6877,10 +6985,18 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
     })() {
         Some(t) => t,
         None => {
+            // The session file is written by the server, not by any CLI verb —
+            // `SessionAuth::new` mints a token at startup and persists it. There
+            // is no login command. This message named `zp session login` until
+            // 2026-08-05, sending operators after a verb that has never existed.
+            // Per *the chain configures the cockpit*: output must not name
+            // affordances absent from the verb set.
             eprintln!(
                 "\x1b[31m✗\x1b[0m  No session token at ~/ZeroPoint/session.json"
             );
-            eprintln!("    Log in first: zp session login");
+            eprintln!("    The server mints this file at startup — start it with `zp serve`.");
+            eprintln!("    If it is already running, the token has aged out past");
+            eprintln!("    ZP_SESSION_MAX_AGE_SECONDS (default 8h); `zp restart` re-mints it.");
             return 2;
         }
     };
@@ -7404,6 +7520,7 @@ async fn run_correction_issue(
     negation: Option<&str>,
     context: Option<&str>,
     priority: u32,
+    supersedes: &[String],
     json_source: Option<&str>,
     json_out: bool,
 ) -> anyhow::Result<()> {
@@ -7437,12 +7554,19 @@ async fn run_correction_issue(
             content["context"] = serde_json::json!(c);
         }
 
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "correction_type": ct,
             "domain": dom,
             "content": content,
             "priority": priority,
-        })
+        });
+        // Omit when empty rather than sending `[]` — `supersedes` is
+        // `#[serde(default, skip_serializing_if = "Vec::is_empty")]`, and an
+        // absent field round-trips identically to an empty one.
+        if !supersedes.is_empty() {
+            body["supersedes"] = serde_json::json!(supersedes);
+        }
+        body
     };
 
     let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
@@ -7761,6 +7885,305 @@ async fn run_approval_resolve(
         v["entry_hash"].as_str().unwrap_or("?")
     );
     println!();
+    Ok(())
+}
+
+/// True when a command reaches the substrate over HTTP carrying the session
+/// token, and signs nothing locally.
+///
+/// # Why this predicate exists
+///
+/// Pipeline construction in `main()` calls `load_genesis_secret_composed()` to
+/// derive an audit signer. On a hardware-Genesis substrate that prompts a
+/// physical touch. Commands listed here never construct that signer — they read
+/// `~/ZeroPoint/session.json` and issue an HTTP request — so paying a ceremony
+/// for them buys nothing.
+///
+/// It matters past the annoyance because these are P9 surfaces. The signature is
+/// the operator's act, so the queue of things awaiting it, the precedents that
+/// authorise autonomous action, and the corrections that steer Regent's
+/// cognition must all be freely inspectable and freely amendable. A queue that
+/// costs a ceremony to read is a queue that stops being read; a correction that
+/// costs a ceremony to issue is a correction that does not get issued. And a
+/// ceremony spent on a command that cannot complete — observed twice, 2026-07-31
+/// and 2026-08-05, both times ending in `session_stale` or a connection failure
+/// *after* the touch — teaches the operator that touches are cheap, which is the
+/// opposite of what a signing ceremony exists to establish.
+///
+/// # Adding a command
+///
+/// Name it here. Membership is deliberately a declaration rather than a
+/// consequence of where a block sits in `main()`: `zp correction` inherited the
+/// touch for months precisely because it landed below pipeline construction and
+/// nobody had to say otherwise.
+///
+/// The full general form — every command declaring its own sovereign-root
+/// requirement, checked exhaustively so the compiler forces the decision — is
+/// still the right destination. This is the narrower step that closes the
+/// silent-inheritance path.
+/// Membership was derived 2026-08-06 by scanning every caller of
+/// `read_zp_session_token()` — the marker for "talks to the substrate over
+/// HTTP" — rather than by noticing verbs one complaint at a time. Three
+/// families beyond the original set turned up: substrate validation, officer
+/// sweeps, and vault provider tests.
+///
+/// Note the granularity difference. `Precedent`, `Approval` and `Correction`
+/// match whole-group because every subcommand in each is an HTTP call.
+/// `Substrate`, `Officer` and `Vault` match per-subcommand: their siblings
+/// (`vault list`, `vault revoke`, `officer list`) were not audited and may
+/// legitimately need the root, so they keep the default path.
+fn is_session_token_only(cmd: &Commands) -> bool {
+    matches!(
+        cmd,
+        Commands::Precedent(_)
+            | Commands::Approval(_)
+            | Commands::Correction(_)
+            | Commands::Substrate(SubstrateCmd::Validate { .. })
+            | Commands::Officer(OfficerCmd::Sweep { .. })
+            | Commands::Vault(VaultCmd::Test { .. })
+            // The vault verbs proxy to the server, which already holds the
+            // master key from the boot ceremony. Unlocking the sovereign root
+            // again here would be a second root — see `singular_sovereign_root`.
+            | Commands::Vault(VaultCmd::List { .. })
+            | Commands::Vault(VaultCmd::Put { .. })
+            | Commands::Vault(VaultCmd::Reveal { .. })
+            | Commands::Vault(VaultCmd::Remove { .. })
+    )
+}
+
+/// Dispatch a session-token-only command.
+///
+/// Callers must gate on [`is_session_token_only`] first. The two are a pair:
+/// the predicate decides membership, this decides behaviour, and a command in
+/// one but not the other is a bug the `unreachable!` arm will surface loudly
+/// rather than silently falling through to a hardware prompt.
+async fn run_session_token_command(cmd: &Commands) -> anyhow::Result<()> {
+    match cmd {
+        Commands::Precedent(PrecedentCmd::List { json }) => run_precedent_list(*json).await,
+        Commands::Precedent(PrecedentCmd::Revoke {
+            context_signature,
+            reason,
+        }) => run_precedent_revoke(context_signature, reason.as_deref()).await,
+
+        Commands::Approval(ApprovalCmd::List { json }) => run_approval_list(*json).await,
+        Commands::Approval(ApprovalCmd::Grant {
+            request_hash,
+            reason,
+        }) => run_approval_resolve(request_hash, "granted", reason.as_deref()).await,
+        Commands::Approval(ApprovalCmd::Deny {
+            request_hash,
+            reason,
+        }) => run_approval_resolve(request_hash, "denied", reason.as_deref()).await,
+
+        Commands::Correction(CorrectionCmd::Issue {
+            correction_type,
+            domain,
+            assertion,
+            negation,
+            context,
+            priority,
+            supersedes,
+            json,
+            json_out,
+        }) => {
+            run_correction_issue(
+                correction_type.as_deref(),
+                domain.as_deref(),
+                assertion.as_deref(),
+                negation.as_deref(),
+                context.as_deref(),
+                *priority,
+                supersedes,
+                json.as_deref(),
+                *json_out,
+            )
+            .await
+        }
+        Commands::Correction(CorrectionCmd::List { json }) => run_correction_list(*json).await,
+        Commands::Correction(CorrectionCmd::Revoke {
+            correction_id,
+            json,
+        }) => run_correction_revoke(correction_id, *json).await,
+
+        Commands::Substrate(SubstrateCmd::Validate { json }) => {
+            run_substrate_validate(*json).await
+        }
+        Commands::Officer(OfficerCmd::Sweep { name, json }) => {
+            run_officer_sweep(name.as_deref(), *json).await
+        }
+        Commands::Vault(VaultCmd::Test { provider, json }) => {
+            run_vault_test(provider, *json).await
+        }
+        Commands::Vault(VaultCmd::List { json }) => run_vault_list(*json).await,
+        Commands::Vault(VaultCmd::Put { key, json }) => run_vault_put(key, *json).await,
+        Commands::Vault(VaultCmd::Reveal { key, json }) => run_vault_reveal(key, *json).await,
+        Commands::Vault(VaultCmd::Remove { key, json }) => run_vault_remove(key, *json).await,
+
+        _ => unreachable!(
+            "run_session_token_command reached for a command \
+             is_session_token_only does not claim"
+        ),
+    }
+}
+
+/// Shared plumbing for the vault verbs: config, session token, HTTP client.
+///
+/// All four talk to the running server rather than opening the vault directly.
+/// The server already holds the vault master key, derived once from the boot
+/// ceremony; unlocking the sovereign root again in the CLI would be a second
+/// root in all but name, which `singular_sovereign_root` forbids.
+async fn vault_request(
+    path: &str,
+    method: reqwest::Method,
+    body: Option<serde_json::Value>,
+) -> anyhow::Result<serde_json::Value> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = zp_net::peer_url_with_path("127.0.0.1", port, path);
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()?;
+
+    let mut req = client.request(method, &url).bearer_auth(&token);
+    if let Some(b) = body {
+        req = req.json(&b);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate at 127.0.0.1:{}: {}", port, e))?;
+    let body = resp.text().await?;
+    serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {} (body: {})", e, body))
+}
+
+/// Print `{"error": ..., "detail": ...}` if present. Returns true when handled.
+fn vault_report_error(v: &serde_json::Value) -> bool {
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        if let Some(d) = v.get("detail").and_then(|d| d.as_str()) {
+            eprintln!("    {}", d);
+        }
+        return true;
+    }
+    false
+}
+
+async fn run_vault_list(json_out: bool) -> anyhow::Result<()> {
+    let v = vault_request("/api/v1/vault/list", reqwest::Method::GET, None).await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    let keys: Vec<&str> = v["keys"].as_array().map(|a| {
+        a.iter().filter_map(|k| k.as_str()).collect()
+    }).unwrap_or_default();
+    let exists = v["exists"].as_bool().unwrap_or(false);
+    let path = v["vault_path"].as_str().unwrap_or("?");
+
+    println!();
+    if keys.is_empty() {
+        println!("Vault holds no secrets.");
+        println!("─────────────────────────");
+        // The distinction Steward's finding cannot make.
+        if exists {
+            println!("  The vault file exists and is empty.");
+        } else {
+            println!("  No vault file yet at {}", path);
+            println!("  It is created the first time a secret is stored, not at startup.");
+        }
+    } else {
+        println!("Vault secrets: {}", keys.len());
+        println!("─────────────────────────");
+        for k in &keys {
+            println!("  {}", k);
+        }
+        println!();
+        println!("  Key names only — values are never listed.");
+    }
+    println!();
+    Ok(())
+}
+
+async fn run_vault_put(key: &str, json_out: bool) -> anyhow::Result<()> {
+    use std::io::Read;
+    let mut value = String::new();
+    std::io::stdin().read_to_string(&mut value)?;
+    // Trailing newline from `echo` or a heredoc is almost never part of the
+    // secret, and a stray one produces an auth failure that is very hard to
+    // see. Strip it; a caller who needs the newline can use `--json` input.
+    let value = value.trim_end_matches(['\n', '\r']).to_string();
+    if value.is_empty() {
+        anyhow::bail!(
+            "No value on stdin. Pipe the secret in:\n    \
+             printf %s \"$SECRET\" | zp vault put {}",
+            key
+        );
+    }
+
+    let v = vault_request(
+        "/api/v1/vault/put",
+        reqwest::Method::POST,
+        Some(serde_json::json!({ "key": key, "value": value })),
+    )
+    .await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    println!("\x1b[32m✓\x1b[0m  Stored {} ({} bytes)", key, value.len());
+    Ok(())
+}
+
+async fn run_vault_reveal(key: &str, json_out: bool) -> anyhow::Result<()> {
+    let v = vault_request(
+        "/api/v1/vault/reveal",
+        reqwest::Method::POST,
+        Some(serde_json::json!({ "key": key })),
+    )
+    .await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    // Bare value on stdout, no decoration — so it composes with a pipe without
+    // the caller having to strip a banner.
+    if let Some(s) = v["value"].as_str() {
+        println!("{}", s);
+    }
+    Ok(())
+}
+
+async fn run_vault_remove(key: &str, json_out: bool) -> anyhow::Result<()> {
+    let v = vault_request(
+        "/api/v1/vault/remove",
+        reqwest::Method::POST,
+        Some(serde_json::json!({ "key": key })),
+    )
+    .await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    println!("\x1b[32m✓\x1b[0m  Removed {}", key);
     Ok(())
 }
 
@@ -9924,7 +10347,7 @@ async fn run_policy_set_inference(
             println!("  Circuit breaker: {} consecutive failures", threshold);
         }
         println!();
-        println!("  Restart IronClaw for the new policy to take effect.");
+        println!("  Restart any governed tool reading this policy for it to take effect.");
     }
 
     Ok(())

@@ -323,7 +323,7 @@ mod tests {
             domain: "operations",
             finding_type: "port_mismatch".into(),
             severity: Severity::Warning,
-            summary: "IronClaw port mismatch".into(),
+            summary: "ExampleTool port mismatch".into(),
             detail: json!({"expected": 9101, "actual": 8090}),
             timestamp: Utc::now(),
             cross_domain_depth: 0,
@@ -335,38 +335,38 @@ mod tests {
         let p = Proposal::new(
             test_finding(),
             ProposedMutation::SetPortBinding {
-                tool: "ironclaw".into(),
+                tool: "example-tool".into(),
                 port: 8090,
                 rationale: "observed on PID 12345".into(),
             },
             "forge",
         );
-        assert_eq!(p.event_key(), "proposal:forge:set_port:ironclaw");
+        assert_eq!(p.event_key(), "proposal:forge:set_port:example-tool");
         assert_eq!(p.status, ProposalStatus::Pending);
     }
 
     #[test]
     fn mutation_summary() {
         let m = ProposedMutation::RestartTool {
-            tool: "ironclaw".into(),
+            tool: "example-tool".into(),
             rationale: "crash loop: 5 launches in 10 min".into(),
         };
         assert_eq!(m.kind_label(), "restart_tool");
-        assert_eq!(m.tool_name(), "ironclaw");
-        assert!(m.summary().contains("Restart ironclaw"));
+        assert_eq!(m.tool_name(), "example-tool");
+        assert!(m.summary().contains("Restart example-tool"));
     }
 
     #[test]
     fn mutation_serde_round_trip() {
         let m = ProposedMutation::GrantDelegation {
-            tool: "ironclaw".into(),
-            scopes: vec!["tool:exec:ironclaw".into()],
+            tool: "example-tool".into(),
+            scopes: vec!["tool:exec:example-tool".into()],
             rationale: "new tool needs execution scope".into(),
         };
         let json = serde_json::to_string(&m).unwrap();
         let m2: ProposedMutation = serde_json::from_str(&json).unwrap();
         assert_eq!(m2.kind_label(), "grant_delegation");
-        assert_eq!(m2.tool_name(), "ironclaw");
+        assert_eq!(m2.tool_name(), "example-tool");
     }
 
     #[test]
@@ -570,7 +570,7 @@ mod tests {
             Proposal::new(
                 test_finding(),
                 ProposedMutation::RestartTool {
-                    tool: "ironclaw".into(),
+                    tool: "example-tool".into(),
                     rationale: "crash loop".into(),
                 },
                 "forge",
@@ -578,7 +578,7 @@ mod tests {
             Proposal::new(
                 test_finding(),
                 ProposedMutation::SetPortBinding {
-                    tool: "ironclaw".into(),
+                    tool: "example-tool".into(),
                     port: 8090,
                     rationale: "observed".into(),
                 },

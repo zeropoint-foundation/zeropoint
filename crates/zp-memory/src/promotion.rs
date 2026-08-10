@@ -10,6 +10,7 @@ use tracing::info;
 use zp_receipt::{ClaimMetadata, ClaimSemantics, Receipt, Status};
 
 use crate::lifecycle::apply_lifecycle_rules;
+use zp_core::receipt_extensions as ext;
 use crate::types::{
     MemoryEntry, MemoryStage, PromotionRequest, PromotionResult, PromotionThresholds,
 };
@@ -284,6 +285,22 @@ impl PromotionEngine {
                 "zp.memory.memory_id",
                 serde_json::Value::String(entry.id.clone()),
             )
+            .extension(
+                // The stage `reconstitute` rebuilds `memory_states` from. It
+                // reads this with `.unwrap_or("unknown")`, so every promotion
+                // reconstituted before 2026-08-09 landed as stage "unknown" —
+                // a default that reads as data. The value was already two lines
+                // above in `claim_metadata`; only the extension was missing.
+                ext::MEMORY_STAGE,
+                serde_json::Value::String(request.target_stage.to_string()),
+            )
+            // `ext::MEMORY_SOURCE_AGENT` is deliberately NOT written here.
+            // `reconstitute` reads it, but `MemoryEntry` has no such field —
+            // the nearest thing is `source_observation_id`, which is an
+            // observation, not an agent. This is a third category, distinct
+            // from the two in the channel-boundary ADR: not a missing producer,
+            // but a producer with no data to supply. Inventing a plausible
+            // value here would be worse than the gap.
             .extension("zp.memory.confidence", serde_json::json!(entry.confidence))
             .extension(
                 "zp.memory.reinforcement_count",

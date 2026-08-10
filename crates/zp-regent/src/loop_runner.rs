@@ -858,6 +858,11 @@ async fn run_cycle(
     for turn in 0..MAX_TOOL_TURNS {
         // Lock the regent first (async-safe tokio Mutex).
         let mut regent_guard = regent.lock().await;
+        // The counter lives on Regent and is incremented by `Regent::cycle()`,
+        // which this loop does not call — it drives perceive/reason directly.
+        // Without this the chain records every autonomous cycle as "cycle 0".
+        let cycle_no = regent_guard.begin_cycle(findings);
+        debug!(cycle = cycle_no, turn, wake = regent_guard.wake().as_str(), "regent cycle starting");
 
         // ── Perceive ─────────────────────────────────────────────
         let perceive_t0 = std::time::Instant::now();
@@ -996,9 +1001,25 @@ async fn run_cycle(
         // case builds the empirical foundation for evidence-based
         // routing when multi-model envelopes ship via operator ceremony.
         if let Some(decision) = regent_guard.inference().take_classifier_decision() {
-            let event = serde_json::to_string(&serde_json::json!({
-                "class": "inference:classifier_decision",
-                "receipt_type": decision.receipt_type(),
+            // `prefix + space + JSON`, matching every other emitter on the
+            // chain (`cognitive:correction:standing {…}`, `…:violated {…}`).
+            //
+            // Until 2026-08-06 this one serialized the whole event as bare
+            // JSON, with `receipt_type()` — the canonical key, documented and
+            // format-tested on `ClassifierDecision` — demoted to a payload
+            // field. The receipt-type inventory partitions the chain by leading
+            // token, so these registered their first serialized key as a
+            // prefix: `{"chosen_model"`, because serde sorts keys and
+            // `chosen_model` precedes `class`. They surfaced in a posture check
+            // as two receipts with an unrecognized prefix, invisible to every
+            // prefix-scoped query in between.
+            //
+            // `class` and `receipt_type` leave the payload — the prefix now
+            // carries both structurally (P4, every bit counts).
+            //
+            // Forward-only: the two malformed receipts stay on the chain as
+            // history. Chain is truth and is not rewritten.
+            let payload = serde_json::to_string(&serde_json::json!({
                 "decision_id": decision.decision_id,
                 "chosen_model": decision.chosen_model,
                 "envelope_size": decision.envelope_size,
@@ -1008,6 +1029,7 @@ async fn run_cycle(
                 "timestamp": decision.timestamp,
             }))
             .unwrap_or_else(|_| "{}".to_string());
+            let event = format!("{} {}", decision.receipt_type(), payload);
             let entry = zp_audit::UnsealedEntry {
                 actor: zp_core::ActorId::System("regent".to_string()),
                 action: zp_core::AuditAction::SystemEvent { event },
@@ -1407,9 +1429,20 @@ fn emit_composition_receipt(
 ) -> Option<String> {
     // Encode summary metadata inline in the event string (existing pattern for
     // chain-anchored regent events — see server::regent::emit_remediation_receipt).
+    // `ground=<count>/<violations>/<hash>` sits first among the input classes
+    // because it is Tier 1 above corrections — and because the distinction it
+    // records is the one that cannot be recovered later. `ground=0/0/` means
+    // no bedrock invariant reached this cycle at all, which is a substrate
+    // whose premises were never examined; `ground=5/0/<hash>` means they were
+    // examined and held. Without the count in the receipt those two are
+    // indistinguishable after the fact, and "Regent was reasoning over intact
+    // premises" stops being a checkable claim.
     let event = format!(
-        "cognitive:input:composed matrix={} corrections={}/{} findings={}/{} chain={} delegations={} reason={}",
+        "cognitive:input:composed matrix={} ground={}/{}/{} corrections={}/{} findings={}/{} chain={} delegations={} reason={}",
         summary.matrix_version,
+        summary.substrate_ground_count,
+        summary.substrate_ground_violations,
+        &summary.substrate_ground_hash[..summary.substrate_ground_hash.len().min(12)],
         summary.standing_correction_count,
         &summary.standing_corrections_hash[..summary.standing_corrections_hash.len().min(12)],
         summary.officer_finding_count,
@@ -1927,9 +1960,15 @@ fn run_emission_coherence(
     };
 
     // Per-finding receipts.
+    //
+    // `prefix + space + JSON`. These emitted bare JSON until 2026-08-06, so the
+    // receipt-type inventory bucketed them under their first serialized key —
+    // `{"class"`, serde sorting alphabetically — and no prefix-scoped query
+    // could reach them. Same defect the Layer 2 classifier receipts carried,
+    // found in the same posture check. `class` leaves the payload; the prefix
+    // now carries it.
     for finding in &outcome.findings {
-        let event = match serde_json::to_string(&serde_json::json!({
-            "class": "emission_coherence:finding",
+        let payload = match serde_json::to_string(&serde_json::json!({
             "heuristic": finding.name,
             "severity": finding.severity,
             "evidence": finding.evidence,
@@ -1940,6 +1979,7 @@ fn run_emission_coherence(
                 continue;
             }
         };
+        let event = format!("emission_coherence:finding {}", payload);
         let entry = zp_audit::UnsealedEntry {
             actor: zp_core::ActorId::System("regent".to_string()),
             action: zp_core::AuditAction::SystemEvent { event },
@@ -1957,9 +1997,12 @@ fn run_emission_coherence(
         }
     }
 
-    // Summary receipt — receipt-family identifies the composed class.
-    let summary_event = match serde_json::to_string(&serde_json::json!({
-        "class": "emission_coherence:summary",
+    // Summary receipt — prefixed, per the note on the per-finding loop above.
+    //
+    // `receipt_family` / `receipt_type` stay in the payload: unlike the
+    // classifier case they describe the *emission being analysed*, not this
+    // receipt, so they are cargo rather than identity.
+    let summary_payload = match serde_json::to_string(&serde_json::json!({
         "receipt_family": outcome.receipt_family,
         "receipt_type": outcome.receipt_family.receipt_type(),
         "response_class": outcome.response_class,
@@ -1974,6 +2017,7 @@ fn run_emission_coherence(
             return;
         }
     };
+    let summary_event = format!("emission_coherence:summary {}", summary_payload);
     let summary_entry = zp_audit::UnsealedEntry {
         actor: zp_core::ActorId::System("regent".to_string()),
         action: zp_core::AuditAction::SystemEvent {

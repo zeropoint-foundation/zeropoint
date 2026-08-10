@@ -539,6 +539,15 @@ impl Sentinel {
             // AI / agent apps
             ("Claude.app/", "ai_client_helper"),
             ("ChatGPT.app/", "ai_client_helper"),
+            // Local inference backends. Ollama spawns a fresh `llama-server`
+            // per model load, each on a random high port bound to 127.0.0.1,
+            // so it is a recurring source of genuinely-new listeners rather
+            // than a one-off — edge-triggering suppresses repeats but cannot
+            // suppress a real new process. Classified benign because it is the
+            // operator's own inference backend; the substrate routes its
+            // cognition through it.
+            ("Ollama.app/", "inference_backend"),
+            ("/llama-server", "inference_backend"),
             // Productivity
             ("Notion.app/", "productivity_helper"),
             ("Obsidian.app/", "productivity_helper"),
@@ -563,14 +572,33 @@ impl Sentinel {
             ("locationd", "system_daemon"),
         ];
 
+        // Case-insensitive. Bundle directory casing is not something the
+        // classifier gets to assume: Claude Code ships its helper at
+        //
+        //   …/Application Support/Claude/claude-code/2.1.219/claude.app/…
+        //
+        // — capitalised as a support directory, lowercase as the bundle. The
+        // keyword `Claude.app/` matched neither, so every Claude Code start was
+        // logged as a security incident. Found 2026-08-06, in the first receipt
+        // payload after officer findings began carrying `binary_path` at all;
+        // for as long as the classifier had existed the evidence needed to see
+        // this was being computed and discarded.
+        //
+        // Lowercasing per call rather than at compile time: this runs once per
+        // newly discovered listener, so the allocation is irrelevant next to
+        // the `proc_pidpath` syscall that produced the path.
+        let path_lc = binary_path.to_lowercase();
+        let name_lc = process_name.to_lowercase();
+
         // Check binary_path first (most reliable — canonical bundle location)
         for (keyword, class) in APPLICATION_KEYWORDS {
-            if binary_path.contains(keyword) {
+            if path_lc.contains(&keyword.to_lowercase()) {
                 return Some(class);
             }
         }
         for (keyword, class) in SYSTEM_DAEMON_KEYWORDS {
-            if binary_path.contains(keyword) || process_name.contains(keyword) {
+            let k = keyword.to_lowercase();
+            if path_lc.contains(&k) || name_lc.contains(&k) {
                 return Some(class);
             }
         }
@@ -859,7 +887,7 @@ mod tests {
     #[test]
     fn sentinel_detects_credential_in_key_name() {
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/api_key".into(),
+            "tools/example-tool/api_key".into(),
             "providers/anthropic/sk-ant-api03-real-key-value".into(), // leaked credential
             "tools/github/ghp_1234567890abcdef".into(),              // leaked GitHub token
         ]);
@@ -884,8 +912,8 @@ mod tests {
         // Should emit Info-level `generic_config_field_name`, NOT Warning
         // `shadow_credential`.
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/API_KEY".into(),
-            "providers/tools/ironclaw/API_KEY".into(),
+            "tools/example-tool/API_KEY".into(),
+            "providers/tools/example-tool/API_KEY".into(),
         ]);
 
         let sen = Sentinel::new();
@@ -1125,6 +1153,47 @@ mod tests {
         assert_eq!(findings[0].finding_type, "unregistered_known_app");
         assert_eq!(findings[0].severity, Severity::Info);
         assert!(findings[0].summary.contains("editor_helper"));
+    }
+
+    /// Bundle casing is not the classifier's to assume.
+    ///
+    /// Real path observed on chain 2026-08-06 — `Claude` capitalised as the
+    /// support directory, `claude.app` lowercase as the bundle. Against the
+    /// keyword `Claude.app/` under case-sensitive matching this classified as
+    /// unknown, so every Claude Code start was recorded as a security incident.
+    #[test]
+    fn benign_classification_is_case_insensitive_on_bundle_name() {
+        let sen = Sentinel::new();
+        let context = json!({
+            "binary_path": "/Users/kenrom/Library/Application Support/Claude/claude-code/2.1.219/claude.app/Contents/MacOS/claude",
+            "user": "kenrom",
+            "parent_name": "zsh"
+        });
+        let ports = vec![json!({"port": 61234, "protocol": "TCP", "socket": "127.0.0.1:61234"})];
+
+        let findings = sen.assess_unauthorized_listener(12345, "claude", &ports, &context);
+        assert_eq!(findings[0].finding_type, "unregistered_known_app");
+        assert_eq!(findings[0].severity, Severity::Info);
+        assert!(findings[0].summary.contains("ai_client_helper"));
+    }
+
+    /// Ollama spawns a `llama-server` per model load on a random high port, so
+    /// it is a recurring source of genuinely-new listeners that edge-triggering
+    /// cannot suppress — each really is a new process.
+    #[test]
+    fn ollama_inference_backend_classifies_benign() {
+        let sen = Sentinel::new();
+        let context = json!({
+            "binary_path": "/Applications/Ollama.app/Contents/Resources/llama-server",
+            "user": "kenrom",
+            "parent_name": "Ollama"
+        });
+        let ports = vec![json!({"port": 60546, "protocol": "TCP", "socket": "127.0.0.1:60546"})];
+
+        let findings = sen.assess_unauthorized_listener(60546, "llama-server", &ports, &context);
+        assert_eq!(findings[0].finding_type, "unregistered_known_app");
+        assert_eq!(findings[0].severity, Severity::Info);
+        assert!(findings[0].summary.contains("inference_backend"));
     }
 
     #[test]

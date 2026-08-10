@@ -3504,7 +3504,7 @@ mod tests {
     }
 
     #[test]
-    fn test_database_url_ironclaw() {
+    fn test_database_url_example_tool() {
         let engine = ConfigEngine::new();
         let m = engine.match_var("DATABASE_URL");
         assert!(m.is_some());
@@ -3985,6 +3985,12 @@ LLM_MODEL=gpt-4
             deluxe: None,
             provider_overrides: overrides,
             verification: None,
+            // Added to `ToolManifest` after this fixture was written. The
+            // struct literal is exhaustive, so the omission is a hard compile
+            // error — but only under `--cfg test`, so `cargo build --workspace`
+            // stayed green while `cargo test --workspace` could not build at
+            // all. See SEAM-010.
+            vault_schema: vec![],
             configurable: vec![],
             capabilities: Default::default(),
             launch: None,

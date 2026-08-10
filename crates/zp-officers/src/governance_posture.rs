@@ -342,7 +342,7 @@ mod tests {
         let chain = ChainReader::new(&store);
         let mut registry = ToolRegistrySnapshot::default();
         registry.registered_tools.insert(
-            "ironclaw".to_string(),
+            "example-tool".to_string(),
             RegisteredToolInfo {
                 port: 9101,
                 pid: Some(12345),
@@ -391,7 +391,7 @@ mod tests {
 
         let mut registry = ToolRegistrySnapshot::default();
         registry.registered_tools.insert(
-            "ironclaw".to_string(),
+            "example-tool".to_string(),
             RegisteredToolInfo {
                 port: 9101,
                 pid: Some(12345),

@@ -20,6 +20,7 @@ pub mod paths;
 pub mod policy;
 pub mod provider;
 pub mod receipt_emission;
+pub mod receipt_extensions;
 pub mod revocation;
 pub mod skill;
 pub mod types;
@@ -77,6 +78,9 @@ pub use policy::{
 };
 pub use policy::{PolicyContext, PolicyDecision, TrustTier};
 pub use provider::{ProviderCapabilities, ProviderHealth, ProviderId};
-pub use receipt_emission::{emit_authorization_receipt, emit_delegation_receipt, emit_revocation_receipt};
+pub use receipt_emission::{
+    capability_grant_receipt, certificate_rotation_receipts, emit_authorization_receipt, emit_delegation_receipt,
+    emit_revocation_receipt,
+};
 pub use skill::{CandidateStatus, SkillCandidate, SkillId, SkillManifest, SkillOrigin, SkillStats};
 pub use types::*;

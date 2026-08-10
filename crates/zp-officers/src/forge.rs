@@ -796,12 +796,12 @@ mod tests {
         let p = Proposal::new(
             finding,
             ProposedMutation::RestartTool {
-                tool: "ironclaw".into(),
+                tool: "example-tool".into(),
                 rationale: "crash loop".into(),
             },
             "forge",
         );
-        assert_eq!(p.event_key(), "proposal:forge:restart_tool:ironclaw");
+        assert_eq!(p.event_key(), "proposal:forge:restart_tool:example-tool");
     }
 
     #[test]
@@ -812,9 +812,9 @@ mod tests {
             domain: "operations",
             finding_type: "port_mismatch".into(),
             severity: Severity::Warning,
-            summary: "ironclaw port mismatch".into(),
+            summary: "example-tool port mismatch".into(),
             detail: json!({
-                "tool_name": "ironclaw",
+                "tool_name": "example-tool",
                 "actual_ports": [8090],
                 "expected": 9101,
             }),
@@ -825,7 +825,7 @@ mod tests {
         let proposals = forge.propose_from_findings(&findings);
         assert_eq!(proposals.len(), 1);
         assert_eq!(proposals[0].mutation.kind_label(), "set_port");
-        assert_eq!(proposals[0].mutation.tool_name(), "ironclaw");
+        assert_eq!(proposals[0].mutation.tool_name(), "example-tool");
     }
 
     #[test]
@@ -860,9 +860,9 @@ mod tests {
             domain: "operations",
             finding_type: "launch_failure_rate".into(),
             severity: Severity::Warning,
-            summary: "ironclaw launch failures".into(),
+            summary: "example-tool launch failures".into(),
             detail: json!({
-                "tool": "ironclaw",
+                "tool": "example-tool",
                 "failures": 5,
                 "successes": 1,
             }),
@@ -873,7 +873,7 @@ mod tests {
         let proposals = forge.propose_from_findings(&findings);
         assert_eq!(proposals.len(), 1);
         assert_eq!(proposals[0].mutation.kind_label(), "restart_tool");
-        assert_eq!(proposals[0].mutation.tool_name(), "ironclaw");
+        assert_eq!(proposals[0].mutation.tool_name(), "example-tool");
     }
 
     #[test]
@@ -885,7 +885,7 @@ mod tests {
             finding_type: "operational_silence".into(),
             severity: Severity::Info,
             summary: "no activity".into(),
-            detail: json!({"tool": "ironclaw"}),
+            detail: json!({"tool": "example-tool"}),
             timestamp: Utc::now(),
             cross_domain_depth: 0,
         }];

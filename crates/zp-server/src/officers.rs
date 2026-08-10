@@ -92,8 +92,43 @@ fn emit_finding(
         Err(_) => return false,
     };
 
+    // `prefix + space + JSON`, per the workspace convention and the
+    // `chain_events_carry_a_prefix` discipline pin.
+    //
+    // Until 2026-08-06 the event was `finding.event_key()` alone, so an officer
+    // finding reached the chain as a bare key with no subject:
+    //
+    //     officer:sen:security:unauthorized_listener
+    //
+    // `finding.summary` was carried in `policy_decision.conditions` — a
+    // different column, and not one any query for finding content thinks to
+    // read — and `finding.detail`, which holds the pid, process name, ports and
+    // binary path, was dropped entirely. A security finding that cannot say
+    // what it is about is a count, not a finding: five of these landed in five
+    // seconds and the only honest thing anyone could say about them was that
+    // there were five.
+    //
+    // Appending a payload is safe for consumers: every reader of officer events
+    // matches by `starts_with`, and the single equality comparison
+    // (`substrate_validate.rs:613`) is already OR'd with one.
+    //
+    // `summary` stays in `conditions` as well for now. That location is a
+    // semantic misuse — conditions describe a policy decision, not an
+    // observation — but removing it is a breaking change for any consumer
+    // reading it today, and the event payload is the canonical location going
+    // forward.
+    let payload = serde_json::json!({
+        "severity": format!("{:?}", finding.severity),
+        "summary": finding.summary,
+        "detail": finding.detail,
+        "observed_at": finding.timestamp.to_rfc3339(),
+    });
     let action = AuditAction::SystemEvent {
-        event: finding.event_key(),
+        event: format!(
+            "{} {}",
+            finding.event_key(),
+            serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
+        ),
     };
     let policy_decision = PolicyDecision::Allow {
         conditions: vec![finding.summary.clone()],
@@ -1101,13 +1136,38 @@ pub fn spawn_sensor_forge_task(
                 );
             }
 
-            // Emit findings for Warning+ severity.
+            // Emit every finding. Severity governs whether it *surfaces*, not
+            // whether it is *recorded*.
+            //
+            // This filtered `> Severity::Info` until 2026-08-06, which silently
+            // defeated half the P1.2 benign-listener refactor. That refactor's
+            // stated intent was that routine listener activity be
+            // "chain-anchored for auditability without surfacing to operator
+            // attention" — two requirements. Classification delivered the
+            // second; the filter destroyed the first. `unregistered_known_app`
+            // sat in KNOWN_RECEIPT_PREFIXES and in `silent_prefixes`
+            // simultaneously: declared, implemented, tested, and structurally
+            // incapable of reaching the chain.
+            //
+            // The volume objection that justified the filter has since
+            // collapsed. Discovery is edge-triggered now, so this is one
+            // receipt per benign listener *appearance* — a model load, an app
+            // launch — not one per listener per 300-second scan.
+            //
+            // The deciding case is inference. Ollama spawns a `llama-server`
+            // per model load, and that process is where Regent's cognition
+            // actually runs; its command line carries the model blob hash and
+            // the port. Classifying it benign and then dropping it would leave
+            // the substrate unable to say when its own reasoning apparatus
+            // changed underneath it. §III.24 aligned blindness is about
+            // refusing to observe what the substrate has no business seeing —
+            // this is the inverse, and the lsof test's requirement that every
+            // listener trace to a receipt or be explicitly out of scope admits
+            // no third option where the listener is simply forgotten.
             let mut emitted = 0usize;
             for finding in &findings {
-                if finding.severity > Severity::Info {
-                    if emit_finding(&state.audit_store, finding) {
-                        emitted += 1;
-                    }
+                if emit_finding(&state.audit_store, finding) {
+                    emitted += 1;
                 }
             }
 

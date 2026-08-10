@@ -78,6 +78,27 @@ impl ConfigResolver {
                 Source::EnvVar("ZP_LLM_ENABLED".into()),
             );
         }
+        if let Ok(v) = std::env::var("ZP_LLM_PROVIDER") {
+            self.config
+                .llm_provider
+                .override_with(v, Source::EnvVar("ZP_LLM_PROVIDER".into()));
+        }
+        if let Ok(v) = std::env::var("ZP_LLM_MODEL") {
+            self.config
+                .llm_model
+                .override_with(v, Source::EnvVar("ZP_LLM_MODEL".into()));
+        }
+        if let Ok(v) = std::env::var("ZP_LLM_ESCALATION_MODEL") {
+            self.config
+                .llm_escalation_model
+                .override_with(v, Source::EnvVar("ZP_LLM_ESCALATION_MODEL".into()));
+        }
+        if let Ok(v) = std::env::var("ZP_LLM_SUPPORTS_TOOLS") {
+            self.config.llm_supports_tools.override_with(
+                v == "true" || v == "1",
+                Source::EnvVar("ZP_LLM_SUPPORTS_TOOLS".into()),
+            );
+        }
         if let Ok(v) = std::env::var("ZP_OPERATOR_NAME") {
             self.config
                 .operator_name
@@ -210,6 +231,22 @@ impl ConfigResolver {
         // LLM
         if let Some(v) = file.llm.enabled {
             self.config.llm_enabled.override_with(v, source.clone());
+        }
+        if let Some(v) = file.llm.provider {
+            self.config.llm_provider.override_with(v, source.clone());
+        }
+        if let Some(v) = file.llm.model {
+            self.config.llm_model.override_with(v, source.clone());
+        }
+        if let Some(v) = file.llm.escalation_model {
+            self.config
+                .llm_escalation_model
+                .override_with(v, source.clone());
+        }
+        if let Some(v) = file.llm.supports_tools {
+            self.config
+                .llm_supports_tools
+                .override_with(v, source.clone());
         }
         // Node topology
         if let Some(v) = file.node.role {
@@ -376,6 +413,35 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
                 reason: "must be true or false".into(),
             })?;
             file.llm.enabled = Some(b);
+        }
+        "llm.provider" => {
+            if value.trim().is_empty() {
+                return Err(ConfigError::InvalidValue {
+                    key: key.into(),
+                    reason: "must be a non-empty provider segment (e.g. ollama)".into(),
+                });
+            }
+            file.llm.provider = Some(value.into());
+        }
+        "llm.model" => {
+            if value.trim().is_empty() {
+                return Err(ConfigError::InvalidValue {
+                    key: key.into(),
+                    reason: "must be a non-empty model name".into(),
+                });
+            }
+            file.llm.model = Some(value.into());
+        }
+        // Empty is meaningful here: it disables the escalation tier.
+        "llm.escalation_model" => {
+            file.llm.escalation_model = Some(value.into());
+        }
+        "llm.supports_tools" => {
+            let b = parse_bool(value).ok_or(ConfigError::InvalidValue {
+                key: key.into(),
+                reason: "must be true or false".into(),
+            })?;
+            file.llm.supports_tools = Some(b);
         }
         "node.role" => {
             match value {

@@ -66,6 +66,27 @@ impl ProxyLlmProvider {
         }
     }
 
+    /// Override the declared strength (0.0–1.0) used by `ProviderPool` routing.
+    ///
+    /// The pool's `Strong` selection picks the highest strength, and
+    /// `RequireStrong` demands `> 0.7`. The constructors ship conservative
+    /// defaults; a pool holding a default tier and an escalation tier must
+    /// separate them here or `Strong` cannot tell them apart.
+    pub fn with_strength(mut self, strength: f64) -> Self {
+        self.capabilities.strength = strength;
+        self
+    }
+
+    /// Declare whether the backing model implements the OpenAI tool-call format.
+    ///
+    /// `local()` defaults to `false` because it cannot know which Ollama tag it
+    /// was handed. Set `true` for tags that do support tools — the pipeline's
+    /// tool-invocation loop is a no-op without it.
+    pub fn with_tools(mut self, supports_tools: bool) -> Self {
+        self.capabilities.supports_tools = supports_tools;
+        self
+    }
+
     fn proxy_url(&self) -> String {
         format!(
             "http://127.0.0.1:{}/api/v1/proxy/{}/v1/chat/completions",

@@ -491,7 +491,7 @@ mod tests {
         ));
         {
             let mut s = store.lock().unwrap();
-            s.set_notifier(Arc::new(AnchorNotifier::new(pipeline.clone())));
+            s.add_notifier(Arc::new(AnchorNotifier::new(pipeline.clone())));
         }
 
         let allow_event = |i: usize| {

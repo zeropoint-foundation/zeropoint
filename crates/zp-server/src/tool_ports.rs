@@ -2272,10 +2272,10 @@ mod tests {
         let (reg, _dir) = make_registry();
         reg.allocate_or_existing("lc-tool", 1, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
-        reg.store_launch_command("lc-tool", "ironclaw", &["--port".to_string(), "9100".to_string()], None)
+        reg.store_launch_command("lc-tool", "example-tool", &["--port".to_string(), "9100".to_string()], None)
             .expect("store");
         let lc = reg.get_assigned("lc-tool").unwrap().launch_command.unwrap();
-        assert_eq!(lc.command, "ironclaw");
+        assert_eq!(lc.command, "example-tool");
         assert_eq!(lc.args, vec!["--port", "9100"]);
     }
 
@@ -2502,10 +2502,10 @@ mod tests {
     fn parse_lsof_listen_ports_extracts_ports() {
         let sample = "\
 COMMAND    PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\n\
-ironclaw 1234 user   17u  IPv4 0xabc       0t0  TCP *:3000 (LISTEN)\n\
-ironclaw 1234 user   18u  IPv4 0xdef       0t0  TCP *:8090 (LISTEN)\n\
-ironclaw 1234 user   19u  IPv4 0x123       0t0  TCP 127.0.0.1:50051 (LISTEN)\n\
-ironclaw 1234 user   20u  IPv4 0x456       0t0  TCP 127.0.0.1:50051 (ESTABLISHED)\n";
+example-tool 1234 user   17u  IPv4 0xabc       0t0  TCP *:3000 (LISTEN)\n\
+example-tool 1234 user   18u  IPv4 0xdef       0t0  TCP *:8090 (LISTEN)\n\
+example-tool 1234 user   19u  IPv4 0x123       0t0  TCP 127.0.0.1:50051 (LISTEN)\n\
+example-tool 1234 user   20u  IPv4 0x456       0t0  TCP 127.0.0.1:50051 (ESTABLISHED)\n";
         let ports = parse_lsof_listen_ports(sample);
         assert_eq!(ports, vec![3000, 8090, 50051]);
     }
@@ -2590,11 +2590,11 @@ python3   200    ken    5u   IPv4 0x2    0t0  TCP *:8000 (LISTEN)\n";
     #[test]
     fn parse_lsof_all_listen_handles_localhost_address() {
         let sample = "\
-ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
+example-tool  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         let procs = parse_lsof_all_listen(sample);
         assert_eq!(procs.len(), 1);
         assert_eq!(procs[0].port, 17770);
-        assert_eq!(procs[0].name, "ironclaw");
+        assert_eq!(procs[0].name, "example-tool");
     }
 
     #[test]
@@ -2671,13 +2671,13 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         let (reg, _dir) = make_registry();
         // Allocate primary port for ironclaw (pid=0, no preferred port — registry picks).
         let b_alloc = reg
-            .allocate_or_existing("ironclaw", 0, "PORT", &[], None, PreferenceSource::Default)
+            .allocate_or_existing("example-tool", 0, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
         let primary_port = b_alloc.port;
         // Inject actual extra ports the way Wire 2 / reconcile_ports does.
         {
             let mut map = reg.bindings.lock().unwrap();
-            let b = map.get_mut("ironclaw").unwrap();
+            let b = map.get_mut("example-tool").unwrap();
             b.actual_extra_ports.insert("GRPC_PORT".into(), 50051);
             b.actual_extra_ports.insert("GATEWAY_PORT".into(), 3000);
         }
@@ -2685,9 +2685,9 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         // Use the actually-allocated primary_port (not a hardcoded value) so the
         // proc matches what's in port_map.
         let procs = vec![
-            ListenProcess { pid: 93290, name: "ironclaw".into(), port: primary_port },
-            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 50051 },
-            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 3000 },
+            ListenProcess { pid: 93290, name: "example-tool".into(), port: primary_port },
+            ListenProcess { pid: 93290, name: "example-tool".into(), port: 50051 },
+            ListenProcess { pid: 93290, name: "example-tool".into(), port: 3000 },
         ];
         let snap = PostureSnapshot::from_processes(&reg, procs);
         assert_eq!(snap.substrate_managed.len(), 3, "all three ports must be SubstrateManaged");
@@ -2695,7 +2695,7 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         for ap in &snap.substrate_managed {
             match &ap.attribution {
                 ProcessAttribution::SubstrateManaged { tool_name, .. } => {
-                    assert_eq!(tool_name, "ironclaw");
+                    assert_eq!(tool_name, "example-tool");
                 }
                 other => panic!("expected SubstrateManaged, got {:?}", other),
             }
@@ -2833,7 +2833,7 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     #[test]
     fn known_system_category_unknown_returns_none() {
         assert!(known_system_category("").is_none());
-        assert!(known_system_category("ironclaw").is_none());
+        assert!(known_system_category("example-tool").is_none());
         assert!(known_system_category("my-custom-service").is_none());
         // Prefix must match exactly — "com.apple" without trailing dot must not match.
         assert!(known_system_category("com.apple").is_none());

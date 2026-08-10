@@ -8168,6 +8168,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-ontology"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+ "zp-core",
+]
+
+[[package]]
 name = "zp-pipeline"
 version = "0.1.0"
 dependencies = [
@@ -8335,6 +8352,7 @@ dependencies = [
  "zp-net",
  "zp-observation",
  "zp-officers",
+ "zp-ontology",
  "zp-pipeline",
  "zp-policy",
  "zp-receipt",

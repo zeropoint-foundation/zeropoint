@@ -5,6 +5,8 @@
 
 pub mod analysis;
 pub mod anchor_pipeline;
+pub mod bedrock;
+pub mod cartographer;
 pub mod artifact_library;
 pub mod canary;
 pub mod coherence;
@@ -89,6 +91,14 @@ pub struct ServerConfig {
     pub home_dir: std::path::PathBuf,
     pub open_dashboard: bool,
     pub llm_enabled: bool,
+    /// Proxy provider segment the pipeline routes completions through.
+    pub llm_provider: String,
+    /// Default-tier model name.
+    pub llm_model: String,
+    /// Escalation-tier model name. Empty disables the tier.
+    pub llm_escalation_model: String,
+    /// Whether the configured models implement the OpenAI tool-call format.
+    pub llm_supports_tools: bool,
     pub operator_name: String,
     /// Optional path to the Bridge UI dist directory.
     /// When set, serves the Bridge at /bridge.
@@ -102,6 +112,10 @@ pub struct ServerConfig {
     pub officers_forge_enabled: bool,
     pub officers_cleo_enabled: bool,
     pub officers_aegis_enabled: bool,
+    /// Enable the Cartographer background task (materializes ontology from
+    /// receipt chain). Per CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md P3.
+    /// Defaults to false — opt-in until empirical validation completes.
+    pub cartographer_enabled: bool,
     /// External processes the operator acknowledges as expected listeners.
     pub acknowledged_listeners: Vec<zp_config::AcknowledgedListener>,
     // ── Regent ──
@@ -132,6 +146,18 @@ impl Default for ServerConfig {
             home_dir: home,
             open_dashboard: true,
             llm_enabled: std::env::var("ZP_LLM_ENABLED").unwrap_or_default() == "true",
+            // Defaults mirror zp_config::ZpConfig so this env-only path and the
+            // resolved-config path agree. See officer-inference.toml for why
+            // these two tags.
+            llm_provider: std::env::var("ZP_LLM_PROVIDER")
+                .unwrap_or_else(|_| "ollama".to_string()),
+            llm_model: std::env::var("ZP_LLM_MODEL")
+                .unwrap_or_else(|_| "gemma4:26b-mlx".to_string()),
+            llm_escalation_model: std::env::var("ZP_LLM_ESCALATION_MODEL")
+                .unwrap_or_else(|_| "qwen3.6:35b-a3b".to_string()),
+            llm_supports_tools: std::env::var("ZP_LLM_SUPPORTS_TOOLS")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(true),
             operator_name: std::env::var("ZP_OPERATOR_NAME")
                 .unwrap_or_else(|_| "ZeroPoint".to_string()),
             bridge_dir: std::env::var("ZP_BRIDGE_DIR")
@@ -144,6 +170,7 @@ impl Default for ServerConfig {
             officers_forge_enabled: true,
             officers_cleo_enabled: true,
             officers_aegis_enabled: true,
+            cartographer_enabled: false,
             acknowledged_listeners: Vec::new(),
             regent_enabled: false,
             regent_inference_endpoint: "http://127.0.0.1:11434".to_string(),
@@ -166,6 +193,10 @@ impl ServerConfig {
             home_dir: cfg.home_dir.value.clone(),
             open_dashboard: cfg.open_dashboard.value,
             llm_enabled: cfg.llm_enabled.value,
+            llm_provider: cfg.llm_provider.value.clone(),
+            llm_model: cfg.llm_model.value.clone(),
+            llm_escalation_model: cfg.llm_escalation_model.value.clone(),
+            llm_supports_tools: cfg.llm_supports_tools.value,
             operator_name: cfg.operator_name.value.clone(),
             bridge_dir: std::env::var("ZP_BRIDGE_DIR")
                 .ok()
@@ -177,6 +208,13 @@ impl ServerConfig {
             officers_forge_enabled: cfg.officers_forge_enabled.value,
             officers_cleo_enabled: cfg.officers_cleo_enabled.value,
             officers_aegis_enabled: cfg.officers_aegis_enabled.value,
+            // P3.2 follow-up: add cartographer_enabled to ZpConfig proper.
+            // For now, default false — opt-in via env var or programmatic
+            // ServerConfig construction.
+            cartographer_enabled: std::env::var("ZP_CARTOGRAPHER_ENABLED")
+                .ok()
+                .map(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+                .unwrap_or(false),
             acknowledged_listeners: cfg.acknowledged_listeners.value.clone(),
             regent_enabled: cfg.regent_enabled.value,
             regent_inference_endpoint: cfg.regent_inference_endpoint.value.clone(),
@@ -762,7 +800,17 @@ impl AppState {
         {
             const AUTO_COMPACT_THRESHOLD: usize = 50_000;
             const AUTO_COMPACT_RETAIN: usize = 10_000;
-            let count = audit_store_inner.entry_count().unwrap_or(0);
+            // `live_entry_count`, not `entry_count`. The latter returns
+            // live + archived, while `compact_chain` computes its cutoff from
+            // the live table alone — so gating on the combined total compares
+            // two different populations. Once anything has been archived the
+            // total can never fall back below the threshold, and compaction
+            // re-fires on every single start, churning the live window down to
+            // the retain target each time. Observed 2026-08-08: 275,675
+            // combined (24,272 live) against a 50,000 threshold, archiving
+            // ~14,000 rows per boot. That churn is what stranded the
+            // Cartographer's cursor below the retained floor.
+            let count = audit_store_inner.live_entry_count().unwrap_or(0);
             if count > AUTO_COMPACT_THRESHOLD {
                 info!(
                     entries = count,
@@ -817,7 +865,81 @@ impl AppState {
                 data_dir: std::path::PathBuf::from(&config.data_dir),
                 mesh: None,
             };
-            Pipeline::new(pipeline_config, audit_store.clone()).ok()
+            let p = Pipeline::new(pipeline_config, audit_store.clone()).ok();
+            // Populate the provider pool. Without this the pipeline exists but
+            // every request fails with NoProvider — the pool is constructed
+            // empty and nothing else fills it.
+            //
+            // Providers route through this server's own proxy on `config.port`,
+            // so completions pick up receipt signing, cost tracking and policy
+            // gating.
+            //
+            // HARNESS-SEAM-2026-08 §4 / S3: this crossing is boot-failing. An
+            // earlier revision logged the error and continued, which let the
+            // server report healthy while holding an empty pool — precisely the
+            // half-state the seam declaration forbids. `llm.enabled = true` is
+            // an operator assertion that inference is configured; if the
+            // crossing fails, that assertion is false and the correct response
+            // is to refuse to start rather than to serve a substrate that
+            // silently cannot think.
+            if let Some(ref pipe) = p {
+                match pipe
+                    .init_providers(
+                        config.port,
+                        &config.llm_provider,
+                        &config.llm_model,
+                        &config.llm_escalation_model,
+                        config.llm_supports_tools,
+                    )
+                    .await
+                {
+                    Ok(n) => tracing::info!(
+                        providers = n,
+                        provider = %config.llm_provider,
+                        model = %config.llm_model,
+                        "LLM provider pool ready"
+                    ),
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            provider = %config.llm_provider,
+                            model = %config.llm_model,
+                            "FATAL: provider pool initialization failed while llm.enabled = true"
+                        );
+                        eprintln!(
+                            "\nZeroPoint refused to start.\n\n\
+                             llm.enabled is true, but the provider pool could not be \
+                             populated:\n  {}\n\n\
+                             Provider: {}\n  Model: {}\n  Escalation: {}\n\n\
+                             Fix the configuration, or set llm.enabled = false to run \
+                             without inference.\n\
+                             (HARNESS-SEAM-2026-08 S3 — a configured substrate that \
+                             cannot serve is a half-state, not a degraded mode.)\n",
+                            e,
+                            config.llm_provider,
+                            config.llm_model,
+                            if config.llm_escalation_model.trim().is_empty() {
+                                "(none)"
+                            } else {
+                                &config.llm_escalation_model
+                            },
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                // Pipeline::new failed but llm.enabled is true. Same class of
+                // broken assertion, same response.
+                tracing::error!("FATAL: llm.enabled = true but pipeline construction failed");
+                eprintln!(
+                    "\nZeroPoint refused to start.\n\n\
+                     llm.enabled is true, but the request pipeline could not be \
+                     constructed.\nCheck that the data directory is writable: {}\n",
+                    config.data_dir
+                );
+                std::process::exit(1);
+            }
+            p
         } else {
             None
         };
@@ -1019,7 +1141,7 @@ impl AppState {
         // trigger events spawn an async seal task.
         {
             let mut s = audit_store.lock().expect("audit store mutex");
-            s.set_notifier(Arc::new(anchor_pipeline::AnchorNotifier::new(
+            s.add_notifier(Arc::new(anchor_pipeline::AnchorNotifier::new(
                 anchor_pipeline.clone(),
             )));
         }
@@ -1082,39 +1204,124 @@ impl AppState {
             regent_handle: std::sync::OnceLock::new(),
         }));
 
-        // Spawn background vault key resolution — the Keychain access can take
-        // 4–5 seconds on macOS but the server is already serving requests.
-        let inner = state.0.clone();
-        let audit_store_vk = state.0.audit_store.clone();
-        std::thread::spawn(move || {
-            let _home = zp_paths::home().unwrap_or_default();
-            match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default())
-                .and_then(|kr| zp_keys::resolve_vault_key(&kr))
-            {
-                Ok(resolved) => {
-                    info!(
-                        "Vault key resolved (source: {:?}) — cached for session",
-                        resolved.source
-                    );
-                    tool_chain::emit_tool_receipt(
-                        &audit_store_vk,
-                        "system:keychain:accessed",
-                        Some(&format!("source={:?}", resolved.source)),
-                    );
-                    let _ = inner.vault_key.set(Some(resolved));
-                }
-                Err(e) => {
-                    warn!(
-                        "⚠ Vault key not available: {} — operator rotation, \
-                         credential decryption, and vault operations are disabled. \
-                         Run `zp recover` with your 24-word mnemonic or `zp doctor` \
-                         to diagnose.",
-                        e
-                    );
-                    let _ = inner.vault_key.set(None);
-                }
+        // Resolve the vault master key synchronously, before `init` returns.
+        //
+        // ── Why this is not a background thread, 2026-08-06 ───────────────
+        //
+        // It was one until this date, on the stated rationale that "the
+        // Keychain access can take 4–5 seconds on macOS but the server is
+        // already serving requests." That rationale was obsolete at the point
+        // it ran.
+        //
+        // `resolve_vault_key` reaches the credential store only through
+        // `load_sovereign_root`, which is a process-scoped `OnceLock`, and
+        // `main.rs` warms that lock *before* the server starts — its comment
+        // says so explicitly: "all subsequent Keychain accesses in
+        // AppState::init are cache hits. Consistent with singular-sovereign-root
+        // (#152): one ceremony here, everything else derived from the in-process
+        // cache." What remains here is a cache read and a KDF. Microseconds.
+        //
+        // The thread bought nothing and cost the substrate its vault. Every
+        // consumer of `vault_key` had to cope with "not resolved yet", and
+        // `spawn_regent` — which runs immediately after `init` — lost that race
+        // on every single boot. Its migration of the operator's cloud-inference
+        // credential from `config.toml` into the vault therefore never ran once:
+        // `~/ZeroPoint/vault.json` did not exist, the key stayed in plaintext on
+        // disk, and `ApiKeySource::RawLegacy` — documented as a transition path —
+        // became permanent. The vault itself was complete and correct the whole
+        // time.
+        //
+        // Resolving here removes the race rather than widening the window on it.
+        // A polled wait with a timeout would have left the same failure mode
+        // behind a magic number; there is no race to lose once the value exists
+        // before any consumer does. `init` returns fully-formed state, and every
+        // `vault_key.get()` downstream is populated by construction.
+        //
+        // The `Option` inside remains meaningful — a substrate with no Genesis
+        // yet (pre-onboarding) legitimately has no vault key. The `OnceLock`
+        // wrapper is now vestigial and could be flattened to a plain
+        // `Option<ResolvedVaultKey>`; that touches four call sites and is left
+        // as a separate change.
+        match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default())
+            .and_then(|kr| zp_keys::resolve_vault_key(&kr))
+        {
+            Ok(resolved) => {
+                info!(
+                    "Vault key resolved (source: {:?}) — cached for session",
+                    resolved.source
+                );
+                tool_chain::emit_tool_receipt(
+                    &state.0.audit_store,
+                    "system:keychain:accessed",
+                    Some(&format!("source={:?}", resolved.source)),
+                );
+                let _ = state.0.vault_key.set(Some(resolved));
             }
-        });
+            Err(e) => {
+                warn!(
+                    "⚠ Vault key not available: {} — operator rotation, \
+                     credential decryption, and vault operations are disabled. \
+                     Run `zp recover` with your 24-word mnemonic or `zp doctor` \
+                     to diagnose.",
+                    e
+                );
+                let _ = state.0.vault_key.set(None);
+            }
+        }
+
+        // ── Bedrock invariants ────────────────────────────────────────────
+        //
+        // Runs last in `init`, once every premise it checks has been
+        // established or definitively failed. Asks whether the substrate is
+        // what it claims to be — not whether it is healthy, which is a
+        // question `substrate_validate` already answers and whose answer has
+        // read `degraded` for long enough to carry no information.
+        //
+        // A missing vault hid inside that for months. See `bedrock.rs`.
+        {
+            let vault_path = zp_paths::vault_path().unwrap_or_else(|_| {
+                std::path::PathBuf::from(&state.0.data_dir).join("vault.json")
+            });
+            let resolved = state.0.vault_key.get().and_then(|k| k.as_ref());
+
+            // `None` here means "could not open", which is a different fault
+            // from "opened and holds nothing". Collapsing the two is precisely
+            // what made the original failure unreadable.
+            let vault_keys = resolved.and_then(|r| {
+                zp_trust::CredentialVault::load_or_create(&r.key, &vault_path)
+                    .ok()
+                    .map(|v| v.list().len())
+            });
+
+            // Read one entry past the threshold — enough to answer "mature or
+            // not" without pulling an unbounded history into memory to count.
+            // The count itself is deliberately not passed on; see
+            // `BedrockInputs::substrate_is_mature`.
+            let substrate_is_mature = state
+                .0
+                .audit_store
+                .lock()
+                .ok()
+                .and_then(|s| s.recent_entries(bedrock::YOUNG_SUBSTRATE_ENTRIES + 1).ok())
+                .map(|e| e.len() > bedrock::YOUNG_SUBSTRATE_ENTRIES)
+                .unwrap_or(false);
+
+            let findings = bedrock::check(&bedrock::BedrockInputs {
+                genesis_present: zp_core::paths::genesis_record_path()
+                    .map(|p| p.exists())
+                    .unwrap_or(false),
+                vault_key_resolved: resolved.is_some(),
+                vault_path,
+                vault_file_exists: zp_paths::vault_path()
+                    .map(|p| p.exists())
+                    .unwrap_or(false),
+                vault_keys,
+                substrate_is_mature,
+            });
+
+            bedrock::report(&findings);
+            bedrock::anchor(&state.0.audit_store, &findings);
+        }
 
         state
     }
@@ -1342,6 +1549,12 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/substrate/validate", get(substrate_validate_handler))
         // Standing corrections — chain-anchored operator claims about Regent's
         // cognitive layer. Composes with COGNITIVE-INPUT-PLANE-2026-07 Tier 1.
+        // Vault operator surface. Names-only listing, value-carrying verbs in
+        // the request body rather than the URL. See the handler module note.
+        .route("/api/v1/vault/list", get(vault_list_handler))
+        .route("/api/v1/vault/put", post(vault_put_handler))
+        .route("/api/v1/vault/remove", post(vault_remove_handler))
+        .route("/api/v1/vault/reveal", post(vault_reveal_handler))
         .route("/api/v1/correction/issue", post(correction_issue_handler))
         .route("/api/v1/correction/list", get(correction_list_handler))
         .route(
@@ -1705,6 +1918,34 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // discovery scanner knows which listeners are registered tools.
     officers::sync_known_bindings(&state.0);
 
+    // ── Cartographer background task (P3 v1) ────────────────────────────
+    // Materializes the ontology from the receipt chain. Runs Pi-side
+    // (chain-adjacent) per SUBSTRATE-COMPUTE-BASELINE. Reads receipts,
+    // evaluates boundary via zp_ontology::evaluate_boundary, materializes
+    // Trajectory rows into ontology.db.
+    //
+    // Notifier is added via `add_notifier` alongside the anchor pipeline —
+    // both fire on each chain append, chained in insertion order.
+    //
+    // Cartographer's own receipt emission (ontology:cartographer:*,
+    // ontology:trajectory:*) deferred to P3.2 pending signing-key derivation.
+    if config.cartographer_enabled {
+        let cart_config = cartographer::CartographerConfig {
+            enabled: true,
+            ontology_db_path: std::path::PathBuf::from(&config.data_dir).join("ontology.db"),
+            boundary_config: zp_ontology::BoundaryConfig::default(),
+            channel_capacity: 1000,
+            catchup_batch_size: 500,
+        };
+        if let Some(notifier) =
+            cartographer::spawn_cartographer_task(cart_config, state.0.audit_store.clone())
+        {
+            let mut s = state.0.audit_store.lock().expect("audit store mutex");
+            s.add_notifier(notifier);
+            info!("Cartographer notifier installed");
+        }
+    }
+
     // ── Chain-read canary discipline (Tier 1) ────────────────────────────
     // Periodic canary marker writes + observer probes + statement cache flush
     // remediation. Structurally catches stuck-read-snapshot bugs per
@@ -2037,13 +2278,25 @@ struct HealthResponse {
     status: String,
     version: String,
     pipeline_enabled: bool,
+    /// Number of providers in the pool. `pipeline_enabled: true` with
+    /// `llm_providers: 0` is the half-state HARNESS-SEAM-2026-08 S3 forbids:
+    /// a pipeline that looks configured and cannot serve. Boot refuses this
+    /// condition, so it should be unreachable — it is reported anyway, because
+    /// an invariant nobody can observe is an invariant nobody can trust.
+    llm_providers: usize,
 }
 
 async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
+    let llm_providers = match state.0.pipeline {
+        Some(ref p) => p.provider_pool.read().await.len(),
+        None => 0,
+    };
+    let degraded = state.0.pipeline.is_some() && llm_providers == 0;
     Json(HealthResponse {
-        status: "ok".to_string(),
+        status: if degraded { "degraded" } else { "ok" }.to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         pipeline_enabled: state.0.pipeline.is_some(),
+        llm_providers,
     })
 }
 
@@ -3440,6 +3693,225 @@ async fn vault_test_handler(
             "credential_field": "api_key",
         })),
     )
+}
+
+// ── Vault operator surface ──────────────────────────────────────────────────
+//
+// Until 2026-08-06 `VaultCmd` had exactly one variant, `Test`, which exercises
+// a sovereignty provider rather than vault storage. There was no way to list
+// what the vault held, put anything into it, or take anything out. The only
+// code touching `vault.list()` was the officer sweep, onboarding, and one
+// branch of `zp configure`.
+//
+// The consequence showed up when the operator asked a simple question — "where
+// are our API keys?" — and the substrate could not answer it. The one surface
+// that reports on the vault is Steward's `vault_empty` finding, which says
+// "Vault contains no entries" for three different conditions (key unresolved,
+// vault unreadable, vault genuinely empty) at Info severity.
+//
+// These run server-side because the server already holds the vault master key,
+// derived once from the boot ceremony. Routing them through the CLI's own
+// sovereign-root unlock would mean a second ceremony per vault operation — a
+// second root in all but name, which `singular_sovereign_root` forbids. The
+// verbs are session-token-only for the same reason: seeing what the vault
+// holds should cost nothing, because a surface that costs a ceremony to read
+// is a surface that stops being read.
+
+/// Resolve the vault for a handler, or the error response explaining why not.
+///
+/// Distinguishes the three states Steward's finding conflates, so a caller can
+/// tell "no key" from "unreadable" from "empty" — see the note above.
+fn open_vault_for_handler(
+    state: &AppState,
+) -> Result<zp_trust::CredentialVault, (StatusCode, Json<serde_json::Value>)> {
+    let resolved = state.0.vault_key.get().and_then(|k| k.as_ref()).ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "vault_key_unavailable",
+                "detail": "The vault master key has not resolved. This is not an \
+                           empty vault — it is an unreadable one. Check that Genesis \
+                           exists and the boot ceremony completed.",
+            })),
+        )
+    })?;
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+    zp_trust::CredentialVault::load_or_create(&resolved.key, &vault_path).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "vault_unreadable",
+                "detail": format!("{}", e),
+            })),
+        )
+    })
+}
+
+fn vault_file_path(state: &AppState) -> std::path::PathBuf {
+    zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"))
+}
+
+/// `GET /api/v1/vault/list` — key names only, never values.
+///
+/// The R1 privilege invariant the officers already hold: names are metadata,
+/// values are not. `exists` distinguishes a vault that has never been written
+/// from one that is empty, which the filesystem alone cannot express because
+/// `load_or_create` synthesises an empty vault in memory without touching disk.
+async fn vault_list_handler(State(state): State<AppState>) -> (StatusCode, Json<serde_json::Value>) {
+    let vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let path = vault_file_path(&state);
+    let names = vault.list();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "keys": names,
+            "count": names.len(),
+            "vault_path": path.display().to_string(),
+            "exists": path.exists(),
+        })),
+    )
+}
+
+#[derive(serde::Deserialize)]
+struct VaultPutRequest {
+    key: String,
+    value: String,
+}
+
+/// `POST /api/v1/vault/put` — store a secret.
+///
+/// The value arrives in a JSON body rather than a query parameter or path
+/// segment so it does not reach a URL, an access log, or shell history. The CLI
+/// side reads it from stdin for the same reason.
+async fn vault_put_handler(
+    State(state): State<AppState>,
+    Json(req): Json<VaultPutRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if req.key.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "key must not be empty"})),
+        );
+    }
+    let mut vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    // Tier is inferred from the key path by `store`, matching how
+    // `spawn_regent`'s migration and the onboarding flow write.
+    if let Err(e) = vault.store(&req.key, req.value.as_bytes()) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("store failed: {}", e)})),
+        );
+    }
+    let path = vault_file_path(&state);
+    if let Err(e) = vault.save(&path) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("save failed: {}", e)})),
+        );
+    }
+    // Chain-anchor the *fact*, never the value. Key name is metadata; the
+    // secret does not enter the cognitive path or the chain.
+    tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        "vault:secret:stored",
+        Some(&format!("key={}", req.key)),
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"stored": req.key, "vault_path": path.display().to_string()})),
+    )
+}
+
+#[derive(serde::Deserialize)]
+struct VaultKeyRequest {
+    key: String,
+}
+
+/// `POST /api/v1/vault/remove` — delete a secret by name.
+async fn vault_remove_handler(
+    State(state): State<AppState>,
+    Json(req): Json<VaultKeyRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let mut vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Err(e) = vault.remove(&req.key) {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        );
+    }
+    let path = vault_file_path(&state);
+    if let Err(e) = vault.save(&path) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("save failed: {}", e)})),
+        );
+    }
+    tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        "vault:secret:removed",
+        Some(&format!("key={}", req.key)),
+    );
+    (StatusCode::OK, Json(serde_json::json!({"removed": req.key})))
+}
+
+/// `POST /api/v1/vault/reveal` — return a secret's value.
+///
+/// Deliberately the only verb that emits secret material, and deliberately
+/// present rather than omitted. Per *delegable safety* (KEEL §III.18), a
+/// restriction with no sanctioned path gets bypassed: an operator who cannot
+/// recover a secret from the vault keeps their secrets somewhere else, and the
+/// vault discipline is defeated by the very rule meant to protect it.
+///
+/// The ceremony is that the caller must ask for this verb by name. The
+/// retrieval is chain-anchored — the value never reaches the chain, but the
+/// fact that it was read does, so the operator can audit their own access.
+async fn vault_reveal_handler(
+    State(state): State<AppState>,
+    Json(req): Json<VaultKeyRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let bytes = match vault.retrieve(&req.key) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": format!("{}", e)})),
+            )
+        }
+    };
+    tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        "vault:secret:revealed",
+        Some(&format!("key={}", req.key)),
+    );
+    match String::from_utf8(bytes) {
+        Ok(s) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"key": req.key, "value": s})),
+        ),
+        Err(e) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "key": req.key,
+                "error": "value is not valid UTF-8",
+                "bytes": e.as_bytes().len(),
+            })),
+        ),
+    }
 }
 
 // ── Standing correction handlers (P2.1) ─────────────────────────────────────

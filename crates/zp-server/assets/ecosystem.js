@@ -25,7 +25,7 @@ const DATA = {
     { id: "tool-proxy", label: "Tool Proxy", type: "service", desc: "Reverse proxy \u2014 governed traffic to tools through ZP" },
     { id: "sentinel", label: "ZP Sentinel", type: "service", desc: "Network Sentinel on ASUS Merlin \u2014 DNS filtering, device monitoring, mesh peer" },
     // Tools
-    { id: "ironclaw", label: "IronClaw", type: "tool", desc: "AI agent tool \u2014 Anthropic claude-sonnet-4, port 8080" },
+    { id: "agent-tool", label: "Agent Tool", type: "tool", desc: "Example governed agent tool \u2014 external LLM backend, allocated port" },
     { id: "zp-hedera", label: "zp-hedera", type: "tool", desc: "Hedera Hashgraph integration \u2014 native Rust, genesis-bound" },
     { id: "ember", label: "Ember", type: "tool", desc: "Local-first generative learning \u2014 sovereign OpenMAIC fork by Mark Qvist" },
     { id: "pentagi", label: "PentAGI", type: "tool", desc: "Pentesting agent \u2014 Docker, port 8443, multi-provider" },
@@ -50,7 +50,7 @@ const DATA = {
     { id: "artemis", label: "ARTEMIS", type: "hardware", desc: "M4 MacBook Pro \u2014 travel system + clean install testing" },
     { id: "zp-playground", label: "zp-playground", type: "external", desc: "Hetzner CX23, Helsinki \u2014 remote ZP server" },
     // External
-    { id: "anthropic", label: "Anthropic", type: "external", desc: "LLM provider for IronClaw \u2014 claude-sonnet-4" },
+    { id: "anthropic", label: "Anthropic", type: "external", desc: "External LLM provider for a governed tool" },
     { id: "cloudflare", label: "Cloudflare", type: "external", desc: "Workers hosting zeropoint.global + thinkstreamlabs.ai" },
     // Crypto primitives
     { id: "ed25519", label: "Ed25519", type: "concept", desc: "Signature scheme \u2014 all receipts cryptographically signed" },
@@ -60,12 +60,12 @@ const DATA = {
     { id: "process-lifecycle", label: "Process Lifecycle", type: "concept", desc: "PID tracking, stop-before-start, process group isolation" },
     // Datastores
     { id: "sqlite", label: "SQLite", type: "datastore", desc: "Audit chain persistence \u2014 append-only, single-writer, WAL mode" },
-    { id: "postgres-ic", label: "PostgreSQL (IC)", type: "datastore", desc: "IronClaw\u2019s operational database \u2014 conversation state, tool configs" },
+    { id: "postgres-ic", label: "PostgreSQL (IC)", type: "datastore", desc: "A governed tool\u2019s operational database \u2014 conversation state, tool configs" },
     { id: "genesis-json", label: "genesis.json", type: "datastore", desc: "Genesis record \u2014 operator identity, sovereignty provider, ceremony timestamp" },
     { id: "env-zp", label: ".env.zp", type: "datastore", desc: "Per-tool sidecar \u2014 ZP-assigned port, auth token, env var overrides" },
     { id: "enrollment-files", label: "Enrollment Files", type: "datastore", desc: "{mode}_enrollment.json + {mode}_genesis.encrypted \u2014 per-provider sovereignty data" },
     // Runtimes
-    { id: "docker", label: "Docker", type: "runtime", desc: "Container runtime for PentAGI, IronClaw\u2019s Postgres" },
+    { id: "docker", label: "Docker", type: "runtime", desc: "Container runtime for governed tools and their datastores" },
     { id: "wasm-runtime", label: "WASM Runtime", type: "runtime", desc: "Policy engine execution sandbox \u2014 deterministic, isolated governance evaluation" },
     { id: "piper-tts", label: "Piper TTS", type: "runtime", desc: "Voice synthesis \u2014 Kusal + Amy models, localhost:8473" },
     // External chains / protocols
@@ -98,15 +98,15 @@ const DATA = {
     { source: "analysis-api", target: "analysis-bridge", label: "TRIGGERS" },
     { source: "analysis-api", target: "progressive-disclosure", label: "IMPLEMENTS" },
     // Tool governance
-    { source: "tools-api", target: "ironclaw", label: "GOVERNS" },
+    { source: "tools-api", target: "agent-tool", label: "GOVERNS" },
     { source: "tools-api", target: "zp-hedera", label: "GOVERNS" },
     { source: "tools-api", target: "ember", label: "GOVERNS" },
     { source: "tools-api", target: "pentagi", label: "GOVERNS" },
-    { source: "ironclaw", target: "anthropic", label: "USES_LLM" },
+    { source: "agent-tool", target: "anthropic", label: "USES_LLM" },
     { source: "tools-api", target: "receipt-chain", label: "EMITS_TO" },
     { source: "tools-api", target: "process-lifecycle", label: "IMPLEMENTS" },
-    { source: "tool-proxy", target: "ironclaw", label: "PROXIES" },
-    { source: "port-allocator", target: "ironclaw", label: "ASSIGNS_PORT" },
+    { source: "tool-proxy", target: "agent-tool", label: "PROXIES" },
+    { source: "port-allocator", target: "agent-tool", label: "ASSIGNS_PORT" },
     { source: "codebase-api", target: "receipt-chain", label: "AUDITS_VIA" },
     // Crate deps
     { source: "zp-server", target: "zp-core", label: "DEPENDS" },
@@ -133,13 +133,13 @@ const DATA = {
     { source: "artemis", target: "touchid", label: "HAS" },
     // Datastores
     { source: "audit-store", target: "sqlite", label: "BACKED_BY" },
-    { source: "ironclaw", target: "postgres-ic", label: "STORES_IN" },
+    { source: "agent-tool", target: "postgres-ic", label: "STORES_IN" },
     { source: "port-allocator", target: "env-zp", label: "WRITES" },
     { source: "genesis", target: "genesis-json", label: "PERSISTS_TO" },
     { source: "sovereignty", target: "enrollment-files", label: "PERSISTS_TO" },
     { source: "genesis", target: "bip39", label: "ENCODES_VIA" },
     // Runtimes
-    { source: "ironclaw", target: "docker", label: "RUNS_ON" },
+    { source: "agent-tool", target: "docker", label: "RUNS_ON" },
     { source: "ember", target: "piper-tts", label: "USES_TTS" },
     { source: "pentagi", target: "docker", label: "RUNS_ON" },
     { source: "postgres-ic", target: "docker", label: "RUNS_ON" },
@@ -165,15 +165,15 @@ const DATA = {
   ],
   receipts: [
     { id: "rcpt-genesis", seq: 1, hash: "a7f30e1c", prev: "genesis", event: "system:genesis", desc: "Genesis ceremony \u2014 Ed25519 identity created, BIP-39 mnemonic generated", ts: "2026-01-15T10:00:00Z" },
-    { id: "rcpt-cfg-ic", seq: 2, hash: "b2d14f8a", prev: "a7f30e1c", event: "tool:configured:ironclaw", desc: "IronClaw configured \u2014 .env written, Anthropic as LLM backend", ts: "2026-03-28T15:00:00Z" },
-    { id: "rcpt-preflight", seq: 3, hash: "c9e47b2d", prev: "b2d14f8a", event: "tool:preflight:passed:ironclaw", desc: "Preflight passed \u2014 Docker, Postgres, port 9100 all green", ts: "2026-03-28T15:01:00Z" },
-    { id: "rcpt-port", seq: 4, hash: "d5a81c3e", prev: "c9e47b2d", event: "tool:port:assigned:ironclaw:9100", desc: "Port 9100 assigned to IronClaw from governance range", ts: "2026-03-28T15:01:01Z" },
-    { id: "rcpt-launched", seq: 5, hash: "e1b79d4f", prev: "d5a81c3e", event: "tool:launched:ironclaw", desc: "IronClaw launched \u2014 PID tracked, process group isolated", ts: "2026-03-28T15:01:05Z" },
-    { id: "rcpt-health", seq: 6, hash: "f8c23a6b", prev: "e1b79d4f", event: "tool:health:up:ironclaw", desc: "Health check \u2014 gateway channel healthy", ts: "2026-03-28T15:02:00Z" },
+    { id: "rcpt-cfg-ic", seq: 2, hash: "b2d14f8a", prev: "a7f30e1c", event: "tool:configured:agent-tool", desc: "the agent tool configured \u2014 .env written, Anthropic as LLM backend", ts: "2026-03-28T15:00:00Z" },
+    { id: "rcpt-preflight", seq: 3, hash: "c9e47b2d", prev: "b2d14f8a", event: "tool:preflight:passed:agent-tool", desc: "Preflight passed \u2014 Docker, Postgres, port 9100 all green", ts: "2026-03-28T15:01:00Z" },
+    { id: "rcpt-port", seq: 4, hash: "d5a81c3e", prev: "c9e47b2d", event: "tool:port:assigned:agent-tool:9100", desc: "Port 9100 assigned to the agent tool from governance range", ts: "2026-03-28T15:01:01Z" },
+    { id: "rcpt-launched", seq: 5, hash: "e1b79d4f", prev: "d5a81c3e", event: "tool:launched:agent-tool", desc: "the agent tool launched \u2014 PID tracked, process group isolated", ts: "2026-03-28T15:01:05Z" },
+    { id: "rcpt-health", seq: 6, hash: "f8c23a6b", prev: "e1b79d4f", event: "tool:health:up:agent-tool", desc: "Health check \u2014 gateway channel healthy", ts: "2026-03-28T15:02:00Z" },
     { id: "rcpt-codebase", seq: 7, hash: "0d9e5f7c", prev: "f8c23a6b", event: "tool:codebase:tree", desc: "Codebase tree queried \u2014 depth=1, 42 entries returned", ts: "2026-03-28T16:30:00Z" },
     { id: "rcpt-discover", seq: 8, hash: "1a4f8e2d", prev: "0d9e5f7c", event: "tool:analysis:discover", desc: "Analysis index discovered \u2014 MLE STAR + Monte Carlo available", ts: "2026-03-28T17:00:00Z" },
-    { id: "rcpt-expertise", seq: 9, hash: "2b5c0f3a", prev: "1a4f8e2d", event: "tool:analysis:expertise:ironclaw", desc: "Expertise profile built for IronClaw \u2014 7 observations", ts: "2026-03-28T17:05:00Z" },
-    { id: "rcpt-stopped", seq: 10, hash: "3c6d1e4b", prev: "2b5c0f3a", event: "tool:stopped:ironclaw", desc: "IronClaw stopped \u2014 PID terminated, port released", ts: "2026-03-28T20:00:00Z" },
+    { id: "rcpt-expertise", seq: 9, hash: "2b5c0f3a", prev: "1a4f8e2d", event: "tool:analysis:expertise:agent-tool", desc: "Expertise profile built for the agent tool \u2014 7 observations", ts: "2026-03-28T17:05:00Z" },
+    { id: "rcpt-stopped", seq: 10, hash: "3c6d1e4b", prev: "2b5c0f3a", event: "tool:stopped:agent-tool", desc: "the agent tool stopped \u2014 PID terminated, port released", ts: "2026-03-28T20:00:00Z" },
   ]
 };
 

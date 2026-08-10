@@ -819,8 +819,15 @@ mod tests {
 
     #[test]
     fn typosquat_of_known_tool_blocks() {
-        let known = vec!["ironclaw".to_string()];
-        let t = td("ironc1aw"); // l → 1
+        // The candidate must be a near-miss of something in `known`, or this
+        // test asserts nothing. It previously paired `known = ["ironclaw"]`
+        // with `td("ironc1aw")`; an anonymisation pass rewrote the known list
+        // to "example-tool" and left the candidate untouched, so the two were
+        // 11 edits apart and the scanner correctly returned Clean. The
+        // assertion then failed for the right reason and the test sat red.
+        // Keep both sides on the placeholder, and keep them one edit apart.
+        let known = vec!["example-tool".to_string()];
+        let t = td("examp1e-tool"); // l → 1, Levenshtein distance 1
         let r = scan_tool_definition(&t, &known);
         assert_eq!(r.verdict, ScanVerdict::Blocked);
         assert!(r
@@ -831,8 +838,8 @@ mod tests {
 
     #[test]
     fn exact_match_is_not_typosquat() {
-        let known = vec!["ironclaw".to_string()];
-        let t = td("ironclaw");
+        let known = vec!["example-tool".to_string()];
+        let t = td("example-tool");
         let r = scan_tool_definition(&t, &known);
         assert!(r
             .findings
