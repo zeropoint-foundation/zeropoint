@@ -207,7 +207,7 @@ TASKS["receipt_classify"] = {
     ),
     "cases": [
         {
-            "input": "A delegation was granted to agent 'ironclaw' for capabilities: chain_render, tool_invoke. Expires in 24 hours.",
+            "input": "A delegation was granted to agent 'agent-alpha' for capabilities: chain_render, tool_invoke. Expires in 24 hours.",
             "expected": {"domain": "governance", "type": "delegation_granted", "severity": "info"},
         },
         {
@@ -219,7 +219,7 @@ TASKS["receipt_classify"] = {
             "expected": {"domain": "integrity", "type": "unsigned_entries", "severity": "critical"},
         },
         {
-            "input": "Tool 'memory_write' was invoked by agent ironclaw with arguments hash abc123.",
+            "input": "Tool 'memory_write' was invoked by agent agent-alpha with arguments hash abc123.",
             "expected": {"domain": "operations", "type": "tool_invoked", "severity": "ok"},
         },
         {
@@ -232,17 +232,17 @@ TASKS["receipt_classify"] = {
         },
         # ── Edge cases (added for coverage) ──
         {
-            "input": "Delegation to agent 'ironclaw' for shell_exec was revoked by operator. Reason: security review.",
+            "input": "Delegation to agent 'agent-alpha' for shell_exec was revoked by operator. Reason: security review.",
             "expected": {"domain": "governance", "type": "delegation_revoked", "severity": "info"},
             "note": "Revocation is governance, not a threat — operator-initiated",
         },
         {
-            "input": "Gate allowed agent 'ironclaw' to invoke 'memory_write' under delegation d-4f8a.",
+            "input": "Gate allowed agent 'agent-alpha' to invoke 'memory_write' under delegation d-4f8a.",
             "expected": {"domain": "governance", "type": "gate_allowed", "severity": "ok"},
             "note": "Routine gate pass — background noise, not notable",
         },
         {
-            "input": "Tool 'web_fetch' failed: connection timeout after 30s. Agent ironclaw, attempt 1 of 3.",
+            "input": "Tool 'web_fetch' failed: connection timeout after 30s. Agent agent-alpha, attempt 1 of 3.",
             "expected": {"domain": "operations", "type": "tool_failed", "severity": "ok"},
             "note": "Single tool failure is routine operational noise, not a warning",
         },
@@ -287,9 +287,9 @@ TASKS["trajectory_boundary"] = {
         {
             "input": (
                 "Events:\n"
-                "0. [09:00] delegation:granted:ironclaw for chain_render\n"
-                "1. [09:01] gate:allowed:chain_render by ironclaw\n"
-                "2. [09:02] gate:allowed:chain_render by ironclaw\n"
+                "0. [09:00] delegation:granted:agent-alpha for chain_render\n"
+                "1. [09:01] gate:allowed:chain_render by agent-alpha\n"
+                "2. [09:02] gate:allowed:chain_render by agent-alpha\n"
                 "3. [09:03] officer:steward:heartbeat — 0 findings\n"
                 "4. [17:30] tool:started:memory_write\n"
                 "5. [17:31] tool:completed:memory_write success\n"
@@ -302,11 +302,11 @@ TASKS["trajectory_boundary"] = {
         {
             "input": (
                 "Events:\n"
-                "0. [14:00] delegation:granted:ironclaw for tool_invoke\n"
-                "1. [14:01] gate:allowed:memory_write by ironclaw\n"
+                "0. [14:00] delegation:granted:agent-alpha for tool_invoke\n"
+                "1. [14:01] gate:allowed:memory_write by agent-alpha\n"
                 "2. [14:02] tool:started:memory_write\n"
                 "3. [14:03] tool:completed:memory_write success\n"
-                "4. [14:05] gate:allowed:web_fetch by ironclaw\n"
+                "4. [14:05] gate:allowed:web_fetch by agent-alpha\n"
                 "5. [14:06] tool:started:web_fetch\n"
                 "6. [14:07] tool:completed:web_fetch success"
             ),
@@ -316,13 +316,13 @@ TASKS["trajectory_boundary"] = {
         {
             "input": (
                 "Events:\n"
-                "0. [10:00] delegation:granted:ironclaw for chain_render\n"
+                "0. [10:00] delegation:granted:agent-alpha for chain_render\n"
                 "1. [10:01] gate:allowed:chain_render\n"
                 "2. [10:02] officer:cleo:governance:authority_gap — 5 ungoverned decisions\n"
                 "3. [10:03] tool:started:shell_exec by operator\n"
                 "4. [10:04] tool:completed:shell_exec success\n"
-                "5. [10:05] delegation:granted:ironclaw for shell_exec\n"
-                "6. [10:06] gate:allowed:shell_exec by ironclaw"
+                "5. [10:05] delegation:granted:agent-alpha for shell_exec\n"
+                "6. [10:06] gate:allowed:shell_exec by agent-alpha"
             ),
             "expected": {"boundaries": [0]},
             "note": "Mixed domains but continuous time, same session = single trajectory (governance driving operations)",
@@ -331,8 +331,8 @@ TASKS["trajectory_boundary"] = {
         {
             "input": (
                 "Events:\n"
-                "0. [08:00] delegation:granted:ironclaw for tool_invoke\n"
-                "1. [08:01] gate:allowed:memory_write by ironclaw\n"
+                "0. [08:00] delegation:granted:agent-alpha for tool_invoke\n"
+                "1. [08:01] gate:allowed:memory_write by agent-alpha\n"
                 "2. [08:02] tool:completed:memory_write success\n"
                 "3. [08:03] officer:steward:heartbeat — 0 findings\n"
                 "4. [14:00] delegation:granted:sage for chain_render\n"
@@ -343,7 +343,7 @@ TASKS["trajectory_boundary"] = {
                 "9. [22:31] officer:cleo:governance:authority_gap — 2 ungoverned"
             ),
             "expected": {"boundaries": [0, 4, 8]},
-            "note": "Three sessions: morning ironclaw work, afternoon sage work, evening officer sweeps. Two large time gaps.",
+            "note": "Three sessions: morning agent-alpha work, afternoon sage work, evening officer sweeps. Two large time gaps.",
         },
         {
             "input": (
@@ -363,8 +363,8 @@ TASKS["trajectory_boundary"] = {
         {
             "input": (
                 "Events:\n"
-                "0. [09:00] delegation:granted:ironclaw for tool_invoke\n"
-                "1. [09:01] gate:allowed:shell_exec by ironclaw\n"
+                "0. [09:00] delegation:granted:agent-alpha for tool_invoke\n"
+                "1. [09:01] gate:allowed:shell_exec by agent-alpha\n"
                 "2. [09:02] tool:started:shell_exec\n"
                 "3. [09:03] tool:completed:shell_exec success\n"
                 "4. [09:10] delegation:granted:sage for chain_render\n"
@@ -373,7 +373,7 @@ TASKS["trajectory_boundary"] = {
                 "7. [09:13] tool:completed:chain_render success"
             ),
             "expected": {"boundaries": [0]},
-            "note": "Actor change (ironclaw→sage) but only 7min gap — same session, one trajectory. Tests actor-change-without-time-gap.",
+            "note": "Actor change (agent-alpha→sage) but only 7min gap — same session, one trajectory. Tests actor-change-without-time-gap.",
         },
     ],
 }
@@ -416,7 +416,7 @@ TASKS["severity_assess"] = {
             "expected": {"severity": "critical", "action_needed": True},
         },
         {
-            "input": "Delegation to 'ironclaw' for chain_render renewed automatically. Prior delegation was 23 hours old.",
+            "input": "Delegation to 'agent-alpha' for chain_render renewed automatically. Prior delegation was 23 hours old.",
             "expected": {"severity": "info", "action_needed": False},
         },
         {
@@ -430,7 +430,7 @@ TASKS["severity_assess"] = {
             "note": "Unambiguously healthy — should not over-interpret positive trend as notable",
         },
         {
-            "input": "Agent 'ironclaw' invoked 'memory_write' 340 times in the last hour. All authorized via valid delegation. No errors.",
+            "input": "Agent 'agent-alpha' invoked 'memory_write' 340 times in the last hour. All authorized via valid delegation. No errors.",
             "expected": {"severity": "info", "action_needed": False},
             "note": "High volume but fully authorized — info at most, not warning. Tests volume-anxiety bias.",
         },
@@ -471,10 +471,10 @@ TASKS["receipt_summarize"] = {
         {
             "input": (
                 "Chain receipts (last 2 hours):\n"
-                "- delegation:granted:ironclaw for tool_invoke (09:00)\n"
-                "- gate:allowed:memory_write by ironclaw (09:01)\n"
+                "- delegation:granted:agent-alpha for tool_invoke (09:00)\n"
+                "- gate:allowed:memory_write by agent-alpha (09:01)\n"
                 "- tool:completed:memory_write success (09:02)\n"
-                "- gate:allowed:web_fetch by ironclaw (09:03)\n"
+                "- gate:allowed:web_fetch by agent-alpha (09:03)\n"
                 "- tool:completed:web_fetch success (09:04)\n"
                 "- officer:steward:heartbeat — 0 findings (09:30)\n"
                 "- officer:cleo:heartbeat — 0 findings (09:30)"
@@ -491,7 +491,7 @@ TASKS["receipt_summarize"] = {
                 "- gate:denied:unknown_bot access to shell_exec (14:02)\n"
                 "- gate:denied:unknown_bot access to memory_write (14:02)\n"
                 "- officer:steward:heartbeat — 1 finding: 5 gate denials in 3 minutes (14:30)\n"
-                "- delegation:granted:ironclaw for tool_invoke (17:00)\n"
+                "- delegation:granted:agent-alpha for tool_invoke (17:00)\n"
                 "- tool:completed:memory_write success (17:02)"
             ),
             "expected": {"tone": "concerning"},
@@ -564,7 +564,7 @@ TASKS["pattern_detect"] = {
         {
             "input": (
                 "Receipts (last 4 hours):\n"
-                "- delegation:granted:ironclaw for tool_invoke (08:00)\n"
+                "- delegation:granted:agent-alpha for tool_invoke (08:00)\n"
                 "- tool:completed:memory_write success (08:05)\n"
                 "- tool:completed:web_fetch success (08:10)\n"
                 "- officer:steward:heartbeat — 0 findings (08:30)\n"
@@ -581,13 +581,13 @@ TASKS["pattern_detect"] = {
         {
             "input": (
                 "Receipts (last 12 hours):\n"
-                "- delegation:granted:ironclaw for chain_render (08:00)\n"
-                "- gate:allowed:chain_render by ironclaw (08:01)\n"
-                "- gate:denied:ironclaw access to shell_exec (08:05)\n"
-                "- gate:denied:ironclaw access to file_write (08:06)\n"
-                "- gate:denied:ironclaw access to memory_write (08:07)\n"
-                "- delegation:granted:ironclaw for tool_invoke (08:30)\n"
-                "- gate:allowed:shell_exec by ironclaw (08:31)\n"
+                "- delegation:granted:agent-alpha for chain_render (08:00)\n"
+                "- gate:allowed:chain_render by agent-alpha (08:01)\n"
+                "- gate:denied:agent-alpha access to shell_exec (08:05)\n"
+                "- gate:denied:agent-alpha access to file_write (08:06)\n"
+                "- gate:denied:agent-alpha access to memory_write (08:07)\n"
+                "- delegation:granted:agent-alpha for tool_invoke (08:30)\n"
+                "- gate:allowed:shell_exec by agent-alpha (08:31)\n"
                 "- tool:completed:shell_exec success (08:32)"
             ),
             "expected": {"overall_assessment": "monitor"},

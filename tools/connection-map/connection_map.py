@@ -214,6 +214,224 @@ def collect_emitted_receipts(root):
     return emitted
 
 
+def _is_test_path(rel):
+    """True for paths whose emissions are fixtures rather than substrate."""
+    s = str(rel)
+    return ("/tests/" in s or s.startswith("tests/")
+            or "-tests/" in s or "/benches/" in s)
+
+
+def _test_module_lines(lines):
+    """Line numbers (1-based) that fall inside a `#[cfg(test)] mod` block.
+
+    Relies on this workspace's formatting: the attribute and `mod` sit at
+    column zero and the block closes with a bare `}` at column zero. That
+    holds throughout `crates/` and is far cheaper than parsing Rust.
+
+    Worth stating the failure mode, because it decides the direction of
+    error: an indented or unconventional test module is *not* detected, so
+    its fixtures read as production emissions. That produces a noisy
+    false positive, which someone fixes. The reverse — silently swallowing
+    a real emission — is the failure this whole check exists to prevent.
+    """
+    inside = set()
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith("#[cfg(test)]"):
+            j = i + 1
+            while j < len(lines) and not lines[j].startswith("mod "):
+                if lines[j].strip() and not lines[j].startswith("#["):
+                    break
+                j += 1
+            if j < len(lines) and lines[j].startswith("mod "):
+                k = j + 1
+                while k < len(lines) and lines[k] != "}":
+                    inside.add(k + 1)
+                    k += 1
+                i = k
+        i += 1
+    return inside
+
+
+# Emission *contexts* for the reverse direction.
+#
+# `EMIT_FORMAT_RE` above matches any `format!` whose literal looks like a
+# receipt name, wherever it appears. That is the right breadth for the
+# doc-driven question ("does anything, anywhere, emit this documented
+# receipt?"), and the wrong breadth for this one. Asking "is this emitted
+# family declared?" of every colon-shaped string in the workspace produced
+# a 40% false-positive rate on first run — `mail:read:{mailbox}` from a
+# delegation capability list, `zp:issue:{id}` hashed to derive a
+# conversation UUID. Neither is a receipt; both look exactly like one.
+#
+# A check people learn to skim is worse than no check, so this direction
+# requires the literal to sit in a position that actually emits:
+RECEIPT = r'([a-z][a-z0-9_]*(?::[a-z0-9_*]+)+)'
+CTX_EVENT_BIND = re.compile(r'let\s+[a-z_]*event[a-z_]*\s*=\s*format!\s*\(\s*"' + RECEIPT)
+CTX_EVENT_FIELD = re.compile(r'event\s*:\s*(?:format!\s*\(\s*)?"' + RECEIPT)
+CTX_EMIT_CALL = re.compile(r'emit_(?:tool_)?receipt(?:_to_store)?\s*\(')
+CTX_LITERAL_IN_CALL = re.compile(r'&?(?:format!\s*\(\s*)?"' + RECEIPT)
+# Event-name constructor helpers: `fn foo(x: &str) -> String { format!("a:b:{}", x) }`.
+# tool_chain.rs keeps a module of these, and their families reach the chain
+# without any literal ever appearing at an emitter call site.
+CTX_CONSTRUCTOR = re.compile(r'^\s*format!\s*\(\s*"' + RECEIPT)
+
+EMIT_CALL_LOOKAHEAD = 4
+
+# ── Why there is no registry → code direction here ──────────────────────
+#
+# `collect_undeclared_emissions` below answers "code emits this — is it
+# declared?" The mirror question, "this is declared — can anything emit it?",
+# would separate the two meanings of a silent family: *quiet* (an emitter
+# exists, nothing triggered it) from *unreachable* (no code path produces it,
+# so the declaration outlived its emitter or was aspirational).
+#
+# It was implemented on 2026-08-06 and removed the same day. Source scanning
+# cannot answer it: of 72 declared families it reported 35 unreachable, and was
+# wrong about nearly all of them. `cognitive:observer:verified` had fired 740
+# times in the preceding window, `governance_request:` 2244.
+#
+# Two causes, neither incidental:
+#
+#   - **const-defined prefixes** — `EVENT_PREFIX_VERIFIED` and friends hold the
+#     literal, and the emission site references the binding.
+#   - **variable-segment prefixes** — `officer:{name}:heartbeat`,
+#     `governance_request:{kind}`, `{domain}:canonicalized:{id}`. There is no
+#     literal for a scan to find, by construction.
+#
+# Const resolution would recover roughly half and leave the rest. A check that
+# is wrong a third of the time trains people to skim it.
+#
+# **The chain is the better oracle.** "Has this family ever appeared?" is a
+# query against chain history, where const and variable prefixes are already
+# resolved into the strings that actually landed. `substrate_validate`'s
+# receipt inventory is where that belongs, and for any chain shorter than
+# INVENTORY_WINDOW its `silent_prefixes` list already *is* the answer.
+# Distinguishing "silent in window" from "never in chain history" only becomes
+# a separate question once the chain outgrows the window.
+
+
+def collect_emitted_sites(root):
+    """Emission sites as (receipt, relpath, lineno), excluding test fixtures.
+
+    The reverse-direction companion to `collect_emitted_receipts`, which
+    returns a bare set for answering "does anything emit this documented
+    receipt?" This one keeps provenance and drops fixtures, because the
+    question it serves is the opposite: "code emits this — is it declared?"
+    and the answer has to be actionable at a file and line.
+
+    Known miss: a family whose name is assembled from a variable prefix —
+    `format!("{}:canonicalized:{}", domain, id)` — has no literal to match,
+    so its per-domain variants stay invisible here. `system:canonicalized:`
+    is declared and `provider:` / `node:` were not, which is exactly that
+    shape. Variable-prefix emitters need declaring by hand.
+    """
+    sites = []
+    crates_dir = root / "crates"
+    if not crates_dir.exists():
+        return sites
+    for path in sorted(crates_dir.rglob("*.rs")):
+        rel = path.relative_to(root)
+        if _is_test_path(rel):
+            continue
+        try:
+            lines = path.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        skip = _test_module_lines(lines)
+        for n, line in enumerate(lines, 1):
+            if n in skip or line.lstrip().startswith("//"):
+                continue
+            hits = set()
+            for pat in (EMIT_LITERAL_RE, EMIT_SYSTEMEVENT_RE,
+                        CTX_EVENT_BIND, CTX_EVENT_FIELD):
+                for m in pat.finditer(line):
+                    hits.add(m.group(1))
+            # A lone `format!` counts only as the body of a `-> String`
+            # helper. Without that guard it also matches list elements —
+            # `vec![format!("mail:read:{}", mb), …]` is a delegation
+            # capability list, not three receipt families.
+            if CTX_CONSTRUCTOR.match(line):
+                back = "\n".join(lines[max(0, n - 3):n - 1])
+                if "-> String" in back:
+                    for m in CTX_CONSTRUCTOR.finditer(line):
+                        hits.add(m.group(1))
+            # `emit_tool_receipt(&store, &format!("policy:wasm:loaded:{}", h))`
+            # routinely wraps, so the literal is a line or three below the call.
+            if CTX_EMIT_CALL.search(line):
+                for look in lines[n:n + EMIT_CALL_LOOKAHEAD]:
+                    if look.lstrip().startswith("//"):
+                        continue
+                    for m in CTX_LITERAL_IN_CALL.finditer(look):
+                        hits.add(m.group(1))
+            for h in hits:
+                sites.append((h, str(rel), n))
+    return sites
+
+
+def collect_undeclared_emissions(root):
+    """Code → registry: every emitted family must be a declared family.
+
+    # Why this direction exists
+
+    `collect_receipts` walks *documented* receipts and asks whether code
+    emits them. That covers three of the four quadrants:
+
+        documented + declared              → live
+        documented, not declared, emitted  → registry gap
+        documented, not declared, no code  → aspirational
+
+    The fourth — **emitted, undeclared, undocumented** — falls through
+    every branch, because nothing in the corpus names it and so no
+    iteration ever reaches it. It is invisible until the family first
+    fires at runtime, at which point `substrate_validate` reports an
+    unrecognized prefix and degrades posture for a receipt that was
+    perfectly legitimate.
+
+    Found 2026-08-06: a manual sweep of all 88 emission sites turned up
+    ten production families in this quadrant — `artifact:signed`,
+    `channel:slack:inbound:`, `cognition:model:routed:`, `emit:`,
+    `foundation_relay:`, `model:registered`, `model:capability:updated`,
+    `pricing:refresh:`, `request_blocked:`, `receipt_forwarded:`. All had
+    been emittable for as long as their subsystems had existed. None had
+    fired inside an inventory window, so nothing had ever flagged them.
+    The registry comment at substrate_validate.rs pointed here for exactly
+    this check, and this direction had never been implemented.
+    """
+    reg_file = root / "crates/zp-server/src/substrate_validate.rs"
+    if not reg_file.exists():
+        drop("registry missing", str(reg_file))
+        return
+    text = reg_file.read_text(errors="replace")
+    reg_body = REGISTRY_RE.search(text)
+    if not reg_body:
+        drop("registry unparsed", "KNOWN_RECEIPT_PREFIXES not matched")
+        return
+    registry = _parse_prefix_list(reg_body.group(1))
+    reserved_body = RESERVED_RE.search(text)
+    reserved = _parse_prefix_list(reserved_body.group(1)) if reserved_body else set()
+    declared = registry | reserved
+
+    seen = {}
+    for receipt, rel, line in collect_emitted_sites(root):
+        seen.setdefault(receipt, f"{rel}:{line}")
+
+    for receipt, site in sorted(seen.items()):
+        covered = any(receipt.startswith(p) or p.startswith(receipt)
+                      for p in declared)
+        edge("chain_to_registry", site, receipt,
+             "live" if covered else "defect",
+             detector="connection-map collect_undeclared_emissions",
+             note=None if covered else
+                  ("undeclared emission: code emits this receipt family but "
+                   "neither KNOWN_RECEIPT_PREFIXES nor "
+                   "RESERVED_RECEIPT_PREFIXES declares it — the receipt-type "
+                   "inventory will report it as an unrecognized prefix the "
+                   "first time it fires. Fix by adding to the registry in "
+                   "crates/zp-server/src/substrate_validate.rs"),
+             site=site)
+
+
 def _has_emitter(receipt, emitted):
     """Does any emit-site name match this documented receipt?
 
@@ -658,6 +876,7 @@ def main():
     collect_doc_code_claims(root, gov)
     collect_keel_refs(root, gov)
     collect_receipts(root, gov, emitted)
+    collect_undeclared_emissions(root)
     collect_artifact_reads(root)
     collect_pin_tieoffs(root)
     collect_derived_artifacts(root)

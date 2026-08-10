@@ -91,6 +91,50 @@ kill_server() {
     sleep 0.3
 }
 
+# Surface bedrock-invariant violations on the terminal after a successful boot.
+#
+# Same problem as the touch prompt, same solution. `AppState::init` evaluates
+# the invariants and writes its findings to the log; under `nohup … >> "$LOG"`
+# nothing the binary prints reaches the operator, so a violation of a
+# load-bearing premise scrolls into a file nobody opens. That is how a missing
+# vault survived months of boots — its only signal was an Info-severity finding
+# that was, at the time, discarded before even reaching the chain.
+#
+# Greps the structured tracing lines rather than the coloured block the binary
+# also emits: the block carries ANSI escapes that make range-matching brittle,
+# while `bedrock invariant violated` is a stable marker with the fields beside
+# it. Only this boot's lines are considered — the log is appended across runs
+# and rotated, not truncated, so matching the whole file would replay every
+# violation the substrate has ever had.
+report_bedrock() {
+    [ -f "$LOG" ] || return 0
+
+    # Everything after the last boot marker. `Starting server` is echoed by
+    # this script, not the binary, so the boundary is unambiguous.
+    local this_boot
+    this_boot=$(awk '/Vault key resolved|Vault key not available/{buf=""} {buf=buf $0 ORS} END{printf "%s", buf}' "$LOG" 2>/dev/null)
+    [ -n "$this_boot" ] || return 0
+
+    printf '%s' "$this_boot" | grep -q "bedrock invariant violated\|bedrock invariant degraded" || return 0
+
+    local red="\033[1;31m" yellow="\033[1;33m" reset="\033[0m"
+    echo
+    printf "${red}   ── BEDROCK ──────────────────────────────────────────${reset}\n"
+    echo
+
+    printf '%s' "$this_boot" \
+      | grep -E "bedrock invariant (violated|degraded)" \
+      | sed -E 's/.*invariant="?([a-z_]+)"?.*detail="?([^"]*)"?.*/  \1 — \2/' \
+      | while IFS= read -r line; do
+            printf "${red}   ✗ %s${reset}\n" "$line"
+        done
+
+    echo
+    printf "${yellow}   Detail and remedies: %s${reset}\n" "$LOG"
+    printf "${red}   ─────────────────────────────────────────────────────${reset}\n"
+    echo
+}
+
 start_server() {
     local bin="$1"
     kill_server
@@ -152,6 +196,7 @@ start_server() {
         if lsof -i :$PORT -sTCP:LISTEN > /dev/null 2>&1; then
             [ $prompted -eq 1 ] && echo "✓ confirmed"
             echo "✓ localhost:$PORT (PID $server_pid, build $commit)"
+            report_bedrock
             return 0
         fi
 

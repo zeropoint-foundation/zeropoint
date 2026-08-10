@@ -1,27 +1,28 @@
 {
-  "generated_from_commit": "c67e327",
-  "governed_docs": 133,
+  "generated_from_commit": "46077d0",
+  "governed_docs": 142,
   "totals": {
-    "connections": 1039,
-    "live": 417,
-    "tied_off": 106,
-    "defect": 516,
-    "maturity": 0.5034
+    "connections": 1207,
+    "live": 552,
+    "tied_off": 137,
+    "defect": 518,
+    "maturity": 0.5708
   },
   "by_kind": {
-    "code_to_artifact/defect": 127,
-    "code_to_artifact/live": 34,
-    "code_to_corpus/live": 5,
-    "corpus_to_chain/defect": 386,
-    "corpus_to_chain/live": 127,
-    "corpus_to_chain/tied_off": 64,
-    "corpus_to_code/live": 66,
+    "chain_to_registry/live": 85,
+    "code_to_artifact/defect": 128,
+    "code_to_artifact/live": 35,
+    "code_to_corpus/live": 6,
+    "corpus_to_chain/defect": 387,
+    "corpus_to_chain/live": 167,
+    "corpus_to_chain/tied_off": 87,
+    "corpus_to_code/live": 68,
     "corpus_to_keel/live": 39,
-    "crate_dep/live": 127,
+    "crate_dep/live": 129,
     "derived_artifact/defect": 3,
     "derived_artifact/tied_off": 1,
-    "pin/live": 19,
-    "pin_exception/tied_off": 41
+    "pin/live": 23,
+    "pin_exception/tied_off": 49
   },
   "dropped": [
     {
@@ -716,6 +717,15 @@
     },
     {
       "kind": "crate_dep",
+      "source": "crates/zp-ontology",
+      "target": "zp-core",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-ontology/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
       "source": "crates/zp-pipeline",
       "target": "zp-core",
       "status": "live",
@@ -1122,6 +1132,15 @@
     {
       "kind": "crate_dep",
       "source": "crates/zp-server",
+      "target": "zp-ontology",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-server/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
+      "source": "crates/zp-server",
       "target": "mle-star-engine",
       "status": "live",
       "detector": "cargo build --workspace",
@@ -1199,6 +1218,15 @@
       "detector": "corpus-lint check_spec_citations",
       "note": null,
       "site": "crates/zp-regent/src/corrections.rs"
+    },
+    {
+      "kind": "code_to_corpus",
+      "source": "crates/zp-regent/src/precedent.rs",
+      "target": "KEEL-2026-07.md",
+      "status": "live",
+      "detector": "corpus-lint check_spec_citations",
+      "note": null,
+      "site": "crates/zp-regent/src/precedent.rs"
     },
     {
       "kind": "code_to_corpus",
@@ -1307,6 +1335,15 @@
       "detector": "connection-map check_doc_code_paths",
       "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/REGENT-PHASE-0-1-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md",
+      "target": "crates/zp-officers/src/aegis.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md"
     },
     {
       "kind": "corpus_to_code",
@@ -1769,6 +1806,15 @@
     },
     {
       "kind": "corpus_to_code",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "crates/zp-regent/src/context.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_code",
       "source": "docs/design/VAULT-KEY-SOVEREIGNTY-COMPOSITION-2026-07.md",
       "target": "crates/zp-cli/src/emit.rs",
       "status": "live",
@@ -2219,6 +2265,123 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:abandoned",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:destination_accepted",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:destination_proposed",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:destination_superseded",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:opened",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:priority_hint",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:proposed",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:settled_with_destination",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:map:settled_without_destination",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/KEEL-2026-07.md",
+      "target": "arc:waypoint:opened",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/KEEL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:waypoint:rejected",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/KEEL-2026-07.md",
+      "target": "arc:waypoint:resolved",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/KEEL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "arc:waypoint:split",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/STORAGE-ABSTRACTION-2026-05.md",
       "target": "artifact:supersedes",
       "status": "defect",
@@ -2552,6 +2715,60 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "classifier:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "classifier:archived:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "classifier:promoted:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "classifier:retired:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "classifier:trained:candidate:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "classifier_hyperparameters:v1",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/OFFICER-ACTION-SURFACES-2026-07.md",
       "target": "cleo:action:community_narration",
       "status": "tied_off",
@@ -2603,6 +2820,33 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/SUBSTRATE-FORM-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "code:local_transform",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "code:multi_file",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "code:repo_wide",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -2702,6 +2946,15 @@
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/KEEL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md",
+      "target": "cognitive:observer:verified",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -2990,6 +3243,15 @@
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "delegation:granted",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3314,6 +3576,24 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/EMBODIMENT-STATE-PROTOCOL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md",
+      "target": "flow:message:sent",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md",
+      "target": "flow:subflow:completed",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3719,6 +3999,51 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/DEPENDENT-SOVEREIGNTY-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "hardware:catalog:missing",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "hardware:profile:declared",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "hardware:profile:drift_suspected",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "hardware:profile:measured",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "hardware:profile:resolved",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4138,9 +4463,9 @@
       "kind": "corpus_to_chain",
       "source": "docs/design/SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md",
       "target": "invariant:vault_key_composes_with_provider:verified",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md"
     },
     {
@@ -4478,12 +4803,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/COGNITIVE-ACT-ACCOUNTING-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "lens:applied:*",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/COGNITIVE-ACT-ACCOUNTING-2026-07.md"
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4568,12 +4893,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "lens:composed:*",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4649,12 +4974,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "lens:conflicts:*",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4676,21 +5001,21 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/COGNITIVE-ACT-ACCOUNTING-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "lens:declared",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/COGNITIVE-ACT-ACCOUNTING-2026-07.md"
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/LENS-DISCIPLINE-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "lens:declared:*",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/LENS-DISCIPLINE-2026-07.md"
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4826,6 +5151,15 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/SUBSTRATE-SLM-TRAINING-ENVIRONMENT-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "lens:declared:tabular_classifier",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5252,6 +5586,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "officer:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/OFFICER-LENS-DECLARATIONS-2026-07.md",
       "target": "officer:*:*",
       "status": "defect",
@@ -5270,12 +5613,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/OFFICER-LENS-DECLARATIONS-2026-07.md",
+      "source": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md",
       "target": "officer:*:heartbeat",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/OFFICER-LENS-DECLARATIONS-2026-07.md"
+      "site": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5297,12 +5640,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
+      "source": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md",
       "target": "officer:aegis:trajectory:*",
       "status": "live",
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
-      "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+      "site": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5495,6 +5838,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "officer:std",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/OFFICER-LENS-DECLARATIONS-2026-07.md",
       "target": "officer:std:*",
       "status": "live",
@@ -5614,118 +5966,217 @@
       "kind": "corpus_to_chain",
       "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
       "target": "ontology:*",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:cartographer:backpressure_signaled",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:cartographer:shutdown:forced",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:cartographer:shutdown:graceful",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:cartographer:startup",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
       "target": "ontology:correction:applied",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
       "target": "ontology:correction:auto",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
       "target": "ontology:correction:operator",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:correction:operator:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:decision:reverted:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
       "target": "ontology:object:updated",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "ontology:object:updated:*",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
       "target": "ontology:trajectory:*",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
       "target": "ontology:trajectory:*:regent_self_buildout",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:trajectory:completed:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:trajectory:continued",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:trajectory:continued:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "ontology:trajectory:created",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "ontology:trajectory:created:*",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
       "source": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md",
       "target": "ontology:trajectory:created:regent_self_buildout",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/design/REGENT-SELF-BUILDOUT-TRAJECTORY-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "ontology:trajectory:ended",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:trajectory:ended:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
       "target": "ontology:trajectory:started",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/ONTOLOGY-AND-CARTOGRAPHER-2026-07.md"
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "ontology:trajectory:started:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5879,6 +6330,33 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/tool-version-provenance-2026-06.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "precedent:labeled",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md",
+      "target": "precedent:labeled:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/AEGIS-V2-TRAJECTORY-SCORING-PROPOSAL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "precedent:labeled:known_bad",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6188,12 +6666,30 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "source": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md",
+      "target": "regent:config:durability:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md",
+      "target": "regent:config:durability:temporal_disabled",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md",
       "target": "regent:config:inference",
       "status": "live",
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
-      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
+      "site": "docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6230,6 +6726,15 @@
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md",
+      "target": "regent:config:tabular_classifier",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/SUBSTRATE-TABULAR-CLASSIFIER-2026-07.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6695,8 +7200,8 @@
       "source": "docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md",
       "target": "regent:precedent:*",
       "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "detector": "connection-map collect_emitted_receipts",
+      "note": "registry gap: code emits this receipt but KNOWN_RECEIPT_PREFIXES does not declare it \u2014 fix by adding to the registry",
       "site": "docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md"
     },
     {
@@ -6712,10 +7217,37 @@
       "kind": "corpus_to_chain",
       "source": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md",
       "target": "regent:precedent:revoked",
-      "status": "defect",
-      "detector": null,
-      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
       "site": "docs/EXECUTION-AUTHORITY-MODEL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "regent:proposal",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "target": "regent:proposal:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "regent:rally:*",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6755,6 +7287,33 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "regent:routing:fit_denied",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/HARDWARE-DOSSIER-2026-08.md",
+      "target": "regent:routing:fit_predicted",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "regent:tool:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/COGNITIVE-INPUT-PLANE-2026-07.md",
       "target": "regent:tool:completed:*",
       "status": "live",
@@ -6770,6 +7329,24 @@
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/design/COGNITIVE-INPUT-PLANE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md",
+      "target": "regent:tool:flow_run:completed",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md",
+      "target": "regent:tool:node_red_dispatch",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/REGENT-ORCHESTRATION-ARTIFACTS-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -7142,6 +7719,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md",
+      "target": "substrate:invariant:violated:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/SUBSTRATE-SLM-TRAINING-ENVIRONMENT-2026-07.md",
       "target": "substrate:model:trained",
       "status": "defect",
@@ -7304,12 +7890,48 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md",
+      "target": "trajectory:scored",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/BUILD-PROCESS-DESIGN-2026-07.md",
       "target": "vault:healthy",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/BUILD-PROCESS-DESIGN-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INFORMATION-CUSTODY-TIERS-2026-08.md",
+      "target": "vault:secret:removed",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/INFORMATION-CUSTODY-TIERS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INFORMATION-CUSTODY-TIERS-2026-08.md",
+      "target": "vault:secret:revealed",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/INFORMATION-CUSTODY-TIERS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INFORMATION-CUSTODY-TIERS-2026-08.md",
+      "target": "vault:secret:stored",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/INFORMATION-CUSTODY-TIERS-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -7355,6 +7977,771 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/COGNITIVE-DESIGN-PRINCIPLES-2026-07.md"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:1017",
+      "target": "arc:map:abandoned",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:1017"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:910",
+      "target": "arc:map:destination_accepted",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:910"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:883",
+      "target": "arc:map:destination_proposed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:883"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:940",
+      "target": "arc:map:destination_superseded",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:940"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:974",
+      "target": "arc:map:settled_with_destination",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:974"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:996",
+      "target": "arc:map:settled_without_destination",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:996"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:823",
+      "target": "arc:waypoint:opened",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:823"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/context.rs:856",
+      "target": "arc:waypoint:resolved",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/context.rs:856"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:1721",
+      "target": "artifact:library:candidate",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:1721"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/artifact_library.rs:177",
+      "target": "artifact:signed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/artifact_library.rs:177"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/canary.rs:162",
+      "target": "chain:canary:written",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/canary.rs:162"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/channels.rs:189",
+      "target": "channel:slack:inbound",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/channels.rs:189"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:2125",
+      "target": "cognition:model:routed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:2125"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:145",
+      "target": "delegation:expired",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:145"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:133",
+      "target": "delegation:granted",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:133"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2993",
+      "target": "delegation:granted:regent",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2993"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:137",
+      "target": "delegation:renewed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:137"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:141",
+      "target": "delegation:revoked",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:141"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/loop_runner.rs:1982",
+      "target": "emission_coherence:finding",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/loop_runner.rs:1982"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/loop_runner.rs:2020",
+      "target": "emission_coherence:summary",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/loop_runner.rs:2020"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/main.rs:8500",
+      "target": "epoch:anchored",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-cli/src/main.rs:8500"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:5127",
+      "target": "gate:denied",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:5127"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2409",
+      "target": "improvement:proposed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2409"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/main.rs:10655",
+      "target": "model:capability:updated",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-cli/src/main.rs:10655"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/main.rs:10481",
+      "target": "model:registered",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-cli/src/main.rs:10481"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:127",
+      "target": "node:canonicalized",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:127"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/wasm_policy.rs:145",
+      "target": "policy:wasm:disabled",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/wasm_policy.rs:145"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/wasm_policy.rs:172",
+      "target": "policy:wasm:enabled",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/wasm_policy.rs:172"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/wasm_policy.rs:74",
+      "target": "policy:wasm:loaded",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/wasm_policy.rs:74"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_ports.rs:870",
+      "target": "port:lifecycle",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_ports.rs:870"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/officers.rs:241",
+      "target": "posture:computed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/officers.rs:241"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/main.rs:10270",
+      "target": "preference:llm:policy:set",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-cli/src/main.rs:10270"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:2070",
+      "target": "preference:model:resolved",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:2070"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:2019",
+      "target": "preference:model:selected",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:2019"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/main.rs:9944",
+      "target": "pricing:refresh",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-cli/src/main.rs:9944"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:119",
+      "target": "provider:canonicalized",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:119"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-regent/src/inference_classifier.rs:200",
+      "target": "regent:inference:classifier_decision",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-regent/src/inference_classifier.rs:200"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2137",
+      "target": "regent:intent:delegate",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2137"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2457",
+      "target": "regent:intent:escalate",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2457"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2149",
+      "target": "regent:intent:execute",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2149"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2447",
+      "target": "regent:intent:observe",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2447"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2257",
+      "target": "regent:intent:remember",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2257"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2428",
+      "target": "regent:intent:request_approval",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2428"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2110",
+      "target": "regent:intent:respond",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2110"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2318",
+      "target": "regent:memory:recorded",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2318"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:1299",
+      "target": "regent:memory:review_",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:1299"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:1282",
+      "target": "regent:memory:review_approve",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:1282"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:354",
+      "target": "regent:precedent:cited",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:354"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2409",
+      "target": "regent:proposal:action",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2409"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2379",
+      "target": "regent:proposal:duplicate",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2379"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:1571",
+      "target": "regent:tool:artifact:chart_generate",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:1571"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:1614",
+      "target": "regent:tool:artifact:report_assemble",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:1614"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2226",
+      "target": "regent:tool:completed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2226"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/regent.rs:2212",
+      "target": "regent:tool:refused:unsigned",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/regent.rs:2212"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:1155",
+      "target": "system:keychain:accessed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:1155"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/officers.rs:210",
+      "target": "system:sweep:officers:all_clear",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/officers.rs:210"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:1305",
+      "target": "tool:adapted",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:1305"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/analysis.rs:266",
+      "target": "tool:analysis:discover",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/analysis.rs:266"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/analysis.rs:353",
+      "target": "tool:analysis:expertise",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/analysis.rs:353"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/analysis.rs:471",
+      "target": "tool:analysis:list",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/analysis.rs:471"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/analysis.rs:580",
+      "target": "tool:analysis:simulate",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/analysis.rs:580"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:123",
+      "target": "tool:canonicalized",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:123"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:115",
+      "target": "tool:capability:configured",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:115"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:109",
+      "target": "tool:capability:degraded",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:109"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:112",
+      "target": "tool:capability:failed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:112"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:106",
+      "target": "tool:capability:verified",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:106"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/exec_ws.rs:138",
+      "target": "tool:cmd:blocked",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/exec_ws.rs:138"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/codebase.rs:427",
+      "target": "tool:codebase:read",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/codebase.rs:427"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/codebase.rs:483",
+      "target": "tool:codebase:search",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/codebase.rs:483"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/codebase.rs:321",
+      "target": "tool:codebase:tree",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/codebase.rs:321"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:82",
+      "target": "tool:configured",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:82"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/run.rs:344",
+      "target": "tool:launch",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-cli/src/run.rs:344"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/emit.rs:227",
+      "target": "tool:launched",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-cli/src/emit.rs:227"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:91",
+      "target": "tool:preflight:check",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:91"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:88",
+      "target": "tool:preflight:failed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:88"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:85",
+      "target": "tool:preflight:passed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:85"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:6370",
+      "target": "tool:preflight:vault_validation_failed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:6370"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:103",
+      "target": "tool:providers:resolved",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:103"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:79",
+      "target": "tool:registered",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:79"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:6123",
+      "target": "tool:removed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:6123"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/tool_chain.rs:100",
+      "target": "tool:setup:complete",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/tool_chain.rs:100"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:6032",
+      "target": "tool:stopped",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:6032"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:3750",
+      "target": "vault:secret:removed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:3750"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:3786",
+      "target": "vault:secret:revealed",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:3786"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:3712",
+      "target": "vault:secret:stored",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:3712"
     },
     {
       "kind": "code_to_artifact",
@@ -7426,7 +8813,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3060"
+      "site": "crates/zp-cli/src/main.rs:3202"
     },
     {
       "kind": "code_to_artifact",
@@ -7435,7 +8822,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3307"
+      "site": "crates/zp-cli/src/main.rs:3449"
     },
     {
       "kind": "code_to_artifact",
@@ -7444,7 +8831,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:6828"
+      "site": "crates/zp-cli/src/main.rs:6944"
     },
     {
       "kind": "code_to_artifact",
@@ -7453,7 +8840,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7369"
+      "site": "crates/zp-cli/src/main.rs:7494"
     },
     {
       "kind": "code_to_artifact",
@@ -7462,7 +8849,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7372"
+      "site": "crates/zp-cli/src/main.rs:7497"
     },
     {
       "kind": "code_to_artifact",
@@ -7471,7 +8858,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7728"
+      "site": "crates/zp-cli/src/main.rs:8082"
     },
     {
       "kind": "code_to_artifact",
@@ -7480,7 +8867,16 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:9446"
+      "site": "crates/zp-cli/src/main.rs:8280"
+    },
+    {
+      "kind": "code_to_artifact",
+      "source": "crates/zp-cli/src/main.rs",
+      "target": "read_to_string",
+      "status": "defect",
+      "detector": null,
+      "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
+      "site": "crates/zp-cli/src/main.rs:9998"
     },
     {
       "kind": "code_to_artifact",
@@ -7925,6 +9321,15 @@
     },
     {
       "kind": "code_to_artifact",
+      "source": "crates/zp-ontology/src/store.rs",
+      "target": "include_str!",
+      "status": "live",
+      "detector": "rustc (compile-time embed)",
+      "note": "content embedded at build time; cannot break at runtime",
+      "site": "crates/zp-ontology/src/store.rs:27"
+    },
+    {
+      "kind": "code_to_artifact",
       "source": "crates/zp-policy/src/policy_registry.rs",
       "target": "read_dir",
       "status": "defect",
@@ -8245,7 +9650,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:244"
+      "site": "crates/zp-server/src/lib.rs:258"
     },
     {
       "kind": "code_to_artifact",
@@ -8254,7 +9659,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1648"
+      "site": "crates/zp-server/src/lib.rs:1768"
     },
     {
       "kind": "code_to_artifact",
@@ -8263,7 +9668,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1809"
+      "site": "crates/zp-server/src/lib.rs:1957"
     },
     {
       "kind": "code_to_artifact",
@@ -8272,7 +9677,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1990"
+      "site": "crates/zp-server/src/lib.rs:2138"
     },
     {
       "kind": "code_to_artifact",
@@ -8281,7 +9686,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:3467"
+      "site": "crates/zp-server/src/lib.rs:3834"
     },
     {
       "kind": "code_to_artifact",
@@ -8290,7 +9695,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:3970"
+      "site": "crates/zp-server/src/lib.rs:4491"
     },
     {
       "kind": "code_to_artifact",
@@ -8299,7 +9704,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4248"
+      "site": "crates/zp-server/src/lib.rs:4769"
     },
     {
       "kind": "code_to_artifact",
@@ -8308,7 +9713,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4690"
+      "site": "crates/zp-server/src/lib.rs:5211"
     },
     {
       "kind": "code_to_artifact",
@@ -8317,7 +9722,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6329"
+      "site": "crates/zp-server/src/lib.rs:6850"
     },
     {
       "kind": "code_to_artifact",
@@ -8326,7 +9731,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6330"
+      "site": "crates/zp-server/src/lib.rs:6851"
     },
     {
       "kind": "code_to_artifact",
@@ -8335,7 +9740,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6331"
+      "site": "crates/zp-server/src/lib.rs:6852"
     },
     {
       "kind": "code_to_artifact",
@@ -8344,7 +9749,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6332"
+      "site": "crates/zp-server/src/lib.rs:6853"
     },
     {
       "kind": "code_to_artifact",
@@ -8353,7 +9758,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6334"
+      "site": "crates/zp-server/src/lib.rs:6855"
     },
     {
       "kind": "code_to_artifact",
@@ -8362,7 +9767,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6335"
+      "site": "crates/zp-server/src/lib.rs:6856"
     },
     {
       "kind": "code_to_artifact",
@@ -8371,7 +9776,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6336"
+      "site": "crates/zp-server/src/lib.rs:6857"
     },
     {
       "kind": "code_to_artifact",
@@ -8380,7 +9785,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6337"
+      "site": "crates/zp-server/src/lib.rs:6858"
     },
     {
       "kind": "code_to_artifact",
@@ -8389,7 +9794,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6338"
+      "site": "crates/zp-server/src/lib.rs:6859"
     },
     {
       "kind": "code_to_artifact",
@@ -8398,7 +9803,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6339"
+      "site": "crates/zp-server/src/lib.rs:6860"
     },
     {
       "kind": "code_to_artifact",
@@ -8407,7 +9812,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6341"
+      "site": "crates/zp-server/src/lib.rs:6862"
     },
     {
       "kind": "code_to_artifact",
@@ -8416,7 +9821,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6342"
+      "site": "crates/zp-server/src/lib.rs:6863"
     },
     {
       "kind": "code_to_artifact",
@@ -8425,7 +9830,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6343"
+      "site": "crates/zp-server/src/lib.rs:6864"
     },
     {
       "kind": "code_to_artifact",
@@ -8434,7 +9839,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6344"
+      "site": "crates/zp-server/src/lib.rs:6865"
     },
     {
       "kind": "code_to_artifact",
@@ -8443,7 +9848,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6346"
+      "site": "crates/zp-server/src/lib.rs:6867"
     },
     {
       "kind": "code_to_artifact",
@@ -8452,7 +9857,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6347"
+      "site": "crates/zp-server/src/lib.rs:6868"
     },
     {
       "kind": "code_to_artifact",
@@ -8461,7 +9866,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6348"
+      "site": "crates/zp-server/src/lib.rs:6869"
     },
     {
       "kind": "code_to_artifact",
@@ -8470,7 +9875,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6386"
+      "site": "crates/zp-server/src/lib.rs:6907"
     },
     {
       "kind": "code_to_artifact",
@@ -8479,7 +9884,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6524"
+      "site": "crates/zp-server/src/lib.rs:7045"
     },
     {
       "kind": "code_to_artifact",
@@ -8803,7 +10208,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-trust/src/vault.rs:661"
+      "site": "crates/zp-trust/src/vault.rs:686"
     },
     {
       "kind": "pin",
@@ -8813,6 +10218,33 @@
       "detector": "cargo test -p zp-discipline --no-fail-fast",
       "note": null,
       "site": "crates/zp-discipline/tests/adapters_must_be_documented.rs"
+    },
+    {
+      "kind": "pin",
+      "source": "chain_events_carry_a_prefix",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/chain_events_carry_a_prefix.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "chain_events_carry_a_prefix",
+      "target": "crates/zp-discipline/",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/chain_events_carry_a_prefix.rs"
+    },
+    {
+      "kind": "pin",
+      "source": "finding_producers_must_reach_the_regent",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/finding_producers_must_reach_the_regent.rs"
     },
     {
       "kind": "pin",
@@ -9338,6 +10770,87 @@
     },
     {
       "kind": "pin",
+      "source": "prompt_placeholders_are_substituted",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/prompt_placeholders_are_substituted.rs"
+    },
+    {
+      "kind": "pin",
+      "source": "singular_sovereign_root",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "singular_sovereign_root",
+      "target": "crates/zp-keys/",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "singular_sovereign_root",
+      "target": "crates/zp-keys/src/biometric.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "singular_sovereign_root",
+      "target": "crates/zp-keys/src/sovereignty/fingerprint.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "singular_sovereign_root",
+      "target": "crates/zp-keys/src/sovereignty/hardware/mod.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "singular_sovereign_root",
+      "target": "crates/zp-keys/src/sovereignty/mod.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "singular_sovereign_root",
+      "target": "crates/zp-keys/src/sovereignty/touchid.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "singular_sovereign_root",
+      "target": "crates/zp-server/src/onboard/genesis.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/singular_sovereign_root.rs"
+    },
+    {
+      "kind": "pin",
       "source": "verbs_must_match_schema",
       "target": "workspace",
       "status": "live",
@@ -9361,7 +10874,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "153 relevant files changed since it was written (92 commits)",
+      "note": "162 relevant files changed since it was written (116 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -9370,16 +10883,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "132 relevant files changed since it was written (81 commits)",
+      "note": "142 relevant files changed since it was written (105 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "c67e327",
+      "target": "21f1cb4",
       "status": "defect",
       "detector": null,
-      "note": "2 relevant files changed since it was written (4 commits), declared source c67e327 dated 2026-08-01",
+      "note": "26 relevant files changed since it was written (23 commits), declared source 21f1cb4 dated 2026-08-02",
       "site": "tools/connection-map/connections.json"
     }
   ]

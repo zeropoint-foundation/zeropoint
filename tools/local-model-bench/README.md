@@ -1,8 +1,15 @@
 # zp-local-model-bench
 
-Benchmarks clear-license local models on Apple Silicon (MLX) against the five measures
+Benchmarks clear-license local models on Apple Silicon (MLX) against the six measures
 ZeroPoint's inference routing actually needs: **decode tok/s, prefill tok/s across context
-lengths, structured-output/tool-call reliability, peak memory, and quant-degradation sanity.**
+lengths, structured-output/tool-call reliability, peak memory, quant-degradation sanity, and
+calibration at the abstention boundary.**
+
+The sixth measure exists because the first five flatter exactly the models we most need to
+distrust. A tool-use-optimised SLM is best in class at emitting well-formed output, which
+means its characteristic failure is well-formed **wrong** output — and schema-valid garbage is
+more dangerous than malformed output, because the parser accepts it and the error travels
+downstream wearing the costume of a verified result.
 
 Model selection rationale, the license posture, and the named hardware targets live in
 `docs/design/LOCAL-MODEL-SELECTION-2026-07.md`.
@@ -11,7 +18,7 @@ Model selection rationale, the license posture, and the named hardware targets l
 
 - **APOLLO** — the M4 Pro Mac Mini (64GB). This MLX harness runs here. `--target APOLLO` (default).
 - **PI5** — the Raspberry Pi 5 (**8GB**, CPU-only). MLX doesn't run on it — PI5 is a **separate
-  llama.cpp/GGUF track** (same five measures, different runtime), to be scaffolded later. Don't
+  llama.cpp/GGUF track** (same six measures, different runtime), to be scaffolded later. Don't
   run this script expecting PI5 numbers. On 8GB the limit is CPU speed, not capacity: classifier
   = Qwen3-0.6B (clear) or LFM2.5-230M (elected); light edge work = Qwen3-1.7B.
 
@@ -50,9 +57,25 @@ benchmark them anyway:
 
 ```bash
 hf download LiquidAI/LFM2.5-8B-A1B-MLX-4bit    # confirm the actual MLX tag
+hf download LiquidAI/LFM2.5-350M-MLX-8bit      # present in the APOLLO cache as of 2026-08-09
 hf download LiquidAI/LFM2.5-230M-MLX-4bit
 python zp_local_model_bench.py --include-license-gated
 ```
+
+**LFM Open License v1.0 — terms verified 2026-08-09.** Apache-2.0 plus one restriction: free
+commercial use below **USD $10M annual revenue**, measured at the Legal Entity level including
+affiliates under common control; at or above the cap a paid license from `sales@liquid.ai` is
+required. **Research and nonprofit (501(c)(3) or equivalent) use has no threshold.** No
+copyleft — fine-tunes need not be opened, but derivatives stay under these terms and the cap
+follows them. Redistribution requires shipping the license, retaining notices, and marking
+modified files; termination is automatic on breach.
+
+The cap binds the **user's** entity, not ours, and the exemption is entity-scoped rather than
+artifact-scoped — it covers what the Foundation does, it does not travel with software the
+Foundation ships. Referencing a repo id here is a pointer, not redistribution, so this bench is
+unencumbered. Making an LFM model a *default* substrate routing target is a different act: it
+hands every adopter over the cap an obligation they did not choose. Hence electable, not
+default. Not legal advice — confirm with counsel before shipping a default.
 
 They live in the `LICENSE_GATED_MODELS` list in the script, clearly separated from the
 clear-license `MODELS`.
@@ -87,6 +110,16 @@ never get mixed up. Outputs land in `results/` (`<base>` = `<target>-<stamp>`):
   corpus the flagship use case can actually reason over. **This is the number that matters most.**
 - **structured (x/4)** — receipt JSON, tool-call JSON, route classifier, and `uc1_synthesis`.
   A model that can't hold this is not a Regent-emission candidate, regardless of speed.
+- **false-assurance rate** — of the six calibration cases, how many produced schema-valid output
+  that was wrong or unwarranted. **This, not the structured score, decides cheap-gate fitness.**
+  Three of the cases are unanswerable by construction; on those, any confident `status:ok` is
+  fabrication however tidy. Tidy JSON with an invented section number is worse than no output.
+- **abstention recall** — of the unanswerable cases, how many did it refuse? **1.0 is the bar
+  for a gate.** Below that, some fraction of confident outputs are fabricated and you can't tell
+  which. A gate that fails closed under doubt is usable at 90% accuracy; one that confidently
+  mislabels is unusable at 97%. High over-abstention with high recall is a *tunable* model —
+  loosen the prompt. High false assurance is not tunable; it disqualifies the gate role
+  whatever the tok/s says.
 - **peak GB** — headroom vs the ~48–56GB budget; watch KV cache grow with context.
 - **samples file** — read `uc1_ontology_extract` and `uc3_grounded_qa` against each task's
   `EXPECT:` line. A wrong number or fabricated section on UC-3 is int4 grounded-retrieval
