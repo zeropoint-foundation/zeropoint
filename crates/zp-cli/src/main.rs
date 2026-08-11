@@ -6068,7 +6068,20 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let config = PipelineConfig {
-        operator_identity: OperatorIdentity::default(),
+        // `OperatorIdentity::default()` sets `name: "ZeroPoint"` — the
+        // substrate's own name, not the operator's. Using the default here
+        // meant `zp chat` ran with no knowledge of who it served, while the
+        // server (lib.rs, AppState::init) populated the same field from
+        // `config.operator_name`. Two entry points, two identities, one field.
+        //
+        // Resolved toward the server's reading: `name` is the operator. See
+        // PromptBuilder::system_prompt.
+        operator_identity: OperatorIdentity {
+            name: zp_config::ConfigResolver::resolve_standard_or_exit()
+                .operator_name
+                .value,
+            base_prompt: OperatorIdentity::default().base_prompt,
+        },
         trust_tier,
         data_dir: args.data_dir,
         mesh: mesh_config.clone(),
@@ -6103,13 +6116,30 @@ async fn main() -> anyhow::Result<()> {
     // Providers route through the running server's proxy on cfg.port, so CLI
     // completions are receipted on the same terms as server completions.
     //
-    // Unlike the server this is NOT boot-fatal: most CLI verbs never touch
-    // inference, and refusing to run `zp config show` because a model is
-    // missing would be its own incoherence. The failure is reported loudly and
-    // the affected verbs fail at call time with NoProvider.
+    // Unlike the server this is NOT boot-fatal, and the difference is principled
+    // rather than a concession. The server exists to serve, so its process start
+    // IS its point of use. The CLI's point of use is the verb: `zp keys`,
+    // `zp verify` and `zp config` do not depend on inference, and killing them
+    // over a model tag would be its own incoherence.
+    //
+    // §4 invariant — *no verb silently degrades*. That is satisfied by the
+    // diagnostic living on PipelineError::NoProvider, which fires at the moment
+    // a verb actually depends on the crossing. Warning here instead would print
+    // noise on every invocation that does not care, and a warning nobody reads
+    // is the silent failure wearing a hat.
+    //
+    // The signer derives from the same `genesis_secret` already loaded above
+    // for the audit signer — one sovereign-root load, two domain-separated
+    // subkeys, no second ceremony. `derive_gate_signer_seed` is the only
+    // derivation permitted (the `no_inline_gate_signer_derivation` pin), and
+    // the resulting kid matches the server's `expected_kid` by construction
+    // because both sides derive from the same root.
     {
         let llm_cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
         if llm_cfg.llm_enabled.value {
+            let gate_seed = zp_keys::derive_gate_signer_seed(&genesis_secret);
+            let signer: std::sync::Arc<dyn zp_core::provider::RequestSigner> =
+                std::sync::Arc::new(zp_gate_envelope::GateRequestSigner::from_seed(&gate_seed));
             match pipeline
                 .init_providers(
                     llm_cfg.port.value,
@@ -6117,15 +6147,14 @@ async fn main() -> anyhow::Result<()> {
                     &llm_cfg.llm_model.value,
                     &llm_cfg.llm_escalation_model.value,
                     llm_cfg.llm_supports_tools.value,
+                    signer,
                 )
                 .await
             {
                 Ok(n) => tracing::debug!(providers = n, "CLI provider pool ready"),
-                Err(e) => eprintln!(
-                    "Warning: provider pool unavailable ({}). \
-                     Inference verbs will fail; other verbs are unaffected.",
-                    e
-                ),
+                // Deliberately not user-facing. The verb that depends on this
+                // will say so, with the full diagnostic, at the point of use.
+                Err(e) => tracing::debug!(error = %e, "CLI provider pool unavailable"),
             }
         }
     }

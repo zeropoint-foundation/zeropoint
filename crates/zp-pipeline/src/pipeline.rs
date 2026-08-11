@@ -34,13 +34,48 @@ use zp_skills::{SkillMatcher, SkillRegistry};
 /// Maximum tool invocation iterations before forcing a final response.
 const MAX_TOOL_ITERATIONS: usize = 10;
 
+/// Build the diagnostic for a failed provider selection.
+///
+/// HARNESS-SEAM-2026-08 §4 invariant — *no verb silently degrades*: a crossing
+/// that failed must produce the same diagnostic wherever it is first depended
+/// upon. The server refuses to boot, because its point of use is process start.
+/// The CLI reaches this instead, because its point of use is the verb. Same
+/// rule, different moment; the text must not differ.
+///
+/// The message is derived from observed pool state rather than from remembered
+/// configuration, so it cannot drift away from what is actually true.
+fn no_provider_diagnostic(pool: &ProviderPool, cause: &str) -> String {
+    if pool.is_empty() {
+        "provider pool is empty — the model-election crossing was never made. \
+         If llm.enabled is true this is a half-state, not a degraded mode: the \
+         substrate is configured to think and cannot. Run `zp config show` and \
+         check llm.provider / llm.model, confirm the model is installed on the \
+         backend, or set llm.enabled = false to run without inference. \
+         (HARNESS-SEAM-2026-08 S3)"
+            .to_string()
+    } else {
+        let ids: Vec<String> = pool.provider_ids().iter().map(|i| i.0.clone()).collect();
+        format!(
+            "no provider in the pool satisfies the requested model class. \
+             Pool holds: [{}]. Underlying cause: {}. Note that a single-tier pool \
+             cannot satisfy RequireStrong by design — set llm.escalation_model to \
+             register a strong tier rather than expecting a silent downgrade. \
+             (HARNESS-SEAM-2026-08 C1)",
+            ids.join(", "),
+            cause
+        )
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum PipelineError {
     #[error("policy blocked: {0}")]
     PolicyBlocked(String),
 
-    #[error("no provider available")]
-    NoProvider,
+    /// Provider selection failed. Carries the full diagnostic rather than a
+    /// bare label — see `no_provider_diagnostic`.
+    #[error("{0}")]
+    NoProvider(String),
 
     #[error("provider error: {0}")]
     ProviderError(String),
@@ -163,6 +198,13 @@ impl Pipeline {
     /// pool cannot satisfy `RequireStrong` at all — that is intentional and
     /// visible rather than silently downgraded.
     ///
+    /// `signer` supplies the per-request ZP-Sig envelope. It is required, not
+    /// optional: the gate authenticates `/api/v1/proxy/*`, so a pool built
+    /// without one can only produce 401s, and the tempting repair for a wall
+    /// of 401s is the legacy bearer path that is pending removal. Requiring it
+    /// here means the composition root must have reached Genesis before it can
+    /// build a pool at all.
+    ///
     /// Returns the number of providers registered. Does not verify the backend
     /// is reachable; call `provider_pool.health_check()` for that.
     pub async fn init_providers(
@@ -172,6 +214,7 @@ impl Pipeline {
         model: &str,
         escalation_model: &str,
         supports_tools: bool,
+        signer: Arc<dyn zp_core::provider::RequestSigner>,
     ) -> Result<usize, PipelineError> {
         if model.trim().is_empty() {
             return Err(PipelineError::Internal(
@@ -185,9 +228,9 @@ impl Pipeline {
             // `local()` marks the provider is_local, which ModelClass::LocalOnly
             // routes on; `new()` does not. Keep them distinct.
             let p = if provider_id == "ollama" {
-                zp_llm::ProxyLlmProvider::local(zp_port, m)
+                zp_llm::ProxyLlmProvider::local(zp_port, m, Arc::clone(&signer))
             } else {
-                zp_llm::ProxyLlmProvider::new(zp_port, provider_id, m)
+                zp_llm::ProxyLlmProvider::new(zp_port, provider_id, m, Arc::clone(&signer))
             };
             Box::new(p.with_strength(strength).with_tools(supports_tools))
         };
@@ -607,8 +650,9 @@ impl Pipeline {
         // 8. Select provider and call LLM
         let pool = self.provider_pool.read().await;
         let provider = pool.select(&model_preference).map_err(|e| {
-            error!("No provider available: {}", e);
-            PipelineError::NoProvider
+            let diagnostic = no_provider_diagnostic(&pool, &e.to_string());
+            error!(providers = pool.len(), "{}", diagnostic);
+            PipelineError::NoProvider(diagnostic)
         })?;
 
         let mut completion = provider.complete(&completion_request).await.map_err(|e| {

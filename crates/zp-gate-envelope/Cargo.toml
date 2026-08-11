@@ -20,7 +20,9 @@ blake3 = { workspace = true }
 hex = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
+ed25519-dalek = { workspace = true }
 zp-receipt = { path = "../zp-receipt" }
+zp-core = { path = "../zp-core" }
 
 [dev-dependencies]
 ed25519-dalek = { workspace = true }

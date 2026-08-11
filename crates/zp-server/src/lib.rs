@@ -697,10 +697,18 @@ impl AppState {
         // expected_kid (for envelope authentication). Derived once from a
         // single sovereign-root load so the operator sees at most one
         // ceremony (#152: singular sovereign root).
-        let (mut audit_store_inner, envelope_verifier) = if is_genesis {
+        // The gate signer is carried out of this block alongside the verifier
+        // deliberately: both come from one `derive_gate_signer_seed` call on
+        // one sovereign-root load, so the key this server signs with and the
+        // `expected_kid` it verifies against cannot drift. Deriving the signer
+        // anywhere else would be a second source of truth for the same key.
+        // `None` during the Genesis ceremony — there is no secret yet, so
+        // there is no identity to sign with.
+        let (mut audit_store_inner, envelope_verifier, gate_signer) = if is_genesis {
             (
                 AuditStore::open_readonly(&audit_path)
                     .expect("Failed to open audit store (readonly)"),
+                None,
                 None,
             )
         } else {
@@ -732,7 +740,22 @@ impl AppState {
             );
             debug!("ZP-Sig envelope verifier kid (full): {}", kid_hex);
 
-            (store, Some(Arc::new(verifier)))
+            // Same seed, signer side. This server calls its own proxy on
+            // loopback, so it is both signer and verifier of these envelopes;
+            // sharing the derivation makes the match structural rather than
+            // something to keep in sync.
+            let signer = zp_gate_envelope::GateRequestSigner::from_seed(&gate_seed);
+            debug_assert_eq!(
+                signer.kid(),
+                expected_kid,
+                "gate signer and verifier must derive the same key"
+            );
+
+            (
+                store,
+                Some(Arc::new(verifier)),
+                Some(Arc::new(signer) as Arc<dyn zp_core::provider::RequestSigner>),
+            )
         };
 
         // Claim 1: startup chain integrity verification (zp-verify catalog rules).
@@ -882,7 +905,26 @@ impl AppState {
             // crossing fails, that assertion is false and the correct response
             // is to refuse to start rather than to serve a substrate that
             // silently cannot think.
-            if let Some(ref pipe) = p {
+            // Pre-Genesis there is no identity to sign with, so no provider can
+            // be constructed. That is a precondition, not a fault: the ceremony
+            // has not produced a sovereign root yet, so inference is legitimately
+            // unavailable. Health reports `degraded` (pipeline present, zero
+            // providers) and boot continues. Post-Genesis the signer is always
+            // present, so a missing one there would be a broken assertion.
+            let signer = match gate_signer.clone() {
+                Some(s) => Some(s),
+                None => {
+                    tracing::warn!(
+                        "llm.enabled = true during the Genesis ceremony — provider pool \
+                         deferred until a sovereign root exists. Inference is unavailable \
+                         until onboarding completes."
+                    );
+                    None
+                }
+            };
+
+            match (p.as_ref(), signer) {
+                (Some(pipe), Some(signer)) => {
                 match pipe
                     .init_providers(
                         config.port,
@@ -890,6 +932,7 @@ impl AppState {
                         &config.llm_model,
                         &config.llm_escalation_model,
                         config.llm_supports_tools,
+                        signer,
                     )
                     .await
                 {
@@ -927,17 +970,24 @@ impl AppState {
                         std::process::exit(1);
                     }
                 }
-            } else {
-                // Pipeline::new failed but llm.enabled is true. Same class of
-                // broken assertion, same response.
-                tracing::error!("FATAL: llm.enabled = true but pipeline construction failed");
-                eprintln!(
-                    "\nZeroPoint refused to start.\n\n\
-                     llm.enabled is true, but the request pipeline could not be \
-                     constructed.\nCheck that the data directory is writable: {}\n",
-                    config.data_dir
-                );
-                std::process::exit(1);
+                }
+                // Pre-Genesis: pipeline exists, no sovereign root to sign with.
+                // Already warned above. Not fatal — the ceremony has not run,
+                // so there is nothing broken to report. Health shows
+                // `degraded` until onboarding completes.
+                (Some(_), None) => {}
+                // Pipeline construction failed while llm.enabled is true.
+                // A broken assertion, same response as a failed crossing.
+                (None, _) => {
+                    tracing::error!("FATAL: llm.enabled = true but pipeline construction failed");
+                    eprintln!(
+                        "\nZeroPoint refused to start.\n\n\
+                         llm.enabled is true, but the request pipeline could not be \
+                         constructed.\nCheck that the data directory is writable: {}\n",
+                        config.data_dir
+                    );
+                    std::process::exit(1);
+                }
             }
             p
         } else {

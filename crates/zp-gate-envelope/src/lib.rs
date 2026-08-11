@@ -29,6 +29,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod signer;
+pub use signer::GateRequestSigner;
+
 /// HTTP header name carrying the envelope. The substrate's gate accepts ZP-Sig
 /// envelopes via the standard `Authorization` header so callers do not need to
 /// add a custom-header allowlist on any intermediary.

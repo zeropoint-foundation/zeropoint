@@ -10,13 +10,28 @@ use crate::provider::{
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, error, warn};
+use zp_core::provider::RequestSigner;
 use zp_core::{ProviderCapabilities, ProviderHealth, ProviderId, ZpError};
 
 /// LLM provider that routes through the ZP inference proxy.
 ///
-/// Construct with `ProxyLlmProvider::new(zp_port, provider_id, model)` for
-/// cloud providers, or `ProxyLlmProvider::local(zp_port, model)` for Ollama.
+/// Construct with `ProxyLlmProvider::new(zp_port, provider_id, model, signer)`
+/// for cloud providers, or `ProxyLlmProvider::local(zp_port, model, signer)`
+/// for Ollama.
+///
+/// # Why the signer is mandatory
+///
+/// The gate requires authentication on `/api/v1/proxy/*`. A provider without
+/// a signer can only ever produce 401s — but the danger is not the failure,
+/// it is the *repair*. An engineer debugging a wall of 401s at 2am reaches
+/// for the nearest switch, and `auth.rs` still accepts a legacy bearer path
+/// pending removal. Making the signer a required constructor argument means
+/// "an inference provider that cannot authenticate" is not a representable
+/// state, so that repair is never available. Compare `OllamaProvider` in this
+/// same crate, which takes no credential at all and talks straight to the
+/// backend — that shape is exactly what this one refuses to be.
 pub struct ProxyLlmProvider {
     id: ProviderId,
     zp_port: u16,
@@ -24,11 +39,19 @@ pub struct ProxyLlmProvider {
     provider_id: String,
     model: String,
     capabilities: ProviderCapabilities,
+    /// Supplies the per-request `Authorization` envelope. Never optional:
+    /// see the type docs.
+    signer: Arc<dyn RequestSigner>,
 }
 
 impl ProxyLlmProvider {
     /// Create a provider that routes through the ZP proxy to a cloud backend.
-    pub fn new(zp_port: u16, provider_id: impl Into<String>, model: impl Into<String>) -> Self {
+    pub fn new(
+        zp_port: u16,
+        provider_id: impl Into<String>,
+        model: impl Into<String>,
+        signer: Arc<dyn RequestSigner>,
+    ) -> Self {
         let provider_id = provider_id.into();
         let model = model.into();
         let id = ProviderId::new(&format!("proxy-{}-{}", provider_id, model));
@@ -44,11 +67,12 @@ impl ProxyLlmProvider {
                 strength: 0.9,
                 model_name: model,
             },
+            signer,
         }
     }
 
     /// Create a provider that routes through the ZP proxy to a local Ollama backend.
-    pub fn local(zp_port: u16, model: impl Into<String>) -> Self {
+    pub fn local(zp_port: u16, model: impl Into<String>, signer: Arc<dyn RequestSigner>) -> Self {
         let model = model.into();
         let id = ProviderId::new(&format!("proxy-ollama-{}", model));
         Self {
@@ -63,6 +87,7 @@ impl ProxyLlmProvider {
                 strength: 0.6,
                 model_name: model,
             },
+            signer,
         }
     }
 
@@ -87,11 +112,20 @@ impl ProxyLlmProvider {
         self
     }
 
-    fn proxy_url(&self) -> String {
+    /// Request path, with leading slash and no scheme/host/port.
+    ///
+    /// This exact string is what the envelope binds to, and what the gate
+    /// reconstructs from the live request. It is derived once here so the
+    /// signed path and the requested path cannot diverge.
+    fn proxy_path(&self) -> String {
         format!(
-            "http://127.0.0.1:{}/api/v1/proxy/{}/v1/chat/completions",
-            self.zp_port, self.provider_id
+            "/api/v1/proxy/{}/v1/chat/completions",
+            self.provider_id
         )
+    }
+
+    fn proxy_url(&self) -> String {
+        format!("http://127.0.0.1:{}{}", self.zp_port, self.proxy_path())
     }
 }
 
@@ -195,11 +229,43 @@ impl LlmProvider for ProxyLlmProvider {
 
         let client = reqwest::Client::new();
         let url = self.proxy_url();
+        let path = self.proxy_path();
 
-        let resp = client
+        // Serialize ONCE and transmit exactly these bytes.
+        //
+        // The envelope binds a BLAKE3 hash of the request body, and the gate
+        // recomputes that hash over the bytes it received. `.json(&body)`
+        // would serialize independently inside reqwest, so the hash could be
+        // taken over one serialization while a different one goes on the
+        // wire. Any difference — key order, float formatting, escaping —
+        // yields a valid-looking envelope that fails verification, reported
+        // as `envelope-signature` and indistinguishable from a bad key.
+        let body_bytes = serde_json::to_vec(&body).map_err(|e| {
+            error!(error = %e, "ProxyLlmProvider: failed to serialize request body");
+            ZpError::ProviderError {
+                provider: self.id.0.clone(),
+                message: format!("Failed to serialize request: {}", e),
+            }
+        })?;
+
+        let mut req = client
             .post(&url)
-            .header("content-type", "application/json")
-            .json(&body)
+            .header("content-type", "application/json");
+
+        // Fail closed: if no credential can be produced we still send the
+        // request, unauthenticated, and let the gate reject it. Skipping the
+        // call would hide the misconfiguration; sending it surfaces a 401 that
+        // names this provider.
+        match self.signer.authorization("POST", &path, &body_bytes) {
+            Some(auth) => req = req.header("authorization", auth),
+            None => warn!(
+                provider = %self.id.0,
+                "ProxyLlmProvider: signer produced no credential — request will be rejected"
+            ),
+        }
+
+        let resp = req
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| {
@@ -292,26 +358,75 @@ impl LlmProvider for ProxyLlmProvider {
 mod tests {
     use super::*;
 
+    /// Test double. Records nothing and signs nothing — it exists only to
+    /// satisfy the mandatory-signer constructor.
+    ///
+    /// It returns `Some`, not `None`, so these construction tests do not
+    /// silently become the place where "provider without a credential" is
+    /// normalised. The `None` case has its own test below, asserting the
+    /// fail-closed contract explicitly.
+    struct StubSigner;
+
+    impl RequestSigner for StubSigner {
+        fn authorization(&self, method: &str, path: &str, _body: &[u8]) -> Option<String> {
+            Some(format!("Stub {} {}", method, path))
+        }
+    }
+
+    /// A signer that cannot produce a credential. Models the pre-Genesis
+    /// state, where there is no identity to sign with.
+    struct SilentSigner;
+
+    impl RequestSigner for SilentSigner {
+        fn authorization(&self, _method: &str, _path: &str, _body: &[u8]) -> Option<String> {
+            None
+        }
+    }
+
+    fn stub() -> Arc<dyn RequestSigner> {
+        Arc::new(StubSigner)
+    }
+
     #[test]
     fn test_proxy_provider_creation() {
-        let p = ProxyLlmProvider::new(7832, "anthropic", "claude-sonnet-4-6");
+        let p = ProxyLlmProvider::new(7832, "anthropic", "claude-sonnet-4-6", stub());
         assert_eq!(p.id().0, "proxy-anthropic-claude-sonnet-4-6");
         assert!(!p.capabilities().is_local);
     }
 
     #[test]
     fn test_proxy_local_creation() {
-        let p = ProxyLlmProvider::local(7832, "mistral");
+        let p = ProxyLlmProvider::local(7832, "mistral", stub());
         assert_eq!(p.id().0, "proxy-ollama-mistral");
         assert!(p.capabilities().is_local);
     }
 
     #[test]
     fn test_proxy_url() {
-        let p = ProxyLlmProvider::new(7832, "together", "llama-3");
+        let p = ProxyLlmProvider::new(7832, "together", "llama-3", stub());
         assert_eq!(
             p.proxy_url(),
             "http://127.0.0.1:7832/api/v1/proxy/together/v1/chat/completions"
         );
+    }
+
+    /// The signed path and the requested path must be the same string. If
+    /// these ever diverge, every envelope fails verification with a binding
+    /// error that looks like a signature problem.
+    #[test]
+    fn signed_path_matches_requested_url() {
+        let p = ProxyLlmProvider::local(7832, "gemma4:26b-mlx", stub());
+        let path = p.proxy_path();
+        assert!(path.starts_with('/'), "signed path needs a leading slash");
+        assert_eq!(p.proxy_url(), format!("http://127.0.0.1:7832{}", path));
+    }
+
+    /// Fail closed: a signer that yields nothing must not cause the provider
+    /// to invent a credential or to treat the request as authorised. The
+    /// request goes out bare and the gate rejects it.
+    #[test]
+    fn absent_credential_yields_no_header() {
+        let signer: Arc<dyn RequestSigner> = Arc::new(SilentSigner);
+        assert!(signer.authorization("POST", "/api/v1/proxy/ollama/v1/chat/completions", b"{}").is_none());
     }
 }

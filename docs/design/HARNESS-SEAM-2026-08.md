@@ -194,10 +194,48 @@ requires new infrastructure — only the decision to assert.
 ### Failure discipline
 
 A boundary sensor that fails must **fail loudly**. The `init_providers` error
-path added on 2026-08-09 logs and continues, allowing the server to report
-healthy while holding an empty pool. That is the exact half-state this
-document exists to forbid, and it is to be corrected: pool state belongs in
-the health surface, and a failed crossing at boot is a boot failure.
+path added on 2026-08-09 logged and continued, allowing the server to report
+healthy while holding an empty pool — the exact half-state this document
+forbids. Corrected: pool state is reported on the health surface, and a failed
+crossing at boot is a boot failure.
+
+#### The invariant
+
+> **No verb silently degrades.** A crossing that failed must produce the same
+> diagnostic wherever it is first depended upon.
+
+Note what this does *not* say. It does not require every process to die at
+start. The first attempt at symmetry got this wrong in both directions: the
+server was made to warn and continue (too weak), and the CLI was briefly
+considered for boot-failure (too strong, and for the wrong reason).
+
+The resolution is that **the server and the CLI differ in where the point of
+use is, not in what rule applies**:
+
+| Entry point | Point of use | Behaviour on failed crossing |
+|---|---|---|
+| `zp-server` | Process start — it exists to serve | Refuse to boot, with full diagnostic |
+| `zp-cli` | The verb — most verbs never touch inference | Silent at start; full diagnostic from `PipelineError::NoProvider` at the moment a verb depends on it |
+
+Symmetry of principle, asymmetry of moment. This is recorded as a rule and not
+an exception, deliberately: the Regent bypass and the compiled `local` tier
+both began as reasonable-sounding exceptions that nobody wrote down.
+
+Two consequences worth stating outright, because both were violated by the
+first implementation:
+
+1. **A startup warning is not compliance.** Printing a caution on every
+   invocation that does not care about inference is noise, and noise is how a
+   half-state hides. The diagnostic belongs at the dependency, not the door.
+2. **The diagnostic is derived, not remembered.** `no_provider_diagnostic`
+   reads live pool state rather than echoing configuration back, so it cannot
+   drift from what is actually true. A diagnostic that reports intent rather
+   than reality is a sensor that lies.
+
+Verified 2026-08-09: `Commands::Cfg` short-circuits at `zp-cli/src/main.rs:4577`,
+before pipeline construction, so no configuration verb can be locked out by a
+failed inference crossing. This property must be preserved — a substrate whose
+repair tools depend on the thing being repaired cannot be repaired.
 
 ---
 

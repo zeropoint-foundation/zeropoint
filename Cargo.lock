@@ -7773,6 +7773,7 @@ dependencies = [
  "zp-configure",
  "zp-core",
  "zp-engine",
+ "zp-gate-envelope",
  "zp-host",
  "zp-keys",
  "zp-mesh",
@@ -7903,6 +7904,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "zp-core",
  "zp-receipt",
 ]
 
