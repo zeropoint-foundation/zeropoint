@@ -13,8 +13,11 @@
 //! checked first, because a proxy URL carries its backend in the path and would
 //! otherwise substring-match the provider rules below. See `detect`.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
+use zp_core::provider::RequestSigner;
 
 use crate::config::{CloudMandate, RegentConfig};
 use crate::error::RegentError;
@@ -122,7 +125,7 @@ impl ProviderProfile {
     /// will be rejected with 401 — loudly, which is correct. Fail closed.
     pub fn zp_proxy() -> Self {
         Self {
-            name: "zp-proxy".into(),
+            name: Self::ZP_PROXY.into(),
             auth: AuthStrategy::None,
             chat_path: "/v1/chat/completions".into(),
             response_format: InferenceProtocol::OpenAI,
@@ -151,6 +154,20 @@ impl ProviderProfile {
             chat_path: "/v1/chat/completions".into(),
             response_format: InferenceProtocol::OpenAI,
         }
+    }
+
+    /// The name `zp_proxy()` carries.
+    ///
+    /// Callers test identity against this rather than re-spelling the
+    /// literal, so there is one place the substrate's own proxy is named.
+    pub const ZP_PROXY: &'static str = "zp-proxy";
+
+    /// Whether this profile is the substrate's own proxy.
+    ///
+    /// The proxy is the only endpoint that expects a ZP-Sig envelope; every
+    /// other profile authenticates through `AuthStrategy` alone.
+    pub fn is_zp_proxy(&self) -> bool {
+        self.name == Self::ZP_PROXY
     }
 
     /// Auto-detect provider from endpoint URL.
@@ -222,6 +239,23 @@ impl ProviderProfile {
         }
 
         format!("{}{}", base, self.chat_path)
+    }
+}
+
+/// The path a request line will carry, taken from an absolute URL.
+///
+/// A ZP-Sig envelope binds the path, and the gate recomputes it from the
+/// request it received — so this must be exactly what travels: leading `/`,
+/// query string included, scheme and authority excluded. A URL with no path
+/// yields `/`, which is what an HTTP client sends in that case.
+fn request_path(url: &str) -> &str {
+    let after_scheme = match url.find("://") {
+        Some(i) => &url[i + 3..],
+        None => url,
+    };
+    match after_scheme.find('/') {
+        Some(i) => &after_scheme[i..],
+        None => "/",
     }
 }
 
@@ -383,12 +417,28 @@ pub struct InferenceBackend {
     last_classifier_decision: std::sync::Mutex<
         Option<crate::inference_classifier::ClassifierDecision>,
     >,
+    /// Gate-request signer for calls to the substrate's own proxy (W5 3b).
+    ///
+    /// `None` pre-Genesis, where there is no sovereign root to sign with —
+    /// the same shape `gate_signer` already has in `AppState::init`. It is
+    /// not configuration and does not live on `RegentConfig`: it is a live
+    /// capability handed to the backend, and a `RegentConfig` field would
+    /// have to be `#[serde(skip)]`, which is a value that vanishes on a
+    /// round-trip without saying so.
+    ///
+    /// Held but unused until the endpoint moves to the proxy in W5 3c.
+    gate_signer: Option<Arc<dyn RequestSigner>>,
 }
 
 impl InferenceBackend {
     /// Create from Regent config. Protocol is auto-detected:
     /// API key source present → OpenAI, absent → Ollama.
-    pub fn new(config: &RegentConfig) -> Self {
+    ///
+    /// `gate_signer` authenticates calls to the substrate's own proxy. Pass
+    /// `None` pre-Genesis, or wherever no sovereign root has been loaded;
+    /// proxy calls made without it are sent unauthenticated and rejected by
+    /// the gate, which is the intended failure — loud, not silent.
+    pub fn new(config: &RegentConfig, gate_signer: Option<Arc<dyn RequestSigner>>) -> Self {
         let has_key = config.api_key_source.has_key();
         let provider = ProviderProfile::detect(&config.inference_endpoint, has_key);
         let protocol = provider.response_format.clone();
@@ -402,6 +452,7 @@ impl InferenceBackend {
             auth = ?provider.auth,
             protocol = ?protocol,
             key_source = ?std::mem::discriminant(&config.api_key_source),
+            gate_signer = gate_signer.is_some(),
             "inference backend initialized"
         );
 
@@ -428,6 +479,7 @@ impl InferenceBackend {
                 crate::inference_classifier::DefaultClassifier::new(),
             ),
             last_classifier_decision: std::sync::Mutex::new(None),
+            gate_signer,
         }
     }
 
@@ -709,6 +761,48 @@ impl InferenceBackend {
         Err("Ollama started but not responsive after 8 seconds".to_string())
     }
 
+    /// Attach the ZP-Sig envelope for a request to the substrate's own proxy.
+    ///
+    /// `body` must be the exact bytes that will be transmitted. The envelope
+    /// binds a BLAKE3 hash of them and the gate recomputes that hash over
+    /// what it received, so a body serialised twice — once to hash, once to
+    /// send — yields a structurally perfect header that fails verification,
+    /// reported as `envelope-signature` and indistinguishable from a wrong
+    /// key. Callers serialise once and pass those bytes here and to `.body()`.
+    ///
+    /// Fail closed, never fail open. If no signer is held, or the signer
+    /// produces no credential, the request still goes — unauthenticated —
+    /// and the gate rejects it. Skipping the call would hide the
+    /// misconfiguration; sending it surfaces a 401 that names this backend.
+    fn sign_for_gate(
+        &self,
+        builder: reqwest::RequestBuilder,
+        url: &str,
+        body: &[u8],
+    ) -> reqwest::RequestBuilder {
+        let signer = match self.gate_signer.as_ref() {
+            Some(s) => s,
+            None => {
+                warn!(
+                    url = %url,
+                    "regent holds no gate signer — proxy request will be rejected"
+                );
+                return builder;
+            }
+        };
+
+        match signer.authorization("POST", request_path(url), body) {
+            Some(auth) => builder.header("Authorization", auth),
+            None => {
+                warn!(
+                    url = %url,
+                    "gate signer produced no credential — proxy request will be rejected"
+                );
+                builder
+            }
+        }
+    }
+
     // ── Ollama path ────────────────────────────────────────────────
 
     /// Chat via local Ollama at the fallback endpoint.
@@ -753,10 +847,31 @@ impl InferenceBackend {
 
         let t0 = std::time::Instant::now();
 
-        let resp = self
+        // Serialize ONCE and transmit exactly these bytes — see `sign_for_gate`
+        // for why `.json(request)` cannot be used on a signed path.
+        let body_bytes = serde_json::to_vec(request).map_err(|e| {
+            RegentError::Inference(format!("request serialization failed: {}", e))
+        })?;
+
+        let mut req = self
             .client
             .post(&url)
-            .json(request)
+            .header("Content-Type", "application/json");
+
+        // Signing is conditioned on the endpoint actually being called, not on
+        // `self.provider` alone. The fallback path posts to raw Ollama while
+        // the configured provider may well be `zp-proxy`, and an envelope
+        // addressed to a backend that cannot verify it is noise. Today no call
+        // reaches here with the proxy as target — `zp_proxy` resolves to the
+        // OpenAI protocol, so `chat_openai` handles it — but the condition is
+        // written against what is true rather than against what happens to be
+        // unreachable.
+        if self.provider.is_zp_proxy() && endpoint == self.endpoint {
+            req = self.sign_for_gate(req, &url, &body_bytes);
+        }
+
+        let resp = req
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| RegentError::Inference(format!("HTTP error: {}", e)))?;
@@ -866,14 +981,28 @@ impl InferenceBackend {
 
         let t0 = std::time::Instant::now();
 
+        // Serialize ONCE and transmit exactly these bytes — see `sign_for_gate`.
+        let body_bytes = serde_json::to_vec(&body).map_err(|e| {
+            RegentError::Inference(format!("request serialization failed: {}", e))
+        })?;
+
         // Apply provider-specific auth strategy.
         let api_key = self.resolved_key.as_deref().unwrap_or("");
         let builder = self
             .client
             .post(&url)
             .header("Content-Type", "application/json");
-        let resp = self.provider.auth.apply(builder, api_key)
-            .json(&body)
+        let mut builder = self.provider.auth.apply(builder, api_key);
+
+        // The proxy's `AuthStrategy::None` is a placeholder, not a statement:
+        // ZP-Sig is per-request and body-bound, so it cannot be expressed as a
+        // static strategy. This is the mechanism that placeholder stands in for.
+        if self.provider.is_zp_proxy() {
+            builder = self.sign_for_gate(builder, &url, &body_bytes);
+        }
+
+        let resp = builder
+            .body(body_bytes)
             .send()
             .await
             .map_err(|e| RegentError::Inference(format!("HTTP error: {}", e)))?;
@@ -1193,5 +1322,44 @@ mod detect_tests {
     fn chat_url_leaves_a_complete_proxy_url_alone() {
         let p = ProviderProfile::zp_proxy();
         assert_eq!(p.chat_url(PROXY), PROXY);
+    }
+
+    // ── W5 3b: gate-envelope signing surface ───────────────────────
+
+    /// `is_zp_proxy` is the predicate the signing condition reads. It must
+    /// agree with `detect` on the URL shape and disagree on every other.
+    #[test]
+    fn is_zp_proxy_matches_detection() {
+        assert!(ProviderProfile::zp_proxy().is_zp_proxy());
+        assert!(ProviderProfile::detect(PROXY, false).is_zp_proxy());
+        assert!(!ProviderProfile::detect("http://127.0.0.1:11434", false).is_zp_proxy());
+        assert!(!ProviderProfile::detect("https://api.openai.com", true).is_zp_proxy());
+    }
+
+    /// The envelope binds the path, and the gate recomputes it from the
+    /// request line — so this must be exactly what travels. A wrong path
+    /// produces a structurally perfect header that fails verification,
+    /// reported as `envelope-signature` and indistinguishable from a bad key.
+    #[test]
+    fn request_path_is_what_travels() {
+        assert_eq!(
+            request_path(PROXY),
+            "/api/v1/proxy/ollama/v1/chat/completions"
+        );
+        assert_eq!(request_path("http://127.0.0.1:11434/api/chat"), "/api/chat");
+        assert_eq!(request_path("https://host/v1/models?a=1"), "/v1/models?a=1");
+    }
+
+    /// A URL with no path yields `/` — what an HTTP client sends in that case.
+    #[test]
+    fn request_path_defaults_to_root() {
+        assert_eq!(request_path("http://127.0.0.1:17010"), "/");
+        assert_eq!(request_path("http://127.0.0.1:17010/"), "/");
+    }
+
+    /// The scheme's own `//` must not be mistaken for the start of the path.
+    #[test]
+    fn request_path_skips_the_scheme() {
+        assert_eq!(request_path("https://example.com/a/b"), "/a/b");
     }
 }

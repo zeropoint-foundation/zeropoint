@@ -570,6 +570,19 @@ pub struct AppStateInner {
     /// header to 401 when the verifier is absent — IronClaw should never
     /// reach the gate before Genesis exists.
     pub envelope_verifier: Option<Arc<envelope_state::EnvelopeVerifier>>,
+    /// Signer for outbound requests this server makes to its own gate
+    /// (`Authorization: ZP-Sig …`).
+    ///
+    /// Derived in `init` from the same `derive_gate_signer_seed` call as
+    /// `envelope_verifier`'s `expected_kid`, so the key this process signs
+    /// with and the key it verifies against cannot drift. Held on state
+    /// because subsystems spawned after `init` — the provider pool, and the
+    /// Regent as of W5 3b — each need it, and a second derivation would be a
+    /// second source of truth for one key.
+    ///
+    /// `Some` once Genesis is established; `None` during the pre-Genesis
+    /// onboarding window, where there is no sovereign root to sign with.
+    pub gate_signer: Option<Arc<dyn zp_core::provider::RequestSigner>>,
     /// Per-IP failed-auth rate limiter (AUTH-VULN-04 mitigation).
     pub rate_limiter: Arc<auth::FailedAuthLimiter>,
     /// Per-endpoint rate limiter (Phase 1.7: AUTH-VULN-04 hardening).
@@ -1230,6 +1243,7 @@ impl AppState {
             config_port: config.port,
             session_auth,
             envelope_verifier,
+            gate_signer,
             rate_limiter,
             endpoint_limiter,
             onboard_token,
@@ -2031,6 +2045,9 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         routing_model: config.regent_routing_model.clone(),
         loop_interval_secs: config.regent_loop_interval_secs,
         display_name: config.regent_display_name.clone(),
+        // W5 3b: the Regent can now authenticate to the proxy. The endpoint
+        // does not move here — 3c does that — so this is held and unused.
+        gate_signer: state.0.gate_signer.clone(),
     };
     // Share the vault key reference with the Regent — she resolves lazily at
     // self_configure time, avoiding the startup race where spawn happens before

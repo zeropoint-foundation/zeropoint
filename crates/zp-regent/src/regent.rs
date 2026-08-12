@@ -353,12 +353,19 @@ impl Regent {
     /// threaded through — the Regent never loads it independently.
     /// This eliminates the dual-load redundancy and ensures one
     /// sovereign identity for the entire process.
+    ///
+    /// `gate_signer` is threaded the same way and for the same reason: it is
+    /// derived once in `AppState::init`, beside the verifier's `expected_kid`
+    /// and from the same sovereign-root load, so signer and verifier cannot
+    /// drift. `None` pre-Genesis. It goes to the inference backend rather
+    /// than onto `RegentConfig` — it is a live capability, not configuration.
     pub fn new(
         config: RegentConfig,
         data_dir: &std::path::Path,
         sovereign: Option<SovereignIdentity>,
+        gate_signer: Option<std::sync::Arc<dyn zp_core::provider::RequestSigner>>,
     ) -> Self {
-        let inference = InferenceBackend::new(&config);
+        let inference = InferenceBackend::new(&config, gate_signer);
         let memory = MemoryStore::new(data_dir);
         let persona = Persona {
             name: config.display_name.clone(),

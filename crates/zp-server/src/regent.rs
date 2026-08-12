@@ -2485,6 +2485,14 @@ pub struct ServerRegentConfig {
     pub routing_model: String,
     pub loop_interval_secs: u64,
     pub display_name: String,
+    /// Signer for requests to this server's own gate, taken from `AppState`.
+    ///
+    /// `None` pre-Genesis. Carried through `ServerRegentConfig` rather than as
+    /// a separate `spawn_regent` argument because it originates in server
+    /// config assembly like every other field here — but it stops at
+    /// `RegentConfig`, which is serde-derived and has no business holding a
+    /// live capability. From here it goes to the inference backends directly.
+    pub gate_signer: Option<std::sync::Arc<dyn zp_core::provider::RequestSigner>>,
 }
 
 impl Default for ServerRegentConfig {
@@ -2497,6 +2505,7 @@ impl Default for ServerRegentConfig {
             routing_model: "qwen3:1.7b".to_string(),
             loop_interval_secs: 60,
             display_name: "Regent".to_string(),
+            gate_signer: None,
         }
     }
 }
@@ -2648,6 +2657,10 @@ pub async fn spawn_regent(
         );
     }
 
+    // Both backends below need it, and `config` is partially moved by the
+    // `RegentConfig` literal that follows.
+    let gate_signer = config.gate_signer.clone();
+
     let regent_config = RegentConfig {
         enabled: true,
         inference_endpoint: config.inference_endpoint,
@@ -2661,7 +2674,7 @@ pub async fn spawn_regent(
     };
 
     let data_path = std::path::Path::new(data_dir);
-    let mut inference_backend = InferenceBackend::new(&regent_config);
+    let mut inference_backend = InferenceBackend::new(&regent_config, gate_signer.clone());
 
     // If key is in vault, resolve it now and inject into the backend.
     if let zp_regent::config::ApiKeySource::Vault(ref path) = api_key_source {
@@ -2703,7 +2716,7 @@ pub async fn spawn_regent(
         None => ("unknown".to_string(), "00000000".to_string()),
     };
 
-    let mut regent = Regent::new(regent_config, data_path, sovereign);
+    let mut regent = Regent::new(regent_config, data_path, sovereign, gate_signer);
 
     // Inject the vault-resolved key into the Regent's OWN InferenceBackend.
     // (spawn_regent also creates a separate backend for ServerIntentExecutor —
