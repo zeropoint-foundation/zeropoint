@@ -303,7 +303,7 @@ showed it to be a protocol migration. Four sub-steps, discovered in order:
 | 3a | Recognise the ZP proxy in `ProviderProfile::detect` rather than sniffing it | **done** 2026-08-10, 6 tests |
 | 2 | Probes `api/tags` → `v1/models` (3 sites, incl. a response-shape change in `model_available`) | **done** 2026-08-10 |
 | 3b | Regent holds a `GateRequestSigner` | **done** 2026-08-12, 4 tests |
-| 3c | `inference_endpoint` → proxy; native `/api/chat` path retires | **next** |
+| 3c | `inference_endpoint` → proxy; native `/api/chat` path retires | **next** — scoped in `W5-STEP-3C-SESSION-BRIEF.md` |
 | 4 | Extend `no_raw_provider_http_outside_canonical_layer` to loopback URLs | last |
 
 **Hard constraint: 3b before 3c.** `ProviderProfile::zp_proxy()` carries
