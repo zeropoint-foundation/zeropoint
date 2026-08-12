@@ -19,7 +19,7 @@ ROOT = None
 # properties of a corpus mid-construction, not defects in it.
 INFORMATIONAL = {"index-coverage", "receipt-coverage", "stated-count",
                  "doc-path-prospective", "doc-path-as-proposed", "pub-consumer",
-                 "line-citation"}
+                 "line-citation", "reservation-applied"}
 
 # The corpus index declares its own establishment date in its opening
 # line ("Established 2026-07-10"). Documents authored on or after it were
@@ -569,6 +569,119 @@ def check_line_citations(docs, root):
                         f"{lines[num - 1].strip()[:80]!r}")
 
 
+def apply_reservations(root):
+    """Reclassify findings that carry a declared reservation.
+
+    Stage 1t's vocabulary at artifact granularity. IMPROVEMENT-LOOP-DISCIPLINE
+    applies `declined / deferred / open / limited` to improvement arcs, and
+    `tools/connection-map/tieoffs.toml` applies it to declared dependency
+    edges. Neither reaches an individual receipt type, prospective path or
+    unconsumed public type — which is why those three surfaces report raw
+    counts today with no dispositions at all: 752 receipt types, 46 paths,
+    360 types, none of them saying whether anyone decided.
+
+    A reservation is not an allowlist entry. It names what it suppresses,
+    carries a rationale, and — when it claims the thing will be revisited —
+    states what would reopen it and what does the watching. All three are
+    enforced here, because a reservation nobody can audit is the coverage
+    story this tool exists to remove.
+
+    Two failures are defects rather than measurements:
+
+      reservation-incomplete  `deferred` or `open` with no way back. Stage 1t:
+                              a revisit claim with no trigger is a permanent
+                              absence wearing a temporary label.
+      reservation-stale       matches no finding. It suppresses nothing and
+                              goes on looking like coverage — the same class
+                              as a check that never runs.
+
+    Suppression counts are reported per reservation. A broad reservation is
+    legible as broad; nothing is capped silently.
+    """
+    f = root / "tools/corpus-lint/reservations.toml"
+    if not f.exists():
+        return
+
+    # Hand-parsed, for the reason tools/connection-map/connection_map.py gives
+    # for the same choice: stdlib tomllib needs 3.11+, this tool targets
+    # whatever python3 is present, and the format is small enough that
+    # hand-parsing beats adding a version floor. The two parsers are
+    # duplicated because there is no shared lib between the tools; that is a
+    # real cost and is noted rather than hidden.
+    rules, cur = [], None
+    lines = f.read_text(errors="replace").split("\n")
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped == "[[reservation]]":
+            if cur:
+                rules.append(cur)
+            cur = {}
+        elif cur is not None and "=" in stripped and not stripped.startswith("#"):
+            key, _, val = stripped.partition("=")
+            key, val = key.strip(), val.strip()
+            if val.startswith('"""'):
+                body = [val[3:]]
+                i += 1
+                while i < len(lines) and '"""' not in lines[i]:
+                    body.append(lines[i])
+                    i += 1
+                if i < len(lines):
+                    body.append(lines[i].split('"""')[0])
+                cur[key] = "\n".join(body).strip().replace("\\\n", "")
+            else:
+                cur[key] = val.strip('"')
+        i += 1
+    if cur:
+        rules.append(cur)
+
+    # An unknown disposition is not applied. Silently honouring it would let a
+    # typo suppress findings under a word the vocabulary does not define.
+    valid = {"declined", "deferred", "open", "limited"}
+    for r in list(rules):
+        d = (r.get("disposition") or "").lower()
+        if d not in valid:
+            finding("reservation-invalid", str(f.relative_to(root)),
+                    f"{r.get('kind','?')} / {r.get('subject','?')} has unknown "
+                    f"disposition '{d}' — not applied; expected one of "
+                    f"{'|'.join(sorted(valid))}")
+            rules.remove(r)
+
+    counts = [0] * len(rules)
+    for item in FINDINGS:
+        if item["kind"] == "reserved":
+            continue
+        for n, r in enumerate(rules):
+            if r.get("check") and r["check"] != item["check"]:
+                continue
+            subj = r.get("subject", "")
+            if subj and subj not in item["msg"] and subj not in str(item["path"]):
+                continue
+            item["kind"] = "reserved"
+            item["reservation"] = f"[{r.get('disposition')}] {r.get('rationale','').strip().splitlines()[0][:110]}"
+            counts[n] += 1
+            break
+
+    for n, r in enumerate(rules):
+        who = f"{r.get('kind','?')} / {r.get('subject','?')}"
+        disp = (r.get("disposition") or "").lower()
+        if disp in ("deferred", "open"):
+            missing = [k for k in ("reopen_condition", "reopen_watch") if not r.get(k)]
+            if missing:
+                finding("reservation-incomplete", str(f.relative_to(root)),
+                        f"{who} is *{disp}* and is missing {' and '.join(missing)} — "
+                        f"a revisit claim with no stated trigger, or no way of "
+                        f"noticing the trigger, is a permanent absence wearing a "
+                        f"temporary label (IMPROVEMENT-LOOP-DISCIPLINE Stage 1t)")
+        if counts[n] == 0:
+            finding("reservation-stale", str(f.relative_to(root)),
+                    f"{who} matches no finding — it suppresses nothing and will "
+                    f"go on looking like coverage")
+        else:
+            finding("reservation-applied", str(f.relative_to(root)),
+                    f"{who} [{disp}] reserves {counts[n]} finding(s)")
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
 def check_doc_paths(docs, root):
     """SC3 — every backticked repo path in a governed doc resolves.
@@ -820,6 +933,9 @@ def main():
     for run in checks.values():
         run()
 
+    # Last, so it sees every finding every check produced.
+    apply_reservations(root)
+
     out = FINDINGS
     if args.only:
         keep = set(args.only.split(","))
@@ -828,13 +944,32 @@ def main():
     if args.json:
         print(json.dumps(out, indent=2))
     else:
-        by = defaultdict(list)
-        for f in out:
-            by[f["check"]].append(f)
         defects = [f for f in out if f["kind"] == "defect"]
         measures = [f for f in out if f["kind"] == "measurement"]
+        reserved = [f for f in out if f["kind"] == "reserved"]
+
+        # Reserved findings print in their own section, never inline among the
+        # defects. The first version of this printer grouped purely by check,
+        # so a reserved finding still appeared under `doc-path` looking exactly
+        # like a defect while the header counted it as neither: the list said
+        # eight and the number said seven, with nothing to reconcile them.
+        # That is the failure METACOGNITIVE-FIDELITY-HARNESS §1 names — a report
+        # surface must declare the arithmetic over its own fields — reproduced
+        # in the output of the tool built to remove it.
+        by = defaultdict(list)
+        for f in out:
+            if f["kind"] != "reserved":
+                by[f["check"]].append(f)
+
         print(f"corpus-lint — {len(docs)} documents ({len(gov)} governed)")
-        print(f"  {len(defects)} defect(s), {len(measures)} measurement(s)\n")
+        print(f"  {len(defects)} defect(s), {len(measures)} measurement(s), "
+              f"{len(reserved)} reserved")
+        if len(defects) + len(measures) + len(reserved) != len(out):
+            print(f"  !! reconciliation failed: {len(defects)}+{len(measures)}+"
+                  f"{len(reserved)} != {len(out)} — a finding carries an "
+                  f"unknown kind and is being reported in no category")
+        print()
+
         for check in sorted(by):
             print(f"── {check} ({len(by[check])})")
             for f in by[check][:40]:
@@ -842,6 +977,15 @@ def main():
                 print(f"   {loc}\n     {f['msg']}")
             if len(by[check]) > 40:
                 print(f"   … {len(by[check]) - 40} more")
+            print()
+
+        if reserved:
+            print(f"── reserved ({len(reserved)}) — declared, not suppressed")
+            for f in reserved:
+                loc = f"{f['path']}:{f['line']}" if f["line"] else f["path"]
+                print(f"   [{f['check']}] {loc}")
+                print(f"     {f['msg']}")
+                print(f"     {f.get('reservation', '(no rationale recorded)')}")
             print()
     sys.exit(1 if (args.strict and any(f["kind"] == "defect" for f in out)) else 0)
 

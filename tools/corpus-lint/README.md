@@ -32,6 +32,38 @@ corpus mid-construction, not faults in it — and the surviving `file.rs:NNN`
 citations, which cannot be judged mechanically but are the one class of claim
 that cannot be kept true by care.
 
+## Reservations — specified, deliberately not built
+
+`reservations.toml` declares that a finding is a decision rather than a defect.
+It is Stage 1t's vocabulary (`IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md`) at a
+third granularity: Stage 1t applies `declined / deferred / open / limited` to
+improvement arcs, `tools/connection-map/tieoffs.toml` applies it to declared
+dependency edges, and this applies it to an individual receipt type, path, or
+public type — the surfaces that until now reported raw counts with no
+dispositions at all.
+
+It is not an allowlist. An allowlist says "ignore this"; a reservation says
+"this absence is deliberate, here is why, and here is what would reopen it."
+Three things are enforced, and the first two are defects:
+
+    reservation-incomplete  `deferred` or `open` with no reopen_condition and
+                            reopen_watch — a revisit claim with no trigger
+    reservation-stale       matches no finding; suppresses nothing while
+                            looking like coverage
+    reservation-invalid     unknown disposition; reported and NOT applied, so
+                            a typo cannot suppress under an undefined word
+
+Reserved findings print in their own section with their disposition, never
+inline among the defects, and every reservation reports how many findings it
+suppresses. The header reconciles: defects + measurements + reserved equals the
+total, and says so loudly when it does not.
+
+Reservations live in a separate file from `tieoffs.toml` rather than extending
+it, because `connection_map.apply_tieoffs()` reports any tie-off matching no
+*edge* as stale — every receipt reservation placed there would immediately read
+as rot. Both files are hand-parsed for the reason `connection_map.py` gives:
+stdlib `tomllib` needs 3.11+ and these tools target whatever python3 is present.
+
 ## Authoring dates are derived, not declared
 
 `index-missing` partitions unlisted documents by authoring date. It read a

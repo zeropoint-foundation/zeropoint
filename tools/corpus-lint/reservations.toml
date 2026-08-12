@@ -1,0 +1,84 @@
+# Declared reservations for corpus-lint.
+#
+# A reservation moves a finding from `defect` or `measurement` to
+# `reserved`: the thing is specified, deliberately not built, and this
+# file is where that deliberation is recorded.
+#
+# This is Stage 1t's vocabulary at a second granularity. Stage 1t
+# (IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md) applies it to improvement
+# arcs; tools/connection-map/tieoffs.toml applies it to declared
+# dependency edges. Neither reaches an individual receipt type, a
+# prospective path, or an unconsumed public type — the three surfaces
+# that currently report raw counts with no dispositions at all. Same four
+# dispositions, same load-bearing field, third subject class.
+#
+#   declined  considered, decided against    reopen_condition optional
+#   deferred  will do, not now               reopen_condition + watch REQUIRED
+#   open      undecided, actively unresolved reopen_condition + watch REQUIRED
+#   limited   cannot be done in principle    neither
+#
+# `reopen_watch` takes the two tiers Stage 1t defines: `watched:` for a
+# structured predicate a canary can evaluate, `reviewed:` for prose with
+# a declared cadence.
+#
+# THIS FILE IS NOT AN ALLOWLIST. An allowlist says "ignore this." A
+# reservation says "this absence is deliberate, here is why, and here is
+# what would reopen it." The difference is the reason, and the tool
+# enforces that the reason exists.
+#
+# Two things are checked and both are defects:
+#   - a `deferred` or `open` reservation with no way back
+#   - a reservation matching no finding, which suppresses nothing and
+#     will go on looking like coverage
+#
+# Every reservation reports how many findings it suppresses. A broad one
+# is legible as broad; there are no silent caps.
+
+[[reservation]]
+kind = "receipt"
+check = "receipt-drift"
+subject = "regent:precedent:context_novelty_missed"
+disposition = "deferred"
+declared = "2026-08-12"
+reopen_condition = "Doom-loop Class R2 confirmation is implemented and emitting."
+reopen_watch = "watched: a receipt in the regent:emission: family recording a confirmed R2 escalation"
+rationale = """
+Specified in INFERENCE-ROUTING-DISCIPLINE-2026-07: when the SLM tier hits a \
+confirmed doom loop on a task the classifier routed by precedent, that is \
+structural evidence the context-novelty test missed something, and this \
+receipt cites both.
+
+Its trigger does not exist. REGENT-DOOM-LOOP-DETECTION-2026-07 places the \
+chronic-drift heuristics behind Cartographer and officer runtime, so nothing \
+can confirm an R2 today. Implementing the receipt now would produce an \
+emitter that cannot fire.
+
+Deferred rather than declined because the claim is sound and the blocker is \
+sequencing. It is the dangerous variant of receipt drift and that is why it \
+is declared rather than left: regent:precedent: is a LIVE family, queries are \
+prefix-based, and a consumer of that prefix reasonably expects every \
+documented member to appear. A member that never fires reads as "novelty was \
+never missed" rather than "nobody checks."
+"""
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "tools/ember/OPENAI_API_KEY"
+disposition = "limited"
+declared = "2026-08-12"
+rationale = """
+Not a filesystem path. It is a vault key path, and the sentence it appears in \
+is making exactly that point — that the *existence* of an API key is Tier 2 \
+and chain-anchorable while its value is Tier 1.
+
+`limited` is correct rather than `declined`: this cannot resolve as a file in \
+principle, because it never named a file. The notation is meaningful and \
+should not change to satisfy a checker.
+
+Declared here rather than fixed by loosening check_doc_paths. The pattern \
+cannot distinguish a vault key path from a filesystem path, and teaching it to \
+guess would trade one visible false positive for an invisible class of missed \
+real ones. A reservation costs one entry and states the reason; a weakened \
+rule costs coverage and states nothing.
+"""
