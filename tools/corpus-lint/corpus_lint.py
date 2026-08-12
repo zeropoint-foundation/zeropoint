@@ -7,7 +7,7 @@ speculative. Reports by default, fails the build with --strict.
 
 Spec: docs/design/SUBSTRATE-LOOP-CLOSURE-2026-07.md
 """
-import re, sys, json, argparse
+import re, sys, json, argparse, subprocess
 from pathlib import Path
 from collections import defaultdict
 
@@ -18,7 +18,8 @@ ROOT = None
 # the pre-convention stratum and the specified-not-shipped receipt surface are
 # properties of a corpus mid-construction, not defects in it.
 INFORMATIONAL = {"index-coverage", "receipt-coverage", "stated-count",
-                 "doc-path-prospective", "doc-path-as-proposed", "pub-consumer"}
+                 "doc-path-prospective", "doc-path-as-proposed", "pub-consumer",
+                 "line-citation"}
 
 # The corpus index declares its own establishment date in its opening
 # line ("Established 2026-07-10"). Documents authored on or after it were
@@ -382,6 +383,44 @@ def check_tieoff_reopen_conditions(docs, root):
                     f"absence wearing a temporary label "
                     f"(IMPROVEMENT-LOOP-DISCIPLINE Stage 1t)", line=n)
 
+def git_add_dates(root):
+    """When each doc entered the tree, from git rather than from its own text.
+
+    `check_index_coverage` partitions unlisted documents by a `**Date:**`
+    field. On 2026-08-11 that field was present in 14 of 114 unlisted
+    documents. The other 100 fell into the pre-convention bucket by default,
+    and 15 of those had entered the tree *after* the convention was
+    established -- including both W5 session briefs written two days earlier,
+    which use `**Written:**`.
+
+    So the check that exists to catch unindexed documents was silently
+    exempting the newest ones, because it depended on an author remembering a
+    field name. That is the hand-maintained-registry failure this whole tool
+    exists to answer, reproduced one level up inside the tool.
+
+    Git already knows. A file's first commit cannot be forgotten, misspelled,
+    or written in a different vocabulary.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "log", "--diff-filter=A", "--reverse", "--date=short",
+             "--format=COMMIT:%ad", "--name-only", "--", "docs"],
+            cwd=root, capture_output=True, text=True, timeout=60).stdout
+    except subprocess.SubprocessError:
+        # A git failure is a real answer -- no history -- and is reported as
+        # such by the caller. A NameError or TypeError here is a bug in this
+        # file and must not be laundered into "no dates found", which reads
+        # as green.
+        return {}
+    dates, cur = {}, None
+    for line in out.splitlines():
+        if line.startswith("COMMIT:"):
+            cur = line[len("COMMIT:"):].strip()
+        elif line.strip() and cur:
+            dates.setdefault(line.strip(), cur)
+    return dates
+
+
 def check_index_coverage(docs, root):
     """SC6 — docs present but unindexed, and index entries pointing nowhere."""
     idx = root / "docs" / "CANONICAL-CORPUS-INDEX-2026-07.md"
@@ -408,11 +447,20 @@ def check_index_coverage(docs, root):
     # authored under the convention and is a defect if unindexed. One
     # that predates it, or declares no date at all, stays a measurement —
     # Tier 3 is frozen at authoring frame and is not retro-indexed.
+    # Declared date first, git's add-date as the fallback. A document that
+    # declares nothing is not thereby exempt -- see git_add_dates. Only a
+    # document that both declares no date and predates the convention in git
+    # is genuinely pre-convention stratum.
+    added = git_add_dates(root)
     post_convention, pre_convention = [], []
     for p in unlisted:
         m = re.search(r"^\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})",
                       p.read_text(errors="replace"), re.M)
-        (post_convention if m and m.group(1) >= INDEX_ESTABLISHED
+        declared = m.group(1) if m else None
+        # Untracked means authored now, which is after any past establishment
+        # date -- absence of a git record is not absence of authorship.
+        effective = declared or added.get(str(p.relative_to(root)), "9999-99-99")
+        (post_convention if effective >= INDEX_ESTABLISHED
          else pre_convention).append(p)
 
     for p in sorted(post_convention):
@@ -427,6 +475,99 @@ def check_index_coverage(docs, root):
                 f"docs/design are not listed in the index (pre-convention stratum "
                 f"or undated; not a defect by itself — Tier 3 is frozen at "
                 f"authoring frame)")
+
+def check_line_citations(docs, root):
+    """SC14 — `file.rs:NNN` citations, which drift on every edit above them.
+
+    Justified by three real defects, 2026-08-12. HARNESS-SEAM-2026-08.md §6.1.1
+    cited `zp-server/src/regent.rs:2481` for a struct that had moved to 2479,
+    and `inference.rs:381` and `:611` for two constructs that had moved to 424
+    and 654. All three were written on 2026-08-10 and were wrong on 2026-08-12.
+    `check_doc_paths` did not see them: its pattern requires a slash and a
+    closing backtick, and matches the path without the line suffix.
+
+    A stale line number is cheap to work around individually -- the reader
+    greps -- and expensive in aggregate, because the first one a reader finds
+    costs them their trust in the surrounding paragraph, which is usually the
+    part that was still true.
+
+    Two dispositions, deliberately unequal:
+
+      defect       the file resolves and has fewer lines than the citation.
+                   Unambiguous: that line does not exist.
+      measurement  every other surviving citation. The tool cannot know
+                   whether line 707 still holds what the author meant, so it
+                   reports the citation and what that line holds now, and
+                   leaves the judgement where it belongs.
+
+    The measurement is the point. Locations are the one class of claim in this
+    corpus that cannot be kept true by care, so the convention adopted in
+    §6.1.1 on 2026-08-12 is to name constructs instead and let `grep` locate
+    them. This counts what has not converted yet.
+    """
+    EXT = r"(?:rs|py|toml|md|sh|json|jsonl|sql|yml|yaml)"
+    pat = re.compile(rf"([A-Za-z0-9_][A-Za-z0-9_./-]*\.{EXT}):(\d+)\b")
+
+    # Bare filenames ("inference.rs:391") need a name -> path index. Ask git
+    # for it rather than walking: `rglob` over crates/ and tools/ visits
+    # 122k entries and costs ~11s on a network filesystem, and it has to
+    # filter out build output afterwards. git ls-files answers in one call
+    # and excludes untracked detritus by construction -- a file git does not
+    # track is not a file the corpus should be citing.
+    by_name = {}
+    try:
+        tracked = subprocess.run(["git", "ls-files", "crates", "tools"],
+                                 cwd=root, capture_output=True, text=True,
+                                 timeout=30).stdout.splitlines()
+    except subprocess.SubprocessError:
+        tracked = []
+    for rel in tracked:
+        by_name.setdefault(rel.rsplit("/", 1)[-1], []).append(root / rel)
+
+    cache = {}
+    def lines_of(path):
+        if path not in cache:
+            cache[path] = path.read_text(errors="replace").splitlines()
+        return cache[path]
+
+    def resolve(ref):
+        for cand in (root / ref, root / "crates" / ref, root / "tools" / ref):
+            if cand.is_file():
+                return cand
+        if "/" not in ref:                      # bare filename — only if unique
+            hits = by_name.get(ref, [])
+            if len(hits) == 1:
+                return hits[0]
+        return None
+
+    for doc in docs:
+        try:
+            text = doc.read_text(errors="replace")
+        except Exception:
+            continue
+        seen = set()
+        for m in pat.finditer(text):
+            ref, num = m.group(1), int(m.group(2))
+            if (ref, num) in seen:
+                continue
+            seen.add((ref, num))
+            rel = str(doc.relative_to(root))
+            target = resolve(ref)
+            if target is None:
+                finding("line-citation", rel,
+                        f"cites {ref}:{num}; path does not resolve uniquely — "
+                        f"the line cannot be checked")
+                continue
+            lines = lines_of(target)
+            if num > len(lines):
+                finding("line-citation-range", rel,
+                        f"cites {ref}:{num}, but that file has {len(lines)} "
+                        f"lines — the cited line does not exist")
+            else:
+                finding("line-citation", rel,
+                        f"cites {ref}:{num}, which now reads: "
+                        f"{lines[num - 1].strip()[:80]!r}")
+
 
 # ── main ─────────────────────────────────────────────────────────────────────
 def check_doc_paths(docs, root):
@@ -658,6 +799,7 @@ def main():
             post_convention(root), root),
         "index_coverage": lambda: check_index_coverage(gov, root),
         "doc_paths": lambda: check_doc_paths(gov, root),
+        "line_citations": lambda: check_line_citations(gov, root),
         "doc_comment_symbols": lambda: check_doc_comment_symbols(root),
         "pub_type_consumers": lambda: check_pub_type_consumers(root),
     }

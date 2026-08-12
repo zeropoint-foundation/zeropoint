@@ -23,11 +23,27 @@ corpus pivots. They are counted, not flagged.
 **Defects** fail `--strict`: a cited KEEL section that does not exist, a
 referenced document that does not exist, a duplicate numbered section, a
 dangling index entry, a missing tier declaration, a `//! Spec:` citation that
-does not resolve, receipt drift within a live family.
+does not resolve, receipt drift within a live family, a `file.rs:NNN` citation
+pointing past the end of that file.
 
 **Measurements** never fail. They report the size of the pre-convention
 stratum and of the specified-not-shipped receipt surface — properties of a
-corpus mid-construction, not faults in it.
+corpus mid-construction, not faults in it — and the surviving `file.rs:NNN`
+citations, which cannot be judged mechanically but are the one class of claim
+that cannot be kept true by care.
+
+## Authoring dates are derived, not declared
+
+`index-missing` partitions unlisted documents by authoring date. It read a
+`**Date:**` field until 2026-08-12, when that field turned out to be present in
+14 of 114 unlisted documents; the other 100 defaulted into the pre-convention
+stratum, and 15 of those had entered the tree *after* the convention was
+established. The check that exists to catch unindexed documents was exempting
+the newest ones, because it depended on an author remembering a field name —
+the hand-maintained-registry failure this tool exists to answer, one level up
+inside the tool. The declared field is still read first; git's add-date is the
+fallback, and a document that declares nothing is no longer thereby exempt.
+Surfacing 2 → 18.
 
 ## Annotations the checks respect
 
