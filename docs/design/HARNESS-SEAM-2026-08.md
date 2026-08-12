@@ -302,8 +302,8 @@ showed it to be a protocol migration. Four sub-steps, discovered in order:
 |---|---|---|
 | 3a | Recognise the ZP proxy in `ProviderProfile::detect` rather than sniffing it | **done** 2026-08-10, 6 tests |
 | 2 | Probes `api/tags` → `v1/models` (3 sites, incl. a response-shape change in `model_available`) | **done** 2026-08-10 |
-| 3b | Regent holds a `GateRequestSigner` | **next** |
-| 3c | `inference_endpoint` → proxy; native `/api/chat` path retires | blocked on 3b |
+| 3b | Regent holds a `GateRequestSigner` | **done** 2026-08-12, 4 tests |
+| 3c | `inference_endpoint` → proxy; native `/api/chat` path retires | **next** |
 | 4 | Extend `no_raw_provider_http_outside_canonical_layer` to loopback URLs | last |
 
 **Hard constraint: 3b before 3c.** `ProviderProfile::zp_proxy()` carries
@@ -312,37 +312,57 @@ cannot be expressed as a static `AuthStrategy`. Pointing the endpoint at the
 proxy before the Regent can sign would 401 every call and take Regent
 inference offline entirely. Fail-closed and correct, but unforgiving.
 
-**3b thread.** The gate signer exists in `AppState::init` (derived beside
-`expected_kid` from one sovereign-root load) and is currently a local. To reach
-the request builder it must travel:
+**3b thread, as landed.** The gate signer is derived in `AppState::init`
+beside `expected_kid` from one sovereign-root load. It was a local there; it is
+now a field on `AppStateInner`, and travels:
 
 ```
-AppState::init  →  AppState field (new)
-                →  spawn_regent(...)            zp-server/src/lib.rs:2039
-                →  ServerRegentConfig           zp-server/src/lib.rs:2026
-                →  RegentConfig                 (note: two structs —
-                                                 zp-regent/src/config.rs:53 and
-                                                 zp-server/src/regent.rs:2481,
-                                                 mapped at regent.rs:2653)
-                →  InferenceBackend::new        zp-regent/src/regent.rs:361
-                                                zp-server/src/regent.rs:2664
-                →  sign when profile is zp_proxy
+AppState::init  →  AppStateInner.gate_signer     zp-server/src/lib.rs
+                →  ServerRegentConfig.gate_signer zp-server/src/lib.rs
+                                                  zp-server/src/regent.rs
+                →  InferenceBackend::new(&config, signer)
+                                                  zp-server/src/regent.rs   (executor's backend)
+                →  Regent::new(…, signer)         zp-server/src/regent.rs
+                   → InferenceBackend::new        zp-regent/src/regent.rs   (Regent's own backend)
+                →  sign when the profile is zp_proxy
 ```
 
-`zp-regent` already depends on `zp-core`, so `RequestSigner` needs no new
+Constructs are named rather than located. Every prior revision of this block
+carried line numbers, and every one of them had drifted by the time the step it
+described was executed — `ServerRegentConfig` by 2, `fallback_endpoint` by 43,
+the auto-start probe by 43. The names do not drift.
+
+**It stops at `ServerRegentConfig` — it does not reach `RegentConfig`.** The
+plan routed it through both config structs. `RegentConfig` derives `Serialize`,
+`Deserialize` and `Debug`, so an `Option<Arc<dyn RequestSigner>>` field there
+would need `#[serde(skip)]` — a live capability that vanishes on a round-trip
+without saying so — plus a `Debug` supertrait on `RequestSigner` and a
+hand-written `Debug` for `GateRequestSigner` that redacts its own key. The
+signer is a capability, not configuration, and is passed as a parameter to the
+two backends instead. `RegentConfig` is untouched.
+
+`zp-regent` already depends on `zp-core`, so `RequestSigner` needed no new
 dependency edge.
 
-**Also required in 3b:** `chat_ollama_at` and `chat_openai` use
-`.json(request)`, which re-serialises independently of any hash taken over the
-body. ZP-Sig binds a BLAKE3 of the exact wire bytes, so the body must be
-serialised once and those bytes both hashed and sent — the same correction made
-to `ProxyLlmProvider` on 2026-08-09.
+**Also landed in 3b:** `chat_ollama_at` and `chat_openai` used `.json(request)`,
+which re-serialises independently of any hash taken over the body. ZP-Sig binds
+a BLAKE3 of the exact wire bytes, so the body is now serialised once and those
+bytes both hashed and sent — the same correction made to `ProxyLlmProvider` on
+2026-08-09. Signing in `chat_ollama_at` is conditioned on the endpoint actually
+being called, not on the profile alone: the fallback path posts to raw Ollama
+while the configured provider may be `zp-proxy`, and an envelope addressed to a
+backend that cannot verify it is noise.
 
-**Out of scope, deliberately.** `fallback_endpoint` (compiled literal,
-`inference.rs:381`) is not relocated to config: 3c collapses both endpoints
-onto one proxy base with the provider varying per request, so a config field
-introduced now would be deleted then. The auto-start probe at `inference.rs:611`
-stays direct — the proxy cannot answer whether the process behind it is running.
+**Confirmed live 2026-08-12.** Both `InferenceBackend::new` call sites report
+`gate_signer=true` at startup. The endpoint did not move, which is correct 3b
+behaviour — the capability is present and unused until 3c.
+
+**Out of scope, deliberately.** `fallback_endpoint` (compiled literal in
+`zp-regent/src/inference.rs`) is not relocated to config: 3c collapses both
+endpoints onto one proxy base with the provider varying per request, so a config
+field introduced now would be deleted then. The auto-start probe in
+`ensure_ollama_running` stays pointed at `11434` directly — the proxy cannot
+answer whether the process behind it is running.
 
 **Related, not part of W5.** `ensure_ollama_running()` spawns processes without
 a grant, without passing `zp-host` (the typed boundary `ExecutionEngine`
