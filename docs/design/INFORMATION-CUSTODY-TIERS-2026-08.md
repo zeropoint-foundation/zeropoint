@@ -221,19 +221,74 @@ also a cross-surface agreement check, which makes the bedrock checklist and
 `METACOGNITIVE-FIDELITY-HARNESS` the same mechanism at different urgency: boot
 invariants are the existential subset that should **refuse** rather than report.
 
-## 9. How you would know this model is violated
+## 9. Vault lifecycle and the copy prohibition
+
+Observed 2026-08-11: three byte-identical copies of the vault sat in the runtime
+home — `vault.json` (Aug 10), `vault.json.bak` (Aug 6), and `vault.json.bak.keep`
+(Aug 10) — distinguishable only by mtime, the third named that way because `.bak`
+was already taken. A restore command nearly put the Aug 6 copy over the Aug 10
+one. They were identical, so nothing was lost, but the near-miss is the finding.
+
+**A `.bak` of the vault is rollback**, and §III.20 is unambiguous that this
+substrate rolls forward. Ad-hoc file copies smuggle rollback in through the
+filesystem, past every discipline that governs the chain.
+
+For a secrets store the objection is sharper than that. Rolling a vault back is
+not recovery — it is a security regression, because it resurrects credentials
+that were deliberately rotated or revoked. A backup of the vault, in the ordinary
+sense of the word, is an anti-feature. Each copy is also one more ciphertext an
+attacker can take offline and work on without time pressure, which is a direct
+enlargement of the Tier 1 attack surface that §3 exists to keep minimal. And a
+substrate reasoning about "the vault" while four files answer to that description
+has lost the singularity the sovereign-root argument depends on.
+
+**The prohibition: no vault copies in the runtime home. Ever.** Four mechanisms,
+where the first two remove the reasons anyone reaches for a copy:
+
+1. **Atomic writes** — temp file, fsync, rename. A crash mid-write cannot
+   corrupt the vault, so no sibling copy is needed for crash safety.
+2. **`vault:mutated` receipts** — tier, key count, before-and-after hash. *Did
+   this change, when, and to what* becomes a chain query instead of a diff
+   against a stale copy.
+3. **A signed export ceremony** — `vault:exported`, Genesis-signed, to an
+   operator-chosen destination **outside** the runtime home. This is the only
+   legitimate way a second copy comes to exist, and it is deliberate, recorded,
+   and not sitting next to the original wearing a similar name.
+4. **Bedrock invariant `no_vault_siblings`** — anything matching the vault's path
+   with a suffix is a violation. Bedrock already knows where the vault is and how
+   many keys it holds (§8); this is the same shape, and it is what makes the
+   prohibition enforced rather than merely agreed.
+
+**A fifth piece, which is why these files existed at all.** They were created by
+hand to test whether bedrock notices an absent vault, and `mv` was the only way
+to run that test. Per §III.18, restrictions without paths get bypassed — when the
+sole route to a legitimate operation is improvisation, the residue is the
+substrate's fault. That test wants a governed mode that simulates absence without
+moving the file.
+
+**Open: re-import.** Export handles the case where the operator loses the device.
+Importing what was exported is legitimate disaster recovery, but it reintroduces
+the resurrection problem in a setting where the alternative — losing every
+credential — is worse. The shape is probably a ceremony that anchors
+`vault:imported` with the export's age and hash, refuses to be silent, and
+surfaces what has rotated since. It is not specified here, and should not be
+implemented as a quiet inverse of export.
+
+## 10. How you would know this model is violated
 
 - A secret value appears in a chain receipt → scrubber gap (§6 boundary)
 - Regent quotes credential material → cognitive admission failure
 - Live credentials in a file outside the vault → custody failure *(observed
   2026-08-06: ~176 entries across five tools)*
 - Vault empty while `.env.zp` files exist → custody lost *(observed 2026-08-06)*
+- Any file matching the vault path with a suffix → copy prohibition violated
+  *(observed 2026-08-11: three copies, §9)*
 - An observation surface acquires a Tier 3 class → §III.24 violation
 
-Four of five are mechanically checkable today. The exception is the second,
-which needs the Cognitive Self-Observer's Class 2 verification.
+Five of six are mechanically checkable today. The exception is the second, which
+needs the Cognitive Self-Observer's Class 2 verification.
 
-## 10. Connects to
+## 11. Connects to
 
 **§III.24 (Aligned blindness)** — supplies Tier 3 and its non-acquisition
 character. This document's contribution is placing it in a model alongside the
@@ -254,6 +309,17 @@ append-only structure, not confidentiality. Different guarantee, deliberately.
 from Genesis. The vault is only as good as that root being singular, which is
 why a second credential path is a vault compromise and not merely an
 inconvenience.
+
+**§III.20 (Forward-only recovery)** — §9's basis. The axiom is usually read as a
+statement about the chain, but a vault `.bak` is the same violation reached
+through the filesystem, and for a secrets store it is worse: rolling the chain
+back would lose truth, while rolling the vault back restores credentials that
+were deliberately destroyed.
+
+**§III.18 (Delegable safety)** — why §9 ends with a governed test mode rather
+than a rule. The copies existed because a legitimate operation had no path, and
+a prohibition that leaves the operator improvising is one that will be bypassed
+again.
 
 **The lsof test** — its custody counterpart: the substrate is mature when every
 piece of material it holds is assigned a tier, and nothing sits in a file
