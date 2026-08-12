@@ -1,5 +1,7 @@
 # W5 Step 3c — Session Brief
 
+**Document type:** Working artifact — session brief, not corpus. Makes no substrate claim.
+**Status:** unexecuted as of 2026-08-12.
 **Task:** point the Regent's `inference_endpoint` at the ZP proxy and retire the
 native `/api/chat` path.
 **Written:** 2026-08-12, at the end of the session that completed 3b.

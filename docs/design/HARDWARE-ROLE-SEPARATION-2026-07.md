@@ -1,6 +1,6 @@
 # Hardware Role Separation: Sentinel and Regent — 2026-07
 
-**Canonical statement of the two-role sovereign node topology, and the reference hardware that serves each role.**
+**Document type:** Tier 2 elaboration. Canonical statement of the two-role sovereign node topology, and the reference hardware that serves each role.
 
 ## Thesis
 

@@ -1,5 +1,7 @@
 # Working brief — Maria
 
+**Document type:** Working artifact — operating brief, not corpus. Makes no substrate claim.
+
 For the Knowledge Base. This describes how we work together, what you can actually
 reach, and how to tell whether you are being useful.
 

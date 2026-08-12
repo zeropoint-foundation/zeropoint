@@ -168,8 +168,8 @@ plainly — the scrubber is not a nicety, it is the tier boundary made mechanica
 
 ## 7. What this implies for onboarding
 
-Onboarding already does more than it appears to. `onboard/credentials.rs` calls
-`vault.store()`; `onboard/deep_scan.rs` actively hunts credentials in project
+Onboarding already does more than it appears to. `crates/zp-server/src/onboard/credentials.rs` calls
+`vault.store()`; `crates/zp-server/src/onboard/deep_scan.rs` actively hunts credentials in project
 configs and has redaction tests for `postgres://user:secret@…` and
 `POSTGRES_PASSWORD`. The April 2026 migration that produced the `.env.pre-vault`
 files almost certainly ran through it.

@@ -1,5 +1,7 @@
 # the Regent Onboarding Wizard — Interaction Script
 
+**Document type:** Interaction spec. The conversational contract the implementation follows.
+
 *2026-05-12. The conversational spec for the director-onboarding wizard at
 `zeropointfoundation.org/onboard/`. Anchored in
 AGENT-AS-UX-ARCHITECTURE-2026-05.md (the Regent's voice, Jarvis-referenced)

@@ -1,5 +1,7 @@
 # Architecture Map
 
+**Document type:** Derived reference. Generated, not authored.
+
 **Generated** by `tools/architecture-map/architecture_map.py` from commit `9877dc5`. Derived, not authored — regenerate rather than edit.
 
 44 crates · 194,526 lines · 41 workspace members

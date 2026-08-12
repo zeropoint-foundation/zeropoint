@@ -188,6 +188,11 @@ def main():
         return "unwired"
 
     out = [f"# Architecture Map\n",
+           # `Document type:` is the token corpus-lint's tier-declaration check
+           # reads. Emitted here rather than added to the output, because the
+           # output is overwritten on every run and a hand-added header would
+           # survive exactly until the next regeneration.
+           f"**Document type:** Derived reference. Generated, not authored.\n",
            f"**Generated** by `tools/architecture-map/architecture_map.py` from commit `{commit}`. "
            f"Derived, not authored — regenerate rather than edit.\n",
            f"{len(info)} crates · {sum(v['loc'] for v in info.values()):,} lines · "

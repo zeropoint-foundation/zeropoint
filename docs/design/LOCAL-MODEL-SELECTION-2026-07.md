@@ -1,6 +1,6 @@
 # Local Model Selection — APOLLO (M4 Pro Mini) + PI5 (2026-07)
 
-**Decision record + benchmark plan. Analysis input, not a canonical elaboration.** Records which local models ZeroPoint will benchmark on the named fleet nodes, why, and the license posture. Does not amend KEEL. Composes with `HARDWARE-ROLE-SEPARATION-2026-07` (canonical two-role topology — closed the Regent-vs-Sentinel node question in this doc at line 20 on 2026-07-27), `INFERENCE-ROUTING-DISCIPLINE-2026-07`, `AI-LANDSCAPE-SIGNAL-2026-07` (the latency-floor framing), `MULTI-DEVICE-OPERATION-2026-07` (every device a scoped Genesis delegation), and `DEPENDENCY-POSTURE` (license-capture risk). Companion harness: `tools/local-model-bench/zp_local_model_bench.py`.
+**Document type:** Decision record and benchmark plan. Analysis input, not a canonical elaboration. Records which local models ZeroPoint will benchmark on the named fleet nodes, why, and the license posture. Does not amend KEEL. Composes with `HARDWARE-ROLE-SEPARATION-2026-07` (canonical two-role topology — closed the Regent-vs-Sentinel node question in this doc at line 20 on 2026-07-27), `INFERENCE-ROUTING-DISCIPLINE-2026-07`, `AI-LANDSCAPE-SIGNAL-2026-07` (the latency-floor framing), `MULTI-DEVICE-OPERATION-2026-07` (every device a scoped Genesis delegation), and `DEPENDENCY-POSTURE` (license-capture risk). Companion harness: `tools/local-model-bench/zp_local_model_bench.py`.
 
 ## Named hardware targets
 
