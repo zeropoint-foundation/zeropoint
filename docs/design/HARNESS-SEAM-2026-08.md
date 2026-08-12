@@ -280,16 +280,77 @@ by the provider-pool wiring and are corrections, not new work.
 
 | # | Work | Crossing / sensor |
 |---|---|---|
-| W1 ⊘ | `init_providers` failure becomes boot-fatal; pool state joins the health surface | S3 |
-| W2 ⊘ | Wire `zp-cli` so both entry points populate the pool identically | S3 |
-| W3 | Delete the compiled `local` tier from `get_routing_config()` | C1, S4 |
-| W4 | Amend `officer-inference.toml` header; officers read election from `zp-config` | C1, C5 |
-| W5 | Remove `[regent] reasoning_model` / `routing_model`; route Regent through the proxy | C1, S6 |
-| W6 | `config set` refuses or warns when writing to a shadowed layer | C7, S5 |
-| W7 | Implement S1–S6 in `zp-discipline` | all |
+| # | Work | Crossing / sensor | Status |
+|---|---|---|---|
+| W1 ⊘ | `init_providers` failure becomes boot-fatal; pool state joins the health surface | S3 | **done** 2026-08-09 |
+| W2 ⊘ | Wire `zp-cli` so both entry points populate the pool identically | S3 | **done** 2026-08-09 |
+| W3 | Delete the compiled `local` tier from `get_routing_config()` | C1, S4 | open |
+| W4 | Amend `officer-inference.toml` header; officers read election from `zp-config` | C1, C5 | open |
+| W5 | Route the Regent through the proxy — see §6.1.1 | C1, S6 | **in progress** |
+| W6 | `config set` refuses or warns when writing to a shadowed layer | C7, S5 | open |
+| W7 | Implement S1–S6 in `zp-discipline` | all | open, last |
 
 W7 last: the sensors assert the invariants W1–W6 establish, and landing them
 first would only produce a red build with nothing to point at.
+
+#### 6.1.1 W5 decomposition
+
+W5 was scoped as "point `inference_endpoint` at the proxy." Reading the code
+showed it to be a protocol migration. Four sub-steps, discovered in order:
+
+| Step | Work | Status |
+|---|---|---|
+| 3a | Recognise the ZP proxy in `ProviderProfile::detect` rather than sniffing it | **done** 2026-08-10, 6 tests |
+| 2 | Probes `api/tags` → `v1/models` (3 sites, incl. a response-shape change in `model_available`) | **done** 2026-08-10 |
+| 3b | Regent holds a `GateRequestSigner` | **next** |
+| 3c | `inference_endpoint` → proxy; native `/api/chat` path retires | blocked on 3b |
+| 4 | Extend `no_raw_provider_http_outside_canonical_layer` to loopback URLs | last |
+
+**Hard constraint: 3b before 3c.** `ProviderProfile::zp_proxy()` carries
+`auth: AuthStrategy::None`, because ZP-Sig is per-request and body-bound and
+cannot be expressed as a static `AuthStrategy`. Pointing the endpoint at the
+proxy before the Regent can sign would 401 every call and take Regent
+inference offline entirely. Fail-closed and correct, but unforgiving.
+
+**3b thread.** The gate signer exists in `AppState::init` (derived beside
+`expected_kid` from one sovereign-root load) and is currently a local. To reach
+the request builder it must travel:
+
+```
+AppState::init  →  AppState field (new)
+                →  spawn_regent(...)            zp-server/src/lib.rs:2039
+                →  ServerRegentConfig           zp-server/src/lib.rs:2026
+                →  RegentConfig                 (note: two structs —
+                                                 zp-regent/src/config.rs:53 and
+                                                 zp-server/src/regent.rs:2481,
+                                                 mapped at regent.rs:2653)
+                →  InferenceBackend::new        zp-regent/src/regent.rs:361
+                                                zp-server/src/regent.rs:2664
+                →  sign when profile is zp_proxy
+```
+
+`zp-regent` already depends on `zp-core`, so `RequestSigner` needs no new
+dependency edge.
+
+**Also required in 3b:** `chat_ollama_at` and `chat_openai` use
+`.json(request)`, which re-serialises independently of any hash taken over the
+body. ZP-Sig binds a BLAKE3 of the exact wire bytes, so the body must be
+serialised once and those bytes both hashed and sent — the same correction made
+to `ProxyLlmProvider` on 2026-08-09.
+
+**Out of scope, deliberately.** `fallback_endpoint` (compiled literal,
+`inference.rs:381`) is not relocated to config: 3c collapses both endpoints
+onto one proxy base with the provider varying per request, so a config field
+introduced now would be deleted then. The auto-start probe at `inference.rs:611`
+stays direct — the proxy cannot answer whether the process behind it is running.
+
+**Related, not part of W5.** `ensure_ollama_running()` spawns processes without
+a grant, without passing `zp-host` (the typed boundary `ExecutionEngine`
+already honours), without a receipt, and confirms success by an 8-second timeout
+rather than by observation. The ruling is that the Regent *should* hold
+lifecycle authority — attested, scoped, revocable — not that it should lose it.
+Tracked separately; `regent:hardware:` and `observation:hardware:` are already
+reserved receipt families and may be the intended carriers.
 
 ### 6.2 Standing rule
 

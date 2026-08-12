@@ -139,6 +139,47 @@ struct OpenAiRequest {
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    /// Tool definitions in OpenAI function format.
+    ///
+    /// Omitted entirely when empty — a backend that does not implement tools
+    /// returns 400 on an empty `tools: []` rather than ignoring it.
+    ///
+    /// This field's absence was why the pipeline's tool-invocation loop had
+    /// never executed. `CompletionRequest` has always carried `tools`, and the
+    /// response side has always parsed `tool_calls`, but the request side
+    /// dropped them — so no tool could be offered, none could be called, and
+    /// `Receipt::execution` was unreachable.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<OpenAiTool>,
+}
+
+/// OpenAI-compatible function-tool wrapper.
+#[derive(Debug, Serialize)]
+struct OpenAiTool {
+    #[serde(rename = "type")]
+    tool_type: &'static str, // always "function"
+    function: OpenAiFunction,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAiFunction {
+    name: String,
+    description: String,
+    /// JSON Schema for the tool's arguments, passed through verbatim.
+    parameters: serde_json::Value,
+}
+
+impl From<&zp_core::capability::ToolDefinition> for OpenAiTool {
+    fn from(t: &zp_core::capability::ToolDefinition) -> Self {
+        Self {
+            tool_type: "function",
+            function: OpenAiFunction {
+                name: t.name.clone(),
+                description: t.description.clone(),
+                parameters: t.parameters.clone(),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -220,11 +261,33 @@ impl LlmProvider for ProxyLlmProvider {
             });
         }
 
+        // Tools are offered only when the provider was declared tool-capable.
+        // `local()` defaults that to false because it cannot know which Ollama
+        // tag it was handed, so an operator enables it via llm.supports_tools
+        // once the elected model actually implements the protocol. Sending
+        // tools to a model that does not is worse than sending none: some
+        // backends 400, others silently emit prose that looks like a call.
+        let tools: Vec<OpenAiTool> = if self.capabilities.supports_tools {
+            request.tools.iter().map(OpenAiTool::from).collect()
+        } else {
+            Vec::new()
+        };
+
+        if !request.tools.is_empty() && !self.capabilities.supports_tools {
+            warn!(
+                provider = %self.id.0,
+                offered = request.tools.len(),
+                "tools were available but this provider is not declared \
+                 tool-capable — set llm.supports_tools to enable them"
+            );
+        }
+
         let body = OpenAiRequest {
             model: request.model.clone().unwrap_or_else(|| self.model.clone()),
             messages,
             max_tokens: request.max_tokens,
             temperature: request.temperature,
+            tools,
         };
 
         let client = reqwest::Client::new();

@@ -7,7 +7,6 @@ edition = "2021"
 zp-core = { path = "../zp-core" }
 zp-host = { path = "../zp-host" }
 zp-policy = { path = "../zp-policy" }
-zp-skills = { path = "../zp-skills" }
 zp-audit = { path = "../zp-audit" }
 zp-llm = { path = "../zp-llm" }
 zp-trust = { path = "../zp-trust" }

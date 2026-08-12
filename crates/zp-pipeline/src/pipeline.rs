@@ -29,7 +29,9 @@ use zp_mesh::identity::MeshIdentity;
 use zp_mesh::runtime::{MeshRuntime, RuntimeConfig};
 use zp_mesh::transport::MeshNode;
 use zp_policy::PolicyEngine;
-use zp_skills::{SkillMatcher, SkillRegistry};
+// zp-skills removed 2026-08-10: SkillMatcher selected capabilities by
+// fuzzy-matching request prose, making an authority decision by string
+// similarity. Capabilities now come from the policy context alone.
 
 /// Maximum tool invocation iterations before forcing a final response.
 const MAX_TOOL_ITERATIONS: usize = 10;
@@ -94,7 +96,6 @@ pub enum PipelineError {
 pub struct Pipeline {
     pub config: PipelineConfig,
     pub policy_engine: PolicyEngine,
-    pub skill_registry: SkillRegistry,
     /// Shared audit store. Stage 3 (AUDIT-03): exactly one `AuditStore`
     /// per process, shared by the server's `AppState` and this pipeline.
     /// Opening a second handle to the same DB file is forbidden —
@@ -148,7 +149,6 @@ impl Pipeline {
         Ok(Self {
             config,
             policy_engine: PolicyEngine::new(),
-            skill_registry: SkillRegistry::new(),
             audit_store,
             provider_pool: RwLock::new(ProviderPool::new()),
             episode_store: Mutex::new(episode_store),
@@ -573,6 +573,11 @@ impl Pipeline {
             trust_tier: self.config.trust_tier,
             channel: request.channel.clone(),
             conversation_id: request.conversation_id.clone(),
+            // Empty until skills arrive from a grant rather than from prose
+            // matching. This was already the effective state — the matcher fed
+            // ids into `capabilities_for`, which returns capabilities carrying
+            // no tools regardless — so removing the matcher changes what is
+            // *authorised*, not what is *delivered*.
             skill_ids: vec![],
             tool_names: vec![],
             mesh_context: None,
@@ -625,15 +630,25 @@ impl Pipeline {
             debug!("Policy returned Warn/Review; auto-approving in Phase 1");
         }
 
-        // 4. Match skills
-        let matched_skill_ids = SkillMatcher::match_request(&self.skill_registry, &request.content);
-        debug!("Matched {} skills", matched_skill_ids.len());
-
-        // 5. Build capabilities
-        let skill_id_strings: Vec<String> = matched_skill_ids.iter().map(|s| s.0.clone()).collect();
+        // 4. Build capabilities
+        //
+        // Capabilities come from the policy context alone. There is no longer a
+        // matching step between the operator's text and the skills that grant
+        // authority.
+        //
+        // `SkillMatcher::match_request` selected capabilities by fuzzy-matching
+        // request prose against a registry. That made an authority decision by
+        // string similarity: what the agent may do was determined by what the
+        // user happened to type. In a substrate where authority flows from
+        // grants, that is the wrong mechanism at a structural level — not
+        // legacy residue but a direct contradiction, and one that widens
+        // capability in response to attacker-controlled input.
+        //
+        // The policy engine already owned the decision; matching only supplied
+        // a candidate list. Removing it makes the grant the sole source.
         let capabilities = self
             .policy_engine
-            .capabilities_for(&policy_context, &skill_id_strings);
+            .capabilities_for(&policy_context, &policy_context.skill_ids);
 
         // 6. Determine model preference
         let model_preference = self.policy_engine.model_for(&policy_context);
@@ -812,11 +827,16 @@ impl Pipeline {
         }
 
         // 13. Record episode (best-effort)
+        //
+        // Skill ids come from the policy context now, not from prose matching.
+        // Recording what was *granted* rather than what was *matched* is the
+        // correct thing for the episode to carry anyway — the learning loop
+        // should see the authority in force, not a heuristic's guess at it.
         self.record_episode(
             &request,
             &response,
             &decision,
-            &skill_id_strings,
+            &policy_context.skill_ids,
             &completion.model,
             start_time.elapsed().as_millis() as u64,
         );

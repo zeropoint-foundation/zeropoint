@@ -169,10 +169,22 @@ fn get_routing_config() -> &'static RoutingConfig {
                 provider: "abacus".to_string(),
                 model: "kimi-2.6-thinking".to_string(),
             }),
-            local: Some(TierRoute {
-                provider: "ollama".to_string(),
-                model: "mistral".to_string(),
-            }),
+            // No compiled default for the local tier.
+            //
+            // HARNESS-SEAM-2026-08 C1: `zp-config`'s `llm.model` is the sole
+            // authority for local model election. A compiled route here was a
+            // second declarant — an inner mechanism carrying outer content,
+            // which §1 corollary 1 forbids — and it named `mistral`, a model
+            // not installed on this substrate, so the route was dead as well as
+            // duplicative.
+            //
+            // The *field* stays. Tier routing is a real mechanism for external
+            // callers that send `X-ZP-Tier`, and an operator may still declare
+            // a local route in `routing.toml`, which is the correct layer for
+            // it. With no route configured, `resolve_tier` returns None and the
+            // handler falls back to the provider named in the URL — which is
+            // the honest behaviour, and is already logged.
+            local: None,
             experimental: Some(TierRoute {
                 provider: "deepinfra".to_string(),
                 model: "Qwen/Qwen3-72B".to_string(),

@@ -67,6 +67,14 @@ impl TestApp {
             home_dir,
             open_dashboard: false,
             llm_enabled: false,
+            // Inference is off for hardening tests, so these are inert — but
+            // they are stated rather than defaulted so that a future change to
+            // the substrate's model election cannot silently alter what these
+            // tests exercise.
+            llm_provider: "ollama".to_string(),
+            llm_model: "test-model".to_string(),
+            llm_escalation_model: String::new(),
+            llm_supports_tools: false,
             operator_name: "hardening-test".to_string(),
             bridge_dir: None,
             officers_enabled: false,
@@ -249,6 +257,14 @@ impl TestServer {
             home_dir,
             open_dashboard: false,
             llm_enabled: false,
+            // Inference is off for hardening tests, so these are inert — but
+            // they are stated rather than defaulted so that a future change to
+            // the substrate's model election cannot silently alter what these
+            // tests exercise.
+            llm_provider: "ollama".to_string(),
+            llm_model: "test-model".to_string(),
+            llm_escalation_model: String::new(),
+            llm_supports_tools: false,
             operator_name: "hardening-test".to_string(),
             bridge_dir: None,
             officers_enabled: false,

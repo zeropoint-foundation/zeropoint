@@ -9,7 +9,6 @@ members = [
     "crates/zp-introduction",
     "crates/zp-llm",
     "crates/zp-pipeline",
-    "crates/zp-skills",
     "crates/zp-trust",
     "crates/zp-learning",
     "crates/zp-mesh",

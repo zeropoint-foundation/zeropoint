@@ -7,6 +7,11 @@
 //!   OpenAI-compatible endpoint.
 //!
 //! Protocol is auto-detected from config: API key present → OpenAI, absent → Ollama.
+//!
+//! One endpoint is recognised rather than sniffed: ZeroPoint's own proxy
+//! (`/api/v1/proxy/…`) always resolves to the `zp_proxy` profile. It has to be
+//! checked first, because a proxy URL carries its backend in the path and would
+//! otherwise substring-match the provider rules below. See `detect`.
 
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
@@ -104,6 +109,26 @@ impl ProviderProfile {
         }
     }
 
+    /// ZeroPoint's own inference proxy.
+    ///
+    /// Always OpenAI-compatible regardless of which provider sits behind it —
+    /// the proxy normalises every backend onto `/v1/chat/completions`, and its
+    /// path allowlist admits nothing else for inference.
+    ///
+    /// `auth` is `None` here and that is a placeholder, not a statement: the
+    /// proxy requires a ZP-Sig envelope, which is per-request and body-bound,
+    /// so it cannot be expressed as a static `AuthStrategy`. Until the Regent
+    /// holds a `GateRequestSigner` (W5 step 3b), calls through this profile
+    /// will be rejected with 401 — loudly, which is correct. Fail closed.
+    pub fn zp_proxy() -> Self {
+        Self {
+            name: "zp-proxy".into(),
+            auth: AuthStrategy::None,
+            chat_path: "/v1/chat/completions".into(),
+            response_format: InferenceProtocol::OpenAI,
+        }
+    }
+
     /// Abacus AI / RouteLLM — standard OpenAI-compatible endpoint.
     /// Uses Bearer auth (same as OpenAI), not a custom header.
     /// Supports model routing via the `model` field (e.g. "zai-org/GLM-5.2").
@@ -138,6 +163,24 @@ impl ProviderProfile {
     /// - Anything else with API key → OpenAI (safe default)
     pub fn detect(endpoint: &str, has_key: bool) -> Self {
         let lower = endpoint.to_lowercase();
+
+        // ZeroPoint's own proxy, checked first and deliberately.
+        //
+        // This is not a heuristic like the matches below — it is the substrate
+        // recognising its own surface, which is unambiguous and always
+        // OpenAI-compatible. It must precede the provider-name matches because
+        // a proxy URL carries its backend in the path: `/api/v1/proxy/ollama/`
+        // contains "ollama", so the substring rules below would select the
+        // native protocol and post to `/api/chat` — a path the proxy allowlist
+        // forbids, producing a 400 that reads like a broken backend rather
+        // than a misrouted request.
+        //
+        // Everything after this point remains name-sniffing against
+        // third-party endpoints, where declaration is not available. That is a
+        // weaker mechanism and should not be extended.
+        if lower.contains("/api/v1/proxy/") {
+            return Self::zp_proxy();
+        }
 
         if lower.contains("abacus") || lower.contains("routellm") {
             return Self::abacus();
@@ -587,12 +630,29 @@ impl InferenceBackend {
         msg.contains("HTTP error:") && (msg.contains("connect") || msg.contains("Connection refused"))
     }
 
+    /// Liveness path for the local inference backend.
+    ///
+    /// `v1/models`, not the native `api/tags`, and the difference is not
+    /// cosmetic. The ZP proxy's allowlist admits only `v1/chat/completions`
+    /// and `v1/models` for the ollama provider; the whole `api/*` family is
+    /// excluded on purpose, because `api/pull` fetches arbitrary remote
+    /// content and `api/delete` mutates local model state, neither of which
+    /// belongs behind a forwarding proxy.
+    ///
+    /// Both surfaces answer the same question — is the backend up and what
+    /// does it hold — so probing the OpenAI-compatible one costs nothing and
+    /// keeps this call routable once the endpoint moves behind the proxy
+    /// (W5 step 3). Probing `api/tags` would 400 there, against a guard that
+    /// should not be relaxed to accommodate a health check.
+    const LIVENESS_PATH: &'static str = "v1/models";
+
     /// Start Ollama if it's not already running. Waits up to 8 seconds
     /// for the server to become responsive.
     async fn ensure_ollama_running() -> Result<(), String> {
         // Check if already running via a quick health check.
         let client = reqwest::Client::new();
-        if client.get("http://127.0.0.1:11434/api/tags")
+        let probe = format!("http://127.0.0.1:11434/{}", Self::LIVENESS_PATH);
+        if client.get(&probe)
             .timeout(std::time::Duration::from_secs(2))
             .send()
             .await
@@ -635,7 +695,7 @@ impl InferenceBackend {
         // Poll until responsive (up to 8 seconds, 500ms intervals).
         for _ in 0..16 {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            if client.get("http://127.0.0.1:11434/api/tags")
+            if client.get(&probe)
                 .timeout(std::time::Duration::from_secs(1))
                 .send()
                 .await
@@ -968,7 +1028,12 @@ impl InferenceBackend {
     pub async fn health_check(&self) -> Result<bool, RegentError> {
         match self.protocol {
             InferenceProtocol::Ollama => {
-                let url = format!("{}/api/tags", self.endpoint);
+                // v1/models rather than api/tags — see LIVENESS_PATH. Ollama
+                // serves both; only this one survives the proxy allowlist, and
+                // `detect()` matches on URL substrings, so a proxy path
+                // containing "/proxy/ollama/" still resolves to this branch.
+                let base = self.endpoint.trim_end_matches('/');
+                let url = format!("{}/{}", base, Self::LIVENESS_PATH);
                 match self.client.get(&url).send().await {
                     Ok(resp) => Ok(resp.status().is_success()),
                     Err(_) => Ok(false),
@@ -1004,7 +1069,12 @@ impl InferenceBackend {
             return Ok(true); // cloud models are always "available"
         }
 
-        let url = format!("{}/api/tags", self.endpoint);
+        // v1/models rather than api/tags — see LIVENESS_PATH. The response
+        // shape differs: api/tags returns {models:[{name}]}, the OpenAI
+        // surface returns {data:[{id}]}. Both are parsed below so this keeps
+        // working whether the endpoint is a direct backend or the proxy.
+        let base = self.endpoint.trim_end_matches('/');
+        let url = format!("{}/{}", base, Self::LIVENESS_PATH);
         let resp = self
             .client
             .get(&url)
@@ -1021,11 +1091,25 @@ impl InferenceBackend {
             .await
             .map_err(|e| RegentError::Inference(format!("parse error: {}", e)))?;
 
-        let available = body["models"]
+        // Accept either shape. `data[].id` is the OpenAI-compatible surface
+        // (and what the proxy forwards); `models[].name` is the native one,
+        // retained so a directly-configured backend still answers correctly.
+        // Absence of both is reported as "not available" rather than an error,
+        // matching the prior behaviour on a malformed body.
+        let matches_name = |n: &str| n.starts_with(model);
+
+        let available = body["data"]
             .as_array()
-            .map(|models| {
-                models.iter().any(|m| {
-                    m["name"].as_str().map_or(false, |n| n.starts_with(model))
+            .map(|entries| {
+                entries
+                    .iter()
+                    .any(|m| m["id"].as_str().map_or(false, matches_name))
+            })
+            .or_else(|| {
+                body["models"].as_array().map(|entries| {
+                    entries
+                        .iter()
+                        .any(|m| m["name"].as_str().map_or(false, matches_name))
                 })
             })
             .unwrap_or(false);
@@ -1051,5 +1135,63 @@ impl InferenceBackend {
             }),
             Some(_) => Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod detect_tests {
+    use super::*;
+
+    const PROXY: &str = "http://127.0.0.1:17010/api/v1/proxy/ollama/v1/chat/completions";
+
+    /// The regression this guards: a proxy URL carries its backend in the
+    /// path, so `/proxy/ollama/` substring-matches the local-endpoint rule and
+    /// selects the native Ollama protocol. That posts to `/api/chat`, which the
+    /// proxy allowlist forbids — a 400 that reads like a broken backend rather
+    /// than a misrouted request.
+    #[test]
+    fn zp_proxy_is_recognised_despite_provider_in_path() {
+        let p = ProviderProfile::detect(PROXY, false);
+        assert_eq!(p.name, "zp-proxy");
+        assert_eq!(p.response_format, InferenceProtocol::OpenAI);
+        assert_eq!(p.chat_path, "/v1/chat/completions");
+    }
+
+    /// Proxy recognition must not depend on whether a key happens to be set.
+    #[test]
+    fn zp_proxy_recognised_with_or_without_key() {
+        assert_eq!(ProviderProfile::detect(PROXY, true).name, "zp-proxy");
+        assert_eq!(ProviderProfile::detect(PROXY, false).name, "zp-proxy");
+    }
+
+    /// A cloud provider behind the proxy is still the proxy's wire format —
+    /// the substrate's own surface wins over the provider name in the path.
+    #[test]
+    fn proxy_wins_over_provider_name_in_path() {
+        let url = "http://127.0.0.1:17010/api/v1/proxy/anthropic/v1/chat/completions";
+        assert_eq!(ProviderProfile::detect(url, true).name, "zp-proxy");
+    }
+
+    /// A directly-configured backend is unaffected.
+    #[test]
+    fn direct_ollama_still_detects_as_ollama() {
+        let p = ProviderProfile::detect("http://127.0.0.1:11434", false);
+        assert_eq!(p.name, "ollama");
+        assert_eq!(p.response_format, InferenceProtocol::Ollama);
+    }
+
+    /// Third-party name-sniffing is unchanged.
+    #[test]
+    fn third_party_detection_is_unchanged() {
+        assert_eq!(ProviderProfile::detect("https://api.openai.com", true).name, "openai");
+        assert_eq!(ProviderProfile::detect("https://routellm.abacus.ai/v1", true).name, "abacus");
+        assert_eq!(ProviderProfile::detect("https://api.anthropic.com", true).name, "anthropic");
+    }
+
+    /// The proxy chat path is already complete, so `chat_url` must not append.
+    #[test]
+    fn chat_url_leaves_a_complete_proxy_url_alone() {
+        let p = ProviderProfile::zp_proxy();
+        assert_eq!(p.chat_url(PROXY), PROXY);
     }
 }

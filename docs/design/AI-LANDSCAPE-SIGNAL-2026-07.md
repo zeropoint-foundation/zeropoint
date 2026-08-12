@@ -156,9 +156,30 @@ Single-analyst commentary, opinion-forward, with substituted model names and unv
 
 ---
 
+## Ingestion mechanism (2026-08-11)
+
+Until now this lens had no feed. Signals 1–4 arrived because a video crossed the
+operator's path, which is why they cluster and then stop — the silence the
+declaration warns about was indistinguishable from nobody having looked.
+
+`SIGNAL-INGESTION-PLANE-2026-08.md` specifies the mechanism, and this lens is its
+first consumer. Under it, each sweep applies the `transformation_question` above
+as its relevance filter and emits `lens:applied:ai_landscape:<invocation_id>`,
+which is what turns the conditional receipt semantics in §7 into something
+actually anchored — and what makes lens-silence mean drift rather than absent
+mechanism.
+
+Interim (Stage 0): a scheduled sweep appends to `docs/review/ai-landscape-log.md`
+over the sources in `docs/review/ai-landscape-sources.md`. Not chain-anchored.
+The **source discipline** below is the standing constraint on anything that
+arrives through it — the classification field in a `signal:candidate:*` receipt
+is that discipline made structural rather than left to the reader's care.
+
+---
+
 ## Cross-references
 
-KEEL Part XIV.5 · `INFERENCE-ROUTING-DISCIPLINE-2026-07` · `DEPENDENCY-POSTURE` · `EXECUTION-AUTHORITY-MODEL-2026-07` (Phase 5) · `SUBSTRATE-SLM-TRAINING-ENVIRONMENT-2026-07` · `REGENT-DOOM-LOOP-DETECTION-2026-07` · `SUBSTRATE-HARDENING-CEREMONY-2026-07` · `QUARANTINE-PLANE-2026-07` · `SECURITY-SIGNAL-CHANNEL-2026-07` · `CIRCUIT-BREAKER-2026-07` · `CONSEQUENCE-AND-FEDERATION-DISCIPLINE-2026-07` · `SOVEREIGN-KINSHIP-PRIMITIVES-2026-07` · `DEPENDENT-SOVEREIGNTY-2026-07` · `MEDIA-PROVENANCE-2026-07` · `PHONE-AND-IDENTITY-2026-07` · `CRYPTOGRAPHIC-SOVEREIGNTY-AND-LEGAL-PROCESS-2026-07`
+KEEL Part XIV.5 · `SIGNAL-INGESTION-PLANE-2026-08` · `INFERENCE-ROUTING-DISCIPLINE-2026-07` · `DEPENDENCY-POSTURE` · `EXECUTION-AUTHORITY-MODEL-2026-07` (Phase 5) · `SUBSTRATE-SLM-TRAINING-ENVIRONMENT-2026-07` · `REGENT-DOOM-LOOP-DETECTION-2026-07` · `SUBSTRATE-HARDENING-CEREMONY-2026-07` · `QUARANTINE-PLANE-2026-07` · `SECURITY-SIGNAL-CHANNEL-2026-07` · `CIRCUIT-BREAKER-2026-07` · `CONSEQUENCE-AND-FEDERATION-DISCIPLINE-2026-07` · `SOVEREIGN-KINSHIP-PRIMITIVES-2026-07` · `DEPENDENT-SOVEREIGNTY-2026-07` · `MEDIA-PROVENANCE-2026-07` · `PHONE-AND-IDENTITY-2026-07` · `CRYPTOGRAPHIC-SOVEREIGNTY-AND-LEGAL-PROCESS-2026-07`
 
 *Proposed corpus-index placement: Tier 3 (reasoning trail), or a new "External signals" grouping if more of these accumulate.*
 

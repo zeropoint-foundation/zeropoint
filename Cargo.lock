@@ -8211,7 +8211,6 @@ dependencies = [
  "zp-mesh",
  "zp-policy",
  "zp-receipt",
- "zp-skills",
  "zp-trust",
 ]
 
@@ -8362,21 +8361,6 @@ dependencies = [
  "zp-sensors",
  "zp-trust",
  "zp-verbs",
-]
-
-[[package]]
-name = "zp-skills"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "parking_lot",
- "semver",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "zp-core",
 ]
 
 [[package]]

@@ -1,12 +1,12 @@
 {
-  "generated_from_commit": "46077d0",
+  "generated_from_commit": "601952d",
   "governed_docs": 142,
   "totals": {
-    "connections": 1207,
-    "live": 552,
+    "connections": 1209,
+    "live": 554,
     "tied_off": 137,
     "defect": 518,
-    "maturity": 0.5708
+    "maturity": 0.5715
   },
   "by_kind": {
     "chain_to_registry/live": 85,
@@ -18,7 +18,7 @@
     "corpus_to_chain/tied_off": 87,
     "corpus_to_code/live": 68,
     "corpus_to_keel/live": 39,
-    "crate_dep/live": 129,
+    "crate_dep/live": 131,
     "derived_artifact/defect": 3,
     "derived_artifact/tied_off": 1,
     "pin/live": 23,
@@ -259,6 +259,15 @@
     {
       "kind": "crate_dep",
       "source": "crates/zp-cli",
+      "target": "zp-gate-envelope",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-cli/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
+      "source": "crates/zp-cli",
       "target": "zp-keys",
       "status": "live",
       "detector": "cargo build --workspace",
@@ -449,6 +458,15 @@
       "kind": "crate_dep",
       "source": "crates/zp-gate-envelope",
       "target": "zp-receipt",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-gate-envelope/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
+      "source": "crates/zp-gate-envelope",
+      "target": "zp-core",
       "status": "live",
       "detector": "cargo build --workspace",
       "note": null,
@@ -8160,21 +8178,21 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:8500",
+      "source": "crates/zp-cli/src/main.rs:8567",
       "target": "epoch:anchored",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:8500"
+      "site": "crates/zp-cli/src/main.rs:8567"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:5127",
+      "source": "crates/zp-server/src/lib.rs:5287",
       "target": "gate:denied",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:5127"
+      "site": "crates/zp-server/src/lib.rs:5287"
     },
     {
       "kind": "chain_to_registry",
@@ -8187,21 +8205,21 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:10655",
+      "source": "crates/zp-cli/src/main.rs:10722",
       "target": "model:capability:updated",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:10655"
+      "site": "crates/zp-cli/src/main.rs:10722"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:10481",
+      "source": "crates/zp-cli/src/main.rs:10548",
       "target": "model:registered",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:10481"
+      "site": "crates/zp-cli/src/main.rs:10548"
     },
     {
       "kind": "chain_to_registry",
@@ -8259,12 +8277,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:10270",
+      "source": "crates/zp-cli/src/main.rs:10337",
       "target": "preference:llm:policy:set",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:10270"
+      "site": "crates/zp-cli/src/main.rs:10337"
     },
     {
       "kind": "chain_to_registry",
@@ -8286,12 +8304,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:9944",
+      "source": "crates/zp-cli/src/main.rs:10011",
       "target": "pricing:refresh",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:9944"
+      "site": "crates/zp-cli/src/main.rs:10011"
     },
     {
       "kind": "chain_to_registry",
@@ -8466,12 +8484,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:1155",
+      "source": "crates/zp-server/src/lib.rs:1303",
       "target": "system:keychain:accessed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:1155"
+      "site": "crates/zp-server/src/lib.rs:1303"
     },
     {
       "kind": "chain_to_registry",
@@ -8664,12 +8682,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:6370",
+      "source": "crates/zp-server/src/lib.rs:6530",
       "target": "tool:preflight:vault_validation_failed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:6370"
+      "site": "crates/zp-server/src/lib.rs:6530"
     },
     {
       "kind": "chain_to_registry",
@@ -8691,12 +8709,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:6123",
+      "source": "crates/zp-server/src/lib.rs:6283",
       "target": "tool:removed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:6123"
+      "site": "crates/zp-server/src/lib.rs:6283"
     },
     {
       "kind": "chain_to_registry",
@@ -8709,39 +8727,39 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:6032",
+      "source": "crates/zp-server/src/lib.rs:6192",
       "target": "tool:stopped",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:6032"
+      "site": "crates/zp-server/src/lib.rs:6192"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:3750",
+      "source": "crates/zp-server/src/lib.rs:3910",
       "target": "vault:secret:removed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:3750"
+      "site": "crates/zp-server/src/lib.rs:3910"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:3786",
+      "source": "crates/zp-server/src/lib.rs:3946",
       "target": "vault:secret:revealed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:3786"
+      "site": "crates/zp-server/src/lib.rs:3946"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:3712",
+      "source": "crates/zp-server/src/lib.rs:3872",
       "target": "vault:secret:stored",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:3712"
+      "site": "crates/zp-server/src/lib.rs:3872"
     },
     {
       "kind": "code_to_artifact",
@@ -8831,7 +8849,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:6944"
+      "site": "crates/zp-cli/src/main.rs:7011"
     },
     {
       "kind": "code_to_artifact",
@@ -8840,7 +8858,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7494"
+      "site": "crates/zp-cli/src/main.rs:7561"
     },
     {
       "kind": "code_to_artifact",
@@ -8849,7 +8867,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7497"
+      "site": "crates/zp-cli/src/main.rs:7564"
     },
     {
       "kind": "code_to_artifact",
@@ -8858,7 +8876,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:8082"
+      "site": "crates/zp-cli/src/main.rs:8149"
     },
     {
       "kind": "code_to_artifact",
@@ -8867,7 +8885,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:8280"
+      "site": "crates/zp-cli/src/main.rs:8347"
     },
     {
       "kind": "code_to_artifact",
@@ -8876,7 +8894,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:9998"
+      "site": "crates/zp-cli/src/main.rs:10065"
     },
     {
       "kind": "code_to_artifact",
@@ -8966,7 +8984,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-config/src/resolve.rs:282"
+      "site": "crates/zp-config/src/resolve.rs:319"
     },
     {
       "kind": "code_to_artifact",
@@ -8975,7 +8993,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-config/src/schema.rs:106"
+      "site": "crates/zp-config/src/schema.rs:119"
     },
     {
       "kind": "code_to_artifact",
@@ -9650,7 +9668,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:258"
+      "site": "crates/zp-server/src/lib.rs:282"
     },
     {
       "kind": "code_to_artifact",
@@ -9659,7 +9677,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1768"
+      "site": "crates/zp-server/src/lib.rs:1916"
     },
     {
       "kind": "code_to_artifact",
@@ -9668,7 +9686,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:1957"
+      "site": "crates/zp-server/src/lib.rs:2105"
     },
     {
       "kind": "code_to_artifact",
@@ -9677,7 +9695,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:2138"
+      "site": "crates/zp-server/src/lib.rs:2286"
     },
     {
       "kind": "code_to_artifact",
@@ -9686,7 +9704,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:3834"
+      "site": "crates/zp-server/src/lib.rs:3994"
     },
     {
       "kind": "code_to_artifact",
@@ -9695,7 +9713,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4491"
+      "site": "crates/zp-server/src/lib.rs:4651"
     },
     {
       "kind": "code_to_artifact",
@@ -9704,7 +9722,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4769"
+      "site": "crates/zp-server/src/lib.rs:4929"
     },
     {
       "kind": "code_to_artifact",
@@ -9713,7 +9731,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:5211"
+      "site": "crates/zp-server/src/lib.rs:5371"
     },
     {
       "kind": "code_to_artifact",
@@ -9722,7 +9740,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6850"
+      "site": "crates/zp-server/src/lib.rs:7010"
     },
     {
       "kind": "code_to_artifact",
@@ -9731,7 +9749,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6851"
+      "site": "crates/zp-server/src/lib.rs:7011"
     },
     {
       "kind": "code_to_artifact",
@@ -9740,7 +9758,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6852"
+      "site": "crates/zp-server/src/lib.rs:7012"
     },
     {
       "kind": "code_to_artifact",
@@ -9749,7 +9767,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6853"
+      "site": "crates/zp-server/src/lib.rs:7013"
     },
     {
       "kind": "code_to_artifact",
@@ -9758,7 +9776,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6855"
+      "site": "crates/zp-server/src/lib.rs:7015"
     },
     {
       "kind": "code_to_artifact",
@@ -9767,7 +9785,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6856"
+      "site": "crates/zp-server/src/lib.rs:7016"
     },
     {
       "kind": "code_to_artifact",
@@ -9776,7 +9794,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6857"
+      "site": "crates/zp-server/src/lib.rs:7017"
     },
     {
       "kind": "code_to_artifact",
@@ -9785,7 +9803,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6858"
+      "site": "crates/zp-server/src/lib.rs:7018"
     },
     {
       "kind": "code_to_artifact",
@@ -9794,7 +9812,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6859"
+      "site": "crates/zp-server/src/lib.rs:7019"
     },
     {
       "kind": "code_to_artifact",
@@ -9803,7 +9821,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6860"
+      "site": "crates/zp-server/src/lib.rs:7020"
     },
     {
       "kind": "code_to_artifact",
@@ -9812,7 +9830,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6862"
+      "site": "crates/zp-server/src/lib.rs:7022"
     },
     {
       "kind": "code_to_artifact",
@@ -9821,7 +9839,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6863"
+      "site": "crates/zp-server/src/lib.rs:7023"
     },
     {
       "kind": "code_to_artifact",
@@ -9830,7 +9848,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6864"
+      "site": "crates/zp-server/src/lib.rs:7024"
     },
     {
       "kind": "code_to_artifact",
@@ -9839,7 +9857,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6865"
+      "site": "crates/zp-server/src/lib.rs:7025"
     },
     {
       "kind": "code_to_artifact",
@@ -9848,7 +9866,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6867"
+      "site": "crates/zp-server/src/lib.rs:7027"
     },
     {
       "kind": "code_to_artifact",
@@ -9857,7 +9875,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6868"
+      "site": "crates/zp-server/src/lib.rs:7028"
     },
     {
       "kind": "code_to_artifact",
@@ -9866,7 +9884,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:6869"
+      "site": "crates/zp-server/src/lib.rs:7029"
     },
     {
       "kind": "code_to_artifact",
@@ -9875,7 +9893,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:6907"
+      "site": "crates/zp-server/src/lib.rs:7067"
     },
     {
       "kind": "code_to_artifact",
@@ -9884,7 +9902,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:7045"
+      "site": "crates/zp-server/src/lib.rs:7205"
     },
     {
       "kind": "code_to_artifact",
@@ -10874,7 +10892,7 @@
       "target": "4cb9e4436932",
       "status": "defect",
       "detector": null,
-      "note": "162 relevant files changed since it was written (116 commits)",
+      "note": "247 relevant files changed since it was written (120 commits)",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -10883,16 +10901,16 @@
       "target": "8a6c25ea2b31",
       "status": "defect",
       "detector": null,
-      "note": "142 relevant files changed since it was written (105 commits)",
+      "note": "230 relevant files changed since it was written (109 commits)",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "21f1cb4",
+      "target": "46077d0",
       "status": "defect",
       "detector": null,
-      "note": "26 relevant files changed since it was written (23 commits), declared source 21f1cb4 dated 2026-08-02",
+      "note": "12 relevant files changed since it was written (1 commits), declared source 46077d0 dated 2026-08-04",
       "site": "tools/connection-map/connections.json"
     }
   ]
