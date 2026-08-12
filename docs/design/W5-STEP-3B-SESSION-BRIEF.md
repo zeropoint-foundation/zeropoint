@@ -1,5 +1,19 @@
 # W5 Step 3b — Session Brief
 
+*Status: Complete (2026-08-12), executed at `7cf2e69`. The live record of what
+landed is `HARNESS-SEAM-2026-08.md` §6.1.1, which supersedes this document on
+every point of fact. Retained as the reasoning trail for the handoff and
+**not amended for what changed during execution** — read it as the plan, never
+as the state.*
+
+*Two divergences to know before reading. §2 routes the signer through
+`RegentConfig`; it does not go there — that struct is serde-derived, and the
+field would have had to be `#[serde(skip)]`, a live capability that vanishes on
+a round-trip without saying so. The signer stops at `ServerRegentConfig` and
+reaches the backends as a parameter. §6 describes a working tree two commits
+stale. §2's line numbers were all still accurate on 2026-08-12, which is the
+one thing here that aged better than expected.*
+
 **Task:** give the Regent a `GateRequestSigner` so it can authenticate to the
 ZeroPoint proxy.
 **Written:** 2026-08-10, at the end of the session that completed 3a and step 2.
