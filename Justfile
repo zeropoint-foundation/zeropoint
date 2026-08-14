@@ -31,6 +31,16 @@ playground_scp := env_var_or_default("ZP_PLAYGROUND_SCP", "scp")
 pins:
     cargo test -p zp-discipline --no-fail-fast
 
+# Mechanical coherence checks over docs/ and crates/.
+#
+# ~7s since the 2026-08-14 walk-pruning fix in check_doc_crossrefs; it was
+# 40s+ before, which is the whole reason it had no target here. Reports by
+# default and never fails - the standing defects are corpus debt, not this
+# run's. The pre-commit hook gates only on defects in the documents being
+# committed; see tools/corpus-lint/staged_gate.py.
+lint:
+    python3 tools/corpus-lint/corpus_lint.py .
+
 # Everything CI would have caught, minus the feature-gate matrix.
 #
 # --all-targets is the point of the first step, not a flourish: plain
@@ -43,8 +53,9 @@ check:
     cargo test -p zp-discipline --no-fail-fast
     cargo clippy --workspace --all-targets -- -D warnings
     cargo fmt --all --check
+    python3 tools/corpus-lint/corpus_lint.py .
     @echo ""
-    @echo "✓  check passed — pins, build (all targets), clippy, fmt"
+    @echo "✓  check passed — pins, build (all targets), clippy, fmt, corpus-lint"
     @echo "   Not covered: the workspace test suite, and the six-way"
     @echo "   feature-gate matrix in ci.yml. Run 'cargo test --workspace"
     @echo "   --no-fail-fast' separately; it is slow and currently noisy."

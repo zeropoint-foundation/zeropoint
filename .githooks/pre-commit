@@ -165,3 +165,30 @@ pre-commit: accumulated unread before 2026-08-12 — one of them load-bearing."
         fi
     fi
 fi
+
+# ── corpus-lint on the documents this commit touches ─────────────────────────
+#
+# Why (2026-08-14): corpus-lint existed, was correct, and cost 40s+ per run
+# because `check_doc_crossrefs` walked node_modules/ and target/ before
+# discarding them. Nothing that expensive gets run on a docs commit, so it was
+# not run — the third instance in this file of a check that is present and
+# unread, after the unregistered `check_stated_counts` and the pins that were
+# red for eight days. Pruning the walk took it to ~7s, which is what makes a
+# gate here affordable at all.
+#
+# Scoped to the staged set, not --strict. The corpus carries 15-16 standing
+# defects; blocking every commit on them is the shape this file already argues
+# against two sections up. `staged_gate.py` carries the full reasoning.
+#
+# Skipped entirely when no document is staged, so a Rust-only commit pays
+# nothing.
+STAGED_DOCS="$(git diff --cached --name-only --diff-filter=ACM | grep -E '^docs/.*\.md$' || true)"
+
+if [ -n "$STAGED_DOCS" ]; then
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "pre-commit: python3 not found — skipping corpus-lint."
+        echo "pre-commit: this is a gap, not a pass."
+    else
+        echo "$STAGED_DOCS" | python3 tools/corpus-lint/staged_gate.py || exit 1
+    fi
+fi
