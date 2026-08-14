@@ -8,7 +8,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use zp_core::AuditEntry;
-use zp_officers::finding::Finding;
+use zp_officers::finding::{Finding, Severity};
 
 use crate::corrections::ActiveStandingCorrection;
 
@@ -730,8 +730,10 @@ impl WorkArc {
 /// closes per TRAJECTORY-MAP-PRIMITIVE-2026-08 §"Closing a map".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SettlementState {
     /// Map is still working (or arc-shaped — same variant covers both).
+    #[default]
     Open,
     /// Destination reached and signed. Downstream work proceeds under
     /// a new arc; this map is preserved as evidence.
@@ -756,11 +758,6 @@ pub enum SettlementState {
     },
 }
 
-impl Default for SettlementState {
-    fn default() -> Self {
-        SettlementState::Open
-    }
-}
 
 /// The event+detail pair a WorkArc mutation produces for chain
 /// anchoring. The caller (typically the dispatch layer) pipes this
@@ -1581,8 +1578,7 @@ mod trajectory_map_tests {
         let mut a = empty_arc();
         a.directive = Some("figure out how Layer 2 should behave".to_string());
 
-        let receipts = vec![
-            a.open_waypoint(mk_waypoint("t1", vec![])).unwrap(),
+        let receipts = [a.open_waypoint(mk_waypoint("t1", vec![])).unwrap(),
             a.open_waypoint(mk_waypoint("t2", vec!["t1"])).unwrap(),
             a.resolve_waypoint("t1", "found precedent".to_string(), t0())
                 .unwrap(),
@@ -1591,8 +1587,7 @@ mod trajectory_map_tests {
             a.propose_destination(mk_dest("d1", "the Layer 2 spec"))
                 .unwrap(),
             a.accept_destination("d1").unwrap(),
-            a.settle_with_destination("d1", t0()).unwrap(),
-        ];
+            a.settle_with_destination("d1", t0()).unwrap()];
 
         let events: Vec<&str> = receipts.iter().map(|r| r.event.as_str()).collect();
         assert_eq!(
@@ -1671,7 +1666,7 @@ impl ChainSnapshot {
             timestamp: entry.timestamp,
             action_summary,
             actor,
-            signed: entry.receipt.as_ref().map_or(false, |r| r.signature.is_some()),
+            signed: entry.receipt.as_ref().is_some_and(|r| r.signature.is_some()),
         }
     }
 }
@@ -1835,7 +1830,9 @@ impl FindingSummary {
             officer: f.officer.to_string(),
             domain: f.domain.to_string(),
             finding_type: f.finding_type.clone(),
-            severity: format!("{:?}", f.severity),
+            // Pinned spelling, not an incidental format. See `Severity`'s type
+            // docs — this string is on the chain going back to the beginning.
+            severity: f.severity.as_context_str().to_string(),
             summary: f.summary.clone(),
             observed_at: Some(f.timestamp),
             age_secs: Some((now - f.timestamp).num_seconds()),
@@ -1847,6 +1844,39 @@ impl FindingSummary {
     /// `now` in hand.
     pub fn from_finding(f: &Finding) -> Self {
         Self::from_finding_at(f, Utc::now())
+    }
+
+    /// The typed severity, or `None` if the carried string is unrecognised.
+    ///
+    /// Prefer [`FindingSummary::demands_attention`] and
+    /// [`FindingSummary::interrupts`] over matching on this — they encode
+    /// which floor governs which decision, and they fail in the safe
+    /// direction on an unparseable value.
+    pub fn severity_level(&self) -> Option<Severity> {
+        Severity::from_context_str(&self.severity)
+    }
+
+    /// Should an in-flight cycle reason about this rather than just observe?
+    ///
+    /// An unrecognised severity counts as *yes*. A finding whose severity
+    /// cannot be read is a defect in the composition path, and the failure
+    /// that costs least is the one that wakes someone — KEEL §III.19.
+    pub fn demands_attention(&self) -> bool {
+        match self.severity_level() {
+            Some(s) => s.demands_attention(),
+            None => true,
+        }
+    }
+
+    /// Should this preempt the timer, and survive compression while the
+    /// operator is mid-conversation?
+    ///
+    /// Unlike [`FindingSummary::demands_attention`], an unrecognised severity
+    /// counts as *no*. Interrupting is the costlier action, and the attention
+    /// path above already guarantees a malformed finding is not silently
+    /// dropped — it will be reasoned about on the next cycle either way.
+    pub fn interrupts(&self) -> bool {
+        self.severity_level().is_some_and(|s| s.interrupts())
     }
 }
 

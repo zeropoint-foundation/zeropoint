@@ -739,7 +739,7 @@ impl Regent {
         // one applies would make the chain misleading about why she woke.
         self.wake = if novel {
             Wake::Novelty
-        } else if self.cycle_count % Self::DELIBERATE_EVERY_N_CYCLES == 0 {
+        } else if self.cycle_count.is_multiple_of(Self::DELIBERATE_EVERY_N_CYCLES) {
             Wake::Scheduled
         } else {
             Wake::Quiet
@@ -979,11 +979,14 @@ impl Regent {
     /// Public within the crate so `run_cycle` can call it after perceive,
     /// with the AuditStore lock already dropped.
     pub(crate) async fn reason(&self, context: &CognitiveContext) -> Result<Intent, RegentError> {
-        // If there's no operator input and no urgent findings, just observe.
+        // If there's no operator input and nothing demanding attention, just
+        // observe. `ATTENTION_FLOOR`, not `INTERRUPT_FLOOR` — this cycle is
+        // already running, so the question is whether to think, not whether to
+        // wake. See `Severity`'s type docs (DECIDED-004 MEANWHILE-3).
         let has_urgent = context
             .officer_findings
             .iter()
-            .any(|f| f.severity == "Error" || f.severity == "Critical");
+            .any(|f| f.demands_attention());
 
         // Skip inference only when there's genuinely nothing to do:
         // no operator input, no urgent findings, no tool results from a
@@ -2134,10 +2137,12 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
         if !context.officer_findings.is_empty() {
             let is_conversation = context.pending_input.is_some();
             if is_conversation {
+                // `INTERRUPT_FLOOR` — the operator is speaking, so only
+                // findings worth breaking into that survive compression.
                 let critical: Vec<String> = context
                     .officer_findings
                     .iter()
-                    .filter(|f| f.severity == "Critical")
+                    .filter(|f| f.interrupts())
                     .map(|f| format!("[{}] {}: {}", f.severity, f.officer, f.summary))
                     .collect();
                 let total = context.officer_findings.len();
@@ -2310,10 +2315,12 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
         // Only fires on the first turn — once tool results exist, the
         // Regent has already acted and should now narrate.
         if context.pending_input.is_none() && context.tool_results.is_empty() {
+            // Same floor as `reason`'s guard above — if it was worth thinking
+            // about, it is worth being told to act on.
             let has_urgent = context
                 .officer_findings
                 .iter()
-                .any(|f| f.severity == "Error" || f.severity == "Critical");
+                .any(|f| f.demands_attention());
             if has_urgent {
                 parts.push(
                     "AUTONOMOUS CYCLE: No operator input. Officer findings above require your attention. \
@@ -2920,7 +2927,7 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
         if raw.contains(tool) {
             warn!(
                 tool,
-                raw_preview = crate::text::preview(&raw, 120),
+                raw_preview = crate::text::preview(raw, 120),
                 "parse_intent: recovered execute intent from malformed JSON"
             );
             return Some(Intent::Execute {
@@ -2962,7 +2969,7 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
     // One declaration, in `crate::tools`. Prefix-freedom of the names is
     // asserted there, which is what makes `starts_with` safe here.
     for tool in crate::tools::tool_names() {
-        if raw.starts_with(tool) {
+        if let Some(remainder) = raw.strip_prefix(tool) {
             if raw.len() == tool.len() {
                 // Exact match — no sanitization needed.
                 return (raw.to_string(), None);
@@ -2970,8 +2977,6 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
 
             // Tool name is a prefix of the raw value — there's garbage after it.
             // Try to extract params from the garbage.
-            let remainder = &raw[tool.len()..];
-
             // Common pattern: `","params":{"limit":5}}` or `", "params": ...`
             // Try to find a JSON object in the remainder.
             if let Some(brace_start) = remainder.find('{') {

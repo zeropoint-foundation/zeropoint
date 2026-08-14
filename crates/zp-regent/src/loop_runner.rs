@@ -193,7 +193,10 @@ const IDLE_THRESHOLD_SECS: u64 = 300; // 5 minutes
 ///
 /// The loop runs until shutdown is requested. It wakes on:
 /// 1. Operator input (immediate cycle, cancels background tasks).
-/// 2. Officer findings (immediate cycle if urgent).
+/// 2. Officer findings — immediate cycle only at `Severity::INTERRUPT_FLOOR`.
+///    Findings at `ATTENTION_FLOOR` are stored and reasoned about on the next
+///    scheduled cycle; they do not start one. "Urgent" is two thresholds, not
+///    one — see `Severity`'s type docs (DECIDED-004 MEANWHILE-3).
 /// 3. Timer (autonomous cycle — system awareness + harmony maintenance).
 ///
 /// `delegations` — the tools granted to the Regent at startup. Passed into
@@ -294,16 +297,17 @@ pub fn start_loop(
 
                 RegentMessage::OfficerFindings(findings) => {
                     latest_findings = findings;
-                    let has_critical = latest_findings.iter().any(|f| {
-                        matches!(
-                            f.severity,
-                            zp_officers::finding::Severity::Critical
-                        )
-                    });
-                    if !has_critical {
+                    // `INTERRUPT_FLOOR` — findings below it are retained in
+                    // `latest_findings` and reach the next scheduled cycle,
+                    // where `reason` applies `ATTENTION_FLOOR`. Continuing
+                    // here drops the cycle, not the finding.
+                    let has_interrupting = latest_findings
+                        .iter()
+                        .any(|f| f.severity.interrupts());
+                    if !has_interrupting {
                         continue;
                     }
-                    debug!("critical finding — triggering immediate cycle");
+                    debug!("finding at interrupt floor — triggering immediate cycle");
                     // Fall through to run_cycle below.
                 }
 
@@ -876,12 +880,12 @@ async fn run_cycle(
                     return CycleOutcome::Done(format!("error: audit store lock poisoned: {}", e));
                 }
             };
-            let chain_reader = ChainReader::new(&*store);
+            let chain_reader = ChainReader::new(&store);
             match regent_guard.perceive(
                 &chain_reader,
                 findings,
                 current_input.take(),
-                &delegations,
+                delegations,
                 system_awareness.clone(),
                 tool_results.clone(),
                 work_arc.clone(),
@@ -919,7 +923,7 @@ async fn run_cycle(
         // per COGNITIVE-INPUT-PLANE-2026-07.md Step 6. Structural only
         // (hashes, counts) — no content bloat on chain per cycle.
         if let Some(ref summary) = context.composition_summary {
-            last_composition_hash = emit_composition_receipt(&audit_store, summary);
+            last_composition_hash = emit_composition_receipt(audit_store, summary);
             last_composition_summary = Some(summary.clone());
         }
 
@@ -938,7 +942,7 @@ async fn run_cycle(
                 // act the accounting layer exists to make visible — the
                 // exit a bottom-of-function emit would silently drop.
                 emit_cognitive_act_receipt(
-                    &audit_store,
+                    audit_store,
                     last_composition_hash.as_deref(),
                     last_composition_summary.as_ref(),
                     None, // no intent — reasoning never produced one
@@ -952,7 +956,7 @@ async fn run_cycle(
         emit(event_tx, CognitiveEvent::new(Phase::InferenceEnd, reason_ms)
             .with_detail(format!("intent={}", intent.receipt_event())));
         emit(event_tx, CognitiveEvent::new(Phase::IntentParsed, 0)
-            .with_detail(format!("{}", intent.receipt_event())));
+            .with_detail(intent.receipt_event().to_string()));
         info!(reason_ms, turn, intent = intent.receipt_event(), "regent reason completed");
 
         // ── Fallback diagnostics ─────────────────────────────────
@@ -1167,7 +1171,7 @@ async fn run_cycle(
                 // COGNITIVE-MODE-AND-AGENCY-2026-07.md §3.1, each turn is
                 // one Deliberation; the flow spans them.
                 emit_cognitive_act_receipt(
-                    &audit_store,
+                    audit_store,
                     last_composition_hash.as_deref(),
                     last_composition_summary.as_ref(),
                     Some(intent.receipt_event()),
@@ -1277,7 +1281,7 @@ async fn run_cycle(
                         proposal_emitted: matches!(&intent, Intent::RequestApproval { .. }),
                     };
                     run_cognitive_observer(
-                        &audit_store,
+                        audit_store,
                         &response,
                         &context.standing_corrections,
                         &enacted,
@@ -1309,7 +1313,7 @@ async fn run_cycle(
                     "regent cycle complete"
                 );
                 emit_cognitive_act_receipt(
-                    &audit_store,
+                    audit_store,
                     last_composition_hash.as_deref(),
                     last_composition_summary.as_ref(),
                     Some(intent.receipt_event()),
@@ -1349,7 +1353,7 @@ async fn run_cycle(
     // earlier in the loop — so the last intent produced before falling out
     // of the loop was always Execute.
     emit_cognitive_act_receipt(
-        &audit_store,
+        audit_store,
         last_composition_hash.as_deref(),
         last_composition_summary.as_ref(),
         Some("execute"),
