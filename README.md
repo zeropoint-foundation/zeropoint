@@ -14,9 +14,21 @@
 
 AI agents are making real decisions — writing code, calling APIs, moving data across trust boundaries. Every agent harness tracks what happened differently, but none of them can *prove* it. Audit trails are proprietary, non-portable, and break the moment you switch tools.
 
-ZeroPoint is the trust layer that works across all of them. Every action produces a **signed receipt**. Every receipt chains into a **tamper-evident ledger**. Every participant — human, agent, service, or device — holds an **Ed25519 keypair**, not an account. The governance layer doesn't care which harness produced the action. The audit chain is continuous regardless of which agent framework you're running today or will switch to tomorrow.
+ZeroPoint is the trust layer that works across all of them. Actions crossing the host boundary produce a **signed receipt**. Every receipt chains into a **tamper-evident ledger**. Every participant — human, agent, service, or device — holds an **Ed25519 keypair**, not an account. The governance layer doesn't care which harness produced the action. The audit chain is continuous regardless of which agent framework you're running today or will switch to tomorrow.
 
 We don't compete with agent harnesses. We make them trustworthy.
+
+## What ZeroPoint Claims
+
+One invariant, stated narrowly enough to test:
+
+> **Every action crossing the ZeroPoint host boundary produces a signed, hash-chained receipt verifiable by a party that trusts neither the agent nor the harness that produced it.**
+
+And what it does **not** claim: it does not prevent effects reachable without crossing that boundary, does not assert the agent's reasoning is correct or safe, and does not defend against a compromised host or kernel. The invariant is not fully held today — [`docs/design/THREAT-MODEL-2026-08.md`](docs/design/THREAT-MODEL-2026-08.md) §6 states exactly where it fails, and [`docs/design/HOST-BROKER-2026-08.md`](docs/design/HOST-BROKER-2026-08.md) §10 sequences the remediation.
+
+We publish the gaps because a trust layer that overstates its guarantees has a category problem, not a marketing problem.
+
+**Status markers used below:** ◈ shipped and running · ◇ designed, not yet built.
 
 ## How It Works with Your Agent Framework
 
@@ -28,15 +40,15 @@ ZeroPoint integrates with agent harnesses as a two-layer extension — no forkin
     └────┬─────┘  └─────┬──────┘  └────┬────┘  └────┬────┘
          │              │              │             │
     ┌────▼──────────────▼──────────────▼─────────────▼────┐
-    │              @zeropoint/trace                        │
+    │           ◇ @zeropoint/trace                         │
     │   Passive receipt emission via MCP · hooks · events  │
     ├─────────────────────────────────────────────────────┤
-    │              @zeropoint/guard                        │
+    │           ◇ @zeropoint/guard                         │
     │   Capability checks before trust-boundary actions    │
     └────────────────────────┬────────────────────────────┘
                              │
     ┌────────────────────────▼────────────────────────────┐
-    │              ZeroPoint Core                          │
+    │            ◈ ZeroPoint Core                          │
     │                                                     │
     │  Identity ─── Receipts ─── Capabilities             │
     │     │            │              │                    │
@@ -47,15 +59,19 @@ ZeroPoint integrates with agent harnesses as a two-layer extension — no forkin
     ┌────────────┬───────────┼────────────┬───────────────┐
     │            │           │            │               │
     ▼            ▼           ▼            ▼               ▼
- Sentinel     Mesh      Fleet Mgmt    Cockpit      Hedera HCS
- (Router)   Network     & Delegation  Dashboard    (Anchoring)
+ ◈ Sentinel   ◈ Mesh    ◈ Fleet Mgmt  ◈ Cockpit    ◇ External
+  (Router)    Network   & Delegation   Dashboard     Anchor
 ```
 
-**Trace layer** — universal, passive, append-only. Hooks into any harness's event lifecycle to write provenance receipts on every tool call. Works via MCP (Model Context Protocol), hooks, or callbacks. A few hundred lines per adapter. This is the adoption wedge.
+**◇ Trace layer** — universal, passive, append-only. Hooks into any harness's event lifecycle to write provenance receipts on every tool call. Works via MCP (Model Context Protocol), hooks, or callbacks. A few hundred lines per adapter. This is the adoption wedge.
 
-**Guard layer** — harness-specific, active. Checks capability grants before trust-boundary actions. Can block unauthorized tool calls. The harness opts into being governed, not just observed. This is where the real governance value lives.
+**◇ Guard layer** — harness-specific, active. Checks capability grants before trust-boundary actions. Can block unauthorized tool calls. The harness opts into being governed, not just observed. This is where the real governance value lives.
 
-A single `zp-mcp-server` gives trace-layer coverage to any MCP-capable harness automatically.
+**Both layers are designed, not shipped.** The Rust prototype lives at `crates/zp-trace/`, is not a workspace member, and does not currently compile. Design notes: `docs/design/HARNESS-SURVEY-2026-08.md`, `docs/design/GOOSE-INTEGRATION-2026-08.md`. A `zp-mcp-server` giving trace-layer coverage to any MCP-capable harness is the intended shape and does not exist yet.
+
+`docs/design/HOST-BROKER-2026-08.md` §3.4 argues the guard layer should own the tool endpoint rather than hook the harness lifecycle — a hook the harness can skip is not a boundary.
+
+**◇ External Anchor** — `zp-anchor` defines the `TruthAnchor` trait. No concrete backend ships in this workspace today; Hedera HCS is the reference target.
 
 ## Get Started
 
@@ -111,7 +127,7 @@ docker run -d --name zp-sentinel -v sentinel-data:/data ghcr.io/zeropoint-founda
 | Primitive | What it does |
 |-----------|-------------|
 | **Identity** | Ed25519 + X25519 keypairs. You are your key, not your account. Destination-hash addressing for mesh routing. |
-| **Receipts** | Blake3 hash-chained, Ed25519-signed records of every action. Tamper-evident by construction. 16µs per signed receipt. |
+| **Receipts** | Blake3 hash-chained, Ed25519-signed records of governed actions. Tamper-evident by construction. 16µs per signed receipt. |
 | **Capabilities** | Scoped, time-bound, delegatable authorization grants with constraint evaluation. Standing delegation with automated lease renewal. |
 | **Governance** | Constitutional rules enforced at the protocol level. Guard → Policy → Audit pipeline. Non-removable invariants. |
 | **Fleet** | Heterogeneous node registry with heartbeat, lease renewal, policy distribution. Rust, Python, and TypeScript nodes in the same mesh. |
@@ -125,8 +141,10 @@ This is not vaporware. The fleet is live:
 - **ZP Sentinel** (Python) on ASUS RT-AX58U router — DNS monitoring, device tracking, anomaly detection, Ed25519 mesh identity
 - **Fleet heartbeat** every 30 seconds between Sentinel and Core
 - **Standing delegation** with automated lease renewal every 2 hours, Ed25519-signed
-- **22+ Rust crates**, 700+ tests, all passing
+- **44 Rust crates** in the workspace, 700+ tests, all passing
 - **16µs** per signed receipt, **47K entries/sec** chain verification
+
+What is *not* running is marked ◇ above and enumerated in [`docs/design/THREAT-MODEL-2026-08.md`](docs/design/THREAT-MODEL-2026-08.md) §6.
 
 ## Project Structure
 
@@ -140,8 +158,11 @@ zeropoint/
 │   ├── zp-mesh          # Mesh networking: identity, links, routing, discovery
 │   ├── zp-receipt       # Receipt building, signing, hashing, verification
 │   ├── zp-pipeline      # GovernanceGate: Guard → Policy → Execute → Audit
+│   ├── zp-host          # The host boundary: gated spawn / write / http
+│   ├── zp-keys          # Genesis → Operator → Agent Ed25519 certificate chain
+│   ├── zp-discipline    # Discipline-pin tests: structural invariants, CI-enforced
 │   ├── zp-server        # Axum HTTP/WebSocket API server + fleet management
-│   ├── zp-anchor        # Truth anchoring trait (Hedera HCS reference backend)
+│   ├── zp-anchor        # Truth anchoring trait (no backend shipped — see ◇)
 │   ├── zp-verify        # Chain verification + trajectory attestation
 │   ├── zp-cli           # Command-line interface (serve, verify, doctor, scan, delegate)
 │   └── execution-engine # Sandboxed command execution
@@ -204,6 +225,9 @@ The [zeropoint.global](https://zeropoint.global) site includes live demos:
 |----------|------|
 | Project Site | [zeropoint.global](https://zeropoint.global) |
 | Whitepaper | [Portable Trust Thesis](https://zeropoint.global/ZeroPoint_Whitepaper_v1.0.pdf) |
+| **Threat Model** | [docs/design/THREAT-MODEL-2026-08.md](docs/design/THREAT-MODEL-2026-08.md) |
+| Host Boundary Design | [docs/design/HOST-BROKER-2026-08.md](docs/design/HOST-BROKER-2026-08.md) |
+| Isolation Precedent | [docs/design/WHONIX-LESSONS.md](docs/design/WHONIX-LESSONS.md) |
 | Sentinel Docs | [zeropoint.global/sentinel](https://zeropoint.global/sentinel) |
 | Deployment Guide | [deploy/README.md](deploy/README.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |

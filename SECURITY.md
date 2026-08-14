@@ -35,10 +35,16 @@ We take the following seriously:
 - Consensus mechanism bypasses
 - Merkle proof or commitment validation failures
 
-### WASM Sandbox Escapes
-- Escapes from the WebAssembly sandbox environment
-- Unauthorized access to host resources
+### WASM Policy Module Escapes
+- Escapes from the WebAssembly sandbox that hosts **policy modules**
 - Memory safety violations in module execution
+- Fuel-exhaustion or trap behaviour that changes a policy outcome
+
+Note the scope: wasmtime sandboxes *policy modules*, not agent code. Agent-directed
+code runs as an OS subprocess (`crates/execution-engine/`), whose isolation is
+`unshare --net --pid --fork` on Linux and, by default, none on macOS. Weaknesses
+there are execution-sandbox issues, not WASM issues, and §6 of the threat model
+already records that filesystem confinement is unimplemented.
 
 ### Constitutional Constraint Violations
 - Bypasses of the HarmPrincipleRule
@@ -81,9 +87,21 @@ A typical timeline is 90 days from initial report to public disclosure, but we'l
 
 ## Threat Model
 
-ZeroPoint's threat model and security assumptions are detailed in the [ZeroPoint Whitepaper](./docs/whitepaper.md), Section 6: Threat Model and Guarantees.
+**Read this first: [`docs/design/THREAT-MODEL-2026-08.md`](./docs/design/THREAT-MODEL-2026-08.md).**
 
-Refer to this before reporting to ensure the issue is within our scope of protection.
+It states the single invariant ZeroPoint claims, enumerates adversary classes by cost to mount, lists the trusted computing base component by component, and — most relevant to a reporter — publishes both what we do not defend against (§5) and where the invariant currently fails (§6).
+
+The invariant, in short:
+
+> Every action crossing the ZeroPoint host boundary produces a signed, hash-chained receipt verifiable by a party that trusts neither the agent nor the harness that produced it.
+
+An issue is in scope if it breaks that sentence. Please check §5 and §6 before reporting — §6 in particular is a published list of known gaps, and a report that rediscovers one of them is welcome but will be closed as known rather than treated as a new finding.
+
+## What We Already Know Is Broken
+
+Publishing known gaps is deliberate. A trust layer that hides them has a category problem, not a marketing problem. The current list lives in [`THREAT-MODEL-2026-08.md`](./docs/design/THREAT-MODEL-2026-08.md) §6 and includes, as of August 2026: in-process advisory enforcement, chain append as a companion rather than a precondition of the effect, WASM policy module errors failing open, `Warn`/`Review` decisions auto-approving, self-asserted trust tiers, no external anchor backend, and no filesystem confinement in the execution sandbox.
+
+Remediation is sequenced in [`HOST-BROKER-2026-08.md`](./docs/design/HOST-BROKER-2026-08.md) §10.
 
 ## Constitutional Context
 
@@ -109,4 +127,4 @@ If you're unsure whether something qualifies as a security issue, email us. It's
 ---
 
 **Security contact**: ken@thinkstreamlabs.ai
-**Last updated**: February 2026
+**Last updated**: August 2026
