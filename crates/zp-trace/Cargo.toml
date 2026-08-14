@@ -1,0 +1,26 @@
+[package]
+name = "zp-trace"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Harness-agnostic trace and guard — the ToolGate contract ZeroPoint installs in a coding harness's dispatch path"
+
+[dependencies]
+# Workspace — substrate access. Deliberately narrow: this crate must be
+# linkable into a foreign harness's dependency graph without dragging in
+# zp-server or the Regent.
+zp-receipt = { path = "../zp-receipt" }
+zp-core = { path = "../zp-core" }
+
+async-trait = "0.1"
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
