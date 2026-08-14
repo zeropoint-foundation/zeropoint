@@ -184,3 +184,4 @@ models/**/*.pth
 models/**/.DS_Store
 docs/_to_delete/
 docs/_to_delete/
+_to_delete/
