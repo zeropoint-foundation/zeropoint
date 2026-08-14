@@ -375,8 +375,7 @@ fn load_operator_via_sovereignty_provider(
 fn load_genesis_secret_from_provider(
     genesis_record_path: &std::path::Path,
 ) -> Result<[u8; 32], String> {
-    zp_keys::load_sovereign_root(genesis_record_path)
-        .map(|s| *s)
+    zp_keys::load_sovereign_root(genesis_record_path).copied()
         .map_err(|e| format!("{}", e))
 }
 
@@ -3075,7 +3074,16 @@ async fn delegate_handler(
         // Claim 4: inherit the parent's tool set when delegating a ToolCall grant.
         // The child may further restrict it via body.scope.
         GrantedCapability::ToolCall { tools } => tools.clone(),
-        _ => vec!["*".to_string()],
+        // Exhaustive on purpose — no `_` arm. The previous `_ => vec!["*"]`
+        // meant a child delegated from a CredentialAccess / MeshSend / Custom
+        // parent, with no explicit scope in the request, inherited a wildcard.
+        // Delegation must narrow; an unspecified scope inherits the parent's,
+        // and a parent whose capability carries no scope list inherits nothing.
+        GrantedCapability::CredentialAccess { credential_refs } => credential_refs.clone(),
+        GrantedCapability::MeshSend { destinations } => destinations.clone(),
+        // `Custom` has no scope list. Empty is the fail-closed reading: the
+        // child is granted nothing until the caller states a scope explicitly.
+        GrantedCapability::Custom { .. } => Vec::new(),
     });
 
     let capability = match body.capability.to_lowercase().as_str() {
@@ -3711,7 +3719,7 @@ async fn vault_test_handler(
     };
 
     let mut req = client.get(probe_url);
-    if provider.to_ascii_lowercase() == "anthropic" {
+    if provider.eq_ignore_ascii_case("anthropic") {
         // Anthropic uses x-api-key + anthropic-version headers
         req = req
             .header("x-api-key", &credential)

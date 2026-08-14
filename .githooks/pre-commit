@@ -54,6 +54,32 @@
 # known-red state, and say so in the commit message. Silent bypassing is how
 # a pin becomes decoration.
 
+# # The mode this hook was in on 2026-08-14
+#
+# It was not executable, and had not been for an unknown span. Git skips a
+# non-executable hook with a *hint*, not an error — so two commits landed
+# reporting success while the pins never ran. Nothing was red: the workspace
+# suite had been run green by hand minutes earlier. The guarantee was absent,
+# not the correctness, which is the harder absence to notice.
+#
+# This is SEAM-010's own finding one level down. That finding was that a pin
+# can be correct, wired, and unread. This one is that the *reader* can be
+# present, correct, and unrun. Neither is visible from inside the thing that
+# failed, which is why both were found by someone looking at something else.
+#
+# Two consequences worth keeping:
+#
+# 1. `core.hooksPath` is version-controlled; the executable bit is not,
+#    unless it is recorded in the tree. `git update-index --chmod=+x
+#    .githooks/pre-commit` does that, so a fresh clone gets a hook that runs.
+#    A `chmod` on the working file alone fixes this machine and no other.
+#
+# 2. The cargo-missing branch below exits 0 by design, and says so plainly.
+#    That is right for a contributor without a toolchain — and it means a
+#    successful commit is never evidence the pins ran. The only evidence is
+#    the "pre-commit: pins green." line. If you did not see it, they did not
+#    run, and both ways of not running look identical from the exit code.
+
 set -e
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -86,3 +112,56 @@ if ! cargo test -p zp-discipline --no-fail-fast --quiet; then
 fi
 
 echo "pre-commit: pins green."
+
+# ── `just check` staleness — warn, never block ───────────────────────────────
+#
+# Why (2026-08-12): DECIDED-005 moved the pins from a reader nobody ran (CI,
+# behind a push that had not happened in 93 commits) to one that fires every
+# commit. Clippy and fmt stayed in `just check`, described as "run on a cadence
+# you choose" — which is the same shape one level up. A reader you have to
+# remember is a reader that goes unread.
+#
+# It did. By 2026-08-12 the workspace had ~60 clippy diagnostics nobody had
+# seen. Fifty-eight were style. One was CROSS-USER-01 (SEAM-012): six CLI paths
+# whose `unused variable: keyring` warning was the visible half of the
+# `chmod_700` that kept `audit.db` from being world-readable. `cargo test` was
+# green throughout.
+#
+# The trigger is the useful part. That debt did not accumulate because time
+# passed — it accumulated because **clippy got newer**. `manual_contains` did
+# not exist when the code it flags was written. So the signal is a toolchain
+# change, not an age, and age is only the backstop.
+#
+# This warns. It does not block, and it must not: the whole reason pre-commit
+# runs pins only is that a hook which costs minutes gets disabled within a week,
+# and a disabled hook is worse than none because the repo still contains one.
+GIT_DIR="$(git rev-parse --git-dir)"
+MARKER="$GIT_DIR/zp-last-check"
+NOW_RUSTC="$(rustc --version 2>/dev/null || echo unknown)"
+
+warn_check() {
+    echo ""
+    echo "pre-commit: NOTE — $1"
+    echo "pre-commit: run 'just check' (build + pins + clippy + fmt) when convenient."
+    echo ""
+}
+
+if [ ! -f "$MARKER" ]; then
+    warn_check "'just check' has no recorded successful run."
+else
+    LAST_RUSTC="$(head -n 1 "$MARKER" 2>/dev/null || echo unknown)"
+    LAST_WHEN="$(sed -n '2p' "$MARKER" 2>/dev/null || echo unknown)"
+    if [ "$LAST_RUSTC" != "$NOW_RUSTC" ]; then
+        warn_check "toolchain changed since the last 'just check'.
+pre-commit:   was: $LAST_RUSTC
+pre-commit:   now: $NOW_RUSTC
+pre-commit: New clippy versions add lints. This is exactly how ~60 diagnostics
+pre-commit: accumulated unread before 2026-08-12 — one of them load-bearing."
+    else
+        # Age backstop. Portable across BSD/GNU date by comparing file mtime
+        # to a marker created 7 days ago; `find -mtime` is in POSIX.
+        if [ -n "$(find "$MARKER" -mtime +7 2>/dev/null)" ]; then
+            warn_check "last 'just check' was $LAST_WHEN (over 7 days ago)."
+        fi
+    fi
+fi

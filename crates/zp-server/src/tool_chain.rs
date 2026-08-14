@@ -263,7 +263,15 @@ pub fn emit_delegation_receipt(
             zp_core::GrantedCapability::CredentialAccess { credential_refs } => {
                 credential_refs.join(",")
             }
-            _ => "*".to_string(),
+            // Exhaustive on purpose — no `_` arm. The previous `_ => "*"` meant a
+            // narrow `ToolCall { tools: ["bash"] }` grant was chained inside a
+            // *signed* delegation receipt claiming `capability_id: "*"`. An
+            // auditor reading the receipt saw a wildcard where the grant was
+            // narrow. Adding a variant to `GrantedCapability` must break this
+            // build rather than silently widen a receipt.
+            zp_core::GrantedCapability::ToolCall { tools } => tools.join(","),
+            zp_core::GrantedCapability::MeshSend { destinations } => destinations.join(","),
+            zp_core::GrantedCapability::Custom { name, .. } => name.clone(),
         };
         let mut receipt = Receipt::delegation(&grant.grantor)
             .status(ReceiptStatus::Success)
