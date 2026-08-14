@@ -71,6 +71,43 @@ pub(crate) fn genesis_keychain_account() -> &'static str {
 /// Format: [0x01][12-byte nonce][ChaCha20-Poly1305 ciphertext+tag].
 const OPERATOR_BLOB_VERSION: u8 = 0x01;
 
+/// Create the key home and lock its permissions down to owner-only.
+///
+/// Creates `base_dir` and `base_dir/agents`, then sets mode 0700 on both **and
+/// on `base_dir`'s parent** — normally `~/ZeroPoint` — so that `audit.db` and
+/// sibling state are not readable by other local accounts. That parent chmod is
+/// **CROSS-USER-01**, and it is the reason this function is public.
+///
+/// # Why this is a named function rather than a side effect of [`Keyring::open`]
+///
+/// Until 2026-08-12 this work lived inside `Keyring::open`, and five CLI paths
+/// invoked it by calling `open_keyring()` and discarding the result — the
+/// binding was dead after the 2026-07-18 composed-loader refactor, but the
+/// hardening was not. Every one of those sites opened `audit.db` immediately
+/// afterwards, under the directory this call protects.
+///
+/// The compiler reported all five as `unused variable: keyring`. Prefixing them
+/// with `_` would have preserved the behaviour and left five bindings that read
+/// as dead code; deleting them would have silently regressed CROSS-USER-01 with
+/// no failing test and no evidence anywhere but file permissions on disk.
+///
+/// So: call this when you are about to write sovereign state under
+/// `~/ZeroPoint` and need the directory to exist and be private. It says what it
+/// does at the call site, which the old form did not.
+pub fn harden_key_home(base_dir: &Path) -> Result<(), KeyError> {
+    std::fs::create_dir_all(base_dir)?;
+    std::fs::create_dir_all(base_dir.join("agents"))?;
+    // Lock down directory perms so other local accounts can't even list
+    // the keyring. Also tighten the parent (~/ZeroPoint) so audit.db
+    // and sibling state aren't cross-user readable (CROSS-USER-01).
+    let _ = chmod_700(base_dir);
+    let _ = chmod_700(&base_dir.join("agents"));
+    if let Some(parent) = base_dir.parent() {
+        let _ = chmod_700(parent);
+    }
+    Ok(())
+}
+
 /// Set restrictive permissions on a directory (owner-only).
 #[cfg(unix)]
 fn chmod_700(path: &Path) -> std::io::Result<()> {
@@ -181,16 +218,7 @@ impl Keyring {
     /// Open or create a keyring at the given directory.
     pub fn open(base_dir: impl Into<PathBuf>) -> Result<Self, KeyError> {
         let base_dir = base_dir.into();
-        std::fs::create_dir_all(&base_dir)?;
-        std::fs::create_dir_all(base_dir.join("agents"))?;
-        // Lock down directory perms so other local accounts can't even list
-        // the keyring. Also tighten the parent (~/ZeroPoint) so audit.db
-        // and sibling state aren't cross-user readable (CROSS-USER-01).
-        let _ = chmod_700(&base_dir);
-        let _ = chmod_700(&base_dir.join("agents"));
-        if let Some(parent) = base_dir.parent() {
-            let _ = chmod_700(parent);
-        }
+        harden_key_home(&base_dir)?;
         Ok(Self { base_dir })
     }
 

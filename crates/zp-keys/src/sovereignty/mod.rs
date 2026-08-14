@@ -1071,8 +1071,16 @@ mod tests {
         // When genesis.json doesn't exist the fast path (Keychain) may also
         // fail (no item in test namespace), but the provider path gives a
         // clearer error. This test verifies the error message is actionable.
-        let dir = tempfile::tempdir().unwrap();
-        let genesis_path = dir.path().join("genesis.json");
+        //
+        // The guard is load-bearing, not decoration. Until 2026-08-12 this
+        // test took no guard at all, so it installed no mock credential store
+        // and read the operator's real Keychain — meaning it passed or failed
+        // according to whether some *other* test had happened to install the
+        // mock first. That is a scheduling-dependent flake, and on a machine
+        // with a provisioned Genesis it resolves a real root and the assertion
+        // below is simply false.
+        let zp = crate::test_sync::isolated_zp_home();
+        let genesis_path = zp.path().join("genesis.json");
         // Do NOT write genesis.json
         let result = load_sovereign_root(&genesis_path);
         // Either the Keychain fast path failed or the provider path failed;

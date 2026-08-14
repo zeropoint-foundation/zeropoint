@@ -34,6 +34,22 @@ pub fn open_keyring() -> Result<Keyring, zp_keys::error::KeyError> {
     Keyring::open(resolve_zp_home().join("keys"))
 }
 
+/// Ensure `~/ZeroPoint` and `~/ZeroPoint/keys` exist and are owner-only.
+///
+/// Call this before creating sovereign state under `~/ZeroPoint` — most
+/// importantly `audit.db`, whose confidentiality depends on the parent
+/// directory being 0700 (CROSS-USER-01).
+///
+/// Prefer this over calling [`open_keyring`] for its side effects. Five CLI
+/// paths did the latter until 2026-08-12: after the composed-loader refactor
+/// (2026-07-18) they no longer used the `Keyring` value, so the compiler
+/// reported `unused variable: keyring`, while the call was still the only thing
+/// hardening the directory each of them was about to write into. See
+/// [`zp_keys::harden_key_home`] for the full note.
+pub fn harden_zp_home() -> Result<(), zp_keys::error::KeyError> {
+    zp_keys::harden_key_home(&resolve_zp_home().join("keys"))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sovereignty-composed key loaders (2026-07-18)
 //
@@ -958,14 +974,14 @@ pub fn keys_derive_foundation_edge() -> i32 {
     use base64::Engine;
     use ed25519_dalek::SigningKey;
 
-    let keyring = match open_keyring() {
-        Ok(k) => k,
-        Err(e) => {
-            eprintln!("  Failed to open keyring: {}", e);
-            eprintln!("  Run `zp init` first to bootstrap your environment.");
-            return 1;
-        }
-    };
+    // Genesis material comes from the sovereignty provider, not the keyring
+    // (see the composed-loader note above) — but this path writes under
+    // ~/ZeroPoint, so the directory must exist and be private first.
+    if let Err(e) = harden_zp_home() {
+        eprintln!("  Failed to prepare the ZeroPoint home directory: {}", e);
+        eprintln!("  Check that ~/ZeroPoint is writable by your user.");
+        return 1;
+    }
 
     let genesis_secret = match load_genesis_secret_composed() {
         Ok(g) => g,

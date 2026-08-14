@@ -479,7 +479,7 @@ pub(crate) fn save_enrollment(metadata: &EnrollmentMetadata) -> Result<(), KeyEr
     let filename = format!("{}_enrollment.json", metadata.mode);
     let json = serde_json::to_string_pretty(metadata)
         .map_err(|e| KeyError::Serialization(e.to_string()))?;
-    crate::secret_file::write_atomic(&dir.join(&filename), json.as_bytes())?;
+    crate::secret_file::write_atomic(dir.join(&filename), json.as_bytes())?;
     Ok(())
 }
 
@@ -516,7 +516,7 @@ pub(crate) fn load_enrollment(mode: &str) -> Result<EnrollmentMetadata, KeyError
 pub(crate) fn save_encrypted_secret(mode: &str, ciphertext: &[u8]) -> Result<(), KeyError> {
     let dir = sovereignty_dir()?;
     let filename = format!("{}_genesis.encrypted", mode);
-    crate::secret_file::write_atomic(&dir.join(&filename), ciphertext)?;
+    crate::secret_file::write_atomic(dir.join(&filename), ciphertext)?;
     Ok(())
 }
 
