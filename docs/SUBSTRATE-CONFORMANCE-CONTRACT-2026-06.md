@@ -8,6 +8,16 @@ implementation-plural.*
 *Updates to this doc are architectural acts and should be treated as
 such — not edited casually.*
 
+*Indexed 2026-08-14 as Tier 2 (Meta-discipline). It had never appeared in
+`CANONICAL-CORPUS-INDEX-2026-07.md` and therefore fell under the Tier-3
+catch-all — "read as historical unless explicitly reclassified" — which
+contradicted the hub status this header declares and would have made the
+2026-08-14 external-falsifier note an amendment to a frozen document.
+Resolved in favour of the header. Owed: an explicit declaration of which
+KEEL sections this contract elaborates, since it predates the July 2026
+KEEL declaration; and a reconciliation of its "eight principles" with
+KEEL's nine.*
+
 ---
 
 ## 1. What this doc is
@@ -108,6 +118,58 @@ Mechanism: the eight delegation invariants in `DelegationChain::verify()`.
 Falsifier: a delegation chain that widens authority anywhere along its
 length. Currently believed to hold; not yet adversarially tested under
 full delegation pressure.
+
+**External falsifier vocabulary (added 2026-08-14).**
+`draft-reece-wimse-cross-org-delegation` — an IETF **individual**
+Internet-Draft, -00 published 22 June 2026, marked on its own face as
+not endorsed by the IETF and carrying no standards standing — states
+nine requirements for cross-organisational agent delegation and
+explicitly declines to specify a solution. Four are this section's
+discipline written by someone with no knowledge of ZeroPoint, which is
+worth more than an internally-authored falsifier because it lets Claims
+2 and 4 be scored by a stranger.
+
+- **R1** — a relying party verifies *from the conveyed authority alone*
+  that no hop exceeds its predecessor. Mechanism here:
+  `DelegationChain::verify()` walks parent-link, depth increment, depth
+  ceiling, grantor-equals-parent's-grantee,
+  `parent.capability.contains(child.capability)`, and lease
+  non-escalation. ZP passes on its face. One subtlety worth carrying
+  rather than glossing: ZP verifies with the **whole chain in hand**,
+  where R1 asks what a relying party can verify **from the credential it
+  was handed**. Same property, different possession assumption — and the
+  difference is what an offline third-party verifier meets first.
+- **R3** — an authorization decision without a synchronous call to the
+  originating organization on the critical path. ZP is structurally
+  stronger: there is no originating organization.
+- **R7** — revocation verifiable offline and **whose staleness is
+  bounded**, so a relying party can fail safe. Revocation here is
+  chain-anchored and offline-verifiable; *bounded staleness under
+  partition* is not specified anywhere the corpus currently reaches.
+  **Treat R7 as the open one.**
+- **R8** — each participant's record resistant to undetectable
+  alteration, the records composing into an end-to-end account of an
+  action's provenance. This is Claim 2, whose status above is "mechanism
+  exists; not yet load-tested against adversarial peers." R8 supplies
+  that load test a vocabulary that did not originate here.
+
+**Where it diverges, and why that matters more than the agreement.** R2
+roots verification in another organization's trust anchor: the principal
+is bound but not sovereign. The draft's §7 names substitution of a
+relying party's trust root as the attack a solution must prevent, while
+rooting every chain in an institution. That is the Sovereign/Companion
+axis of `SUBSTRATE-FORM-2026-07` arriving at the delegation layer — see
+that document's §"Trust-chain reach is stated per layer". Recording the
+convergence without recording the divergence would be the misreading:
+the mechanisms are converging and the root question is untouched.
+Three sweeps across the WIMSE, OAuth and AIP drafts and OIDC-A have
+found no draft that roots the chain in the principal's own key.
+
+Source: `AI-LANDSCAPE-SIGNAL-2026-07.md` §"Signal 5". Read in full at
+datatracker by the landscape sweep; the requirement text above is that
+reading, not a re-read. Confidence is high on what the draft says and
+low on what it becomes — individual drafts frequently expire without
+issue, which is why nothing above is a claim change.
 
 ### The eight principles
 

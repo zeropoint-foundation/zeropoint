@@ -18,7 +18,7 @@ This document specifies the three Forms — Sovereign, Appliance, Companion — 
 
 ## Two axes: sovereignty and compute capacity
 
-Substrate Form describes *where the trust chain is rooted* — firmware → boot chain → substrate. Sovereignty is a property of the trust chain, not of the hardware's compute capacity. Independent of Form, a sovereign device has some amount of local inference capacity, and that capacity may or may not be sufficient for the cognitive work its Regent needs to do.
+Substrate Form describes *where the boot trust chain is rooted* — firmware → boot chain → substrate. **Amended 2026-08-14:** the boot chain is one of three roots a running substrate holds, and Form as first written named only it; §"Trust-chain reach is stated per layer" below refines this definition rather than replacing it. Sovereignty is a property of the trust chain, not of the hardware's compute capacity. Independent of Form, a sovereign device has some amount of local inference capacity, and that capacity may or may not be sufficient for the cognitive work its Regent needs to do.
 
 These two axes are independent, and it is a first-order design error to conflate them.
 
@@ -26,6 +26,29 @@ These two axes are independent, and it is a first-order design error to conflate
 - A Companion-Form Mac Studio with 128GB unified memory has *high compute capacity* — capable of running large local models — even though its trust root remains Apple's.
 
 Sovereignty is decided by Form; cognitive capacity is sourced separately.
+
+### Trust-chain reach is stated per layer
+
+**Amended 2026-08-14 following external signal** (`AI-LANDSCAPE-SIGNAL-2026-07.md` §"Signal 5"). A refinement of the first axis, not a third axis: the sovereignty axis is unchanged in kind, and what changes is that its reach is stated per layer rather than as one chain.
+
+"Sovereignty is decided by Form" above governs the **boot layer** and only the boot layer. A running substrate has three roots, and an operator can hold different ones at each:
+
+| Layer | What the root answers | Canonical position | Specified in |
+|---|---|---|---|
+| **Boot** | what may execute at all, and who signed the stack beneath the substrate | operator-enrolled keys, measured boot, Genesis on a hardware token | this document |
+| **Capability admission** | what may be added to a *running* substrate, and on whose say-so | the operator's signature is the only admitting authority; a third party's attestation is evidence, never authority; registries are advisory | `EXTENSION-SURFACE-2026-07` §"Distribution model", `QUARANTINE-PLANE-2026-07` §"The admission ceremony" |
+| **Delegation verification** | whose authority a chain traces back to, and whom a relying party must trust in order to check it | every chain roots in the operator's Genesis; no institutional anchor is consulted | KEEL Part VII, `DelegationChain::verify()`, `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06` Claim 4 |
+
+**The rule this refinement adds: a Form claim is complete only when all three roots are stated, and Form names the first.** The three Forms below are unchanged and their "Trust chain reach" bullets remain correct — they describe the boot layer, which is what Form has always meant. What was missing is that the upper two are *independently held*, and that a Form name alone does not disclose them.
+
+**The failure this exists to make visible.** A Sovereign-Form operator whose substrate admits only vendor-signed capabilities has an operator-rooted boot chain beneath a vendor-rooted capability layer. Nothing in the substrate today surfaces that, and Form Disclosure is silent on Sovereign Form by design — so the most sovereign Form is the one where the divergence is least visible. That is inverted, and §"Form Disclosure" is amended accordingly.
+
+**Why the layers are named now.** The industry has begun building attenuated delegation and signed capability artifacts, and each instance roots in an institution rather than in the principal: capability artifacts signed against a vendor certificate and catalogued by that vendor; cross-organisational delegation verified against "another organization's trust anchor," with the principal bound as a claim carried inside an institutional credential. These are the Companion-Form trust posture arriving at layers above the operating system. The substrate has held positions at both layers for a year — they are in the table above — but expressed them as properties of the extension surface and of the delegation model rather than as *sovereignty*, which is what they are. Naming them here is the correction.
+
+**What this does not change.** The compute-capacity axis is untouched. No Form is redefined, no Form gains or loses a property, and no graduation path changes. The three roots are not three axes: they are one axis — where trust is rooted — read at three layers of the same substrate.
+
+
+### Cognitive capacity is sourced separately
 
 The substrate handles this via three *inference sources* the active Regent orchestrates:
 
@@ -77,6 +100,12 @@ Appliance Form disclosure is lighter but present:
 > You are running Appliance Form. Sovereign compute runs on the appliance. Local state on this device remains in your vendor's permitted scope until synced to the appliance.
 
 Sovereign Form disclosure is silence — the canonical form does not need to explain itself.
+
+**Amended 2026-08-14.** Sovereign-Form silence covers the **boot** trust chain — the layer Form names. It does not extend to the capability-admission or delegation-verification roots (§"Trust-chain reach is stated per layer"). Where a substrate's upper-layer root diverges from its boot root, the divergence is disclosable at every Form, including Sovereign:
+
+> Capabilities on this substrate are admitted against <party>'s trust root, not your own. You can verify what <party> has signed; you cannot admit what it has not signed, or decline what it has. Your boot chain is sovereign; this layer is not.
+
+The invariant is unchanged in principle and completed in reach: a Form claim that is honest about the boot chain while silent about a vendor-held capability root is the same lie the invariant already forbids, told one layer up.
 
 Form Disclosure is a Layer A invariant. Compatibility mode without honest disclosure is not a compatibility mode; it is a lie about what the substrate is.
 
@@ -254,6 +283,7 @@ Regent's persona is Form-invariant and capacity-invariant. Her *what* is the sam
 The following are deliberately unresolved and will close as the empirical program iterates.
 
 - **Practical floor for local inference.** Unknown as of 2026-07. Empirical program will map this out per hardware tier and model tier. The floor is not fixed — quantization improvements, smaller-better model releases, and rally protocol maturity all move it over time. Design assumption: the floor is *low enough that a $75 Pi 5 is a viable Regent-presence host*, sourcing heavy inference via rally or cloud mandate. Confirm empirically.
+- **Per-layer root disclosure trigger.** §"Trust-chain reach is stated per layer" makes upper-layer divergence disclosable at every Form, including Sovereign. What *detects* the divergence is unspecified. The substrate would have to know that an admitted capability's signature chain terminates outside the operator's Genesis — which the quarantine plane observes at admission and does not retain as a Form-level property. Two shapes: a **derived** Form-reach state computed from admission receipts, or a **declared** operator statement checked against them. Prefer derived; a declared statement can be honest and stale, which is the failure mode Disclosure exists to prevent. Composes with `EXTENSION-SURFACE` E9a (`quarantine:attestation:*` carrying the attesting party's identity), which is the receipt such a derivation would read.
 - **Firmware attestation strategy.** Coreboot, Heads, or vendor UEFI with operator-enrolled keys. Coreboot gives deeper attestation but limited hardware support; Heads is more mature for supported ThinkPads; vendor UEFI is broadest but shallower. Likely: support all three, canonical form recommends Heads on supported hardware, coreboot on hardware where it works, vendor UEFI as fallback with reduced attestation reach.
 - **GPU / accelerator inclusion.** Local inference on Sovereign Form wants GPU. NVIDIA firmware is proprietary; AMD is more open; Intel Arc is emerging. Impacts inference-cost story and Regent's local-vs-cloud decisions.
 - **Wireless story.** Wi-Fi firmware is proprietary on almost all chipsets. Sovereign Form on wireless-only hardware has a firmware-trust gap. Options: canonical form recommends Ethernet where possible; acknowledge the wireless firmware gap in Form Disclosure at Sovereign level; investigate specific chipsets with open firmware.
@@ -266,7 +296,7 @@ The following are deliberately unresolved and will close as the empirical progra
 Immediate design work:
 
 1. `OBSERVATION-PLANE-2026-07.md` — six observation surfaces, delegation scopes, composition with Forms (drafted next).
-2. KEEL Part XV — this doc's declarations elevated to invariant status.
+2. KEEL Part XV — this doc's declarations elevated to invariant status. Includes the 2026-08-14 per-layer refinement: Part XV should state trust-chain reach per layer, so that a Form claim carrying only a boot root is incomplete at the invariant level and not merely under-described here.
 3. `HARDWARE-GENESIS-2026-07.md` **(not yet written)** — YubiKey / Nitrokey / Trezor selection, WebAuthn / OpenPGP interface, ceremony flow, recovery quorum.
 4. `FORM-GRADUATION-2026-07.md` **(not yet written)** — ceremony protocol for each graduation path, chain replication details, rollback semantics.
 

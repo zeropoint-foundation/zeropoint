@@ -119,12 +119,16 @@ Emits `quarantine:verification_failed:<surface>:<hash>` receipt on fail with:
 - What failed
 - Details for operator diagnosis
 
+**Third signature state (added 2026-08-14; `AI-LANDSCAPE-SIGNAL-2026-07.md` §"Signal 5", E9a).** Signature verification above is binary — Genesis-derivable or not — and an artifact signed verifiably by a party the operator has no trust path to falls to *not*. As vendor-signed capability artifacts become the industry norm, that discards evidence rather than defending against it. Verification therefore records a third outcome: **verifiable, non-Genesis-derivable**, emitted as `quarantine:attestation:<surface>:<hash>` with the attesting party, the verification result, the attestation's own claims, and an explicit `authority: none` marker. It does not satisfy the signature check, does not advance the ceremony, and is never read by the gate — it is evidence placed in front of the operator at Step 3 and retained on chain so that a later compromise of the attesting party is traceable to everything it vouched for. Specified in `EXTENSION-SURFACE-2026-07` §"Delegation semantics".
+
+
 ### Step 3: operator delegation ceremony
 
 For admission to complete, the operator must sign a delegation receipt granting the artifact's runtime scope. Operator reviews:
 - Quarantine entry receipt (what came in and from where)
 - Verification receipt (what passed)
 - Declared capabilities (what the artifact says it needs)
+- Any `quarantine:attestation:*` receipts — third-party attestations, named and marked `authority: none`
 - Optional: operator can narrow the granted scope below the declared
 
 Operator signs `delegation:admit:<surface>:<hash>` receipt with:
@@ -237,6 +241,8 @@ Real threats and how the plane addresses them:
 ## Open positions
 
 - **Admission delegation UX.** How does the operator review a pending admission? Dashboard panel with capability summary, source, verification result, and one-tap sign? Regent-narrated summary with confirmation? Both? Design work.
+- **Admission of instruction-shaped artifacts carrying authority (2026-08-14).** The canonical-spec surface covers prompts and policy modules arriving as artifacts, and verifies them by schema conformance and corpus cross-reference — checks that suit a Layer B data record and say nothing about what an authority-carrying instruction bundle asks the cognition layer to do. The industry's capability unit at the extension layer has become exactly that (signed, catalogued `SKILL.md`-shaped instruction sets with machine-readable trust records), so the surface now has a class of artifact its verification schema does not reach. Wants a design pass; see `EXTENSION-SURFACE-2026-07` §Open positions and `AI-LANDSCAPE-SIGNAL-2026-07.md` §"Signal 5" (E9c).
+- **Precedent must be built from operator signatures (2026-08-14).** Constraint on the position above rather than a separate question: a `quarantine:attestation:*` receipt must never contribute to precedent. Precedent built from a third party's signatures is that party's trust root wearing the operator's clothes.
 - **Precedent-based auto-admission scope.** Once operator has admitted an extension from signer X, can Regent autonomously admit future extensions from X within the same capability class? Under what precedent depth? Composes with the act-on-precedent-escalate-on-novelty heuristic.
 - **Peer chain admission threshold.** How many peer receipts must be verifiable before a peer's chain segment is admitted vs quarantined for further review? Depends on peer relationship strength (composes with the reputation discipline).
 - **Storage tier for quarantine.** Sovereign Form: encrypted volume under sealed FDE. Appliance Form: same. Companion Form: whatever the OS provides. How do we honestly disclose the difference?
