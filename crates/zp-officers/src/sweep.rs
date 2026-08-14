@@ -21,6 +21,12 @@ pub struct SweepCycle {
     emitted: HashSet<(String, String)>,
 }
 
+impl Default for SweepCycle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SweepCycle {
     pub fn new() -> Self {
         Self {

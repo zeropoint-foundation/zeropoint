@@ -124,11 +124,10 @@ impl Trajectory {
     /// Bounded: seen_conversation_ids capped at 32, event_prefix_counts at 20.
     pub fn record_receipt_context(&mut self, conv_id: ConversationId, event_prefix: Option<&str>) {
         // Update conversation-id set (bounded).
-        if !self.seen_conversation_ids.contains(&conv_id) {
-            if self.seen_conversation_ids.len() < 32 {
+        if !self.seen_conversation_ids.contains(&conv_id)
+            && self.seen_conversation_ids.len() < 32 {
                 self.seen_conversation_ids.push(conv_id.clone());
             }
-        }
         // Dominant is always the most-recent (P4 v1 approximation).
         self.dominant_conversation_id = conv_id;
 

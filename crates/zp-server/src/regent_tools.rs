@@ -281,7 +281,7 @@ fn starts_with_ci(hay: &[u8], needle: &[u8]) -> bool {
         return false;
     }
     for i in 0..needle.len() {
-        if hay[i].to_ascii_lowercase() != needle[i].to_ascii_lowercase() {
+        if !hay[i].eq_ignore_ascii_case(&needle[i]) {
             return false;
         }
     }
@@ -301,7 +301,7 @@ fn find_ci(hay: &[u8], needle: &[u8]) -> Option<usize> {
     }
     'outer: for start in 0..=(hay.len() - needle.len()) {
         for j in 0..needle.len() {
-            if hay[start + j].to_ascii_lowercase() != needle[j].to_ascii_lowercase() {
+            if !hay[start + j].eq_ignore_ascii_case(&needle[j]) {
                 continue 'outer;
             }
         }
@@ -718,7 +718,7 @@ pub fn assemble_report_html(fragments: &[ReportFragment]) -> Result<String, Rege
     for frag in fragments {
         html.push_str("<section class=\"fragment\">\n");
         if let Some(heading) = &frag.heading {
-            let _ = write!(html, "<h2>{}</h2>\n", escape_xml(heading));
+            let _ = writeln!(html, "<h2>{}</h2>", escape_xml(heading));
         }
         let sanitized = sanitize_fragment_html(&frag.body_html);
         html.push_str(&sanitized);

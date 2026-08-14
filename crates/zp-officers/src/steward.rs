@@ -14,6 +14,12 @@ use crate::officer::{ChainReader, Officer, VaultKeyLister};
 /// The Steward officer — watches chain integrity and vault coherence.
 pub struct Steward;
 
+impl Default for Steward {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Steward {
     pub fn new() -> Self {
         Self

@@ -1048,7 +1048,7 @@ fn check_receipt_inventory(
         // acknowledgement of outstanding implementation work; silent is
         // legitimate quiet.
         "reserved_total": RESERVED_RECEIPT_PREFIXES.len(),
-        "reserved_prefixes": RESERVED_RECEIPT_PREFIXES.iter().copied().collect::<Vec<_>>(),
+        "reserved_prefixes": RESERVED_RECEIPT_PREFIXES.to_vec(),
     })
 }
 

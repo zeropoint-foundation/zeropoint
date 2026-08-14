@@ -163,13 +163,13 @@ pub fn compute_postures(
 
         // Registered: port allocated OR configured receipt exists.
         if registry.registered_tools.contains_key(tool)
-            || evidence.map_or(false, |e| e.has_configured || e.has_port_assigned)
+            || evidence.is_some_and(|e| e.has_configured || e.has_port_assigned)
         {
             facets.insert(GovernanceFacet::Registered);
         }
 
         // Provisioned: preflight passed (vault schema validated).
-        if evidence.map_or(false, |e| e.has_preflight_passed) {
+        if evidence.is_some_and(|e| e.has_preflight_passed) {
             facets.insert(GovernanceFacet::Provisioned);
         }
 
@@ -177,9 +177,9 @@ pub fn compute_postures(
         let has_launch_command = registry
             .registered_tools
             .get(tool)
-            .map_or(false, |r| r.has_launch_command);
-        if evidence.map_or(false, |e| e.has_launched) && has_launch_command
-            && evidence.map_or(false, |e| e.has_delegation)
+            .is_some_and(|r| r.has_launch_command);
+        if evidence.is_some_and(|e| e.has_launched) && has_launch_command
+            && evidence.is_some_and(|e| e.has_delegation)
         {
             facets.insert(GovernanceFacet::Governed);
         }
@@ -188,8 +188,8 @@ pub fn compute_postures(
         // no Warning+ officer findings. Silence is not approval —
         // an officer must explicitly sign off via chain receipt.
         if facets.contains(&GovernanceFacet::Governed)
-            && evidence.map_or(false, |e| !e.officer_attestations.is_empty())
-            && evidence.map_or(true, |e| !e.has_officer_warnings)
+            && evidence.is_some_and(|e| !e.officer_attestations.is_empty())
+            && evidence.is_none_or(|e| !e.has_officer_warnings)
         {
             facets.insert(GovernanceFacet::Hardened);
         }

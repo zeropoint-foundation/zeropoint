@@ -106,6 +106,14 @@ mod tests {
     struct TestSignable {
         id: String,
         payload: u32,
+        // Never read, and that is the property under test: `#[serde(skip)]`
+        // keeps it out of the preimage, so the two tests below construct it
+        // as `None` and `Some(..)` and assert the hashes match. A newer
+        // rustc flags write-only fields as dead code; here the lint's premise
+        // is what the test exists to demonstrate. Deleting the field would
+        // leave two identical structs hashing identically, which asserts
+        // nothing.
+        #[allow(dead_code)]
         #[serde(skip)]
         signature: Option<Vec<u8>>,
     }

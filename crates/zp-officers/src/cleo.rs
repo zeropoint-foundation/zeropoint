@@ -31,6 +31,12 @@ use zp_core::{AuditEntry, PolicyDecision};
 /// and authority chains.
 pub struct Cleo;
 
+impl Default for Cleo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cleo {
     pub fn new() -> Self {
         Self

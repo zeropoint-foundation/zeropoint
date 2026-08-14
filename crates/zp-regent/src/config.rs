@@ -13,8 +13,10 @@ use serde::{Deserialize, Serialize};
 /// records *where* the key is stored; the actual value is resolved at
 /// HTTP call time and immediately dropped.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ApiKeySource {
     /// No API key — using Ollama or local inference.
+    #[default]
     None,
     /// Key stored in the vault at this path (e.g. "system/regent/inference/api_key").
     Vault(String),
@@ -42,11 +44,6 @@ impl ApiKeySource {
     }
 }
 
-impl Default for ApiKeySource {
-    fn default() -> Self {
-        ApiKeySource::None
-    }
-}
 
 /// Regent cognitive configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1911,7 +1911,7 @@ async fn test_e2e_pipeline_init_mesh_from_config() {
     let mesh_config = config.mesh.clone().unwrap();
     std::fs::create_dir_all(&config.data_dir).ok();
     let audit_store = Arc::new(std::sync::Mutex::new(
-        zp_audit::AuditStore::open_unsigned(&config.data_dir.join("audit.db")).unwrap(),
+        zp_audit::AuditStore::open_unsigned(config.data_dir.join("audit.db")).unwrap(),
     ));
     let mut pipeline = Pipeline::new(config, audit_store).expect("pipeline init");
     pipeline.init_mesh(&mesh_config).await.expect("mesh init");
@@ -2133,7 +2133,7 @@ async fn test_e2e_pipeline_mesh_store_lifecycle() {
         };
         std::fs::create_dir_all(&config.data_dir).ok();
         let audit_store = Arc::new(std::sync::Mutex::new(
-            zp_audit::AuditStore::open_unsigned(&config.data_dir.join("audit.db")).unwrap(),
+            zp_audit::AuditStore::open_unsigned(config.data_dir.join("audit.db")).unwrap(),
         ));
         let mut pipeline = zp_pipeline::Pipeline::new(config, audit_store).unwrap();
 

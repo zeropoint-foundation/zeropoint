@@ -433,7 +433,7 @@ fn extract_proper_noun_tokens(text: &str) -> Vec<String> {
         // is preserved because trim_end_matches only touches the tail.
         let w = words[i].trim_end_matches(|c: char| c.is_ascii_punctuation());
         let is_cap =
-            w.chars().next().map_or(false, |c| c.is_ascii_uppercase()) && w.len() >= 3;
+            w.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && w.len() >= 3;
         let has_version = w.contains(|c: char| c.is_ascii_digit());
         let has_hyphen = w.contains('-');
 
@@ -447,7 +447,7 @@ fn extract_proper_noun_tokens(text: &str) -> Vec<String> {
                 let next_is_version = next
                     .chars()
                     .next()
-                    .map_or(false, |c| c.is_ascii_digit())
+                    .is_some_and(|c| c.is_ascii_digit())
                     && next.chars().all(|c| c.is_ascii_digit() || c == '.');
                 if next_is_version {
                     token.push(' ');
@@ -492,14 +492,14 @@ fn match_pattern(response: &str, pattern: &ObserverPattern) -> Option<String> {
     let end = (idx + pattern.pattern.len() + 24).min(response.len());
     let mut excerpt = String::new();
     if start > 0 {
-        excerpt.push_str("…");
+        excerpt.push('…');
     }
     // Snap to char boundaries to avoid slicing multi-byte codepoints.
     let start = snap_to_char_boundary(response, start);
     let end = snap_to_char_boundary(response, end);
     excerpt.push_str(&response[start..end]);
     if end < response.len() {
-        excerpt.push_str("…");
+        excerpt.push('…');
     }
     Some(excerpt)
 }

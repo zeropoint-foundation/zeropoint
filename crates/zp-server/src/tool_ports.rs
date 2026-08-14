@@ -1382,7 +1382,7 @@ pub async fn write_env_zp(
         format!("{}/env.zp", tool_name),
     ))
     .await
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    .map_err(|e| std::io::Error::other(e.to_string()))?;
     debug!(
         "Wrote .env.zp for {} → {}={}{}, {}=<redacted>",
         tool_path.display(),
@@ -1447,7 +1447,7 @@ pub async fn write_env_zp(
                     format!("{}/env.cleanup", tool_name),
                 ))
                 .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
                 info!(
                     "Removed ZP-managed vars ({}) from {}.env to prevent shadow conflicts",
                     zp_owned.join(", "),

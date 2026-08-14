@@ -486,7 +486,7 @@ mod tests {
         let report = verifier.verify(&chain, None);
 
         assert!(!report.chain_valid);
-        assert_eq!(report.entries[2].chain_link_valid, false);
+        assert!(!report.entries[2].chain_link_valid);
     }
 
     #[test]
@@ -499,7 +499,7 @@ mod tests {
         let report = verifier.verify(&chain, None);
 
         assert!(!report.chain_valid);
-        assert_eq!(report.entries[0].chain_link_valid, false);
+        assert!(!report.entries[0].chain_link_valid);
     }
 
     #[test]

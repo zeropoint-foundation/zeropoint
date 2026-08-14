@@ -85,7 +85,7 @@ fn generate_test_vectors() -> Vec<Vec<u8>> {
     for i in 0u32..500 {
         let mut hasher = Sha256::new();
         hasher.update(b"interop-mtu-vector");
-        hasher.update(&i.to_le_bytes());
+        hasher.update(i.to_le_bytes());
         let hash = hasher.finalize();
         mtu_data.push(hash[0]);
     }

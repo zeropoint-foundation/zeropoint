@@ -273,7 +273,7 @@ fn schema_is_the_dialect_it_claims_to_be() {
          needs to change with it"
     );
     assert!(
-        s["$id"].as_str().map_or(false, |v| v.contains("zeropoint")),
+        s["$id"].as_str().is_some_and(|v| v.contains("zeropoint")),
         "schema $id should identify this as a ZeroPoint schema"
     );
 }

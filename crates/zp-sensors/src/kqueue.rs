@@ -347,11 +347,11 @@ fn translate_event(
     } else if ev.filter == EVFILT_PROC {
         let pid = ev.ident as u32;
         let watched = procs.get(&pid)?;
-        let kind = if ev.fflags & (NOTE_EXIT as u32) != 0 {
+        let kind = if ev.fflags & NOTE_EXIT != 0 {
             ProcessEventKind::Exit
-        } else if ev.fflags & (NOTE_FORK as u32) != 0 {
+        } else if ev.fflags & NOTE_FORK != 0 {
             ProcessEventKind::Fork
-        } else if ev.fflags & (NOTE_EXEC as u32) != 0 {
+        } else if ev.fflags & NOTE_EXEC != 0 {
             ProcessEventKind::Exec
         } else {
             ProcessEventKind::Signal

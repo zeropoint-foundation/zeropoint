@@ -767,7 +767,7 @@ impl ServerIntentExecutor {
                 let total = store
                     .entry_count()
                     .map_err(|e| RegentError::ChainRead(e.to_string()))?;
-                if (total as usize) <= retain {
+                if total <= retain {
                     return Ok(serde_json::json!({
                         "archived": 0,
                         "retained": total,
@@ -960,8 +960,8 @@ impl ServerIntentExecutor {
                 };
 
                 // Domain gate: if action involves a URL, validate it.
-                if !url.is_empty() {
-                    if !domain_allowed(&url, ALLOWED_DOMAINS) {
+                if !url.is_empty()
+                    && !domain_allowed(&url, ALLOWED_DOMAINS) {
                         return Ok(serde_json::json!({
                             "error": "domain_blocked",
                             "message": format!("URL '{}' is not in allowed_domains", url),
@@ -971,7 +971,6 @@ impl ServerIntentExecutor {
                                 .collect::<Vec<_>>(),
                         }));
                     }
-                }
 
                 // Build the Python snippet for browser-harness.
                 // Always start with ensure_real_tab() to avoid hung-tab
@@ -1145,10 +1144,10 @@ impl ServerIntentExecutor {
                 let mut review_due = 0usize;
                 for m in &all {
                     *by_stage.entry(m.stage.to_string()).or_default() += 1;
-                    if m.expires_at.map_or(false, |e| e <= now) {
+                    if m.expires_at.is_some_and(|e| e <= now) {
                         expired += 1;
                     }
-                    if m.review_due_at.map_or(false, |r| r <= now) {
+                    if m.review_due_at.is_some_and(|r| r <= now) {
                         review_due += 1;
                     }
                 }
@@ -1931,173 +1930,6 @@ fn parse_report_fragments(
         });
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod phase1_dispatch_tests {
-    use super::*;
-
-    #[test]
-    fn parse_chart_spec_valid_bar() {
-        let params = serde_json::json!({
-            "type": "bar",
-            "title": "Q3",
-            "labels": ["A", "B"],
-            "series": [{"name": "s1", "values": [1.0, 2.0]}]
-        });
-        let spec = parse_chart_spec(&params).unwrap();
-        assert_eq!(spec.chart_type, "bar");
-        assert_eq!(spec.title.as_deref(), Some("Q3"));
-        assert_eq!(spec.labels, vec!["A".to_string(), "B".to_string()]);
-        assert_eq!(spec.series.len(), 1);
-        assert_eq!(spec.series[0].values, vec![1.0, 2.0]);
-    }
-
-    #[test]
-    fn parse_chart_spec_missing_type() {
-        let params = serde_json::json!({
-            "labels": ["A"],
-            "series": [{"name": "s", "values": [1.0]}]
-        });
-        let err = parse_chart_spec(&params).unwrap_err();
-        assert!(err.to_string().contains("'type'"));
-    }
-
-    #[test]
-    fn parse_chart_spec_missing_series_name() {
-        let params = serde_json::json!({
-            "type": "bar",
-            "labels": ["A"],
-            "series": [{"values": [1.0]}]
-        });
-        let err = parse_chart_spec(&params).unwrap_err();
-        assert!(err.to_string().contains("series[0]"));
-        assert!(err.to_string().contains("'name'"));
-    }
-
-    #[test]
-    fn parse_report_fragments_valid() {
-        let params = serde_json::json!({
-            "fragments": [
-                {"heading": "H", "body_html": "<p>b</p>"},
-                {"body_html": "<p>c</p>", "chart_svg": "<svg/>"}
-            ]
-        });
-        let frags = parse_report_fragments(&params).unwrap();
-        assert_eq!(frags.len(), 2);
-        assert_eq!(frags[0].heading.as_deref(), Some("H"));
-        assert!(frags[1].heading.is_none());
-        assert_eq!(frags[1].chart_svg.as_deref(), Some("<svg/>"));
-    }
-
-    #[test]
-    fn parse_report_fragments_missing_body_html() {
-        let params = serde_json::json!({
-            "fragments": [{"heading": "H"}]
-        });
-        let err = parse_report_fragments(&params).unwrap_err();
-        assert!(err.to_string().contains("body_html"));
-    }
-
-    #[test]
-    fn parse_report_fragments_missing_fragments_array() {
-        let params = serde_json::json!({});
-        let err = parse_report_fragments(&params).unwrap_err();
-        assert!(err.to_string().contains("fragments"));
-    }
-
-    // ── save_to_artifacts parser + validator ───────────────────────────
-
-    #[test]
-    fn parse_save_to_artifacts_accepts_content_text() {
-        let params = serde_json::json!({
-            "name": "report.html",
-            "content": "<p>hi</p>",
-        });
-        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
-        assert_eq!(name, "report.html");
-        assert_eq!(bytes, b"<p>hi</p>");
-    }
-
-    #[test]
-    fn parse_save_to_artifacts_accepts_content_base64() {
-        // Base64 of "hello"
-        let params = serde_json::json!({
-            "name": "test.bin",
-            "content_base64": "aGVsbG8=",
-        });
-        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
-        assert_eq!(name, "test.bin");
-        assert_eq!(bytes, b"hello");
-    }
-
-    #[test]
-    fn parse_save_to_artifacts_base64_wins_over_content_when_both_present() {
-        // If Regent sends both, prefer bytes (safer default).
-        let params = serde_json::json!({
-            "name": "test.bin",
-            "content_base64": "aGVsbG8=",  // "hello"
-            "content": "goodbye",
-        });
-        let (_, bytes) = parse_save_to_artifacts(&params).unwrap();
-        assert_eq!(bytes, b"hello");
-    }
-
-    #[test]
-    fn parse_save_to_artifacts_missing_name() {
-        let params = serde_json::json!({"content": "x"});
-        let err = parse_save_to_artifacts(&params).unwrap_err();
-        assert!(err.to_string().contains("'name'"));
-    }
-
-    #[test]
-    fn parse_save_to_artifacts_missing_content() {
-        let params = serde_json::json!({"name": "x.html"});
-        let err = parse_save_to_artifacts(&params).unwrap_err();
-        assert!(err.to_string().contains("missing content"));
-    }
-
-    #[test]
-    fn parse_save_to_artifacts_bad_base64() {
-        let params = serde_json::json!({
-            "name": "test.bin",
-            "content_base64": "not_valid_base64!!!",
-        });
-        let err = parse_save_to_artifacts(&params).unwrap_err();
-        assert!(err.to_string().contains("failed to decode"));
-    }
-
-    #[test]
-    fn validate_artifact_name_accepts_plain_filenames() {
-        assert!(validate_artifact_name("report.html").is_ok());
-        assert!(validate_artifact_name("chart.svg").is_ok());
-        assert!(validate_artifact_name("data.bin").is_ok());
-        assert!(validate_artifact_name("no-extension").is_ok());
-        assert!(validate_artifact_name("with_underscore.txt").is_ok());
-    }
-
-    #[test]
-    fn validate_artifact_name_rejects_path_separators() {
-        assert!(validate_artifact_name("sub/file.html").is_err());
-        assert!(validate_artifact_name("windows\\file.html").is_err());
-    }
-
-    #[test]
-    fn validate_artifact_name_rejects_traversal() {
-        assert!(validate_artifact_name("..").is_err());
-        assert!(validate_artifact_name(".").is_err());
-        assert!(validate_artifact_name("/etc/passwd").is_err());
-    }
-
-    #[test]
-    fn validate_artifact_name_rejects_empty() {
-        assert!(validate_artifact_name("").is_err());
-    }
-
-    #[test]
-    fn validate_artifact_name_rejects_nul_byte() {
-        assert!(validate_artifact_name("file\0.html").is_err());
-    }
 }
 
 #[async_trait::async_trait]
@@ -3105,4 +2937,171 @@ pub async fn spawn_regent(
 
     info!("Regent cognitive loop started (models preloaded)");
     Some(handle)
+}
+
+#[cfg(test)]
+mod phase1_dispatch_tests {
+    use super::*;
+
+    #[test]
+    fn parse_chart_spec_valid_bar() {
+        let params = serde_json::json!({
+            "type": "bar",
+            "title": "Q3",
+            "labels": ["A", "B"],
+            "series": [{"name": "s1", "values": [1.0, 2.0]}]
+        });
+        let spec = parse_chart_spec(&params).unwrap();
+        assert_eq!(spec.chart_type, "bar");
+        assert_eq!(spec.title.as_deref(), Some("Q3"));
+        assert_eq!(spec.labels, vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(spec.series.len(), 1);
+        assert_eq!(spec.series[0].values, vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn parse_chart_spec_missing_type() {
+        let params = serde_json::json!({
+            "labels": ["A"],
+            "series": [{"name": "s", "values": [1.0]}]
+        });
+        let err = parse_chart_spec(&params).unwrap_err();
+        assert!(err.to_string().contains("'type'"));
+    }
+
+    #[test]
+    fn parse_chart_spec_missing_series_name() {
+        let params = serde_json::json!({
+            "type": "bar",
+            "labels": ["A"],
+            "series": [{"values": [1.0]}]
+        });
+        let err = parse_chart_spec(&params).unwrap_err();
+        assert!(err.to_string().contains("series[0]"));
+        assert!(err.to_string().contains("'name'"));
+    }
+
+    #[test]
+    fn parse_report_fragments_valid() {
+        let params = serde_json::json!({
+            "fragments": [
+                {"heading": "H", "body_html": "<p>b</p>"},
+                {"body_html": "<p>c</p>", "chart_svg": "<svg/>"}
+            ]
+        });
+        let frags = parse_report_fragments(&params).unwrap();
+        assert_eq!(frags.len(), 2);
+        assert_eq!(frags[0].heading.as_deref(), Some("H"));
+        assert!(frags[1].heading.is_none());
+        assert_eq!(frags[1].chart_svg.as_deref(), Some("<svg/>"));
+    }
+
+    #[test]
+    fn parse_report_fragments_missing_body_html() {
+        let params = serde_json::json!({
+            "fragments": [{"heading": "H"}]
+        });
+        let err = parse_report_fragments(&params).unwrap_err();
+        assert!(err.to_string().contains("body_html"));
+    }
+
+    #[test]
+    fn parse_report_fragments_missing_fragments_array() {
+        let params = serde_json::json!({});
+        let err = parse_report_fragments(&params).unwrap_err();
+        assert!(err.to_string().contains("fragments"));
+    }
+
+    // ── save_to_artifacts parser + validator ───────────────────────────
+
+    #[test]
+    fn parse_save_to_artifacts_accepts_content_text() {
+        let params = serde_json::json!({
+            "name": "report.html",
+            "content": "<p>hi</p>",
+        });
+        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(name, "report.html");
+        assert_eq!(bytes, b"<p>hi</p>");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_accepts_content_base64() {
+        // Base64 of "hello"
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "aGVsbG8=",
+        });
+        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(name, "test.bin");
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_base64_wins_over_content_when_both_present() {
+        // If Regent sends both, prefer bytes (safer default).
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "aGVsbG8=",  // "hello"
+            "content": "goodbye",
+        });
+        let (_, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_missing_name() {
+        let params = serde_json::json!({"content": "x"});
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("'name'"));
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_missing_content() {
+        let params = serde_json::json!({"name": "x.html"});
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("missing content"));
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_bad_base64() {
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "not_valid_base64!!!",
+        });
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("failed to decode"));
+    }
+
+    #[test]
+    fn validate_artifact_name_accepts_plain_filenames() {
+        assert!(validate_artifact_name("report.html").is_ok());
+        assert!(validate_artifact_name("chart.svg").is_ok());
+        assert!(validate_artifact_name("data.bin").is_ok());
+        assert!(validate_artifact_name("no-extension").is_ok());
+        assert!(validate_artifact_name("with_underscore.txt").is_ok());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_path_separators() {
+        assert!(validate_artifact_name("sub/file.html").is_err());
+        assert!(validate_artifact_name("windows\\file.html").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_traversal() {
+        assert!(validate_artifact_name("..").is_err());
+        assert!(validate_artifact_name(".").is_err());
+        assert!(validate_artifact_name("/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_empty() {
+        assert!(validate_artifact_name("").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_nul_byte() {
+        assert!(validate_artifact_name("file\0.html").is_err());
+    }
 }

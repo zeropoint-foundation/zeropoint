@@ -14,8 +14,18 @@
 //! cargo test -p zp-hardening-tests stress
 //! ```
 
+// `#[cfg(test)]` on the imports, not just the tests. Every item below is
+// `#[tokio::test]`, which expands to `#[test]` and is therefore excluded from
+// non-test builds — so in the *lib* target these imports read as unused,
+// rustc warns, and `cargo clippy --fix` deletes them. It did exactly that on
+// 2026-08-12, breaking the lib-test target with 29 errors. Gating the imports
+// the same way the items are gated makes this crate safe to run `--fix` over.
+// `claim2_collective_audit.rs` already used this pattern for `uuid::Uuid`.
+#[cfg(test)]
 use crate::harness::TestApp;
+#[cfg(test)]
 use axum::http::StatusCode;
+#[cfg(test)]
 use serde_json::json;
 
 // ─── Chain growth via gate calls ─────────────────────────────────────────────

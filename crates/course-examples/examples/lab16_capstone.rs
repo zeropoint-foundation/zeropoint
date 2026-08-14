@@ -117,8 +117,7 @@ fn main() {
     let mut warned = 0;
     let mut blocked = 0;
 
-    let actions = vec![
-        ActionType::Chat,
+    let actions = [ActionType::Chat,
         ActionType::Chat,
         ActionType::Read {
             target: "file.txt".into(),
@@ -131,8 +130,7 @@ fn main() {
         },
         ActionType::CredentialAccess {
             credential_ref: "api-key".into(),
-        },
-    ];
+        }];
 
     let mut receipt_chain = ReceiptChain::new("fleet-receipts");
 

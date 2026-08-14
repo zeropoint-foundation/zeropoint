@@ -14,6 +14,11 @@
 //! cargo test -p zp-hardening-tests claim2
 //! ```
 
+// Gated to match the items below, and to match `uuid::Uuid` immediately
+// after — an ungated `use tempfile::tempdir;` here read as unused in the lib
+// target and was deleted by `cargo clippy --fix` on 2026-08-12. See the note
+// in `receipt_chain_stress.rs`.
+#[cfg(test)]
 use tempfile::tempdir;
 #[cfg(test)]
 use uuid::Uuid;

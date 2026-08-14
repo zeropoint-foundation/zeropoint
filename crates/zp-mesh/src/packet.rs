@@ -421,9 +421,9 @@ mod tests {
         let bytes = header.encode();
         let decoded = PacketHeader::decode(&bytes).unwrap();
 
-        assert_eq!(decoded.ifac, true);
-        assert_eq!(decoded.header_type_2, false);
-        assert_eq!(decoded.has_context, true);
+        assert!(decoded.ifac);
+        assert!(!decoded.header_type_2);
+        assert!(decoded.has_context);
         assert_eq!(decoded.propagation, PropagationType::Transport);
         assert_eq!(decoded.destination_type, DestinationType::Single);
         assert_eq!(decoded.packet_type, PacketType::Data);

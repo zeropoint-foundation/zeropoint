@@ -141,7 +141,7 @@ impl ChainStory {
     pub fn from_entries(entries: &[AuditEntry]) -> Self {
         let segments: Vec<StorySegment> = entries
             .iter()
-            .filter_map(|entry| narrate_entry(entry))
+            .filter_map(narrate_entry)
             .collect();
 
         let time_range = if let (Some(first), Some(last)) = (entries.first(), entries.last()) {

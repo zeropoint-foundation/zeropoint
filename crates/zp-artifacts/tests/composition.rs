@@ -32,12 +32,10 @@ fn closer_is_pure_same_input_same_output() {
 
 #[test]
 fn middle_prompt_never_contains_last_receipt_claim() {
-    let receipts = vec![
-        receipt("r1", "first event"),
+    let receipts = [receipt("r1", "first event"),
         receipt("r2", "middle event A"),
         receipt("r3", "middle event B"),
-        receipt("r4", "LAST EVENT SENTINEL"),
-    ];
+        receipt("r4", "LAST EVENT SENTINEL")];
     let middle = &receipts[1..receipts.len() - 1];
     let prompt = build_middle_prompt(middle, "You are the apex observer.");
     assert!(

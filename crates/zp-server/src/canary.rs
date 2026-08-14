@@ -191,7 +191,7 @@ impl CanaryRuntime {
             Ok(s) => s,
             Err(e) => return ProbeOutcome::Unresponsive(format!("lock poisoned: {}", e)),
         };
-        let chain = ChainReader::new(&*store);
+        let chain = ChainReader::new(&store);
 
         let entries = match chain.recent_entries(limit) {
             Ok(e) => e,

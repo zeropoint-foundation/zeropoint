@@ -25,6 +25,12 @@ use zp_core::AuditEntry;
 /// and access anomalies.
 pub struct Sentinel;
 
+impl Default for Sentinel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sentinel {
     pub fn new() -> Self {
         Self

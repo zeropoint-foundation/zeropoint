@@ -812,7 +812,7 @@ mod tests {
         let result = gate.evaluate(&context, actor);
 
         assert!(result.is_blocked());
-        assert_eq!(result.unsealed.policy_decision.is_blocked(), true);
+        assert!(result.unsealed.policy_decision.is_blocked());
     }
 
     #[test]

@@ -9,7 +9,7 @@
 //! After Phase 0.6, they MUST PASS.
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::Request;
 use zp_hardening_tests::harness::TestApp;
 
 /// Helper: check that a response includes a Content-Security-Policy header.

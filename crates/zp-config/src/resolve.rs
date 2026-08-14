@@ -527,7 +527,7 @@ fn parse_bool(s: &str) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn unknown_section_rejected() {

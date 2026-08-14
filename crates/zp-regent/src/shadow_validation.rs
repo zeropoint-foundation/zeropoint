@@ -378,7 +378,7 @@ async fn check_json_intent(
             if was_parsed {
                 (true, format!("valid JSON → Intent::Respond ({}B)", content.len()))
             } else {
-                (false, format!("fallthrough to raw Respond — model did not produce JSON"))
+                (false, "fallthrough to raw Respond — model did not produce JSON".to_string())
             }
         }
         Ok(Intent::Execute { tool, .. }) => {
@@ -467,7 +467,7 @@ async fn check_tool_dispatch(
             (false, format!(
                 "responded instead of dispatching (mentions_tool={}): {}...",
                 mentions_tool,
-                crate::text::preview(&content, 80)
+                crate::text::preview(content, 80)
             ))
         }
         Ok(_) => (false, "unexpected intent type".to_string()),
@@ -542,7 +542,7 @@ async fn check_self_configure(
             (false, format!(
                 "responded instead of dispatching self_configure (knows_something={}): {}...",
                 knows_something,
-                crate::text::preview(&content, 80)
+                crate::text::preview(content, 80)
             ))
         }
         Ok(_) => (false, "unexpected intent type".to_string()),

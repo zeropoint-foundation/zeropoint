@@ -50,7 +50,7 @@ static REFRESHED_CATALOG: OnceLock<std::sync::RwLock<Option<Vec<ProviderProfile>
     OnceLock::new();
 
 fn get_catalog() -> &'static Vec<ProviderProfile> {
-    PROVIDER_CATALOG.get_or_init(|| zp_engine::providers::load_catalog())
+    PROVIDER_CATALOG.get_or_init(zp_engine::providers::load_catalog)
 }
 
 /// Return a snapshot of the current catalog, preferring the refreshed version.

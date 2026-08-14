@@ -1232,13 +1232,13 @@ impl InferenceBackend {
             .map(|entries| {
                 entries
                     .iter()
-                    .any(|m| m["id"].as_str().map_or(false, matches_name))
+                    .any(|m| m["id"].as_str().is_some_and(matches_name))
             })
             .or_else(|| {
                 body["models"].as_array().map(|entries| {
                     entries
                         .iter()
-                        .any(|m| m["name"].as_str().map_or(false, matches_name))
+                        .any(|m| m["name"].as_str().is_some_and(matches_name))
                 })
             })
             .unwrap_or(false);

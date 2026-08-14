@@ -189,7 +189,7 @@ fn emit_heartbeat(
         action,
         officer_conv_id().clone(),
         policy_decision,
-        &format!("officer-{}", result.officer_name),
+        format!("officer-{}", result.officer_name),
     );
     store.append(unsealed).ok();
 }
@@ -631,11 +631,10 @@ pub fn spawn_sweep_task(
                 // but don't need their own chain entry.
                 let mut n = 0;
                 for finding in &result.findings {
-                    if finding.severity > Severity::Info {
-                        if emit_finding(&state.audit_store, finding) {
+                    if finding.severity > Severity::Info
+                        && emit_finding(&state.audit_store, finding) {
                             n += 1;
                         }
-                    }
                 }
                 n
             };
@@ -685,11 +684,10 @@ pub fn spawn_sweep_task(
                 // Only emit requests with Warning+ severity — Info-level
                 // consolidations are captured in posture but don't need
                 // their own chain entry (same quiet-sweep principle as Step 4).
-                if req.severity > Severity::Info {
-                    if emit_governance_request(&state.audit_store, req) {
+                if req.severity > Severity::Info
+                    && emit_governance_request(&state.audit_store, req) {
                         governance_emitted += 1;
                     }
-                }
             }
 
             // Step 5c: officer attestations for governed tools.
@@ -782,11 +780,10 @@ pub fn spawn_sweep_task(
                     for officer in &officers {
                         for tool in &governed_tools {
                             let pair = (officer.name().to_string(), tool.to_string());
-                            if !warned.contains(&pair) && !already_attested.contains(&pair) {
-                                if emit_attestation(&state.audit_store, officer.name(), tool) {
+                            if !warned.contains(&pair) && !already_attested.contains(&pair)
+                                && emit_attestation(&state.audit_store, officer.name(), tool) {
                                     attestations += 1;
                                 }
-                            }
                         }
                     }
                     if attestations > 0 {
@@ -1202,11 +1199,10 @@ pub fn spawn_sensor_forge_task(
             let governance_requests = consolidate(&findings, &authorized_proposals);
             let mut governance_emitted = 0usize;
             for req in &governance_requests {
-                if req.severity > Severity::Info {
-                    if emit_governance_request(&state.audit_store, req) {
+                if req.severity > Severity::Info
+                    && emit_governance_request(&state.audit_store, req) {
                         governance_emitted += 1;
                     }
-                }
             }
 
             if emitted > 0 || proposals_emitted_count > 0 || governance_emitted > 0 {

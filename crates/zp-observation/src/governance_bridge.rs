@@ -275,7 +275,7 @@ mod tests {
 
     #[allow(dead_code)]
     fn make_event(
-        event_type: GovernanceEventType,
+        _event_type: GovernanceEventType,
         decision: GovernanceDecision,
     ) -> GovernanceEvent {
         let actor = GovernanceActor::Agent {

@@ -22,6 +22,12 @@ use crate::officer::{ChainReader, Officer, VaultKeyLister};
 /// and operational coherence.
 pub struct Forge;
 
+impl Default for Forge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Forge {
     pub fn new() -> Self {
         Self
