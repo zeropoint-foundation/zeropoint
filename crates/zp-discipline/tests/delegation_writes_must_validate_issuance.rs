@@ -112,7 +112,7 @@ fn fn_name(header_line: &str) -> &str {
         .split("fn ")
         .nth(1)
         .unwrap_or("")
-        .split(|c: char| c == '(' || c == '<' || c == ' ')
+        .split(['(', '<', ' '])
         .next()
         .unwrap_or("")
 }

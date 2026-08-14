@@ -191,7 +191,7 @@ impl Discipline {
             let ext_ok = path
                 .extension()
                 .and_then(|e| e.to_str())
-                .map(|e| self.extensions.iter().any(|wanted| *wanted == e))
+                .map(|e| self.extensions.contains(&e))
                 .unwrap_or(false);
             if !ext_ok {
                 continue;

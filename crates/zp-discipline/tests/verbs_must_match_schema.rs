@@ -405,9 +405,11 @@ fn strip_wrappers(t: &str) -> &str {
         // Stream<Item = T> — the inner type is after `Item =`
     ];
     for wrapper in wrappers {
-        if t.starts_with(wrapper) {
-            // Extract what's inside the outer `<…>`.
-            let inner = &t[wrapper.len()..];
+        // `strip_prefix` rather than `starts_with` + slice: the two forms can
+        // disagree if the prefix is ever changed to something non-ASCII, and
+        // the slice would panic on a char boundary rather than not match.
+        if let Some(inner) = t.strip_prefix(wrapper) {
+            // `inner` is what's inside the outer `<…>`.
             // Find the matching `>`. For Result<T, E> we want T (before the comma
             // at depth-1). Walk characters tracking angle-bracket depth.
             let first_type = extract_first_generic_arg(inner);

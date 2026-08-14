@@ -23,3 +23,8 @@ walkdir = "2"
 # Used by the self-test to construct a pattern that's guaranteed not to
 # appear in source — see `impossible_pattern_passes` in src/lib.rs.
 blake3 = { workspace = true }
+# Used by `no_audit_db_in_workspace` to build a synthetic tree with a planted
+# `audit.db`, so the absence assertion is shown to be capable of failing.
+# An absence pin that has gone blind and one that is genuinely clean look
+# identical from the outside; the positive control is what tells them apart.
+tempfile = { workspace = true }
