@@ -1,7 +1,25 @@
-# AI Landscape — YouTube Source Channels
+# AI Landscape — Sources
 
-Read each morning by the `zp-ai-landscape-sweep` scheduled task. One channel per
-line, `<channel_id> # <channel name>`. Lines starting with `#` are ignored.
+Read each morning by the `zp-ai-landscape-sweep` scheduled task.
+
+## This file is a floor, not a ceiling
+
+**Operator direction, 2026-08-13:** the sources named here are the ones that get
+checked *by default*. They are not the extent of the sweep. Every run should cast
+wider than this file — the channel list below is a guaranteed minimum, and §
+"Widening classes" names the ground to cover beyond it.
+
+The failure this guards against is a sweep that quietly narrows to its own
+bookmark list and starts reporting the same four voices' opinions as though they
+were the landscape. A curated default plus a mandate to range is the shape that
+survives; a fixed list alone is not.
+
+---
+
+## Default YouTube channels
+
+One channel per line, `<channel_id> # <channel name>`. Lines starting with `#`
+are ignored.
 
 Every ID below was verified by fetching its RSS feed and confirming the returned
 channel title — not taken from a search result or a handle. Handles are not
@@ -74,3 +92,122 @@ Worth pruning as well as adding. A channel that has not produced a load-bearing
 item in two months is costing a transcript fetch a day for nothing — the same
 signal-density argument the log itself is built on. The log records which source
 produced each entry, so the evidence for pruning accumulates on its own.
+
+---
+
+## Widening classes
+
+Ground the sweep should cover beyond the defaults. Not a checklist to exhaust
+every run — a map of where to range, weighted by what the lens is for. A run that
+only ever returns items from the default channels and the first page of a search
+has not swept.
+
+### 1. Non-English primary text — highest value, most neglected
+
+Earned the hard way on 2026-08-13: three independent English summaries of one CAC
+document each supplied a detail the Chinese original does not contain — an
+effective date, a tiering axis, a pre-deployment requirement. All three were in a
+ZeroPoint steering brief before the original was read.
+
+- **China** — `cac.gov.cn` (CAC), MIIT, NDRC, TC260 standards drafts. Expert
+  commentary (专家解读) and press Q&A (答记者问) pages are usually published
+  alongside the instrument itself and are often more legible than the text.
+- **EU** — EUR-Lex, the AI Office, EDPB, national DPAs. French and German
+  regulatory commentary frequently precedes English coverage.
+- **Japan / Korea** — METI, PIPC, and the Korean AI Basic Act ecosystem.
+- **Rule:** if an item turns on the content of a non-English instrument, read the
+  instrument. Otherwise label the item as resting on translation.
+
+### 2. Standards and specification venues
+
+Where the actual protocols land, usually months before commentary notices.
+
+- IETF datatracker (agent identity, delegation, OAuth extensions), W3C, C2PA /
+  CAWG, Linux Foundation projects (x402 Foundation), DIF, OpenID Foundation.
+- NIST (AI RMF and successors), ISO/IEC JTC 1/SC 42.
+- **Watch for name collisions** — 2026-08-13 turned up two unrelated "AIP"s, the
+  IETF Agent Identity Protocol and China's state-backed Agent Interconnection
+  Protocol. Disambiguate on every mention.
+
+### 3. Preprints
+
+arXiv `cs.CR`, `cs.AI`, `cs.MA`, `cs.SE`. Agent identity, delegation, sandbox
+escape, capability control, verifiable inference. Preprints surfaced the AIP
+drafts before any trade coverage.
+
+### 4. Vendor engineering blogs beyond the frontier labs
+
+The default weighting toward Anthropic / OpenAI / Google / Meta is right but
+incomplete. Liquid AI's LFM2.5 release was a load-bearing item on 2026-08-13 and
+appears on no list anywhere. Also: Mistral, Qwen/Alibaba, DeepSeek, Moonshot,
+Zhipu, Cohere, Together, Groq, Cerebras, Hugging Face, Ollama, llama.cpp.
+
+### 5. Release and artifact signals
+
+Often the earliest honest signal, because it is the thing itself rather than an
+announcement about it.
+
+- GitHub releases and changelogs for substrate-adjacent projects.
+- Hugging Face model cards and licence changes — a licence shift is a strategic
+  move and rarely gets its own press release.
+
+### 6. Security disclosure channels
+
+CVE / NVD, vendor security advisories, CISA, conference proceedings (Black Hat,
+DEF CON, USENIX Security, IEEE S&P). Agent sandbox escapes, MCP supply chain,
+prompt injection with real consequence.
+
+### 7. Regulatory and legal primary text, non-EU/China
+
+US Federal Register, state legislatures (CA, NY, TX, IL — Illinois SB315 landed
+2026-07 and was found only via a vendor blog), UK (DSIT, Ofcom, ICO), Canada,
+India, Brazil, Singapore IMDA.
+
+### 8. Deliberately off-beat
+
+The `House of El` geopolitics channel is on the default list on purpose — it is
+off the AI beat and closest to the sovereignty questions ZeroPoint exists to
+answer. Generalise that: adjacent-domain framing is often where a lens earns its
+keep. Payments infrastructure, identity and KYC, supply-chain provenance in other
+industries, energy and compute markets, insurance and liability.
+
+---
+
+## Promotion — how this list grows
+
+When a run finds a load-bearing item from a source **not** on this list, name the
+source in the log entry and add a line to "Candidate sources" below. A source
+that produces two load-bearing items should be promoted into the defaults.
+
+Symmetrically, per "Notes on curation", a default that produces nothing for two
+months is a pruning candidate. The list should churn. A sources file that has not
+changed in a quarter is either perfectly curated or not being read — and the
+second is far more likely.
+
+### Candidate sources
+
+<!-- Append: `- <source>  # <date first hit>, <what it produced>` -->
+
+- liquid.ai engineering blog  # 2026-08-13, LFM2.5-2.6B on-device agent release,
+  verified at source after an aggregator got the hardware claim wrong
+- cac.gov.cn (incl. 专家解读 / 答记者问 pages)  # 2026-08-13, the Implementation
+  Opinions original — three English summaries had each invented a detail
+- IETF datatracker agent-identity drafts  # 2026-08-13, three competing drafts
+  sharing the AIP acronym; pre-convergence signal
+- anthropic.com/research (Frontier Red Team posts)  # 2026-08-13, the multiagent
+  turf-war / collusion / epistemics study — measured evidence for the absence ZP
+  is built on, with a prescribed direction that is mechanism design rather than
+  identity. Distinct from red.anthropic.com, which carries the cyber work.
+- Hugging Face model cards and licence files  # 2026-08-13, MiniMax H3's
+  territory exclusion of US/EU/UK/Korea — a licence clause, surfaced by no
+  announcement anywhere
+- docs.cloud.google.com product docs (GA / Preview status labels)  # 2026-08-13,
+  Agent Identity GA vs Agent Gateway Private Preview — vendor docs separated
+  shipped from announced where the announcements did not
+- developer.nvidia.com / blogs.nvidia.com (engineering + technical blogs)  #
+  2026-08-14, NVIDIA-verified agent skills (signed capability artifacts, skill
+  cards, OpenSSF Model Signing) and the SAFE RFC; NVIDIA's own deployment blog
+  also settled the Qwen3.8-Max release question two prior sweeps left open
+- IETF datatracker  # 2026-08-14, SECOND load-bearing item
+  (draft-reece-wimse-cross-org-delegation, R1-R9 requirements) after the AIP
+  drafts on 2026-08-13 — **promotion candidate for the default list**
