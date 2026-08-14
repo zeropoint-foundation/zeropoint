@@ -7,7 +7,7 @@ speculative. Reports by default, fails the build with --strict.
 
 Spec: docs/design/SUBSTRATE-LOOP-CLOSURE-2026-07.md
 """
-import re, sys, json, argparse, subprocess
+import os, re, sys, json, argparse, subprocess
 from pathlib import Path
 from collections import defaultdict
 
@@ -19,7 +19,8 @@ ROOT = None
 # properties of a corpus mid-construction, not defects in it.
 INFORMATIONAL = {"index-coverage", "receipt-coverage", "stated-count",
                  "doc-path-prospective", "doc-path-as-proposed", "pub-consumer",
-                 "line-citation", "reservation-applied"}
+                 "line-citation", "reservation-applied",
+                 "receipt-namespace-unshipped"}
 
 # The corpus index declares its own establishment date in its opening
 # line ("Established 2026-07-10"). Documents authored on or after it were
@@ -137,8 +138,46 @@ def check_doc_crossrefs(docs, root):
     and check_doc_paths honour it. Twenty citations were converted 2026-07-29.
     """
     IGNORED = ("docs/handoffs/", "graphify-out/", "target/", "node_modules/")
-    names = {p.name for p in root.rglob("*.md")
-             if not any(seg in p.as_posix() for seg in IGNORED)}
+
+    # Prune the ignored trees during the walk rather than filtering after it
+    # (2026-08-14).
+    #
+    # `root.rglob("*.md")` traversed the entire repository — node_modules/,
+    # target/, every vendored tree — and IGNORED then discarded what it had
+    # just paid to visit. The filter reads like it prevents the traversal; it
+    # does not. That one line was substantially the whole runtime of
+    # corpus-lint: the same resolution set, built with the four IGNORED trees
+    # pruned at the directory level, takes 3.8s against 40s+ measured on
+    # APOLLO, and the tool as a whole becomes something that can be run on
+    # every docs commit instead of something that gets skipped.
+    #
+    # That distinction is the point rather than the speed. This file already
+    # carries three instances of the same failure — `check_stated_counts`
+    # written and never registered, two pins red for eight days in a log
+    # nobody ran, the pre-commit hook sitting non-executable — and a lint slow
+    # enough that `just check` has no recorded successful run is that failure
+    # one step removed. Cost is a correctness property when it decides whether
+    # the check runs at all.
+    #
+    # Equivalence is by construction, not by measurement: every IGNORED entry
+    # ends in `/`, so it can only match a directory component, and a file
+    # beneath a pruned directory would have been discarded by the filter that
+    # remains below. Directories that are merely large and not ignored —
+    # `.venvs/`, `.pnpm-store/`, `.git/` — are still walked, because pruning
+    # them would change which names resolve. `.git` holds no `.md` today; that
+    # is not a reason to assume it never will.
+    #
+    # The failure direction is also safe independent of that argument: pruning
+    # can only shrink the resolution set, a smaller set can only produce more
+    # findings, and this check reports zero across the corpus. A pruning
+    # mistake would therefore surface as a false failure, not as a masked one.
+    names = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if not any(seg in f"{dirpath}/{d}/" for seg in IGNORED)]
+        if any(seg in f"{dirpath}/" for seg in IGNORED):
+            continue
+        names.update(f for f in filenames if f.endswith(".md"))
     pat = re.compile(r"`([A-Za-z0-9][A-Za-z0-9\-_.]*\.md)`")
     unwritten = re.compile(r"not yet written|\(planned\)|to be written|does not exist yet|"
                            r"not yet authored|placeholder", re.I)
@@ -296,13 +335,32 @@ def check_receipt_vocabulary(docs, registry):
             if not any(base.startswith(k) or k.startswith(base) for k in impl):
                 drift.append((r, f, sorted(impl)[:3]))
     if unshipped:
-        per_ns = defaultdict(int)
-        for ns, _ in unshipped:
-            per_ns[ns] += 1
+        per_ns = defaultdict(list)
+        for ns, r in unshipped:
+            per_ns[ns].append(r)
+
+        # One finding per namespace — not one aggregate, and not one per type.
+        #
+        # The aggregate alone could not be reserved: a single string saying
+        # "775 types" is one finding, so a reservation against it would either
+        # hide everything or nothing. Per type would be 775 findings, and worse,
+        # it would put the reservation at the wrong granularity: "the lens
+        # subsystem is unbuilt" is ONE decision covering its 63 types, and
+        # splitting it into 63 identical rationales is an allowlist wearing a
+        # reservation's clothes.
+        #
+        # The namespace is the unit of decision, so it is the unit of
+        # reservation. Per-member granularity already exists where it belongs —
+        # receipt-drift, for a member missing from a family that IS live, which
+        # is a different and more dangerous claim.
         finding("receipt-coverage", "docs/",
-                f"{len(unshipped)} receipt types across {len(per_ns)} namespaces are documented "
-                f"with no implemented family in the code registry: " +
-                ", ".join(f"{ns}:({n})" for ns, n in sorted(per_ns.items(), key=lambda x: -x[1])[:12]))
+                f"{len(unshipped)} receipt types across {len(per_ns)} namespaces are "
+                f"documented with no implemented family in the code registry — "
+                f"itemised per namespace below, each separately reservable")
+        for ns, rs in sorted(per_ns.items(), key=lambda x: (-len(x[1]), x[0])):
+            finding("receipt-namespace-unshipped", f"docs/ [{ns}:]",
+                    f"{len(rs)} receipt types documented in the {ns}: namespace with no "
+                    f"implemented family for any of them (e.g. {', '.join(sorted(rs)[:3])})")
     for r, f, impl in drift:
         finding("receipt-drift", f"docs/ [{r}]",
                 f"family {f}: is implemented but {r} is not a member — rename, or a "
