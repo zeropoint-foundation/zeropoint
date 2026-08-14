@@ -6092,8 +6092,13 @@ async fn main() -> anyhow::Result<()> {
     let audit_db = config.data_dir.join("audit.db");
     std::fs::create_dir_all(&config.data_dir).ok();
 
+    // audit.db is created immediately below, under ~/ZeroPoint. Harden the
+    // directory first (CROSS-USER-01) — this was previously an unnamed side
+    // effect of `open_keyring()`, whose value went unused after the
+    // composed-loader refactor.
+    crate::commands::harden_zp_home()
+        .context("Failed to prepare the ZeroPoint home directory")?;
     // Derive the audit signer from the Genesis secret
-    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
     let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
@@ -6594,14 +6599,16 @@ fn run_adapt(
     let entry_hash = {
         use std::sync::{Arc, Mutex};
 
+        // audit.db lives under ~/ZeroPoint; harden the directory before
+        // creating it (CROSS-USER-01).
+        if let Err(e) = crate::commands::harden_zp_home() {
+            eprintln!(
+                "\x1b[31merror\x1b[0m: failed to prepare the ZeroPoint home directory: {}",
+                e
+            );
+            return 2;
+        }
         // Derive the audit signer from the Genesis secret
-        let keyring = match crate::commands::open_keyring() {
-            Ok(k) => k,
-            Err(e) => {
-                eprintln!("\x1b[31merror\x1b[0m: failed to open keyring: {}", e);
-                return 2;
-            }
-        };
         let genesis_secret = match crate::commands::load_genesis_secret_composed() {
             Ok(s) => s,
             Err(e) => {
@@ -8453,14 +8460,14 @@ fn run_anchor(
 
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
 
+    // audit.db lives under ~/ZeroPoint; harden the directory before creating it
+    // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
+    // provider, not the keyring.
+    if let Err(e) = crate::commands::harden_zp_home() {
+        eprintln!("error: failed to prepare the ZeroPoint home directory: {}", e);
+        return 2;
+    }
     // Derive the audit signer from the Genesis secret
-    let keyring = match crate::commands::open_keyring() {
-        Ok(k) => k,
-        Err(e) => {
-            eprintln!("error: failed to open keyring: {}", e);
-            return 2;
-        }
-    };
     let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
@@ -8965,17 +8972,39 @@ fn run_delegate(
         grant.renews = Some(prior_id.clone());
     }
 
+    // M4-3 issuance validation on the CLI path.
+    //
+    // Until now `zp delegate` built a standing grant and wrote it straight to
+    // the chain with no issuance validation at all, so the SSRF self-grant
+    // protection `grant_handler` applies (`zp-server/src/lib.rs`, "M4-3:
+    // Validate issuance") did not cover this path. The hole was not that the
+    // CLI is externally reachable — it is not — but that `validate_issuance`
+    // is also where the non-delegable reserved set is refused, and that refusal
+    // is capability-intrinsic: it must fire regardless of who is asking.
+    //
+    // Provenance is `UserAction`, which is the honest description of an
+    // operator at a terminal and matches `EventOrigin::UserAction`'s own
+    // documentation ("CLI, API with authenticated session"). That keeps
+    // internal-only capabilities (ConfigChange, CredentialAccess) grantable
+    // here, which is correct — the external-request restriction exists to stop
+    // a fetch from granting itself credentials, not to stop the operator.
+    grant = grant.with_issued_via(zp_core::EventProvenance::user_action("zp-cli-delegate"));
+    if let Err(e) = grant.validate_issuance() {
+        eprintln!("error: grant issuance rejected: {}", e);
+        return 2;
+    }
+
     // Emit the chain receipt.
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
 
+    // audit.db lives under ~/ZeroPoint; harden the directory before creating it
+    // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
+    // provider, not the keyring.
+    if let Err(e) = crate::commands::harden_zp_home() {
+        eprintln!("error: failed to prepare the ZeroPoint home directory: {}", e);
+        return 2;
+    }
     // Derive the audit signer from the Genesis secret
-    let keyring = match crate::commands::open_keyring() {
-        Ok(k) => k,
-        Err(e) => {
-            eprintln!("error: failed to open keyring: {}", e);
-            return 2;
-        }
-    };
     let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
@@ -9286,14 +9315,14 @@ fn run_revoke(
 
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
 
+    // audit.db lives under ~/ZeroPoint; harden the directory before creating it
+    // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
+    // provider, not the keyring.
+    if let Err(e) = crate::commands::harden_zp_home() {
+        eprintln!("error: failed to prepare the ZeroPoint home directory: {}", e);
+        return 2;
+    }
     // Derive the audit signer from the Genesis secret
-    let keyring = match crate::commands::open_keyring() {
-        Ok(k) => k,
-        Err(e) => {
-            eprintln!("error: failed to open keyring: {}", e);
-            return 2;
-        }
-    };
     let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {

@@ -55,9 +55,9 @@ pub use zp_receipt::verify::{verify_signature, verify_signed, VerifyError};
 pub use capability::{Capability, InferenceTier, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
 pub use authority_ref::{AuthorityRef, AuthorityRefType};
 pub use capability_grant::{
-    CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation, DelegationError,
-    GrantProvenance, GrantedCapability, GranteeType, IssuanceError, RedelegationPolicy,
-    RenewalError,
+    reserved_class, CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation,
+    DelegationError, GrantProvenance, GrantedCapability, GranteeType, IssuanceError,
+    RedelegationPolicy, RenewalError, ReservedReason, RESERVED_PROBE_CAPABILITY,
 };
 pub use delegation_chain::{ChainError, DelegationChain};
 pub use lease::{LeaseFailureMode, LeasePolicy};

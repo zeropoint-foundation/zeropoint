@@ -424,6 +424,18 @@ impl CapabilityGrant {
     /// by M4-3. The governance gate MUST call this before accepting any
     /// new capability grant.
     pub fn validate_issuance(&self) -> Result<(), IssuanceError> {
+        // Non-delegable check runs first and unconditionally. It does not
+        // depend on provenance: a reserved capability may not be placed in a
+        // grant even by a fully-authorised local operator, because the point
+        // is not who is asking but that the authority cannot be held by a
+        // grantee at all. No-op while RESERVED_CAPABILITY_NAMES is empty.
+        if let Some(reason) = reserved_class(&self.capability) {
+            return Err(IssuanceError::ReservedCapability {
+                capability: self.capability.name().to_string(),
+                reserved_member: reason.member_id().to_string(),
+            });
+        }
+
         let provenance = self
             .issued_via
             .as_ref()
@@ -644,6 +656,22 @@ impl CapabilityGrant {
         capability: GrantedCapability,
         receipt_id: String,
     ) -> Result<Self, DelegationError> {
+        // Non-delegable capabilities are refused ahead of every other check.
+        // Ordering is deliberate: a reserved capability must produce the
+        // reserved error, not a depth or scope error that happens to fire
+        // first, so the refusal receipt names the real reason.
+        //
+        // Not directly testable while RESERVED_CAPABILITY_NAMES is empty —
+        // this check cannot fire, so step 2 must add an ordering test
+        // alongside its first table row. `lookup_reserved` is tested now;
+        // the ordering it guards is not.
+        if let Some(reason) = reserved_class(&capability) {
+            return Err(DelegationError::ReservedCapability {
+                capability: capability.name().to_string(),
+                reserved_member: reason.member_id().to_string(),
+            });
+        }
+
         // Tier 5 (Ceremony) is the substrate's cold floor — no running
         // process may issue or re-delegate T5 authority. T5 is exercised
         // only during a genesis ceremony with the operator key physically
@@ -836,6 +864,56 @@ impl CapabilityGrant {
 
             // All other combinations don't match
             _ => false,
+        }
+    }
+
+    /// The `ActionType` variants this grant's capability can *ever* authorise,
+    /// ignoring scope.
+    ///
+    /// # Why this exists (defect 6, 2026-08-13)
+    ///
+    /// `matches_action` pairs each `GrantedCapability` with exactly one
+    /// `ActionType`; every other pairing falls to `_ => false`. That is correct
+    /// and it is invisible from outside. An operator can issue
+    /// `capability: "execute", scope: ["*"]`, have it validated, signed and
+    /// chained, and authorise no tool call whatsoever — while an auditor reading
+    /// the chain sees `execute:*` and flags it as over-permissive. The grant is
+    /// simultaneously a false positive for review and a false negative for use,
+    /// and the two readings cancel, so nobody investigates.
+    ///
+    /// This makes the pairing legible without changing it.
+    ///
+    /// # Why it is derived and never stored
+    ///
+    /// The obvious fix is to write this set into the delegation receipt so the
+    /// chain records what a grant *does* rather than what it is named. That was
+    /// proposed and withdrawn. It is a pure function of `self.capability`, so a
+    /// stored copy is a second source of truth for a fact the chain already
+    /// carries — the same defect as five declarations of the local model
+    /// (HARNESS-SEAM §3-C1) and three copies of `REGENT_TOOLS`
+    /// (`zp-regent/src/tools.rs`). Worse, `ClaimMetadata::Delegation` is inside
+    /// a *signed* receipt, so adding a field is a canonical-form change bought
+    /// for a derivable convenience.
+    ///
+    /// Callers that want to show it — `zp grants --check`, a grant response —
+    /// call this. Nothing serialises it.
+    ///
+    /// Kept adjacent to `matches_action` deliberately: the two must agree, and
+    /// `satisfiable_actions_agrees_with_matches_action` proves they do.
+    pub fn satisfiable_actions(&self) -> &'static [&'static str] {
+        match &self.capability {
+            GrantedCapability::Read { .. } => &["Read"],
+            GrantedCapability::Write { .. } => &["Write"],
+            GrantedCapability::Execute { .. } => &["Execute"],
+            GrantedCapability::CredentialAccess { .. } => &["CredentialAccess"],
+            GrantedCapability::ApiCall { .. } => &["ApiCall"],
+            GrantedCapability::ConfigChange { .. } => &["ConfigChange"],
+            GrantedCapability::ToolCall { .. } => &["ToolCall"],
+            // No `ActionType` pairs with either of these, so `matches_action`
+            // returns false for every action. A grant of one authorises nothing
+            // the gate consults — which is the condition defect 6 exists to make
+            // visible, not an oversight here.
+            GrantedCapability::MeshSend { .. } | GrantedCapability::Custom { .. } => &[],
         }
     }
 
@@ -1361,6 +1439,148 @@ pub struct ConstraintViolation {
     pub reason: String,
 }
 
+// ── Non-delegable authority (NON-DELEGABLE-AUTHORITY-2026-08 step 1) ────
+//
+// Some authority must never appear in a grant, to any grantee, at any tier,
+// at any depth. Until now the substrate has relied on the *absence* of a
+// grant to mean "not delegated", where for this class it needs to mean
+// "cannot be delegated". See docs/design/NON-DELEGABLE-AUTHORITY-2026-08.md.
+//
+// Step 1 lands the machinery with an EMPTY membership table. Every call site
+// below is therefore a no-op at runtime — this commit cannot change the
+// behaviour of any existing grant. Members are added in step 2, at which
+// point the Layer A claim becomes real and the amendment cost of KEEL III.6
+// applies.
+//
+// Why a name table rather than a match on `GrantedCapability` variants:
+// none of N1–N5 is expressible as an existing variant. There is no
+// `GenesisSign`, no `FormGraduation`. They could only ever arrive through
+// `Custom { name }`, which is precisely the smuggling path this must cover.
+// `GrantedCapability::name()` returns the custom name for `Custom` and the
+// static name otherwise, so one lookup covers both shapes.
+
+/// Which member of the non-delegable set a capability matched.
+///
+/// Numbering follows NON-DELEGABLE-AUTHORITY-2026-08 §3 so the code and the
+/// spec can be read against each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReservedReason {
+    /// N1 — Genesis signature. Delegating it collapses II.5 and the
+    /// singular-sovereign-root property: signatures would trace to whoever
+    /// last held the delegation, not to the operator.
+    GenesisSignature,
+    /// N2 — amendment of the reserved set itself. Without this the class is
+    /// decorative: delegate the power to shorten the list, then shorten it.
+    ReservedSetAmendment,
+    /// N3 — revoking or rotating the operator's own Genesis. The recovery
+    /// path is the sovereignty; delegable, it is a one-signature bypass of
+    /// the M-of-N design.
+    RootRevocation,
+    /// N4 — Substrate Form graduation. A delegate could move the operator to
+    /// Companion Form, surrendering the trust root to a vendor, without the
+    /// operator present. Confirmed Layer A by operator direction 2026-08-13.
+    FormGraduation,
+    /// N5 — modification of constitutional rules. Already unbypassable by
+    /// grants; N5 closes the adjacent door of delegating the modification
+    /// authority.
+    ConstitutionalModification,
+    /// N6 — issuance of a grant naming any reserved member. Closure rule.
+    ReservedGrantIssuance,
+    /// **Not a spec member.** A probe used to keep the enforcement path live
+    /// and observable while N1–N6 are still latent — none of them currently
+    /// flows through the capability system, so without this the machinery
+    /// would be unexercised at runtime. Numbered `N0` so it can never be
+    /// mistaken for a spec member. Carries no Layer A claim and is removable
+    /// in one line. See NON-DELEGABLE-AUTHORITY-2026-08 §13.7.
+    Probe,
+}
+
+impl ReservedReason {
+    /// Spec identifier, e.g. `"N1"`. Used in refusal receipts so a chain
+    /// reader can resolve the refusal against the spec without the prose.
+    pub fn member_id(self) -> &'static str {
+        match self {
+            ReservedReason::GenesisSignature => "N1",
+            ReservedReason::ReservedSetAmendment => "N2",
+            ReservedReason::RootRevocation => "N3",
+            ReservedReason::FormGraduation => "N4",
+            ReservedReason::ConstitutionalModification => "N5",
+            ReservedReason::ReservedGrantIssuance => "N6",
+            ReservedReason::Probe => "N0",
+        }
+    }
+
+    /// Whether this is a real spec member rather than the liveness probe.
+    /// Used by tests to assert that no Layer A claim has been made yet.
+    pub fn is_spec_member(self) -> bool {
+        !matches!(self, ReservedReason::Probe)
+    }
+}
+
+impl std::fmt::Display for ReservedReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            ReservedReason::GenesisSignature => "Genesis signature",
+            ReservedReason::ReservedSetAmendment => "amendment of the reserved set",
+            ReservedReason::RootRevocation => "root revocation",
+            ReservedReason::FormGraduation => "Substrate Form graduation",
+            ReservedReason::ConstitutionalModification => "constitutional-rule modification",
+            ReservedReason::ReservedGrantIssuance => "issuance of a reserved grant",
+            ReservedReason::Probe => "non-delegable liveness probe",
+        };
+        write!(f, "{} ({})", text, self.member_id())
+    }
+}
+
+/// The name of the liveness probe. Colon-delimited and namespaced so it
+/// cannot collide with a real capability name — existing names are bare
+/// identifiers (`read`, `tool_call`) or operator-chosen `Custom` names.
+pub const RESERVED_PROBE_CAPABILITY: &str = "zp:reserved:probe";
+
+/// The non-delegable membership table.
+///
+/// **Contains no spec members.** The only row is the liveness probe, which
+/// carries no Layer A claim: it exists because N1–N6 are all still latent —
+/// none of Genesis signing, root revocation, constitutional modification or
+/// Form graduation currently flows through the capability system — and
+/// without it this enforcement path would never execute outside tests.
+///
+/// Adding a real row makes the corresponding authority structurally
+/// undelegable everywhere `reserved_class` is consulted, and makes the
+/// Layer A claim real. Do not add one without reading
+/// NON-DELEGABLE-AUTHORITY-2026-08 §6 on amendment cost — removing a row
+/// later is a release that peers can detect as non-conformant. And note §13.2:
+/// a row only protects a name that some code path actually constructs.
+const RESERVED_CAPABILITY_NAMES: &[(&str, ReservedReason)] =
+    &[(RESERVED_PROBE_CAPABILITY, ReservedReason::Probe)];
+
+/// Whether a capability is structurally reserved to the sovereign operator.
+///
+/// Returns `Some(reason)` if the capability may never be granted or
+/// delegated to anyone, by anyone, at any tier or depth. This is distinct
+/// from constitutional prohibition (which forbids the *act*, for everyone
+/// including the operator) and from a capability merely not being granted
+/// (which is delegable in principle).
+///
+/// Canonical enforcement helper — per Principle 8, every enforcement point
+/// calls this rather than reimplementing the test.
+pub fn reserved_class(capability: &GrantedCapability) -> Option<ReservedReason> {
+    lookup_reserved(capability.name(), RESERVED_CAPABILITY_NAMES)
+}
+
+/// Table lookup, split out so it is testable against a non-empty table while
+/// `RESERVED_CAPABILITY_NAMES` is still empty. Without this split, step 1
+/// would ship an enforcement path with no executable test behind it.
+fn lookup_reserved(
+    name: &str,
+    table: &[(&str, ReservedReason)],
+) -> Option<ReservedReason> {
+    table
+        .iter()
+        .find(|(reserved_name, _)| *reserved_name == name)
+        .map(|(_, reason)| *reason)
+}
+
 /// Error type for delegation failures.
 #[derive(Debug, Clone)]
 pub enum DelegationError {
@@ -1383,6 +1603,14 @@ pub enum DelegationError {
     /// no running process may re-delegate it. T5 authority is exercised
     /// only during a genesis ceremony.
     CeremonyTierNotDelegable,
+    /// The requested capability is in the non-delegable set. Unlike every
+    /// other variant here, this one is not about the parent's terms — the
+    /// capability itself may never be delegated, by anyone, at any tier or
+    /// depth. See NON-DELEGABLE-AUTHORITY-2026-08.
+    ReservedCapability {
+        capability: String,
+        reserved_member: String,
+    },
 }
 
 impl std::fmt::Display for DelegationError {
@@ -1426,6 +1654,16 @@ impl std::fmt::Display for DelegationError {
                     "tier 5 (ceremony) is non-delegable — exercised only during genesis ceremony"
                 )
             }
+            DelegationError::ReservedCapability {
+                capability,
+                reserved_member,
+            } => {
+                write!(
+                    f,
+                    "capability '{}' is reserved to the sovereign operator ({}) — it may not be delegated at any tier or depth",
+                    capability, reserved_member
+                )
+            }
         }
     }
 }
@@ -1463,6 +1701,13 @@ pub enum IssuanceError {
         capability: String,
         source_ip: Option<String>,
     },
+    /// The capability is in the non-delegable set — it may not be placed in
+    /// a grant at all, regardless of origin, signer or tier.
+    /// See NON-DELEGABLE-AUTHORITY-2026-08.
+    ReservedCapability {
+        capability: String,
+        reserved_member: String,
+    },
 }
 
 impl std::fmt::Display for IssuanceError {
@@ -1480,6 +1725,16 @@ impl std::fmt::Display for IssuanceError {
                     "external request (IP: {}) attempted to issue internal-only capability '{}'",
                     source_ip.as_deref().unwrap_or("unknown"),
                     capability
+                )
+            }
+            IssuanceError::ReservedCapability {
+                capability,
+                reserved_member,
+            } => {
+                write!(
+                    f,
+                    "capability '{}' is reserved to the sovereign operator ({}) — it may not be placed in a grant",
+                    capability, reserved_member
                 )
             }
         }
@@ -2943,6 +3198,363 @@ mod tests {
                 assert_eq!(max, 0);
             }
             other => panic!("expected SubtreeDepthExceeded, got {:?}", other),
+        }
+    }
+
+    // ── Non-delegable authority (NON-DELEGABLE-AUTHORITY-2026-08 step 1) ──
+    //
+    // The membership table ships empty, so these tests split in two: the
+    // lookup mechanism is tested against a synthetic table, and the live
+    // path is tested to prove it is currently inert. Step 2 replaces the
+    // inertness tests with real membership tests.
+
+    /// The table lookup matches by capability name, including the name
+    /// carried by `Custom` — which is the only shape N1–N5 could take today,
+    /// since none of them is an existing `GrantedCapability` variant.
+    #[test]
+    fn reserved_lookup_matches_custom_capability_name() {
+        const TEST_TABLE: &[(&str, ReservedReason)] =
+            &[("genesis_sign", ReservedReason::GenesisSignature)];
+
+        let smuggled = GrantedCapability::Custom {
+            name: "genesis_sign".to_string(),
+            parameters: serde_json::Value::Null,
+        };
+        assert_eq!(
+            lookup_reserved(smuggled.name(), TEST_TABLE),
+            Some(ReservedReason::GenesisSignature)
+        );
+
+        let ordinary = GrantedCapability::Read {
+            scope: vec!["*".to_string()],
+        };
+        assert_eq!(lookup_reserved(ordinary.name(), TEST_TABLE), None);
+    }
+
+    /// Lookup is exact, not prefix or substring — a capability whose name
+    /// merely contains a reserved name is not itself reserved.
+    #[test]
+    fn reserved_lookup_is_exact_match() {
+        const TEST_TABLE: &[(&str, ReservedReason)] =
+            &[("genesis_sign", ReservedReason::GenesisSignature)];
+
+        for near_miss in ["genesis_signx", "xgenesis_sign", "genesis", "GENESIS_SIGN"] {
+            assert_eq!(
+                lookup_reserved(near_miss, TEST_TABLE),
+                None,
+                "'{}' should not match",
+                near_miss
+            );
+        }
+    }
+
+    /// Step-1 invariant: the shipped table carries the liveness probe and
+    /// **no spec member**, so no Layer A claim has been made and no real
+    /// authority has changed behaviour. Step 2 adds the first spec member and
+    /// must update this test deliberately, not incidentally.
+    #[test]
+    fn reserved_set_contains_probe_only_no_spec_members() {
+        assert_eq!(
+            RESERVED_CAPABILITY_NAMES.len(),
+            1,
+            "expected only the liveness probe"
+        );
+        for (name, reason) in RESERVED_CAPABILITY_NAMES {
+            assert!(
+                !reason.is_spec_member(),
+                "'{}' is a spec member ({}) — adding one carries the KEEL III.6 \
+                 amendment cost and must be a deliberate change, not a drive-by",
+                name,
+                reason.member_id()
+            );
+        }
+    }
+
+    /// No ordinary capability matches. The probe is deliberately unreachable
+    /// by any name a real grant would carry.
+    #[test]
+    fn ordinary_capabilities_are_never_reserved() {
+        let every_variant = [
+            GrantedCapability::Read { scope: vec![] },
+            GrantedCapability::Write { scope: vec![] },
+            GrantedCapability::Execute { languages: vec![] },
+            GrantedCapability::CredentialAccess {
+                credential_refs: vec![],
+            },
+            GrantedCapability::ApiCall { endpoints: vec![] },
+            GrantedCapability::ConfigChange { settings: vec![] },
+            GrantedCapability::MeshSend {
+                destinations: vec![],
+            },
+            GrantedCapability::Custom {
+                name: "anything".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            GrantedCapability::ToolCall { tools: vec![] },
+        ];
+        for cap in &every_variant {
+            assert!(
+                reserved_class(cap).is_none(),
+                "'{}' unexpectedly matched the reserved table",
+                cap.name()
+            );
+        }
+    }
+
+    /// End-to-end at enforcement point 1: a grant naming a reserved
+    /// capability is refused at issuance, and the error names the member.
+    #[test]
+    fn reserved_capability_is_refused_at_issuance() {
+        let grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "some-agent".to_string(),
+            GrantedCapability::Custom {
+                name: RESERVED_PROBE_CAPABILITY.to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        );
+
+        match grant.validate_issuance().unwrap_err() {
+            IssuanceError::ReservedCapability {
+                capability,
+                reserved_member,
+            } => {
+                assert_eq!(capability, RESERVED_PROBE_CAPABILITY);
+                assert_eq!(reserved_member, "N0");
+            }
+            other => panic!("expected ReservedCapability, got {:?}", other),
+        }
+    }
+
+    /// The reserved check precedes the provenance check. A grant that is both
+    /// reserved and missing `issued_via` must report the reserved refusal —
+    /// the refusal has to name the real reason, not whichever check fired
+    /// first. This is the ordering step 2 inherits.
+    #[test]
+    fn reserved_refusal_precedes_missing_provenance() {
+        let grant = CapabilityGrant::new(
+            "genesis".to_string(),
+            "some-agent".to_string(),
+            GrantedCapability::Custom {
+                name: RESERVED_PROBE_CAPABILITY.to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        );
+        // `new()` leaves issued_via = None, which would otherwise produce
+        // MissingProvenance.
+        assert!(grant.issued_via.is_none());
+        assert!(matches!(
+            grant.validate_issuance().unwrap_err(),
+            IssuanceError::ReservedCapability { .. }
+        ));
+    }
+
+    /// End-to-end at enforcement point 2: re-delegation of a reserved
+    /// capability is refused, and refused ahead of the tier check — a Tier 5
+    /// parent would otherwise return `CeremonyTierNotDelegable` and mask the
+    /// real reason.
+    #[test]
+    fn reserved_capability_is_refused_at_delegation_ahead_of_tier() {
+        let parent = CapabilityGrant::new(
+            "genesis".to_string(),
+            "subject1".to_string(),
+            GrantedCapability::Custom {
+                name: RESERVED_PROBE_CAPABILITY.to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_max_delegation_depth(5)
+        .with_trust_tier(TrustTier::Tier5);
+
+        match parent
+            .delegate(
+                "subject2".to_string(),
+                GrantedCapability::Custom {
+                    name: RESERVED_PROBE_CAPABILITY.to_string(),
+                    parameters: serde_json::Value::Null,
+                },
+                "rcpt-child".to_string(),
+            )
+            .unwrap_err()
+        {
+            DelegationError::ReservedCapability {
+                capability,
+                reserved_member,
+            } => {
+                assert_eq!(capability, RESERVED_PROBE_CAPABILITY);
+                assert_eq!(reserved_member, "N0");
+            }
+            other => panic!(
+                "expected ReservedCapability to precede the tier check, got {:?}",
+                other
+            ),
+        }
+    }
+
+    /// Regression guard: the new check sits at the top of `delegate()`, so
+    /// an ordinary delegation must still succeed unchanged.
+    #[test]
+    fn reserved_check_does_not_disturb_ordinary_delegation() {
+        let parent = CapabilityGrant::new(
+            "genesis".to_string(),
+            "subject1".to_string(),
+            GrantedCapability::Custom {
+                name: "tool-execution".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            "rcpt".to_string(),
+        )
+        .with_max_delegation_depth(5);
+
+        let child = parent
+            .delegate(
+                "subject2".to_string(),
+                GrantedCapability::Custom {
+                    name: "tool-execution".to_string(),
+                    parameters: serde_json::Value::Null,
+                },
+                "rcpt-child".to_string(),
+            )
+            .expect("ordinary delegation must still succeed in step 1");
+        assert_eq!(child.delegation_depth, 1);
+    }
+
+    /// Member ids are the spec's identifiers and are used in refusal
+    /// receipts — a chain reader resolves the refusal against the spec by
+    /// this string, so it is part of the wire contract, not a label.
+    #[test]
+    fn reserved_reason_member_ids_are_stable_and_distinct() {
+        let all = [
+            ReservedReason::GenesisSignature,
+            ReservedReason::ReservedSetAmendment,
+            ReservedReason::RootRevocation,
+            ReservedReason::FormGraduation,
+            ReservedReason::ConstitutionalModification,
+            ReservedReason::ReservedGrantIssuance,
+            ReservedReason::Probe,
+        ];
+        let ids: Vec<&str> = all.iter().map(|r| r.member_id()).collect();
+        assert_eq!(ids, vec!["N1", "N2", "N3", "N4", "N5", "N6", "N0"]);
+
+        let mut seen = std::collections::HashSet::new();
+        for id in &ids {
+            assert!(seen.insert(*id), "duplicate member id {}", id);
+        }
+
+        // The probe must never be mistaken for a spec member.
+        assert!(!ReservedReason::Probe.is_spec_member());
+        assert!(ReservedReason::GenesisSignature.is_spec_member());
+
+        assert!(ReservedReason::GenesisSignature
+            .to_string()
+            .contains("N1"));
+    }
+
+    /// `satisfiable_actions` and `matches_action` must not be able to disagree.
+    ///
+    /// This is the guard that lets `satisfiable_actions` be a *derivation*
+    /// rather than a stored field. Without it the two are just two hand-written
+    /// tables, which is the arrangement this method was written to avoid.
+    ///
+    /// Scope is wildcarded throughout so the only thing under test is the
+    /// capability-to-action-type pairing; scope narrowing has its own tests.
+    #[test]
+    fn satisfiable_actions_agrees_with_matches_action() {
+        use crate::policy::{ActionType, FileOperation};
+
+        // Exhaustive, no wildcard arm, on purpose: adding a variant to
+        // `ActionType` breaks this build. That is the loud failure that keeps
+        // `satisfiable_actions` honest when the action vocabulary grows.
+        // Do not add a `_` arm — add the variant, and a sample below.
+        fn action_kind(a: &ActionType) -> &'static str {
+            match a {
+                ActionType::Chat => "Chat",
+                ActionType::Read { .. } => "Read",
+                ActionType::Write { .. } => "Write",
+                ActionType::ApiCall { .. } => "ApiCall",
+                ActionType::Execute { .. } => "Execute",
+                ActionType::FileOp { .. } => "FileOp",
+                ActionType::CredentialAccess { .. } => "CredentialAccess",
+                ActionType::ConfigChange { .. } => "ConfigChange",
+                ActionType::KeyDelegation { .. } => "KeyDelegation",
+                ActionType::PeerIntroduction { .. } => "PeerIntroduction",
+                ActionType::ToolCall { .. } => "ToolCall",
+                ActionType::InferenceRequest { .. } => "InferenceRequest",
+            }
+        }
+
+        let star = || vec!["*".to_string()];
+        let capabilities = vec![
+            GrantedCapability::Read { scope: star() },
+            GrantedCapability::Write { scope: star() },
+            GrantedCapability::Execute { languages: star() },
+            GrantedCapability::CredentialAccess { credential_refs: star() },
+            GrantedCapability::ApiCall { endpoints: star() },
+            GrantedCapability::ConfigChange { settings: star() },
+            GrantedCapability::MeshSend { destinations: star() },
+            GrantedCapability::Custom {
+                name: "anything".to_string(),
+                parameters: serde_json::Value::Null,
+            },
+            GrantedCapability::ToolCall { tools: star() },
+        ];
+
+        // Samples for the variants that can be constructed without inventing
+        // field values. The remaining variants are still covered by
+        // `action_kind`'s exhaustive match and by `no_unsampled_kinds` below.
+        let actions = vec![
+            ActionType::Chat,
+            ActionType::Read { target: "anything".to_string() },
+            ActionType::Write { target: "anything".to_string() },
+            ActionType::ApiCall { endpoint: "https://anything".to_string() },
+            ActionType::Execute { language: "python".to_string() },
+            ActionType::FileOp {
+                op: FileOperation::Read,
+                path: "anything".to_string(),
+            },
+            ActionType::CredentialAccess { credential_ref: "anything".to_string() },
+            ActionType::ConfigChange { setting: "anything".to_string() },
+            ActionType::ToolCall { name: "anything".to_string() },
+        ];
+
+        for capability in &capabilities {
+            let grant = CapabilityGrant::new(
+                "grantor".to_string(),
+                "grantee".to_string(),
+                capability.clone(),
+                "rcpt-test".to_string(),
+            );
+            let declared = grant.satisfiable_actions();
+
+            for action in &actions {
+                let kind = action_kind(action);
+                let declared_says = declared.contains(&kind);
+                let matcher_says = grant.matches_action(action);
+                assert_eq!(
+                    declared_says, matcher_says,
+                    "disagreement for capability {:?} on action {}: \
+                     satisfiable_actions says {}, matches_action says {}. \
+                     These two describe the same pairing and must be changed \
+                     together.",
+                    capability, kind, declared_says, matcher_says
+                );
+            }
+
+            // Every kind named must be one we actually exercised above —
+            // otherwise the agreement check silently skips it.
+            let sampled: Vec<&'static str> = actions.iter().map(action_kind).collect();
+            for kind in declared {
+                assert!(
+                    sampled.contains(kind),
+                    "satisfiable_actions names `{kind}` for {:?}, but no sample \
+                     action of that kind exists, so agreement was never checked. \
+                     Add one to `actions`.",
+                    capability
+                );
+            }
         }
     }
 }

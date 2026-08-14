@@ -305,20 +305,20 @@ async fn chain_happy_path_three_entry_sequence() {
 
     let delegation_idx = entries
         .iter()
-        .position(|e| event_of(e).map_or(false, |ev| ev.starts_with("delegation:granted:")))
+        .position(|e| event_of(e).is_some_and(|ev| ev.starts_with("delegation:granted:")))
         .expect("delegation:granted:* must appear on chain");
 
     let gate_idx = entries
         .iter()
         .position(|e| {
-            event_of(e).map_or(false, |ev| ev == format!("gate:allowed:{}", tool))
+            event_of(e).is_some_and(|ev| ev == format!("gate:allowed:{}", tool))
         })
         .expect("gate:allowed:<tool> must appear on chain");
 
     let exec_idx = entries
         .iter()
         .position(|e| {
-            event_of(e).map_or(false, |ev| ev == format!("exec:{}:ok", tool))
+            event_of(e).is_some_and(|ev| ev == format!("exec:{}:ok", tool))
         })
         .expect("exec:<tool>:ok must appear on chain");
 
@@ -359,12 +359,12 @@ async fn chain_denied_gate_no_exec_when_delegation_absent() {
     let entries = h.entries();
 
     let has_denied = entries.iter().any(|e| {
-        event_of(e).map_or(false, |ev| ev == format!("gate:denied:{}", tool))
+        event_of(e).is_some_and(|ev| ev == format!("gate:denied:{}", tool))
     });
     assert!(has_denied, "gate:denied:{} must appear on chain", tool);
 
     let has_exec = entries.iter().any(|e| {
-        event_of(e).map_or(false, |ev| ev.starts_with(&format!("exec:{}:", tool)))
+        event_of(e).is_some_and(|ev| ev.starts_with(&format!("exec:{}:", tool)))
     });
     assert!(
         !has_exec,
@@ -516,7 +516,7 @@ async fn chain_injection_gate_allowed_but_exec_omitted() {
 
     let gate_idx = entries
         .iter()
-        .position(|e| event_of(e).map_or(false, |ev| ev == format!("gate:allowed:{}", tool)))
+        .position(|e| event_of(e).is_some_and(|ev| ev == format!("gate:allowed:{}", tool)))
         .expect("gate:allowed:<tool> must appear on chain");
 
     // Verify the chain is intact up to and including the gate entry.
@@ -525,7 +525,7 @@ async fn chain_injection_gate_allowed_but_exec_omitted() {
     // Verify there is NO exec entry after the gate entry.
     let has_exec_after_gate = entries[gate_idx + 1..]
         .iter()
-        .any(|e| event_of(e).map_or(false, |ev| ev.starts_with(&format!("exec:{}:", tool))));
+        .any(|e| event_of(e).is_some_and(|ev| ev.starts_with(&format!("exec:{}:", tool))));
 
     assert!(
         !has_exec_after_gate,
@@ -646,7 +646,7 @@ async fn gate_http_emits_chain_entry() {
         resp
     );
     assert!(
-        resp["chain_entry_hash"].as_str().map_or(false, |s| !s.is_empty()),
+        resp["chain_entry_hash"].as_str().is_some_and(|s| !s.is_empty()),
         "chain_entry_hash must be a non-empty string; body: {}",
         resp
     );
@@ -669,12 +669,21 @@ async fn gate_http_grant_enables_agent_via_chain() {
     let agent = "boundary-test-agent";
 
     // Issue a capability grant for the agent via HTTP.
+    //
+    // The capability type is load-bearing, not incidental. `lease_prereq_for_agent`
+    // tests the grant with `matches_action(ActionType::ToolCall { .. })`, and
+    // `CapabilityGrant::matches_action` only pairs `GrantedCapability::ToolCall`
+    // with that action (`zp-core/src/capability_grant.rs:860-863`); every other
+    // pairing falls through to `_ => false`. An `execute` grant scoped `["*"]`
+    // therefore reads as broad on the chain and authorises no tool call at all.
+    // If this assertion ever fails again, fix the grant, not the gate — loosening
+    // the scope check would retire Claim 4 narrowing.
     let (grant_status, grant_resp) = h
         .post_authed(
             "/api/v1/capabilities/grant",
             serde_json::json!({
                 "grantee": agent,
-                "capability": "execute",
+                "capability": "tool_call",
                 "scope": ["*"],
                 "max_delegation_depth": 1
             }),
