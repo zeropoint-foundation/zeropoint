@@ -113,17 +113,67 @@ fn is_comment(line: &str) -> bool {
     t.starts_with("//") || t.starts_with("*") || t.starts_with("/*")
 }
 
+/// Blank every comment line, preserving line count.
+///
+/// # Why blank rather than drop (2026-08-14)
+///
+/// Both predicates below must match against the **whole file**, not line by
+/// line. `open_coded_threshold_re` is written for a construct that spans
+/// lines — `matches!\s*\([^)]*` followed by `Severity::Error|Critical`, where
+/// `[^)]*` crosses newlines by design. Fed one line at a time it can only
+/// ever match the single-line spelling, so whether the pin fires depends on
+/// whether rustfmt wrapped the call — that is, on identifier length.
+///
+/// This was not hypothetical. At `18466fc` this pin was green while
+/// `crates/zp-regent/src/loop_runner.rs:300` still read:
+///
+/// ```text
+///     matches!(
+///         f.severity,
+///         zp_officers::finding::Severity::Critical
+///     )
+/// ```
+///
+/// Whole-file scan matches that. Line-by-line does not. The pin passed on a
+/// formatting accident, which is the precise failure mode a discipline pin
+/// exists to prevent — a rule that looks enforced and is not.
+///
+/// Blanking rather than deleting keeps byte offsets aligned to line numbers,
+/// so `line_of` can still report where a violation is. Comment lines stay
+/// exempt: these files quote the old spellings deliberately.
+fn scrub_comments(src: &str) -> String {
+    src.lines()
+        .map(|l| if is_comment(l) { "" } else { l })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// 1-indexed line number containing byte offset `at`.
+fn line_of(src: &str, at: usize) -> usize {
+    src[..at].bytes().filter(|b| *b == b'\n').count() + 1
+}
+
+/// Every match of `re` in `rel`, as `(line_number, that line trimmed)`.
+fn violations_in(rel: &str, re: &Regex) -> Vec<String> {
+    let raw = read(rel);
+    let scrubbed = scrub_comments(&raw);
+    let lines: Vec<&str> = raw.lines().collect();
+    re.find_iter(&scrubbed)
+        .map(|m| {
+            let n = line_of(&scrubbed, m.start());
+            let text = lines.get(n - 1).map(|l| l.trim()).unwrap_or("");
+            format!("  {rel}:{n}  {text}")
+        })
+        .collect()
+}
+
 #[test]
 fn urgency_is_never_decided_by_a_severity_string() {
     let re = string_comparison_re();
     let mut violations = Vec::new();
 
     for rel in SCANNED {
-        for (i, line) in read(rel).lines().enumerate() {
-            if !is_comment(line) && re.is_match(line) {
-                violations.push(format!("  {rel}:{}  {}", i + 1, line.trim()));
-            }
-        }
+        violations.extend(violations_in(rel, &re));
     }
 
     assert!(
@@ -144,11 +194,7 @@ fn thresholds_are_not_open_coded_against_the_enum() {
     let mut violations = Vec::new();
 
     for rel in SCANNED {
-        for (i, line) in read(rel).lines().enumerate() {
-            if !is_comment(line) && re.is_match(line) {
-                violations.push(format!("  {rel}:{}  {}", i + 1, line.trim()));
-            }
-        }
+        violations.extend(violations_in(rel, &re));
     }
 
     assert!(
@@ -188,6 +234,45 @@ fn the_scan_finds_the_sanctioned_predicates() {
              this pin does not look."
         );
     }
+}
+
+/// The pin must catch a threshold whatever way rustfmt broke the line.
+///
+/// This is the regression test for the 2026-08-14 finding described on
+/// `scrub_comments`: the wrapped spelling below is the exact text that sat
+/// green in `loop_runner.rs` at `18466fc`. If someone reverts the scan to
+/// line-by-line, `wrapped` stops matching and this test fails loudly, rather
+/// than the pin going quietly blind.
+#[test]
+fn the_scan_catches_a_threshold_however_rustfmt_wrapped_it() {
+    let re = open_coded_threshold_re();
+
+    let inline = "        if matches!(f.severity, Severity::Critical) {";
+    let wrapped = "            let has_critical = latest_findings.iter().any(|f| {\n\
+                   \x20               matches!(\n\
+                   \x20                   f.severity,\n\
+                   \x20                   zp_officers::finding::Severity::Critical\n\
+                   \x20               )\n\
+                   \x20           });";
+
+    assert!(
+        re.is_match(inline),
+        "the single-line threshold spelling is no longer caught"
+    );
+    assert!(
+        re.is_match(&scrub_comments(wrapped)),
+        "the rustfmt-wrapped threshold spelling is no longer caught — the scan \
+         has regressed to line-by-line, and the pin now fires or not depending \
+         on identifier length. See `scrub_comments`."
+    );
+
+    // And a comment carrying the forbidden spelling stays exempt, or every
+    // doc comment in these files becomes a violation.
+    let commented = "            // matches!(f.severity, Severity::Critical)";
+    assert!(
+        !re.is_match(&scrub_comments(commented)),
+        "comment lines are no longer exempt"
+    );
 }
 
 #[test]

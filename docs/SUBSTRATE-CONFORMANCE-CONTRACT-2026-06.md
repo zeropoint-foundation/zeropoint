@@ -776,9 +776,16 @@ In order of appearance in this document:
   specification; the Tier 6 spoke candidate
 - `docs/SUPPLY-CHAIN-MANIFEST.md` — the partial Tier 11 spoke; currently
   covers public-site asset SRI
-- `docs/whitepaper-v2.md` — the public thesis; §6.1 (governance by
-  protocol, not by rules) is the source for §7's governance-by-decree
-  point
+- `docs/whitepaper-v9.md` — the public thesis; §5 (The Governance Model —
+  *"Governance in ZeroPoint is protocol, not policy. It is enforced by
+  structure — evaluation order, invariant checks, cryptographic
+  verification — rather than by trust in an organization"*) is the source
+  for §7's governance-by-decree point. **Repointed 2026-08-14**: this cited
+  `whitepaper-v2.md` §6.1, and no v2 exists — the file is v8 and v9, of
+  which v9 is what the rest of the corpus cites. The section number moved
+  too, so repointing to §6.1 of either extant draft would have produced a
+  citation that *resolves and is wrong*, which is worse than one that
+  dangles.
 - `CLAUDE.md` workflow heuristics — the cockpit-projection heuristic
   (project-not-decide pattern), the propose-not-sign heuristic, and the
   singular-sovereign-root heuristic that the integration patterns
