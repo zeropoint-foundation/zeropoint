@@ -1,102 +1,138 @@
-# Anchor Backend Selection — choose the first witness by its trust root
+# Anchor Backend Selection — a floor that always works, an escalation that answers harder questions
 
-**Document type:** Design note / decision memo. Elaborates no KEEL section; it selects an implementation behind the existing `TruthAnchor` trait and the `EXTERNAL-ANCHOR-TIER-CONTRACT`.
+**Document type:** Design note / decision memo. Elaborates no KEEL section; it selects implementations behind the existing `TruthAnchor` trait and the `EXTERNAL-ANCHOR-TIER-CONTRACT`.
 
-**Status:** Proposed 2026-08-14. No code written. Requests one operator ruling (§6).
+**Status:** Proposed 2026-08-14. **Revision 2, same day** — revision 1 posed a false choice between backends and got two supporting facts wrong. See §7. No code written. Requests two rulings (§6).
 
 **Date:** 2026-08-14.
 
-**Composes with:** `EXTERNAL-ANCHOR-TIER-CONTRACT` (§5 Forbidden #5 — compact commitment only), `THREAT-MODEL-2026-08.md` (§3.4 — the scenario that needs this), `NOSTR-TRANSPORT-CONFORMANCE-2026-08.md` (§3 — the relay-classification ruling already resolved the anchoring case), `TRUST-ROOT-LOCUS-LENS-2026-08.md` (the lens this document is scored against), `DEPENDENCY-POSTURE.md` (dual-path rule).
+**Composes with:** `EXTERNAL-ANCHOR-TIER-CONTRACT` (§5 Forbidden #5 — compact commitment only), `THREAT-MODEL-2026-08.md` (§3.4 — the scenario that needs this), `NOSTR-TRANSPORT-CONFORMANCE-2026-08.md` (§3 — the relay-classification ruling, and an open question this document raises against it), `TRUST-ROOT-LOCUS-LENS-2026-08.md`, `DEPENDENCY-POSTURE.md` (dual-path rule).
 
-**Attribution:** Drafted by Claude against the `zp-anchor` trait, the corpus, and the threat model. The ruling in §6 is Ken's.
+**Attribution:** Drafted by Claude against the `zp-anchor` trait, the corpus, and primary sources cited inline. The rulings in §6 are Ken's.
 
 ---
 
 ## 1. Why this is now the blocking item
 
-`THREAT-MODEL-2026-08.md` §3.4 works the accountability scenario — an agent drives a platform login as its operator, the platform asks "was this you" — through three deployment profiles, and the answer that distinguishes the governed substrate is *a receipt anchored where the operator cannot revise it*.
+`THREAT-MODEL-2026-08.md` §3.4 works the accountability scenario — an agent drives a platform login as its operator, the platform asks "was this you" — through three deployment profiles, and the answer distinguishing the governed substrate is *a receipt anchored where the operator cannot revise it*.
 
-That answer is currently unavailable. `zp-anchor` is a trait with one file and no backend; the `zp-hedera` crate its doc comment references does not exist in the workspace; `README.md` showed Hedera HCS as a live component until 2026-08-14.
+That answer is currently unavailable. `zp-anchor` is a trait with one file and no backend; the `zp-hedera` crate its doc references does not exist in the workspace.
 
-**The scenario that best justifies the project depends on the component least implemented.** That is the sequencing defect this memo exists to close.
+**The scenario that best justifies the project depends on the component least implemented.** That is the sequencing defect this memo closes.
 
 ## 2. What the anchor must actually do
 
-Narrower than "put the chain on a blockchain." From `EXTERNAL-ANCHOR-TIER-CONTRACT` §5 Forbidden #5, only the **compact commitment** crosses the boundary — hash, height, signature. Never receipt bodies, actor identifiers, claim types, policy decisions or grants.
+Narrower than "put the chain on a blockchain." Per `EXTERNAL-ANCHOR-TIER-CONTRACT` §5 Forbidden #5, only the **compact commitment** crosses the boundary — hash, height, signature. Never receipt bodies, actor identifiers, claim types, policy decisions or grants.
 
-So the requirement is exactly:
+So the requirement is:
 
 > Given a chain head hash, produce evidence that **this hash existed no later than time T**, verifiable by a party that trusts neither the operator nor ZeroPoint.
 
-Three properties, and only three:
+Four properties matter, and revision 1 only named three:
 
-- **Precedence.** The commitment demonstrably predates the dispute. This is the whole point; without attested time, an anchor proves only that the operator once published a hash, which the operator could do at any time including afterwards.
-- **Independence.** The witness is outside the operator's control. `NOSTR-TRANSPORT-CONFORMANCE` §3 already draws this conclusion and is worth quoting, because it is counterintuitive and already ruled: *"An internal-only anchoring deployment would be worthless — a witness you control witnesses nothing."*
-- **Verifiability without the witness's cooperation.** A third party must be able to check the proof later, without the anchor operator answering a query, and ideally without trusting them at all.
+- **Precedence.** The commitment demonstrably predates the dispute.
+- **Independence.** The witness is outside operator control. `NOSTR-TRANSPORT-CONFORMANCE` §3 already ruled on this: *"an internal-only anchoring deployment would be worthless — a witness you control witnesses nothing."*
+- **Verifiability without the witness's cooperation.** A third party can check the proof later without the anchor operator answering a query.
+- **Non-suppressibility.** *(New in revision 2, and the property that changes the conclusion.)* A third party can establish that a commitment exists **without the operator's cooperation.** These last two are not the same property, and no single backend has both.
 
-The trait's existing design notes are correct and constrain this usefully: anchoring is **event-driven, not scheduled** — *"the chain doesn't get 'more true' by being witnessed more often"* — and the operator chooses the backend. Both hold under every option below.
+The trait's existing design notes constrain this usefully and hold under every option: anchoring is **event-driven, not scheduled** — *"the chain doesn't get 'more true' by being witnessed more often"* — and **the operator chooses the backend** (design principle #3).
 
-## 3. Candidates, scored by trust root
+## 3. The two serious candidates, scored honestly
 
-The trait's own doc comment already enumerates the field: *"Hedera HCS, Ethereum L2 calldata, Bitcoin OpenTimestamps, Ceramic streams, or a simple HTTPS timestamp authority."*
+The trait's doc comment already enumerates the field: *"Hedera HCS, Ethereum L2 calldata, Bitcoin OpenTimestamps, Ceramic streams, or a simple HTTPS timestamp authority."* Two are serious for this substrate.
 
-| Backend | Root of trust | Account / cost | Offline verify | Precedence |
-|---|---|---|---|---|
-| **OpenTimestamps** (Bitcoin) | Bitcoin proof-of-work | none / free | **Yes** — proof + block headers | ~1–6 h to confirm |
-| **Sigstore Rekor** | The Rekor operator's key + witness co-signing | none / free | Partial — needs the log's key | Immediate |
-| **RFC 3161 TSA** | A commercial CA | none–low | Yes, given the CA cert | Immediate |
-| **Hedera HCS** | The Hedera Governing Council | account + per-message fee | No — requires querying the network | Immediate |
-| **Nostr multi-relay** | None — replication only | none / free | N/A | **None** (see §4) |
+| | OpenTimestamps | Hedera HCS |
+|---|---|---|
+| Trust root | Bitcoin proof-of-work | Hedera Governing Council |
+| Account required | none | account + funded HBAR balance |
+| Cost per commitment | none | **$0.0008** (raised 8× from $0.0001, Jan 2026) |
+| Time resolution | **±2–3 hours** (Bitcoin attestation) | seconds, exact consensus timestamp |
+| Ordering between commitments | none | total order within a topic |
+| Verify offline | **yes**, once upgraded | no — requires querying the network |
+| Survives its infrastructure dying | **yes**, upgraded proofs verify against block headers forever | no |
+| Third party can confirm **without operator** | **no** — the proof is a file the operator holds | **yes**, via mirror nodes |
 
-**Scored against `TRUST-ROOT-LOCUS-LENS`, Hedera is the weakest candidate despite being the documented target.** That lens exists to notice when a mechanism converges with the industry while its *root* diverges, and it carries a standing finding across three sweeps: no draft or programme roots the chain in the principal's own key. Adopting a witness rooted in a governing council would be that same pattern pointed at ourselves — an institutional trust root, in the one component whose entire job is to be trustworthy to someone who does not trust us. It also costs money per commitment and requires an account, which makes the sovereign, offline, self-hosted deployment the one that cannot anchor.
+### 3.1 Hedera's case, stated at full strength
 
-**OpenTimestamps inverts every one of those.** No account, no fee, no registration. The proof is a self-contained file: a Merkle path from your hash to a Bitcoin block header. Verification needs the proof and a header chain — not the aggregator's cooperation, not its continued existence, not its honesty. If every OTS calendar server disappears tomorrow, previously issued proofs still verify. That is the strongest independence property available, and it is the one that matches what the substrate claims about itself.
+**Suppression resistance is the strongest argument, and revision 1 missed it.** An OTS proof is a file *you* possess. In a dispute where you are the party being questioned, a witness only you hold is not forgeable — but it is losable, and it is withholdable. Nothing compels you to produce it. An HCS topic is queryable by a third party through mirror nodes: the platform can confirm a commitment existed at a time **without your cooperation**. For an adversary class defined as "a platform deciding whether to believe you" (`THREAT-MODEL` A4), that asymmetry is the whole game.
 
-Its cost is latency: a commitment is provisional until the Bitcoin transaction confirms, typically an hour or several. Under the trait's event-driven model this is nearly free — anchoring fires on audits, disputes, introductions and operator requests, none of which need a witness within seconds. And §2's requirement is *precedence*, which is a claim about the past. A proof that lands an hour late still proves the hash existed an hour ago.
+**Precise time and ordering.** Seconds of finality with an exact timestamp, and a total order across a topic. OTS gives a ±2–3 hour window per hash and no relation between separate proofs. If a dispute turns on sequence — this grant preceded that action — OTS cannot answer and Hedera can.
 
-## 4. What Nostr multi-relay is and is not
+**Legibility.** In a compliance conversation, "anchored to Hedera Consensus Service" is a recognised answer. "A Bitcoin calendar aggregation proof" requires a paragraph of explanation to someone who will not read it.
 
-`NOSTR-TRANSPORT-CONFORMANCE` §3's payload table permits *"compact chain-head commitments (hash + height + signature)"* on an external relay, and it is tempting to read that as the anchor being already solved by work in flight.
+**Cost is not an objection.** Revision 1 implied it was; at $0.0008 per message and event-driven volume, this is single-digit dollars a year. The real burden is needing a funded account — a custody and operations question, not a financial one.
 
-It is not, and the distinction matters. Relays give **replication and witness plurality** — that document's own note that multi-relay publication *"makes withholding require collusion"* is right. What they do not give is **attested time**: a relay's `created_at` is set by the publisher and the relay may lie about when it saw an event. Nostr has no consensus timestamp and no inclusion proof.
+### 3.2 Where Hedera's case is thinner than it looks
 
-So the two compose rather than compete:
+The queryable record is a **hash**. A third party learns existence and time, not content — they still need the operator to supply the receipt that hashes to it. Hedera removes the operator's ability to suppress *that something happened*; it does not remove the ability to withhold *what*.
 
-- **OpenTimestamps** supplies precedence — *this hash existed by time T*.
-- **Nostr multi-relay** supplies availability and plurality — *and here is where N independent parties can be seen to hold it*.
+And the funded-account requirement bites precisely where this project claims to live: an air-gapped, self-hosted, or unbanked deployment cannot hold a funded HBAR balance, and therefore cannot anchor at all. Scored against `TRUST-ROOT-LOCUS-LENS`, the governing-council root also remains that lens's standing finding — mechanism converges, root does not — pointed at ourselves.
 
-Publishing the OTS proof itself as a compact commitment across several external relays is strictly better than either alone, and it stays inside Forbidden #5 because an OTS proof is a hash path, carrying no chain content.
+### 3.3 Where OTS is weaker than revision 1 claimed
 
-## 5. Proposed shape
+Stated plainly, because revision 1 overstated it:
 
-**First backend: `zp-anchor-ots`**, implementing `TruthAnchor` against the OpenTimestamps protocol.
+- **Durability applies to *upgraded* proofs only.** Peter Todd's own account is precise: a proof is self-validating and easy to mirror *after* `ots upgrade` pulls the Bitcoin attestation. Before that, an incomplete timestamp still depends on the calendar server. Revision 1's "survives everything" described the end state, not the lifecycle.
+- **±2–3 hour resolution.** Fine for "did this precede a complaint filed a week later." Useless for ordering two actions an hour apart.
+- **Custody is the operator's problem**, which is what makes suppression possible.
 
-- `anchor()` submits the chain head hash to N calendar servers, stores the returned provisional proof, and upgrades it to a Bitcoin-attested proof once confirmed. `AnchorReceipt.consensus_timestamp` is the Bitcoin block time.
-- `verify()` checks the Merkle path against a block header — no network call if headers are cached.
-- `query()` reads locally stored proofs by time range.
-- Feature-gated, off by default, per the `libp2p` precedent `NOSTR-TRANSPORT-CONFORMANCE` NT3 warns against repeating.
-- Per the dual-path rule, the trait must retain at least one other viable implementation. `zp-anchor-tsa` (RFC 3161) is the natural second: immediate timestamps, different root, ~200 lines.
+What survives unchanged is the part that matters for a floor: *"the worst an aggregation server can do is go offline, an inconvenience. The aggregation system **can't** produce a fake timestamp, because it's Bitcoin, not the aggregation system, that proves the validity."*
+
+### 3.4 The reframe
+
+Revision 1 asked which backend displaces the other. That was the wrong question — the trait is plural by design and its third design principle is that the operator chooses. These two fail differently rather than competing:
+
+- **OTS is the floor.** No account, no balance, no institutional root, works in every deployment including the air-gapped one, costs nothing to leave enabled.
+- **Hedera is the escalation.** Precise time, ordering, and third-party queryability — the properties that answer the harder half of §3.4, for deployments that can hold an account.
+
+Keeping Hedera is not a concession on this reading. It is the backend that answers the suppression question, and nothing else in the field does.
+
+### 3.5 Nostr relays are not a third option
+
+`NOSTR-TRANSPORT-CONFORMANCE` §3's payload table permits *"compact chain-head commitments (hash + height + signature)"* on external relays, which invites reading the anchor as already solved by work in flight. It is not.
+
+Relays supply **replication and witness plurality** — that document's note that multi-relay publication *"makes withholding require collusion"* is correct. They do not supply **attested time**: `created_at` is publisher-set and a relay may lie about when it saw an event.
+
+But they do bear on **suppression**, which is the gap in the OTS floor. Publishing OTS proofs across several external relays would let a third party observe that a commitment exists without the operator producing it — recovering most of what Hedera offers, without an account.
+
+**This raises an open question against that document, and it is a real one.** §3.2's ephemerality ruling is scoped to *cross-sovereign kinship payloads*. §3's table lists chain-head commitments as permitted on external relays without stating whether those must also be ephemeral. If commitments may persist, relays substantially close the suppression gap in the floor. If the ephemeral rule extends to them, they cannot, and Hedera becomes the only answer to suppression. **Ruling requested — §6.3.**
+
+## 4. Proposed shape
+
+**Floor: `zp-anchor-ots`.** Submits the chain head hash to N calendar servers, stores the provisional proof, upgrades it to a Bitcoin-attested proof once confirmed. `verify()` replays the commitment operations against a block header, no network call with headers cached. Feature-gated; intended to be the default-enabled backend because enabling it requires nothing of the operator.
+
+**Escalation: `zp-anchor-hedera`.** Implements the same trait against HCS with an operator-configured topic and account. Enabled by configuration, never by default, because it requires a funded balance the operator must consciously provision.
+
+Both behind the existing trait, unmodified. Per the dual-path rule, having two real implementations is itself the point — `DEPENDENCY-POSTURE`'s *"hedged architecturally; not yet hedged in code"* is the drift this avoids.
 
 **Verifiable outcomes:**
 
-- **AT1** — `zp-anchor-ots` implements `TruthAnchor` unmodified. No trait method widened.
-- **AT2** — A proof verifies with the calendar servers unreachable. This is the property that distinguishes it from every account-based backend, so it is the test that matters most.
-- **AT3** — Nothing but hash, height and signature crosses `anchor()`. A test asserts that a commitment carrying receipt content fails at construction, not at runtime.
-- **AT4** — With the feature disabled, the workspace builds and no substrate operation changes outcome.
-- **AT5** — **The §3.4 test.** Given a completed tool action, produce the receipt chain answering *which agent, under which grant, authorized by whom, expiring when* — plus an anchor proof of precedence — and verify the whole thing with the operator's keys withheld from the verifier. This is the only outcome here that tests the §1 invariant rather than a component of it, and it is `THREAT-MODEL` §7's test 7.
+- **AT1** — both crates implement `TruthAnchor` unmodified. No trait method widened.
+- **AT2** — *(rescoped in revision 2)* **an upgraded OTS proof verifies with every calendar server unreachable.** Revision 1 treated this as a universal discriminator, which was unfair — it is a property of the floor, and the reason the floor is the floor. It is not a defect in Hedera that it fails a test defined around offline verification.
+- **AT3** — **the suppression test, and Hedera's counterpart to AT2.** A third party, given only a topic ID and a hash, confirms the commitment's existence and time through a mirror node with the operator offline.
+- **AT4** — nothing but hash, height and signature crosses `anchor()` in either backend. A test asserts a commitment carrying receipt content fails at construction, not at runtime.
+- **AT5** — with both features disabled, the workspace builds and no substrate operation changes outcome.
+- **AT6** — **the §3.4 test.** Given a completed tool action, produce the receipt chain answering *which agent, under which grant, authorized by whom, expiring when* — plus an anchor proof of precedence — and verify the whole thing with the operator's keys withheld from the verifier. This is `THREAT-MODEL` §7's test 7, and the only outcome that tests the invariant rather than a component.
 
-**Minimum slice (m0):** anchor one chain head, wait for confirmation, verify the proof offline with the network disabled. No integration with the gate, no triggers wired, no receipt family. If m0 goes badly, deleting the crate is the whole rollback.
+**Minimum slice (m0):** anchor one chain head via OTS, wait for confirmation, verify the proof offline with the network disabled. No gate integration, no triggers wired, no receipt family. Deleting the crate is the whole rollback. Hedera follows at m1, when AT3 becomes testable.
 
-## 6. Ruling requested
-
-1. **Is OpenTimestamps the first backend, displacing Hedera as the documented target?** The argument is §3: Hedera's root is institutional, and a sovereignty substrate whose witness roots in a governing council has the same defect its own lens exists to detect in others. Hedera would remain a permitted backend — the trait is plural by design, and an operator who wants it should have it.
-2. **Does the README's roadmap entry change accordingly?** It currently reads "◇ External Anchor — Hedera HCS is the reference target."
-
-If the answer to (1) is no, the §5 shape holds with `zp-anchor-hedera` substituted, and AT2 becomes untestable — which is itself the argument.
-
-## 7. Non-goals
+## 5. Non-goals
 
 - **Not chain storage.** Forbidden #5 stands; the commitment is a hash.
 - **Not a timer.** Event-driven, per the trait's design notes.
-- **Not required.** With no anchor configured the substrate operates unchanged and local chain integrity is unaffected. The anchor buys third-party verifiability, nothing else.
-- **Not a currency dependency.** OTS calendar servers aggregate submissions and pay their own fees; the operator holds no wallet, no key, and no balance. Any proposal that requires the operator to hold a token reopens §6.
+- **Not required.** With no anchor configured the substrate operates unchanged and local chain integrity is unaffected.
+- **The floor must not require a funded balance.** *(Revised — revision 1 stated this as a blanket refusal of any token dependency, which would have excluded Hedera entirely and was the error that produced the false choice.)* The requirement is not that no backend may need funding; it is that the **default** must not, so that a deployment with no account still anchors. This is the reason for the floor/escalation split rather than an argument against Hedera.
+
+## 6. Rulings requested
+
+1. **Is OTS the default-enabled floor, with Hedera the configured escalation?** §3.4's argument: a default requiring no account is a default that always works, and Hedera answers the suppression question that OTS cannot.
+2. **Build order.** OTS first is proposed on size — it is the smaller crate and m0 needs no external account. Hedera first is defensible if enterprise legibility is nearer-term than the air-gapped case.
+3. **May a chain-head commitment persist on an external Nostr relay?** Per §3.5, this decides whether relay publication can close the suppression gap in the floor, or whether Hedera remains the only answer to it. This is a question for `NOSTR-TRANSPORT-CONFORMANCE`, raised here because this is where it bites.
+
+## 7. What revision 1 got wrong
+
+Recorded rather than silently edited, because two of the three are factual.
+
+- **Cost was cited as a barrier.** It is not. $0.0008 per message, raised 8× in January 2026 from $0.0001, at event-driven volume. The real burden is account custody, which is a different and weaker argument than the one made.
+- **OTS durability was overstated.** "Verifies offline, survives everything" is true of upgraded proofs. Incomplete timestamps depend on the calendar until upgraded, and Bitcoin's attestation is accurate only to within two or three hours — a limitation revision 1 did not mention at all.
+- **The framing was a false choice.** Displacement was never the question; the trait is plural and the operator chooses. Revision 1 scored Hedera against criteria drawn from OTS's strengths and concluded, unsurprisingly, that OTS won. Suppression resistance — the property Hedera has and OTS lacks — went unnamed, and it is the property §3.4 most depends on.
