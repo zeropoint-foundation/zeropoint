@@ -58,6 +58,22 @@
 //! and says plainly that it has not been independently replayed. That is a
 //! weaker claim than AT2 and the code says so rather than implying otherwise.
 //!
+//! ## Calendars are contacted concurrently, and that is a correctness property
+//!
+//! All three calendar round-trips — submit, upgrade, reachability — fan out
+//! rather than iterate. Serially, three calendars at a 10-second timeout cost
+//! up to 30 seconds, and because anchoring is event-driven that stall lands
+//! inside a governance flow rather than in a background job: a gate denial or
+//! a dispute is exactly when an anchor fires and exactly when a 30-second block
+//! is least acceptable. Fanning out bounds the worst case at one timeout.
+//!
+//! **This does not make anchoring free.** One timeout is still up to ten
+//! seconds of awaiting inside whatever called it. Whether `anchor()` should be
+//! awaited on a governance path at all, or dispatched and reconciled later, is
+//! a question for the pipeline that owns the trigger rather than for this
+//! crate — noted here because the concurrency fix improves the number without
+//! changing the shape.
+//!
 //! ## Payload
 //!
 //! Only the chain head hash is submitted. Not the sequence, not the trigger,
@@ -223,8 +239,20 @@ impl TruthAnchor for OtsAnchor {
         let mut partial = Vec::new();
         let mut failures = Vec::new();
 
-        for cal in &self.calendars {
-            match calendar::submit(&self.client, cal, &digest, self.timeout).await {
+        // Concurrent, not sequential. Submitted serially with a 10s per-call
+        // timeout, three calendars cost up to 30s of blocking — and anchoring
+        // is event-driven, so that stall lands inside a governance flow
+        // (a gate denial, a dispute) rather than in a background job. Fanning
+        // out bounds the worst case at one timeout instead of N.
+        let client = &self.client;
+        let timeout = self.timeout;
+        let outcomes = futures::future::join_all(self.calendars.iter().map(|cal| async move {
+            (cal.clone(), calendar::submit(client, cal, &digest, timeout).await)
+        }))
+        .await;
+
+        for (cal, outcome) in outcomes {
+            match outcome {
                 Ok(p) => {
                     debug!(calendar = %p.calendar, bytes = p.bytes.len(), "ots: partial proof");
                     partial.push(CalendarProof {
@@ -287,8 +315,21 @@ impl TruthAnchor for OtsAnchor {
         let chain_matches = receipt.commitment.chain_head_hash == proof.digest_hex;
 
         if !proof.attested {
-            for cal in &self.calendars {
-                match calendar::upgrade(&self.client, cal, &digest, self.timeout).await {
+            // Concurrent for the same reason as `anchor`. This gives up the
+            // old short-circuit — every calendar is now asked even when the
+            // first already has the attestation — which costs two extra
+            // requests and buys a worst case of one timeout rather than three.
+            // At three calendars and event-driven cadence that trade is clear.
+            let client = &self.client;
+            let timeout = self.timeout;
+            let outcomes =
+                futures::future::join_all(self.calendars.iter().map(|cal| async move {
+                    (cal.clone(), calendar::upgrade(client, cal, &digest, timeout).await)
+                }))
+                .await;
+
+            for (cal, outcome) in outcomes {
+                match outcome {
                     Ok(Some(bytes)) => {
                         proof.attested_proof = Some(bytes);
                         proof.attested = true;
@@ -372,12 +413,18 @@ impl TruthAnchor for OtsAnchor {
     }
 
     async fn is_available(&self) -> bool {
-        for cal in &self.calendars {
-            if calendar::reachable(&self.client, cal, self.timeout).await {
-                return true;
-            }
-        }
-        false
+        // Concurrent: an all-unreachable check was the worst case here, and it
+        // is exactly the case a caller asks about.
+        let client = &self.client;
+        let timeout = self.timeout;
+        futures::future::join_all(
+            self.calendars
+                .iter()
+                .map(|cal| calendar::reachable(client, cal, timeout)),
+        )
+        .await
+        .into_iter()
+        .any(|reachable| reachable)
     }
 }
 
