@@ -637,8 +637,10 @@ pub struct AppStateInner {
     pub policy_distributor: zp_mesh::PolicyDistributor,
     /// Event-driven Merkle anchor pipeline (#176).
     /// Detects significant governance events as they land on the audit chain
-    /// and seals epochs against the configured `TruthAnchor` backend
-    /// (NoOpAnchor by default, HCS when `zp-hedera` is wired in).
+    /// and seals epochs against the configured `TruthAnchor` backend, selected
+    /// by `ZP_ANCHOR`: OpenTimestamps by default, `off` for no anchoring.
+    /// Hedera HCS remains supported but is never the default — it needs a
+    /// funded balance someone must consciously provision.
     pub anchor_pipeline: Arc<anchor_pipeline::AnchorPipeline>,
 
     /// P4 (#197): standing-delegation lease heartbeat state. `Some` only on
@@ -1184,11 +1186,64 @@ impl AppState {
         };
 
         // Anchor pipeline (#176): event-driven Merkle epoch sealing.
-        // Default backend is NoOpAnchor — the architecture is testable without
-        // an external ledger, and HCS becomes a drop-in replacement when the
-        // `zp-hedera` client is wired into onboarding.
+        //
+        // Backend selection, per `docs/design/ANCHOR-BACKEND-SELECTION-2026-08.md`
+        // §6.1 (operator ruling 2026-08-14): **OpenTimestamps is the default
+        // floor.** It is the default because enabling it asks nothing of the
+        // operator — no account, no funded balance — so an air-gapped or
+        // unbanked deployment anchors too. Hedera remains supported and is
+        // never default, because it requires a balance someone must
+        // consciously provision.
+        //
+        // `ZP_ANCHOR=off` disables anchoring entirely and is the escape hatch
+        // for a deployment that does not want outbound calls from a governance
+        // path. Note what enabling costs: `anchor()` fans out to three public
+        // calendars with a ten-second worst case, and anchoring is
+        // event-driven, so that await lands inside a gate denial or a dispute
+        // rather than in a background job. See `zp-anchor-ots`'s crate docs on
+        // why the concurrency fix improved that number without changing its
+        // shape.
+        //
+        // An unrecognised value is a startup failure rather than a silent
+        // fallback: `ZP_ANCHOR=OTS` quietly turning anchoring off would be the
+        // configuration mistake hardest to notice, since nothing downstream
+        // errors — the chain simply stops being witnessed.
+        let anchor_backend = std::env::var("ZP_ANCHOR")
+            .unwrap_or_else(|_| "ots".to_string())
+            .to_ascii_lowercase();
+
+        let anchor: Arc<dyn zp_anchor::TruthAnchor> = match anchor_backend.as_str() {
+            "off" | "none" => {
+                tracing::info!("anchor: disabled by ZP_ANCHOR — chain is not externally witnessed");
+                Arc::new(zp_anchor::NoOpAnchor)
+            }
+            "ots" => match zp_core::paths::data_dir() {
+                Ok(dir) => {
+                    let store = zp_anchor_ots::default_store_dir(&dir);
+                    tracing::info!(store = %store.display(), "anchor: OpenTimestamps floor");
+                    Arc::new(zp_anchor_ots::OtsAnchor::new(store))
+                }
+                Err(e) => {
+                    // Cannot resolve where proofs would live. Anchoring
+                    // silently into nowhere is worse than not anchoring, so
+                    // this degrades loudly rather than pretending.
+                    tracing::error!(
+                        "anchor: cannot resolve the data dir ({e}) — anchoring DISABLED; \
+                         set ZP_ANCHOR=off to make this deliberate"
+                    );
+                    Arc::new(zp_anchor::NoOpAnchor)
+                }
+            },
+            other => panic!(
+                "ZP_ANCHOR={other:?} is not a recognised anchor backend. \
+                 Valid values: 'ots' (default, OpenTimestamps floor) or 'off'. \
+                 Refusing to start rather than silently leaving the chain \
+                 unwitnessed."
+            ),
+        };
+
         let anchor_pipeline = Arc::new(anchor_pipeline::AnchorPipeline::new(
-            Arc::new(zp_anchor::NoOpAnchor),
+            anchor,
             audit_store.clone(),
             identity.destination_hash.clone(),
         ));

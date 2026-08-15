@@ -7681,6 +7681,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-anchor-ots"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "zp-anchor",
+]
+
+[[package]]
 name = "zp-artifacts"
 version = "0.1.0"
 dependencies = [
@@ -7960,6 +7977,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -8338,6 +8356,7 @@ dependencies = [
  "which",
  "zeroize",
  "zp-anchor",
+ "zp-anchor-ots",
  "zp-artifacts",
  "zp-audit",
  "zp-config",

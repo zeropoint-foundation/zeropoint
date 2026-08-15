@@ -71,7 +71,7 @@ ZeroPoint integrates with agent harnesses as a two-layer extension — no forkin
 
 `docs/design/HOST-BROKER-2026-08.md` §3.4 argues the guard layer should own the tool endpoint rather than hook the harness lifecycle — a hook the harness can skip is not a boundary.
 
-**◇ External Anchor** — `zp-anchor` defines the `TruthAnchor` trait. No concrete backend ships in this workspace today; Hedera HCS is the reference target.
+**◈ External Anchor** — `zp-anchor` defines the `TruthAnchor` trait; `zp-anchor-ots` implements it against OpenTimestamps and is the default floor, chosen because enabling it requires no account and no funded balance, so an air-gapped deployment anchors too. Hedera HCS is supported as a configured backend for the property OTS lacks — a third party confirming a commitment exists without the operator producing the proof — and is ◇ not yet built. Full offline verification of an OTS proof (replay against a Bitcoin header) is ◇ likewise pending; the crate reports an unverified proof as unverified rather than claiming otherwise. See [`docs/design/ANCHOR-BACKEND-SELECTION-2026-08.md`](docs/design/ANCHOR-BACKEND-SELECTION-2026-08.md).
 
 ## Get Started
 
