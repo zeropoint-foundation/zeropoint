@@ -169,6 +169,7 @@ Published as a table, per Whonix's practice of making the negative space explici
 | Signature verification of policy modules | **Not implemented.** Blake3 content hash only; `PolicyMetadata.signature` is never populated or checked. |
 | A harness that declines to route through the governed endpoint | Out of scope. The `uwt` answer — own the endpoint rather than hook the lifecycle — is `WHONIX-LESSONS` §3.4. |
 | Traffic analysis of substrate activity | Out of scope. Not an anonymity system. |
+| **Suppression of an anchor proof by the operator** | **Accepted property of the default anchor floor, 2026-08-14.** `zp-anchor-ots` proofs are files the operator holds, so an operator can lose or withhold one. The anchor is therefore unforgeable but not unsuppressable, and a third party cannot confirm a commitment exists without the operator producing it. Closing this requires a witness with an independent index — `zp-anchor-hedera` (unbuilt) is the specified answer, per `ANCHOR-BACKEND-SELECTION-2026-08.md` §3.1. Recorded as a limitation rather than left as an open question. |
 | Operator behaviour | Out of scope. Whonix's phrasing is the right one: no protection for *"those who fail to read the Documentation."* |
 
 ---

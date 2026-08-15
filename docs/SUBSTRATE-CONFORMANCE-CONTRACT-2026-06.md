@@ -171,6 +171,69 @@ reading, not a re-read. Confidence is high on what the draft says and
 low on what it becomes — individual drafts frequently expire without
 issue, which is why nothing above is a claim change.
 
+**Amended 2026-08-15 (E13).** A second external falsifier vocabulary,
+adopted on a stronger warrant than the first: it was arrived at twice,
+independently. Two standards lineages have converged on the same four
+authorization primitives by different routes — IETF/OAuth via the `act`
+claim, and DID/VC via NIST SP 800-162 ABAC and RFC 9396. Independent
+convergence is the best available evidence that a primitive set is
+right, and it hands the substrate a conformance checklist it did not
+have to author. Scored against the tree on 2026-08-15:
+
+- **Deny-precedence** — a deny anywhere in the evaluation governs.
+  Mechanism here: the rule chain in `crates/zp-policy/src/engine.rs`
+  resolves most-restrictive-wins across all rules, native and WASM
+  alike. ZP passes on its face.
+- **Attenuation-only delegation** — no hop widens what it received.
+  Mechanism here: `CapabilityGrant::delegate()` requires equal-or-
+  narrower scope, enforced by `GrantedCapability::contains`
+  (`crates/zp-core/src/capability_grant.rs:646`). This is the same
+  mechanism R1 scores, reached from the other lineage, and it passes for
+  the same reason.
+- **Mandatory expiry** — an authorization that never lapses is not
+  bounded. **ZP fails, at the constructor.** `CapabilityGrant::new()`
+  defaults `expires_at` to `None` (`capability_grant.rs:333`), so
+  non-expiring is what a caller receives by omission rather than by
+  decision. The defect is in the default, which is the most load-bearing
+  place it could be: every grant that nobody thought about is unbounded.
+- **Default-deny** — absent an authorizing rule, refuse. **Treat this as
+  the open one, and note that it is open rather than failed.** The
+  substrate has two layers with opposite defaults. The capability layer
+  *is* default-deny: nothing acts outside a grant's scope. The policy
+  engine is default-allow by written design — `DefaultAllowRule` is the
+  permissive baseline, evaluated last — per `ARCHITECTURE.md` §13.3's
+  install-and-run posture. Those two have never been reconciled in a
+  single statement, and this convergence is the occasion to do it, not
+  the authority to overrule it.
+
+**Where this differs from the R1/R3/R7/R8 reading, and why it is worth
+recording separately.** E10's vocabulary came from one lineage and
+tested the *shape* of delegation. This one came from two and tests the
+*defaults*, which is a different and less flattering question: a
+substrate can implement every mechanism correctly and still ship a
+posture that grants more than intended, because a default is what
+happens when nobody decides. The two failures found here are both
+defaults — one at a constructor, one at a rule chain — and neither would
+have surfaced by scoring mechanisms.
+
+**On the remedy for expiry, corrected.** A first reading called this a
+one-line type change. It is not: there are 118 `CapabilityGrant`
+construction sites across the workspace, and making the field
+non-optional is a refactor rather than a fix. The proportionate remedy
+is at the boundary — `validate_issuance` already gates issuance and
+already refuses external provenance on credential access; refusing a
+grant issued without an expiry belongs there, and costs nothing at the
+118 sites. Enforce where the thing crosses, not by rewriting every
+caller.
+
+Source: the 2026-08-15 landscape sweep, which read Chinese-language and
+arXiv primary sources and surfaced the DID/VC lineage the log had not
+previously tracked. The convergence claim rests on that sweep's reading
+of both lineages, not on a re-read here. Confidence is high on the
+primitive set — two independent arrivals is the point — and the scoring
+above is a direct read of the tree on that date, pinned by the line
+citations.
+
 ### The eight principles
 
 Principles are conservation laws, not policy preferences. Every per-tier

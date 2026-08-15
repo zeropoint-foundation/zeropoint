@@ -447,7 +447,11 @@ First, an earlier reading of this finding counted eight production sites constru
 
 Second, default-deny is deliberately **not** scored as a failure. The two-layer split is a real architectural position with a written rationale, not an oversight, and scoring it as a failure would import a standards body's framing over a documented substrate decision. What the convergence earns is a re-examination, not a verdict.
 
-**Nominated, not applied.** The expiry defect is small and mechanical — make expiry non-optional at construction, or pin a maximum TTL and require an explicit opt-out receipt. The default-deny question is architectural and belongs to whoever next opens `ARCHITECTURE` §13.3.
+**APPLIED 2026-08-15.** Pasted into `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06.md` after the E10 block, restructured to match that block's shape — per-primitive bullets, a divergence paragraph, a source line with a confidence note — rather than the single dense paragraph first drafted here.
+
+**Correction carried into the paste.** This block first called the expiry remedy "small and mechanical — make expiry non-optional at construction." That was wrong: there are **118 `CapabilityGrant` construction sites** workspace-wide, so changing the field's optionality is a refactor, not a fix. The proportionate remedy is at the boundary — `validate_issuance` already gates issuance and already refuses external provenance on credential access; refusing a grant issued without an expiry belongs there and costs nothing at the 118 sites. The corrected recommendation is what was pasted.
+
+The default-deny question is architectural, is recorded in the paste as **open rather than failed**, and belongs to whoever next opens `ARCHITECTURE` §13.3.
 
 ---
 
@@ -469,13 +473,17 @@ E9a already gives the right frame for meeting one: an ERC-8004 identity is verif
 
 **Open, and not proposed here.** Whether the substrate should ever *present* an identity to a counterparty operating an ERC-8004 registry, as opposed to merely receiving one, is a separate question about outbound interop and does not belong to the quarantine plane. Nothing in the corpus addresses it, and this block deliberately does not open it.
 
+**APPLIED 2026-08-15.** Appended to the third-signature-state paragraph in `QUARANTINE-PLANE-2026-07.md`. No new vocabulary, no new gate behaviour, no new admission path — two recorded fields and a line of reading discipline.
+
 ---
 
 ## Summary of nominated actions — round three
 
 | Block | Document | Kind | Status |
 |---|---|---|---|
-| E13 | `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06` | Additive paste + two scored defects | Nominated |
-| E14 | `QUARANTINE-PLANE-2026-07` | Additive paste | Nominated |
+| E13 | `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06` | Additive paste + two scored defects | **APPLIED (2026-08-15)** — restructured to match the E10 block's shape; expiry remedy corrected before pasting |
+| E14 | `QUARANTINE-PLANE-2026-07` | Additive paste | **APPLIED (2026-08-15)** |
 
-**Neither block is applied. Both request an operator ruling.** E13 additionally carries a code-level defect — the expiry constructor default — which is fixable independently of whether the block is ever pasted, and should be, since a non-expiring grant by omission is the kind of thing that is discovered rather than decided.
+**Both applied by operator ruling, 2026-08-15.** Applying them is itself the ruling this sheet requested; recorded here so the sheet does not misdescribe its own state.
+
+**One code-level defect remains open and is not closed by either paste.** `CapabilityGrant::new()` defaults `expires_at` to `None`, so a grant is unbounded by omission. E13 records it and names the proportionate remedy (`validate_issuance`, not the type). Nothing has been changed in the tree — a non-expiring grant by omission is the kind of thing that is discovered rather than decided, and it should be decided.

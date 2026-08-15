@@ -211,3 +211,15 @@ second is far more likely.
 - IETF datatracker  # 2026-08-14, SECOND load-bearing item
   (draft-reece-wimse-cross-org-delegation, R1-R9 requirements) after the AIP
   drafts on 2026-08-13 — **promotion candidate for the default list**
+- news.cn / 人民邮电报 and china.com.cn / 央视新闻 (Chinese-language state
+  outlets)  # 2026-08-15, TWO load-bearing items in one run — the GB/Z 185-2026
+  agent-interconnection standard series with 2,000+ 智能体身份码 issued, and the
+  20263116-Q-252 mandatory agent-security standard plan. Both read in the
+  original; English search coverage collapsed 指导性 (guidance) into "standard"
+  and would have produced a wrong item. **Promotion candidate for the defaults.**
+- eips.ethereum.org / ERC-8004 + on-chain agent registries  # 2026-08-15,
+  Trustless Agents live on mainnet since Jan 2026 with ERC-721-based agent
+  identity — an entire lineage this log had never once mentioned
+- arXiv bibliographies as a traversal surface (not a source, a method)  #
+  2026-08-15, produced four of the run's items; following one preprint's
+  reference list outperformed every seed-term search

@@ -1206,3 +1206,356 @@ being re-derived.
   new, and the source of one load-bearing item plus three adjacent ones today.
   NVIDIA's own pages were also the thing that settled the Qwen3.8-Max release
   question that two prior sweeps left open. Appended to Candidate sources.
+
+## 2026-08-15
+
+**Swept:** Widening classes ranged over beyond the defaults: **(1) non-English
+primary text** — Chinese-language searching against 网信办 / 国标委 territory,
+two Chinese primaries fetched and read in the original (Xinhua/人民邮电报 on the
+mandatory standard, CCTV via china.com.cn on GB/Z 185-2026); **(2) standards
+venues** — `spec.c2pa.org` fetched directly, ERC-8004 and NIST NCCoE reached at
+search level; **(3) preprints** — two arXiv papers, one read in full at source;
+**(6) security disclosure** — search level only, nothing verified at NVD;
+**(7) non-EU/China regulatory primary text** — Singapore CSA publication page
+fetched at source, EU Commission Code of Practice page fetched at source. Not
+ranged this run: **(4)** vendors beyond the frontier labs, **(5)** release
+artifacts, **(8)** off-beat adjacent domains. YouTube leg ran: four channels
+fetched by RSS, one new transcript read in full.
+
+The dominant finding of this run is not any single item. It is that a whole
+lineage — W3C VC/DID, on-chain agent registries, state-issued agent identity
+codes — has been **structurally invisible to this log for five entries**. Counts
+across the entire file before today: `IMDA` 0, `NCCoE` 0, `ERC-8004` 0,
+`verifiable credential` 0, `did:` 0, `GB/Z` 0, `国家标准` 0. The log has tracked
+the IETF/OAuth delegation lineage closely and well, and has been reading one
+half of the field while believing it was reading the field. That is precisely
+the narrowing the sources file's widening mandate exists to catch, and it took a
+Chinese-language search plus one arXiv bibliography to surface it.
+
+### Load-bearing — may change a ZP direction
+
+- **China published a seven-part national standard system for agent identity and
+  interconnection, and has begun issuing agent identity codes.** The
+  《人工智能 智能体互联》 GB/Z 185-2026 series — seven 指导性国家标准 (guidance
+  national standards) — was released at an application-promotion conference in
+  Beijing. The seven parts are 总体架构 (overall architecture), 智能体身份码
+  (agent identity code), 身份管理 (identity management), 能力描述 (capability
+  description), 跨域发现 (cross-domain discovery), 协同交互 (collaborative
+  interaction), 工具调用 (tool invocation). The identity code is described in the
+  original as the 核心落地载体 — the core implementation vehicle. A first-batch
+  issuance ceremony was held at the same event: 累计完成2000余个重点行业智能体身份码发放
+  — over 2,000 identity codes issued to key-industry agents, giving each agent a
+  唯一可追溯"数字身份证" (unique traceable "digital ID card"). An English
+  translation was published at the 2026 WAIC international standardisation
+  forum; Russian and Arabic versions are stated as forthcoming, with promotion
+  through ASEAN.
+  - Source: [china.com.cn carrying 央视新闻, 24 July 2026, read in
+    Chinese](http://guoqing.china.com.cn/2026-07/24/content_118615570.shtml)
+    (shipped — the standards are published and codes are issued. Note GB/Z is a
+    *guidance technical document*, advisory in Chinese standards hierarchy, not
+    a mandatory GB. The distinction matters and every English summary of this
+    that was visible in search collapsed it.)
+  - Bearing: this is the sharpest available contrast to ZP's identity posture,
+    and it is not theoretical — 2,000 codes exist. Where ZP holds that identity
+    is a key the operator controls, this system holds that identity is a code an
+    authority issues and can trace. Both are answers to "how does a counterparty
+    know which agent it is talking to." The implication for ZP is a question
+    about reach rather than about correctness: if the identity layer for
+    cross-domain agent interaction is being set by a state standards body and
+    exported with translations, then "portable trust infrastructure" has to say
+    what portability means across a boundary where the other side's identity is
+    issued rather than held. State the question and stop; this does not get
+    investigated in a research task.
+  - Confidence: high on the facts — read in the original Chinese from a central
+    state outlet reprinting CCTV, per verification rule 5. Medium on the framing:
+    the 2,000 figure and the "world's first" claim are the publisher's, and the
+    actual normative text of the seven parts was not obtained this run.
+
+- **A mandatory Chinese national standard for agent security has been formally
+  initiated, with market access named as a downstream consequence.** 国家标准化管理委员会
+  (SAC) issued the plan for 《智能体应用安全基本要求》 ("Basic Security
+  Requirements for Agent Applications"), plan number **20263116-Q-252**,
+  administered by 中央网信办 (CAC), with drafting led by China Mobile, 中国电子技术标准化研究院
+  (CESI) and 国家计算机网络应急技术处理协调中心 (CNCERT/CC). The original describes
+  it as 全球首部面向智能体安全的强制性国家标准. Its stated scope is 面向公众的智能体产品与服务
+  — agent products and services facing the public. Its stated purpose is to
+  convert governance red lines into 可落地、可检测的技术合规要求 (implementable,
+  testable technical compliance requirements) providing a 法定底层依据 for
+  行业监管、市场准入和技术测评 — industry regulation, **market access**, and
+  technical assessment. The risk framing in the original is the notable part:
+  安全风险已从传统的内容输出层面扩展至自主行动层面 (risk has moved from content output
+  to autonomous action), naming 信息泄露、权限失控、工具滥用、意图偏离 — information
+  leakage, **permission loss of control**, tool abuse, and intent deviation.
+  - Source: [Xinhua carrying 人民邮电报, 28 July 2026, read in
+    Chinese](https://www.news.cn/tech/20260728/8ebf5083cf0e487287f894fb31e123f5/c.html)
+    (**announced**, precisely — 立项 means the standard-development project has
+    been approved and drafting assigned. The standard is not published and not
+    in force. Any summary saying China "has issued" a mandatory agent security
+    standard is ahead of the source.)
+  - Bearing: 权限失控 — loss of control over permissions — is named as a
+    first-order risk category in an instrument that will gate market access.
+    That is delegation narrowing arriving as a compliance requirement rather than
+    as an architectural preference, in the largest single market that has moved
+    on it. The implication for ZP is that the delegation-narrowing argument may
+    stop being something to explain and start being something to conform to,
+    with the conformance target set by a body ZP has no relationship with. A
+    question, not a finding about ZP.
+  - Confidence: high on what the document says — read in the original. Low on
+    timing and content: a 立项 gives no publication date, and the normative text
+    does not exist yet.
+
+- **ERC-8004 "Trustless Agents" has been live on Ethereum mainnet since 29
+  January 2026 and holds tens of thousands of registered agents — and this log
+  had never mentioned it.** The standard defines three registries deployed once
+  per chain: an **Identity Registry** assigning agents portable **ERC-721-based**
+  identities, a **Reputation Registry** recording publicly readable feedback, and
+  a **Validation Registry** storing independent attestations of agent
+  performance. Deployed on Ethereum, BNB Smart Chain and Base; BSC reportedly
+  carries the largest population at roughly 32k registrations. A separate
+  ecosystem scanner indexes 44,355 agents.
+  - Source: [EIP-8004 as cited from the MolTrust
+    preprint](https://eips.ethereum.org/EIPS/eip-8004) and [an empirical study of
+    the ecosystem, arXiv 2606.26028](https://arxiv.org/html/2606.26028)
+    (**shipped** for mainnet deployment. The chain-by-chain registration counts
+    and the 44,355 figure are secondary and were not verified on-chain this run;
+    the empirical study was surfaced but **not read** — it exceeded fetch limits
+    and is flagged for a future run.)
+  - Bearing: agent identity as a **transferable ERC-721 token** is a direct
+    contradiction of *identity is a key, not a location* — an NFT identity can be
+    sold, and whatever reputation attaches to it travels with the buyer rather
+    than with the principal. ZP has an answer to this and the answer is
+    structural, but the question of what ZP says to a counterparty whose agent
+    identity is an NFT is currently unaddressed in the corpus as far as this log
+    can see. Surface and stop.
+  - Confidence: medium-high on the architecture (three registries, ERC-721
+    identity, mainnet since January) — consistent across independent sources
+    including a hostile-titled academic study. Low on population figures.
+
+- **The closest independent instance yet of ZeroPoint's primitive stack —
+  and it still does not root in the operator's key.** "Trust Without Trusting:
+  A Recomputable Trust Protocol for Autonomous Agents" (Lars Kroehl, MolTrust /
+  CryptoKRI GmbH, 14 June 2026) describes a live W3C VC + DID trust layer running
+  since March 2026 whose primitives are: DIDs with Ed25519 key ownership,
+  Verifiable Credentials carrying **attenuating delegation chains any verifier
+  can traverse independently**, dual-signed **Interaction Proof Records**
+  Merkle-anchored on Base L2, and an aggregate trust score. Its authorization
+  object (the "Agent Authorization Envelope") mandates **default-deny,
+  deny-precedence, attenuation-only delegation, and mandatory expiry**. Its
+  stated design goal is that the exercise of boundary-authority be *recomputable*
+  by any party rather than certified by a trusted one, explicitly rejecting a
+  person, a single chain, or a single instance as the certifier.
+  - Source: [arXiv 2605.06738, read in full at
+    source](https://arxiv.org/html/2605.06738) (**preprint / speculated** for the
+    headline governance mechanism; **shipped** only for the underlying
+    verification layer.)
+  - Bearing: **verification rule 6 was applied hard here, and it changed the
+    reading.** The surface impression is the outside world independently
+    arriving at ZP's conclusions — attenuation-only, default-deny, mandatory
+    expiry, append-only anchored evidence, no central verifier. On a careful read
+    that impression does not survive four things. (i) It is a single-author
+    preprint from the author's own commercial entity, citing its own earlier
+    version under the same arXiv identifier. (ii) The registry is admitted to be
+    "run by one organisation," and anchoring is on one chain (Base L2) despite
+    the paper's own argument against single-chain certifiers — multi-chain
+    anchoring is listed as pending. (iii) The headline mechanism is
+    "demonstrable on testnet"; the paper's own Gate-2 prerequisites are marked
+    *open*. (iv) The registry population is stated as "on the order of dozens of
+    agents." So: convergence on mechanism, not on maturity. But the *interesting*
+    part is where it still diverges — the example credential in the paper is
+    issued by `did:moltrust:bank-9f2a` to `did:moltrust:agent-7c3a`. **The issuer
+    is an institution.** The human principal is not the root; the bank is. This
+    is now the fourth consecutive sweep to find attenuation specified
+    beautifully and the root placed somewhere other than the person, and it is
+    the first to find it in the DID/VC lineage rather than the IETF/OAuth one.
+    Two independent lineages, same root placement. That is a stronger version of
+    the pattern than any prior sweep had.
+  - Confidence: high that the paper says what is described — read in full at
+    source. High that the convergence is partial rather than real, for the four
+    reasons above. Deliberately low confidence offered on the paper's deployment
+    claims, which are self-reported and bootstrap-scale.
+
+- **xAI shipped a consumer agent product whose security model is one shared
+  perimeter with credentials authorised once.** Grok Bot entered beta 11 August
+  2026. Per the vendor page: bots "have their own computer," "sign into the tools
+  you already use," work across apps and inboxes, run continuously, and surface
+  only when approval is needed. Availability is stated by the vendor as SuperGrok
+  Heavy, Cursor Ultra, and Cursor Teams Premium subscribers on desktop and iOS.
+  Nate B Jones, who used it, describes the consequence directly and approvingly:
+  *"because it's all one computer, you authorize that once in one conversation
+  with one bot. Any other bot you use with Grok anywhere else at any time, it's
+  authorized."* He ran over a dozen agents on it. He frames the single perimeter
+  as the security advantage: *"adding more agents doesn't add to that security
+  perimeter."*
+  - Source: [x.ai/news/introducing-grok-bot](https://x.ai/news/introducing-grok-bot)
+    (**shipped**, beta) — name and tier availability verified at the vendor per
+    rule 2; the auto-caption rendered it "Grockbot" throughout and the $200 /
+    $120 price points circulating are aggregator-level, **not** confirmed on the
+    vendor page and not asserted here. Usage description is
+    [commentary](https://www.youtube.com/watch?v=LM7Ft7g8qJw), transcript read in
+    full.
+  - Bearing: the standards bodies are specifying per-hop attenuation while the
+    shipping consumer product is collapsing N agents onto one credential set and
+    marketing that collapse *as the safety property*. Both cannot be right about
+    what makes agent delegation safe. Worth noting that the argument for the
+    shared perimeter is not stupid — a single legible boundary the operator can
+    reason about beats twelve boundaries they cannot — and any ZP framing that
+    treats per-capability narrowing as self-evidently better is arguing against
+    a real usability claim rather than a straw one. That is the implication;
+    it stops here.
+  - Confidence: high on the product and its shape. Medium on how widely this
+    model spreads — one product, three weeks old.
+
+### Adjacent — logged, no action
+
+- **C2PA version question resolved at source.** The prior entry flagged that no
+  C2PA version number in this log should be trusted. Fetched
+  `spec.c2pa.org` directly: the current specification set is **2.4**, with
+  Content Credentials, crJSON, Soft Binding API, Security Considerations and
+  Harms Modelling all at 2.4, the Human and Organizational Identity
+  Recommendation at 2.4, AI/ML guidance at 2.3, and the downloadable PDF bundle
+  offered at 2.3. Earlier entries citing 2.2 or 2.3 as "current" were reading
+  aggregators. — https://spec.c2pa.org/specifications/specifications/2.4/index.html
+
+- **The EU's Code of Practice on Transparency of AI-generated Content was
+  finalised 10 June 2026 and had roughly 190 signatories by end of July** — never
+  previously logged, though this log has covered Article 50 and its guidelines
+  three times. Two sections: providers (marking and detection) and deployers
+  (labelling of deepfakes and AI-generated text). Adherence is voluntary; the
+  Article 50 obligations are not. The Commission and AI Board have issued an
+  opinion that the code is an adequate voluntary compliance route, and
+  non-signatories must demonstrate adequacy to individual market surveillance
+  authorities instead. — https://digital-strategy.ec.europa.eu/en/policies/code-practice-ai-generated-content
+
+- **Singapore's CSA finalised its Addendum on Securing Agentic AI on 17 June
+  2026** — voluntary practical controls, read alongside the 2024 Guidelines and
+  Companion Guide, built on a taxonomy of LLM / instructions / tools / memory /
+  protocols, naming rogue actions and agent-manipulated data disclosure as the
+  new risks. **Correction worth recording:** a search-level summary attributed to
+  this document a set of hard requirements — trusted agent registry, verifiable
+  credentials, short-lived OAuth tokens, prohibition on cross-agent privilege
+  delegation. Those specifics appear nowhere on the CSA publication page, which
+  describes voluntary measures. The 5 MB PDF was not fetched. Recorded as
+  unverified; do not repeat the specifics.
+  — https://www.csa.gov.sg/resources/publications/addendum-on-securing-ai-systems/
+
+- **Singapore IMDA's Model AI Governance Framework for Agentic AI (January 2026,
+  launched at Davos)** is described in the MolTrust preprint as requiring each
+  agent to carry a verifiable digital identity and an audit trail of which agent
+  acted under whose authorisation. **Resting on that characterisation only** —
+  the IMDA document was not fetched. If accurate it is a significant instrument
+  and belongs in a future run's non-EU/China leg.
+  — https://www.imda.gov.sg/-/media/imda/files/about/emerging-tech-and-research/artificial-intelligence/mgf-for-agentic-ai.pdf
+
+- **NIST NCCoE concept paper "Accelerating the Adoption of Software and AI Agent
+  Identity and Authorization," 5 February 2026**, public comment closed 2 April
+  2026. Frames the gap as agents being treated as generic service accounts
+  without dedicated identity, authorization or accountability controls; covers
+  identification, authorization via OAuth 2.0 extensions and policy-based access
+  control, auditing and non-repudiation. A related NIST CAISI AI Agent Standards
+  Initiative launched February 2026. Search-level only.
+  — https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd
+
+- **China Internet Association and CAICT released an agent trust-evaluation and
+  registration list in July 2026**, assessing identity transparency, capability
+  boundaries, reliable permissions, controllable operation, behaviour
+  intervention, security compliance and risk management. Surfaced in Chinese
+  search; the primary was not fetched and the criteria list rests on a summary.
+
+- **MCP CVE volume, again at search level only.** Specific identifiers surfaced
+  this run: CVE-2026-33032 (CVSS 9.8, reported as actively exploited),
+  CVE-2026-0755 (CVSS 9.8, unauthenticated RCE in `gemini-mcp-tool`),
+  CVE-2026-30615 (prompt-injection-to-command-execution in Windsurf). **None
+  verified against NVD.** Recorded as identifiers to check, not as facts. The
+  structural claims attached to them — that MCP STDIO transport executes OS
+  commands without sanitisation, and that the MCP authorization specification
+  marks authorization optional — are the more interesting part and are also
+  unverified. — https://vulnerablemcp.info/
+
+### Noted for pattern
+
+- **Four roots are now visible, and none of them is the person.** Organisational
+  (IETF/WIMSE/OAuth `act` chains, logged 2026-08-13 and 08-14), vendor (NVIDIA's
+  signed skill artifacts, logged 08-14), state (China's 智能体身份码, today), and
+  on-chain registry (ERC-8004's ERC-721 identities, today). Four sweeps, four
+  lineages, four different answers to *who issues identity* — and the same answer
+  to *is it the human principal*: no. The prior two entries recorded this as a
+  divergence within one lineage. It is now a property of the whole field. The
+  useful consequence is that the ZP posture is not contrarian against a consensus;
+  it is a fifth position in a field that has not converged, and the field's
+  non-convergence is itself the load-bearing fact.
+
+- **This log had a structural blind spot for five entries and did not detect it.**
+  Zero prior mentions of DIDs, verifiable credentials, IMDA, NCCoE, ERC-8004,
+  GB/Z or 国家标准 — while three separate entries tracked IETF drafts in
+  fine-grained detail. The sweep was not lazy; it was well-executed within a
+  boundary it could not see. Two things surfaced it, and neither was a search on
+  the seed terms: a Chinese-language query, and reading one preprint's
+  bibliography. Both are widening-class activities. Worth recording as a concrete
+  argument for the widening mandate, and worth asking whether the sweep should
+  periodically audit *what it has never mentioned* rather than only *what is
+  new* — a silent-lens check applied to the log itself, which is the same defect
+  signal `lens:declared:ai_landscape` was built to catch, one level up.
+
+- **Two independent standards lineages have converged on the same four
+  authorization primitives.** Default-deny, deny-precedence, attenuation-only
+  delegation, mandatory expiry — specified in the IETF/OAuth drafts logged
+  08-13 and 08-14, and specified independently in the DID/VC deployment read
+  today, which reaches them via NIST SP 800-162 ABAC and RFC 9396 rather than
+  via the OAuth `act` claim. Convergence on the primitive set is now strong
+  enough that it should probably be treated as settled rather than as news. What
+  is not settled, and what remains the interesting axis, is root placement.
+
+- **The bibliography is a better search tool than the search engine, for this
+  lens.** Every item in today's load-bearing section except Grok Bot was reached
+  either through a Chinese-language query or through the reference list of one
+  preprint. The 24-hour recency reflex found almost nothing; the 08-14 entry
+  noticed the same thing and it has now happened twice. The lens's yield appears
+  bounded by *where* the sweep looks and by *how deep it follows citations*,
+  not by how recent the window is.
+
+### YouTube leg
+
+Ran. Four channels fetched by RSS, all four returned. One item published after
+the last run's close; one transcript read in full.
+
+- **Nate B Jones** — one new, `LM7Ft7g8qJw` (Aug 14, ~20k characters), on Grok
+  Bot. Transcript read in full and it produced a load-bearing item above — the
+  first time this leg has done so. Worth noting *why* it worked: not because the
+  video reported news the open web missed, but because a practitioner describing
+  what it felt like to use the product surfaced the credential-sharing property
+  that the vendor page states neutrally and no aggregator flagged at all. That
+  is the case for reading transcripts rather than skimming titles. The product
+  name was verified at the vendor before writing: the auto-caption renders it
+  "Grockbot" throughout, exactly the identifier-mangling failure rule 2 exists
+  for, and the price figures in the transcript were left out of the item because
+  the vendor page does not carry them.
+- **House of El: AI** — nothing new since `RmX5FEp2cEY` (Aug 14), assessed last
+  run. Pruning evidence now six entries deep with no load-bearing item; still
+  short of the sources file's two-month window.
+- **House of El** (geopolitics) — nothing new since `hweoLsCvweU` (Aug 13).
+- **Peter H. Diamandis** — nothing new since `uoGnH0REG7A` (Aug 13), traversed
+  last run. One earlier short, `86IOCMtk8H4` (Aug 13, "Four frontier AI labs
+  confirmed breaches in containment within one month"), was not assessed by the
+  previous run and is flagged here rather than pulled: the claim is
+  lens-relevant, the format is a short with no primary source attached, and it
+  would need a vendor or incident-report primary before anything could be
+  written about it. Recorded as an open thread, not as an item.
+
+### Source promotion
+
+New sources that produced load-bearing items this run, appended to Candidate
+sources in the sources file:
+
+- **`news.cn` / 人民邮电报 and `china.com.cn` / 央视新闻 (Chinese-language state
+  outlets)** — two load-bearing items in one run, both read in the original, both
+  invisible in English search. The English-language coverage of GB/Z 185-2026
+  that search returned collapsed 指导性 (guidance) into "standard" and would have
+  produced a wrong item.
+- **`eips.ethereum.org` / ERC-8004 and the on-chain agent-registry ecosystem** —
+  first appearance in this log despite being live since January.
+- **`arXiv` bibliographies as a traversal surface** — not a source so much as a
+  method, but it produced four of today's items and is worth naming.
+
+**Promotion status carried forward:** `IETF datatracker` remains a promotion
+candidate for the default list on two load-bearing items (08-13, 08-14); it
+produced nothing new today because the run deliberately ranged elsewhere.

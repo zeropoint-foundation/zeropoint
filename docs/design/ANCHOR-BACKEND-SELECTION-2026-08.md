@@ -2,7 +2,7 @@
 
 **Document type:** Design note / decision memo. Elaborates no KEEL section; it selects implementations behind the existing `TruthAnchor` trait and the `EXTERNAL-ANCHOR-TIER-CONTRACT`.
 
-**Status:** Proposed 2026-08-14. **Revision 2, same day** — revision 1 posed a false choice between backends and got two supporting facts wrong. See §7. No code written. Requests two rulings (§6).
+**Status:** Proposed 2026-08-14. **Revision 2, same day** — revision 1 posed a false choice between backends and got two supporting facts wrong; see §7. **§6.1 resolved 2026-08-14 by operator ruling: OTS is the default-enabled floor, Hedera remains supported.** The floor is built — `zp-anchor-ots` landed the same day at `2a7d0b3`, compiling and tested, with AT2 explicitly not yet met and the crate saying so. **§6.3 closed the same day, not pursued** — commitments are not routed through Nostr relays, and the resulting suppression gap is recorded as a stated limitation in `THREAT-MODEL-2026-08.md` §5. **No open rulings remain in this document.**
 
 **Date:** 2026-08-14.
 
@@ -93,9 +93,13 @@ Keeping Hedera is not a concession on this reading. It is the backend that answe
 
 Relays supply **replication and witness plurality** — that document's note that multi-relay publication *"makes withholding require collusion"* is correct. They do not supply **attested time**: `created_at` is publisher-set and a relay may lie about when it saw an event.
 
-But they do bear on **suppression**, which is the gap in the OTS floor. Publishing OTS proofs across several external relays would let a third party observe that a commitment exists without the operator producing it — recovering most of what Hedera offers, without an account.
+They do bear on **suppression**, which is the gap in the OTS floor: publishing OTS proofs across several external relays would let a third party observe that a commitment exists without the operator producing it, recovering much of what Hedera offers without an account.
 
-**This raises an open question against that document, and it is a real one.** §3.2's ephemerality ruling is scoped to *cross-sovereign kinship payloads*. §3's table lists chain-head commitments as permitted on external relays without stating whether those must also be ephemeral. If commitments may persist, relays substantially close the suppression gap in the floor. If the ephemeral rule extends to them, they cannot, and Hedera becomes the only answer to suppression. **Ruling requested — §6.3.**
+**That route was considered and declined — §6.3, closed 2026-08-14.** This section originally raised it as an open question against `NOSTR-TRANSPORT-CONFORMANCE`, on the grounds that §3.2's ephemerality ruling is scoped to cross-sovereign *kinship* payloads while §3's table permits chain-head commitments on external relays without saying whether those must be ephemeral too.
+
+The question is not answered but **dissolved**: commitments are not routed through relays at all, so the ambiguity in that table never has to be resolved and §3.2 keeps a single principle with no exception carved into it. The deciding cost was that `AnchorTrigger` is event-driven, so a persisted commitment history would disclose *when the operator was in dispute* — a worse leak than the chain-growth-rate one this document set out to avoid, and one that survives every mitigation available, because the leak is in the timing and timing is the point.
+
+**Anchoring and Nostr transport are therefore independent concerns, and this document makes no claim on that one.** The suppression gap is real, accepted, and recorded in `THREAT-MODEL-2026-08.md` §5. Reopening conditions are in §6.3.
 
 ## 4. Proposed shape
 
@@ -123,11 +127,40 @@ Both behind the existing trait, unmodified. Per the dual-path rule, having two r
 - **Not required.** With no anchor configured the substrate operates unchanged and local chain integrity is unaffected.
 - **The floor must not require a funded balance.** *(Revised — revision 1 stated this as a blanket refusal of any token dependency, which would have excluded Hedera entirely and was the error that produced the false choice.)* The requirement is not that no backend may need funding; it is that the **default** must not, so that a deployment with no account still anchors. This is the reason for the floor/escalation split rather than an argument against Hedera.
 
-## 6. Rulings requested
+## 6. Rulings
 
-1. **Is OTS the default-enabled floor, with Hedera the configured escalation?** §3.4's argument: a default requiring no account is a default that always works, and Hedera answers the suppression question that OTS cannot.
-2. **Build order.** OTS first is proposed on size — it is the smaller crate and m0 needs no external account. Hedera first is defensible if enterprise legibility is nearer-term than the air-gapped case.
-3. **May a chain-head commitment persist on an external Nostr relay?** Per §3.5, this decides whether relay publication can close the suppression gap in the floor, or whether Hedera remains the only answer to it. This is a question for `NOSTR-TRANSPORT-CONFORMANCE`, raised here because this is where it bites.
+### 6.1 — RESOLVED 2026-08-14 by operator ruling
+
+> **OpenTimestamps is the default-enabled floor. Hedera remains supported as a configured backend.**
+
+Operator ruling, 2026-08-14. This adopts §3.4's floor/escalation shape in full: neither backend displaces the other, and the trait's third design principle — the operator chooses — is preserved rather than pre-empted.
+
+What the ruling settles, stated so a later reader does not have to infer it:
+
+- `zp-anchor-ots` ships **enabled by default**, because enabling it asks nothing of the operator. A deployment with no account, no balance and no network egress beyond HTTP still anchors.
+- `zp-anchor-hedera` is **supported and never default**, because it requires a funded balance the operator must consciously provision. Its purpose is the property OTS structurally lacks — a third party confirming a commitment exists without the operator producing it (AT3).
+- **Neither is deprecated.** A deployment may run both; they answer different questions, and running both is the strongest posture rather than a redundant one.
+
+### 6.2 — Settled by events, not by ruling
+
+Build order resolved itself: `zp-anchor-ots` landed 2026-08-14 (`2a7d0b3`), so OTS is first by construction. Recorded here rather than left as an open question, since an open position that events have already closed is the kind of stale entry `IMPROVEMENT-LOOP-DISCIPLINE` exists to prevent.
+
+`zp-anchor-hedera` is unbuilt and unscheduled. Its shape is specified in §4.
+
+### 6.3 — CLOSED 2026-08-14, not pursued
+
+The question was whether a chain-head commitment may persist on an external Nostr relay, which would let relay publication close the suppression gap in the floor without requiring an account. **It is closed by deciding not to route commitments through relays at all**, leaving `NOSTR-TRANSPORT-CONFORMANCE` §3.2's ephemerality ruling untouched and unamended.
+
+Four reasons, recorded because a closed question with no reasoning reopens itself:
+
+1. **Nothing was blocked by it.** No deployment has a suppression problem. The floor works and Hedera is the specified answer for anyone who needs one.
+2. **The question was generated by this document, not by a need.** Anchoring and Nostr transport are adjacent, and adjacency was mistaken for a reason to couple them. Left alone they stay two independent concerns, which is what they are.
+3. **A significant cost surfaced late.** Because `AnchorTrigger` is event-driven — `DisputeEvidence`, `GovernanceEvent`, `CrossMeshIntroduction` — a persisted commitment history discloses **when the operator was in dispute**, not merely how fast the chain grew. Dropping `chain_sequence` does not touch it, since the leak is in the timing and timing is irreducible when publication is the point. That is materially worse than the announce enumeration surface `NOSTR-TRANSPORT-CONFORMANCE` §4 already argues against, and it was found after the amendment was drafted.
+4. **The asymmetry favours waiting.** Adding relay publication later is cheap. Un-amending a clean invariant after it has been carved up is not.
+
+**Consequence, recorded rather than hidden:** the default anchor floor has no suppression resistance. This is now a stated limitation in `THREAT-MODEL-2026-08.md` §5 rather than an open question, which is the correct home for a known and accepted property.
+
+**If this reopens**, the trigger is a real deployment that needs a third party to confirm a commitment without the operator's cooperation *and* cannot hold a funded account. Note that a permanent public medium — the operator's own site, a git repo, a transparency log — closes the gap without any ruling about Nostr, and should be weighed before the transport document is amended. `NOSTR-TRANSPORT-CONFORMANCE-2026-08-PROPOSED-EDITS.md` is parked, not withdrawn, and holds the drafted mechanics.
 
 ## 7. What revision 1 got wrong
 
