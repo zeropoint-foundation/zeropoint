@@ -30,6 +30,7 @@ members = [
     "crates/zp-config",
     "crates/zp-hardening-tests",
     "crates/zp-anchor",
+    "crates/zp-anchor-ots",
     "crates/zp-memory",
     "crates/zp-configure",
     "crates/zp-bench",
