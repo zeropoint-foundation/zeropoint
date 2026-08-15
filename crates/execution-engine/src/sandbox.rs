@@ -183,9 +183,24 @@ pub fn build_sandbox_wrapper(
         // --net: new network namespace (no network by default)
         // --mount: new mount namespace (isolated filesystem view)
         // --pid --fork: new PID namespace
+        // `--mount` was described in the comment above from the beginning and
+        // was never in the emitted argv (found 2026-08-14). The child
+        // therefore ran with a full view of the host filesystem at the
+        // invoking user's permissions, while `src/lib.rs` advertised
+        // "Filesystem: tmpdir only, no host access". Adding it makes the
+        // child's mount namespace its own, so later `readonly_mounts` work
+        // has a namespace to act on rather than needing one created first.
+        //
+        // Note what this does and does not buy. A private mount namespace
+        // means the child's mount *changes* do not propagate to the host —
+        // it does not by itself restrict what the child can read. Actual
+        // confinement needs a bind-mount set built inside the namespace, which
+        // is `readonly_mounts` and is still "Planned" in the table above. This
+        // is the prerequisite, not the feature.
         let mut wrapper = vec![
             "unshare".to_string(),
             "--net".to_string(), // No network
+            "--mount".to_string(), // Private mount namespace (see above)
             "--pid".to_string(),
             "--fork".to_string(),
         ];

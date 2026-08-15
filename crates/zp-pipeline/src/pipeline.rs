@@ -625,9 +625,50 @@ impl Pipeline {
             return Err(PipelineError::PolicyBlocked(reason));
         }
 
-        // 3. Auto-approve Warn/Review in Phase 1
+        // 3. A decision that requires interaction, with no interaction
+        //    surface, is a denial.
+        //
+        // This previously logged "auto-approving in Phase 1" and continued.
+        // `needs_interaction()` is exactly `Warn { require_ack: true }` or
+        // `Review { .. }` — in both cases the type is asking for a human, and
+        // proceeding without one answers the question by assuming the answer.
+        //
+        // `Review`'s own field documents `timeout` as "How long to wait
+        // before auto-denying". Auto-approving inverts the type's stated
+        // semantics; with no reviewer surface wired, the timeout is
+        // effectively immediate, so denial is what the type already specifies.
+        //
+        // `Warn { require_ack: false }` is unaffected and still proceeds —
+        // that variant means flagged-but-permitted, and it is the one that
+        // does not ask anything of anyone.
+        //
+        // Behaviourally this is a no-op today: no rule in the workspace
+        // constructs `Warn` or `Review` (checked 2026-08-14 — the only
+        // constructors are an example, the out-of-workspace trust-triangle
+        // demo, serialization mappers and tests). It exists so that the first
+        // rule to emit one is not silently approved. When an ack/review
+        // surface lands, this is the branch it replaces.
+        //
+        // See `docs/design/THREAT-MODEL-2026-08.md` §6.
         if decision.needs_interaction() {
-            debug!("Policy returned Warn/Review; auto-approving in Phase 1");
+            let reason = match &decision {
+                PolicyDecision::Review { summary, .. } => format!(
+                    "requires human review ({summary}), and no reviewer surface is wired"
+                ),
+                PolicyDecision::Warn { message, .. } => format!(
+                    "requires acknowledgement ({message}), and no acknowledgement surface is wired"
+                ),
+                _ => "requires interaction, and no interaction surface is wired".to_string(),
+            };
+            self.log_audit(
+                ActorId::System("policy".to_string()),
+                AuditAction::SystemEvent {
+                    event: format!("request_needs_interaction: {}", reason),
+                },
+                &request.conversation_id,
+                &decision,
+            );
+            return Err(PipelineError::PolicyBlocked(reason));
         }
 
         // 4. Build capabilities
