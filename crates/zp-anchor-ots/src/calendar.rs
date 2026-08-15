@@ -1,32 +1,55 @@
 //! Calendar-server client.
 //!
-//! # Everything unverified in this crate is in this file, deliberately
+//! # Every protocol constant in this crate is in this file, with its status
 //!
-//! The OpenTimestamps calendar wire protocol could **not** be confirmed from a
-//! primary source on 2026-08-14. The server repository's README documents only
-//! client invocations (`ots stamp -c <url>`), the calendar homepages publish
-//! operational statistics and no API reference, and no protocol specification
-//! was located.
+//! The OpenTimestamps calendar wire protocol could not be confirmed from a
+//! written primary source on 2026-08-14: the server repository's README
+//! documents only client invocations (`ots stamp -c <url>`), the calendar
+//! homepages publish operational statistics and no API reference, and no
+//! protocol specification was located. The constants were therefore first
+//! written from prior knowledge and then checked against a live calendar.
 //!
-//! The three constants below — the submit path, the upgrade path, and the
-//! `Accept` header — are therefore stated from prior knowledge rather than from
-//! a citation, and they are gathered here so that the unverified surface is one
-//! small file rather than a risk spread through the crate.
+//! They are gathered here so the unverified surface stays one small file rather
+//! than a risk spread through the crate. **Each carries its own status. Do not
+//! let these go stale — a constant marked confirmed that nobody re-checked is
+//! worse than one marked unverified.**
 //!
-//! **Verify before trusting this crate, with a live calendar and one command:**
+//! ## Confirmed 2026-08-14 against `alice.btc.calendar.opentimestamps.org`
+//!
+//! `SUBMIT_PATH` and `ACCEPT`, together, by observation:
 //!
 //! ```text
-//! printf '%s' "$(python3 -c 'import sys;sys.stdout.write("\x00"*32)')" \
-//!   | curl -sS -X POST --data-binary @- \
-//!       -H 'Accept: application/vnd.opentimestamps.v1' \
-//!       https://alice.btc.calendar.opentimestamps.org/digest -o /tmp/ots.bin -w '%{http_code}\n'
-//! xxd /tmp/ots.bin | head
+//! head -c 32 /dev/zero > /tmp/d.bin
+//! curl -sS -X POST --data-binary @/tmp/d.bin \
+//!   -H 'Accept: application/vnd.opentimestamps.v1' \
+//!   -o /tmp/ots.bin -w 'HTTP %{http_code}  %{size_download} bytes\n' \
+//!   https://alice.btc.calendar.opentimestamps.org/digest
 //! ```
 //!
-//! A 200 with a non-empty binary body confirms `SUBMIT_PATH` and the header. If
-//! it 404s or 415s, the constants are wrong and every `anchor()` in this crate
-//! fails at the network layer — loudly, which is the intended failure mode.
-//! `CALENDARS` themselves *are* confirmed, from the project's own uptime monitor.
+//! → `HTTP 200  172 bytes`, body beginning `f0 08 6d 76 21 db 5a b1 …` with a
+//! further `f0 10` inside it. Structured binary in a tag-length-value shape,
+//! not an error page. A POST of 32 raw bytes to `/digest` with that `Accept`
+//! header is accepted and answered with a partial proof.
+//!
+//! ## Still unverified: `UPGRADE_PATH`
+//!
+//! Submission does not exercise it, so the check above says nothing about it.
+//! To confirm, request a digest that is already attested — an all-zero digest
+//! is a common enough test input that it is likely to have been stamped and
+//! confirmed long ago:
+//!
+//! ```text
+//! curl -sS -o /tmp/up.bin -w 'HTTP %{http_code}  %{size_download} bytes\n' \
+//!   https://alice.btc.calendar.opentimestamps.org/timestamp/$(printf '00%.0s' {1..32})
+//! ```
+//!
+//! A 200 with a body confirms the path. A 404 is **ambiguous** — it means
+//! either "path wrong" or "this digest genuinely has no attestation yet", and
+//! the two are indistinguishable by status alone. If it 404s, the honest read
+//! is that the constant remains unverified, and the way to settle it is to
+//! upgrade a digest this crate submitted once Bitcoin has confirmed it.
+//!
+//! `CALENDARS` are confirmed from the project's own uptime monitor.
 
 use std::time::Duration;
 
@@ -45,14 +68,16 @@ pub const CALENDARS: &[&str] = &[
     "https://finney.calendar.eternitywall.com",
 ];
 
-/// **UNVERIFIED** — see module docs. Digest submission endpoint.
+/// **Confirmed 2026-08-14** — see module docs for the observation.
+/// Digest submission endpoint.
 const SUBMIT_PATH: &str = "/digest";
 
 /// **UNVERIFIED** — see module docs. Completed-timestamp retrieval, suffixed
-/// with the hex commitment.
+/// with the hex commitment. Submission does not exercise this path, so the
+/// 2026-08-14 check confirmed the other two constants and not this one.
 const UPGRADE_PATH: &str = "/timestamp/";
 
-/// **UNVERIFIED** — see module docs. Protocol version header.
+/// **Confirmed 2026-08-14** — see module docs. Protocol version header.
 const ACCEPT: &str = "application/vnd.opentimestamps.v1";
 
 /// A calendar's response to one submission: the opaque partial-proof bytes.
@@ -175,9 +200,10 @@ pub async fn reachable(client: &reqwest::Client, calendar: &str, timeout: Durati
 mod tests {
     use super::*;
 
-    /// The URLs are confirmed and the paths are not. If someone edits this
-    /// list, the module docs' verification command needs re-running against
-    /// whatever was added.
+    /// The URLs are confirmed, as are `SUBMIT_PATH` and `ACCEPT` as of
+    /// 2026-08-14; `UPGRADE_PATH` is not. If someone edits this list, the
+    /// module docs' verification command needs re-running against whatever was
+    /// added — a calendar is only as confirmed as the last check against it.
     #[test]
     fn calendars_are_distinct_operators_and_https() {
         assert_eq!(CALENDARS.len(), 3);
