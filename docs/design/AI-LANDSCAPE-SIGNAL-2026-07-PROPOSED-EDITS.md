@@ -1,6 +1,6 @@
 # Proposed Edits — AI Landscape Signal (2026-07)
 
-Companion to `AI-LANDSCAPE-SIGNAL-2026-07.md`. Round one (2026-07-21): five additive edit blocks, one per affected Tier-2 doc. Round two (2026-08-14, at the end of this file): four more, from Signal 5. Each is additive (append/insert; no existing prose rewritten) and cites the signal brief so the reasoning trail is walkable.
+Companion to `AI-LANDSCAPE-SIGNAL-2026-07.md`. Round one (2026-07-21): five additive edit blocks, one per affected Tier-2 doc. Round two (2026-08-14, at the end of this file): four more, from Signal 5. Each is additive (append/insert; no existing prose rewritten) and cites the signal brief so the reasoning trail is walkable. **Round three (2026-08-15): two blocks — E13 and E14 — from the sweep that read Chinese-language and arXiv primary sources, both nominated and neither applied.**
 
 **Status (2026-07-21):**
 
@@ -409,3 +409,73 @@ Signal 5 tested.
 Recommend the split, on the grounds that the second question is a different
 question and answering it through a market-dynamics lens is what nearly caused
 this round to be recorded as convergence.
+
+---
+
+# Round three — 2026-08-15 sweep
+
+**Occasion.** The 2026-08-13/15 landscape entries: China's CAC Implementation Opinions on Intelligent Agents, GB/Z 185-2026 agent identity codes, the 立项 of a mandatory agent security standard, ERC-8004 Trustless Agents on Ethereum mainnet, and MolTrust's DID/VC trust layer on Base L2.
+
+**Two blocks, both drafted against code read on 2026-08-15. Neither is a record of an operator ruling.**
+
+**What round three is not.** It does not restate the four-roots pattern — the log already carries that, and `TRUST-ROOT-LOCUS-LENS` already exists to hold it. It proposes only the two edits where the sweep exposed something in the *substrate* rather than in the field.
+
+---
+
+## E13 — `docs/SUBSTRATE-CONFORMANCE-CONTRACT-2026-06.md`
+
+**Additive, same shape as E10.** Where E10 adopted WIMSE's R1/R3/R7/R8 as an external falsifier vocabulary and named R7 as the open one, this adopts a second and stronger vocabulary — stronger because it was arrived at twice, independently.
+
+**The finding.** Two standards lineages have converged on the same four authorization primitives by different routes: IETF/OAuth via the `act` claim, and DID/VC via NIST SP 800-162 ABAC and RFC 9396. **Default-deny, deny-precedence, attenuation-only delegation, mandatory expiry.** Independent convergence is the strongest evidence available that a primitive set is right, and it converts the set into a conformance checklist the substrate did not have to author.
+
+**Scored against the tree, 2026-08-15:**
+
+| Primitive | Verdict | Evidence |
+|---|---|---|
+| Deny-precedence | **Pass** | Most-restrictive-wins across the rule chain, `crates/zp-policy/src/engine.rs` |
+| Attenuation-only delegation | **Pass** | `CapabilityGrant::delegate()` requires equal-or-narrower scope, enforced by `GrantedCapability::contains` (`crates/zp-core/src/capability_grant.rs:646`) |
+| Mandatory expiry | **Fail** | `CapabilityGrant::new()` defaults `expires_at: None` (`capability_grant.rs:333`). A grant is non-expiring unless a caller opts in — the default is the inverse of the primitive |
+| Default-deny | **Open** | `DefaultAllowRule`, last in the chain, commented *"Permissive baseline — evaluated last"* (`crates/zp-policy/src/engine.rs`) |
+
+**Proposed paste, after E10's block:**
+
+> **Amended 2026-08-15 (E13).** A second external falsifier vocabulary, adopted on the strength of independent convergence: two standards lineages — IETF/OAuth via the `act` claim, DID/VC via NIST SP 800-162 and RFC 9396 — arrived separately at the same four authorization primitives. **Default-deny, deny-precedence, attenuation-only delegation, mandatory expiry.** The substrate passes deny-precedence and attenuation-only on their face. **Mandatory expiry fails at the constructor**: `CapabilityGrant::new()` defaults `expires_at` to `None`, so non-expiring is what a caller gets by omission rather than by decision. **Default-deny is named as the open one**, and the reason it is open rather than failed is that the substrate has two layers with opposite defaults: the capability layer *is* default-deny — nothing acts outside a grant's scope — while the policy engine is default-allow by design, per `ARCHITECTURE.md` §13.3's install-and-run posture. Those two have never been reconciled in one statement, and the convergence is the occasion to do it.
+
+**Two corrections to the record, made here rather than silently.**
+
+First, an earlier reading of this finding counted eight production sites constructing `expires_at: None` and characterised the primitive as failing broadly. Most are unrelated structs — `zp-memory`'s promotion record and `zp-audit`'s `InFlightGrant` carry their own `expires_at`, and in the recovery type `None` means *unknown from the chain*, not *never expires*. The accurate finding is narrower and worse: it is the **constructor default**, which is the single most load-bearing place the primitive could fail.
+
+Second, default-deny is deliberately **not** scored as a failure. The two-layer split is a real architectural position with a written rationale, not an oversight, and scoring it as a failure would import a standards body's framing over a documented substrate decision. What the convergence earns is a re-examination, not a verdict.
+
+**Nominated, not applied.** The expiry defect is small and mechanical — make expiry non-optional at construction, or pin a maximum TTL and require an explicit opt-out receipt. The default-deny question is architectural and belongs to whoever next opens `ARCHITECTURE` §13.3.
+
+---
+
+## E14 — `docs/design/QUARANTINE-PLANE-2026-07.md` §"Third signature state"
+
+**Additive.** Extends the third state added by E9a for a property it did not anticipate: **an identity that changes hands.**
+
+**The finding.** ERC-8004 assigns agents portable **ERC-721-based** identities across three registries, live on Ethereum mainnet since 29 January 2026 and deployed also on BNB Smart Chain and Base. An ERC-721 is transferable by construction. So an agent identity — and any reputation accumulated against it — can be **sold**, and travels with the buyer rather than with the principal who earned it.
+
+E9a already gives the right frame for meeting one: an ERC-8004 identity is verifiable on-chain, is not Genesis-derivable, and therefore emits `quarantine:attestation:<surface>:<hash>` carrying `authority: none` — evidence before the operator at Step 3, never read by the gate, never contributing to precedent per the constraint recorded on 2026-08-14.
+
+**What E9a does not cover** is that the binding underneath such an attestation can change with no signal to anyone holding it. A Genesis-derived key binds to a principal for as long as the key is held. A token binds to whoever holds it *now*. An attestation that was true when recorded may describe a different party by the time it is read, and nothing in the receipt says so.
+
+**Proposed paste, appended to the third-signature-state paragraph:**
+
+> **Transferable identities (added 2026-08-15, E14).** Where the attesting or attested identity is a transferable token rather than a key — ERC-8004's ERC-721 agent identities being the live instance — the attestation receipt must additionally record **the holder observed at attestation time and the time of that observation**, because the binding can change hands afterwards with no signal to any party holding the receipt. Such an attestation is evidence **about a moment**, never about a present state, and a reader must not treat a past attestation as a current one. This does not widen what the third state grants: it remains `authority: none`, and a transferable identity is if anything further from Genesis-derivable than a fixed one, since the party it names is not the party it will name.
+
+**Why this is small.** It adds two fields and a sentence of reading discipline to a receipt type that already exists. It introduces no new vocabulary, no new gate behaviour, and no new admission path — which is the test E9b already established for whether an addition to this plane is worth making.
+
+**Open, and not proposed here.** Whether the substrate should ever *present* an identity to a counterparty operating an ERC-8004 registry, as opposed to merely receiving one, is a separate question about outbound interop and does not belong to the quarantine plane. Nothing in the corpus addresses it, and this block deliberately does not open it.
+
+---
+
+## Summary of nominated actions — round three
+
+| Block | Document | Kind | Status |
+|---|---|---|---|
+| E13 | `SUBSTRATE-CONFORMANCE-CONTRACT-2026-06` | Additive paste + two scored defects | Nominated |
+| E14 | `QUARANTINE-PLANE-2026-07` | Additive paste | Nominated |
+
+**Neither block is applied. Both request an operator ruling.** E13 additionally carries a code-level defect — the expiry constructor default — which is fixable independently of whether the block is ever pasted, and should be, since a non-expiring grant by omission is the kind of thing that is discovered rather than decided.
