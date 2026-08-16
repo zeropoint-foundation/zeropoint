@@ -195,6 +195,43 @@ fn regent_tools_are_single_sourced_and_dispatchable() {
 /// arm — recorded as SEAM-005 CARRIED, not fixed. This asserts only that every
 /// entry declares one, so a new tool cannot arrive with an empty scope and look
 /// governed.
+/// Names in `body` whose `RegentTool` record carries no non-empty `scope`.
+///
+/// Record-oriented, not line-oriented. The original scan required `name:` and
+/// `scope:` on one physical line, which held only because the entries happened
+/// to fit in 100 columns. `cargo fmt` wrapped every entry across four lines on
+/// 2026-08-16 and the pin reported all fourteen tools as scopeless — a total
+/// false positive on a file whose scopes had not changed.
+///
+/// A pin that fails when rustfmt runs teaches operators to distrust it, which
+/// is how a real finding gets waved through. Splitting on the struct name
+/// tracks the declaration's shape rather than its typography.
+fn scopeless_tools(body: &str) -> Vec<String> {
+    let mut scopeless = Vec::new();
+    // `split` on the struct name yields one chunk per record; the leading
+    // chunk (before the first `RegentTool`) is the const's own header and has
+    // no `name:`, so `field` returns None and it is skipped.
+    for record in body.split("RegentTool") {
+        let Some(name) = field(record, "name:") else {
+            continue;
+        };
+        match field(record, "scope:") {
+            Some(scope) if !scope.trim().is_empty() => {}
+            _ => scopeless.push(name),
+        }
+    }
+    scopeless
+}
+
+/// The string literal following `key` in `record`, if any.
+fn field(record: &str, key: &str) -> Option<String> {
+    record
+        .split_once(key)
+        .and_then(|(_, r)| r.trim_start().strip_prefix('"'))
+        .and_then(|r| r.split_once('"'))
+        .map(|(v, _)| v.to_string())
+}
+
 #[test]
 fn every_tool_declares_a_scope() {
     let root = repo_root();
@@ -207,28 +244,7 @@ fn every_tool_declares_a_scope() {
     let rest = &tools_src[start..];
     let body = &rest[..rest.find("];").expect("unterminated REGENT_TOOLS")];
 
-    let mut scopeless = Vec::new();
-    for line in body.lines() {
-        let l = line.trim();
-        if l.starts_with("//") || !l.contains("name:") {
-            continue;
-        }
-        let name = l
-            .split_once("name:")
-            .and_then(|(_, r)| r.trim_start().strip_prefix('"'))
-            .and_then(|r| r.split_once('"'))
-            .map(|(n, _)| n.to_string())
-            .unwrap_or_else(|| l.to_string());
-        let scope_ok = l
-            .split_once("scope:")
-            .and_then(|(_, r)| r.trim_start().strip_prefix('"'))
-            .and_then(|r| r.split_once('"'))
-            .map(|(s, _)| !s.trim().is_empty())
-            .unwrap_or(false);
-        if !scope_ok {
-            scopeless.push(name);
-        }
-    }
+    let scopeless = scopeless_tools(body);
 
     assert!(
         scopeless.is_empty(),
@@ -237,4 +253,39 @@ fn every_tool_declares_a_scope() {
          PIN-001: adding to this list grants a capability — it is an authority \
          decision, never a lint fix."
     );
+}
+
+/// The scan must catch a genuinely scopeless tool *however rustfmt wrapped it*.
+///
+/// Without this, the record-oriented rewrite above could have been made to
+/// pass by weakening it — and a weakened scope pin looks identical to a
+/// satisfied one. Both spellings of the same defect must be caught, and both
+/// spellings of a correct declaration must be left alone.
+#[test]
+fn the_scan_catches_a_scopeless_tool_however_rustfmt_wrapped_it() {
+    let one_line = r#"
+        RegentTool { name: "governed", scope: "audit_chain" },
+        RegentTool { name: "bare", scope: "" },
+    "#;
+    assert_eq!(scopeless_tools(one_line), vec!["bare".to_string()]);
+
+    let wrapped = r#"
+        RegentTool {
+            name: "governed",
+            scope: "audit_chain",
+        },
+        RegentTool {
+            name: "bare",
+            scope: "",
+        },
+    "#;
+    assert_eq!(
+        scopeless_tools(wrapped),
+        vec!["bare".to_string()],
+        "the wrapped form must produce the same verdict as the one-line form"
+    );
+
+    // A well-formed declaration in either spelling must produce nothing.
+    assert!(scopeless_tools(r#"RegentTool { name: "a", scope: "s" },"#).is_empty());
+    assert!(scopeless_tools("RegentTool {\n name: \"a\",\n scope: \"s\",\n},").is_empty());
 }

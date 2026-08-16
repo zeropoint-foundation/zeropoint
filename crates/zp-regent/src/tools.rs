@@ -67,17 +67,50 @@ pub struct RegentTool {
 /// matching becomes order-dependent — `tool_names_are_prefix_free` fails
 /// before it can bite.
 pub const REGENT_TOOLS: &[RegentTool] = &[
-    RegentTool { name: "chain_query", scope: "audit_chain" },
-    RegentTool { name: "governance_posture", scope: "governance" },
-    RegentTool { name: "model_evaluate", scope: "inference" },
-    RegentTool { name: "system_status", scope: "system" },
-    RegentTool { name: "batch_sign", scope: "audit_chain" },
-    RegentTool { name: "chain_compact", scope: "audit_chain" },
-    RegentTool { name: "self_configure", scope: "inference:endpoint,model,api_key" },
-    RegentTool { name: "memory_list", scope: "cognition:memory_promotion" },
-    RegentTool { name: "memory_review", scope: "cognition:memory_promotion:review_remembered" },
-    RegentTool { name: "substrate_validate", scope: "substrate:validation:regent" },
-    RegentTool { name: "browser_use", scope: "web:allowed_domains" },
+    RegentTool {
+        name: "chain_query",
+        scope: "audit_chain",
+    },
+    RegentTool {
+        name: "governance_posture",
+        scope: "governance",
+    },
+    RegentTool {
+        name: "model_evaluate",
+        scope: "inference",
+    },
+    RegentTool {
+        name: "system_status",
+        scope: "system",
+    },
+    RegentTool {
+        name: "batch_sign",
+        scope: "audit_chain",
+    },
+    RegentTool {
+        name: "chain_compact",
+        scope: "audit_chain",
+    },
+    RegentTool {
+        name: "self_configure",
+        scope: "inference:endpoint,model,api_key",
+    },
+    RegentTool {
+        name: "memory_list",
+        scope: "cognition:memory_promotion",
+    },
+    RegentTool {
+        name: "memory_review",
+        scope: "cognition:memory_promotion:review_remembered",
+    },
+    RegentTool {
+        name: "substrate_validate",
+        scope: "substrate:validation:regent",
+    },
+    RegentTool {
+        name: "browser_use",
+        scope: "web:allowed_domains",
+    },
     // Phase 1 report-generation tools (docs/REGENT-PHASE-0-1-DESIGN-2026-07.md).
     // chart_generate / report_assemble are pure functions returning strings;
     // save_to_artifacts writes to ~/ZeroPoint/artifacts/<hash>.<ext> and emits
@@ -89,9 +122,18 @@ pub const REGENT_TOOLS: &[RegentTool] = &[
     // artifact space is a different risk class. Revisit if a confusion
     // incident argues otherwise — matching the pattern that put `browser_use`
     // behind approval after an observed event, not preemptively.
-    RegentTool { name: "chart_generate", scope: "artifact:chart" },
-    RegentTool { name: "report_assemble", scope: "artifact:report" },
-    RegentTool { name: "save_to_artifacts", scope: "artifact:library:write" },
+    RegentTool {
+        name: "chart_generate",
+        scope: "artifact:chart",
+    },
+    RegentTool {
+        name: "report_assemble",
+        scope: "artifact:report",
+    },
+    RegentTool {
+        name: "save_to_artifacts",
+        scope: "artifact:library:write",
+    },
 ];
 
 /// Dispatch names only — for parsing and sanitization, which do not care

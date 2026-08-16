@@ -46,22 +46,16 @@ pub mod verify {
 
 // Re-export commonly used types at crate root
 pub use audit::{ActorId, AuditAction, AuditEntry, AuditId};
-pub use zp_receipt::canonical::{
-    canonical_bytes, canonical_bytes_of, canonical_hash, canonical_hash_bytes,
-    canonical_hash_bytes_of, canonical_hash_of, canonical_string,
-};
-pub use zp_receipt::signable::{signable_from_serialize, Signable};
-pub use zp_receipt::verify::{verify_signature, verify_signed, VerifyError};
-pub use capability::{Capability, InferenceTier, ModelClass, ModelPreference, PipelineResult, ToolDefinition};
 pub use authority_ref::{AuthorityRef, AuthorityRefType};
+pub use capability::{
+    Capability, InferenceTier, ModelClass, ModelPreference, PipelineResult, ToolDefinition,
+};
 pub use capability_grant::{
     reserved_class, CapabilityGrant, Constraint, ConstraintContext, ConstraintViolation,
     DelegationError, GrantProvenance, GrantedCapability, GranteeType, IssuanceError,
     RedelegationPolicy, RenewalError, ReservedReason, RESERVED_PROBE_CAPABILITY,
 };
 pub use delegation_chain::{ChainError, DelegationChain};
-pub use lease::{LeaseFailureMode, LeasePolicy};
-pub use revocation::{CascadePolicy, RevocationClaim, RevocationReason};
 pub use episode::{Episode, EpisodeId, Feedback, FeedbackRating, Outcome, Pattern};
 pub use epistemic::{Epistemic, EpistemicError, EpistemicStatus, StatusTransition};
 pub use error::ZpError;
@@ -72,6 +66,7 @@ pub use governance::{
 pub use internal_token::{
     InternalCapabilityToken, InternalScope, InternalTokenAuthority, TokenError,
 };
+pub use lease::{LeaseFailureMode, LeasePolicy};
 pub use policy::{
     ActionType, FileOperation, MeshAction, MeshPeerContext, PolicyMetadata, ReviewTarget,
     RiskLevel, SanitizePattern,
@@ -79,8 +74,15 @@ pub use policy::{
 pub use policy::{PolicyContext, PolicyDecision, TrustTier};
 pub use provider::{ProviderCapabilities, ProviderHealth, ProviderId};
 pub use receipt_emission::{
-    capability_grant_receipt, certificate_rotation_receipts, emit_authorization_receipt, emit_delegation_receipt,
-    emit_revocation_receipt,
+    capability_grant_receipt, certificate_rotation_receipts, emit_authorization_receipt,
+    emit_delegation_receipt, emit_revocation_receipt,
 };
+pub use revocation::{CascadePolicy, RevocationClaim, RevocationReason};
 pub use skill::{CandidateStatus, SkillCandidate, SkillId, SkillManifest, SkillOrigin, SkillStats};
 pub use types::*;
+pub use zp_receipt::canonical::{
+    canonical_bytes, canonical_bytes_of, canonical_hash, canonical_hash_bytes,
+    canonical_hash_bytes_of, canonical_hash_of, canonical_string,
+};
+pub use zp_receipt::signable::{signable_from_serialize, Signable};
+pub use zp_receipt::verify::{verify_signature, verify_signed, VerifyError};

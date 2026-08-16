@@ -170,9 +170,7 @@ pub fn load_catalog() -> Vec<ProviderProfile> {
 
     // Try loading user overrides from ~/ZeroPoint/config/providers.toml
     if let Ok(zp_home) = zp_core::paths::home() {
-        let user_path = zp_home
-            .join("config")
-            .join("providers.toml");
+        let user_path = zp_home.join("config").join("providers.toml");
         if let Ok(content) = std::fs::read_to_string(&user_path) {
             if let Ok(user_catalog) = toml::from_str::<ProviderCatalogFile>(&content) {
                 for user_provider in user_catalog.providers {

@@ -177,11 +177,10 @@ pub fn tail<F>(config: TailConfig, mut on_event: F) -> Result<()>
 where
     F: FnMut(TailedEvent),
 {
-    let mut file = File::open(&config.path)
-        .with_context(|| format!("open {}", config.path.display()))?;
+    let mut file =
+        File::open(&config.path).with_context(|| format!("open {}", config.path.display()))?;
     if !config.from_beginning {
-        file.seek(SeekFrom::End(0))
-            .context("seek to end of file")?;
+        file.seek(SeekFrom::End(0)).context("seek to end of file")?;
     }
     let mut reader = BufReader::new(file);
     let mut buf = String::new();

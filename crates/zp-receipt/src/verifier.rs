@@ -277,8 +277,7 @@ impl ReceiptVerifier {
             .map(|b| b.key_id.clone())
             .or_else(|| receipt.signer_public_key.clone());
 
-        let has_signature =
-            !receipt.signatures.is_empty() || receipt.signature.is_some();
+        let has_signature = !receipt.signatures.is_empty() || receipt.signature.is_some();
 
         if has_signature {
             let pk_hex = ed25519_pk_hex.ok_or_else(|| {
@@ -380,7 +379,9 @@ impl ReceiptVerifier {
                 result.checks.push(VerificationCheck {
                     name: "pq_signature".to_string(),
                     passed: true, // Can't verify without pq-signing, don't fail
-                    detail: "ML-DSA-65 signature present but pq-signing feature not enabled — skipped".to_string(),
+                    detail:
+                        "ML-DSA-65 signature present but pq-signing feature not enabled — skipped"
+                            .to_string(),
                 });
             }
         }

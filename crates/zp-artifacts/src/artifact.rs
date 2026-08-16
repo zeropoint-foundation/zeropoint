@@ -43,7 +43,9 @@ pub fn compute_artifact_id(manifest: &SourceManifest, config: &RenderConfig) -> 
     let mut sorted = manifest.clone();
     sorted.receipt_ids.sort();
     let mut bytes = serde_json::to_vec(&sorted).expect("manifest serialization is infallible");
-    bytes.extend_from_slice(&serde_json::to_vec(config).expect("config serialization is infallible"));
+    bytes.extend_from_slice(
+        &serde_json::to_vec(config).expect("config serialization is infallible"),
+    );
     ArtifactId(ContentId::from_bytes(&bytes))
 }
 

@@ -110,9 +110,7 @@ use zp_discipline::Discipline;
 #[test]
 fn variable_program_spawns_must_route_through_zp_host() {
     Discipline::new("no_raw_variable_spawn_outside_zp_host")
-        .cite_invariant(
-            "Principle 8 (one canonical path) — host effects cross the host boundary",
-        )
+        .cite_invariant("Principle 8 (one canonical path) — host effects cross the host boundary")
         .rationale(
             "A spawn whose program name is a variable turns config, request \
              payload, or tool manifest into an executable with no gate \

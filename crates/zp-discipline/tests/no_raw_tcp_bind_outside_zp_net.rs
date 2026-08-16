@@ -36,9 +36,7 @@ use zp_discipline::Discipline;
 #[test]
 fn loopback_servers_must_route_through_zp_net() {
     Discipline::new("no_raw_tcp_bind_outside_zp_net")
-        .cite_invariant(
-            "Principle 8 (one canonical path) — singular loopback binding",
-        )
+        .cite_invariant("Principle 8 (one canonical path) — singular loopback binding")
         .rationale(
             "Direct TcpListener::bind calls for loopback servers \
              re-introduce the IPv4-only resolver-order trap that \

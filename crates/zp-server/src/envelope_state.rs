@@ -247,7 +247,10 @@ impl EnvelopeVerifier {
         // independently. We register before signature verification because a
         // nonce reuse with a forged signature is still a replay attempt — the
         // legitimate envelope was already accepted.
-        if !self.nonce_store.try_insert(parsed.kid, &parsed.nonce, parsed.ts, now) {
+        if !self
+            .nonce_store
+            .try_insert(parsed.kid, &parsed.nonce, parsed.ts, now)
+        {
             return Err(EnvelopeReject::Replay);
         }
 
@@ -308,7 +311,9 @@ pub const _NONCE_BYTES_HINT: usize = NONCE_BYTES;
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
-    use zp_gate_envelope::{build_header, body_hash_hex, random_nonce_b64, EnvelopeClaims, SCHEME_VERSION};
+    use zp_gate_envelope::{
+        body_hash_hex, build_header, random_nonce_b64, EnvelopeClaims, SCHEME_VERSION,
+    };
     use zp_receipt::Signable;
 
     fn make_signed(
@@ -343,8 +348,7 @@ mod tests {
         let kid = sk.verifying_key().to_bytes();
         let verifier = EnvelopeVerifier::new(kid);
         let now = 1_700_000_000;
-        let (header, claims) =
-            make_signed(&sk, "POST", "/api/v1/gate/tool-call", b"{}", now);
+        let (header, claims) = make_signed(&sk, "POST", "/api/v1/gate/tool-call", b"{}", now);
         let got = verifier
             .verify(&header, "POST", "/api/v1/gate/tool-call", b"{}", now)
             .expect("must verify");
@@ -360,7 +364,9 @@ mod tests {
         let verifier = EnvelopeVerifier::new(wrong_kid);
         let now = 1_700_000_000;
         let (header, _) = make_signed(&sk, "POST", "/x", b"{}", now);
-        let err = verifier.verify(&header, "POST", "/x", b"{}", now).unwrap_err();
+        let err = verifier
+            .verify(&header, "POST", "/x", b"{}", now)
+            .unwrap_err();
         assert_eq!(err, EnvelopeReject::UnknownSigner);
     }
 
@@ -372,7 +378,9 @@ mod tests {
         let now = 1_700_000_000;
         let (header, _) = make_signed(&sk, "POST", "/x", b"{}", now);
         // Present envelope as GET → preimage differs → signature mismatch.
-        let err = verifier.verify(&header, "GET", "/x", b"{}", now).unwrap_err();
+        let err = verifier
+            .verify(&header, "GET", "/x", b"{}", now)
+            .unwrap_err();
         assert_eq!(err, EnvelopeReject::Signature);
     }
 
@@ -397,7 +405,9 @@ mod tests {
         let now = 1_700_000_000;
         // Sign with ts that's 1 hour in the past.
         let (header, _) = make_signed(&sk, "POST", "/x", b"{}", now - 3600);
-        let err = verifier.verify(&header, "POST", "/x", b"{}", now).unwrap_err();
+        let err = verifier
+            .verify(&header, "POST", "/x", b"{}", now)
+            .unwrap_err();
         assert_eq!(err, EnvelopeReject::Drift);
     }
 
@@ -408,8 +418,12 @@ mod tests {
         let verifier = EnvelopeVerifier::new(kid);
         let now = 1_700_000_000;
         let (header, _) = make_signed(&sk, "POST", "/x", b"{}", now);
-        verifier.verify(&header, "POST", "/x", b"{}", now).expect("first ok");
-        let err = verifier.verify(&header, "POST", "/x", b"{}", now).unwrap_err();
+        verifier
+            .verify(&header, "POST", "/x", b"{}", now)
+            .expect("first ok");
+        let err = verifier
+            .verify(&header, "POST", "/x", b"{}", now)
+            .unwrap_err();
         assert_eq!(err, EnvelopeReject::Replay);
     }
 
@@ -429,7 +443,9 @@ mod tests {
         };
         let sig = sk.sign(&claims.canonical_hash()).to_bytes();
         let header = build_header(&claims, &kid, &sig);
-        let err = verifier.verify(&header, "POST", "/x", b"{}", now).unwrap_err();
+        let err = verifier
+            .verify(&header, "POST", "/x", b"{}", now)
+            .unwrap_err();
         assert_eq!(err, EnvelopeReject::UnknownVersion);
     }
 

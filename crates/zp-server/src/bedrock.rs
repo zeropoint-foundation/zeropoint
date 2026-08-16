@@ -107,7 +107,12 @@ pub struct Finding {
 
 impl Finding {
     fn ok(invariant: &'static str, detail: impl Into<String>) -> Self {
-        Self { invariant, severity: Severity::Ok, detail: detail.into(), remedy: None }
+        Self {
+            invariant,
+            severity: Severity::Ok,
+            detail: detail.into(),
+            remedy: None,
+        }
     }
     fn warn(invariant: &'static str, detail: impl Into<String>, remedy: impl Into<String>) -> Self {
         Self {
@@ -181,7 +186,10 @@ pub fn check(inputs: &BedrockInputs) -> Vec<Finding> {
     // *can* be derived; this asks whether it *was*, by the time anything
     // needed it. The 2026-08-06 race passed the former and failed the latter.
     out.push(if inputs.vault_key_resolved {
-        Finding::ok("sovereign_root_delivers", "vault master key resolved before consumers ran")
+        Finding::ok(
+            "sovereign_root_delivers",
+            "vault master key resolved before consumers ran",
+        )
     } else if inputs.genesis_present {
         Finding::critical(
             "sovereign_root_delivers",
@@ -201,11 +209,17 @@ pub fn check(inputs: &BedrockInputs) -> Vec<Finding> {
     match inputs.vault_keys {
         None if inputs.vault_key_resolved => out.push(Finding::critical(
             "vault_readable",
-            format!("vault at {} could not be opened", inputs.vault_path.display()),
+            format!(
+                "vault at {} could not be opened",
+                inputs.vault_path.display()
+            ),
             "The file may be corrupt or encrypted under a different root. Do not \
              delete it — move it aside and inspect before replacing",
         )),
-        None => out.push(Finding::ok("vault_readable", "no vault key — not applicable")),
+        None => out.push(Finding::ok(
+            "vault_readable",
+            "no vault key — not applicable",
+        )),
         Some(_) => out.push(Finding::ok(
             "vault_readable",
             format!("vault opens at {}", inputs.vault_path.display()),
@@ -275,13 +289,21 @@ pub fn report(findings: &[Finding]) {
     let red = "\x1b[1;31m";
     let yellow = "\x1b[1;33m";
     let reset = "\x1b[0m";
-    let accent = if worst == Some(Severity::Critical) { red } else { yellow };
+    let accent = if worst == Some(Severity::Critical) {
+        red
+    } else {
+        yellow
+    };
 
     eprintln!();
     eprintln!("{accent}   ── BEDROCK ──────────────────────────────────────────{reset}");
     eprintln!();
     for f in findings.iter().filter(|f| f.severity != Severity::Ok) {
-        let mark = if f.severity == Severity::Critical { "✗" } else { "⚠" };
+        let mark = if f.severity == Severity::Critical {
+            "✗"
+        } else {
+            "⚠"
+        };
         eprintln!("{accent}   {mark}  {}{reset}", f.invariant);
         eprintln!("      {}", f.detail);
         if let Some(r) = &f.remedy {
@@ -308,7 +330,11 @@ pub fn report(findings: &[Finding]) {
 /// boots are on there too.
 pub fn anchor(audit_store: &Arc<std::sync::Mutex<AuditStore>>, findings: &[Finding]) {
     for f in findings {
-        let verb = if f.severity == Severity::Ok { "verified" } else { "violated" };
+        let verb = if f.severity == Severity::Ok {
+            "verified"
+        } else {
+            "violated"
+        };
         tool_chain::emit_tool_receipt(
             audit_store,
             &format!("{}{}:{}", EVENT_PREFIX_INVARIANT, f.invariant, verb),
@@ -333,13 +359,18 @@ mod tests {
     }
 
     fn find<'a>(fs: &'a [Finding], name: &str) -> &'a Finding {
-        fs.iter().find(|f| f.invariant == name).expect("invariant present")
+        fs.iter()
+            .find(|f| f.invariant == name)
+            .expect("invariant present")
     }
 
     #[test]
     fn healthy_substrate_reports_all_ok() {
         let fs = check(&base());
-        assert!(fs.iter().all(|f| f.severity == Severity::Ok), "expected all ok");
+        assert!(
+            fs.iter().all(|f| f.severity == Severity::Ok),
+            "expected all ok"
+        );
     }
 
     /// The 2026-08-06 condition: a mature substrate, key resolving, vault empty.
@@ -360,7 +391,10 @@ mod tests {
         let mut i = base();
         i.vault_keys = Some(0);
         i.substrate_is_mature = false;
-        assert_eq!(find(&check(&i), "vault_custody").severity, Severity::Warning);
+        assert_eq!(
+            find(&check(&i), "vault_custody").severity,
+            Severity::Warning
+        );
     }
 
     /// Unreadable is not empty. Conflating them is what hid the original defect.
@@ -380,7 +414,10 @@ mod tests {
         let mut i = base();
         i.vault_key_resolved = false;
         i.vault_keys = None;
-        assert_eq!(find(&check(&i), "sovereign_root_delivers").severity, Severity::Critical);
+        assert_eq!(
+            find(&check(&i), "sovereign_root_delivers").severity,
+            Severity::Critical
+        );
     }
 
     /// Absent Genesis reports once, not three times.
@@ -391,9 +428,16 @@ mod tests {
         i.vault_key_resolved = false;
         i.vault_keys = None;
         let fs = check(&i);
-        let criticals: Vec<_> =
-            fs.iter().filter(|f| f.severity == Severity::Critical).map(|f| f.invariant).collect();
-        assert_eq!(criticals, vec!["genesis_present"], "one root cause, one alarm");
+        let criticals: Vec<_> = fs
+            .iter()
+            .filter(|f| f.severity == Severity::Critical)
+            .map(|f| f.invariant)
+            .collect();
+        assert_eq!(
+            criticals,
+            vec!["genesis_present"],
+            "one root cause, one alarm"
+        );
     }
 
     /// Secrets in memory with no file means they vanish at restart.
@@ -401,6 +445,9 @@ mod tests {
     fn populated_vault_without_a_file_is_critical() {
         let mut i = base();
         i.vault_file_exists = false;
-        assert_eq!(find(&check(&i), "vault_persisted").severity, Severity::Critical);
+        assert_eq!(
+            find(&check(&i), "vault_persisted").severity,
+            Severity::Critical
+        );
     }
 }

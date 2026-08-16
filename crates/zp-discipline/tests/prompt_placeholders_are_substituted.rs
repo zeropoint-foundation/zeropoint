@@ -64,17 +64,13 @@ fn workspace_root() -> PathBuf {
 /// Placeholders appearing in a template.
 fn placeholders_in(text: &str) -> BTreeSet<String> {
     let re = Regex::new(r"\{([a-z][a-z0-9_]*)\}").unwrap();
-    re.captures_iter(text)
-        .map(|c| c[1].to_string())
-        .collect()
+    re.captures_iter(text).map(|c| c[1].to_string()).collect()
 }
 
 /// Placeholders a source file substitutes, from its `.replace("{…}", …)` calls.
 fn substituted_in(src: &str) -> BTreeSet<String> {
     let re = Regex::new(r#"\.replace\(\s*"\{([a-z][a-z0-9_]*)\}""#).unwrap();
-    re.captures_iter(src)
-        .map(|c| c[1].to_string())
-        .collect()
+    re.captures_iter(src).map(|c| c[1].to_string()).collect()
 }
 
 #[test]

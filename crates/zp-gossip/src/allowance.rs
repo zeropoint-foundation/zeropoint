@@ -210,7 +210,7 @@ mod tests {
         ca.current = 0.0;
         ca.in_maintenance = true;
         ca.regenerate(3600.0); // 1 hour idle
-        // Should regenerate at 3× rate = 3.0 units
+                               // Should regenerate at 3× rate = 3.0 units
         assert!((ca.current - 3.0).abs() < 0.01);
     }
 }

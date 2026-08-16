@@ -497,7 +497,11 @@ impl From<&ZpConfig> for ConfigFile {
                 forge_enabled: Some(cfg.officers_forge_enabled.value),
                 cleo_enabled: Some(cfg.officers_cleo_enabled.value),
                 aegis_enabled: Some(cfg.officers_aegis_enabled.value),
-                acknowledged_listeners: if cfg.acknowledged_listeners.value.is_empty() { None } else { Some(cfg.acknowledged_listeners.value.clone()) },
+                acknowledged_listeners: if cfg.acknowledged_listeners.value.is_empty() {
+                    None
+                } else {
+                    Some(cfg.acknowledged_listeners.value.clone())
+                },
             },
             regent: RegentSection {
                 enabled: Some(cfg.regent_enabled.value),

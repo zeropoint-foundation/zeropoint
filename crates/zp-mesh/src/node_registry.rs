@@ -109,7 +109,10 @@ impl MembershipStatus {
                 format!("Attested ({})", short_id)
             }
             Self::Unattested => "Unattested (no membership receipt)".into(),
-            Self::Revoked { receipt_id, revoked_at } => {
+            Self::Revoked {
+                receipt_id,
+                revoked_at,
+            } => {
                 let short_id = if receipt_id.len() > 12 {
                     format!("{}...", &receipt_id[..12])
                 } else {
@@ -120,7 +123,6 @@ impl MembershipStatus {
         }
     }
 }
-
 
 /// A node in the fleet.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -398,10 +400,7 @@ impl NodeRegistry {
     ///    the legitimate node.
     /// 5. **State update**: refresh status/capabilities, advance
     ///    `last_seq` and `last_signed_at`.
-    pub async fn verify_and_record(
-        &self,
-        signed: SignedHeartbeat,
-    ) -> Result<(), HeartbeatError> {
+    pub async fn verify_and_record(&self, signed: SignedHeartbeat) -> Result<(), HeartbeatError> {
         // 1. Timestamp window
         let now = Utc::now();
         let skew = now.signed_duration_since(signed.signed_at);
@@ -417,15 +416,15 @@ impl NodeRegistry {
         }
 
         // 2. Decode public key + signature
-        let pk_bytes = hex::decode(&signed.public_key)
-            .map_err(|_| HeartbeatError::InvalidPublicKey)?;
+        let pk_bytes =
+            hex::decode(&signed.public_key).map_err(|_| HeartbeatError::InvalidPublicKey)?;
         let pk_array: [u8; 32] = pk_bytes
             .as_slice()
             .try_into()
             .map_err(|_| HeartbeatError::InvalidPublicKey)?;
 
-        let sig_bytes = hex::decode(&signed.signature)
-            .map_err(|_| HeartbeatError::InvalidSignature)?;
+        let sig_bytes =
+            hex::decode(&signed.signature).map_err(|_| HeartbeatError::InvalidSignature)?;
         let sig_array: [u8; 64] = sig_bytes
             .as_slice()
             .try_into()
@@ -589,9 +588,7 @@ impl NodeRegistry {
                     warn!(node_id = %node.node_id, age_secs = age.as_secs(), "node marked offline");
                     node.status = NodeStatus::Offline;
                 }
-            } else if age >= self.config.stale_timeout
-                && node.status != NodeStatus::Stale
-            {
+            } else if age >= self.config.stale_timeout && node.status != NodeStatus::Stale {
                 warn!(node_id = %node.node_id, age_secs = age.as_secs(), "node marked stale");
                 node.status = NodeStatus::Stale;
             }
@@ -692,7 +689,9 @@ mod tests {
     #[tokio::test]
     async fn heartbeat_registers_new_node() {
         let registry = NodeRegistry::new();
-        registry.record_unverified(test_heartbeat("node-1", "Alpha")).await;
+        registry
+            .record_unverified(test_heartbeat("node-1", "Alpha"))
+            .await;
 
         let nodes = registry.list_nodes().await;
         assert_eq!(nodes.len(), 1);
@@ -705,8 +704,12 @@ mod tests {
     #[tokio::test]
     async fn heartbeat_refreshes_existing_node() {
         let registry = NodeRegistry::new();
-        registry.record_unverified(test_heartbeat("node-1", "Alpha")).await;
-        registry.record_unverified(test_heartbeat("node-1", "Alpha")).await;
+        registry
+            .record_unverified(test_heartbeat("node-1", "Alpha"))
+            .await;
+        registry
+            .record_unverified(test_heartbeat("node-1", "Alpha"))
+            .await;
 
         let node = registry.get_node("node-1").await.unwrap();
         assert_eq!(node.heartbeat_count, 2);
@@ -720,7 +723,9 @@ mod tests {
             offline_timeout: Duration::from_secs(0),
         };
         let registry = NodeRegistry::with_config(config);
-        registry.record_unverified(test_heartbeat("node-1", "Alpha")).await;
+        registry
+            .record_unverified(test_heartbeat("node-1", "Alpha"))
+            .await;
 
         // After sweep with zero timeouts, node should be offline
         registry.sweep().await;
@@ -731,7 +736,9 @@ mod tests {
     #[tokio::test]
     async fn deregister_removes_node() {
         let registry = NodeRegistry::new();
-        registry.record_unverified(test_heartbeat("node-1", "Alpha")).await;
+        registry
+            .record_unverified(test_heartbeat("node-1", "Alpha"))
+            .await;
         assert!(registry.deregister("node-1").await);
         assert!(registry.get_node("node-1").await.is_none());
         assert!(!registry.deregister("node-1").await); // already gone
@@ -818,10 +825,15 @@ mod tests {
     #[tokio::test]
     async fn new_node_is_unattested() {
         let registry = NodeRegistry::new();
-        registry.record_unverified(test_heartbeat("node-1", "Alpha")).await;
+        registry
+            .record_unverified(test_heartbeat("node-1", "Alpha"))
+            .await;
 
         let node = registry.get_node("node-1").await.unwrap();
-        assert!(matches!(node.membership_status, MembershipStatus::Unattested));
+        assert!(matches!(
+            node.membership_status,
+            MembershipStatus::Unattested
+        ));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -868,12 +880,7 @@ mod tests {
     async fn tofu_first_heartbeat_registers_and_binds_key() {
         let registry = NodeRegistry::new();
         let key = fresh_signing_key();
-        let signed = sign_heartbeat(
-            &key,
-            test_heartbeat("node-tofu", "Alpha"),
-            1,
-            Utc::now(),
-        );
+        let signed = sign_heartbeat(&key, test_heartbeat("node-tofu", "Alpha"), 1, Utc::now());
         let expected_pk = signed.public_key.clone();
 
         registry
@@ -943,12 +950,7 @@ mod tests {
     async fn tampered_signature_is_rejected_on_first_heartbeat() {
         let registry = NodeRegistry::new();
         let key = fresh_signing_key();
-        let mut signed = sign_heartbeat(
-            &key,
-            test_heartbeat("node-tamper", "X"),
-            1,
-            Utc::now(),
-        );
+        let mut signed = sign_heartbeat(&key, test_heartbeat("node-tamper", "X"), 1, Utc::now());
         // Flip a byte of the signature
         let mut sig_bytes = hex::decode(&signed.signature).unwrap();
         sig_bytes[0] ^= 0xFF;
@@ -970,7 +972,10 @@ mod tests {
         let signed = sign_heartbeat(&key, test_heartbeat("node-stale", "X"), 1, stale);
 
         let result = registry.verify_and_record(signed).await;
-        assert!(matches!(result, Err(HeartbeatError::TimestampSkewed { .. })));
+        assert!(matches!(
+            result,
+            Err(HeartbeatError::TimestampSkewed { .. })
+        ));
     }
 
     #[tokio::test]
@@ -981,7 +986,10 @@ mod tests {
         let signed = sign_heartbeat(&key, test_heartbeat("node-future", "X"), 1, future);
 
         let result = registry.verify_and_record(signed).await;
-        assert!(matches!(result, Err(HeartbeatError::TimestampSkewed { .. })));
+        assert!(matches!(
+            result,
+            Err(HeartbeatError::TimestampSkewed { .. })
+        ));
     }
 
     #[tokio::test]

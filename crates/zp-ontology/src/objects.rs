@@ -115,7 +115,11 @@ impl Trajectory {
     pub fn top_event_prefixes(&self, n: usize) -> Vec<String> {
         let mut entries: Vec<(&String, &u32)> = self.event_prefix_counts.iter().collect();
         entries.sort_by(|a, b| b.1.cmp(a.1).then_with(|| a.0.cmp(b.0)));
-        entries.into_iter().take(n).map(|(p, _)| p.clone()).collect()
+        entries
+            .into_iter()
+            .take(n)
+            .map(|(p, _)| p.clone())
+            .collect()
     }
 
     /// Record a new receipt's contribution to boundary-detection state.
@@ -124,10 +128,9 @@ impl Trajectory {
     /// Bounded: seen_conversation_ids capped at 32, event_prefix_counts at 20.
     pub fn record_receipt_context(&mut self, conv_id: ConversationId, event_prefix: Option<&str>) {
         // Update conversation-id set (bounded).
-        if !self.seen_conversation_ids.contains(&conv_id)
-            && self.seen_conversation_ids.len() < 32 {
-                self.seen_conversation_ids.push(conv_id.clone());
-            }
+        if !self.seen_conversation_ids.contains(&conv_id) && self.seen_conversation_ids.len() < 32 {
+            self.seen_conversation_ids.push(conv_id.clone());
+        }
         // Dominant is always the most-recent (P4 v1 approximation).
         self.dominant_conversation_id = conv_id;
 
@@ -166,13 +169,27 @@ impl TrajectoryStatus {
 
 impl OntologyObject for Trajectory {
     const OBJECT_TYPE: ObjectType = ObjectType::Trajectory;
-    fn id(&self) -> &ObjectId { &self.id }
-    fn trajectory_id(&self) -> Option<&ObjectId> { None }
-    fn title(&self) -> &str { &self.title }
-    fn status_str(&self) -> String { self.status.as_str().into() }
-    fn created_at(&self) -> DateTime<Utc> { self.created_at }
-    fn last_active(&self) -> DateTime<Utc> { self.last_active }
-    fn boundary_confidence(&self) -> Option<f32> { Some(self.boundary_confidence) }
+    fn id(&self) -> &ObjectId {
+        &self.id
+    }
+    fn trajectory_id(&self) -> Option<&ObjectId> {
+        None
+    }
+    fn title(&self) -> &str {
+        &self.title
+    }
+    fn status_str(&self) -> String {
+        self.status.as_str().into()
+    }
+    fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+    fn last_active(&self) -> DateTime<Utc> {
+        self.last_active
+    }
+    fn boundary_confidence(&self) -> Option<f32> {
+        Some(self.boundary_confidence)
+    }
 }
 
 // ── Decision ───────────────────────────────────────────────────────────────
@@ -209,14 +226,26 @@ impl DecisionStatus {
 
 impl OntologyObject for Decision {
     const OBJECT_TYPE: ObjectType = ObjectType::Decision;
-    fn id(&self) -> &ObjectId { &self.id }
-    fn trajectory_id(&self) -> Option<&ObjectId> { Some(&self.trajectory_id) }
-    fn title(&self) -> &str { &self.title }
-    fn status_str(&self) -> String { self.status.as_str().into() }
-    fn created_at(&self) -> DateTime<Utc> { self.created_at }
+    fn id(&self) -> &ObjectId {
+        &self.id
+    }
+    fn trajectory_id(&self) -> Option<&ObjectId> {
+        Some(&self.trajectory_id)
+    }
+    fn title(&self) -> &str {
+        &self.title
+    }
+    fn status_str(&self) -> String {
+        self.status.as_str().into()
+    }
+    fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
     // Decisions don't have their own last_active — track by created_at.
     // P2+ may add a distinct field if update-timestamp tracking becomes useful.
-    fn last_active(&self) -> DateTime<Utc> { self.created_at }
+    fn last_active(&self) -> DateTime<Utc> {
+        self.created_at
+    }
 }
 
 // ── Insight ────────────────────────────────────────────────────────────────
@@ -234,13 +263,25 @@ pub struct Insight {
 
 impl OntologyObject for Insight {
     const OBJECT_TYPE: ObjectType = ObjectType::Insight;
-    fn id(&self) -> &ObjectId { &self.id }
-    fn trajectory_id(&self) -> Option<&ObjectId> { Some(&self.trajectory_id) }
-    fn title(&self) -> &str { &self.title }
+    fn id(&self) -> &ObjectId {
+        &self.id
+    }
+    fn trajectory_id(&self) -> Option<&ObjectId> {
+        Some(&self.trajectory_id)
+    }
+    fn title(&self) -> &str {
+        &self.title
+    }
     // Insights have no lifecycle status; use fixed "recorded".
-    fn status_str(&self) -> String { "recorded".into() }
-    fn created_at(&self) -> DateTime<Utc> { self.created_at }
-    fn last_active(&self) -> DateTime<Utc> { self.created_at }
+    fn status_str(&self) -> String {
+        "recorded".into()
+    }
+    fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+    fn last_active(&self) -> DateTime<Utc> {
+        self.created_at
+    }
 }
 
 // ── Artifact ───────────────────────────────────────────────────────────────
@@ -289,12 +330,24 @@ impl ArtifactStatus {
 
 impl OntologyObject for Artifact {
     const OBJECT_TYPE: ObjectType = ObjectType::Artifact;
-    fn id(&self) -> &ObjectId { &self.id }
-    fn trajectory_id(&self) -> Option<&ObjectId> { Some(&self.trajectory_id) }
-    fn title(&self) -> &str { &self.title }
-    fn status_str(&self) -> String { self.status.as_str().into() }
-    fn created_at(&self) -> DateTime<Utc> { self.created_at }
-    fn last_active(&self) -> DateTime<Utc> { self.created_at }
+    fn id(&self) -> &ObjectId {
+        &self.id
+    }
+    fn trajectory_id(&self) -> Option<&ObjectId> {
+        Some(&self.trajectory_id)
+    }
+    fn title(&self) -> &str {
+        &self.title
+    }
+    fn status_str(&self) -> String {
+        self.status.as_str().into()
+    }
+    fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+    fn last_active(&self) -> DateTime<Utc> {
+        self.created_at
+    }
 }
 
 // ── Friction ───────────────────────────────────────────────────────────────
@@ -344,12 +397,24 @@ impl FrictionStatus {
 
 impl OntologyObject for Friction {
     const OBJECT_TYPE: ObjectType = ObjectType::Friction;
-    fn id(&self) -> &ObjectId { &self.id }
-    fn trajectory_id(&self) -> Option<&ObjectId> { Some(&self.trajectory_id) }
-    fn title(&self) -> &str { &self.title }
-    fn status_str(&self) -> String { self.status.as_str().into() }
-    fn created_at(&self) -> DateTime<Utc> { self.created_at }
-    fn last_active(&self) -> DateTime<Utc> { self.last_seen }
+    fn id(&self) -> &ObjectId {
+        &self.id
+    }
+    fn trajectory_id(&self) -> Option<&ObjectId> {
+        Some(&self.trajectory_id)
+    }
+    fn title(&self) -> &str {
+        &self.title
+    }
+    fn status_str(&self) -> String {
+        self.status.as_str().into()
+    }
+    fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+    fn last_active(&self) -> DateTime<Utc> {
+        self.last_seen
+    }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────

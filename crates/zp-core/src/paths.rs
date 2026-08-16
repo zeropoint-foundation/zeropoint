@@ -239,12 +239,30 @@ mod tests {
     fn test_subdirectories() {
         let _env = env_lock();
         std::env::set_var("ZP_HOME", "/tmp/zp-paths-test");
-        assert_eq!(keys_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/keys"));
-        assert_eq!(data_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/data"));
-        assert_eq!(audit_db_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/data/audit.db"));
-        assert_eq!(vault_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/vault.json"));
-        assert_eq!(session_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/session.json"));
-        assert_eq!(policies_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/policies"));
+        assert_eq!(
+            keys_dir().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/keys")
+        );
+        assert_eq!(
+            data_dir().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/data")
+        );
+        assert_eq!(
+            audit_db_path().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/data/audit.db")
+        );
+        assert_eq!(
+            vault_path().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/vault.json")
+        );
+        assert_eq!(
+            session_path().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/session.json")
+        );
+        assert_eq!(
+            policies_dir().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/policies")
+        );
         std::env::remove_var("ZP_HOME");
     }
 
@@ -280,7 +298,10 @@ mod tests {
         // audit_db_path inherits the ZP_DATA_DIR override transitively —
         // this is the Architecture II.0 contract: one resolver, env-respecting,
         // every audit-store consumer sees the same file.
-        assert_eq!(audit_db_path().unwrap(), PathBuf::from("/custom/data/audit.db"));
+        assert_eq!(
+            audit_db_path().unwrap(),
+            PathBuf::from("/custom/data/audit.db")
+        );
         std::env::remove_var("ZP_DATA_DIR");
         std::env::remove_var("ZP_HOME");
     }

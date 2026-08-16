@@ -74,7 +74,10 @@ pub async fn wasm_load_handler(
             crate::tool_chain::emit_tool_receipt(
                 &state.0.audit_store,
                 &format!("policy:wasm:loaded:{}", metadata.content_hash),
-                Some(&format!("name={} size={}", metadata.name, metadata.size_bytes)),
+                Some(&format!(
+                    "name={} size={}",
+                    metadata.name, metadata.size_bytes
+                )),
             );
 
             (
@@ -147,9 +150,15 @@ pub async fn wasm_disable_handler(
                     &format!("policy:wasm:disabled:{}", hash),
                     None,
                 );
-                (StatusCode::OK, Json(serde_json::json!({ "ok": true, "hash": hash, "status": "disabled" })))
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({ "ok": true, "hash": hash, "status": "disabled" })),
+                )
             } else {
-                (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": format!("Module {} not found", hash) })))
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({ "error": format!("Module {} not found", hash) })),
+                )
             }
         }
         None => (
@@ -174,9 +183,15 @@ pub async fn wasm_enable_handler(
                     &format!("policy:wasm:enabled:{}", hash),
                     None,
                 );
-                (StatusCode::OK, Json(serde_json::json!({ "ok": true, "hash": hash, "status": "active" })))
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({ "ok": true, "hash": hash, "status": "active" })),
+                )
             } else {
-                (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": format!("Module {} not found", hash) })))
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({ "error": format!("Module {} not found", hash) })),
+                )
             }
         }
         None => (

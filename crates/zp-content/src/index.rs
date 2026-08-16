@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use chrono::{TimeZone as _, Utc};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use crate::{ContentError, ContentFilter, ContentId, ContentMeta};
 
@@ -19,8 +19,7 @@ pub struct LocalIndex {
 impl LocalIndex {
     /// Open (or create) the index at `path`.
     pub fn open(path: &Path) -> Result<Self, ContentError> {
-        let conn = Connection::open(path)
-            .map_err(|e| ContentError::Index(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| ContentError::Index(e.to_string()))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS content (
                 content_id  BLOB NOT NULL PRIMARY KEY,
@@ -31,7 +30,9 @@ impl LocalIndex {
             );",
         )
         .map_err(|e| ContentError::Index(e.to_string()))?;
-        Ok(Self { conn: std::sync::Mutex::new(conn) })
+        Ok(Self {
+            conn: std::sync::Mutex::new(conn),
+        })
     }
 
     /// Insert a content entry. No-op if the id already exists.
@@ -85,7 +86,10 @@ impl LocalIndex {
         );
         match result {
             Ok((kind, ts, size, ext)) => {
-                let created_at = Utc.timestamp_millis_opt(ts).single().unwrap_or_else(Utc::now);
+                let created_at = Utc
+                    .timestamp_millis_opt(ts)
+                    .single()
+                    .unwrap_or_else(Utc::now);
                 let extensions = ext.and_then(|s| serde_json::from_str(&s).ok());
                 Ok(Some(ContentMeta {
                     kind,

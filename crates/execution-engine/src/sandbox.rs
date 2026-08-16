@@ -199,7 +199,7 @@ pub fn build_sandbox_wrapper(
         // is the prerequisite, not the feature.
         let mut wrapper = vec![
             "unshare".to_string(),
-            "--net".to_string(), // No network
+            "--net".to_string(),   // No network
             "--mount".to_string(), // Private mount namespace (see above)
             "--pid".to_string(),
             "--fork".to_string(),

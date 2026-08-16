@@ -42,9 +42,7 @@ use zp_discipline::Discipline;
 #[test]
 fn no_raw_storage_calls_outside_zp_content() {
     Discipline::new("no_raw_storage_calls_outside_zp_content")
-        .cite_invariant(
-            "Principle 8 (one canonical path) — singular content-addressed storage",
-        )
+        .cite_invariant("Principle 8 (one canonical path) — singular content-addressed storage")
         .rationale(
             "Direct Cloudflare KV and R2 calls outside the adapter crate \
              bypass the ContentStore abstraction and create parallel data paths \

@@ -120,11 +120,8 @@ fn adapters_must_carry_documentation() {
                 regex::escape(trait_name)
             ))
             .unwrap();
-            let define_re = Regex::new(&format!(
-                r"pub\s+trait\s+{}\b",
-                regex::escape(trait_name)
-            ))
-            .unwrap();
+            let define_re =
+                Regex::new(&format!(r"pub\s+trait\s+{}\b", regex::escape(trait_name))).unwrap();
             (*trait_name, impl_re, define_re)
         })
         .collect();
@@ -141,10 +138,7 @@ fn adapters_must_carry_documentation() {
     // suffix forms (-s, -ing, -ation, -ers) all match. This is the
     // forgiveness layer: authors should write naturally, not contort
     // their prose to match a regex.
-    let doc_marker = Regex::new(
-        r"(?im)^//!.*\b(adapter|implement|provider|backend)",
-    )
-    .unwrap();
+    let doc_marker = Regex::new(r"(?im)^//!.*\b(adapter|implement|provider|backend)").unwrap();
 
     let mut violations: Vec<Violation> = Vec::new();
 
@@ -241,7 +235,10 @@ fn adapters_must_carry_documentation() {
          //! who want OS-level biometric unlock.\n\
          \n",
     );
-    msg.push_str(&format!("  {} adapter(s) without documentation:\n", violations.len()));
+    msg.push_str(&format!(
+        "  {} adapter(s) without documentation:\n",
+        violations.len()
+    ));
     for v in &violations {
         msg.push_str(&format!(
             "    {} — implements: {}\n",

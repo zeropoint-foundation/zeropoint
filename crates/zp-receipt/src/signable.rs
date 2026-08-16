@@ -71,7 +71,9 @@ pub trait Signable {
     /// display, logging, and string comparison; does not change what
     /// gets signed.
     fn canonical_hash_hex(&self) -> String {
-        blake3::hash(&self.canonical_preimage()).to_hex().to_string()
+        blake3::hash(&self.canonical_preimage())
+            .to_hex()
+            .to_string()
     }
 }
 

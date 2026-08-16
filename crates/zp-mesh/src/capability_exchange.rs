@@ -288,10 +288,7 @@ fn intersect_offers(
 /// The match is exhaustive over same-type pairs with no catch-all for them, so
 /// a new `GrantedCapability` variant breaks this build rather than falling into
 /// a widening default.
-fn intersect_capability(
-    a: &GrantedCapability,
-    b: &GrantedCapability,
-) -> Option<GrantedCapability> {
+fn intersect_capability(a: &GrantedCapability, b: &GrantedCapability) -> Option<GrantedCapability> {
     match (a, b) {
         (GrantedCapability::Read { scope: sa }, GrantedCapability::Read { scope: sb }) => {
             Some(GrantedCapability::Read {
@@ -328,22 +325,28 @@ fn intersect_capability(
             settings: intersect_scopes(sa, sb),
         }),
         (
-            GrantedCapability::CredentialAccess { credential_refs: ra },
-            GrantedCapability::CredentialAccess { credential_refs: rb },
+            GrantedCapability::CredentialAccess {
+                credential_refs: ra,
+            },
+            GrantedCapability::CredentialAccess {
+                credential_refs: rb,
+            },
         ) => Some(GrantedCapability::CredentialAccess {
             credential_refs: intersect_scopes(ra, rb),
         }),
-        (
-            GrantedCapability::ToolCall { tools: ta },
-            GrantedCapability::ToolCall { tools: tb },
-        ) => Some(GrantedCapability::ToolCall {
-            tools: intersect_scopes(ta, tb),
-        }),
+        (GrantedCapability::ToolCall { tools: ta }, GrantedCapability::ToolCall { tools: tb }) => {
+            Some(GrantedCapability::ToolCall {
+                tools: intersect_scopes(ta, tb),
+            })
+        }
         // Two `Custom` capabilities intersect only if they name the same thing.
         // Parameters are not merged — there is no general way to intersect
         // arbitrary JSON, and guessing would widen.
         (
-            GrantedCapability::Custom { name: na, parameters: pa },
+            GrantedCapability::Custom {
+                name: na,
+                parameters: pa,
+            },
             GrantedCapability::Custom { name: nb, .. },
         ) => (na == nb).then(|| GrantedCapability::Custom {
             name: na.clone(),
@@ -748,7 +751,9 @@ mod tests {
 
         let narrowed = intersect_capability(
             &GrantedCapability::ToolCall { tools: star() },
-            &GrantedCapability::ToolCall { tools: vec!["bash".to_string()] },
+            &GrantedCapability::ToolCall {
+                tools: vec!["bash".to_string()],
+            },
         )
         .expect("same-type pair must intersect");
         match narrowed {
@@ -797,7 +802,10 @@ mod tests {
             parameters: serde_json::Value::Null,
         };
 
-        match intersect_capability(&propose("governance:propose"), &propose("governance:propose")) {
+        match intersect_capability(
+            &propose("governance:propose"),
+            &propose("governance:propose"),
+        ) {
             Some(GrantedCapability::Custom { name, .. }) => {
                 assert_eq!(name, "governance:propose");
             }

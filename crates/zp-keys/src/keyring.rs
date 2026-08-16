@@ -66,7 +66,6 @@ pub(crate) fn genesis_keychain_account() -> &'static str {
     }
 }
 
-
 /// Version byte for the on-disk encrypted operator secret blob.
 /// Format: [0x01][12-byte nonce][ChaCha20-Poly1305 ciphertext+tag].
 const OPERATOR_BLOB_VERSION: u8 = 0x01;
@@ -556,7 +555,10 @@ impl Keyring {
         // file is the raw Ed25519 seed (32 bytes, Tier-3 sovereignty
         // material); the chain.json reveals the operator hierarchy and
         // capability metadata, also kept owner-readable only.
-        write_secret_file(&agents_dir.join(format!("{}.json", name)), chain_json.as_bytes())?;
+        write_secret_file(
+            &agents_dir.join(format!("{}.json", name)),
+            chain_json.as_bytes(),
+        )?;
         write_secret_file(
             &agents_dir.join(format!("{}.secret", name)),
             &agent.secret_key(),
@@ -716,9 +718,6 @@ fn load_genesis_from_credential_store_uncached() -> Result<[u8; 32], KeyError> {
     }
 }
 
-
-
-
 // ── Orphan-entry cleanup ─────────────────────────────────────────────
 
 /// A Keychain entry that exists on-disk but is no longer used by current
@@ -763,7 +762,11 @@ pub fn find_orphan_keychain_entries() -> Vec<OrphanEntry> {
     for &(service, account, reason) in ORPHAN_CANDIDATES {
         if let Ok(entry) = keyring::Entry::new(service, account) {
             if entry.get_password().is_ok() {
-                found.push(OrphanEntry { service, account, reason });
+                found.push(OrphanEntry {
+                    service,
+                    account,
+                    reason,
+                });
             }
         }
     }

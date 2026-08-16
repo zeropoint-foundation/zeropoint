@@ -319,11 +319,7 @@ impl Officer for Aegis {
         &[]
     }
 
-    fn sweep(
-        &self,
-        chain: &ChainReader<'_>,
-        _vault_keys: &VaultKeyLister,
-    ) -> Vec<Finding> {
+    fn sweep(&self, chain: &ChainReader<'_>, _vault_keys: &VaultKeyLister) -> Vec<Finding> {
         self.check_officer_cadre_cadence(chain)
     }
 }
@@ -337,9 +333,7 @@ mod tests {
 
     use super::*;
     use chrono::TimeZone;
-    use zp_core::{
-        ActorId, AuditAction, AuditEntry, AuditId, ConversationId, PolicyDecision,
-    };
+    use zp_core::{ActorId, AuditAction, AuditEntry, AuditId, ConversationId, PolicyDecision};
 
     /// Build a synthetic AuditEntry with the given event string and timestamp.
     /// Aegis only reads `action` and `timestamp`; the rest is filled with
@@ -522,8 +516,10 @@ mod tests {
         assert_eq!(findings[0].finding_type, "divergent:critical");
         assert_eq!(findings[0].severity, Severity::Critical);
 
-        let per_officer_types: std::collections::HashSet<String> =
-            findings[1..].iter().map(|f| f.finding_type.clone()).collect();
+        let per_officer_types: std::collections::HashSet<String> = findings[1..]
+            .iter()
+            .map(|f| f.finding_type.clone())
+            .collect();
         assert!(per_officer_types.contains("silent_officer:std"));
         assert!(per_officer_types.contains("silent_officer:sen"));
     }
@@ -572,8 +568,14 @@ mod tests {
         // Lock in the receipt-event format per OFFICER-LENS-DECLARATIONS-2026-07.md.
         for (finding_type, expected_key) in &[
             ("coherent", "officer:aegis:trajectory:coherent"),
-            ("divergent:warning", "officer:aegis:trajectory:divergent:warning"),
-            ("divergent:critical", "officer:aegis:trajectory:divergent:critical"),
+            (
+                "divergent:warning",
+                "officer:aegis:trajectory:divergent:warning",
+            ),
+            (
+                "divergent:critical",
+                "officer:aegis:trajectory:divergent:critical",
+            ),
             (
                 "awaiting_cadre_history",
                 "officer:aegis:trajectory:awaiting_cadre_history",

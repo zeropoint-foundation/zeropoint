@@ -22,7 +22,10 @@ use zp_core::{ProviderCapabilities, ProviderHealth, ProviderId, ZpError};
 ///
 /// **Use `ProxyLlmProvider` instead.** This struct bypasses the ZP inference
 /// proxy; calls do not produce signed receipts or cost tracking entries.
-#[deprecated(since = "0.1.0", note = "Use ProxyLlmProvider routed through the ZP proxy instead")]
+#[deprecated(
+    since = "0.1.0",
+    note = "Use ProxyLlmProvider routed through the ZP proxy instead"
+)]
 pub struct AnthropicProvider {
     id: ProviderId,
     api_key: String,

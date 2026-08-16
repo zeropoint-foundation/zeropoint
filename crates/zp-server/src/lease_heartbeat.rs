@@ -230,10 +230,8 @@ async fn try_renew_once(client: &reqwest::Client, config: &LeaseHeartbeatConfig)
     let ts_ms = chrono::Utc::now().timestamp_millis();
     let payload_to_sign = format!("{}|{}", config.grant_id, ts_ms);
 
-    let (sig_hex, _pk_hex) = sign_with_hex_key(
-        &config.subject_signing_key_hex,
-        payload_to_sign.as_bytes(),
-    );
+    let (sig_hex, _pk_hex) =
+        sign_with_hex_key(&config.subject_signing_key_hex, payload_to_sign.as_bytes());
     let Some(sig_hex) = sig_hex else {
         warn!("subject_signing_key_hex is malformed (expected 64 hex chars); cannot heartbeat");
         return false;
@@ -317,10 +315,7 @@ mod tests {
         };
         assert_eq!(cfg.parse_failure_mode(), LeaseFailureMode::DegradeOnExpiry);
         cfg.failure_mode = "flag".into();
-        assert_eq!(
-            cfg.parse_failure_mode(),
-            LeaseFailureMode::ContinueWithFlag
-        );
+        assert_eq!(cfg.parse_failure_mode(), LeaseFailureMode::ContinueWithFlag);
     }
 
     #[test]

@@ -10,10 +10,10 @@ use tracing::info;
 use zp_receipt::{ClaimMetadata, ClaimSemantics, Receipt, Status};
 
 use crate::lifecycle::apply_lifecycle_rules;
-use zp_core::receipt_extensions as ext;
 use crate::types::{
     MemoryEntry, MemoryStage, PromotionRequest, PromotionResult, PromotionThresholds,
 };
+use zp_core::receipt_extensions as ext;
 
 /// The promotion engine manages memory lifecycle transitions.
 ///
@@ -468,9 +468,7 @@ mod tests {
             requestor: "operator".to_string(),
             reviewer: None,
         });
-        assert!(
-            matches!(result, PromotionResult::RequiresReview { .. })
-        );
+        assert!(matches!(result, PromotionResult::RequiresReview { .. }));
 
         // With reviewer — should succeed.
         let result = engine.promote(&PromotionRequest {

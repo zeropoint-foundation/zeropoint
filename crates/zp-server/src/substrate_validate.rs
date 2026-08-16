@@ -919,9 +919,7 @@ fn check_officer_heartbeats(
 /// reported alongside the result so the number stays interpretable.
 const INVENTORY_WINDOW: usize = 25_000;
 
-fn check_receipt_inventory(
-    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
-) -> serde_json::Value {
+fn check_receipt_inventory(audit_store: &Arc<std::sync::Mutex<AuditStore>>) -> serde_json::Value {
     let recent: Vec<zp_core::AuditEntry> = match audit_store.lock() {
         Ok(store) => match store.recent_entries(INVENTORY_WINDOW) {
             Ok(e) => e,
@@ -941,8 +939,10 @@ fn check_receipt_inventory(
     };
     let recent = &recent[..];
 
-    let window_span = match (recent.iter().map(|e| e.timestamp).min(),
-                             recent.iter().map(|e| e.timestamp).max()) {
+    let window_span = match (
+        recent.iter().map(|e| e.timestamp).min(),
+        recent.iter().map(|e| e.timestamp).max(),
+    ) {
         (Some(a), Some(b)) => serde_json::json!({
             "from": a.to_rfc3339(),
             "to": b.to_rfc3339(),
@@ -958,7 +958,9 @@ fn check_receipt_inventory(
         let event = match &e.action {
             AuditAction::SystemEvent { event } => event,
             _ => {
-                *counts_by_prefix.entry("<non-system-event>".to_string()).or_insert(0) += 1;
+                *counts_by_prefix
+                    .entry("<non-system-event>".to_string())
+                    .or_insert(0) += 1;
                 continue;
             }
         };
@@ -1030,7 +1032,11 @@ fn check_receipt_inventory(
         "receipt inventory must partition the declared set exactly"
     );
 
-    let status = if unknown_samples.is_empty() { "ok" } else { "unrecognized_present" };
+    let status = if unknown_samples.is_empty() {
+        "ok"
+    } else {
+        "unrecognized_present"
+    };
 
     serde_json::json!({
         "status": status,
@@ -1236,9 +1242,7 @@ fn derive_posture(
     let heartbeat_status = heartbeats["status"].as_str().unwrap_or("unknown");
 
     // Any single critical fault escalates the whole posture.
-    if integrity_status == "failed"
-        || canary_status == "critical"
-        || heartbeat_status == "critical"
+    if integrity_status == "failed" || canary_status == "critical" || heartbeat_status == "critical"
     {
         return "critical".to_string();
     }
@@ -1266,15 +1270,21 @@ fn derive_notable_gaps(
 ) -> Vec<String> {
     let mut gaps = Vec::new();
     if chain_integrity["status"].as_str() == Some("failed") {
-        gaps.push("Chain integrity check failed — investigate hash-linkage or signature validity.".to_string());
+        gaps.push(
+            "Chain integrity check failed — investigate hash-linkage or signature validity."
+                .to_string(),
+        );
     }
     if canary["status"].as_str() == Some("critical") {
         gaps.push(
-            "Canary Tier 1 remediation insufficient — Tier 2 (Connection rebuild) may be required.".to_string(),
+            "Canary Tier 1 remediation insufficient — Tier 2 (Connection rebuild) may be required."
+                .to_string(),
         );
     }
     if canary["status"].as_str() == Some("inactive") {
-        gaps.push("No canary activity in the last hour — discipline may not be spawned.".to_string());
+        gaps.push(
+            "No canary activity in the last hour — discipline may not be spawned.".to_string(),
+        );
     }
     if sandwich["status"].as_str() == Some("imbalanced") {
         gaps.push(
@@ -1285,7 +1295,10 @@ fn derive_notable_gaps(
         for (officer, data) in map {
             let status = data["status"].as_str().unwrap_or("unknown");
             if status == "missing" || status == "critical" {
-                gaps.push(format!("Officer {} heartbeat {} — expected cadence 900s.", officer, status));
+                gaps.push(format!(
+                    "Officer {} heartbeat {} — expected cadence 900s.",
+                    officer, status
+                ));
             }
         }
     }
@@ -1432,8 +1445,14 @@ mod tests {
         write_event(&store, "chain:canary:written 0");
         write_event(&store, "chain:canary:verified chain_reader 0 probe_ms=5");
         write_event(&store, "chain:canary:written 1");
-        write_event(&store, "chain:canary:missed chain_reader 1 probe_ms=8 probed_entries=100");
-        write_event(&store, "chain:canary:remediated chain_reader 1 method=cache_flush");
+        write_event(
+            &store,
+            "chain:canary:missed chain_reader 1 probe_ms=8 probed_entries=100",
+        );
+        write_event(
+            &store,
+            "chain:canary:remediated chain_reader 1 method=cache_flush",
+        );
 
         let report = run_substrate_validation(&store);
         let canary = &report["checks"]["canary_discipline"];
@@ -1460,7 +1479,10 @@ mod tests {
         let report = run_substrate_validation(&store);
         let sandwich = &report["checks"]["cognitive_sandwich"];
         assert_eq!(sandwich["cognitive_input_composed_count"].as_u64(), Some(1));
-        assert_eq!(sandwich["cognitive_observer_verified_count"].as_u64(), Some(1));
+        assert_eq!(
+            sandwich["cognitive_observer_verified_count"].as_u64(),
+            Some(1)
+        );
         assert_eq!(sandwich["violations_last_hour"].as_u64(), Some(0));
         assert_eq!(sandwich["status"].as_str(), Some("ok"));
     }
@@ -1513,7 +1535,9 @@ mod tests {
         let report = run_substrate_validation(&store);
         let inv = &report["checks"]["receipt_inventory"];
         assert_eq!(inv["status"].as_str(), Some("unrecognized_present"));
-        assert!(inv["unrecognized_prefix_counts"]["some_new_thing"].as_u64().is_some());
+        assert!(inv["unrecognized_prefix_counts"]["some_new_thing"]
+            .as_u64()
+            .is_some());
     }
 
     #[test]
@@ -1523,8 +1547,12 @@ mod tests {
         let report = run_substrate_validation(&store);
         let gaps = report["notable_gaps"].as_array().unwrap();
         // Should mention missing officers AND unknown prefixes.
-        assert!(gaps.iter().any(|g| g.as_str().unwrap_or("").contains("Officer")));
-        assert!(gaps.iter().any(|g| g.as_str().unwrap_or("").contains("Unrecognized")));
+        assert!(gaps
+            .iter()
+            .any(|g| g.as_str().unwrap_or("").contains("Officer")));
+        assert!(gaps
+            .iter()
+            .any(|g| g.as_str().unwrap_or("").contains("Unrecognized")));
     }
 
     #[test]

@@ -245,9 +245,12 @@ pub async fn list_observations_handler(
     ))?;
 
     let store = obs_store.lock().unwrap();
-    let active = store
-        .get_active()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Store error: {}", e)))?;
+    let active = store.get_active().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Store error: {}", e),
+        )
+    })?;
 
     let summaries: Vec<ObservationSummary> = active
         .into_iter()
@@ -330,10 +333,7 @@ pub enum ReviewDecisionRequest {
         action: String,
     },
     #[serde(rename = "defer")]
-    Defer {
-        reviewer: String,
-        reason: String,
-    },
+    Defer { reviewer: String, reason: String },
 }
 
 #[derive(Serialize)]
@@ -403,10 +403,9 @@ pub async fn submit_review_handler(
         "Review queue not available".to_string(),
     ))?;
 
-    let target_stage = parse_stage(&body.target_stage)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    let current_stage = parse_stage(&body.current_stage)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let target_stage = parse_stage(&body.target_stage).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let current_stage =
+        parse_stage(&body.current_stage).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
     // Check if this stage transition requires review.
     let requires_review = ReviewQueue::requires_review(target_stage);
@@ -453,8 +452,8 @@ pub async fn decide_review_handler(
             reason,
             action,
         } => {
-            let parsed_action = parse_review_action(&action)
-                .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+            let parsed_action =
+                parse_review_action(&action).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
             ReviewDecision::Reject {
                 reason,
                 action: parsed_action,
@@ -613,9 +612,7 @@ pub struct MemoriesResponse {
 /// Returns all tracked memories with their lifecycle state: stage, confidence,
 /// reinforcement count, expiry, review-due timestamps. This is the surface
 /// that makes the memory lifecycle observable and testable.
-pub async fn list_memories_handler(
-    State(state): State<AppState>,
-) -> Json<MemoriesResponse> {
+pub async fn list_memories_handler(State(state): State<AppState>) -> Json<MemoriesResponse> {
     let engine = state.0.promotion_engine.lock().unwrap();
     let all = engine.all_memories();
 
@@ -662,9 +659,7 @@ pub struct MemorySweepResponse {
 /// Runs the same sweep that the officer timer runs on its 900s interval.
 /// Demotes expired memories and submits review-due memories to the review queue.
 /// Useful for testing without waiting for the periodic timer.
-pub async fn sweep_memories_handler(
-    State(state): State<AppState>,
-) -> Json<MemorySweepResponse> {
+pub async fn sweep_memories_handler(State(state): State<AppState>) -> Json<MemorySweepResponse> {
     let mut engine = state.0.promotion_engine.lock().unwrap();
 
     let sweep_result = {
@@ -680,12 +675,18 @@ pub async fn sweep_memories_handler(
     }
 
     // Submit review-due memories to the review queue.
-    let review_submissions: Vec<(String, MemoryStage, MemoryStage)> =
-        sweep_result.review_due_ids.iter().filter_map(|id| {
+    let review_submissions: Vec<(String, MemoryStage, MemoryStage)> = sweep_result
+        .review_due_ids
+        .iter()
+        .filter_map(|id| {
             engine.get(id).and_then(|entry| {
-                entry.stage.next().map(|next| (id.clone(), entry.stage, next))
+                entry
+                    .stage
+                    .next()
+                    .map(|next| (id.clone(), entry.stage, next))
             })
-        }).collect();
+        })
+        .collect();
 
     if !review_submissions.is_empty() {
         if let Some(ref rq) = state.0.review_queue {

@@ -117,7 +117,8 @@ fn main() {
     let mut warned = 0;
     let mut blocked = 0;
 
-    let actions = [ActionType::Chat,
+    let actions = [
+        ActionType::Chat,
         ActionType::Chat,
         ActionType::Read {
             target: "file.txt".into(),
@@ -130,7 +131,8 @@ fn main() {
         },
         ActionType::CredentialAccess {
             credential_ref: "api-key".into(),
-        }];
+        },
+    ];
 
     let mut receipt_chain = ReceiptChain::new("fleet-receipts");
 
@@ -178,7 +180,8 @@ fn main() {
     // 4. Audit trail
     println!("\nAUDIT");
     println!("─────");
-    let mut store = AuditStore::open_unsigned("./capstone-audit.db").expect("Should open audit store");
+    let mut store =
+        AuditStore::open_unsigned("./capstone-audit.db").expect("Should open audit store");
     let conv_id = ConversationId::new();
 
     let unsealed = UnsealedEntry::new(

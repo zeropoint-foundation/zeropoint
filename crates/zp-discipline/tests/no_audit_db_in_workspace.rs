@@ -86,9 +86,7 @@ fn scan(root: &Path) -> (Vec<PathBuf>, usize) {
 
     for entry in WalkDir::new(root)
         .into_iter()
-        .filter_entry(|e| {
-            !e.file_type().is_dir() || !skipped(&e.file_name().to_string_lossy())
-        })
+        .filter_entry(|e| !e.file_type().is_dir() || !skipped(&e.file_name().to_string_lossy()))
         .filter_map(Result::ok)
     {
         if entry.file_type().is_dir() {
@@ -136,10 +134,7 @@ fn no_chain_database_inside_the_workspace() {
          something that is not `audit.db` and record what it is.\n\
          See SEAM-001 in docs/DELIBERATION-LOG-2026-08.md.\n",
         hits.iter()
-            .map(|p| format!(
-                "  {}",
-                p.strip_prefix(&root).unwrap_or(p).display()
-            ))
+            .map(|p| format!("  {}", p.strip_prefix(&root).unwrap_or(p).display()))
             .collect::<Vec<_>>()
             .join("\n")
     );

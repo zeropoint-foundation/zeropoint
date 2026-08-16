@@ -25,9 +25,8 @@ pub mod library;
 pub mod local;
 
 pub use artifact::{
-    ArtifactId, ArtifactKind, ArtifactContent, ArtifactSignature, Artifact, LifecycleState,
-    LibraryError, LibraryFilter, LibraryStateFilter, RenderConfig, SourceManifest,
-    compute_artifact_id,
+    compute_artifact_id, Artifact, ArtifactContent, ArtifactId, ArtifactKind, ArtifactSignature,
+    LibraryError, LibraryFilter, LibraryStateFilter, LifecycleState, RenderConfig, SourceManifest,
 };
 pub use library::Library;
 pub use local::LocalArtifactLibrary;

@@ -134,10 +134,7 @@ impl CoherenceRuntime {
                 )
             }
             CoherenceReport::Diverged { detail } => {
-                warn!(
-                    "coherence class1: CHAIN READERS DIVERGED — {}",
-                    detail
-                );
+                warn!("coherence class1: CHAIN READERS DIVERGED — {}", detail);
                 format!(
                     "coherence:diverged:class1_chain_readers probe_ms={} live_count={} detail={}",
                     probe_ms, probes.live_count, detail
@@ -187,7 +184,11 @@ pub enum CoherenceReport {
 /// Pure evaluation function — takes probe results, returns coherence assessment.
 /// Extracted for testability.
 pub fn evaluate_class1_coherence(probes: &TailProbes) -> CoherenceReport {
-    match (&probes.by_rowid, &probes.by_timestamp, &probes.via_latest_hash) {
+    match (
+        &probes.by_rowid,
+        &probes.by_timestamp,
+        &probes.via_latest_hash,
+    ) {
         (None, None, None) => CoherenceReport::EmptyChain,
         (Some(a), Some(b), Some(hash_c)) => {
             // All three probes returned data — check agreement.
@@ -291,10 +292,7 @@ mod tests {
         store.lock().unwrap().append(entry).expect("append");
     }
 
-    fn count_events_with_prefix(
-        store: &Arc<std::sync::Mutex<AuditStore>>,
-        prefix: &str,
-    ) -> usize {
+    fn count_events_with_prefix(store: &Arc<std::sync::Mutex<AuditStore>>, prefix: &str) -> usize {
         let store = store.lock().unwrap();
         store
             .search_chain_by_action_keyword(prefix, 1024)
@@ -309,7 +307,10 @@ mod tests {
         runtime.run_one_cycle().await;
         // Empty chain emits informational verified receipt.
         assert!(count_events_with_prefix(&store, "coherence:verified:class1_chain_readers") >= 1);
-        assert_eq!(count_events_with_prefix(&store, "coherence:diverged:class1_chain_readers"), 0);
+        assert_eq!(
+            count_events_with_prefix(&store, "coherence:diverged:class1_chain_readers"),
+            0
+        );
     }
 
     #[tokio::test]
@@ -323,7 +324,10 @@ mod tests {
         runtime.run_one_cycle().await;
         // Healthy chain: probes agree, verified receipt emitted, no divergence.
         assert!(count_events_with_prefix(&store, "coherence:verified:class1_chain_readers") >= 1);
-        assert_eq!(count_events_with_prefix(&store, "coherence:diverged:class1_chain_readers"), 0);
+        assert_eq!(
+            count_events_with_prefix(&store, "coherence:diverged:class1_chain_readers"),
+            0
+        );
     }
 
     #[test]
@@ -357,7 +361,11 @@ mod tests {
             archive_exists: false,
         };
         match evaluate_class1_coherence(&probes) {
-            CoherenceReport::Verified { tail_rowid, tail_hash, .. } => {
+            CoherenceReport::Verified {
+                tail_rowid,
+                tail_hash,
+                ..
+            } => {
                 assert_eq!(tail_rowid, 42);
                 assert_eq!(tail_hash, "abcdef1234567890");
             }
@@ -440,4 +448,3 @@ mod tests {
         }
     }
 }
-

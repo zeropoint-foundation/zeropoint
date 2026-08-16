@@ -11,8 +11,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::{
-    Artifact, ArtifactContent, ArtifactId, ArtifactKind, LibraryError, LifecycleState,
-    RenderConfig, SourceManifest, compute_artifact_id,
+    compute_artifact_id, Artifact, ArtifactContent, ArtifactId, ArtifactKind, LibraryError,
+    LifecycleState, RenderConfig, SourceManifest,
 };
 use crate::library::Library;
 
@@ -182,7 +182,11 @@ pub async fn generate_candidate(
             composition.closer.trim()
         )
     } else if !composition.closer.is_empty() {
-        format!("{}\n\n{}", composition.opener.trim(), composition.closer.trim())
+        format!(
+            "{}\n\n{}",
+            composition.opener.trim(),
+            composition.closer.trim()
+        )
     } else {
         composition.opener.clone()
     };

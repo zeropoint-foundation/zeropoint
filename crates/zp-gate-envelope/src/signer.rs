@@ -111,7 +111,12 @@ mod tests {
     #[test]
     fn header_parses_back() {
         let s = signer();
-        let header = s.sign_request("POST", "/api/v1/proxy/ollama/v1/chat/completions", b"{}", 1_700_000_000);
+        let header = s.sign_request(
+            "POST",
+            "/api/v1/proxy/ollama/v1/chat/completions",
+            b"{}",
+            1_700_000_000,
+        );
         let parsed = parse_header(&header).expect("own header must parse");
         assert_eq!(parsed.v, SCHEME_VERSION);
         assert_eq!(parsed.kid, s.kid());
@@ -134,11 +139,10 @@ mod tests {
 
         // Reconstruct claims the way the verifier does: request-derived
         // method/path/body_hash, header-derived v/ts/nonce.
-        let claims = parsed.clone().into_claims(
-            method.to_string(),
-            path.to_string(),
-            body_hash_hex(body),
-        );
+        let claims =
+            parsed
+                .clone()
+                .into_claims(method.to_string(), path.to_string(), body_hash_hex(body));
 
         zp_receipt::verify_signed(&claims, &parsed.kid, &parsed.sig)
             .expect("signature must verify through the gate's own primitive");
@@ -167,7 +171,12 @@ mod tests {
     fn path_binding_is_enforced() {
         let s = signer();
         let body = b"{}";
-        let header = s.sign_request("POST", "/api/v1/proxy/ollama/v1/chat/completions", body, 1_700_000_000);
+        let header = s.sign_request(
+            "POST",
+            "/api/v1/proxy/ollama/v1/chat/completions",
+            body,
+            1_700_000_000,
+        );
         let parsed = parse_header(&header).unwrap();
 
         // Replaying the same envelope against the native Ollama route must fail.
@@ -202,9 +211,10 @@ mod tests {
         let s = signer();
         let lower = s.sign_request("post", "/x", b"", 1_700_000_000);
         let parsed = parse_header(&lower).unwrap();
-        let claims = parsed
-            .clone()
-            .into_claims("POST".to_string(), "/x".to_string(), body_hash_hex(b""));
+        let claims =
+            parsed
+                .clone()
+                .into_claims("POST".to_string(), "/x".to_string(), body_hash_hex(b""));
         zp_receipt::verify_signed(&claims, &parsed.kid, &parsed.sig)
             .expect("lowercase method must sign as uppercase");
     }

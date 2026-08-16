@@ -144,8 +144,8 @@ impl ToolSpec {
                 return Err(ToolSpecError::ShellMetacharacter(pat));
             }
         }
-        let argv = shlex::split(trimmed)
-            .ok_or_else(|| ToolSpecError::ParseFailed(trimmed.to_string()))?;
+        let argv =
+            shlex::split(trimmed).ok_or_else(|| ToolSpecError::ParseFailed(trimmed.to_string()))?;
         if argv.is_empty() {
             return Err(ToolSpecError::EmptyCommand);
         }
@@ -357,11 +357,13 @@ mod tests {
 
     #[test]
     fn parse_dotenv_quoted() {
-        let parsed = parse_dotenv(r#"
+        let parsed = parse_dotenv(
+            r#"
 KEY="quoted value"
 OTHER='single quoted'
 EMPTY=""
-"#);
+"#,
+        );
         assert_eq!(parsed[0], ("KEY".into(), "quoted value".into()));
         assert_eq!(parsed[1], ("OTHER".into(), "single quoted".into()));
         assert_eq!(parsed[2], ("EMPTY".into(), "".into()));
@@ -369,9 +371,7 @@ EMPTY=""
 
     #[test]
     fn parse_dotenv_skips_comments_and_blanks() {
-        let parsed = parse_dotenv(
-            "# comment line\n\n  # indented comment\nKEY=value\n   \n",
-        );
+        let parsed = parse_dotenv("# comment line\n\n  # indented comment\nKEY=value\n   \n");
         assert_eq!(parsed, vec![("KEY".into(), "value".into())]);
     }
 

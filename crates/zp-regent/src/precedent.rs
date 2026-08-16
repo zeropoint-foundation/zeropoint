@@ -355,11 +355,7 @@ mod tests {
     /// Revocation withdraws what stood at the time; it is not a permanent ban.
     #[test]
     fn a_later_grant_survives_an_earlier_revocation() {
-        let t = |s: &str| {
-            DateTime::parse_from_rfc3339(s)
-                .unwrap()
-                .with_timezone(&Utc)
-        };
+        let t = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc);
         // granted, then revoked → withdrawn
         assert!(revocation_supersedes(
             t("2026-08-04T10:00:00Z"),

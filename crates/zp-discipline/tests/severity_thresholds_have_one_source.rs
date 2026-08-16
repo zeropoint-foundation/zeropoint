@@ -102,8 +102,7 @@ fn workspace_root() -> PathBuf {
 
 fn read(rel: &str) -> String {
     let path = workspace_root().join(rel);
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
 }
 
 /// A line is exempt if it is a comment. The doc comments in these files

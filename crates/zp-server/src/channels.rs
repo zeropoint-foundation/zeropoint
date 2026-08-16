@@ -204,11 +204,7 @@ pub async fn slack_webhook_handler(
             let stream_item = EventStreamItem {
                 category: "channel".to_string(),
                 event_type: format!("slack:{}", event_type),
-                summary: Some(format!(
-                    "Slack message from {} in #{}",
-                    user_id,
-                    channel_id
-                )),
+                summary: Some(format!("Slack message from {} in #{}", user_id, channel_id)),
                 entry_hash: None,
                 timestamp: chrono::Utc::now().to_rfc3339(),
             };
@@ -226,10 +222,7 @@ pub async fn slack_webhook_handler(
         }
     }
 
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({ "ok": true })),
-    )
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }
 
 /// Typed response for the channel status endpoint.
@@ -249,16 +242,9 @@ pub struct ChannelStatus {
 }
 
 /// `GET /api/v1/channels/status` — list all configured channel adapters.
-pub async fn channels_status_handler(
-    State(state): State<AppState>,
-) -> Json<ChannelStatusResponse> {
+pub async fn channels_status_handler(State(state): State<AppState>) -> Json<ChannelStatusResponse> {
     // For now, check if Slack is configured by looking for a vault entry
-    let slack_configured = state
-        .0
-        .vault_key
-        .get()
-        .and_then(|k| k.as_ref())
-        .is_some(); // placeholder — will check for slack_bot_token in vault
+    let slack_configured = state.0.vault_key.get().and_then(|k| k.as_ref()).is_some(); // placeholder — will check for slack_bot_token in vault
 
     let channels = vec![
         ChannelStatus {

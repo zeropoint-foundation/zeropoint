@@ -65,9 +65,7 @@ impl PreflightResults {
 
     /// Persist to ~/ZeroPoint/state/preflight.json
     pub fn save(&self) {
-        let state_dir = zp_paths::home()
-            .unwrap_or_default()
-            .join("state");
+        let state_dir = zp_paths::home().unwrap_or_default().join("state");
         std::fs::create_dir_all(&state_dir).ok();
         let path = state_dir.join("preflight.json");
         if let Ok(json) = serde_json::to_string_pretty(self) {
@@ -77,10 +75,7 @@ impl PreflightResults {
 
     /// Load from disk, if available.
     pub fn load() -> Option<Self> {
-        let path = zp_paths::home()
-            .ok()?
-            .join("state")
-            .join("preflight.json");
+        let path = zp_paths::home().ok()?.join("state").join("preflight.json");
         let contents = std::fs::read_to_string(path).ok()?;
         serde_json::from_str(&contents).ok()
     }
@@ -398,7 +393,10 @@ async fn run_preflight_inner(
                 emit_tool_receipt(
                     store,
                     &event,
-                    Some(&format!("launch_method={} storage=vault", tool.launch_method)),
+                    Some(&format!(
+                        "launch_method={} storage=vault",
+                        tool.launch_method
+                    )),
                 );
             }
 
@@ -462,7 +460,9 @@ async fn run_preflight_inner(
                 }
 
                 // Redis
-                if template_contents.contains("REDIS_URL") || template_contents.contains("REDIS_HOST") {
+                if template_contents.contains("REDIS_URL")
+                    || template_contents.contains("REDIS_HOST")
+                {
                     let event = if docker_available {
                         te::dep(te::DEP_SATISFIED, &tool.name, "redis")
                     } else {
@@ -776,7 +776,9 @@ async fn preflight_tool(
                 let uv_available = run_cmd(path, "uv", &["--version"]).await.success;
 
                 if uv_available && (has_uv_lock || has_pyproject) {
-                    events.push(OnboardEvent::terminal("    Installing Python deps via uv sync..."));
+                    events.push(OnboardEvent::terminal(
+                        "    Installing Python deps via uv sync...",
+                    ));
                     let install_ok = run_cmd(path, "uv", &["sync"]).await;
                     if install_ok.success {
                         checks.push(PreflightCheck {
@@ -807,10 +809,7 @@ async fn preflight_tool(
                         checks.push(PreflightCheck {
                             name: "python_deps".into(),
                             status: "fail".into(),
-                            detail: format!(
-                                "python -m venv failed: {}",
-                                venv_create.stderr_tail()
-                            ),
+                            detail: format!("python -m venv failed: {}", venv_create.stderr_tail()),
                         });
                         events.push(OnboardEvent::terminal(&format!(
                             "    ✗ venv create failed: {}",
@@ -999,7 +998,9 @@ async fn preflight_tool(
     if has_cargo {
         let pid_dirs = [
             // ~/.{toolname}/{toolname}.pid
-            zp_core::paths::user_home().ok().map(|h| h.join(format!(".{}", name))),
+            zp_core::paths::user_home()
+                .ok()
+                .map(|h| h.join(format!(".{}", name))),
             // ./tmp/{toolname}.pid
             Some(path.join("tmp")),
         ];
@@ -1731,7 +1732,10 @@ pub(crate) async fn handle_preflight(
     // preflighted during onboarding show "awaiting preflight" on the
     // dashboard because chain-based readiness finds no entries.
     // Detect vault-configured tools for the preflight
-    let vault = app_state.0.vault_key.get()
+    let vault = app_state
+        .0
+        .vault_key
+        .get()
         .and_then(|k| k.as_ref())
         .and_then(|resolved_key| {
             let vault_path = std::path::PathBuf::from(&app_state.0.data_dir).join("vault.json");

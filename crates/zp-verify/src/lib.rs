@@ -239,8 +239,7 @@ impl Verifier {
             report.findings.push(VerifyFinding {
                 rule: "P2".to_string(),
                 entry_id: entries[0].entry_id().to_string(),
-                description: "Genesis entry content hash mismatch — possible tampering"
-                    .to_string(),
+                description: "Genesis entry content hash mismatch — possible tampering".to_string(),
                 severity: FindingSeverity::Error,
             });
             report.passed = false;

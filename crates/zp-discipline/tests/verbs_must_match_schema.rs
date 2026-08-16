@@ -120,11 +120,7 @@ const FORBIDDEN_PATTERNS: &[&str] = &[
 ///   include both Request and Response messages; scanning it would be noise.
 /// - `/tests/` — test scaffolding is not a handler boundary.
 /// - `/benches/` — benchmark harness, not a handler.
-const EXEMPT_PATH_FRAGMENTS: &[&str] = &[
-    "crates/zp-verbs/",
-    "/tests/",
-    "/benches/",
-];
+const EXEMPT_PATH_FRAGMENTS: &[&str] = &["crates/zp-verbs/", "/tests/", "/benches/"];
 
 /// Specific files that are exempt from this pin.
 ///
@@ -214,7 +210,10 @@ fn verbs_must_match_schema() {
         }
 
         // Apply per-file exemptions (suffix match against relative path).
-        if KNOWN_EXEMPT_FILES.iter().any(|exempt| rel.ends_with(exempt)) {
+        if KNOWN_EXEMPT_FILES
+            .iter()
+            .any(|exempt| rel.ends_with(exempt))
+        {
             continue;
         }
 
@@ -233,7 +232,8 @@ fn verbs_must_match_schema() {
             // Skip comment lines — the pattern text appears in comments,
             // documentation strings, and in this pin's own source.
             let trimmed = line.trim_start();
-            if trimmed.starts_with("//") || trimmed.starts_with("///") || trimmed.starts_with("//!") {
+            if trimmed.starts_with("//") || trimmed.starts_with("///") || trimmed.starts_with("//!")
+            {
                 continue;
             }
 

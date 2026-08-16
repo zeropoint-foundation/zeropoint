@@ -47,7 +47,6 @@ pub struct ObservationCandidate {
 pub fn event_to_observation(event: &GovernanceEvent) -> Option<ObservationCandidate> {
     match &event.event_type {
         // === HIGH priority: security-relevant events ===
-
         GovernanceEventType::PolicyTierViolation => Some(ObservationCandidate {
             content: format!(
                 "Policy tier violation by {}: {}",
@@ -93,7 +92,6 @@ pub fn event_to_observation(event: &GovernanceEvent) -> Option<ObservationCandid
         }),
 
         // === MEDIUM priority: notable but not security-critical ===
-
         GovernanceEventType::ReputationComputed => Some(ObservationCandidate {
             content: format!(
                 "Reputation updated for {}: {}",
@@ -128,10 +126,7 @@ pub fn event_to_observation(event: &GovernanceEvent) -> Option<ObservationCandid
         }),
 
         GovernanceEventType::LinkSevered => Some(ObservationCandidate {
-            content: format!(
-                "Peer link severed with {}",
-                format_actor(&event.actor),
-            ),
+            content: format!("Peer link severed with {}", format_actor(&event.actor),),
             priority: ObservationPriority::Medium,
             category: "governance.mesh".to_string(),
             source_event_id: event.id.clone(),
@@ -200,13 +195,7 @@ pub fn candidate_to_observation(candidate: &ObservationCandidate) -> Observation
         referenced_at: now,
         observed_at: now,
         relative_time: Some("just now".to_string()),
-        source_range: SourceRange::new(
-            "governance",
-            &source_hash,
-            &source_hash,
-            0,
-            0,
-        ),
+        source_range: SourceRange::new("governance", &source_hash, &source_hash, 0, 0),
         superseded: false,
         token_estimate: Observation::estimate_tokens(&candidate.content),
         receipt_id: None,
@@ -223,7 +212,11 @@ fn format_actor(actor: &zp_core::governance::GovernanceActor) -> String {
         zp_core::governance::GovernanceActor::Agent {
             destination_hash,
             trust_tier,
-        } => format!("agent:{}(tier-{})", &destination_hash[..8.min(destination_hash.len())], trust_tier),
+        } => format!(
+            "agent:{}(tier-{})",
+            &destination_hash[..8.min(destination_hash.len())],
+            trust_tier
+        ),
         zp_core::governance::GovernanceActor::System { component } => {
             format!("system:{}", component)
         }
@@ -289,8 +282,8 @@ mod tests {
             risk_level: "Medium".to_string(),
         };
         GovernanceEvent::guard_evaluation(actor, ctx, decision)
-            // Override the event_type since we can't easily construct other variants
-            // through the typed constructors for test purposes
+        // Override the event_type since we can't easily construct other variants
+        // through the typed constructors for test purposes
     }
 
     #[test]
@@ -356,9 +349,7 @@ mod tests {
             trust_tier: 0,
             risk_level: "Low".to_string(),
         };
-        let decision = GovernanceDecision::Allow {
-            conditions: vec![],
-        };
+        let decision = GovernanceDecision::Allow { conditions: vec![] };
 
         let event = GovernanceEvent::guard_evaluation(actor, ctx, decision);
         assert!(event_to_observation(&event).is_none());
@@ -397,9 +388,7 @@ mod tests {
             trust_tier: 0,
             risk_level: "Low".to_string(),
         };
-        let decision = GovernanceDecision::Allow {
-            conditions: vec![],
-        };
+        let decision = GovernanceDecision::Allow { conditions: vec![] };
 
         let event = GovernanceEvent::policy_evaluation(actor, ctx, decision);
         assert!(event_to_observation(&event).is_none());
@@ -422,16 +411,12 @@ mod tests {
             GovernanceEvent::guard_evaluation(
                 actor.clone(),
                 ctx.clone(),
-                GovernanceDecision::Allow {
-                    conditions: vec![],
-                },
+                GovernanceDecision::Allow { conditions: vec![] },
             ),
             GovernanceEvent::guard_evaluation(
                 actor.clone(),
                 ctx.clone(),
-                GovernanceDecision::Allow {
-                    conditions: vec![],
-                },
+                GovernanceDecision::Allow { conditions: vec![] },
             ),
             GovernanceEvent::delegation_rejected(
                 GovernanceActor::Agent {
@@ -444,9 +429,7 @@ mod tests {
             GovernanceEvent::guard_evaluation(
                 actor,
                 ctx,
-                GovernanceDecision::Allow {
-                    conditions: vec![],
-                },
+                GovernanceDecision::Allow { conditions: vec![] },
             ),
         ];
 

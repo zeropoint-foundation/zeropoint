@@ -73,12 +73,12 @@ impl Default for BoundaryConfig {
             boundary_threshold: 0.5,
             confidence_scale: 1.5,
             s1_capacity_threshold: 20,
-            s2_short_secs: 300,             // 5 min
-            s2_medium_secs: 3600,           // 1 hr
-            s2_long_secs: 14_400,           // 4 hr
-            s2_dormant_secs: 86_400,        // 24 hr
+            s2_short_secs: 300,                 // 5 min
+            s2_medium_secs: 3600,               // 1 hr
+            s2_long_secs: 14_400,               // 4 hr
+            s2_dormant_secs: 86_400,            // 24 hr
             s2_extended_dormancy_secs: 604_800, // 7 days
-            trajectory_receipt_cap: 250,    // per 2026-08 empirical recalibration
+            trajectory_receipt_cap: 250,        // per 2026-08 empirical recalibration
         }
     }
 }
@@ -162,9 +162,16 @@ impl BoundarySignals {
 pub enum BoundaryDecision {
     /// The receipt continues the current trajectory. Confidence is 0.0-1.0
     /// (how confident we are that it's continuity, not a missed boundary).
-    ContinueTrajectory { confidence: f32, signals: BoundarySignals },
+    ContinueTrajectory {
+        confidence: f32,
+        signals: BoundarySignals,
+    },
     /// The receipt starts a new trajectory. Confidence is 0.0-1.0.
-    NewTrajectory { confidence: f32, signals: BoundarySignals, reason: BoundaryReason },
+    NewTrajectory {
+        confidence: f32,
+        signals: BoundarySignals,
+        reason: BoundaryReason,
+    },
 }
 
 /// Why a boundary was declared. Useful for operator inspection and for
@@ -630,7 +637,10 @@ mod tests {
         let mut input = input_at(conv(1), ref_now());
         input.event = Some("ontology:trajectory:started:some-id".into());
         assert_eq!(signal_explicit_marker(&input), Some(1.0));
-        assert_eq!(classify_explicit_marker(&input), Some(ExplicitMarkerKind::Start));
+        assert_eq!(
+            classify_explicit_marker(&input),
+            Some(ExplicitMarkerKind::Start)
+        );
     }
 
     #[test]
@@ -638,7 +648,10 @@ mod tests {
         let mut input = input_at(conv(1), ref_now());
         input.event = Some("ontology:trajectory:ended:xyz".into());
         assert_eq!(signal_explicit_marker(&input), Some(1.0));
-        assert_eq!(classify_explicit_marker(&input), Some(ExplicitMarkerKind::End));
+        assert_eq!(
+            classify_explicit_marker(&input),
+            Some(ExplicitMarkerKind::End)
+        );
     }
 
     #[test]
@@ -646,7 +659,10 @@ mod tests {
         let mut input = input_at(conv(1), ref_now());
         input.event = Some("ontology:trajectory:continued:foo".into());
         assert_eq!(signal_explicit_marker(&input), Some(-1.0));
-        assert_eq!(classify_explicit_marker(&input), Some(ExplicitMarkerKind::Continue));
+        assert_eq!(
+            classify_explicit_marker(&input),
+            Some(ExplicitMarkerKind::Continue)
+        );
     }
 
     #[test]
@@ -675,7 +691,10 @@ mod tests {
 
         let decision = evaluate_boundary(&input, &ctx, &cfg);
         match decision {
-            BoundaryDecision::ContinueTrajectory { confidence, signals } => {
+            BoundaryDecision::ContinueTrajectory {
+                confidence,
+                signals,
+            } => {
                 // event=None → S4=0.0. S1=-0.6 (same conv), S2=-0.2 (recent, retuned).
                 // Raw = -0.8. Strong continuity.
                 assert!(confidence >= 0.99);
@@ -694,7 +713,11 @@ mod tests {
 
         let decision = evaluate_boundary(&input, &ctx, &cfg);
         match decision {
-            BoundaryDecision::NewTrajectory { confidence, reason, signals } => {
+            BoundaryDecision::NewTrajectory {
+                confidence,
+                reason,
+                signals,
+            } => {
                 // S1=0.5 (conv change at capacity) + S2=0.4 (3-day gap) = 0.9
                 assert_eq!(signals.raw_score(), 0.9);
                 assert!((confidence - 0.6).abs() < 0.001); // 0.9 / 1.5 = 0.6
@@ -717,7 +740,9 @@ mod tests {
 
         let decision = evaluate_boundary(&input, &ctx, &cfg);
         match decision {
-            BoundaryDecision::NewTrajectory { confidence, reason, .. } => {
+            BoundaryDecision::NewTrajectory {
+                confidence, reason, ..
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(reason, BoundaryReason::ExplicitStartMarker);
             }
@@ -729,7 +754,7 @@ mod tests {
     fn fusion_explicit_continue_marker_vetoes_positive_signals() {
         let now = ref_now();
         let ctx = ctx_at(conv(1), now, 25); // above capacity
-        // Different conversation + long gap → normally new trajectory
+                                            // Different conversation + long gap → normally new trajectory
         let mut input = input_at(conv(99), now + Duration::days(14));
         // But explicit continue marker vetoes
         input.event = Some("ontology:trajectory:continued:same-arc".into());
@@ -771,7 +796,10 @@ mod tests {
         let cfg = BoundaryConfig::default();
 
         let decision = evaluate_boundary(&input, &ctx, &cfg);
-        assert!(matches!(decision, BoundaryDecision::ContinueTrajectory { .. }));
+        assert!(matches!(
+            decision,
+            BoundaryDecision::ContinueTrajectory { .. }
+        ));
     }
 
     // ── Determinism ──
@@ -913,13 +941,7 @@ mod tests {
     #[test]
     fn s4_non_system_event_neutral() {
         let now = ref_now();
-        let ctx = ctx_with_domain(
-            conv(1),
-            now,
-            10,
-            "officer:std",
-            vec!["officer:std"],
-        );
+        let ctx = ctx_with_domain(conv(1), now, 10, "officer:std", vec!["officer:std"]);
         let input = input_at(conv(1), now); // event = None
         assert_eq!(signal_domain_clustering(&input, &ctx), 0.0);
     }
@@ -939,7 +961,10 @@ mod tests {
     #[test]
     fn extract_event_prefix_takes_first_two_segments() {
         assert_eq!(extract_event_prefix("officer:std:heartbeat"), "officer:std");
-        assert_eq!(extract_event_prefix("delegation:granted:foo"), "delegation:granted");
+        assert_eq!(
+            extract_event_prefix("delegation:granted:foo"),
+            "delegation:granted"
+        );
         assert_eq!(extract_event_prefix("system:startup"), "system:startup");
         assert_eq!(extract_event_prefix("solo"), "solo");
         assert_eq!(extract_event_prefix(""), "");
@@ -996,20 +1021,18 @@ mod tests {
         //   S4: foreign namespace = +0.8 (bumped)
         //   Raw = 0.3 + 0.0 + 0.8 = 1.1 → strong boundary (~0.73 confidence)
         let now = ref_now();
-        let ctx = ctx_with_domain(
-            conv(1),
-            now,
-            10,
-            "officer:std",
-            vec!["officer:std"],
-        );
+        let ctx = ctx_with_domain(conv(1), now, 10, "officer:std", vec!["officer:std"]);
         let mut input = input_at(conv(99), now + Duration::hours(2));
         input.event = Some("delegation:granted:foo".into());
         let cfg = BoundaryConfig::default();
 
         let decision = evaluate_boundary(&input, &ctx, &cfg);
         match decision {
-            BoundaryDecision::NewTrajectory { confidence, signals, .. } => {
+            BoundaryDecision::NewTrajectory {
+                confidence,
+                signals,
+                ..
+            } => {
                 assert!((signals.raw_score() - 1.1).abs() < 0.001);
                 assert!((confidence - 0.7333).abs() < 0.01); // 1.1 / 1.5
             }
@@ -1032,7 +1055,9 @@ mod tests {
 
         let decision = evaluate_boundary(&input, &ctx, &cfg);
         match decision {
-            BoundaryDecision::NewTrajectory { confidence, reason, .. } => {
+            BoundaryDecision::NewTrajectory {
+                confidence, reason, ..
+            } => {
                 assert_eq!(confidence, 1.0);
                 assert_eq!(reason, BoundaryReason::ReceiptCountCap);
             }
@@ -1052,7 +1077,10 @@ mod tests {
         };
         let decision = evaluate_boundary(&input, &ctx, &cfg);
         // No cap → falls through to normal signal flow → continuity.
-        assert!(matches!(decision, BoundaryDecision::ContinueTrajectory { .. }));
+        assert!(matches!(
+            decision,
+            BoundaryDecision::ContinueTrajectory { .. }
+        ));
     }
 
     #[test]
@@ -1068,7 +1096,10 @@ mod tests {
 
         let decision = evaluate_boundary(&input, &ctx, &cfg);
         // Explicit continue marker (-1.0) wins.
-        assert!(matches!(decision, BoundaryDecision::ContinueTrajectory { .. }));
+        assert!(matches!(
+            decision,
+            BoundaryDecision::ContinueTrajectory { .. }
+        ));
     }
 
     #[test]
@@ -1079,7 +1110,10 @@ mod tests {
         let input = input_at(c, now + Duration::minutes(1));
         let cfg = BoundaryConfig::default();
         let decision = evaluate_boundary(&input, &ctx, &cfg);
-        assert!(matches!(decision, BoundaryDecision::ContinueTrajectory { .. }));
+        assert!(matches!(
+            decision,
+            BoundaryDecision::ContinueTrajectory { .. }
+        ));
     }
 
     #[test]

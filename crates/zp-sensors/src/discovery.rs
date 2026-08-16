@@ -182,7 +182,10 @@ fn scan_and_diff(
 
     for (pid, (name, ports)) in &by_pid {
         // Skip ignored and self.
-        if *pid == self_pid || config.ignore_pids.contains(pid) || config.ignore_names.contains(name) {
+        if *pid == self_pid
+            || config.ignore_pids.contains(pid)
+            || config.ignore_names.contains(name)
+        {
             continue;
         }
 

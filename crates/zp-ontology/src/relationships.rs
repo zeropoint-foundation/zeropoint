@@ -25,7 +25,10 @@ pub struct ObjectRef {
 
 impl ObjectRef {
     pub fn new(object_type: ObjectType, object_id: ObjectId) -> Self {
-        ObjectRef { object_type, object_id }
+        ObjectRef {
+            object_type,
+            object_id,
+        }
     }
 }
 

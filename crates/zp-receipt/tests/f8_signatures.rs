@@ -15,8 +15,7 @@
 
 use base64::Engine;
 use zp_receipt::{
-    canonical_hash, Action, Receipt, SignatureAlgorithm, SignatureBlock,
-    Signer, Status,
+    canonical_hash, Action, Receipt, SignatureAlgorithm, SignatureBlock, Signer, Status,
 };
 use zp_verify::{FindingSeverity, SignatureBlockView, VerifiableEntry, Verifier};
 
@@ -286,7 +285,10 @@ fn signature_serialization_is_canonical_regardless_of_insertion_order() {
 
     let ja = serde_json::to_string(&a).expect("a serializes");
     let jb = serde_json::to_string(&b).expect("b serializes");
-    assert_eq!(ja, jb, "canonically-sorted receipts must serialize identically");
+    assert_eq!(
+        ja, jb,
+        "canonically-sorted receipts must serialize identically"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────

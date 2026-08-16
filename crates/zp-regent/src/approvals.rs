@@ -375,9 +375,7 @@ impl ApprovalIndex {
         self.requests
             .iter()
             .filter(|r| {
-                r.resolution == Some(Resolution::Granted)
-                    && !r.enacted
-                    && r.enactment.is_some()
+                r.resolution == Some(Resolution::Granted) && !r.enacted && r.enactment.is_some()
             })
             .collect()
     }
@@ -396,9 +394,7 @@ impl ApprovalIndex {
         match hits.len() {
             0 => Err(format!("no approval request matching {prefix}")),
             1 => Ok(hits[0].request_hash.clone()),
-            n => Err(format!(
-                "{n} requests match {prefix} — use more characters"
-            )),
+            n => Err(format!("{n} requests match {prefix} — use more characters")),
         }
     }
 }

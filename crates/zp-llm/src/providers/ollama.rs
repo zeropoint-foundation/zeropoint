@@ -5,7 +5,9 @@
 //! tools field on `/api/chat`. Pass `supports_tools: true` to
 //! `OllamaProvider::with_options` for those models.
 
-use crate::provider::{ChatRole, CompletionRequest, CompletionResponse, LlmProvider, ToolCall, Usage};
+use crate::provider::{
+    ChatRole, CompletionRequest, CompletionResponse, LlmProvider, ToolCall, Usage,
+};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -187,7 +189,10 @@ impl LlmProvider for OllamaProvider {
         };
 
         let ollama_request = OllamaRequest {
-            model: request.model.clone().unwrap_or_else(|| self.model_name.clone()),
+            model: request
+                .model
+                .clone()
+                .unwrap_or_else(|| self.model_name.clone()),
             messages,
             temperature: request.temperature,
             num_predict: request.max_tokens,
@@ -367,6 +372,9 @@ mod tests {
         let ollama_tool = tool_definition_to_ollama(&tool);
         assert_eq!(ollama_tool.tool_type, "function");
         assert_eq!(ollama_tool.function.name, "zp_gate_check");
-        assert_eq!(ollama_tool.function.description, "Check if an action is permitted by the gate");
+        assert_eq!(
+            ollama_tool.function.description,
+            "Check if an action is permitted by the gate"
+        );
     }
 }

@@ -239,20 +239,14 @@ impl Discipline {
             return;
         }
 
-        let mut msg = format!(
-            "\n\nDiscipline violation: {}\n",
-            self.name
-        );
+        let mut msg = format!("\n\nDiscipline violation: {}\n", self.name);
         if let Some(rule) = self.invariant {
             msg.push_str(&format!("  Invariant: {}\n", rule));
         }
         if let Some(why) = self.rationale {
             msg.push_str(&format!("  Rationale: {}\n", why));
         }
-        msg.push_str(&format!(
-            "  {} violation(s):\n",
-            violations.len()
-        ));
+        msg.push_str(&format!("  {} violation(s):\n", violations.len()));
         for v in &violations {
             msg.push_str(&format!(
                 "    {}:{} (pattern `{}`):  {}\n",
@@ -321,9 +315,7 @@ mod tests {
     /// Sanity: a Discipline with no patterns passes trivially.
     #[test]
     fn empty_discipline_is_a_pass() {
-        Discipline::new("empty")
-            .cite_invariant("none")
-            .assert();
+        Discipline::new("empty").cite_invariant("none").assert();
     }
 
     /// Self-test: a Discipline that looks for a string nobody could

@@ -20,8 +20,12 @@ struct GenesisParams {
     #[serde(default = "default_sovereignty_mode")]
     sovereignty_mode: String,
 }
-fn default_operator_name() -> String { "Operator".to_string() }
-fn default_sovereignty_mode() -> String { "auto".to_string() }
+fn default_operator_name() -> String {
+    "Operator".to_string()
+}
+fn default_sovereignty_mode() -> String {
+    "auto".to_string()
+}
 
 /// Create Genesis + Operator keys.
 pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) -> Vec<OnboardEvent> {
@@ -30,8 +34,8 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     // Phase 2.8 (P2-4): typed parameter extraction with schema validation.
     // Falls back to defaults if params don't match the schema — backward compatible
     // with existing clients that may send extra fields during onboarding.
-    let params: GenesisParams = serde_json::from_value(action.params.clone())
-        .unwrap_or(GenesisParams {
+    let params: GenesisParams =
+        serde_json::from_value(action.params.clone()).unwrap_or(GenesisParams {
             operator_name: default_operator_name(),
             sovereignty_mode: default_sovereignty_mode(),
         });
@@ -117,8 +121,7 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     }
 
     // ── Step 4: Persist keys ──────────────────────────────────────
-    let home = zp_paths::home()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let home = zp_paths::home().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     // Check if already initialized (a complete genesis record with operator field)
     let has_genesis = if let Ok(contents) = std::fs::read_to_string(home.join("genesis.json")) {
@@ -195,7 +198,9 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     // password prompt.  This prevents the "nothing happened" dead state
     // reported in result 028 — the UI can show a spinner or instruction.
     let provider_hint = match sovereignty_mode {
-        zp_keys::SovereigntyMode::TouchId => "Touch ID will be requested — look for the biometric prompt",
+        zp_keys::SovereigntyMode::TouchId => {
+            "Touch ID will be requested — look for the biometric prompt"
+        }
         zp_keys::SovereigntyMode::WindowsHello => "Windows Hello verification will appear",
         zp_keys::SovereigntyMode::Fingerprint => "Place your finger on the reader when prompted",
         zp_keys::SovereigntyMode::FaceEnroll => "Camera will activate for face enrollment",
@@ -411,10 +416,7 @@ pub async fn handle_genesis(action: &OnboardAction, state: &mut OnboardState) ->
     // ceremony did not complete — returning early leaves the keyring and
     // provider in whatever state they reached, but ~/ZeroPoint/genesis.json
     // does not exist, so subsequent `zp serve` will offer re-onboarding.
-    if let Err(e) = atomic_write_json(
-        &home.join("genesis_transcript.json"),
-        &signed_transcript,
-    ) {
+    if let Err(e) = atomic_write_json(&home.join("genesis_transcript.json"), &signed_transcript) {
         events.push(OnboardEvent::error(&format!(
             "Failed to write ceremony transcript: {} — ceremony aborted, re-run onboarding",
             e
@@ -522,8 +524,7 @@ pub async fn handle_vault_check(state: &mut OnboardState) -> Vec<OnboardEvent> {
 
     events.push(OnboardEvent::terminal("Verifying vault key derivation..."));
 
-    let _home = zp_paths::home()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let _home = zp_paths::home().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let keyring = match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default()) {
         Ok(k) => k,
@@ -609,8 +610,7 @@ pub async fn handle_sovereignty_upgrade(
     )));
 
     // ── Step 1: Load current genesis record ──────────────────────
-    let home = zp_paths::home()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let home = zp_paths::home().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let genesis_path = home.join("genesis.json");
     let genesis_json = match std::fs::read_to_string(&genesis_path) {
@@ -692,10 +692,7 @@ pub async fn handle_sovereignty_upgrade(
     match new_provider.upgrade_from(&secret) {
         Ok(result) => {
             if let Some(ref enrollment) = result {
-                events.push(OnboardEvent::terminal(&format!(
-                    "✓ {}",
-                    enrollment.summary
-                )));
+                events.push(OnboardEvent::terminal(&format!("✓ {}", enrollment.summary)));
             }
         }
         Err(e) => {
@@ -734,23 +731,23 @@ pub async fn handle_sovereignty_upgrade(
 
     // ── Step 5: Append upgrade record to transcript ──────────────
     let transcript_path = home.join("genesis_transcript.json");
-    let mut transcript_doc: serde_json::Value =
-        match std::fs::read_to_string(&transcript_path).and_then(|s| {
+    let mut transcript_doc: serde_json::Value = match std::fs::read_to_string(&transcript_path)
+        .and_then(|s| {
             serde_json::from_str(&s)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
         }) {
-            Ok(v) => v,
-            Err(e) => {
-                events.push(OnboardEvent::error(&format!(
-                    "Cannot read transcript: {} — upgrade saved to genesis.json \
+        Ok(v) => v,
+        Err(e) => {
+            events.push(OnboardEvent::error(&format!(
+                "Cannot read transcript: {} — upgrade saved to genesis.json \
                      but transcript not updated",
-                    e
-                )));
-                // Still save genesis.json even if transcript update fails
-                let _ = atomic_write_json(&genesis_path, &genesis_record);
-                return events;
-            }
-        };
+                e
+            )));
+            // Still save genesis.json even if transcript update fails
+            let _ = atomic_write_json(&genesis_path, &genesis_record);
+            return events;
+        }
+    };
 
     let upgrade_record = serde_json::json!({
         "ceremony": "sovereignty_upgrade",
@@ -770,14 +767,11 @@ pub async fn handle_sovereignty_upgrade(
     let upgrade_hash = blake3::hash(&upgrade_bytes);
 
     // Append to the transcript as an "upgrades" array
-    if let Some(upgrades_arr) = transcript_doc
-        .as_object_mut()
-        .and_then(|m| {
-            m.entry("upgrades")
-                .or_insert_with(|| serde_json::Value::Array(Vec::new()))
-                .as_array_mut()
-        })
-    {
+    if let Some(upgrades_arr) = transcript_doc.as_object_mut().and_then(|m| {
+        m.entry("upgrades")
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()))
+            .as_array_mut()
+    }) {
         upgrades_arr.push(serde_json::json!({
             "record": upgrade_record,
             "hash": upgrade_hash.to_hex().to_string(),

@@ -55,8 +55,7 @@ fn get_catalog() -> &'static Vec<ProviderProfile> {
 
 /// Return a snapshot of the current catalog, preferring the refreshed version.
 fn catalog_snapshot() -> Vec<ProviderProfile> {
-    let lock = REFRESHED_CATALOG
-        .get_or_init(|| std::sync::RwLock::new(None));
+    let lock = REFRESHED_CATALOG.get_or_init(|| std::sync::RwLock::new(None));
     if let Ok(guard) = lock.read() {
         if let Some(ref refreshed) = *guard {
             return refreshed.clone();
@@ -68,8 +67,7 @@ fn catalog_snapshot() -> Vec<ProviderProfile> {
 /// Replace the in-process catalog with a freshly-fetched snapshot.
 /// Called by the `POST /api/v1/pricing/refresh` handler after a successful fetch.
 pub fn reload_provider_catalog(updated: Vec<ProviderProfile>) {
-    let lock = REFRESHED_CATALOG
-        .get_or_init(|| std::sync::RwLock::new(None));
+    let lock = REFRESHED_CATALOG.get_or_init(|| std::sync::RwLock::new(None));
     if let Ok(mut guard) = lock.write() {
         *guard = Some(updated);
     }
@@ -139,7 +137,9 @@ pub struct PricingConfig {
     pub hosts: std::collections::HashMap<String, HostPricingConfig>,
 }
 
-fn default_stale_days() -> u64 { 30 }
+fn default_stale_days() -> u64 {
+    30
+}
 
 /// TOML wrapper for `[tiers.*]` and `[pricing]` table structure.
 #[derive(Debug, Deserialize, Default)]
@@ -574,35 +574,33 @@ pub async fn proxy_handler(
     };
 
     // Tier routing: X-ZP-Tier header overrides the URL provider + injects model.
-    let (provider, tier_model) = if let Some(tier_val) = headers
-        .get("x-zp-tier")
-        .and_then(|v| v.to_str().ok())
-    {
-        let tier = match tier_val {
-            "high_stakes" => Some(InferenceTier::HighStakes),
-            "bulk" => Some(InferenceTier::Bulk),
-            "coding" => Some(InferenceTier::Coding),
-            "local" => Some(InferenceTier::Local),
-            "experimental" => Some(InferenceTier::Experimental),
-            _ => {
-                warn!(tier = %tier_val, "Unknown X-ZP-Tier value; ignoring");
-                None
-            }
-        };
-        if let Some(t) = tier {
-            if let Some((tp, tm)) = resolve_tier(&t) {
-                debug!(tier = %tier_val, provider = %tp, model = %tm, "Tier routing resolved");
-                (tp.to_string(), Some(tm))
+    let (provider, tier_model) =
+        if let Some(tier_val) = headers.get("x-zp-tier").and_then(|v| v.to_str().ok()) {
+            let tier = match tier_val {
+                "high_stakes" => Some(InferenceTier::HighStakes),
+                "bulk" => Some(InferenceTier::Bulk),
+                "coding" => Some(InferenceTier::Coding),
+                "local" => Some(InferenceTier::Local),
+                "experimental" => Some(InferenceTier::Experimental),
+                _ => {
+                    warn!(tier = %tier_val, "Unknown X-ZP-Tier value; ignoring");
+                    None
+                }
+            };
+            if let Some(t) = tier {
+                if let Some((tp, tm)) = resolve_tier(&t) {
+                    debug!(tier = %tier_val, provider = %tp, model = %tm, "Tier routing resolved");
+                    (tp.to_string(), Some(tm))
+                } else {
+                    warn!(tier = %tier_val, "No route configured for tier; using URL provider");
+                    (provider, None)
+                }
             } else {
-                warn!(tier = %tier_val, "No route configured for tier; using URL provider");
                 (provider, None)
             }
         } else {
             (provider, None)
-        }
-    } else {
-        (provider, None)
-    };
+        };
 
     // 1. Resolve provider base URL
     let base_url = match provider_base_url(&provider) {
@@ -774,17 +772,13 @@ pub async fn proxy_handler(
 
     // Collect pricing provenance for receipt extensions
     let provider_profile = catalog_lookup(&provider);
-    let pricing_age_days = provider_profile
-        .as_ref()
-        .and_then(|p| p.pricing_age_days());
-    let pricing_source_str = provider_profile.as_ref().map(|p| {
-        match &p.pricing_source {
-            zp_engine::providers::PricingSource::Fetch { source_url } => {
-                format!("fetch:{}", source_url)
-            }
-            zp_engine::providers::PricingSource::Manual => "manual".to_string(),
-            zp_engine::providers::PricingSource::Unknown => "unknown".to_string(),
+    let pricing_age_days = provider_profile.as_ref().and_then(|p| p.pricing_age_days());
+    let pricing_source_str = provider_profile.as_ref().map(|p| match &p.pricing_source {
+        zp_engine::providers::PricingSource::Fetch { source_url } => {
+            format!("fetch:{}", source_url)
         }
+        zp_engine::providers::PricingSource::Manual => "manual".to_string(),
+        zp_engine::providers::PricingSource::Unknown => "unknown".to_string(),
     });
 
     // 5. Generate receipt
@@ -823,23 +817,17 @@ pub async fn proxy_handler(
 
     // Pricing provenance extensions (Commit 5)
     if let Some(ref src) = pricing_source_str {
-        receipt_builder = receipt_builder.extension(
-            "zp.pricing.source",
-            serde_json::Value::String(src.clone()),
-        );
+        receipt_builder =
+            receipt_builder.extension("zp.pricing.source", serde_json::Value::String(src.clone()));
     }
     if let Some(age) = pricing_age_days {
-        receipt_builder = receipt_builder.extension(
-            "zp.pricing.age_days",
-            serde_json::Value::Number(age.into()),
-        );
+        receipt_builder =
+            receipt_builder.extension("zp.pricing.age_days", serde_json::Value::Number(age.into()));
         // Emit a staleness warning extension when pricing is stale
         let threshold = stale_threshold_days(&provider);
         if age > threshold {
-            receipt_builder = receipt_builder.extension(
-                "zp.pricing.stale",
-                serde_json::Value::Bool(true),
-            );
+            receipt_builder =
+                receipt_builder.extension("zp.pricing.stale", serde_json::Value::Bool(true));
         }
     }
 

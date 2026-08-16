@@ -173,13 +173,25 @@ mod tests {
     fn quarantine_affected_memories() {
         let mut qstore = QuarantineStore::new("operator-1");
         let mut memories = HashMap::new();
-        memories.insert("mem-1".to_string(), make_memory("mem-1", MemoryStage::Trusted));
-        memories.insert("mem-2".to_string(), make_memory("mem-2", MemoryStage::Remembered));
-        memories.insert("mem-3".to_string(), make_memory("mem-3", MemoryStage::Observed));
+        memories.insert(
+            "mem-1".to_string(),
+            make_memory("mem-1", MemoryStage::Trusted),
+        );
+        memories.insert(
+            "mem-2".to_string(),
+            make_memory("mem-2", MemoryStage::Remembered),
+        );
+        memories.insert(
+            "mem-3".to_string(),
+            make_memory("mem-3", MemoryStage::Observed),
+        );
 
         let mut memory_to_receipts = HashMap::new();
         memory_to_receipts.insert("mem-1".to_string(), vec!["rcpt-A".to_string()]);
-        memory_to_receipts.insert("mem-2".to_string(), vec!["rcpt-A".to_string(), "rcpt-B".to_string()]);
+        memory_to_receipts.insert(
+            "mem-2".to_string(),
+            vec!["rcpt-A".to_string(), "rcpt-B".to_string()],
+        );
 
         let report = CompromiseReport {
             compromised_key: "deadbeef01234567".to_string(),
@@ -204,8 +216,14 @@ mod tests {
     fn skips_already_quarantined() {
         let mut qstore = QuarantineStore::new("operator-1");
         let mut memories = HashMap::new();
-        memories.insert("mem-1".to_string(), make_memory("mem-1", MemoryStage::Trusted));
-        memories.insert("mem-2".to_string(), make_memory("mem-2", MemoryStage::Observed));
+        memories.insert(
+            "mem-1".to_string(),
+            make_memory("mem-1", MemoryStage::Trusted),
+        );
+        memories.insert(
+            "mem-2".to_string(),
+            make_memory("mem-2", MemoryStage::Observed),
+        );
 
         // Pre-quarantine mem-1
         let mut mem1 = memories.get("mem-1").unwrap().clone();
@@ -233,7 +251,10 @@ mod tests {
     fn handles_missing_memories() {
         let mut qstore = QuarantineStore::new("operator-1");
         let mut memories = HashMap::new();
-        memories.insert("mem-1".to_string(), make_memory("mem-1", MemoryStage::Trusted));
+        memories.insert(
+            "mem-1".to_string(),
+            make_memory("mem-1", MemoryStage::Trusted),
+        );
 
         let report = CompromiseReport {
             compromised_key: "badkey".to_string(),
@@ -283,7 +304,10 @@ mod tests {
     fn idempotent_quarantine() {
         let mut qstore = QuarantineStore::new("operator-1");
         let mut memories = HashMap::new();
-        memories.insert("mem-1".to_string(), make_memory("mem-1", MemoryStage::Trusted));
+        memories.insert(
+            "mem-1".to_string(),
+            make_memory("mem-1", MemoryStage::Trusted),
+        );
 
         let report = CompromiseReport {
             compromised_key: "badkey".to_string(),

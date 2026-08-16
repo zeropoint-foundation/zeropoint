@@ -208,7 +208,10 @@ impl GateHarness {
         // Keep temp_dir alive for duration of test by leaking it.
         std::mem::forget(temp_dir);
 
-        Self { router, session_token }
+        Self {
+            router,
+            session_token,
+        }
     }
 
     /// POST JSON with Bearer session token. Returns (status, json body).
@@ -226,7 +229,9 @@ impl GateHarness {
             .unwrap();
         let resp = self.router.clone().oneshot(req).await.unwrap();
         let status = resp.status();
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
         (status, json)
     }
@@ -245,7 +250,9 @@ impl GateHarness {
             .unwrap();
         let resp = self.router.clone().oneshot(req).await.unwrap();
         let status = resp.status();
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
         (status, json)
     }
@@ -266,11 +273,16 @@ fn assert_chain_links(entries: &[zp_core::AuditEntry]) {
     for (i, entry) in entries.iter().enumerate().skip(1) {
         let prev = &entries[i - 1];
         assert_eq!(
-            entry.prev_hash, prev.entry_hash,
+            entry.prev_hash,
+            prev.entry_hash,
             "Chain linkage broken at position {}: \
              entry[{}].prev_hash ({}) != entry[{}].entry_hash ({}) \
              (Claim 1 violation — BEGIN IMMEDIATE or prev-hash computation is wrong)",
-            i, i, &entry.prev_hash[..12], i - 1, &prev.entry_hash[..12]
+            i,
+            i,
+            &entry.prev_hash[..12],
+            i - 1,
+            &prev.entry_hash[..12]
         );
     }
 }
@@ -310,28 +322,26 @@ async fn chain_happy_path_three_entry_sequence() {
 
     let gate_idx = entries
         .iter()
-        .position(|e| {
-            event_of(e).is_some_and(|ev| ev == format!("gate:allowed:{}", tool))
-        })
+        .position(|e| event_of(e).is_some_and(|ev| ev == format!("gate:allowed:{}", tool)))
         .expect("gate:allowed:<tool> must appear on chain");
 
     let exec_idx = entries
         .iter()
-        .position(|e| {
-            event_of(e).is_some_and(|ev| ev == format!("exec:{}:ok", tool))
-        })
+        .position(|e| event_of(e).is_some_and(|ev| ev == format!("exec:{}:ok", tool)))
         .expect("exec:<tool>:ok must appear on chain");
 
     // Boundary ordering: delegation → gate → exec.
     assert!(
         delegation_idx < gate_idx,
         "delegation (idx {}) must precede gate (idx {})",
-        delegation_idx, gate_idx
+        delegation_idx,
+        gate_idx
     );
     assert!(
         gate_idx < exec_idx,
         "gate (idx {}) must precede exec (idx {})",
-        gate_idx, exec_idx
+        gate_idx,
+        exec_idx
     );
 
     // Boundary 3→4 and 4→1: every prev-hash must link correctly.
@@ -358,14 +368,14 @@ async fn chain_denied_gate_no_exec_when_delegation_absent() {
     // after the denied decision, not caller compliance.)
     let entries = h.entries();
 
-    let has_denied = entries.iter().any(|e| {
-        event_of(e).is_some_and(|ev| ev == format!("gate:denied:{}", tool))
-    });
+    let has_denied = entries
+        .iter()
+        .any(|e| event_of(e).is_some_and(|ev| ev == format!("gate:denied:{}", tool)));
     assert!(has_denied, "gate:denied:{} must appear on chain", tool);
 
-    let has_exec = entries.iter().any(|e| {
-        event_of(e).is_some_and(|ev| ev.starts_with(&format!("exec:{}:", tool)))
-    });
+    let has_exec = entries
+        .iter()
+        .any(|e| event_of(e).is_some_and(|ev| ev.starts_with(&format!("exec:{}:", tool))));
     assert!(
         !has_exec,
         "exec:{}:* must NOT appear on chain after gate:denied \
@@ -442,8 +452,7 @@ async fn chain_concurrent_writers_preserve_linearity() {
             s.spawn(move || {
                 for j in 0..WRITES_PER_THREAD {
                     let event = format!("concurrent:writer{}:entry{}", i, j);
-                    let result =
-                        zp_server::tool_chain::emit_tool_receipt(&store, &event, None);
+                    let result = zp_server::tool_chain::emit_tool_receipt(&store, &event, None);
                     if result.is_some() {
                         success_count.fetch_add(1, Ordering::Relaxed);
                     }
@@ -605,7 +614,12 @@ async fn gate_http_denies_agent_without_delegation() {
         )
         .await;
 
-    assert_eq!(status, StatusCode::OK, "gate always returns 200; body: {}", resp);
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "gate always returns 200; body: {}",
+        resp
+    );
     assert_eq!(
         resp["allowed"].as_bool(),
         Some(false),
@@ -636,7 +650,12 @@ async fn gate_http_emits_chain_entry() {
         )
         .await;
 
-    assert_eq!(status, StatusCode::OK, "gate must return 200; body: {}", resp);
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "gate must return 200; body: {}",
+        resp
+    );
 
     // The gate handler emits a chain entry for every decision; the hash must
     // be present and non-null in the response.
@@ -646,7 +665,9 @@ async fn gate_http_emits_chain_entry() {
         resp
     );
     assert!(
-        resp["chain_entry_hash"].as_str().is_some_and(|s| !s.is_empty()),
+        resp["chain_entry_hash"]
+            .as_str()
+            .is_some_and(|s| !s.is_empty()),
         "chain_entry_hash must be a non-empty string; body: {}",
         resp
     );
@@ -712,7 +733,12 @@ async fn gate_http_grant_enables_agent_via_chain() {
         )
         .await;
 
-    assert_eq!(gate_status, StatusCode::OK, "gate must return 200; body: {}", gate_resp);
+    assert_eq!(
+        gate_status,
+        StatusCode::OK,
+        "gate must return 200; body: {}",
+        gate_resp
+    );
     assert_eq!(
         gate_resp["allowed"].as_bool(),
         Some(true),

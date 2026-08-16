@@ -74,7 +74,6 @@ pub enum TestCategory {
     // These probe failure modes, not success modes. A model that
     // passes polite tests but fails adversarial ones has known
     // deployment constraints. The model dossier captures WHERE it breaks.
-
     /// When system prompt says X and user message says not-X, which wins?
     InstructionConflict,
     /// Does the user message successfully override system prompt constraints?
@@ -92,7 +91,6 @@ pub enum TestCategory {
     // Can the model explain substrate concepts using the embedded
     // knowledge in its prompts? Tests that the enriched prompts
     // actually land in the model's reasoning.
-
     /// Can the model articulate substrate design principles and concepts?
     SubstrateKnowledge,
 }
@@ -653,7 +651,11 @@ impl<'a> ModelEvaluator<'a> {
             )));
         }
 
-        info!(model, test_count = battery.len(), "starting model evaluation");
+        info!(
+            model,
+            test_count = battery.len(),
+            "starting model evaluation"
+        );
 
         let mut results = Vec::with_capacity(battery.len());
         let eval_start = Instant::now();
@@ -740,12 +742,7 @@ impl<'a> ModelEvaluator<'a> {
                 .filter(|m| !m.effective)
                 .map(|m| m.mechanism.as_str())
                 .collect();
-            info!(
-                model,
-                ?effective,
-                ?ineffective,
-                "think suppression profile"
-            );
+            info!(model, ?effective, ?ineffective, "think suppression profile");
         }
 
         // Run collapse probes if requested.
@@ -786,7 +783,7 @@ impl<'a> ModelEvaluator<'a> {
     async fn run_test(&self, model: &str, test: &TestCase) -> TestResult {
         // Use the test's think override if specified, otherwise default to Some(false).
         let think = match test.think_override {
-            Some(v) => v,       // Explicit override: Some(true), Some(false), or None
+            Some(v) => v,        // Explicit override: Some(true), Some(false), or None
             None => Some(false), // Default: suppress thinking
         };
 
@@ -851,12 +848,10 @@ impl<'a> ModelEvaluator<'a> {
     /// Apply a ResponseCheck to a model output.
     fn check_response(&self, response: &str, check: &ResponseCheck) -> (bool, Option<String>) {
         match check {
-            ResponseCheck::ValidIntentJson => {
-                match parse_intent_json(response) {
-                    Ok(_) => (true, None),
-                    Err(reason) => (false, Some(reason)),
-                }
-            }
+            ResponseCheck::ValidIntentJson => match parse_intent_json(response) {
+                Ok(_) => (true, None),
+                Err(reason) => (false, Some(reason)),
+            },
 
             ResponseCheck::ContentContains(needle) => {
                 let lower = response.to_lowercase();
@@ -864,7 +859,10 @@ impl<'a> ModelEvaluator<'a> {
                 if lower.contains(&needle_lower) {
                     (true, None)
                 } else {
-                    (false, Some(format!("response does not contain '{}'", needle)))
+                    (
+                        false,
+                        Some(format!("response does not contain '{}'", needle)),
+                    )
                 }
             }
 
@@ -872,47 +870,52 @@ impl<'a> ModelEvaluator<'a> {
                 let lower = response.to_lowercase();
                 let needle_lower = needle.to_lowercase();
                 if lower.contains(&needle_lower) {
-                    (false, Some(format!("response contains '{}' (should not)", needle)))
+                    (
+                        false,
+                        Some(format!("response contains '{}' (should not)", needle)),
+                    )
                 } else {
                     (true, None)
                 }
             }
 
-            ResponseCheck::JsonAndContains(needle) => {
-                match parse_intent_json(response) {
-                    Ok(content) => {
-                        let lower = content.to_lowercase();
-                        let needle_lower = needle.to_lowercase();
-                        if lower.contains(&needle_lower) {
-                            (true, None)
-                        } else {
-                            (false, Some(format!(
+            ResponseCheck::JsonAndContains(needle) => match parse_intent_json(response) {
+                Ok(content) => {
+                    let lower = content.to_lowercase();
+                    let needle_lower = needle.to_lowercase();
+                    if lower.contains(&needle_lower) {
+                        (true, None)
+                    } else {
+                        (
+                            false,
+                            Some(format!(
                                 "valid JSON but content does not contain '{}'",
                                 needle
-                            )))
-                        }
+                            )),
+                        )
                     }
-                    Err(reason) => (false, Some(reason)),
                 }
-            }
+                Err(reason) => (false, Some(reason)),
+            },
 
-            ResponseCheck::JsonAndNotContains(needle) => {
-                match parse_intent_json(response) {
-                    Ok(content) => {
-                        let lower = content.to_lowercase();
-                        let needle_lower = needle.to_lowercase();
-                        if lower.contains(&needle_lower) {
-                            (false, Some(format!(
+            ResponseCheck::JsonAndNotContains(needle) => match parse_intent_json(response) {
+                Ok(content) => {
+                    let lower = content.to_lowercase();
+                    let needle_lower = needle.to_lowercase();
+                    if lower.contains(&needle_lower) {
+                        (
+                            false,
+                            Some(format!(
                                 "valid JSON but content contains '{}' (should not)",
                                 needle
-                            )))
-                        } else {
-                            (true, None)
-                        }
+                            )),
+                        )
+                    } else {
+                        (true, None)
                     }
-                    Err(reason) => (false, Some(reason)),
                 }
-            }
+                Err(reason) => (false, Some(reason)),
+            },
         }
     }
 }
@@ -922,20 +925,20 @@ impl<'a> ModelEvaluator<'a> {
 fn parse_intent_json(response: &str) -> Result<String, String> {
     let trimmed = response.trim();
 
-    let value: serde_json::Value = serde_json::from_str(trimmed)
-        .map_err(|e| format!("not valid JSON: {}", e))?;
+    let value: serde_json::Value =
+        serde_json::from_str(trimmed).map_err(|e| format!("not valid JSON: {}", e))?;
 
-    let intent = value.get("intent")
+    let intent = value
+        .get("intent")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "JSON missing 'intent' field".to_string())?;
 
     if intent == "respond" {
-        let content = value.get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let content = value.get("content").and_then(|v| v.as_str()).unwrap_or("");
         Ok(content.to_string())
     } else if intent == "execute" {
-        let tool = value.get("tool")
+        let tool = value
+            .get("tool")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
         Ok(format!("[tool:{}]", tool))
@@ -1223,21 +1226,16 @@ async fn run_collapse_test(backend: &InferenceBackend, model: &str, test: &Colla
     };
 
     match &test.check {
-        CollapseCheck::ValidIntentJson => {
-            parse_intent_json(&response).is_ok()
-        }
-        CollapseCheck::JsonContains(needle) => {
-            match parse_intent_json(&response) {
-                Ok(content) => content.to_lowercase().contains(&needle.to_lowercase()),
-                Err(_) => false,
-            }
-        }
+        CollapseCheck::ValidIntentJson => parse_intent_json(&response).is_ok(),
+        CollapseCheck::JsonContains(needle) => match parse_intent_json(&response) {
+            Ok(content) => content.to_lowercase().contains(&needle.to_lowercase()),
+            Err(_) => false,
+        },
         CollapseCheck::JsonToolMatch(expected_tool) => {
             let trimmed = response.trim();
             // Try raw, then try stripping think tags.
-            let value: Option<serde_json::Value> = serde_json::from_str(trimmed)
-                .ok()
-                .or_else(|| {
+            let value: Option<serde_json::Value> =
+                serde_json::from_str(trimmed).ok().or_else(|| {
                     let cleaned = strip_think_tags_for_parse(trimmed);
                     serde_json::from_str(&cleaned).ok()
                 });
@@ -1356,22 +1354,70 @@ fn generate_tool_list(count: usize) -> String {
 
     // Pad with plausible-sounding fake tools.
     let fake_tools = [
-        "network_scan", "peer_discover", "receipt_verify", "delegation_audit",
-        "key_rotate", "session_inspect", "vault_check", "config_diff",
-        "officer_report", "sweep_trigger", "manifest_validate", "artifact_sign",
-        "posture_reset", "beacon_ping", "fence_check", "route_trace",
-        "cache_flush", "token_refresh", "ledger_compact", "snapshot_create",
-        "migration_status", "health_deep", "entropy_sample", "quorum_verify",
-        "witness_call", "threshold_check", "boundary_probe", "link_test",
-        "sync_status", "drift_detect", "consensus_poll", "archive_rotate",
-        "index_rebuild", "schema_migrate", "event_replay", "state_diff",
-        "capacity_plan", "load_balance", "failover_test", "backup_verify",
-        "restore_check", "compliance_scan", "policy_evaluate", "rule_check",
-        "access_audit", "permission_diff", "role_inspect", "scope_verify",
-        "origin_trace", "provenance_check", "lineage_map", "impact_assess",
-        "dependency_scan", "conflict_detect", "resolution_suggest", "merge_preview",
-        "branch_compare", "history_search", "timeline_render", "trend_analyze",
-        "anomaly_detect", "baseline_compare", "forecast_generate", "model_retrain",
+        "network_scan",
+        "peer_discover",
+        "receipt_verify",
+        "delegation_audit",
+        "key_rotate",
+        "session_inspect",
+        "vault_check",
+        "config_diff",
+        "officer_report",
+        "sweep_trigger",
+        "manifest_validate",
+        "artifact_sign",
+        "posture_reset",
+        "beacon_ping",
+        "fence_check",
+        "route_trace",
+        "cache_flush",
+        "token_refresh",
+        "ledger_compact",
+        "snapshot_create",
+        "migration_status",
+        "health_deep",
+        "entropy_sample",
+        "quorum_verify",
+        "witness_call",
+        "threshold_check",
+        "boundary_probe",
+        "link_test",
+        "sync_status",
+        "drift_detect",
+        "consensus_poll",
+        "archive_rotate",
+        "index_rebuild",
+        "schema_migrate",
+        "event_replay",
+        "state_diff",
+        "capacity_plan",
+        "load_balance",
+        "failover_test",
+        "backup_verify",
+        "restore_check",
+        "compliance_scan",
+        "policy_evaluate",
+        "rule_check",
+        "access_audit",
+        "permission_diff",
+        "role_inspect",
+        "scope_verify",
+        "origin_trace",
+        "provenance_check",
+        "lineage_map",
+        "impact_assess",
+        "dependency_scan",
+        "conflict_detect",
+        "resolution_suggest",
+        "merge_preview",
+        "branch_compare",
+        "history_search",
+        "timeline_render",
+        "trend_analyze",
+        "anomaly_detect",
+        "baseline_compare",
+        "forecast_generate",
+        "model_retrain",
     ];
 
     let real_count = tools.len();
@@ -1384,7 +1430,9 @@ fn generate_tool_list(count: usize) -> String {
         };
         tools.push(format!(
             "{}{} — performs {} operation on substrate state",
-            fake_tools[idx], suffix, fake_tools[idx].replace('_', " ")
+            fake_tools[idx],
+            suffix,
+            fake_tools[idx].replace('_', " ")
         ));
     }
 
@@ -1452,7 +1500,9 @@ pub async fn discover_local_models(backend: &InferenceBackend) -> Result<Vec<Str
         .map_err(|e| RegentError::Inference(format!("model discovery HTTP error: {}", e)))?;
 
     if !resp.status().is_success() {
-        return Err(RegentError::Inference("model discovery: Ollama not reachable".into()));
+        return Err(RegentError::Inference(
+            "model discovery: Ollama not reachable".into(),
+        ));
     }
 
     let body: serde_json::Value = resp
@@ -1596,7 +1646,10 @@ pub async fn run_evaluation_sweep(
         // Background sweep runs collapse probes with the model's natural tier.
         let tier = ProbeTier::for_model(model);
         let collapse_opts: Option<(ProbeTier, &CancelFlag)> = Some((tier, &cancel));
-        match evaluator.evaluate(model, &battery, &operator, &genesis_prefix, collapse_opts).await {
+        match evaluator
+            .evaluate(model, &battery, &operator, &genesis_prefix, collapse_opts)
+            .await
+        {
             Ok(report) => {
                 // Emit receipt immediately — work is durable before we move on.
                 emit_receipt(&report);

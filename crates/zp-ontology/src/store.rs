@@ -126,13 +126,10 @@ impl OntologyStore {
 
     /// Get a meta key's value, if set.
     pub fn get_meta(&self, key: &str) -> Result<Option<String>, StoreError> {
-        let guard = self
-            .conn
-            .lock()
-            .map_err(|_| StoreError::MetaInvalid {
-                key: key.into(),
-                detail: "lock poisoned".into(),
-            })?;
+        let guard = self.conn.lock().map_err(|_| StoreError::MetaInvalid {
+            key: key.into(),
+            detail: "lock poisoned".into(),
+        })?;
         let mut stmt = guard.prepare("SELECT value FROM meta WHERE key = ?1")?;
         let mut rows = stmt.query(params![key])?;
         if let Some(row) = rows.next()? {
@@ -144,13 +141,10 @@ impl OntologyStore {
 
     /// Set a meta key. Upsert semantics.
     pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StoreError> {
-        let guard = self
-            .conn
-            .lock()
-            .map_err(|_| StoreError::MetaInvalid {
-                key: key.into(),
-                detail: "lock poisoned".into(),
-            })?;
+        let guard = self.conn.lock().map_err(|_| StoreError::MetaInvalid {
+            key: key.into(),
+            detail: "lock poisoned".into(),
+        })?;
         let now = Utc::now().to_rfc3339();
         guard.execute(
             "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3)
@@ -250,9 +244,7 @@ impl OntologyStore {
             detail: "lock poisoned".into(),
         })?;
 
-        let mut stmt = guard.prepare(
-            "SELECT object_type, payload FROM objects WHERE id = ?1",
-        )?;
+        let mut stmt = guard.prepare("SELECT object_type, payload FROM objects WHERE id = ?1")?;
         let mut rows = stmt.query(params![id.as_bytes().as_slice()])?;
 
         if let Some(row) = rows.next()? {
@@ -365,9 +357,7 @@ impl OntologyStore {
                     detail: format!("audit_id has wrong length: {}", bytes.len()),
                 });
             }
-            let uuid_bytes: [u8; 16] = bytes
-                .try_into()
-                .expect("length checked above");
+            let uuid_bytes: [u8; 16] = bytes.try_into().expect("length checked above");
             out.push(AuditId(uuid::Uuid::from_bytes(uuid_bytes)));
         }
         Ok(out)
@@ -418,10 +408,7 @@ impl OntologyStore {
     }
 
     /// Get all relationships originating from a source object.
-    pub fn relationships_from(
-        &self,
-        source: ObjectRef,
-    ) -> Result<Vec<Relationship>, StoreError> {
+    pub fn relationships_from(&self, source: ObjectRef) -> Result<Vec<Relationship>, StoreError> {
         let guard = self.conn.lock().map_err(|_| StoreError::MetaInvalid {
             key: "relationships".into(),
             detail: "lock poisoned".into(),
@@ -453,10 +440,7 @@ impl OntologyStore {
     }
 
     /// Get all relationships targeting a specific object.
-    pub fn relationships_to(
-        &self,
-        target: ObjectRef,
-    ) -> Result<Vec<Relationship>, StoreError> {
+    pub fn relationships_to(&self, target: ObjectRef) -> Result<Vec<Relationship>, StoreError> {
         let guard = self.conn.lock().map_err(|_| StoreError::MetaInvalid {
             key: "relationships".into(),
             detail: "lock poisoned".into(),
@@ -522,8 +506,7 @@ impl OntologyStore {
             key: "relationships".into(),
             detail: "lock poisoned".into(),
         })?;
-        let count: i64 =
-            guard.query_row("SELECT COUNT(*) FROM relationships", [], |r| r.get(0))?;
+        let count: i64 = guard.query_row("SELECT COUNT(*) FROM relationships", [], |r| r.get(0))?;
         Ok(count)
     }
 }
@@ -570,10 +553,7 @@ mod tests {
     fn empty_chain_produces_empty_ontology() {
         let (store, _tmp) = temp_store();
         assert_eq!(store.object_count().expect("count"), 0);
-        assert_eq!(
-            store.last_processed_sequence().expect("last seq"),
-            None
-        );
+        assert_eq!(store.last_processed_sequence().expect("last seq"), None);
     }
 
     #[test]
@@ -592,7 +572,9 @@ mod tests {
         store.set_meta("k", "v1").unwrap();
         let guard = store.conn.lock().unwrap();
         let ts1: String = guard
-            .query_row("SELECT updated_at FROM meta WHERE key = 'k'", [], |r| r.get(0))
+            .query_row("SELECT updated_at FROM meta WHERE key = 'k'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         drop(guard);
 
@@ -600,7 +582,9 @@ mod tests {
         store.set_meta("k", "v2").unwrap();
         let guard = store.conn.lock().unwrap();
         let ts2: String = guard
-            .query_row("SELECT updated_at FROM meta WHERE key = 'k'", [], |r| r.get(0))
+            .query_row("SELECT updated_at FROM meta WHERE key = 'k'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_ne!(ts1, ts2);
     }
@@ -746,7 +730,10 @@ mod tests {
             receipt_refs: vec![],
         };
         let result = store.insert_object(&d);
-        assert!(result.is_err(), "FK constraint should reject orphan decision");
+        assert!(
+            result.is_err(),
+            "FK constraint should reject orphan decision"
+        );
     }
 
     #[test]

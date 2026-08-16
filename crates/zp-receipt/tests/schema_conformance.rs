@@ -139,8 +139,7 @@ fn _exhaustiveness_guard(t: ReceiptType) {
 
 fn schema_path() -> PathBuf {
     // crates/zp-receipt -> repo root -> spec/
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../spec/receipt.schema.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../spec/receipt.schema.json")
 }
 
 fn schema() -> serde_json::Value {
@@ -174,7 +173,11 @@ fn schema_receipt_type_enum_matches_the_rust_enum() {
         .as_array()
         .expect("schema properties.receipt_type.enum must be an array")
         .iter()
-        .map(|v| v.as_str().expect("enum entries must be strings").to_string())
+        .map(|v| {
+            v.as_str()
+                .expect("enum entries must be strings")
+                .to_string()
+        })
         .collect();
 
     let built: BTreeSet<String> = ALL.iter().map(wire_name).collect();

@@ -252,7 +252,8 @@ impl ReceiptBuilder {
 
     /// Declare that this receipt supersedes multiple prior receipts.
     pub fn supersedes_all(mut self, receipt_ids: &[&str]) -> Self {
-        self.supersedes.extend(receipt_ids.iter().map(|id| id.to_string()));
+        self.supersedes
+            .extend(receipt_ids.iter().map(|id| id.to_string()));
         self
     }
 
@@ -265,7 +266,8 @@ impl ReceiptBuilder {
 
     /// Declare that this receipt revokes multiple prior receipts.
     pub fn revokes_all(mut self, receipt_ids: &[&str]) -> Self {
-        self.revokes.extend(receipt_ids.iter().map(|id| id.to_string()));
+        self.revokes
+            .extend(receipt_ids.iter().map(|id| id.to_string()));
         self
     }
 
@@ -501,8 +503,12 @@ mod tests {
         assert_eq!(receipt.receipt_type, ReceiptType::ConfigurationClaim);
         assert!(receipt.verify_hash());
         assert!(receipt.claim_metadata.is_some());
-        if let Some(crate::types::ClaimMetadata::Configuration { tool_id, parameter, value, .. }) =
-            &receipt.claim_metadata
+        if let Some(crate::types::ClaimMetadata::Configuration {
+            tool_id,
+            parameter,
+            value,
+            ..
+        }) = &receipt.claim_metadata
         {
             assert_eq!(tool_id, "my-tool");
             assert_eq!(parameter, "max_tokens");
@@ -528,11 +534,17 @@ mod tests {
             .finalize();
 
         assert!(receipt.id.starts_with("cfgr-"));
-        if let Some(crate::types::ClaimMetadata::Configuration { previous_value, source, .. }) =
-            &receipt.claim_metadata
+        if let Some(crate::types::ClaimMetadata::Configuration {
+            previous_value,
+            source,
+            ..
+        }) = &receipt.claim_metadata
         {
             assert_eq!(*previous_value, Some(serde_json::json!(1.0)));
-            assert!(matches!(source, crate::types::ConfigurationSource::OperatorOverride));
+            assert!(matches!(
+                source,
+                crate::types::ConfigurationSource::OperatorOverride
+            ));
         } else {
             panic!("Expected Configuration metadata");
         }

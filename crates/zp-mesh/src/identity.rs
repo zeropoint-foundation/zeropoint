@@ -458,10 +458,9 @@ mod tests {
         // canonical and any well-formed extraction would yield the
         // same bytes).
         let re_derived = {
-            let ed_pub = libp2p_identity::ed25519::PublicKey::try_from_bytes(
-                &id.signing_public_key(),
-            )
-            .unwrap();
+            let ed_pub =
+                libp2p_identity::ed25519::PublicKey::try_from_bytes(&id.signing_public_key())
+                    .unwrap();
             let pubkey: libp2p_identity::PublicKey = ed_pub.into();
             libp2p_identity::PeerId::from_public_key(&pubkey)
         };

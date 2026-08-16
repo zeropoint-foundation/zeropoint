@@ -92,7 +92,9 @@ impl ReconstitutionEntry {
             timestamp: entry.timestamp,
             prev_hash: entry.prev_hash.clone(),
             entry_hash: entry.entry_hash.clone(),
-            signature: entry.signatures.iter()
+            signature: entry
+                .signatures
+                .iter()
                 .find(|b| matches!(b.algorithm, zp_core::SignatureAlgorithm::Ed25519))
                 .map(|b| b.signature_b64.clone()),
             receipt_extensions,
@@ -447,10 +449,7 @@ impl ReconstitutionEngine {
         }
 
         // Memory promotions.
-        if let Some(memory_id) = extensions
-            .get(ext::MEMORY_ID)
-            .and_then(|v| v.as_str())
-        {
+        if let Some(memory_id) = extensions.get(ext::MEMORY_ID).and_then(|v| v.as_str()) {
             let stage = extensions
                 .get(ext::MEMORY_STAGE)
                 .and_then(|v| v.as_str())
@@ -514,10 +513,7 @@ impl ReconstitutionEngine {
 
         // Policy version tracking (R6-4: downgrade resistance).
         // Detect any attempt to load a lower policy version in the chain.
-        if let Some(version_str) = extensions
-            .get(ext::POLICY_VERSION)
-            .and_then(|v| v.as_str())
-        {
+        if let Some(version_str) = extensions.get(ext::POLICY_VERSION).and_then(|v| v.as_str()) {
             let parts: Vec<&str> = version_str.split('.').collect();
             if let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(patch))) = (
                 parts.first().map(|s| s.parse::<u32>()),
@@ -532,14 +528,16 @@ impl ReconstitutionEngine {
                             entry_id: entry_id.to_string(),
                             description: format!(
                                 "Policy downgrade detected: v{}.{}.{} < v{}.{}.{}",
-                                major, minor, patch,
-                                prev_ver.0, prev_ver.1, prev_ver.2
+                                major, minor, patch, prev_ver.0, prev_ver.1, prev_ver.2
                             ),
                             severity: AnomalySeverity::Critical,
                         });
                     }
                 }
-                if self.highest_policy_version.is_none_or(|prev| new_ver > prev) {
+                if self
+                    .highest_policy_version
+                    .is_none_or(|prev| new_ver > prev)
+                {
                     self.highest_policy_version = Some(new_ver);
                 }
             }
@@ -1013,7 +1011,10 @@ mod tests {
             engine.state.anomalies[0].kind,
             AnomalyKind::PolicyDowngradeDetected
         );
-        assert_eq!(engine.state.anomalies[0].severity, AnomalySeverity::Critical);
+        assert_eq!(
+            engine.state.anomalies[0].severity,
+            AnomalySeverity::Critical
+        );
     }
 
     #[test]
@@ -1090,7 +1091,10 @@ mod tests {
             delegation, "h1",
         )));
         assert!(
-            engine.state.valid_operator_keys.contains("new-operator-key"),
+            engine
+                .state
+                .valid_operator_keys
+                .contains("new-operator-key"),
             "the key a real rotation delegated to did not reach reconstituted \
              state — the break is between certificate_rotation_receipts and \
              ReconstitutionEngine, not in either end"
@@ -1100,7 +1104,10 @@ mod tests {
             revocation, "h2",
         )));
         assert!(
-            !engine.state.valid_operator_keys.contains("old-operator-key"),
+            !engine
+                .state
+                .valid_operator_keys
+                .contains("old-operator-key"),
             "the revoked key survived reconstitution"
         );
     }

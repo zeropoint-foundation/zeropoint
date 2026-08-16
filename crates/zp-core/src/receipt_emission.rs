@@ -18,10 +18,7 @@ use crate::receipt_extensions as ext;
 /// Emit an AuthorizationClaim receipt when a capability grant is issued.
 ///
 /// Required semantics: `AuthorizationGrant`
-pub fn emit_authorization_receipt(
-    grantor_id: &str,
-    scope: &str,
-) -> Receipt {
+pub fn emit_authorization_receipt(grantor_id: &str, scope: &str) -> Receipt {
     Receipt::authorization(grantor_id)
         .status(Status::Success)
         .claim_semantics(ClaimSemantics::AuthorizationGrant)
@@ -146,7 +143,10 @@ pub fn certificate_rotation_receipts(
             max_depth: 0,
         })
         .parent(certificate_id)
-        .extension(ext::CERTIFICATE_PUBLIC_KEY, serde_json::json!(new_public_key))
+        .extension(
+            ext::CERTIFICATE_PUBLIC_KEY,
+            serde_json::json!(new_public_key),
+        )
         .extension(ext::CERTIFICATE_ROLE, serde_json::json!(role))
         .finalize();
 
@@ -158,7 +158,10 @@ pub fn certificate_rotation_receipts(
             reason: "key_rotation".to_string(),
             revoker_id: old_public_key.to_string(),
         })
-        .extension(ext::REVOCATION_REVOKED_KEY, serde_json::json!(old_public_key))
+        .extension(
+            ext::REVOCATION_REVOKED_KEY,
+            serde_json::json!(old_public_key),
+        )
         .finalize();
 
     (delegation, revocation)
@@ -195,11 +198,7 @@ mod tests {
 
     #[test]
     fn revocation_receipt_has_correct_type_and_semantics() {
-        let r = emit_revocation_receipt(
-            "operator-key",
-            "old-key-receipt-id",
-            "key_rotation",
-        );
+        let r = emit_revocation_receipt("operator-key", "old-key-receipt-id", "key_rotation");
         assert_eq!(r.receipt_type, ReceiptType::RevocationClaim);
         assert_eq!(r.claim_semantics, ClaimSemantics::IntegrityAttestation);
         assert!(r.id.starts_with("revk-"));
@@ -211,7 +210,9 @@ mod tests {
     fn authorization_receipt_carries_metadata() {
         let r = emit_authorization_receipt("operator", "execute:docker");
         match &r.claim_metadata {
-            Some(ClaimMetadata::Authorization { scope, grantor_id, .. }) => {
+            Some(ClaimMetadata::Authorization {
+                scope, grantor_id, ..
+            }) => {
                 assert_eq!(scope, "execute:docker");
                 assert_eq!(grantor_id, "operator");
             }
@@ -223,7 +224,12 @@ mod tests {
     fn delegation_receipt_carries_metadata() {
         let r = emit_delegation_receipt("old-key", "new-key", "signing:operator", "cert-1");
         match &r.claim_metadata {
-            Some(ClaimMetadata::Delegation { delegator_id, delegate_id, capability_id, .. }) => {
+            Some(ClaimMetadata::Delegation {
+                delegator_id,
+                delegate_id,
+                capability_id,
+                ..
+            }) => {
                 assert_eq!(delegator_id, "old-key");
                 assert_eq!(delegate_id, "new-key");
                 assert_eq!(capability_id, "signing:operator");
@@ -236,7 +242,11 @@ mod tests {
     fn revocation_receipt_carries_metadata() {
         let r = emit_revocation_receipt("revoker", "rcpt-old", "compromised");
         match &r.claim_metadata {
-            Some(ClaimMetadata::Revocation { revoked_receipt_id, reason, revoker_id }) => {
+            Some(ClaimMetadata::Revocation {
+                revoked_receipt_id,
+                reason,
+                revoker_id,
+            }) => {
                 assert_eq!(revoked_receipt_id, "rcpt-old");
                 assert_eq!(reason, "compromised");
                 assert_eq!(revoker_id, "revoker");
@@ -245,5 +255,3 @@ mod tests {
         }
     }
 }
-
-

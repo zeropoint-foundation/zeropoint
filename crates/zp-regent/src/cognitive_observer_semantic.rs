@@ -386,9 +386,7 @@ fn find_silence_duration(text: &str) -> Vec<DurationHit> {
 
         // Skip whitespace after number.
         let mut unit_start = num_end;
-        while unit_start < text.len()
-            && text.as_bytes()[unit_start].is_ascii_whitespace()
-        {
+        while unit_start < text.len() && text.as_bytes()[unit_start].is_ascii_whitespace() {
             unit_start += 1;
         }
 
@@ -909,8 +907,7 @@ mod tests {
     fn extracts_confabulated_pubkey_case_from_session_log() {
         // Reproduces the actual confabulation from 2026-07-24 session:
         // Regent claimed pubkey 58449fc1... when actual was 539839ff...
-        let response =
-            "The operator's Genesis pubkey is 58449fc1abcdef01 and should be verified.";
+        let response = "The operator's Genesis pubkey is 58449fc1abcdef01 and should be verified.";
         let claims = extract_pubkey_claims(response);
         assert_eq!(claims.len(), 1);
         match &claims[0].payload {
@@ -1060,7 +1057,11 @@ mod copula_tests {
             "Your Genesis pubkey IS 539839ff1234abcd.",
             "Your Genesis pubkey is `539839ff1234abcd`.",
         ] {
-            assert_eq!(hexes(s), vec!["539839ff1234abcd".to_string()], "failed on: {s}");
+            assert_eq!(
+                hexes(s),
+                vec!["539839ff1234abcd".to_string()],
+                "failed on: {s}"
+            );
         }
     }
 

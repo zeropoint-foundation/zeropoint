@@ -160,10 +160,7 @@ impl AuditStore {
     /// The signer should come from
     /// [`zp_keys::derive_audit_signer_seed`] applied to the in-memory
     /// Genesis seed (sovereignty unlock at startup, not on disk).
-    pub fn open_signed(
-        path: impl AsRef<std::path::Path>,
-        signer: AuditSigner,
-    ) -> Result<Self> {
+    pub fn open_signed(path: impl AsRef<std::path::Path>, signer: AuditSigner) -> Result<Self> {
         let conn = Connection::open(path).map_err(StoreError::Database)?;
         let store = AuditStore {
             conn,
@@ -290,7 +287,11 @@ impl AuditStore {
     pub fn wal_checkpoint_restart(&self) -> Result<(i64, i64, i64)> {
         self.conn
             .query_row("PRAGMA wal_checkpoint(RESTART)", [], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
             })
             .map_err(StoreError::Database)
     }
@@ -639,41 +640,43 @@ impl AuditStore {
         warn!(entry_id = id, "pentest-demo: returning corrupted clone");
         // Load the entry by id. Reuse the existing column list so the
         // signatures column round-trips correctly.
-        let entry = self.conn.query_row(
-            "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+        let entry = self
+            .conn
+            .query_row(
+                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
                     conversation_id, policy_decision, policy_module, receipt, signatures
              FROM audit_entries WHERE id = ?1",
-            params![id],
-            |row| {
-                let id_str: String = row.get(0)?;
-                let timestamp_str: String = row.get(1)?;
-                let prev_hash: String = row.get(2)?;
-                let entry_hash: String = row.get(3)?;
-                let actor_json: String = row.get(4)?;
-                let action_json: String = row.get(5)?;
-                let conv_id_str: String = row.get(6)?;
-                let policy_decision_json: String = row.get(7)?;
-                let policy_module: String = row.get(8)?;
-                let receipt_json: Option<String> = row.get(9)?;
-                let signatures_json: String = row.get(10)?;
-                Ok((
-                    id_str,
-                    timestamp_str,
-                    prev_hash,
-                    entry_hash,
-                    actor_json,
-                    action_json,
-                    conv_id_str,
-                    policy_decision_json,
-                    policy_module,
-                    receipt_json,
-                    signatures_json,
-                ))
-            },
-        )
-        .optional()
-        .map_err(StoreError::Database)?
-        .ok_or(StoreError::NoEntries)?;
+                params![id],
+                |row| {
+                    let id_str: String = row.get(0)?;
+                    let timestamp_str: String = row.get(1)?;
+                    let prev_hash: String = row.get(2)?;
+                    let entry_hash: String = row.get(3)?;
+                    let actor_json: String = row.get(4)?;
+                    let action_json: String = row.get(5)?;
+                    let conv_id_str: String = row.get(6)?;
+                    let policy_decision_json: String = row.get(7)?;
+                    let policy_module: String = row.get(8)?;
+                    let receipt_json: Option<String> = row.get(9)?;
+                    let signatures_json: String = row.get(10)?;
+                    Ok((
+                        id_str,
+                        timestamp_str,
+                        prev_hash,
+                        entry_hash,
+                        actor_json,
+                        action_json,
+                        conv_id_str,
+                        policy_decision_json,
+                        policy_module,
+                        receipt_json,
+                        signatures_json,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(StoreError::Database)?
+            .ok_or(StoreError::NoEntries)?;
 
         let mut hydrated = self.hydrate_entries(vec![entry])?;
         let mut tampered = hydrated.pop().ok_or(StoreError::NoEntries)?;
@@ -708,7 +711,10 @@ impl AuditStore {
             .map_err(StoreError::Database)?;
         // Re-create the table + indexes + triggers via the canonical init().
         self.init()?;
-        info!("Cleared {} audit entries (table dropped and recreated)", count);
+        info!(
+            "Cleared {} audit entries (table dropped and recreated)",
+            count
+        );
         Ok(count)
     }
 
@@ -1055,10 +1061,9 @@ impl AuditStore {
                     Err(_) => return Ok(None),
                 };
                 let epoch_num = match &action {
-                    zp_core::AuditAction::SystemEvent { event } => {
-                        event.strip_prefix("epoch:anchored:")
-                            .and_then(|s| s.parse::<u64>().ok())
-                    }
+                    zp_core::AuditAction::SystemEvent { event } => event
+                        .strip_prefix("epoch:anchored:")
+                        .and_then(|s| s.parse::<u64>().ok()),
                     _ => None,
                 };
                 let epoch_num = match epoch_num {
@@ -1072,12 +1077,14 @@ impl AuditStore {
                     Err(_) => return Ok(None),
                 };
                 let last_seq = match &policy {
-                    zp_core::PolicyDecision::Allow { conditions } => {
-                        conditions.first().and_then(|c| {
-                            serde_json::from_str::<serde_json::Value>(c).ok()
+                    zp_core::PolicyDecision::Allow { conditions } => conditions
+                        .first()
+                        .and_then(|c| {
+                            serde_json::from_str::<serde_json::Value>(c)
+                                .ok()
                                 .and_then(|v| v.get("last_sequence")?.as_i64())
-                        }).unwrap_or(0)
-                    }
+                        })
+                        .unwrap_or(0),
                     _ => 0,
                 };
 
@@ -1116,11 +1123,9 @@ impl AuditStore {
         if archive_exists {
             let archived: usize = self
                 .conn
-                .query_row(
-                    "SELECT COUNT(*) FROM audit_entries_archive",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT COUNT(*) FROM audit_entries_archive", [], |row| {
+                    row.get(0)
+                })
                 .unwrap_or(0);
             Ok(live + archived)
         } else {
@@ -1173,13 +1178,13 @@ impl AuditStore {
 
         // Find all entries with empty signature arrays.
         let unsigned: Vec<(i64, String)> = {
-            let mut stmt = self.conn.prepare(
-                "SELECT rowid, entry_hash FROM audit_entries WHERE signatures = '[]'"
-            ).map_err(StoreError::Database)?;
+            let mut stmt = self
+                .conn
+                .prepare("SELECT rowid, entry_hash FROM audit_entries WHERE signatures = '[]'")
+                .map_err(StoreError::Database)?;
 
-            let rows = stmt.query_map([], |row| {
-                    Ok((row.get(0)?, row.get(1)?))
-                })
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
                 .map_err(StoreError::Database)?;
             rows.filter_map(|r| r.ok()).collect()
         };
@@ -1198,7 +1203,8 @@ impl AuditStore {
         // compact_chain() with the DELETE trigger. Signature backfilling
         // is a legitimate maintenance operation: the entry_hash is
         // unchanged, only the signatures column gains a block.
-        let tx = self.conn
+        let tx = self
+            .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(StoreError::Database)?;
 
@@ -1211,15 +1217,17 @@ impl AuditStore {
             tx.execute(
                 "UPDATE audit_entries SET signatures = ?1 WHERE rowid = ?2",
                 params![signatures_json, rowid],
-            ).map_err(StoreError::Database)?;
+            )
+            .map_err(StoreError::Database)?;
         }
 
         // Restore the append-only trigger.
         tx.execute_batch(
             "CREATE TRIGGER IF NOT EXISTS no_update_audit_entries
                  BEFORE UPDATE ON audit_entries
-                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END"
-        ).map_err(StoreError::Database)?;
+                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END",
+        )
+        .map_err(StoreError::Database)?;
 
         tx.commit().map_err(StoreError::Database)?;
 
@@ -1287,7 +1295,8 @@ impl AuditStore {
     ///
     /// Returns the number of entries archived.
     pub fn compact_chain(&mut self, retain: usize) -> Result<usize> {
-        let total: i64 = self.conn
+        let total: i64 = self
+            .conn
             .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
             .map_err(StoreError::Database)?;
 
@@ -1298,7 +1307,8 @@ impl AuditStore {
         }
 
         // Find the cutoff rowid — entries with rowid <= this move to archive.
-        let cutoff_rowid: i64 = self.conn
+        let cutoff_rowid: i64 = self
+            .conn
             .query_row(
                 "SELECT rowid FROM audit_entries ORDER BY rowid ASC LIMIT 1 OFFSET ?",
                 params![to_archive],
@@ -1306,9 +1316,14 @@ impl AuditStore {
             )
             .map_err(StoreError::Database)?;
 
-        info!(total, retain, to_archive, cutoff_rowid, "chain compact: archiving entries");
+        info!(
+            total,
+            retain, to_archive, cutoff_rowid, "chain compact: archiving entries"
+        );
 
-        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(StoreError::Database)?;
 
         // Create archive table if it doesn't exist (same schema as active).
@@ -1325,15 +1340,18 @@ impl AuditStore {
                 policy_module TEXT NOT NULL,
                 receipt TEXT,
                 signatures TEXT NOT NULL DEFAULT '[]'
-            )"
-        ).map_err(StoreError::Database)?;
+            )",
+        )
+        .map_err(StoreError::Database)?;
 
         // Move entries to archive.
-        let archived = tx.execute(
-            "INSERT OR IGNORE INTO audit_entries_archive
+        let archived = tx
+            .execute(
+                "INSERT OR IGNORE INTO audit_entries_archive
              SELECT * FROM audit_entries WHERE rowid < ?",
-            params![cutoff_rowid],
-        ).map_err(StoreError::Database)?;
+                params![cutoff_rowid],
+            )
+            .map_err(StoreError::Database)?;
 
         // Temporarily drop the append-only trigger so we can delete
         // archived entries. The trigger is restored immediately after.
@@ -1343,14 +1361,16 @@ impl AuditStore {
         tx.execute(
             "DELETE FROM audit_entries WHERE rowid < ?",
             params![cutoff_rowid],
-        ).map_err(StoreError::Database)?;
+        )
+        .map_err(StoreError::Database)?;
 
         // Restore the append-only trigger.
         tx.execute_batch(
             "CREATE TRIGGER IF NOT EXISTS no_delete_audit_entries
                  BEFORE DELETE ON audit_entries
-                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END"
-        ).map_err(StoreError::Database)?;
+                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END",
+        )
+        .map_err(StoreError::Database)?;
 
         tx.commit().map_err(StoreError::Database)?;
 
@@ -1639,10 +1659,7 @@ impl AuditStore {
              LIMIT ?2"
         };
 
-        let mut stmt = self
-            .conn
-            .prepare(sql)
-            .map_err(StoreError::Database)?;
+        let mut stmt = self.conn.prepare(sql).map_err(StoreError::Database)?;
 
         let rows = stmt
             .query_map(params![like_pattern, limit], |row| {
@@ -1658,9 +1675,17 @@ impl AuditStore {
                 let receipt_json: Option<String> = row.get(9)?;
                 let signatures_json: String = row.get(10)?;
                 Ok((
-                    id_str, timestamp_str, prev_hash, entry_hash,
-                    actor_json, action_json, conv_id_str,
-                    policy_decision_json, policy_module, receipt_json, signatures_json,
+                    id_str,
+                    timestamp_str,
+                    prev_hash,
+                    entry_hash,
+                    actor_json,
+                    action_json,
+                    conv_id_str,
+                    policy_decision_json,
+                    policy_module,
+                    receipt_json,
+                    signatures_json,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -1668,8 +1693,19 @@ impl AuditStore {
             .map_err(StoreError::Database)?;
 
         let mut result = Vec::new();
-        for (id_str, timestamp_str, prev_hash, entry_hash, actor_json, action_json,
-             conv_id_str, policy_decision_json, policy_module, receipt_json, signatures_json) in rows
+        for (
+            id_str,
+            timestamp_str,
+            prev_hash,
+            entry_hash,
+            actor_json,
+            action_json,
+            conv_id_str,
+            policy_decision_json,
+            policy_module,
+            receipt_json,
+            signatures_json,
+        ) in rows
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
             let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
@@ -1679,17 +1715,23 @@ impl AuditStore {
             let actor = serde_json::from_str(&actor_json)
                 .unwrap_or_else(|_| zp_core::ActorId::System("unknown".to_string()));
             let action = serde_json::from_str(&action_json).unwrap_or_else(|_| {
-                zp_core::AuditAction::SystemEvent { event: "unknown".to_string() }
+                zp_core::AuditAction::SystemEvent {
+                    event: "unknown".to_string(),
+                }
             });
             let conversation_id = zp_core::ConversationId(
                 uuid::Uuid::parse_str(&conv_id_str).unwrap_or_else(|_| uuid::Uuid::nil()),
             );
-            let policy_decision = serde_json::from_str(&policy_decision_json)
-                .unwrap_or_else(|_| zp_core::PolicyDecision::Block {
-                    reason: "unknown".to_string(),
-                    policy_module: "unknown".to_string(),
+            let policy_decision =
+                serde_json::from_str(&policy_decision_json).unwrap_or_else(|_| {
+                    zp_core::PolicyDecision::Block {
+                        reason: "unknown".to_string(),
+                        policy_module: "unknown".to_string(),
+                    }
                 });
-            let receipt = receipt_json.as_ref().and_then(|json| serde_json::from_str(json).ok());
+            let receipt = receipt_json
+                .as_ref()
+                .and_then(|json| serde_json::from_str(json).ok());
             result.push(AuditEntry {
                 id: zp_core::AuditId(id),
                 timestamp,
@@ -1790,8 +1832,20 @@ impl AuditStore {
             .map_err(StoreError::Database)?;
 
         let mut result = Vec::new();
-        for (rowid, id_str, timestamp_str, prev_hash, entry_hash, actor_json, action_json,
-             conv_id_str, policy_decision_json, policy_module, receipt_json, signatures_json) in rows
+        for (
+            rowid,
+            id_str,
+            timestamp_str,
+            prev_hash,
+            entry_hash,
+            actor_json,
+            action_json,
+            conv_id_str,
+            policy_decision_json,
+            policy_module,
+            receipt_json,
+            signatures_json,
+        ) in rows
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
             let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
@@ -1860,7 +1914,8 @@ impl AuditStore {
         // Look it up and pass as expected_prev_hash so verify_linkage_report
         // doesn't default to genesis.
         let archive_tail_hash: Option<String> = {
-            let archive_exists: bool = self.conn
+            let archive_exists: bool = self
+                .conn
                 .query_row(
                     "SELECT EXISTS(
                         SELECT 1 FROM sqlite_master
@@ -1917,7 +1972,8 @@ impl AuditStore {
         if entries[0].1 != genesis_hash {
             // Check if the prev_hash exists in the archive (compacted chain).
             // The archive table may not exist on a never-compacted chain.
-            let in_archive: bool = self.conn
+            let in_archive: bool = self
+                .conn
                 .query_row(
                     "SELECT EXISTS(
                         SELECT 1 FROM sqlite_master
@@ -1927,7 +1983,8 @@ impl AuditStore {
                     |row| row.get(0),
                 )
                 .unwrap_or(false)
-                && self.conn
+                && self
+                    .conn
                     .query_row(
                         "SELECT EXISTS(SELECT 1 FROM audit_entries_archive WHERE entry_hash = ?)",
                         params![entries[0].1],

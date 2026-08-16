@@ -19,8 +19,8 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::context::{
-    BackgroundTaskKind, BackgroundTaskStatus, LoadedModel, MemoryPressure,
-    PressureLevel, SystemAwareness,
+    BackgroundTaskKind, BackgroundTaskStatus, LoadedModel, MemoryPressure, PressureLevel,
+    SystemAwareness,
 };
 use crate::error::RegentError;
 use crate::inference::InferenceBackend;
@@ -140,7 +140,9 @@ impl SystemMonitor {
 
     /// Whether any background task of the given kind is currently running.
     pub fn has_active_task(&self, kind: &BackgroundTaskKind) -> bool {
-        self.tasks.iter().any(|t| &t.kind == kind && !t.is_finished())
+        self.tasks
+            .iter()
+            .any(|t| &t.kind == kind && !t.is_finished())
     }
 
     /// Cancel all background tasks.

@@ -33,13 +33,13 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-mod ngram;
-mod length;
 mod entropy;
+mod length;
+mod ngram;
 
-pub use ngram::ngram_repetition_density;
-pub use length::length_distribution_collapse;
 pub use entropy::token_entropy_anomaly;
+pub use length::length_distribution_collapse;
+pub use ngram::ngram_repetition_density;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -327,7 +327,12 @@ impl EmissionAnalyzer {
 fn classify(
     findings: &[Finding],
     escalate_r1_to_r2: bool,
-) -> (ResponseClass, ReceiptFamily, bool, Option<SamplingAdjustment>) {
+) -> (
+    ResponseClass,
+    ReceiptFamily,
+    bool,
+    Option<SamplingAdjustment>,
+) {
     if findings.is_empty() {
         return (
             ResponseClass::LogAndContinue,

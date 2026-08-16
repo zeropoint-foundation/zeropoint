@@ -7,9 +7,7 @@ use std::path::PathBuf;
 
 /// Default vault file path: `~/ZeroPoint/vault.json`
 pub fn default_vault_path() -> PathBuf {
-    zp_core::paths::vault_path().unwrap_or_else(|_| {
-        PathBuf::from(".").join("vault.json")
-    })
+    zp_core::paths::vault_path().unwrap_or_else(|_| PathBuf::from(".").join("vault.json"))
 }
 
 /// Result of a bulk vault import operation.

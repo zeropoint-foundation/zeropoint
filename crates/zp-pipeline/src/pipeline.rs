@@ -14,7 +14,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use execution_engine::{ExecutionEngine, ExecutionRequest as ExecRequest, Runtime};
-use zp_host::HostContext;
 use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::policy::PolicyContext;
 use zp_core::{
@@ -22,6 +21,7 @@ use zp_core::{
     MessageRole, OperatorIdentity, Outcome, PolicyDecision, ReceiptAction, ReceiptStatus, Request,
     Response, ToolCall, ToolResult,
 };
+use zp_host::HostContext;
 use zp_learning::EpisodeStore;
 use zp_llm::{ChatMessage, CompletionRequest, PromptBuilder, ProviderPool};
 use zp_mesh::envelope::EnvelopeType;
@@ -652,9 +652,9 @@ impl Pipeline {
         // See `docs/design/THREAT-MODEL-2026-08.md` §6.
         if decision.needs_interaction() {
             let reason = match &decision {
-                PolicyDecision::Review { summary, .. } => format!(
-                    "requires human review ({summary}), and no reviewer surface is wired"
-                ),
+                PolicyDecision::Review { summary, .. } => {
+                    format!("requires human review ({summary}), and no reviewer surface is wired")
+                }
                 PolicyDecision::Warn { message, .. } => format!(
                     "requires acknowledgement ({message}), and no acknowledgement surface is wired"
                 ),

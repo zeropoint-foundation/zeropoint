@@ -86,7 +86,9 @@ impl SegmentKind {
             | Self::ChainBurst
             | Self::SignatureCoverage => "integrity",
 
-            Self::ToolInvoked | Self::ToolCompleted | Self::ToolFailed
+            Self::ToolInvoked
+            | Self::ToolCompleted
+            | Self::ToolFailed
             | Self::OfficerFindingOperations => "operations",
 
             Self::OfficerFindingGovernance => "governance",
@@ -139,10 +141,7 @@ impl ChainStory {
     /// Each `AuditAction` variant maps to a narration template.
     /// Entries are processed in chronological order.
     pub fn from_entries(entries: &[AuditEntry]) -> Self {
-        let segments: Vec<StorySegment> = entries
-            .iter()
-            .filter_map(narrate_entry)
-            .collect();
+        let segments: Vec<StorySegment> = entries.iter().filter_map(narrate_entry).collect();
 
         let time_range = if let (Some(first), Some(last)) = (entries.first(), entries.last()) {
             Some((first.timestamp, last.timestamp))
@@ -204,9 +203,7 @@ impl ChainStory {
 
             // Count consecutive segments of the same kind
             let mut run_end = i + 1;
-            while run_end < self.segments.len()
-                && self.segments[run_end].kind == current.kind
-            {
+            while run_end < self.segments.len() && self.segments[run_end].kind == current.kind {
                 run_end += 1;
             }
 
@@ -367,10 +364,7 @@ fn narrate_system_event(event: &str, entry: &AuditEntry) -> Option<StorySegment>
         let subject = ev.target;
         let (text, kind) = match ev.kind {
             DelegationKind::Granted => {
-                let capabilities = conditions
-                    .get("capabilities")
-                    .cloned()
-                    .unwrap_or_default();
+                let capabilities = conditions.get("capabilities").cloned().unwrap_or_default();
                 let expiry = conditions.get("expires").cloned().unwrap_or_default();
                 let text = if !capabilities.is_empty() && !expiry.is_empty() {
                     format!(
@@ -771,9 +765,7 @@ mod tests {
                 arguments_hash: "abcdef1234567890".into(),
             },
             conversation_id: ConversationId::new(),
-            policy_decision: PolicyDecision::Allow {
-                conditions: vec![],
-            },
+            policy_decision: PolicyDecision::Allow { conditions: vec![] },
             policy_module: "gate".into(),
             receipt: None,
             signatures: vec![],
@@ -817,18 +809,12 @@ mod tests {
             make_system_event("delegation:granted:example-tool", vec![]),
             make_system_event(
                 "officer:std:heartbeat",
-                vec![
-                    "finding_count=0".into(),
-                    "max_severity=Ok".into(),
-                ],
+                vec!["finding_count=0".into(), "max_severity=Ok".into()],
             ),
         ];
         let story = ChainStory::from_entries(&entries);
         let governance = story.filter_domain("governance");
         assert_eq!(governance.segments.len(), 1);
-        assert_eq!(
-            governance.segments[0].kind,
-            SegmentKind::DelegationGranted
-        );
+        assert_eq!(governance.segments[0].kind, SegmentKind::DelegationGranted);
     }
 }

@@ -463,9 +463,8 @@ pub fn validate_launch_spec_no_vault_refs(spec: &LaunchSpec) -> Result<(), Strin
 pub fn load_manifest_validated(path: &Path) -> Result<ToolManifest, ManifestError> {
     let manifest = load_manifest(path)?;
     if let Some(ref launch) = manifest.launch {
-        validate_launch_spec_no_vault_refs(launch).map_err(|msg| {
-            ManifestError::VaultRefInLaunch(path.to_path_buf(), msg)
-        })?;
+        validate_launch_spec_no_vault_refs(launch)
+            .map_err(|msg| ManifestError::VaultRefInLaunch(path.to_path_buf(), msg))?;
     }
     Ok(manifest)
 }
@@ -474,7 +473,8 @@ pub fn load_manifest_validated(path: &Path) -> Result<ToolManifest, ManifestErro
 /// vault refs in the `[launch]` section.
 pub fn load_manifest_bytes_validated(bytes: &[u8]) -> Result<ToolManifest, String> {
     let content = std::str::from_utf8(bytes).map_err(|e| format!("invalid UTF-8: {e}"))?;
-    let manifest: ToolManifest = toml::from_str(content).map_err(|e| format!("parse error: {e}"))?;
+    let manifest: ToolManifest =
+        toml::from_str(content).map_err(|e| format!("parse error: {e}"))?;
     if let Some(ref launch) = manifest.launch {
         validate_launch_spec_no_vault_refs(launch)?;
     }
@@ -748,10 +748,7 @@ pub fn validate_tool_env(
                 violations.push(VaultVarViolation {
                     var: rule.var.clone(),
                     severity: "error",
-                    message: format!(
-                        "too short: {} bytes (minimum {})",
-                        len, min
-                    ),
+                    message: format!("too short: {} bytes (minimum {})", len, min),
                 });
             }
         }
@@ -761,10 +758,7 @@ pub fn validate_tool_env(
                 violations.push(VaultVarViolation {
                     var: rule.var.clone(),
                     severity: "error",
-                    message: format!(
-                        "too long: {} bytes (maximum {})",
-                        len, max
-                    ),
+                    message: format!("too long: {} bytes (maximum {})", len, max),
                 });
             }
         }
@@ -799,7 +793,8 @@ pub fn validate_tool_env(
         // --- Field-type-specific checks ---
         match rule.field_type {
             VaultFieldType::Url => {
-                if !text.starts_with("http://") && !text.starts_with("https://") && !text.is_empty() {
+                if !text.starts_with("http://") && !text.starts_with("https://") && !text.is_empty()
+                {
                     violations.push(VaultVarViolation {
                         var: rule.var.clone(),
                         severity: "warning",
@@ -824,10 +819,7 @@ pub fn validate_tool_env(
                     violations.push(VaultVarViolation {
                         var: rule.var.clone(),
                         severity: "warning",
-                        message: format!(
-                            "toggle should be true/false/1/0, got '{}'",
-                            text
-                        ),
+                        message: format!("toggle should be true/false/1/0, got '{}'", text),
                     });
                 }
             }
@@ -869,7 +861,11 @@ pub struct VaultAuditFinding {
 
 impl std::fmt::Display for VaultAuditFinding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}] {}: {} ({})", self.severity, self.category, self.message, self.key)
+        write!(
+            f,
+            "[{}] {}: {} ({})",
+            self.severity, self.category, self.message, self.key
+        )
     }
 }
 
@@ -891,8 +887,7 @@ pub fn audit_vault_keys(tool: &str, all_keys: &[String]) -> Vec<VaultAuditFindin
 
     // Known API key prefixes that should never appear in key NAMES.
     let secret_patterns = [
-        "sk-ant-", "sk-", "ghp_", "gho_", "xoxb-", "xapp-", "xoxp-",
-        "AIza", "AKIA", "tvly-",
+        "sk-ant-", "sk-", "ghp_", "gho_", "xoxb-", "xapp-", "xoxp-", "AIza", "AKIA", "tvly-",
     ];
 
     for key in all_keys {
@@ -902,7 +897,9 @@ pub fn audit_vault_keys(tool: &str, all_keys: &[String]) -> Vec<VaultAuditFindin
                 key: key.clone(),
                 severity: "error",
                 category: "malformed_key",
-                message: "key name contains '=' — likely a value was concatenated into the key name".to_string(),
+                message:
+                    "key name contains '=' — likely a value was concatenated into the key name"
+                        .to_string(),
             });
         }
 
@@ -1786,11 +1783,15 @@ mod tests {
     #[test]
     fn reversibility_parses_all_four_values() {
         assert_eq!(
-            parse_with_capabilities("reversible").capabilities.reversibility,
+            parse_with_capabilities("reversible")
+                .capabilities
+                .reversibility,
             Reversibility::Reversible
         );
         assert_eq!(
-            parse_with_capabilities("partial").capabilities.reversibility,
+            parse_with_capabilities("partial")
+                .capabilities
+                .reversibility,
             Reversibility::Partial
         );
         assert_eq!(
@@ -1800,7 +1801,9 @@ mod tests {
             Reversibility::Irreversible
         );
         assert_eq!(
-            parse_with_capabilities("unknown").capabilities.reversibility,
+            parse_with_capabilities("unknown")
+                .capabilities
+                .reversibility,
             Reversibility::Unknown
         );
     }

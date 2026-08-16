@@ -105,8 +105,7 @@ fn forwarder_re() -> Regex {
 /// fails loudly on a false positive and goes quiet on a false negative, so the
 /// error is pointed in the safe direction.
 fn functions(src: &str) -> Vec<(String, usize, String)> {
-    let decl =
-        Regex::new(r"(?m)^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)").unwrap();
+    let decl = Regex::new(r"(?m)^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)").unwrap();
     let marks: Vec<(String, usize)> = decl
         .captures_iter(src)
         .map(|c| {
@@ -128,8 +127,7 @@ fn functions(src: &str) -> Vec<(String, usize, String)> {
 
 fn source() -> String {
     let path = workspace_root().join(FINDING_SOURCE);
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
 }
 
 #[test]

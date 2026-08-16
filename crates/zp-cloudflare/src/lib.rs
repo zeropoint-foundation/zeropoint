@@ -59,5 +59,5 @@
 //! - Phase 2.3 — `CfWorkflowAdapter` (GovernedWorkflow port)
 //! - (Future) — `D1AuditStoreAdapter` (AuditStore port)
 
-pub mod wire;
 pub mod adapter;
+pub mod wire;

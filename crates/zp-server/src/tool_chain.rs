@@ -630,9 +630,7 @@ pub fn emit_tool_action_receipt(
 /// Returns `(irreversible_count, signed_irreversible_count)`. A signed entry
 /// is one whose receipt carries an Ed25519 signature — at tier ≥ 1 every
 /// irreversible entry should be signed.
-pub fn count_irreversible_actions(
-    audit_store: &Arc<Mutex<AuditStore>>,
-) -> (usize, usize) {
+pub fn count_irreversible_actions(audit_store: &Arc<Mutex<AuditStore>>) -> (usize, usize) {
     let store = match audit_store.lock() {
         Ok(s) => s,
         Err(_) => return (0, 0),
@@ -789,9 +787,7 @@ pub fn emit_signed_canonicalization_receipt(
         event: event.to_string(),
     };
 
-    let policy_decision = PolicyDecision::Allow {
-        conditions: vec![],
-    };
+    let policy_decision = PolicyDecision::Allow { conditions: vec![] };
 
     let unsealed = UnsealedEntry::new(
         ActorId::System("zp-server".to_string()),
@@ -948,10 +944,7 @@ pub fn emit_canonicalization_receipt_with_scan(
 ///
 /// Checks both the Receipt object (preferred) and the legacy string event
 /// (backward compat) to handle entries created before the migration.
-fn has_canonicalization_receipt(
-    audit_store: &Arc<Mutex<AuditStore>>,
-    event_name: &str,
-) -> bool {
+fn has_canonicalization_receipt(audit_store: &Arc<Mutex<AuditStore>>, event_name: &str) -> bool {
     let store = match audit_store.lock() {
         Ok(s) => s,
         Err(_) => return false,
@@ -1123,9 +1116,7 @@ pub fn emit_signed_lifecycle_receipt(
         event: event.to_string(),
     };
 
-    let policy_decision = PolicyDecision::Allow {
-        conditions: vec![],
-    };
+    let policy_decision = PolicyDecision::Allow { conditions: vec![] };
 
     let unsealed = UnsealedEntry::new(
         ActorId::System("zp-server".to_string()),
@@ -1228,8 +1219,7 @@ pub fn query_canonicalization_metadata(
     // JSON, parented to the tool's wire tip. The bead-zero stays untouched —
     // chain integrity preserved — but doctor reads the latest values via
     // this overlay. Pre-adapt tools fall through to bead-zero values.
-    let mut overlaid: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut overlaid: std::collections::HashSet<String> = std::collections::HashSet::new();
     for entry in entries.iter() {
         let Some(receipt) = entry.receipt.as_ref() else {
             continue;
@@ -1303,10 +1293,7 @@ pub fn emit_adapted_receipt(
         );
     }
     if let Some(r) = reversibility {
-        detail.insert(
-            "reversibility".into(),
-            serde_json::Value::String(r.into()),
-        );
+        detail.insert("reversibility".into(), serde_json::Value::String(r.into()));
     }
     let detail_json = serde_json::Value::Object(detail).to_string();
 
@@ -1382,11 +1369,14 @@ pub fn query_bead_zeros(
             if parts.len() == 3 && parts[1] == "canonicalized" {
                 let key = format!("{}:{}", parts[0], parts[2]);
                 anchors.entry(key).or_insert_with(|| {
-                    let detail = if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
-                        conditions.first().and_then(|s| serde_json::from_str(s).ok())
-                    } else {
-                        None
-                    };
+                    let detail =
+                        if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
+                            conditions
+                                .first()
+                                .and_then(|s| serde_json::from_str(s).ok())
+                        } else {
+                            None
+                        };
                     (entry.timestamp.to_rfc3339(), detail)
                 });
             }
@@ -1564,9 +1554,7 @@ pub fn query_tool_readiness(
                     // Extract bead-zero Receipt metadata if present (Phase 4 compat)
                     if state.bead_zero_receipt_id.is_none() {
                         if let Some(ref receipt) = entry.receipt {
-                            if receipt.receipt_type
-                                == zp_receipt::ReceiptType::CanonicalizedClaim
-                            {
+                            if receipt.receipt_type == zp_receipt::ReceiptType::CanonicalizedClaim {
                                 state.bead_zero_receipt_id = Some(receipt.id.clone());
                                 state.bead_zero_signed = receipt.is_signed();
                             }
@@ -1932,7 +1920,9 @@ pub fn query_tool_configuration(
                 // Parse the detail JSON from the policy conditions
                 let detail_json: Option<serde_json::Value> =
                     if let PolicyDecision::Allow { conditions } = &entry.policy_decision {
-                        conditions.first().and_then(|s| serde_json::from_str(s).ok())
+                        conditions
+                            .first()
+                            .and_then(|s| serde_json::from_str(s).ok())
                     } else {
                         None
                     };
@@ -1998,10 +1988,7 @@ pub fn emit_and_broadcast(
     let entry_hash = emit_tool_receipt(audit_store, event, detail);
 
     // Broadcast to SSE subscribers (best-effort)
-    let item = crate::events::EventStreamItem::from_audit(
-        event,
-        entry_hash.clone(),
-    );
+    let item = crate::events::EventStreamItem::from_audit(event, entry_hash.clone());
     let item = if let Some(d) = detail {
         item.with_summary(d)
     } else {
@@ -2184,14 +2171,14 @@ pub fn query_chain_model_preference(
     tool: &str,
 ) -> Option<String> {
     let store = audit_store.lock().ok()?;
-    let entries = store.query_by_claim_type("model_preference_selected", 20).ok()?;
+    let entries = store
+        .query_by_claim_type("model_preference_selected", 20)
+        .ok()?;
     let tool_lower = tool.to_lowercase();
     entries.into_iter().find_map(|e| {
         if let Some(receipt) = e.receipt {
-            if let Some(ClaimMetadata::ModelPreferenceSelected {
-                tool: t,
-                model_id,
-            }) = receipt.claim_metadata
+            if let Some(ClaimMetadata::ModelPreferenceSelected { tool: t, model_id }) =
+                receipt.claim_metadata
             {
                 if t == tool_lower {
                     return Some(model_id);
@@ -2223,11 +2210,7 @@ mod f5_tests {
         }
     }
 
-    fn canon_tool(
-        store: &Arc<Mutex<AuditStore>>,
-        name: &str,
-        rev: Reversibility,
-    ) {
+    fn canon_tool(store: &Arc<Mutex<AuditStore>>, name: &str, rev: Reversibility) {
         let initial = serde_json::json!({"fields": []});
         let outcome = emit_canonicalization_receipt_with_scan(
             store,
@@ -2245,7 +2228,10 @@ mod f5_tests {
             ScannedCanonicalization::Emitted { .. } => {}
             ScannedCanonicalization::AlreadyExists => {}
             ScannedCanonicalization::Blocked(s) => {
-                panic!("test fixture blocked unexpectedly: {} findings", s.findings.len())
+                panic!(
+                    "test fixture blocked unexpectedly: {} findings",
+                    s.findings.len()
+                )
             }
         }
     }

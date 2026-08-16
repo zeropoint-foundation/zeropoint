@@ -59,12 +59,8 @@ impl AuthStrategy {
     pub fn apply(&self, builder: reqwest::RequestBuilder, key: &str) -> reqwest::RequestBuilder {
         match self {
             AuthStrategy::None => builder,
-            AuthStrategy::Bearer => {
-                builder.header("Authorization", format!("Bearer {}", key))
-            }
-            AuthStrategy::Header(name) => {
-                builder.header(name.as_str(), key)
-            }
+            AuthStrategy::Bearer => builder.header("Authorization", format!("Bearer {}", key)),
+            AuthStrategy::Header(name) => builder.header(name.as_str(), key),
         }
     }
 }
@@ -408,15 +404,12 @@ pub struct InferenceBackend {
     /// receipts. Does NOT alter routing today — that lands when operator
     /// envelope-declaration ceremony ships and envelopes carry multiple
     /// authorized models.
-    classifier: std::sync::Arc<
-        dyn crate::inference_classifier::InferenceClassifier + Send + Sync,
-    >,
+    classifier: std::sync::Arc<dyn crate::inference_classifier::InferenceClassifier + Send + Sync>,
     /// Side channel for the classifier's most recent decision. Same
     /// drain-and-emit pattern as `last_fallback`. Interior mutability
     /// because `chat()` takes `&self`.
-    last_classifier_decision: std::sync::Mutex<
-        Option<crate::inference_classifier::ClassifierDecision>,
-    >,
+    last_classifier_decision:
+        std::sync::Mutex<Option<crate::inference_classifier::ClassifierDecision>>,
     /// Gate-request signer for calls to the substrate's own proxy (W5 3b).
     ///
     /// `None` pre-Genesis, where there is no sovereign root to sign with —
@@ -475,9 +468,7 @@ impl InferenceBackend {
             fallback_endpoint: "http://127.0.0.1:11434".to_string(),
             fallback_model,
             last_fallback: std::sync::Mutex::new(None),
-            classifier: std::sync::Arc::new(
-                crate::inference_classifier::DefaultClassifier::new(),
-            ),
+            classifier: std::sync::Arc::new(crate::inference_classifier::DefaultClassifier::new()),
             last_classifier_decision: std::sync::Mutex::new(None),
             gate_signer,
         }
@@ -545,8 +536,7 @@ impl InferenceBackend {
     /// and the caller passes a multi-model envelope, this hook flips to
     /// producing meaningful selections without changing its signature.
     fn record_classifier_decision(&self, request: &InferenceRequest) {
-        let envelope =
-            crate::inference_classifier::InferenceEnvelope::single(&request.model);
+        let envelope = crate::inference_classifier::InferenceEnvelope::single(&request.model);
         // Concatenated prompt text for workload classification. Cheap:
         // one allocation over N message bodies.
         let concatenated: String = request
@@ -558,8 +548,7 @@ impl InferenceBackend {
         let hint = crate::inference_classifier::QueryHint {
             caller: Some("regent:inference".to_string()),
             prompt_length: Some(concatenated.len()),
-            workload_class:
-                crate::inference_classifier::infer_workload_class(&concatenated),
+            workload_class: crate::inference_classifier::infer_workload_class(&concatenated),
         };
         let decision = self.classifier.choose(&envelope, &hint);
         if let Ok(mut guard) = self.last_classifier_decision.lock() {
@@ -635,7 +624,10 @@ impl InferenceBackend {
                         if self.fallback_model.starts_with("qwen3") {
                             fallback_request.think = Some(false);
                         }
-                        match self.chat_ollama_at(&self.fallback_endpoint, &fallback_request).await {
+                        match self
+                            .chat_ollama_at(&self.fallback_endpoint, &fallback_request)
+                            .await
+                        {
                             Ok(response) => Ok(response),
                             Err(ref ollama_err) if Self::is_ollama_not_running(ollama_err) => {
                                 // Ollama isn't running — start it and retry once.
@@ -647,7 +639,8 @@ impl InferenceBackend {
                                         e, start_err
                                     )));
                                 }
-                                self.chat_ollama_at(&self.fallback_endpoint, &fallback_request).await
+                                self.chat_ollama_at(&self.fallback_endpoint, &fallback_request)
+                                    .await
                             }
                             Err(ollama_err) => Err(ollama_err),
                         }
@@ -670,7 +663,9 @@ impl InferenceBackend {
             return true;
         }
         // Connection failures — endpoint is down or unreachable.
-        if msg.contains("HTTP error:") && (msg.contains("connect") || msg.contains("timeout") || msg.contains("dns")) {
+        if msg.contains("HTTP error:")
+            && (msg.contains("connect") || msg.contains("timeout") || msg.contains("dns"))
+        {
             return true;
         }
         false
@@ -679,7 +674,8 @@ impl InferenceBackend {
     /// Whether an error indicates Ollama isn't running (connection refused).
     fn is_ollama_not_running(error: &RegentError) -> bool {
         let msg = error.to_string();
-        msg.contains("HTTP error:") && (msg.contains("connect") || msg.contains("Connection refused"))
+        msg.contains("HTTP error:")
+            && (msg.contains("connect") || msg.contains("Connection refused"))
     }
 
     /// Liveness path for the local inference backend.
@@ -704,7 +700,8 @@ impl InferenceBackend {
         // Check if already running via a quick health check.
         let client = reqwest::Client::new();
         let probe = format!("http://127.0.0.1:11434/{}", Self::LIVENESS_PATH);
-        if client.get(&probe)
+        if client
+            .get(&probe)
             .timeout(std::time::Duration::from_secs(2))
             .send()
             .await
@@ -736,7 +733,12 @@ impl InferenceBackend {
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .spawn()
-                    .map_err(|e2| format!("neither `ollama serve` nor `open -a Ollama` available: {}, {}", e, e2))?;
+                    .map_err(|e2| {
+                        format!(
+                            "neither `ollama serve` nor `open -a Ollama` available: {}, {}",
+                            e, e2
+                        )
+                    })?;
                 info!("launched Ollama.app — waiting for it to become responsive");
             }
             Err(e) => {
@@ -747,7 +749,8 @@ impl InferenceBackend {
         // Poll until responsive (up to 8 seconds, 500ms intervals).
         for _ in 0..16 {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            if client.get(&probe)
+            if client
+                .get(&probe)
                 .timeout(std::time::Duration::from_secs(1))
                 .send()
                 .await
@@ -833,7 +836,11 @@ impl InferenceBackend {
     }
 
     /// Ollama chat against a specific endpoint (used for fallback).
-    async fn chat_ollama_at(&self, endpoint: &str, request: &InferenceRequest) -> Result<String, RegentError> {
+    async fn chat_ollama_at(
+        &self,
+        endpoint: &str,
+        request: &InferenceRequest,
+    ) -> Result<String, RegentError> {
         let url = format!("{}/api/chat", endpoint);
 
         let input_chars: usize = request.messages.iter().map(|m| m.content.len()).sum();
@@ -849,9 +856,8 @@ impl InferenceBackend {
 
         // Serialize ONCE and transmit exactly these bytes — see `sign_for_gate`
         // for why `.json(request)` cannot be used on a signed path.
-        let body_bytes = serde_json::to_vec(request).map_err(|e| {
-            RegentError::Inference(format!("request serialization failed: {}", e))
-        })?;
+        let body_bytes = serde_json::to_vec(request)
+            .map_err(|e| RegentError::Inference(format!("request serialization failed: {}", e)))?;
 
         let mut req = self
             .client
@@ -905,7 +911,10 @@ impl InferenceBackend {
                 if m.content.is_empty() {
                     if let Some(ref thinking) = m.thinking {
                         if !thinking.is_empty() {
-                            debug!(thinking_len = thinking.len(), "content empty, using thinking field as fallback");
+                            debug!(
+                                thinking_len = thinking.len(),
+                                "content empty, using thinking field as fallback"
+                            );
                             return thinking.clone();
                         }
                     }
@@ -924,7 +933,10 @@ impl InferenceBackend {
 
         let elapsed_ms = t0.elapsed().as_millis() as u64;
         let eval_count = inference_resp.eval_count.unwrap_or(0);
-        let total_duration_ms = inference_resp.total_duration.map(|d| d / 1_000_000).unwrap_or(0);
+        let total_duration_ms = inference_resp
+            .total_duration
+            .map(|d| d / 1_000_000)
+            .unwrap_or(0);
 
         let is_fallback = endpoint != self.endpoint;
         info!(
@@ -982,9 +994,8 @@ impl InferenceBackend {
         let t0 = std::time::Instant::now();
 
         // Serialize ONCE and transmit exactly these bytes — see `sign_for_gate`.
-        let body_bytes = serde_json::to_vec(&body).map_err(|e| {
-            RegentError::Inference(format!("request serialization failed: {}", e))
-        })?;
+        let body_bytes = serde_json::to_vec(&body)
+            .map_err(|e| RegentError::Inference(format!("request serialization failed: {}", e)))?;
 
         // Apply provider-specific auth strategy.
         let api_key = self.resolved_key.as_deref().unwrap_or("");
@@ -1027,8 +1038,13 @@ impl InferenceBackend {
             "regent raw openai response"
         );
 
-        let openai_resp: OpenAIResponse = serde_json::from_str(&raw_body)
-            .map_err(|e| RegentError::Inference(format!("parse error: {} — body: {}", e, crate::text::preview(&raw_body, 200))))?;
+        let openai_resp: OpenAIResponse = serde_json::from_str(&raw_body).map_err(|e| {
+            RegentError::Inference(format!(
+                "parse error: {} — body: {}",
+                e,
+                crate::text::preview(&raw_body, 200)
+            ))
+        })?;
 
         let content = openai_resp
             .choices
@@ -1037,8 +1053,16 @@ impl InferenceBackend {
             .unwrap_or_default();
 
         let elapsed_ms = t0.elapsed().as_millis() as u64;
-        let prompt_tokens = openai_resp.usage.as_ref().and_then(|u| u.prompt_tokens).unwrap_or(0);
-        let completion_tokens = openai_resp.usage.as_ref().and_then(|u| u.completion_tokens).unwrap_or(0);
+        let prompt_tokens = openai_resp
+            .usage
+            .as_ref()
+            .and_then(|u| u.prompt_tokens)
+            .unwrap_or(0);
+        let completion_tokens = openai_resp
+            .usage
+            .as_ref()
+            .and_then(|u| u.completion_tokens)
+            .unwrap_or(0);
         let model_used = openai_resp.model.as_deref().unwrap_or("unknown");
 
         info!(
@@ -1098,7 +1122,10 @@ impl InferenceBackend {
 
             match self.client.post(&chat_url).json(&body).send().await {
                 Ok(resp) if resp.status().is_success() => {
-                    info!(model = model.as_str(), "inference hygiene: unloaded stale model");
+                    info!(
+                        model = model.as_str(),
+                        "inference hygiene: unloaded stale model"
+                    );
                 }
                 Ok(resp) => {
                     let status = resp.status();
@@ -1110,7 +1137,10 @@ impl InferenceBackend {
             }
         }
 
-        info!(count = loaded.len(), "inference hygiene: cleared stale models");
+        info!(
+            count = loaded.len(),
+            "inference hygiene: cleared stale models"
+        );
     }
 
     /// Preload models into memory (Ollama only).
@@ -1247,7 +1277,10 @@ impl InferenceBackend {
     }
 
     /// Validate that a CloudMandate is active before escalation.
-    pub fn validate_mandate(mandate: &Option<CloudMandate>, estimated_tokens: u64) -> Result<(), RegentError> {
+    pub fn validate_mandate(
+        mandate: &Option<CloudMandate>,
+        estimated_tokens: u64,
+    ) -> Result<(), RegentError> {
         match mandate {
             None => Err(RegentError::InsufficientDelegation {
                 action: "cloud escalation requires an active mandate".to_string(),
@@ -1255,13 +1288,15 @@ impl InferenceBackend {
             Some(m) if !m.is_active() => Err(RegentError::InsufficientDelegation {
                 action: "cloud mandate expired or exhausted".to_string(),
             }),
-            Some(m) if m.remaining() < estimated_tokens => Err(RegentError::InsufficientDelegation {
-                action: format!(
-                    "cloud mandate has {} tokens remaining, need {}",
-                    m.remaining(),
-                    estimated_tokens
-                ),
-            }),
+            Some(m) if m.remaining() < estimated_tokens => {
+                Err(RegentError::InsufficientDelegation {
+                    action: format!(
+                        "cloud mandate has {} tokens remaining, need {}",
+                        m.remaining(),
+                        estimated_tokens
+                    ),
+                })
+            }
             Some(_) => Ok(()),
         }
     }
@@ -1312,9 +1347,18 @@ mod detect_tests {
     /// Third-party name-sniffing is unchanged.
     #[test]
     fn third_party_detection_is_unchanged() {
-        assert_eq!(ProviderProfile::detect("https://api.openai.com", true).name, "openai");
-        assert_eq!(ProviderProfile::detect("https://routellm.abacus.ai/v1", true).name, "abacus");
-        assert_eq!(ProviderProfile::detect("https://api.anthropic.com", true).name, "anthropic");
+        assert_eq!(
+            ProviderProfile::detect("https://api.openai.com", true).name,
+            "openai"
+        );
+        assert_eq!(
+            ProviderProfile::detect("https://routellm.abacus.ai/v1", true).name,
+            "abacus"
+        );
+        assert_eq!(
+            ProviderProfile::detect("https://api.anthropic.com", true).name,
+            "anthropic"
+        );
     }
 
     /// The proxy chat path is already complete, so `chat_url` must not append.

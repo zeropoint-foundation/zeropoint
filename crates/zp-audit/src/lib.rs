@@ -17,15 +17,14 @@ pub mod store;
 pub mod verifier;
 
 pub use chain::{genesis_hash, recompute_entry_hash, seal_entry, UnsealedEntry};
-pub use notify::{AppendNotifier, SharedNotifier};
 pub use collective_audit::{
     response_tip_consistent, verify_peer_chain, verify_response, AuditChallenge, AuditRange,
     AuditResponse, CompactAuditEntry, PeerAuditAttestation, MAX_ENTRIES_PER_RESPONSE,
 };
+pub use notify::{AppendNotifier, SharedNotifier};
 pub use reconstitute::{
     compute_blast_radius, BlastRadiusReport, ReconstitutedState, ReconstitutionAnomaly,
-    ReconstitutionEntry,
-    ReconstitutionConfig, ReconstitutionEngine,
+    ReconstitutionConfig, ReconstitutionEngine, ReconstitutionEntry,
 };
 pub use recovery::{
     Checkpoint, RecoveredState, RecoveryConfig, RecoveryEngine, RecoveryReceipt, ShutdownMarker,

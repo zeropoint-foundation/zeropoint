@@ -554,8 +554,7 @@ pub fn classify_gate(entry: &AuditEntry) -> Option<GateEvent> {
     let AuditAction::SystemEvent { event } = &entry.action else {
         return None;
     };
-    const ALL_OUTCOMES: [GateOutcome; 2] =
-        [GateOutcome::Allowed, GateOutcome::Denied];
+    const ALL_OUTCOMES: [GateOutcome; 2] = [GateOutcome::Allowed, GateOutcome::Denied];
     for outcome in ALL_OUTCOMES {
         let prefix = outcome.receipt_prefix();
         let Some(subject) = event.strip_prefix(prefix) else {
@@ -733,11 +732,7 @@ mod tests {
         store.append(entry).expect("append");
     }
 
-    fn append_event_with_conditions(
-        store: &mut AuditStore,
-        event: &str,
-        conditions: Vec<String>,
-    ) {
+    fn append_event_with_conditions(store: &mut AuditStore, event: &str, conditions: Vec<String>) {
         let entry = UnsealedEntry {
             actor: ActorId::System("test".to_string()),
             action: AuditAction::SystemEvent {
@@ -759,8 +754,7 @@ mod tests {
         append_event(&mut store, "unrelated:event");
 
         let chain = ChainReader::new(&store);
-        let events =
-            tool_lifecycle_events(&chain, ToolLifecycleKind::Configured, 100).unwrap();
+        let events = tool_lifecycle_events(&chain, ToolLifecycleKind::Configured, 100).unwrap();
         let names: Vec<_> = events.iter().map(|e| e.tool_name.clone()).collect();
         assert!(names.contains(&"alpha".to_string()));
         assert!(names.contains(&"beta".to_string()));
@@ -778,8 +772,7 @@ mod tests {
         append_event(&mut store, "tool:port:assigned:beta:9090");
 
         let chain = ChainReader::new(&store);
-        let events =
-            tool_lifecycle_events(&chain, ToolLifecycleKind::PortAssigned, 100).unwrap();
+        let events = tool_lifecycle_events(&chain, ToolLifecycleKind::PortAssigned, 100).unwrap();
         let names: Vec<_> = events.iter().map(|e| e.tool_name.clone()).collect();
         assert!(names.contains(&"alpha".to_string()));
         assert!(names.contains(&"beta".to_string()));
@@ -795,10 +788,8 @@ mod tests {
         append_event(&mut store, "tool:started:beta");
 
         let chain = ChainReader::new(&store);
-        let launched =
-            tool_lifecycle_events(&chain, ToolLifecycleKind::Launched, 100).unwrap();
-        let started =
-            tool_lifecycle_events(&chain, ToolLifecycleKind::Started, 100).unwrap();
+        let launched = tool_lifecycle_events(&chain, ToolLifecycleKind::Launched, 100).unwrap();
+        let started = tool_lifecycle_events(&chain, ToolLifecycleKind::Started, 100).unwrap();
         assert_eq!(launched.len(), 1);
         assert_eq!(launched[0].tool_name, "alpha");
         assert_eq!(started.len(), 1);
@@ -812,8 +803,7 @@ mod tests {
         append_event(&mut store, "tool:configured:real");
 
         let chain = ChainReader::new(&store);
-        let events =
-            tool_lifecycle_events(&chain, ToolLifecycleKind::Configured, 100).unwrap();
+        let events = tool_lifecycle_events(&chain, ToolLifecycleKind::Configured, 100).unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].tool_name, "real");
     }
@@ -858,7 +848,10 @@ mod tests {
         let mut store = appending_store();
         append_event(&mut store, "delegation:granted:mytool");
         append_event(&mut store, "delegation:granted:officer:cleo");
-        append_event(&mut store, &format!("delegation:granted:{}", "a".repeat(64)));
+        append_event(
+            &mut store,
+            &format!("delegation:granted:{}", "a".repeat(64)),
+        );
 
         let chain = ChainReader::new(&store);
         let all = delegation_events(&chain, DelegationKind::Granted, 100).unwrap();
@@ -943,12 +936,10 @@ mod tests {
 
         let chain = ChainReader::new(&store);
         let started =
-            system_lifecycle_events(&chain, SystemLifecycleKind::ServerStarted, 100)
-                .unwrap();
+            system_lifecycle_events(&chain, SystemLifecycleKind::ServerStarted, 100).unwrap();
         assert_eq!(started.len(), 1);
         let stopped =
-            system_lifecycle_events(&chain, SystemLifecycleKind::ServerStopped, 100)
-                .unwrap();
+            system_lifecycle_events(&chain, SystemLifecycleKind::ServerStopped, 100).unwrap();
         assert_eq!(stopped.len(), 1);
     }
 
@@ -960,18 +951,63 @@ mod tests {
         // newest-first order (verified by other tests in this module),
         // so we check by set membership rather than index alignment.
         let cases: &[(ToolLifecycleKind, &str, &str, &str)] = &[
-            (ToolLifecycleKind::Configured, "tool:configured:", "alpha", "alpha"),
-            (ToolLifecycleKind::PortAssigned, "tool:port:assigned:", "beta:8080", "beta"),
-            (ToolLifecycleKind::PreflightPassed, "tool:preflight:passed:", "gamma", "gamma"),
-            (ToolLifecycleKind::PreflightFailed, "tool:preflight:failed:", "delta", "delta"),
+            (
+                ToolLifecycleKind::Configured,
+                "tool:configured:",
+                "alpha",
+                "alpha",
+            ),
+            (
+                ToolLifecycleKind::PortAssigned,
+                "tool:port:assigned:",
+                "beta:8080",
+                "beta",
+            ),
+            (
+                ToolLifecycleKind::PreflightPassed,
+                "tool:preflight:passed:",
+                "gamma",
+                "gamma",
+            ),
+            (
+                ToolLifecycleKind::PreflightFailed,
+                "tool:preflight:failed:",
+                "delta",
+                "delta",
+            ),
             (ToolLifecycleKind::Launched, "tool:launched:", "eps", "eps"),
             (ToolLifecycleKind::Started, "tool:started:", "zeta", "zeta"),
-            (ToolLifecycleKind::Restarted, "tool:restarted:", "eta", "eta"),
-            (ToolLifecycleKind::Stopped, "tool:stopped:", "theta", "theta"),
+            (
+                ToolLifecycleKind::Restarted,
+                "tool:restarted:",
+                "eta",
+                "eta",
+            ),
+            (
+                ToolLifecycleKind::Stopped,
+                "tool:stopped:",
+                "theta",
+                "theta",
+            ),
             (ToolLifecycleKind::Failed, "tool:failed:", "iota", "iota"),
-            (ToolLifecycleKind::LaunchFailed, "tool:launch_failed:", "kappa", "kappa"),
-            (ToolLifecycleKind::HealthUp, "tool:health:up:", "lambda", "lambda"),
-            (ToolLifecycleKind::HealthDown, "tool:health:down:", "mu", "mu"),
+            (
+                ToolLifecycleKind::LaunchFailed,
+                "tool:launch_failed:",
+                "kappa",
+                "kappa",
+            ),
+            (
+                ToolLifecycleKind::HealthUp,
+                "tool:health:up:",
+                "lambda",
+                "lambda",
+            ),
+            (
+                ToolLifecycleKind::HealthDown,
+                "tool:health:down:",
+                "mu",
+                "mu",
+            ),
         ];
         let mut store = appending_store();
         for (_, prefix, suffix, _) in cases {
@@ -1173,7 +1209,10 @@ mod tests {
             .iter()
             .filter(|e| is_system_startup_event(e))
             .count();
-        assert_eq!(startup_count, 3, "system:startup + longer form + server:started");
+        assert_eq!(
+            startup_count, 3,
+            "system:startup + longer form + server:started"
+        );
         let shutdown_count = entries
             .iter()
             .filter(|e| is_system_shutdown_event(e))

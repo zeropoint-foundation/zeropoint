@@ -12,8 +12,12 @@ struct ConfigureParams {
     proxy_port: u16,
     scan_path: Option<String>,
 }
-fn default_proxy() -> bool { true }
-fn default_proxy_port() -> u16 { 17770 }
+fn default_proxy() -> bool {
+    true
+}
+fn default_proxy_port() -> u16 {
+    17770
+}
 
 /// Configure discovered tools by invoking `zp configure auto`.
 ///
@@ -27,8 +31,8 @@ pub async fn handle_configure(
     let mut events = Vec::new();
 
     // Phase 2.8 (P2-4): typed parameter extraction
-    let params: ConfigureParams = serde_json::from_value(action.params.clone())
-        .unwrap_or(ConfigureParams {
+    let params: ConfigureParams =
+        serde_json::from_value(action.params.clone()).unwrap_or(ConfigureParams {
             proxy: default_proxy(),
             proxy_port: default_proxy_port(),
             scan_path: None,
@@ -39,7 +43,8 @@ pub async fn handle_configure(
 
     // Determine scan path — prefer what the user set in Step 5,
     // fall back to ~/projects, then accept an override from the action.
-    let scan_path = params.scan_path
+    let scan_path = params
+        .scan_path
         .or_else(|| state.scan_path.clone())
         .unwrap_or_else(|| "~/projects".to_string());
 

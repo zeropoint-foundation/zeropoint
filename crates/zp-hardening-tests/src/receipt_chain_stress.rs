@@ -102,7 +102,10 @@ async fn stress_chain_head_advances_on_gate_activity() {
     let (_, head1) = app.get_authed("/api/v1/audit/chain-head", &token).await;
     let hash1 = head1["latest_hash"].as_str().unwrap_or("").to_string();
 
-    assert!(!hash1.is_empty(), "chain head must be non-empty after a gate call");
+    assert!(
+        !hash1.is_empty(),
+        "chain head must be non-empty after a gate call"
+    );
     assert_ne!(hash0, hash1, "chain head must advance after a gate call");
 }
 
@@ -190,7 +193,11 @@ async fn stress_claim4_http_lifecycle_grant_allow_deny() {
             &token,
         )
         .await;
-    assert_eq!(status, StatusCode::OK, "narrow grant must succeed: {grant_resp}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "narrow grant must succeed: {grant_resp}"
+    );
 
     // The gate's prereq check walks the audit chain for delegation:granted receipts.
     // "bash" is in scope → allowed.
@@ -250,7 +257,10 @@ async fn stress_unknown_agent_denied_and_chained() {
         .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["allowed"], false, "unknown agent must be denied: {body}");
+    assert_eq!(
+        body["allowed"], false,
+        "unknown agent must be denied: {body}"
+    );
     assert_eq!(body["reason"], "no_valid_delegation");
     assert!(
         body["chain_entry_hash"].is_string(),

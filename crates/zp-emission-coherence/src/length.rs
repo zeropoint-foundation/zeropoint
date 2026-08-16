@@ -106,7 +106,9 @@ mod tests {
 
     #[test]
     fn healthy_variable_window_no_flag() {
-        let lengths: Vec<usize> = vec![40, 78, 120, 45, 89, 200, 55, 92, 130, 60, 88, 165, 44, 77, 110, 92, 130, 44, 68, 100];
+        let lengths: Vec<usize> = vec![
+            40, 78, 120, 45, 89, 200, 55, 92, 130, 60, 88, 165, 44, 77, 110, 92, 130, 44, 68, 100,
+        ];
         assert!(length_distribution_collapse(&window(&lengths), 0.15, 20).is_none());
     }
 

@@ -86,7 +86,10 @@ impl EventStreamItem {
 }
 
 /// Create a new broadcast channel pair for event streaming.
-pub fn event_channel() -> (broadcast::Sender<EventStreamItem>, broadcast::Receiver<EventStreamItem>) {
+pub fn event_channel() -> (
+    broadcast::Sender<EventStreamItem>,
+    broadcast::Receiver<EventStreamItem>,
+) {
     broadcast::channel(EVENT_CHANNEL_CAPACITY)
 }
 

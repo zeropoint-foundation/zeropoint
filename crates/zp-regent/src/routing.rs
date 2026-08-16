@@ -14,7 +14,6 @@ use tracing::{debug, info, warn};
 
 use crate::context::SystemAwareness;
 
-
 // ─── Intent categories ────────────────────────────────────────────
 
 /// Why the Regent is calling inference — maps to capability requirements.
@@ -303,38 +302,44 @@ impl DossierCorpus {
 
     /// Parse a single model_dossier.toml into a ModelDossier.
     fn parse_dossier(path: &Path) -> Result<ModelDossier, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("read error: {}", e))?;
+        let content = std::fs::read_to_string(path).map_err(|e| format!("read error: {}", e))?;
         let table: toml::Table = content
             .parse()
             .map_err(|e| format!("TOML parse error: {}", e))?;
 
         // Extract identity.
-        let identity = table.get("identity")
+        let identity = table
+            .get("identity")
             .and_then(|v| v.as_table())
             .ok_or("missing [identity] section")?;
 
-        let family = identity.get("family")
+        let family = identity
+            .get("family")
             .and_then(|v| v.as_str())
             .ok_or("missing identity.family")?
             .to_string();
 
-        let primary_variant = identity.get("variant_primary")
+        let primary_variant = identity
+            .get("variant_primary")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 
-        let variants: Vec<String> = identity.get("variants_tested")
+        let variants: Vec<String> = identity
+            .get("variants_tested")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         // Check if cloud-only.
-        let cloud_only = identity.get("cloud")
-            .and_then(|v| v.as_table())
-            .is_some();
+        let cloud_only = identity.get("cloud").and_then(|v| v.as_table()).is_some();
 
-        let cloud_model_id = identity.get("cloud")
+        let cloud_model_id = identity
+            .get("cloud")
             .and_then(|v| v.as_table())
             .and_then(|c| c.get("abacus_model_id"))
             .and_then(|v| v.as_str())
@@ -381,14 +386,8 @@ impl DossierCorpus {
                     .and_then(|v| v.as_str())
                     .unwrap_or(&primary_variant)
                     .to_string(),
-                mean: t
-                    .get("mean")
-                    .and_then(|v| v.as_float())
-                    .unwrap_or(0.0),
-                std_dev: t
-                    .get("std_dev")
-                    .and_then(|v| v.as_float())
-                    .unwrap_or(0.0),
+                mean: t.get("mean").and_then(|v| v.as_float()).unwrap_or(0.0),
+                std_dev: t.get("std_dev").and_then(|v| v.as_float()).unwrap_or(0.0),
                 battery_prompt_count: t
                     .get("battery_prompt_count")
                     .and_then(|v| v.as_integer())
@@ -427,9 +426,7 @@ impl DossierCorpus {
     /// dossiers without a baseline section are silently ignored.
     ///
     /// Returned map fits `AnalyzerConfig.entropy_baselines` directly.
-    pub fn entropy_baselines(
-        &self,
-    ) -> HashMap<String, zp_emission_coherence::EntropyBaseline> {
+    pub fn entropy_baselines(&self) -> HashMap<String, zp_emission_coherence::EntropyBaseline> {
         let mut out = HashMap::new();
         for (family, dossier) in &self.dossiers {
             let Some(spec) = &dossier.entropy_baseline else {
@@ -595,7 +592,11 @@ impl Router {
             .collect();
 
         // Sort by score descending.
-        candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Winner is the highest-scored candidate.
         let winner = &candidates[0];
@@ -812,7 +813,10 @@ mod tests {
         let config = test_config();
         let decision = Router::route(&IntentCategory::Conversation, &corpus, None, &config);
         // gemma4 is blocked for reasoning — should not appear
-        assert!(!decision.alternatives_rejected.iter().any(|r| r.contains("gemma4")));
+        assert!(!decision
+            .alternatives_rejected
+            .iter()
+            .any(|r| r.contains("gemma4")));
         assert_ne!(decision.model, "gemma4:26b-mlx");
     }
 

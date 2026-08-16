@@ -62,9 +62,7 @@ const PRODUCTION_KEY_PATH: &str = "system/regent/inference/api_key";
 const SECRET: &[u8] = b"sk-abacus-TESTONLY-4f3a91c2e8b7d60514a2";
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack
-        .windows(needle.len())
-        .any(|w| w == needle)
+    haystack.windows(needle.len()).any(|w| w == needle)
 }
 
 #[test]
@@ -108,18 +106,14 @@ fn vault_round_trips_a_secret_through_the_production_seam() {
 
     // Store and persist, as `spawn_regent`'s migration does.
     {
-        let mut vault = CredentialVault::load_or_create(&key, &vault_path)
-            .expect("load_or_create");
+        let mut vault = CredentialVault::load_or_create(&key, &vault_path).expect("load_or_create");
         vault
             .store_tiered(PRODUCTION_KEY_PATH, SECRET, VaultTier::System)
             .expect("store_tiered");
         vault.save(&vault_path).expect("save");
     }
 
-    assert!(
-        vault_path.exists(),
-        "save() must create the vault file"
-    );
+    assert!(vault_path.exists(), "save() must create the vault file");
 
     // (3) The secret must not be readable from the file.
     let on_disk = std::fs::read(&vault_path).expect("read vault file");
@@ -128,22 +122,15 @@ fn vault_round_trips_a_secret_through_the_production_seam() {
         "plaintext secret found in the vault file — encryption at rest is not \
          in effect"
     );
-    assert!(
-        !on_disk.is_empty(),
-        "vault file exists but is empty"
-    );
+    assert!(!on_disk.is_empty(), "vault file exists but is empty");
 
     // (4) Survives a process boundary: fresh instance, loaded from disk.
     {
-        let vault = CredentialVault::load_or_create(&key, &vault_path)
-            .expect("reload from disk");
+        let vault = CredentialVault::load_or_create(&key, &vault_path).expect("reload from disk");
         let retrieved = vault
             .retrieve(PRODUCTION_KEY_PATH)
             .expect("retrieve after reload");
-        assert_eq!(
-            retrieved, SECRET,
-            "secret did not survive save/load"
-        );
+        assert_eq!(retrieved, SECRET, "secret did not survive save/load");
         assert_eq!(
             vault.list(),
             vec![PRODUCTION_KEY_PATH.to_string()],

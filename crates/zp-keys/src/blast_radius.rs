@@ -161,12 +161,7 @@ impl BlastRadiusTracker {
     }
 
     /// Register a delegation from parent key to child key.
-    pub fn register_delegation(
-        &mut self,
-        parent_key: &str,
-        child_key: &str,
-        delegation_id: &str,
-    ) {
+    pub fn register_delegation(&mut self, parent_key: &str, child_key: &str, delegation_id: &str) {
         self.delegation_graph
             .entry(parent_key.to_string())
             .or_default()
@@ -200,7 +195,11 @@ impl BlastRadiusTracker {
         let mut affected_delegations = Vec::new();
         affected_keys.insert(compromised_key.to_string());
 
-        self.walk_delegations(compromised_key, &mut affected_keys, &mut affected_delegations);
+        self.walk_delegations(
+            compromised_key,
+            &mut affected_keys,
+            &mut affected_delegations,
+        );
 
         // Step 2: Collect all receipts signed by any affected key.
         let mut signed_receipts = Vec::new();
@@ -296,10 +295,7 @@ impl BlastRadiusTracker {
 
     /// Get all receipt IDs signed by a specific key (direct, non-transitive).
     pub fn receipts_by_key(&self, key: &str) -> Vec<String> {
-        self.key_to_receipts
-            .get(key)
-            .cloned()
-            .unwrap_or_default()
+        self.key_to_receipts.get(key).cloned().unwrap_or_default()
     }
 
     /// Get all direct delegations from a key.

@@ -146,9 +146,7 @@ mod tests {
 
         // Sanity: a different hash must NOT verify under the same sig.
         let wrong_hash = hex::decode("ff".repeat(32)).unwrap();
-        assert!(
-            zp_receipt::verify::verify_signature(&pk_array, &wrong_hash, &sig_array).is_err()
-        );
+        assert!(zp_receipt::verify::verify_signature(&pk_array, &wrong_hash, &sig_array).is_err());
     }
 
     #[test]

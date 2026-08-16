@@ -78,11 +78,7 @@ fn chain_integrity_signed_entries_verify_clean() {
         report.signature_failures, 0,
         "No signature should have failed"
     );
-    assert_eq!(
-        report.error_count(),
-        0,
-        "No error-level findings expected"
-    );
+    assert_eq!(report.error_count(), 0, "No error-level findings expected");
 }
 
 /// An unsigned store (entries have no `entry.signatures`) must still pass
@@ -99,7 +95,9 @@ fn chain_integrity_unsigned_store_passes_structural_rules() {
     let mut store = AuditStore::open_unsigned(&db).expect("open_unsigned");
 
     for i in 0..3 {
-        store.append(test_entry(&format!("unsigned-{i}"))).expect("append");
+        store
+            .append(test_entry(&format!("unsigned-{i}")))
+            .expect("append");
     }
 
     let report = store.verify_with_catalog().expect("verify_with_catalog");

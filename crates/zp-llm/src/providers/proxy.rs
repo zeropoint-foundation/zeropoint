@@ -5,9 +5,7 @@
 //! canonical substrate-side provider — use it instead of the direct
 //! AnthropicProvider or any other cloud provider implementation.
 
-use crate::provider::{
-    CompletionRequest, CompletionResponse, LlmProvider, Usage,
-};
+use crate::provider::{CompletionRequest, CompletionResponse, LlmProvider, Usage};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -118,10 +116,7 @@ impl ProxyLlmProvider {
     /// reconstructs from the live request. It is derived once here so the
     /// signed path and the requested path cannot diverge.
     fn proxy_path(&self) -> String {
-        format!(
-            "/api/v1/proxy/{}/v1/chat/completions",
-            self.provider_id
-        )
+        format!("/api/v1/proxy/{}/v1/chat/completions", self.provider_id)
     }
 
     fn proxy_url(&self) -> String {
@@ -311,9 +306,7 @@ impl LlmProvider for ProxyLlmProvider {
             }
         })?;
 
-        let mut req = client
-            .post(&url)
-            .header("content-type", "application/json");
+        let mut req = client.post(&url).header("content-type", "application/json");
 
         // Fail closed: if no credential can be produced we still send the
         // request, unauthenticated, and let the gate reject it. Skipping the
@@ -327,17 +320,13 @@ impl LlmProvider for ProxyLlmProvider {
             ),
         }
 
-        let resp = req
-            .body(body_bytes)
-            .send()
-            .await
-            .map_err(|e| {
-                error!(url = %url, error = %e, "ProxyLlmProvider: request failed");
-                ZpError::ProviderError {
-                    provider: self.id.0.clone(),
-                    message: format!("Proxy request failed: {}", e),
-                }
-            })?;
+        let resp = req.body(body_bytes).send().await.map_err(|e| {
+            error!(url = %url, error = %e, "ProxyLlmProvider: request failed");
+            ZpError::ProviderError {
+                provider: self.id.0.clone(),
+                message: format!("Proxy request failed: {}", e),
+            }
+        })?;
 
         let cost_usd = resp
             .headers()
@@ -490,6 +479,8 @@ mod tests {
     #[test]
     fn absent_credential_yields_no_header() {
         let signer: Arc<dyn RequestSigner> = Arc::new(SilentSigner);
-        assert!(signer.authorization("POST", "/api/v1/proxy/ollama/v1/chat/completions", b"{}").is_none());
+        assert!(signer
+            .authorization("POST", "/api/v1/proxy/ollama/v1/chat/completions", b"{}")
+            .is_none());
     }
 }

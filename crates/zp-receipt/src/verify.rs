@@ -68,7 +68,10 @@ impl std::fmt::Display for VerifyError {
             VerifyError::InvalidPublicKey => write!(f, "invalid Ed25519 public key bytes"),
             VerifyError::InvalidSignature => write!(f, "invalid Ed25519 signature bytes"),
             VerifyError::Mismatch => {
-                write!(f, "signature does not verify against the supplied public key")
+                write!(
+                    f,
+                    "signature does not verify against the supplied public key"
+                )
             }
         }
     }

@@ -155,7 +155,6 @@ pub struct CapabilityGrant {
     pub renews: Option<String>,
 
     // --- Officer cadre gap-closing fields ----------------------------------
-
     /// What kind of entity holds this grant (operator, officer, agent,
     /// external tool). Identity is always a key (Principle 2), but knowing
     /// the *kind* behind the key lets Sentinel scope audit queries and lets
@@ -290,7 +289,6 @@ pub enum RedelegationPolicy {
     RequiresApproval,
 }
 
-
 fn default_max_delegation_depth() -> u8 {
     3
 }
@@ -368,10 +366,7 @@ impl CapabilityGrant {
         capability: GrantedCapability,
     ) -> (Self, zp_receipt::Receipt) {
         let scope = format!("{:?}", capability);
-        let receipt = crate::receipt_emission::emit_authorization_receipt(
-            &grantor,
-            &scope,
-        );
+        let receipt = crate::receipt_emission::emit_authorization_receipt(&grantor, &scope);
         let grant = Self::new(grantor, grantee, capability, receipt.id.clone());
         (grant, receipt)
     }
@@ -1571,10 +1566,7 @@ pub fn reserved_class(capability: &GrantedCapability) -> Option<ReservedReason> 
 /// Table lookup, split out so it is testable against a non-empty table while
 /// `RESERVED_CAPABILITY_NAMES` is still empty. Without this split, step 1
 /// would ship an enforcement path with no executable test behind it.
-fn lookup_reserved(
-    name: &str,
-    table: &[(&str, ReservedReason)],
-) -> Option<ReservedReason> {
+fn lookup_reserved(name: &str, table: &[(&str, ReservedReason)]) -> Option<ReservedReason> {
     table
         .iter()
         .find(|(reserved_name, _)| *reserved_name == name)
@@ -1714,7 +1706,10 @@ impl std::fmt::Display for IssuanceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IssuanceError::MissingProvenance => {
-                write!(f, "grant has no issued_via provenance — cannot verify origin")
+                write!(
+                    f,
+                    "grant has no issued_via provenance — cannot verify origin"
+                )
             }
             IssuanceError::ExternalOnInternalCapability {
                 capability,
@@ -3048,9 +3043,9 @@ mod tests {
         )
         .with_max_delegation_depth(3)
         .with_lease_policy(crate::lease::LeasePolicy::standard_8h())
-        .with_renewal_authorities(vec![
-            crate::authority_ref::AuthorityRef::genesis("lease_renewal"),
-        ])
+        .with_renewal_authorities(vec![crate::authority_ref::AuthorityRef::genesis(
+            "lease_renewal",
+        )])
         .with_redelegation_policy(RedelegationPolicy::Allowed {
             max_subtree_depth: 2,
         });
@@ -3448,9 +3443,7 @@ mod tests {
         assert!(!ReservedReason::Probe.is_spec_member());
         assert!(ReservedReason::GenesisSignature.is_spec_member());
 
-        assert!(ReservedReason::GenesisSignature
-            .to_string()
-            .contains("N1"));
+        assert!(ReservedReason::GenesisSignature.to_string().contains("N1"));
     }
 
     /// `satisfiable_actions` and `matches_action` must not be able to disagree.
@@ -3491,10 +3484,14 @@ mod tests {
             GrantedCapability::Read { scope: star() },
             GrantedCapability::Write { scope: star() },
             GrantedCapability::Execute { languages: star() },
-            GrantedCapability::CredentialAccess { credential_refs: star() },
+            GrantedCapability::CredentialAccess {
+                credential_refs: star(),
+            },
             GrantedCapability::ApiCall { endpoints: star() },
             GrantedCapability::ConfigChange { settings: star() },
-            GrantedCapability::MeshSend { destinations: star() },
+            GrantedCapability::MeshSend {
+                destinations: star(),
+            },
             GrantedCapability::Custom {
                 name: "anything".to_string(),
                 parameters: serde_json::Value::Null,
@@ -3507,17 +3504,31 @@ mod tests {
         // `action_kind`'s exhaustive match and by `no_unsampled_kinds` below.
         let actions = vec![
             ActionType::Chat,
-            ActionType::Read { target: "anything".to_string() },
-            ActionType::Write { target: "anything".to_string() },
-            ActionType::ApiCall { endpoint: "https://anything".to_string() },
-            ActionType::Execute { language: "python".to_string() },
+            ActionType::Read {
+                target: "anything".to_string(),
+            },
+            ActionType::Write {
+                target: "anything".to_string(),
+            },
+            ActionType::ApiCall {
+                endpoint: "https://anything".to_string(),
+            },
+            ActionType::Execute {
+                language: "python".to_string(),
+            },
             ActionType::FileOp {
                 op: FileOperation::Read,
                 path: "anything".to_string(),
             },
-            ActionType::CredentialAccess { credential_ref: "anything".to_string() },
-            ActionType::ConfigChange { setting: "anything".to_string() },
-            ActionType::ToolCall { name: "anything".to_string() },
+            ActionType::CredentialAccess {
+                credential_ref: "anything".to_string(),
+            },
+            ActionType::ConfigChange {
+                setting: "anything".to_string(),
+            },
+            ActionType::ToolCall {
+                name: "anything".to_string(),
+            },
         ];
 
         for capability in &capabilities {

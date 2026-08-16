@@ -37,12 +37,12 @@ use tracing::{debug, error, info, warn};
 
 use zp_audit::{AppendNotifier, AuditStore};
 use zp_core::{ActorId, AuditAction, AuditEntry};
+use zp_ontology::boundary::extract_event_prefix;
 use zp_ontology::{
     canonicalize_boundary_signals, derive_trajectory_id, evaluate_boundary, BoundaryConfig,
     BoundaryDecision, BoundaryInput, OntologyStore, Trajectory, TrajectoryContext,
     TrajectoryStatus,
 };
-use zp_ontology::boundary::extract_event_prefix;
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -140,7 +140,10 @@ pub fn spawn_cartographer_task(
             }
         };
 
-        let starting_hwm = ontology.last_processed_sequence().unwrap_or(None).unwrap_or(0);
+        let starting_hwm = ontology
+            .last_processed_sequence()
+            .unwrap_or(None)
+            .unwrap_or(0);
         info!(
             last_processed_sequence = starting_hwm,
             "Cartographer starting"
@@ -163,7 +166,10 @@ pub fn spawn_cartographer_task(
         // ── Steady state: consume notifier channel ────────────────────────
         info!("Cartographer entering steady-state loop");
         while let Some(sequence) = rx.recv().await {
-            let expected_hwm = ontology.last_processed_sequence().unwrap_or(None).unwrap_or(0);
+            let expected_hwm = ontology
+                .last_processed_sequence()
+                .unwrap_or(None)
+                .unwrap_or(0);
             if sequence <= expected_hwm {
                 // Already processed (catchup covered it) — skip.
                 continue;
@@ -293,15 +299,18 @@ fn process_entry(
             // a synthetic "cold_start" signals marker so the derived ID is
             // stable across rebuilds — same first-receipt always produces
             // the same first-trajectory ID.
-            let cold_start_signals =
-                r#"{"conversation":0.0000,"time_gap":0.0000,"explicit_marker":null,"cold_start":true}"#;
+            let cold_start_signals = r#"{"conversation":0.0000,"time_gap":0.0000,"explicit_marker":null,"cold_start":true}"#;
             create_new_trajectory(ontology, &input, entry, 1.0, cold_start_signals)?;
         }
         Some(traj) => {
             let ctx = trajectory_context_from(&traj);
             let decision = evaluate_boundary(&input, &ctx, boundary_config);
             match decision {
-                BoundaryDecision::NewTrajectory { confidence, signals, reason: _ } => {
+                BoundaryDecision::NewTrajectory {
+                    confidence,
+                    signals,
+                    reason: _,
+                } => {
                     debug!(
                         prior_traj = %traj.id.to_hex(),
                         new_confidence = confidence,
@@ -310,7 +319,10 @@ fn process_entry(
                     let signals_json = canonicalize_boundary_signals(&signals);
                     create_new_trajectory(ontology, &input, entry, confidence, &signals_json)?;
                 }
-                BoundaryDecision::ContinueTrajectory { confidence: _, signals: _ } => {
+                BoundaryDecision::ContinueTrajectory {
+                    confidence: _,
+                    signals: _,
+                } => {
                     // Extend the current trajectory: update last_active,
                     // append receipt_refs, update boundary-detection state,
                     // link receipt row.

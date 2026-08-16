@@ -98,8 +98,12 @@ struct AbacusModelsResponse {
 
 #[async_trait]
 impl PricingFetcher for AbacusFetcher {
-    fn provider_id(&self) -> &str { "abacus" }
-    fn source_url(&self) -> &str { ABACUS_MODELS_URL }
+    fn provider_id(&self) -> &str {
+        "abacus"
+    }
+    fn source_url(&self) -> &str {
+        ABACUS_MODELS_URL
+    }
 
     async fn fetch(&self, api_key: &str) -> Result<Vec<PricingUpdate>, String> {
         let client = reqwest::Client::new();
@@ -237,10 +241,9 @@ pub async fn refresh_hosts(
                         }
 
                         profile.pricing_verified_at = Some(now.clone());
-                        profile.pricing_source =
-                            crate::providers::PricingSource::Fetch {
-                                source_url: update.source_url.clone(),
-                            };
+                        profile.pricing_source = crate::providers::PricingSource::Fetch {
+                            source_url: update.source_url.clone(),
+                        };
 
                         if changed {
                             changed_count += 1;

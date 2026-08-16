@@ -130,10 +130,9 @@ impl ConfigResolver {
         }
         if let Ok(v) = std::env::var("ZP_OFFICERS_SWEEP_INTERVAL") {
             if let Ok(secs) = v.parse::<u64>() {
-                self.config.officers_sweep_interval_secs.override_with(
-                    secs,
-                    Source::EnvVar("ZP_OFFICERS_SWEEP_INTERVAL".into()),
-                );
+                self.config
+                    .officers_sweep_interval_secs
+                    .override_with(secs, Source::EnvVar("ZP_OFFICERS_SWEEP_INTERVAL".into()));
             }
         }
         self
@@ -259,50 +258,78 @@ impl ConfigResolver {
         }
         // Officers
         if let Some(v) = file.officers.enabled {
-            self.config.officers_enabled.override_with(v, source.clone());
+            self.config
+                .officers_enabled
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.officers.sweep_interval_secs {
-            self.config.officers_sweep_interval_secs.override_with(v, source.clone());
+            self.config
+                .officers_sweep_interval_secs
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.officers.steward_enabled {
-            self.config.officers_steward_enabled.override_with(v, source.clone());
+            self.config
+                .officers_steward_enabled
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.officers.sentinel_enabled {
-            self.config.officers_sentinel_enabled.override_with(v, source.clone());
+            self.config
+                .officers_sentinel_enabled
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.officers.forge_enabled {
-            self.config.officers_forge_enabled.override_with(v, source.clone());
+            self.config
+                .officers_forge_enabled
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.officers.cleo_enabled {
-            self.config.officers_cleo_enabled.override_with(v, source.clone());
+            self.config
+                .officers_cleo_enabled
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.officers.aegis_enabled {
-            self.config.officers_aegis_enabled.override_with(v, source.clone());
+            self.config
+                .officers_aegis_enabled
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.officers.acknowledged_listeners {
-            self.config.acknowledged_listeners.override_with(v, source.clone());
+            self.config
+                .acknowledged_listeners
+                .override_with(v, source.clone());
         }
         // Regent
         if let Some(v) = file.regent.enabled {
             self.config.regent_enabled.override_with(v, source.clone());
         }
         if let Some(v) = file.regent.inference_endpoint {
-            self.config.regent_inference_endpoint.override_with(v, source.clone());
+            self.config
+                .regent_inference_endpoint
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.regent.inference_api_key {
-            self.config.regent_inference_api_key.override_with(Some(v), source.clone());
+            self.config
+                .regent_inference_api_key
+                .override_with(Some(v), source.clone());
         }
         if let Some(v) = file.regent.reasoning_model {
-            self.config.regent_reasoning_model.override_with(v, source.clone());
+            self.config
+                .regent_reasoning_model
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.regent.routing_model {
-            self.config.regent_routing_model.override_with(v, source.clone());
+            self.config
+                .regent_routing_model
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.regent.loop_interval_secs {
-            self.config.regent_loop_interval_secs.override_with(v, source.clone());
+            self.config
+                .regent_loop_interval_secs
+                .override_with(v, source.clone());
         }
         if let Some(v) = file.regent.display_name {
-            self.config.regent_display_name.override_with(v, source.clone());
+            self.config
+                .regent_display_name
+                .override_with(v, source.clone());
         }
     }
 }
@@ -527,7 +554,6 @@ fn parse_bool(s: &str) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn unknown_section_rejected() {
@@ -558,6 +584,10 @@ bind = "127.0.0.1"
 operator = "testuser"
 "#;
         let result: Result<crate::schema::ConfigFile, _> = toml::from_str(toml);
-        assert!(result.is_ok(), "valid config must parse: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "valid config must parse: {:?}",
+            result.err()
+        );
     }
 }

@@ -67,10 +67,7 @@ impl ObjectId {
 /// Callers are responsible for ensuring canonical form (sorted keys,
 /// consistent float precision) — helper `canonicalize_boundary_signals`
 /// provided in `boundary` module.
-pub fn derive_trajectory_id(
-    first_receipt_hash: &str,
-    boundary_signals_json: &str,
-) -> ObjectId {
+pub fn derive_trajectory_id(first_receipt_hash: &str, boundary_signals_json: &str) -> ObjectId {
     let mut input = Vec::with_capacity(64 + first_receipt_hash.len() + boundary_signals_json.len());
     input.extend_from_slice(b"trajectory:");
     input.extend_from_slice(first_receipt_hash.as_bytes());

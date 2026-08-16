@@ -183,11 +183,8 @@ pub(crate) async fn proxy_inner(
         .query()
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
-    let target_url = zp_net::peer_url_with_path(
-        "127.0.0.1",
-        target_port,
-        &format!("/{}{}", path, query),
-    );
+    let target_url =
+        zp_net::peer_url_with_path("127.0.0.1", target_port, &format!("/{}{}", path, query));
 
     debug!("Proxy: {} → {}", tool_name, target_url);
 
@@ -216,32 +213,43 @@ pub(crate) async fn proxy_inner(
     }
     fwd_headers.push(("X-ZeroPoint-Governed".to_string(), "true".to_string()));
     fwd_headers.push(("X-ZeroPoint-Tool".to_string(), tool_name.to_string()));
-    fwd_headers.push(("Authorization".to_string(), format!("Bearer {}", assignment.auth_token)));
+    fwd_headers.push((
+        "Authorization".to_string(),
+        format!("Bearer {}", assignment.auth_token),
+    ));
 
     let body_bytes = axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024)
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let http_method = match &method {
-        m if m == axum::http::Method::GET     => zp_host::HttpMethod::Get,
-        m if m == axum::http::Method::POST    => zp_host::HttpMethod::Post,
-        m if m == axum::http::Method::PUT     => zp_host::HttpMethod::Put,
-        m if m == axum::http::Method::DELETE  => zp_host::HttpMethod::Delete,
-        m if m == axum::http::Method::PATCH   => zp_host::HttpMethod::Patch,
-        m if m == axum::http::Method::HEAD    => zp_host::HttpMethod::Head,
+        m if m == axum::http::Method::GET => zp_host::HttpMethod::Get,
+        m if m == axum::http::Method::POST => zp_host::HttpMethod::Post,
+        m if m == axum::http::Method::PUT => zp_host::HttpMethod::Put,
+        m if m == axum::http::Method::DELETE => zp_host::HttpMethod::Delete,
+        m if m == axum::http::Method::PATCH => zp_host::HttpMethod::Patch,
+        m if m == axum::http::Method::HEAD => zp_host::HttpMethod::Head,
         m if m == axum::http::Method::OPTIONS => zp_host::HttpMethod::Options,
         _ => zp_host::HttpMethod::Post,
     };
 
     let http_req = if accepts_sse {
         zp_host::HttpRequest::for_streaming(
-            &target_url, http_method, fwd_headers, body_bytes.to_vec(),
-            "tool_proxy", format!("{}/{}", tool_name, path),
+            &target_url,
+            http_method,
+            fwd_headers,
+            body_bytes.to_vec(),
+            "tool_proxy",
+            format!("{}/{}", tool_name, path),
         )
     } else {
         zp_host::HttpRequest::new(
-            &target_url, http_method, fwd_headers, body_bytes.to_vec(),
-            "tool_proxy", format!("{}/{}", tool_name, path),
+            &target_url,
+            http_method,
+            fwd_headers,
+            body_bytes.to_vec(),
+            "tool_proxy",
+            format!("{}/{}", tool_name, path),
         )
     };
 
@@ -249,11 +257,17 @@ pub(crate) async fn proxy_inner(
     let resp = match state.0.host.http_request_streaming(http_req).await {
         Ok(r) => r,
         Err(zp_host::HostError::GateDenied { reason }) => {
-            return Ok((StatusCode::TOO_MANY_REQUESTS, format!("gate denied: {}", reason))
+            return Ok((
+                StatusCode::TOO_MANY_REQUESTS,
+                format!("gate denied: {}", reason),
+            )
                 .into_response());
         }
         Err(e) => {
-            warn!("Proxy: failed to reach {} at {}: {}", tool_name, target_url, e);
+            warn!(
+                "Proxy: failed to reach {} at {}: {}",
+                tool_name, target_url, e
+            );
             if sampler().should_emit(tool_name, HealthKind::Down) {
                 let event = events::for_tool(events::HEALTH_DOWN, tool_name);
                 let detail = format!("error={} target={}", e, target_url);
@@ -288,8 +302,7 @@ pub(crate) async fn proxy_inner(
     emit_traffic_receipt(state, tool_name, resp_status);
 
     // ── Build the axum response ──────────────────────────────────────
-    let status =
-        StatusCode::from_u16(resp_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let status = StatusCode::from_u16(resp_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
     // ── SSE streaming fast-path ──────────────────────────────────────
     let is_sse = resp

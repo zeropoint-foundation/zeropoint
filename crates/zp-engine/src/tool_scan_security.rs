@@ -189,7 +189,11 @@ pub fn scan_tool_with_context(
     }
     for param in &tool_def.parameters {
         let pname = &param.name;
-        scan_text_field(&format!("parameter:{}.name", pname), &param.name, &mut findings);
+        scan_text_field(
+            &format!("parameter:{}.name", pname),
+            &param.name,
+            &mut findings,
+        );
         if let Some(desc) = &param.description {
             let loc = format!("parameter:{}.description", pname);
             scan_text_field(&loc, desc, &mut findings);
@@ -205,8 +209,7 @@ pub fn scan_tool_with_context(
     scan_capability_escalation(tool_def, &mut findings);
 
     // F5 context: read declared reversibility from the tool dir, if any.
-    let reversibility =
-        tool_dir.map(crate::capability::reversibility_for_tool_dir);
+    let reversibility = tool_dir.map(crate::capability::reversibility_for_tool_dir);
 
     let mut verdict = derive_verdict(&findings);
 
@@ -215,7 +218,10 @@ pub fn scan_tool_with_context(
     // response to a finding that already exists. Critical findings
     // (already Blocked) are unaffected. Clean stays Clean.
     if matches!(verdict, ScanVerdict::Flagged)
-        && matches!(reversibility, Some(crate::capability::Reversibility::Irreversible))
+        && matches!(
+            reversibility,
+            Some(crate::capability::Reversibility::Irreversible)
+        )
     {
         verdict = ScanVerdict::Blocked;
     }
@@ -419,9 +425,7 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
         curr[0] = i;
         for j in 1..=n {
             let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
-            curr[j] = (curr[j - 1] + 1)
-                .min(prev[j] + 1)
-                .min(prev[j - 1] + cost);
+            curr[j] = (curr[j - 1] + 1).min(prev[j] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -434,9 +438,7 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
 
 /// Parameter names that imply arbitrary code or shell execution. A tool that
 /// asks for these without a name like `exec`/`shell` is structurally suspect.
-const DANGEROUS_PARAM_NAMES: &[&str] = &[
-    "command", "exec", "eval", "shell", "code", "script",
-];
+const DANGEROUS_PARAM_NAMES: &[&str] = &["command", "exec", "eval", "shell", "code", "script"];
 
 /// Verbs in tool names that imply read-only intent. If such a tool requests
 /// write/delete-shaped parameters, that's a semantics mismatch.
@@ -500,9 +502,8 @@ fn scan_capability_escalation(tool_def: &ToolDefinition, findings: &mut Vec<Scan
             .as_deref()
             .unwrap_or("")
             .to_ascii_lowercase();
-        let path_shaped = pname_lc.contains("path")
-            || pname_lc.contains("file")
-            || pname_lc.contains("dir");
+        let path_shaped =
+            pname_lc.contains("path") || pname_lc.contains("file") || pname_lc.contains("dir");
         let unrestricted = pdesc_lc.contains("anywhere")
             || pdesc_lc.contains("any path")
             || pdesc_lc.contains("absolute path")
@@ -571,11 +572,7 @@ pub fn scan_path(path: &Path, known_tools: &[String]) -> Vec<ScannedTool> {
         let tool_dir = find_nearest_tool_dir(&file);
         let defs = parse_tool_definitions(&value);
         for def in defs {
-            let result = scan_tool_with_context(
-                &def,
-                tool_dir.as_deref(),
-                known_tools,
-            );
+            let result = scan_tool_with_context(&def, tool_dir.as_deref(), known_tools);
             scanned.push(ScannedTool {
                 source_path: file.clone(),
                 result,
@@ -711,14 +708,11 @@ fn parse_parameters(v: &serde_json::Value) -> Vec<ToolParameter> {
                         .and_then(|t| t.as_str())
                         .unwrap_or("")
                         .to_string(),
-                    enum_values: p
-                        .get("enum")
-                        .and_then(|e| e.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|x| x.as_str().map(String::from))
-                                .collect()
-                        }),
+                    enum_values: p.get("enum").and_then(|e| e.as_array()).map(|arr| {
+                        arr.iter()
+                            .filter_map(|x| x.as_str().map(String::from))
+                            .collect()
+                    }),
                 })
             })
             .collect();

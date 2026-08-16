@@ -55,8 +55,7 @@ pub fn derive_node_role_with_hint(
         if config_role_hint == Some("delegate") {
             let upstream_addr = config_upstream.unwrap_or("").to_string();
             // Extract the genesis pubkey from the certificate for binding verification
-            let upstream_genesis_pubkey = extract_genesis_pubkey(&genesis_path)
-                .unwrap_or_default();
+            let upstream_genesis_pubkey = extract_genesis_pubkey(&genesis_path).unwrap_or_default();
             return NodeRole::Delegate {
                 upstream_addr,
                 upstream_genesis_pubkey,

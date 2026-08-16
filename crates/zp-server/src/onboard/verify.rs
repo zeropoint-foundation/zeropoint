@@ -83,8 +83,7 @@ pub async fn verify_tool_capabilities(
         tracing::info!("verify[{}]: Tier 1 — probing {}", tool_name, url);
 
         // P2-3: Issue a scoped internal token for this Tier 1 probe
-        let mut tier1_headers: std::collections::HashMap<String, String> =
-            Default::default();
+        let mut tier1_headers: std::collections::HashMap<String, String> = Default::default();
         if let Some(auth) = internal_auth {
             let token = auth.issue("verify:tier1", tool_name);
             tier1_headers.insert(

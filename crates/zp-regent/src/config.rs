@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 /// chain receipts) must never contain raw API key material. This enum
 /// records *where* the key is stored; the actual value is resolved at
 /// HTTP call time and immediately dropped.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum ApiKeySource {
     /// No API key — using Ollama or local inference.
     #[default]
@@ -43,7 +42,6 @@ impl ApiKeySource {
         }
     }
 }
-
 
 /// Regent cognitive configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]

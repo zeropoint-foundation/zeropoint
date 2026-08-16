@@ -83,9 +83,7 @@ fn heartbeat_error_response(err: HeartbeatError, node_id: &str) -> (StatusCode, 
 }
 
 /// GET /api/v1/fleet/nodes — list all fleet nodes.
-pub async fn fleet_nodes_handler(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<Value>) {
+pub async fn fleet_nodes_handler(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     let nodes = state.0.node_registry.list_nodes().await;
     (
         StatusCode::OK,
@@ -114,9 +112,7 @@ pub async fn fleet_node_detail_handler(
 }
 
 /// GET /api/v1/fleet/summary — fleet-wide status summary.
-pub async fn fleet_summary_handler(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<Value>) {
+pub async fn fleet_summary_handler(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     // Run a sweep first to update stale/offline status
     state.0.node_registry.sweep().await;
     let summary = state.0.node_registry.summary().await;
@@ -151,7 +147,10 @@ pub async fn fleet_policy_push_handler(
     // Broadcast as SSE event
     let item = crate::events::EventStreamItem::system(
         "policy_push",
-        format!("policy rollout {} initiated for {}", rollout_id, req.policy_version),
+        format!(
+            "policy rollout {} initiated for {}",
+            rollout_id, req.policy_version
+        ),
     );
     crate::events::broadcast_event(&state.0.event_tx, item);
 
@@ -165,9 +164,7 @@ pub async fn fleet_policy_push_handler(
 }
 
 /// GET /api/v1/fleet/policy/rollouts — list all rollout IDs.
-pub async fn fleet_rollouts_handler(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<Value>) {
+pub async fn fleet_rollouts_handler(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     let ids = state.0.policy_distributor.list_rollouts().await;
     (StatusCode::OK, Json(serde_json::json!({ "rollouts": ids })))
 }
@@ -177,7 +174,12 @@ pub async fn fleet_rollout_detail_handler(
     State(state): State<AppState>,
     Path(rollout_id): Path<String>,
 ) -> (StatusCode, Json<Value>) {
-    match state.0.policy_distributor.rollout_summary(&rollout_id).await {
+    match state
+        .0
+        .policy_distributor
+        .rollout_summary(&rollout_id)
+        .await
+    {
         Some(summary) => (
             StatusCode::OK,
             Json(serde_json::to_value(&summary).unwrap_or_default()),

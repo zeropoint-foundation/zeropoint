@@ -5,38 +5,38 @@
 
 pub mod analysis;
 pub mod anchor_pipeline;
-pub mod bedrock;
-pub mod cartographer;
 pub mod artifact_library;
-pub mod canary;
-pub mod coherence;
-pub mod officers;
-pub mod substrate_validate;
 pub mod attestations;
 pub mod auth;
-pub mod envelope_state;
-pub mod foundation_relay;
-pub mod lease_heartbeat;
+pub mod bedrock;
+pub mod canary;
+pub mod cartographer;
 pub mod channels;
 pub mod codebase;
 pub mod cognition;
+pub mod coherence;
+pub mod envelope_state;
 pub mod events;
-pub mod fleet;
-pub mod wasm_policy;
 pub mod exec_ws;
-pub mod internal_auth;
+pub mod fleet;
+pub mod foundation_relay;
 pub mod genesis_verify;
+pub mod internal_auth;
 pub mod launch_inference;
+pub mod lease_heartbeat;
+pub mod officers;
 pub mod onboard;
 pub mod proxy;
+pub mod regent;
+pub mod regent_tools;
 pub mod security;
+pub mod substrate_validate;
 pub mod tool_chain;
 pub mod tool_launch;
 pub mod tool_ports;
 pub mod tool_proxy;
 pub mod tool_state;
-pub mod regent;
-pub mod regent_tools;
+pub mod wasm_policy;
 
 /// gRPC service handlers — Phase 2b foothold (NodeStatus pilot).
 ///
@@ -46,9 +46,7 @@ pub mod grpc;
 
 use axum::http::HeaderValue;
 use axum::{
-    extract::{
-        Path as AxumPath, Query, State,
-    },
+    extract::{Path as AxumPath, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -64,15 +62,13 @@ use tower_http::services::ServeDir;
 use tracing::{debug, error, info, warn};
 
 use zp_audit::AuditStore;
+use zp_core::governance::{ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent};
+use zp_core::paths as zp_paths;
 use zp_core::{
     ActionType as CoreActionType, ActorId, CapabilityGrant, Channel, ConversationId,
     DelegationChain, EventProvenance, GrantProvenance, GrantedCapability, OperatorIdentity,
     PolicyContext, PolicyDecision, TrustTier,
 };
-use zp_core::governance::{
-    ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent,
-};
-use zp_core::paths as zp_paths;
 use zp_observation::{
     candidate_to_observation, event_to_observation, CognitionPipeline, ObservationConfig,
     ObservationStore,
@@ -135,8 +131,7 @@ impl Default for ServerConfig {
             .and_then(|p| p.parse().ok())
             .unwrap_or(3000);
         let bind = std::env::var("ZP_BIND").unwrap_or_else(|_| "127.0.0.1".to_string());
-        let home = zp_paths::home()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let home = zp_paths::home().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
         Self {
             bind_addr: bind,
@@ -149,8 +144,7 @@ impl Default for ServerConfig {
             // Defaults mirror zp_config::ZpConfig so this env-only path and the
             // resolved-config path agree. See officer-inference.toml for why
             // these two tags.
-            llm_provider: std::env::var("ZP_LLM_PROVIDER")
-                .unwrap_or_else(|_| "ollama".to_string()),
+            llm_provider: std::env::var("ZP_LLM_PROVIDER").unwrap_or_else(|_| "ollama".to_string()),
             llm_model: std::env::var("ZP_LLM_MODEL")
                 .unwrap_or_else(|_| "gemma4:26b-mlx".to_string()),
             llm_escalation_model: std::env::var("ZP_LLM_ESCALATION_MODEL")
@@ -375,7 +369,8 @@ fn load_operator_via_sovereignty_provider(
 fn load_genesis_secret_from_provider(
     genesis_record_path: &std::path::Path,
 ) -> Result<[u8; 32], String> {
-    zp_keys::load_sovereign_root(genesis_record_path).copied()
+    zp_keys::load_sovereign_root(genesis_record_path)
+        .copied()
         .map_err(|e| format!("{}", e))
 }
 
@@ -554,7 +549,8 @@ pub struct AppStateInner {
     pub sensor_handle: zp_sensors::SensorLayerHandle,
     /// Sensor event receiver — taken once by `spawn_sensor_forge_task`.
     /// `None` after first take; wrapped in Mutex for interior mutability.
-    pub sensor_event_rx: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<zp_sensors::SensorEvent>>>,
+    pub sensor_event_rx:
+        std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<zp_sensors::SensorEvent>>>,
     /// MLE STAR + Monte Carlo analysis engines fed by receipt chain data.
     pub analysis: analysis::AnalysisEngines,
     /// Server port — needed by proxy for subdomain URL generation.
@@ -621,7 +617,8 @@ pub struct AppStateInner {
     pub promotion_engine: Arc<std::sync::Mutex<zp_memory::PromotionEngine>>,
     /// Memory entries (in-memory store for the memory lifecycle).
     /// Maps memory_id → MemoryEntry. Populated by the promotion engine.
-    pub memory_store: Arc<std::sync::Mutex<std::collections::HashMap<String, zp_memory::MemoryEntry>>>,
+    pub memory_store:
+        Arc<std::sync::Mutex<std::collections::HashMap<String, zp_memory::MemoryEntry>>>,
     /// Downgrade resistance guard (R6-4: monotonic policy version enforcement).
     /// Prevents rollback to a prior, less restrictive policy version.
     /// Checked on every policy load and during reconstitution chain walk.
@@ -879,7 +876,10 @@ impl AppState {
                         GovernanceGate::with_policy_engine(&identity.destination_hash, engine)
                     }
                     Err(e) => {
-                        tracing::warn!("WASM policy runtime unavailable: {} — falling back to native-only", e);
+                        tracing::warn!(
+                            "WASM policy runtime unavailable: {} — falling back to native-only",
+                            e
+                        );
                         GovernanceGate::new(&identity.destination_hash)
                     }
                 }
@@ -939,32 +939,32 @@ impl AppState {
 
             match (p.as_ref(), signer) {
                 (Some(pipe), Some(signer)) => {
-                match pipe
-                    .init_providers(
-                        config.port,
-                        &config.llm_provider,
-                        &config.llm_model,
-                        &config.llm_escalation_model,
-                        config.llm_supports_tools,
-                        signer,
-                    )
-                    .await
-                {
-                    Ok(n) => tracing::info!(
-                        providers = n,
-                        provider = %config.llm_provider,
-                        model = %config.llm_model,
-                        "LLM provider pool ready"
-                    ),
-                    Err(e) => {
-                        tracing::error!(
-                            error = %e,
+                    match pipe
+                        .init_providers(
+                            config.port,
+                            &config.llm_provider,
+                            &config.llm_model,
+                            &config.llm_escalation_model,
+                            config.llm_supports_tools,
+                            signer,
+                        )
+                        .await
+                    {
+                        Ok(n) => tracing::info!(
+                            providers = n,
                             provider = %config.llm_provider,
                             model = %config.llm_model,
-                            "FATAL: provider pool initialization failed while llm.enabled = true"
-                        );
-                        eprintln!(
-                            "\nZeroPoint refused to start.\n\n\
+                            "LLM provider pool ready"
+                        ),
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                provider = %config.llm_provider,
+                                model = %config.llm_model,
+                                "FATAL: provider pool initialization failed while llm.enabled = true"
+                            );
+                            eprintln!(
+                                "\nZeroPoint refused to start.\n\n\
                              llm.enabled is true, but the provider pool could not be \
                              populated:\n  {}\n\n\
                              Provider: {}\n  Model: {}\n  Escalation: {}\n\n\
@@ -972,18 +972,18 @@ impl AppState {
                              without inference.\n\
                              (HARNESS-SEAM-2026-08 S3 — a configured substrate that \
                              cannot serve is a half-state, not a degraded mode.)\n",
-                            e,
-                            config.llm_provider,
-                            config.llm_model,
-                            if config.llm_escalation_model.trim().is_empty() {
-                                "(none)"
-                            } else {
-                                &config.llm_escalation_model
-                            },
-                        );
-                        std::process::exit(1);
+                                e,
+                                config.llm_provider,
+                                config.llm_model,
+                                if config.llm_escalation_model.trim().is_empty() {
+                                    "(none)"
+                                } else {
+                                    &config.llm_escalation_model
+                                },
+                            );
+                            std::process::exit(1);
+                        }
                     }
-                }
                 }
                 // Pre-Genesis: pipeline exists, no sovereign root to sign with.
                 // Already warned above. Not fatal — the ceremony has not run,
@@ -1013,7 +1013,9 @@ impl AppState {
             tracing::warn!(
                 "Attestation database unavailable ({}): {} — attestation features disabled. \
                  Check that the data directory exists and is writable: {}",
-                config.data_dir, e, config.data_dir
+                config.data_dir,
+                e,
+                config.data_dir
             );
         }
 
@@ -1052,9 +1054,9 @@ impl AppState {
 
         // Internal zero-trust authority (P2-3: SSRF-VULN-01/02).
         // Derives an internal HMAC key from the operator key via BLAKE3.
-        let internal_auth = Arc::new(
-            internal_auth::InternalAuthority::new(&identity.signing_key.to_bytes()),
-        );
+        let internal_auth = Arc::new(internal_auth::InternalAuthority::new(
+            &identity.signing_key.to_bytes(),
+        ));
 
         // Observation store (M4-2: governance→memory bridge).
         // Stores observations derived from governance events so they can
@@ -1078,7 +1080,10 @@ impl AppState {
         // Cognition pipeline (G5-1: observation→promotion).
         let cognition_pipeline = if observation_store.is_some() {
             let obs_config = ObservationConfig::default();
-            Some(CognitionPipeline::new(obs_config, &identity.destination_hash))
+            Some(CognitionPipeline::new(
+                obs_config,
+                &identity.destination_hash,
+            ))
         } else {
             None
         };
@@ -1093,34 +1098,30 @@ impl AppState {
         // Blast radius tracker (R6-1: key compromise scoping).
         // In-memory indices populated as receipts are signed and delegations
         // created. Future: rebuild from audit chain on startup.
-        let blast_radius_tracker = Arc::new(std::sync::Mutex::new(
-            zp_keys::BlastRadiusTracker::new(),
-        ));
+        let blast_radius_tracker =
+            Arc::new(std::sync::Mutex::new(zp_keys::BlastRadiusTracker::new()));
 
         // Quarantine store + memory store (R6-2: compromise → quarantine).
-        let quarantine_store = Arc::new(std::sync::Mutex::new(
-            zp_memory::QuarantineStore::new(&identity.destination_hash),
-        ));
-        let memory_store = Arc::new(std::sync::Mutex::new(
-            std::collections::HashMap::<String, zp_memory::MemoryEntry>::new(),
-        ));
+        let quarantine_store = Arc::new(std::sync::Mutex::new(zp_memory::QuarantineStore::new(
+            &identity.destination_hash,
+        )));
+        let memory_store = Arc::new(std::sync::Mutex::new(std::collections::HashMap::<
+            String,
+            zp_memory::MemoryEntry,
+        >::new()));
 
         // Promotion engine (Phase 4.3: memory truth transition lifecycle).
         // Enforces the doctrine: "Nothing becomes durable truth merely because
         // a model inferred it." Every stage transition requires a receipt-backed gate.
-        let promotion_engine = Arc::new(std::sync::Mutex::new(
-            zp_memory::PromotionEngine::new(
-                &identity.destination_hash,
-                zp_memory::PromotionThresholds::default(),
-            ),
-        ));
+        let promotion_engine = Arc::new(std::sync::Mutex::new(zp_memory::PromotionEngine::new(
+            &identity.destination_hash,
+            zp_memory::PromotionThresholds::default(),
+        )));
 
         // Downgrade resistance guard (R6-4: monotonic policy version).
         // Starts at 0.0.0 — the first policy load sets the baseline.
         // Future: restore from persisted state on restart.
-        let downgrade_guard = Arc::new(std::sync::Mutex::new(
-            zp_policy::DowngradeGuard::new(),
-        ));
+        let downgrade_guard = Arc::new(std::sync::Mutex::new(zp_policy::DowngradeGuard::new()));
 
         // One-time onboard setup token (AUTH-VULN-06).
         // Only generated when:
@@ -1277,9 +1278,10 @@ impl AppState {
         // Phase 1 — Commitment A: host-function boundary.
         // SystemHostContext takes Arc refs to the same gate and audit_store
         // that live in AppStateInner, so they share the same live state.
-        let host: Arc<dyn zp_host::HostContext> = Arc::new(
-            zp_host::SystemHostContext::new(gate.clone(), audit_store.clone()),
-        );
+        let host: Arc<dyn zp_host::HostContext> = Arc::new(zp_host::SystemHostContext::new(
+            gate.clone(),
+            audit_store.clone(),
+        ));
 
         let state = AppState(Arc::new(AppStateInner {
             gate,
@@ -1397,9 +1399,8 @@ impl AppState {
         //
         // A missing vault hid inside that for months. See `bedrock.rs`.
         {
-            let vault_path = zp_paths::vault_path().unwrap_or_else(|_| {
-                std::path::PathBuf::from(&state.0.data_dir).join("vault.json")
-            });
+            let vault_path = zp_paths::vault_path()
+                .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
             let resolved = state.0.vault_key.get().and_then(|k| k.as_ref());
 
             // `None` here means "could not open", which is a different fault
@@ -1430,9 +1431,7 @@ impl AppState {
                     .unwrap_or(false),
                 vault_key_resolved: resolved.is_some(),
                 vault_path,
-                vault_file_exists: zp_paths::vault_path()
-                    .map(|p| p.exists())
-                    .unwrap_or(false),
+                vault_file_exists: zp_paths::vault_path().map(|p| p.exists()).unwrap_or(false),
                 vault_keys,
                 substrate_is_mature,
             });
@@ -1474,10 +1473,7 @@ pub(crate) fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> std::ne
 
 /// Extract the `zp_onboard` cookie value from request headers.
 pub(crate) fn extract_onboard_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
-    let cookie_header = headers
-        .get(axum::http::header::COOKIE)?
-        .to_str()
-        .ok()?;
+    let cookie_header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
     for pair in cookie_header.split(';') {
         let pair = pair.trim();
         if let Some(val) = pair.strip_prefix("zp_onboard=") {
@@ -1664,7 +1660,10 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/vault/test/:provider", post(vault_test_handler))
         // Substrate validation — deterministic structural audit primitive
         // per SUBSTRATE-SELF-CONSTRUCTION discipline (task #20/#21).
-        .route("/api/v1/substrate/validate", get(substrate_validate_handler))
+        .route(
+            "/api/v1/substrate/validate",
+            get(substrate_validate_handler),
+        )
         // Standing corrections — chain-anchored operator claims about Regent's
         // cognitive layer. Composes with COGNITIVE-INPUT-PLANE-2026-07 Tier 1.
         // Vault operator surface. Names-only listing, value-carrying verbs in
@@ -1734,22 +1733,55 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/:name/remove", post(tool_remove_handler))
         .route("/api/v1/tools/:name/probe", get(tool_probe_handler))
         .route("/api/v1/tools/:name/posture", get(tool_posture_handler))
-        .route("/api/v1/tools/:name/register-agent", post(register_agent_handler))
+        .route(
+            "/api/v1/tools/:name/register-agent",
+            post(register_agent_handler),
+        )
         .route("/api/v1/tools/receipt", post(tools_receipt_handler))
         // Model governance — operator preference + routing observation
         .route("/api/v1/preference/model", post(model_preference_handler))
         .route("/api/v1/cognition/model-routed", post(model_routed_handler))
         // Cognition module — observation, reflection, memory lifecycle, reviews
-        .route("/api/v1/cognition/observe", post(cognition::observe_handler))
-        .route("/api/v1/cognition/reflect", post(cognition::reflect_handler))
-        .route("/api/v1/cognition/status", get(cognition::cognition_status_handler))
-        .route("/api/v1/cognition/observations", get(cognition::list_observations_handler))
-        .route("/api/v1/cognition/reviews", get(cognition::list_reviews_handler))
-        .route("/api/v1/cognition/reviews/submit", post(cognition::submit_review_handler))
-        .route("/api/v1/cognition/reviews/decide", post(cognition::decide_review_handler))
-        .route("/api/v1/cognition/reviews/sweep", post(cognition::sweep_reviews_handler))
-        .route("/api/v1/cognition/memories", get(cognition::list_memories_handler))
-        .route("/api/v1/cognition/memories/sweep", post(cognition::sweep_memories_handler))
+        .route(
+            "/api/v1/cognition/observe",
+            post(cognition::observe_handler),
+        )
+        .route(
+            "/api/v1/cognition/reflect",
+            post(cognition::reflect_handler),
+        )
+        .route(
+            "/api/v1/cognition/status",
+            get(cognition::cognition_status_handler),
+        )
+        .route(
+            "/api/v1/cognition/observations",
+            get(cognition::list_observations_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews",
+            get(cognition::list_reviews_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews/submit",
+            post(cognition::submit_review_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews/decide",
+            post(cognition::decide_review_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews/sweep",
+            post(cognition::sweep_reviews_handler),
+        )
+        .route(
+            "/api/v1/cognition/memories",
+            get(cognition::list_memories_handler),
+        )
+        .route(
+            "/api/v1/cognition/memories/sweep",
+            post(cognition::sweep_memories_handler),
+        )
         // Governed exec WebSocket — cockpit terminal output streaming
         .route("/ws/exec", get(exec_ws::exec_ws_handler))
         // Regent cockpit — operator input to the cognitive loop
@@ -1757,17 +1789,35 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Real-time event stream — SSE for dashboard and channel adapters (P4-1)
         .route("/api/v1/events/stream", get(events::event_stream_handler))
         // Channel adapters — Slack/Discord integration (P4-2)
-        .route("/api/v1/channels/slack/webhook", post(channels::slack_webhook_handler))
+        .route(
+            "/api/v1/channels/slack/webhook",
+            post(channels::slack_webhook_handler),
+        )
         // Fleet node registry — heartbeat, status, and management (P5-2)
-        .route("/api/v1/fleet/heartbeat", post(fleet::fleet_heartbeat_handler))
+        .route(
+            "/api/v1/fleet/heartbeat",
+            post(fleet::fleet_heartbeat_handler),
+        )
         .route("/api/v1/fleet/nodes", get(fleet::fleet_nodes_handler))
-        .route("/api/v1/fleet/nodes/:id", get(fleet::fleet_node_detail_handler).delete(fleet::fleet_deregister_handler))
+        .route(
+            "/api/v1/fleet/nodes/:id",
+            get(fleet::fleet_node_detail_handler).delete(fleet::fleet_deregister_handler),
+        )
         .route("/api/v1/fleet/summary", get(fleet::fleet_summary_handler))
         // P6-4: WASM policy runtime management (feature-gated, fallback on non-WASM builds)
-        .route("/api/v1/policy/wasm/load", post(wasm_policy::wasm_load_handler))
+        .route(
+            "/api/v1/policy/wasm/load",
+            post(wasm_policy::wasm_load_handler),
+        )
         .route("/api/v1/policy/wasm", get(wasm_policy::wasm_list_handler))
-        .route("/api/v1/policy/wasm/:hash/disable", post(wasm_policy::wasm_disable_handler))
-        .route("/api/v1/policy/wasm/:hash/enable", post(wasm_policy::wasm_enable_handler))
+        .route(
+            "/api/v1/policy/wasm/:hash/disable",
+            post(wasm_policy::wasm_disable_handler),
+        )
+        .route(
+            "/api/v1/policy/wasm/:hash/enable",
+            post(wasm_policy::wasm_enable_handler),
+        )
         // System state — derived from receipt chain (the big one)
         .route(
             "/api/v1/system/state",
@@ -1793,15 +1843,39 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // API Proxy — governance-aware LLM provider proxy
         .route("/api/v1/proxy/*proxy_path", post(proxy::proxy_handler))
         // Pricing freshness — live refresh of provider pricing data
-        .route("/api/v1/pricing/refresh", post(proxy::pricing_refresh_handler))
+        .route(
+            "/api/v1/pricing/refresh",
+            post(proxy::pricing_refresh_handler),
+        )
         // Artifact library
-        .route("/api/operator/me/library/chain-narration/compose", post(artifact_library::compose_handler))
-        .route("/api/operator/me/library/chain-narration/submit", post(artifact_library::submit_handler))
-        .route("/api/operator/me/library", get(artifact_library::list_handler))
-        .route("/api/operator/me/library/:id", get(artifact_library::get_handler))
-        .route("/api/operator/me/library/:id/sign", post(artifact_library::sign_handler))
-        .route("/api/operator/me/library/:id/reject", post(artifact_library::reject_handler))
-        .route("/api/operator/me/library/by-kind/:kind/canonical", get(artifact_library::canonical_handler))
+        .route(
+            "/api/operator/me/library/chain-narration/compose",
+            post(artifact_library::compose_handler),
+        )
+        .route(
+            "/api/operator/me/library/chain-narration/submit",
+            post(artifact_library::submit_handler),
+        )
+        .route(
+            "/api/operator/me/library",
+            get(artifact_library::list_handler),
+        )
+        .route(
+            "/api/operator/me/library/:id",
+            get(artifact_library::get_handler),
+        )
+        .route(
+            "/api/operator/me/library/:id/sign",
+            post(artifact_library::sign_handler),
+        )
+        .route(
+            "/api/operator/me/library/:id/reject",
+            post(artifact_library::reject_handler),
+        )
+        .route(
+            "/api/operator/me/library/by-kind/:kind/canonical",
+            get(artifact_library::canonical_handler),
+        )
         .layer(cors)
         // ── Request body size limit (Phase 1.1: strict input validation) ──
         // Cap request bodies at 1 MB to prevent denial-of-service via
@@ -1923,10 +1997,16 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     if let Ok(override_dir) = std::env::var("ZP_ASSETS_DIR") {
         let dir = std::path::PathBuf::from(&override_dir);
         if dir.exists() {
-            info!("Assets:     http://localhost:{}/assets/  (override: {})", config.port, override_dir);
+            info!(
+                "Assets:     http://localhost:{}/assets/  (override: {})",
+                config.port, override_dir
+            );
             router = router.nest_service("/assets", ServeDir::new(&dir));
         } else {
-            tracing::warn!("ZP_ASSETS_DIR={} does not exist, using compiled-in assets", override_dir);
+            tracing::warn!(
+                "ZP_ASSETS_DIR={} does not exist, using compiled-in assets",
+                override_dir
+            );
             router = router.nest("/assets", embedded_assets_router());
         }
     } else {
@@ -2027,7 +2107,13 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // immediately (immune-system model). The periodic sweep still runs
     // all officers on its timer.
     if config.officers_enabled && config.officers_forge_enabled {
-        if let Some(rx) = state.0.sensor_event_rx.lock().ok().and_then(|mut g| g.take()) {
+        if let Some(rx) = state
+            .0
+            .sensor_event_rx
+            .lock()
+            .ok()
+            .and_then(|mut g| g.take())
+        {
             officers::spawn_sensor_forge_task(rx, state.0.clone());
         }
     }
@@ -2116,7 +2202,9 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         state.0.promotion_engine.clone(),
         state.0.review_queue.clone(),
         regent_vault_key,
-    ).await {
+    )
+    .await
+    {
         // OnceLock::set is safe from any thread and races cleanly.
         // We're in the single-threaded startup path so this always succeeds.
         let _ = state.0.regent_handle.set(handle);
@@ -2150,7 +2238,10 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         info!("  {}", onboard_url);
         info!("═══════════════════════════════════════════════════════");
     } else {
-        info!("Onboard:   http://{}:{}/onboard", config.bind_addr, config.port);
+        info!(
+            "Onboard:   http://{}:{}/onboard",
+            config.bind_addr, config.port
+        );
     }
     info!("Trust is infrastructure.");
 
@@ -2265,8 +2356,7 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     {
         let registry_arc = state.0.clone();
         tokio::spawn(async move {
-            let mut ticker =
-                tokio::time::interval(std::time::Duration::from_secs(30));
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
             loop {
                 ticker.tick().await;
                 registry_arc.port_registry.sweep_dead_pids();
@@ -2288,18 +2378,14 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     let grpc_state = state.clone();
     let grpc_factory = move || {
         let handler = grpc::NodeStatusHandler::new(grpc_state.clone());
-        tonic::transport::Server::builder().add_service(
-            zp_verbs::nodestatus::node_status_server::NodeStatusServer::new(handler),
-        )
+        tonic::transport::Server::builder()
+            .add_service(zp_verbs::nodestatus::node_status_server::NodeStatusServer::new(handler))
     };
 
     let _grpc_handles = if is_loopback {
-        let handles = zp_net::serve_loopback_grpc_with_shutdown(
-            grpc_factory,
-            grpc_port,
-            shutdown.clone(),
-        )
-        .await?;
+        let handles =
+            zp_net::serve_loopback_grpc_with_shutdown(grpc_factory, grpc_port, shutdown.clone())
+                .await?;
         info!(
             "gRPC server on 127.0.0.1:{} (NodeStatus pilot — Phase 2b, stacks: {:?})",
             grpc_port, handles.bound_stacks
@@ -2349,10 +2435,7 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
 ///
 /// Idempotent: missing PIDs / already-dead processes are skipped
 /// silently. Safe to call from a single watcher task on shutdown.
-pub fn cleanup_launched_tools(
-    pid_dir_path: &std::path::Path,
-    server_pid_path: &std::path::Path,
-) {
+pub fn cleanup_launched_tools(pid_dir_path: &std::path::Path, server_pid_path: &std::path::Path) {
     info!("Shutdown signal received — stopping launched tools...");
     if let Ok(entries) = std::fs::read_dir(pid_dir_path) {
         for entry in entries.flatten() {
@@ -2454,10 +2537,7 @@ async fn regent_input_handler(
     }
 
     match handle
-        .send_input_and_wait(
-            content,
-            zp_regent::context::CockpitSource::Cli,
-        )
+        .send_input_and_wait(content, zp_regent::context::CockpitSource::Cli)
         .await
     {
         Ok(response) => (
@@ -2993,9 +3073,9 @@ async fn grant_handler(
             return Err((
                 StatusCode::BAD_REQUEST,
                 format!(
-                    "Unknown capability type: {}. Use read, write, execute, api, config, or tool_call.",
-                    other
-                ),
+                "Unknown capability type: {}. Use read, write, execute, api, config, or tool_call.",
+                other
+            ),
             ))
         }
     };
@@ -3172,7 +3252,10 @@ async fn delegate_handler(
     };
 
     // M4-3: Tag delegated grant with API origin and validate issuance.
-    child = child.with_issued_via(EventProvenance::external_request("api-delegate-handler", None));
+    child = child.with_issued_via(EventProvenance::external_request(
+        "api-delegate-handler",
+        None,
+    ));
     state.0.gate.validate_grant(&child).map_err(|e| {
         tracing::warn!("Delegated grant rejected by M4-3 gate: {}", e);
         (
@@ -3405,7 +3488,6 @@ async fn audit_verify_handler(State(state): State<AppState>) -> Json<ChainVerify
     }
 }
 
-
 // ── Audit receipts (normalized, ZpClient-compatible schema) ─────────────────
 
 #[derive(Deserialize)]
@@ -3605,9 +3687,6 @@ async fn receipt_generate_handler(
     })
 }
 
-
-
-
 // ============================================================================
 // Stats Handler
 // ============================================================================
@@ -3658,9 +3737,7 @@ async fn officer_sweep_handler(
 /// Composes with SUBSTRATE-SELF-CONSTRUCTION discipline: separates
 /// deterministic structural validation (this endpoint's job) from narration
 /// judgment (Regent's job when she narrates the output).
-async fn substrate_validate_handler(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn substrate_validate_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     let report = crate::substrate_validate::run_substrate_validation(&state.0.audit_store);
     Json(report)
 }
@@ -3854,17 +3931,22 @@ async fn vault_test_handler(
 fn open_vault_for_handler(
     state: &AppState,
 ) -> Result<zp_trust::CredentialVault, (StatusCode, Json<serde_json::Value>)> {
-    let resolved = state.0.vault_key.get().and_then(|k| k.as_ref()).ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({
-                "error": "vault_key_unavailable",
-                "detail": "The vault master key has not resolved. This is not an \
-                           empty vault — it is an unreadable one. Check that Genesis \
-                           exists and the boot ceremony completed.",
-            })),
-        )
-    })?;
+    let resolved = state
+        .0
+        .vault_key
+        .get()
+        .and_then(|k| k.as_ref())
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "error": "vault_key_unavailable",
+                    "detail": "The vault master key has not resolved. This is not an \
+                               empty vault — it is an unreadable one. Check that Genesis \
+                               exists and the boot ceremony completed.",
+                })),
+            )
+        })?;
     let vault_path = zp_paths::vault_path()
         .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
     zp_trust::CredentialVault::load_or_create(&resolved.key, &vault_path).map_err(|e| {
@@ -3889,7 +3971,9 @@ fn vault_file_path(state: &AppState) -> std::path::PathBuf {
 /// values are not. `exists` distinguishes a vault that has never been written
 /// from one that is empty, which the filesystem alone cannot express because
 /// `load_or_create` synthesises an empty vault in memory without touching disk.
-async fn vault_list_handler(State(state): State<AppState>) -> (StatusCode, Json<serde_json::Value>) {
+async fn vault_list_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
     let vault = match open_vault_for_handler(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -3992,7 +4076,10 @@ async fn vault_remove_handler(
         "vault:secret:removed",
         Some(&format!("key={}", req.key)),
     );
-    (StatusCode::OK, Json(serde_json::json!({"removed": req.key})))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"removed": req.key})),
+    )
 }
 
 /// `POST /api/v1/vault/reveal` — return a secret's value.
@@ -4073,7 +4160,10 @@ async fn correction_issue_handler(
             .ok()
             .and_then(|home| std::fs::read_to_string(home.join("genesis.json")).ok())
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("genesis_public_key").and_then(|k| k.as_str().map(String::from)))
+            .and_then(|v| {
+                v.get("genesis_public_key")
+                    .and_then(|k| k.as_str().map(String::from))
+            })
             .unwrap_or_default();
         payload["issued_by"] = serde_json::json!(operator_pubkey);
     }
@@ -4487,11 +4577,7 @@ async fn regent_approval_resolve_handler(
                 );
             }
         };
-        let req = index
-            .all()
-            .iter()
-            .find(|r| r.request_hash == full)
-            .cloned();
+        let req = index.all().iter().find(|r| r.request_hash == full).cloned();
         match req {
             Some(r) if !r.is_pending() => {
                 return (
@@ -4787,11 +4873,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             kind: o.launch.kind,
             url,
             port: o.launch.port,
-            cmd: Some(format!(
-                "cd '{}' && {}",
-                tool_path.display(),
-                o.launch.cmd
-            )),
+            cmd: Some(format!("cd '{}' && {}", tool_path.display(), o.launch.cmd)),
         };
     }
 
@@ -4837,12 +4919,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         let has_pnpm_lock = tool_path.join("pnpm-lock.yaml").exists();
 
         let scripts = launch_inference::read_npm_scripts(tool_path);
-        let has_script = |name: &str| {
-            scripts
-                .as_ref()
-                .map(|s| s.contains(name))
-                .unwrap_or(false)
-        };
+        let has_script = |name: &str| scripts.as_ref().map(|s| s.contains(name)).unwrap_or(false);
 
         let (cmd, kind) = if has_runnable_node {
             let pkg_mgr = if has_pnpm_lock { "pnpm" } else { "npm" };
@@ -4851,8 +4928,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             let has_build_dir = tool_path.join("build").exists();
             // Only emit `<pm> run build` when the project both lacks a built
             // output AND actually has a `build` script (Fix B).
-            let needs_build =
-                !has_next_build && !has_dist && !has_build_dir && has_script("build");
+            let needs_build = !has_next_build && !has_dist && !has_build_dir && has_script("build");
             let build_prefix = if needs_build {
                 format!("{} run build && ", pkg_mgr)
             } else {
@@ -4879,12 +4955,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         } else if let Some(entry) = launch_inference::detect_python_entrypoint(tool_path) {
             let py = launch_inference::python_invocation(tool_path);
             (
-                Some(format!(
-                    "cd '{}' && {} {}",
-                    tool_path.display(),
-                    py,
-                    entry
-                )),
+                Some(format!("cd '{}' && {} {}", tool_path.display(), py, entry)),
                 "python",
             )
         } else if has_docker_compose {
@@ -4918,9 +4989,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
     } else {
         // Scripted or CLI — check for start.sh, runnable Node, Python, make.
         let start_scripts = ["start.sh", "run.sh", "launch.sh"];
-        let script = start_scripts
-            .iter()
-            .find(|s| tool_path.join(s).exists());
+        let script = start_scripts.iter().find(|s| tool_path.join(s).exists());
         let npm_scripts = launch_inference::read_npm_scripts(tool_path);
         let has_npm_script = |name: &str| {
             npm_scripts
@@ -4962,12 +5031,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         } else if let Some(entry) = launch_inference::detect_python_entrypoint(tool_path) {
             let py = launch_inference::python_invocation(tool_path);
             (
-                Some(format!(
-                    "cd '{}' && {} {}",
-                    tool_path.display(),
-                    py,
-                    entry
-                )),
+                Some(format!("cd '{}' && {} {}", tool_path.display(), py, entry)),
                 "python",
             )
         } else if launch_inference::looks_like_python_project(tool_path) {
@@ -4996,9 +5060,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
 
 /// PID file directory: ~/ZeroPoint/pids/
 fn pid_dir() -> std::path::PathBuf {
-    let dir = zp_paths::home()
-        .unwrap_or_default()
-        .join("pids");
+    let dir = zp_paths::home().unwrap_or_default().join("pids");
     std::fs::create_dir_all(&dir).ok();
     dir
 }
@@ -5034,9 +5096,7 @@ fn kill_tool_process(name: &str, pid: u32) -> bool {
     info!("Stopping {} (PID {})", name, pid);
 
     // For docker-compose tools, try `docker compose down` first
-    let tool_path = zp_core::paths::user_home_or("")
-        .join("projects")
-        .join(name);
+    let tool_path = zp_core::paths::user_home_or("").join("projects").join(name);
     let has_compose = tool_path.join("docker-compose.yml").exists()
         || tool_path.join("docker-compose.yaml").exists()
         || tool_path.join("compose.yml").exists()
@@ -5410,7 +5470,9 @@ async fn gate_tool_call_handler(
             .port_registry
             .get_agent_key(agent_id)
             .unwrap_or_else(|| agent_id.to_string());
-        if let Some(deny_reason) = lease_prereq_for_agent(&state, &resolved_agent_id, &req.tool_name) {
+        if let Some(deny_reason) =
+            lease_prereq_for_agent(&state, &resolved_agent_id, &req.tool_name)
+        {
             let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
             let chain_event = format!("gate:denied:{}", req.tool_name);
             let chain_detail = serde_json::json!({
@@ -5525,13 +5587,20 @@ async fn gate_tool_call_handler(
         &req.tool_name,
         allow,
         req.agent.as_deref(),
-        if reason.is_empty() { None } else { Some(&reason) },
+        if reason.is_empty() {
+            None
+        } else {
+            Some(&reason)
+        },
         Some(&state.0.identity.signing_key),
     );
 
     info!(
         "Gate decision: tool={} allow={} reason={} chain_entry={:?}",
-        req.tool_name, allow, reason, chain_entry_hash.as_deref()
+        req.tool_name,
+        allow,
+        reason,
+        chain_entry_hash.as_deref()
     );
 
     (
@@ -5794,7 +5863,11 @@ async fn lease_renew_handler(
 /// carry a `ToolCall` capability covering `tool_name` is not sufficient. The
 /// deny reason `"capability_scope_exceeded"` is returned when an alive grant
 /// exists but none of them cover the requested tool.
-fn lease_prereq_for_agent(state: &AppState, agent_id: &str, tool_name: &str) -> Option<&'static str> {
+fn lease_prereq_for_agent(
+    state: &AppState,
+    agent_id: &str,
+    tool_name: &str,
+) -> Option<&'static str> {
     let chain = state
         .0
         .audit_store
@@ -5803,7 +5876,8 @@ fn lease_prereq_for_agent(state: &AppState, agent_id: &str, tool_name: &str) -> 
         .export_chain(i32::MAX as usize)
         .ok()?;
 
-    let mut grants: std::collections::HashMap<String, zp_core::CapabilityGrant> = Default::default();
+    let mut grants: std::collections::HashMap<String, zp_core::CapabilityGrant> =
+        Default::default();
     let mut revoked: std::collections::HashSet<String> = Default::default();
     for entry in &chain {
         let zp_core::AuditAction::SystemEvent { event } = &entry.action else {
@@ -5836,7 +5910,9 @@ fn lease_prereq_for_agent(state: &AppState, agent_id: &str, tool_name: &str) -> 
 
     if !live.is_empty() {
         // Claim 4: at least one live grant must cover this specific tool.
-        let tool_action = CoreActionType::ToolCall { name: tool_name.to_string() };
+        let tool_action = CoreActionType::ToolCall {
+            name: tool_name.to_string(),
+        };
         let scope_ok = live.iter().any(|g| g.matches_action(&tool_action));
         if scope_ok {
             None
@@ -5871,13 +5947,6 @@ fn verify_ed25519_signature(pubkey_hex: &str, signature_hex: &str, payload: &[u8
     };
     zp_receipt::verify::verify_signature(&pk_arr, payload, &sig_arr).is_ok()
 }
-
-
-
-
-
-
-
 
 // ============================================================================
 // Tool configure / repair — ecosystem self-healing actions
@@ -5996,13 +6065,17 @@ async fn tools_list_handler(State(state): State<AppState>) -> Json<serde_json::V
                     // get a 600s wait with indeterminate progress bar; web/
                     // script tools get 30s. Must match tool_launch_handler's
                     // kind derivation exactly.
-                    kind: b.launch_command.as_ref().map_or("web", |lc| {
-                        if lc.command == "cargo" || lc.command.ends_with("/cargo") {
-                            "native"
-                        } else {
-                            "web"
-                        }
-                    }).to_string(),
+                    kind: b
+                        .launch_command
+                        .as_ref()
+                        .map_or("web", |lc| {
+                            if lc.command == "cargo" || lc.command.ends_with("/cargo") {
+                                "native"
+                            } else {
+                                "web"
+                            }
+                        })
+                        .to_string(),
                     url: None,
                     port: Some(ui_port),
                     cmd: None,
@@ -6264,7 +6337,10 @@ async fn tool_stop_handler(
                 }
             }
         }
-        state.0.port_registry.clear_binding(&lower, tool_ports::ReleaseReason::OperatorKill);
+        state
+            .0
+            .port_registry
+            .clear_binding(&lower, tool_ports::ReleaseReason::OperatorKill);
         state.0.port_registry.clear_proxy_port(&lower);
     }
 
@@ -6454,7 +6530,10 @@ async fn tool_launch_handler(
     let log_path = {
         let logs_dir = std::path::PathBuf::from(&state.0.data_dir).join("logs");
         let _ = std::fs::create_dir_all(&logs_dir);
-        logs_dir.join(format!("{}.log", body.name.to_lowercase().replace(' ', "-")))
+        logs_dir.join(format!(
+            "{}.log",
+            body.name.to_lowercase().replace(' ', "-")
+        ))
     };
 
     let auth_token = binding.auth_token.clone();
@@ -6465,7 +6544,9 @@ async fn tool_launch_handler(
     // causes "address already in use" and the web UI never starts.
     // extra_ports["GATEWAY_PORT"] is the port ZP allocated specifically for the
     // gateway process; the proxy will discover it via post-launch probing.
-    let gateway_port_for_launch = binding.extra_ports.get("GATEWAY_PORT")
+    let gateway_port_for_launch = binding
+        .extra_ports
+        .get("GATEWAY_PORT")
         .copied()
         .unwrap_or(proxy_port_for_launch);
     let mut cmd = tokio::process::Command::new(&lc.command);
@@ -6522,13 +6603,15 @@ async fn tool_launch_handler(
                         let manifest_candidates = [
                             work_dir.join(".zp-configure.toml"),
                             std::path::PathBuf::from(
-                                std::env::var("ZP_SOURCE_DIR")
-                                    .unwrap_or_else(|_| {
-                                        zp_paths::user_home()
-                                            .map(|h| h.join("projects/zeropoint").display().to_string())
-                                            .unwrap_or_default()
-                                    })
-                            ).join("tools").join(&tool_lower).join(".zp-configure.toml"),
+                                std::env::var("ZP_SOURCE_DIR").unwrap_or_else(|_| {
+                                    zp_paths::user_home()
+                                        .map(|h| h.join("projects/zeropoint").display().to_string())
+                                        .unwrap_or_default()
+                                }),
+                            )
+                            .join("tools")
+                            .join(&tool_lower)
+                            .join(".zp-configure.toml"),
                         ];
 
                         let mut manifest_loaded = None;
@@ -6582,9 +6665,8 @@ async fn tool_launch_handler(
                                     }
                                 }
 
-                                let error_count = violations.iter()
-                                    .filter(|v| v.severity == "error")
-                                    .count();
+                                let error_count =
+                                    violations.iter().filter(|v| v.severity == "error").count();
 
                                 if error_count > 0 {
                                     error!(
@@ -6597,7 +6679,8 @@ async fn tool_launch_handler(
 
                                     // Emit preflight:failed receipt to audit chain.
                                     {
-                                        let violation_summary: Vec<String> = violations.iter()
+                                        let violation_summary: Vec<String> = violations
+                                            .iter()
                                             .filter(|v| v.severity == "error")
                                             .map(|v| format!("{}: {}", v.var, v.message))
                                             .collect();
@@ -6609,7 +6692,10 @@ async fn tool_launch_handler(
                                         );
                                         let _ = crate::tool_chain::emit_tool_receipt(
                                             &state.0.audit_store,
-                                            &format!("tool:preflight:vault_validation_failed:{}", tool_lower),
+                                            &format!(
+                                                "tool:preflight:vault_validation_failed:{}",
+                                                tool_lower
+                                            ),
                                             Some(&detail_str),
                                         );
                                     }
@@ -6632,16 +6718,15 @@ async fn tool_launch_handler(
 
                         // Run vault hygiene audit on key names (no decryption needed).
                         if manifest_loaded.is_some() {
-                            let all_keys: Vec<String> = vault.list()
+                            let all_keys: Vec<String> = vault
+                                .list()
                                 .into_iter()
                                 .filter(|k| k.contains(&tool_lower))
                                 .collect();
 
                             if !all_keys.is_empty() {
-                                let findings = zp_engine::capability::audit_vault_keys(
-                                    &tool_lower,
-                                    &all_keys,
-                                );
+                                let findings =
+                                    zp_engine::capability::audit_vault_keys(&tool_lower, &all_keys);
                                 for f in &findings {
                                     if f.severity == "error" {
                                         error!(
@@ -6795,19 +6880,28 @@ async fn tool_launch_handler(
                 tokio::spawn(async move {
                     // Give the tool a few seconds to bind before probing.
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    if let Some(binding) = state_for_probe.0.port_registry.get_assigned(&tool_name_for_probe) {
+                    if let Some(binding) = state_for_probe
+                        .0
+                        .port_registry
+                        .get_assigned(&tool_name_for_probe)
+                    {
                         match tool_ports::discover_proxy_port_with_retry(
                             &binding,
                             30,
                             std::time::Duration::from_secs(2),
-                        ).await {
+                        )
+                        .await
+                        {
                             Some(discovered) => {
                                 info!(
                                     tool = %tool_name_for_probe,
                                     port = discovered,
                                     "Post-launch probe: proxy_port discovered"
                                 );
-                                state_for_probe.0.port_registry.set_proxy_port(&tool_name_for_probe, discovered);
+                                state_for_probe
+                                    .0
+                                    .port_registry
+                                    .set_proxy_port(&tool_name_for_probe, discovered);
                             }
                             None => {
                                 warn!(
@@ -6827,7 +6921,11 @@ async fn tool_launch_handler(
             // Register PID with sensor layer — kqueue EVFILT_PROC will fire
             // immediately on exit/fork/exec, triggering a Forge sweep.
             if pid > 0 {
-                state.0.sensor_handle.watch_pid(pid, body.name.to_lowercase()).await;
+                state
+                    .0
+                    .sensor_handle
+                    .watch_pid(pid, body.name.to_lowercase())
+                    .await;
             }
 
             // Re-issue delegation grant on every cockpit launch. This makes
@@ -6841,7 +6939,9 @@ async fn tool_launch_handler(
                 let mut grant = CapabilityGrant::new(
                     grantor,
                     agent_key.clone(),
-                    GrantedCapability::ToolCall { tools: vec!["*".to_string()] },
+                    GrantedCapability::ToolCall {
+                        tools: vec!["*".to_string()],
+                    },
                     format!("rcpt-{}", uuid::Uuid::now_v7()),
                 );
                 grant.sign(&state.0.identity.signing_key);
@@ -6904,7 +7004,6 @@ async fn tools_receipt_handler(
     }
 }
 
-
 // ============================================================================
 // Agent Registration + Delegation Auto-Renewal
 // ============================================================================
@@ -6939,7 +7038,9 @@ async fn register_agent_handler(
     let mut grant = CapabilityGrant::new(
         grantor,
         body.agent_key.clone(),
-        GrantedCapability::ToolCall { tools: vec!["*".to_string()] },
+        GrantedCapability::ToolCall {
+            tools: vec!["*".to_string()],
+        },
         receipt_id,
     );
     grant.sign(&state.0.identity.signing_key);
@@ -7122,21 +7223,64 @@ fn embedded_assets_router() -> axum::Router {
 
     axum::Router::new()
         // CSS
-        .route("/onboard.css", get(|| async { text_response(ONBOARD_CSS, "text/css; charset=utf-8") }))
-        .route("/vendor/xterm.min.css", get(|| async { text_response(VENDOR_XTERM_CSS, "text/css; charset=utf-8") }))
-        .route("/fonts/fonts.css", get(|| async { text_response(FONTS_CSS, "text/css; charset=utf-8") }))
+        .route(
+            "/onboard.css",
+            get(|| async { text_response(ONBOARD_CSS, "text/css; charset=utf-8") }),
+        )
+        .route(
+            "/vendor/xterm.min.css",
+            get(|| async { text_response(VENDOR_XTERM_CSS, "text/css; charset=utf-8") }),
+        )
+        .route(
+            "/fonts/fonts.css",
+            get(|| async { text_response(FONTS_CSS, "text/css; charset=utf-8") }),
+        )
         // JS
-        .route("/onboard.js", get(|| async { text_response(ONBOARD_JS, "application/javascript; charset=utf-8") }))
-        .route("/tts.js", get(|| async { text_response(TTS_JS, "application/javascript; charset=utf-8") }))
-        .route("/dashboard.js", get(|| async { text_response(DASHBOARD_JS, "application/javascript; charset=utf-8") }))
-        .route("/ecosystem.js", get(|| async { text_response(ECOSYSTEM_JS, "application/javascript; charset=utf-8") }))
-        .route("/speak.js", get(|| async { text_response(SPEAK_JS, "application/javascript; charset=utf-8") }))
-        .route("/vendor/xterm.min.js", get(|| async { text_response(VENDOR_XTERM_JS, "application/javascript; charset=utf-8") }))
-        .route("/vendor/xterm-addon-fit.min.js", get(|| async { text_response(VENDOR_XTERM_FIT_JS, "application/javascript; charset=utf-8") }))
-        .route("/vendor/d3.min.js", get(|| async { text_response(VENDOR_D3_JS, "application/javascript; charset=utf-8") }))
+        .route(
+            "/onboard.js",
+            get(|| async { text_response(ONBOARD_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/tts.js",
+            get(|| async { text_response(TTS_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/dashboard.js",
+            get(|| async { text_response(DASHBOARD_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/ecosystem.js",
+            get(|| async { text_response(ECOSYSTEM_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/speak.js",
+            get(|| async { text_response(SPEAK_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/vendor/xterm.min.js",
+            get(|| async {
+                text_response(VENDOR_XTERM_JS, "application/javascript; charset=utf-8")
+            }),
+        )
+        .route(
+            "/vendor/xterm-addon-fit.min.js",
+            get(|| async {
+                text_response(VENDOR_XTERM_FIT_JS, "application/javascript; charset=utf-8")
+            }),
+        )
+        .route(
+            "/vendor/d3.min.js",
+            get(|| async { text_response(VENDOR_D3_JS, "application/javascript; charset=utf-8") }),
+        )
         // Fonts
-        .route("/fonts/inter-latin.woff2", get(|| async { binary_response(FONT_INTER, "font/woff2") }))
-        .route("/fonts/jetbrainsmono-latin.woff2", get(|| async { binary_response(FONT_JETBRAINS, "font/woff2") }))
+        .route(
+            "/fonts/inter-latin.woff2",
+            get(|| async { binary_response(FONT_INTER, "font/woff2") }),
+        )
+        .route(
+            "/fonts/jetbrainsmono-latin.woff2",
+            get(|| async { binary_response(FONT_JETBRAINS, "font/woff2") }),
+        )
 }
 
 /// Resolve an HTML asset: check $ZP_ASSETS_DIR first (hot-reload override),
@@ -7166,7 +7310,8 @@ async fn root_handler(State(state): State<AppState>) -> Response {
         Redirect::temporary("/onboard").into_response()
     };
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -7178,7 +7323,8 @@ async fn dashboard_handler(State(state): State<AppState>) -> Response {
     );
     let mut resp = Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -7218,13 +7364,11 @@ async fn onboard_page_handler(
             .unwrap_or(false);
 
         if from_query {
-            let cookie_val = format!(
-                "zp_onboard={}; HttpOnly; SameSite=Strict; Path=/",
-                expected
-            );
+            let cookie_val = format!("zp_onboard={}; HttpOnly; SameSite=Strict; Path=/", expected);
             let mut resp = Redirect::temporary("/onboard").into_response();
             if let Ok(hv) = cookie_val.parse() {
-                resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+                resp.headers_mut()
+                    .insert(axum::http::header::SET_COOKIE, hv);
             }
             return resp;
         } else if !from_cookie {
@@ -7243,7 +7387,8 @@ async fn onboard_page_handler(
     );
     let mut resp = Html(resolve_html_asset("onboard.html", ONBOARD_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -7255,7 +7400,8 @@ async fn speak_page_handler(State(state): State<AppState>) -> Response {
     );
     let mut resp = Html(resolve_html_asset("speak.html", SPEAK_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -7267,7 +7413,8 @@ async fn ecosystem_page_handler(State(state): State<AppState>) -> Response {
     );
     let mut resp = Html(resolve_html_asset("ecosystem.html", ECOSYSTEM_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -7316,7 +7463,6 @@ async fn genesis_handler(State(state): State<AppState>) -> Json<serde_json::Valu
 // store. The HTTP layer itself is covered transitively — the handler is
 // thin glue over the helpers tested here.
 
-
 /// Emit a substrate lifecycle receipt.
 ///
 /// `system:startup` and `system:shutdown` were declared in the receipt
@@ -7355,7 +7501,6 @@ fn emit_lifecycle_receipt(
         Err(e) => warn!("lifecycle receipt: audit store lock poisoned: {}", e),
     }
 }
-
 
 #[cfg(test)]
 mod p4_phase2_tests {
@@ -7420,8 +7565,7 @@ mod p4_phase2_tests {
             let Some(body) = conditions.first() else {
                 continue;
             };
-            if event.starts_with("delegation:granted:")
-                || event.starts_with("delegation:renewed:")
+            if event.starts_with("delegation:granted:") || event.starts_with("delegation:renewed:")
             {
                 if let Ok(g) = serde_json::from_str::<CapabilityGrant>(body) {
                     if g.grantee == agent_id {
@@ -7440,9 +7584,15 @@ mod p4_phase2_tests {
             .collect();
         if !live.is_empty() {
             // Claim 4: scope check — at least one live grant must cover the tool.
-            let tool_action = CoreActionType::ToolCall { name: tool_name.to_string() };
+            let tool_action = CoreActionType::ToolCall {
+                name: tool_name.to_string(),
+            };
             let scope_ok = live.iter().any(|g| g.matches_action(&tool_action));
-            if scope_ok { None } else { Some("capability_scope_exceeded") }
+            if scope_ok {
+                None
+            } else {
+                Some("capability_scope_exceeded")
+            }
         } else if grants.is_empty() {
             Some("no_valid_delegation")
         } else if grants.values().all(|g| revoked.contains(&g.id)) {
@@ -7463,8 +7613,8 @@ mod p4_phase2_tests {
         // and re-emits — which is exactly what the HTTP handler does.
         let mut g = grant.clone();
         let new_expiry = g.renew().unwrap();
-        let h =
-            crate::tool_chain::emit_delegation_receipt(&store, "renewed", &g, None).expect("renewed");
+        let h = crate::tool_chain::emit_delegation_receipt(&store, "renewed", &g, None)
+            .expect("renewed");
         assert!(!h.is_empty());
         // Reconstruction picks up the new expiry / count.
         assert_eq!(g.renewal_count, 1);
@@ -7613,7 +7763,10 @@ mod p4_phase2_tests {
             None,
             Some(&key),
         );
-        assert!(hash.is_some(), "emit_gate_decision_receipt must return entry_hash");
+        assert!(
+            hash.is_some(),
+            "emit_gate_decision_receipt must return entry_hash"
+        );
 
         // Reload via export_chain and verify the receipt is non-null.
         let entries = store.lock().unwrap().export_chain(10).unwrap();
@@ -7647,13 +7800,12 @@ mod p4_phase2_tests {
         let key = SigningKey::from_bytes(&[0xBB_u8; 32]);
         let grant = standing_grant("artemis");
 
-        let hash = crate::tool_chain::emit_delegation_receipt(
-            &store,
-            "granted",
-            &grant,
-            Some(&key),
+        let hash =
+            crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant, Some(&key));
+        assert!(
+            hash.is_some(),
+            "emit_delegation_receipt must return entry_hash"
         );
-        assert!(hash.is_some(), "emit_delegation_receipt must return entry_hash");
 
         let entries = store.lock().unwrap().export_chain(10).unwrap();
         let entry = entries

@@ -11,8 +11,7 @@
 use crate::policy_registry::PolicyModuleRegistry;
 use crate::rules::{
     BulkOperationRule, CatastrophicActionRule, DefaultAllowRule, HarmPrincipleRule, PolicyRule,
-    TrustTierEnforcementRule,
-    ReputationGateRule, SovereigntyRule,
+    ReputationGateRule, SovereigntyRule, TrustTierEnforcementRule,
 };
 use tracing::debug;
 use zp_core::capability::{Capability, ModelClass, ModelPreference};

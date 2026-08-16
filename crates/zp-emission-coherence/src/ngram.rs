@@ -45,7 +45,9 @@ pub fn ngram_repetition_density(text: &str, token_ids: &[u32]) -> Option<Finding
                     let joined = gram.join(" ");
                     let hit_worse = worst
                         .as_ref()
-                        .map(|(pn, _, _, _)| n > *pn || (n == *pn && count > worst.as_ref().unwrap().2))
+                        .map(|(pn, _, _, _)| {
+                            n > *pn || (n == *pn && count > worst.as_ref().unwrap().2)
+                        })
                         .unwrap_or(true);
                     if hit_worse {
                         worst = Some((n, joined, count, thr_word));

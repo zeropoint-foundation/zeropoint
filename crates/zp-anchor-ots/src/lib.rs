@@ -179,9 +179,8 @@ impl OtsAnchor {
     /// truncated digest would produce a proof of the wrong thing — which
     /// verifies cleanly and attests nothing.
     fn digest_of(commitment: &AnchorCommitment) -> Result<[u8; 32]> {
-        let raw = hex::decode(&commitment.chain_head_hash).map_err(|e| AnchorError::Internal(
-            format!("chain_head_hash is not hex: {e}"),
-        ))?;
+        let raw = hex::decode(&commitment.chain_head_hash)
+            .map_err(|e| AnchorError::Internal(format!("chain_head_hash is not hex: {e}")))?;
         let arr: [u8; 32] = raw.as_slice().try_into().map_err(|_| {
             AnchorError::Internal(format!(
                 "chain_head_hash decoded to {} bytes, expected 32",
@@ -211,10 +210,8 @@ impl OtsAnchor {
     }
 
     fn decode_proof(receipt: &AnchorReceipt) -> Result<OtsProof> {
-        serde_json::from_slice(&receipt.ledger_proof).map_err(|e| {
-            AnchorError::VerificationFailed {
-                reason: format!("ledger_proof is not an OtsProof: {e}"),
-            }
+        serde_json::from_slice(&receipt.ledger_proof).map_err(|e| AnchorError::VerificationFailed {
+            reason: format!("ledger_proof is not an OtsProof: {e}"),
         })
     }
 
@@ -247,7 +244,10 @@ impl TruthAnchor for OtsAnchor {
         let client = &self.client;
         let timeout = self.timeout;
         let outcomes = futures::future::join_all(self.calendars.iter().map(|cal| async move {
-            (cal.clone(), calendar::submit(client, cal, &digest, timeout).await)
+            (
+                cal.clone(),
+                calendar::submit(client, cal, &digest, timeout).await,
+            )
         }))
         .await;
 
@@ -322,11 +322,13 @@ impl TruthAnchor for OtsAnchor {
             // At three calendars and event-driven cadence that trade is clear.
             let client = &self.client;
             let timeout = self.timeout;
-            let outcomes =
-                futures::future::join_all(self.calendars.iter().map(|cal| async move {
-                    (cal.clone(), calendar::upgrade(client, cal, &digest, timeout).await)
-                }))
-                .await;
+            let outcomes = futures::future::join_all(self.calendars.iter().map(|cal| async move {
+                (
+                    cal.clone(),
+                    calendar::upgrade(client, cal, &digest, timeout).await,
+                )
+            }))
+            .await;
 
             for (cal, outcome) in outcomes {
                 match outcome {
@@ -532,7 +534,10 @@ mod tests {
 
         let v = anchor.verify(&receipt).await.unwrap();
         assert!(v.chain_matches, "digest matches the head it was made from");
-        assert!(!v.anchor_valid, "an unattested proof must never read as valid");
+        assert!(
+            !v.anchor_valid,
+            "an unattested proof must never read as valid"
+        );
         assert!(
             v.summary.contains("pending Bitcoin attestation"),
             "summary should name the pending state, got: {}",

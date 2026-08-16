@@ -244,20 +244,23 @@ async fn execute_and_stream(
         }
         Err(zp_host::HostError::AuditError(e)) => {
             tracing::error!("exec_ws: audit rejected receipt — refusing spawn: {}", e);
-            let _ = tx.send(WsMessage::Text(
-                serde_json::json!({ "type": "error", "message": "Internal audit error" })
-                    .to_string(),
-            )).await;
+            let _ = tx
+                .send(WsMessage::Text(
+                    serde_json::json!({ "type": "error", "message": "Internal audit error" })
+                        .to_string(),
+                ))
+                .await;
             return None;
         }
         Err(zp_host::HostError::Http(e)) => {
             // spawn_process never makes HTTP calls; this arm exists only for
             // exhaustiveness since HostError is shared across all host functions.
             tracing::error!("exec_ws: unexpected HTTP error in spawn: {}", e);
-            let _ = tx.send(WsMessage::Text(
-                serde_json::json!({ "type": "error", "message": "Internal error" })
-                    .to_string(),
-            )).await;
+            let _ = tx
+                .send(WsMessage::Text(
+                    serde_json::json!({ "type": "error", "message": "Internal error" }).to_string(),
+                ))
+                .await;
             return None;
         }
     };

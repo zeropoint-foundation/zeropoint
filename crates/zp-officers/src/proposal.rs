@@ -134,16 +134,29 @@ impl ProposedMutation {
     /// Human-readable summary for operator review.
     pub fn summary(&self) -> String {
         match self {
-            Self::SetPortBinding { tool, port, rationale } => {
+            Self::SetPortBinding {
+                tool,
+                port,
+                rationale,
+            } => {
                 format!("Set {}'s port binding to {} ({})", tool, port, rationale)
             }
-            Self::FillVaultEntry { tool, key_path, description } => {
-                format!("Add vault entry {} for {} ({})", key_path, tool, description)
+            Self::FillVaultEntry {
+                tool,
+                key_path,
+                description,
+            } => {
+                format!(
+                    "Add vault entry {} for {} ({})",
+                    key_path, tool, description
+                )
             }
             Self::GrantDelegation { tool, scopes, .. } => {
                 format!("Grant delegation to {}: [{}]", tool, scopes.join(", "))
             }
-            Self::UpdateManifest { tool, field, value, .. } => {
+            Self::UpdateManifest {
+                tool, field, value, ..
+            } => {
                 format!("Update {}'s manifest: {} = {}", tool, field, value)
             }
             Self::RestartTool { tool, rationale } => {
@@ -186,10 +199,7 @@ pub const GOVERNANCE_MUTATION_SCOPES: &[&str] = &[
 /// 2. Have a `parameters.mutations` array that contains the mutation's `kind_label()`
 ///    or the wildcard `"*"`.
 /// 3. Not expired.
-pub fn grant_authorizes_mutation(
-    grant: &zp_core::CapabilityGrant,
-    mutation_kind: &str,
-) -> bool {
+pub fn grant_authorizes_mutation(grant: &zp_core::CapabilityGrant, mutation_kind: &str) -> bool {
     // Check expiry.
     if let Some(expires) = grant.expires_at {
         if expires < chrono::Utc::now() {
@@ -275,7 +285,9 @@ impl OfficerDelegation {
 
     /// Check if this delegation authorizes a specific mutation kind.
     pub fn can_propose(&self, mutation_kind: &str) -> bool {
-        self.authorized_mutations.iter().any(|s| s == "*" || s == mutation_kind)
+        self.authorized_mutations
+            .iter()
+            .any(|s| s == "*" || s == mutation_kind)
     }
 
     /// Check if this officer has any proposal authority at all.
@@ -373,26 +385,42 @@ mod tests {
     fn all_mutation_kinds() {
         let mutations = vec![
             ProposedMutation::SetPortBinding {
-                tool: "t".into(), port: 8080, rationale: "r".into(),
+                tool: "t".into(),
+                port: 8080,
+                rationale: "r".into(),
             },
             ProposedMutation::FillVaultEntry {
-                tool: "t".into(), key_path: "k".into(), description: "d".into(),
+                tool: "t".into(),
+                key_path: "k".into(),
+                description: "d".into(),
             },
             ProposedMutation::GrantDelegation {
-                tool: "t".into(), scopes: vec![], rationale: "r".into(),
+                tool: "t".into(),
+                scopes: vec![],
+                rationale: "r".into(),
             },
             ProposedMutation::UpdateManifest {
-                tool: "t".into(), field: "f".into(), value: "v".into(), observed: "o".into(),
+                tool: "t".into(),
+                field: "f".into(),
+                value: "v".into(),
+                observed: "o".into(),
             },
             ProposedMutation::RestartTool {
-                tool: "t".into(), rationale: "r".into(),
+                tool: "t".into(),
+                rationale: "r".into(),
             },
         ];
 
         let labels: Vec<&str> = mutations.iter().map(|m| m.kind_label()).collect();
         assert_eq!(
             labels,
-            vec!["set_port", "fill_vault", "grant_delegation", "update_manifest", "restart_tool"]
+            vec![
+                "set_port",
+                "fill_vault",
+                "grant_delegation",
+                "update_manifest",
+                "restart_tool"
+            ]
         );
 
         // All point to tool "t".
@@ -408,19 +436,29 @@ mod tests {
         // Every kind_label() must appear in GOVERNANCE_MUTATION_SCOPES.
         let mutations = vec![
             ProposedMutation::SetPortBinding {
-                tool: "t".into(), port: 8080, rationale: "r".into(),
+                tool: "t".into(),
+                port: 8080,
+                rationale: "r".into(),
             },
             ProposedMutation::FillVaultEntry {
-                tool: "t".into(), key_path: "k".into(), description: "d".into(),
+                tool: "t".into(),
+                key_path: "k".into(),
+                description: "d".into(),
             },
             ProposedMutation::GrantDelegation {
-                tool: "t".into(), scopes: vec![], rationale: "r".into(),
+                tool: "t".into(),
+                scopes: vec![],
+                rationale: "r".into(),
             },
             ProposedMutation::UpdateManifest {
-                tool: "t".into(), field: "f".into(), value: "v".into(), observed: "o".into(),
+                tool: "t".into(),
+                field: "f".into(),
+                value: "v".into(),
+                observed: "o".into(),
             },
             ProposedMutation::RestartTool {
-                tool: "t".into(), rationale: "r".into(),
+                tool: "t".into(),
+                rationale: "r".into(),
             },
         ];
         for m in &mutations {
@@ -541,9 +579,7 @@ mod tests {
 
     #[test]
     fn officer_delegation_from_grants() {
-        let grants = vec![
-            make_governance_grant(vec!["restart_tool", "set_port"]),
-        ];
+        let grants = vec![make_governance_grant(vec!["restart_tool", "set_port"])];
         let d = OfficerDelegation::from_grants(&grants);
         assert!(d.has_any_authority());
         assert!(d.can_propose("restart_tool"));

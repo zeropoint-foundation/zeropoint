@@ -44,13 +44,19 @@ use tokio::process::Command;
 use tracing::error;
 
 use zp_audit::{AuditStore, UnsealedEntry};
-use zp_core::{ActionType, ActorId, Channel, ConversationId, FileOperation, PolicyContext, PolicyDecision, TrustTier};
+use zp_core::{
+    ActionType, ActorId, Channel, ConversationId, FileOperation, PolicyContext, PolicyDecision,
+    TrustTier,
+};
 use zp_policy::GovernanceGate;
 
 use crate::{
     context::HostContext,
     error::HostError,
-    types::{HttpMethod, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteMode, WriteRequest, WriteResult},
+    types::{
+        HttpMethod, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteMode, WriteRequest,
+        WriteResult,
+    },
 };
 
 /// Production HostContext.  Holds references to the governance gate and audit
@@ -86,10 +92,13 @@ impl SystemHostContext {
             HostError::AuditError(format!("{site}: audit store lock poisoned: {e}"))
         })?;
 
-        store.append(unsealed).map(|sealed| sealed.entry_hash).map_err(|e| {
-            error!("zp-host: {site}: gate receipt append rejected — refusing action: {e}");
-            HostError::AuditError(format!("{site}: failed to append gate receipt: {e}"))
-        })
+        store
+            .append(unsealed)
+            .map(|sealed| sealed.entry_hash)
+            .map_err(|e| {
+                error!("zp-host: {site}: gate receipt append rejected — refusing action: {e}");
+                HostError::AuditError(format!("{site}: failed to append gate receipt: {e}"))
+            })
     }
 }
 
@@ -147,7 +156,10 @@ impl HostContext for SystemHostContext {
 
         let child = cmd.spawn()?; // maps std::io::Error → HostError::Io via From
 
-        Ok(SpawnResult { child, gate_receipt_hash })
+        Ok(SpawnResult {
+            child,
+            gate_receipt_hash,
+        })
     }
 
     async fn write_file(&self, req: WriteRequest) -> Result<WriteResult, HostError> {
@@ -203,7 +215,10 @@ impl HostContext for SystemHostContext {
             }
         }
 
-        Ok(WriteResult { gate_receipt_hash, bytes_written })
+        Ok(WriteResult {
+            gate_receipt_hash,
+            bytes_written,
+        })
     }
 
     async fn http_request(&self, req: HttpRequest) -> Result<HttpResult, HostError> {
@@ -240,7 +255,11 @@ impl HostContext for SystemHostContext {
         let status = response.status().as_u16();
         let body = response.bytes().await?.to_vec();
 
-        Ok(HttpResult { status, body, gate_receipt_hash })
+        Ok(HttpResult {
+            status,
+            body,
+            gate_receipt_hash,
+        })
     }
 
     async fn http_request_streaming(
@@ -289,18 +308,19 @@ impl SystemHostContext {
             client_builder = client_builder.no_proxy();
         }
         if let Some(ms) = req.timeout_ms {
-            client_builder =
-                client_builder.timeout(std::time::Duration::from_millis(ms));
+            client_builder = client_builder.timeout(std::time::Duration::from_millis(ms));
         }
-        let client = client_builder.build().unwrap_or_else(|_| reqwest::Client::new());
+        let client = client_builder
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         let method = match req.method {
-            HttpMethod::Get     => reqwest::Method::GET,
-            HttpMethod::Post    => reqwest::Method::POST,
-            HttpMethod::Put     => reqwest::Method::PUT,
-            HttpMethod::Delete  => reqwest::Method::DELETE,
-            HttpMethod::Patch   => reqwest::Method::PATCH,
-            HttpMethod::Head    => reqwest::Method::HEAD,
+            HttpMethod::Get => reqwest::Method::GET,
+            HttpMethod::Post => reqwest::Method::POST,
+            HttpMethod::Put => reqwest::Method::PUT,
+            HttpMethod::Delete => reqwest::Method::DELETE,
+            HttpMethod::Patch => reqwest::Method::PATCH,
+            HttpMethod::Head => reqwest::Method::HEAD,
             HttpMethod::Options => reqwest::Method::OPTIONS,
         };
 

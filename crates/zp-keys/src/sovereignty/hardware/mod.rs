@@ -356,10 +356,7 @@ fn decrypt_v2(blob_after_version: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8;
 /// Legacy v0/v1 decrypt: deterministic BLAKE3-derived nonce.
 ///
 /// Read-only path — never used for new encryptions after Phase 2.
-fn decrypt_v1_legacy(
-    ciphertext: &[u8],
-    wrapping_key: &[u8; 32],
-) -> Result<[u8; 32], KeyError> {
+fn decrypt_v1_legacy(ciphertext: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8; 32], KeyError> {
     use chacha20poly1305::{aead::Aead, ChaCha20Poly1305, KeyInit, Nonce};
 
     let cipher = ChaCha20Poly1305::new(wrapping_key.into());
@@ -1075,10 +1072,22 @@ mod tests {
     fn hw_providers_are_hardware_category() {
         use super::super::{SovereigntyCategory, SovereigntyMode};
 
-        assert_eq!(SovereigntyMode::YubiKey.category(), SovereigntyCategory::HardwareWallet);
-        assert_eq!(SovereigntyMode::Ledger.category(), SovereigntyCategory::HardwareWallet);
-        assert_eq!(SovereigntyMode::Trezor.category(), SovereigntyCategory::HardwareWallet);
-        assert_eq!(SovereigntyMode::OnlyKey.category(), SovereigntyCategory::HardwareWallet);
+        assert_eq!(
+            SovereigntyMode::YubiKey.category(),
+            SovereigntyCategory::HardwareWallet
+        );
+        assert_eq!(
+            SovereigntyMode::Ledger.category(),
+            SovereigntyCategory::HardwareWallet
+        );
+        assert_eq!(
+            SovereigntyMode::Trezor.category(),
+            SovereigntyCategory::HardwareWallet
+        );
+        assert_eq!(
+            SovereigntyMode::OnlyKey.category(),
+            SovereigntyCategory::HardwareWallet
+        );
     }
 
     // ── Stub providers return correct errors ────────────────────────
@@ -1169,7 +1178,9 @@ mod tests {
 
         for provider in &stubs {
             let cap = provider.detect();
-            if cap.implementation_status == super::super::ProviderStatus::DetectionOnly && !cap.available {
+            if cap.implementation_status == super::super::ProviderStatus::DetectionOnly
+                && !cap.available
+            {
                 assert!(
                     !cap.description.to_lowercase().contains("connect your"),
                     "{:?} says 'connect your' but is DetectionOnly: {:?}",
@@ -1265,14 +1276,38 @@ mod tests {
     fn from_onboard_str_parses_hardware_modes() {
         use super::super::SovereigntyMode;
 
-        assert_eq!(SovereigntyMode::from_onboard_str("trezor"), SovereigntyMode::Trezor);
-        assert_eq!(SovereigntyMode::from_onboard_str("ledger"), SovereigntyMode::Ledger);
-        assert_eq!(SovereigntyMode::from_onboard_str("yubikey"), SovereigntyMode::YubiKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("yubi-key"), SovereigntyMode::YubiKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("yubi_key"), SovereigntyMode::YubiKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("onlykey"), SovereigntyMode::OnlyKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("only-key"), SovereigntyMode::OnlyKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("only_key"), SovereigntyMode::OnlyKey);
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("trezor"),
+            SovereigntyMode::Trezor
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("ledger"),
+            SovereigntyMode::Ledger
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("yubikey"),
+            SovereigntyMode::YubiKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("yubi-key"),
+            SovereigntyMode::YubiKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("yubi_key"),
+            SovereigntyMode::YubiKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("onlykey"),
+            SovereigntyMode::OnlyKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("only-key"),
+            SovereigntyMode::OnlyKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("only_key"),
+            SovereigntyMode::OnlyKey
+        );
     }
 
     #[test]

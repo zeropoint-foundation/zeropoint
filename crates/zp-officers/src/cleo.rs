@@ -19,8 +19,8 @@ use serde_json::json;
 use tracing::debug;
 
 use crate::chain_reads::{
-    classify_delegation, classify_gate, is_delegation_event, is_gate_event,
-    DelegationKind, GateOutcome,
+    classify_delegation, classify_gate, is_delegation_event, is_gate_event, DelegationKind,
+    GateOutcome,
 };
 use crate::finding::{Finding, Severity};
 use crate::narration::{ChainNarrator, ChainStory, StorySegment};
@@ -116,10 +116,7 @@ impl Cleo {
                         domain: self.domain(),
                         finding_type: "delegation_expired".into(),
                         severity: Severity::Warning,
-                        summary: format!(
-                            "Delegation to '{}' expired without renewal",
-                            subject
-                        ),
+                        summary: format!("Delegation to '{}' expired without renewal", subject),
                         detail: json!({
                             "subject": subject,
                             "expired_at": exp.timestamp.to_rfc3339(),
@@ -371,11 +368,7 @@ impl Officer for Cleo {
         ]
     }
 
-    fn sweep(
-        &self,
-        chain: &ChainReader<'_>,
-        _vault_keys: &VaultKeyLister,
-    ) -> Vec<Finding> {
+    fn sweep(&self, chain: &ChainReader<'_>, _vault_keys: &VaultKeyLister) -> Vec<Finding> {
         debug!("Cleo sweep starting");
 
         let mut findings = Vec::new();
@@ -385,10 +378,7 @@ impl Officer for Cleo {
         findings.extend(self.check_authority_chains(chain));
         findings.extend(self.check_unsigned_governance(chain));
 
-        debug!(
-            findings = findings.len(),
-            "Cleo sweep complete"
-        );
+        debug!(findings = findings.len(), "Cleo sweep complete");
 
         findings
     }

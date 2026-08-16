@@ -758,7 +758,6 @@ pub enum SettlementState {
     },
 }
 
-
 /// The event+detail pair a WorkArc mutation produces for chain
 /// anchoring. The caller (typically the dispatch layer) pipes this
 /// through `emit_receipt(event, Some(detail))` to actually write to
@@ -795,10 +794,7 @@ pub enum MapError {
 impl WorkArc {
     /// Open a new waypoint. Waypoint id must be unique within this arc.
     /// Errors on duplicate id or if the map is already settled.
-    pub fn open_waypoint(
-        &mut self,
-        waypoint: Waypoint,
-    ) -> Result<MapReceipt, MapError> {
+    pub fn open_waypoint(&mut self, waypoint: Waypoint) -> Result<MapReceipt, MapError> {
         if self.is_settled() {
             return Err(MapError::MapAlreadySettled);
         }
@@ -866,7 +862,11 @@ impl WorkArc {
         if self.is_settled() {
             return Err(MapError::MapAlreadySettled);
         }
-        if self.destination_hypotheses.iter().any(|h| h.id == hypothesis.id) {
+        if self
+            .destination_hypotheses
+            .iter()
+            .any(|h| h.id == hypothesis.id)
+        {
             return Err(MapError::DuplicateDestination(hypothesis.id));
         }
         let id = hypothesis.id.clone();
@@ -887,10 +887,7 @@ impl WorkArc {
     /// accepting an already-accepted hypothesis succeeds without
     /// changing state (but still emits a receipt for the operator's
     /// signature).
-    pub fn accept_destination(
-        &mut self,
-        id: &str,
-    ) -> Result<MapReceipt, MapError> {
+    pub fn accept_destination(&mut self, id: &str) -> Result<MapReceipt, MapError> {
         if self.is_settled() {
             return Err(MapError::MapAlreadySettled);
         }
@@ -1027,8 +1024,7 @@ mod ground_finding_tests {
     /// remembered shape is the seam that breaks silently — it yields `None`,
     /// the section renders empty, and an intact-looking substrate is
     /// indistinguishable from one nothing checked.
-    const VERIFIED: &str =
-        "invariant:vault_custody:verified severity=ok vault holds 176 secrets";
+    const VERIFIED: &str = "invariant:vault_custody:verified severity=ok vault holds 176 secrets";
     const VIOLATED: &str = "invariant:vault_custody:violated severity=CRITICAL \
          the vault holds nothing, on an established substrate — custody was set \
          up and has been lost, or was never completed";
@@ -1070,8 +1066,12 @@ mod ground_finding_tests {
     #[test]
     fn namespaced_invariant_names_keep_their_colons() {
         let (obs, now) = at(0);
-        let g = GroundFinding::parse("invariant:vault:custody:violated severity=CRITICAL x", obs, now)
-            .expect("should parse");
+        let g = GroundFinding::parse(
+            "invariant:vault:custody:violated severity=CRITICAL x",
+            obs,
+            now,
+        )
+        .expect("should parse");
         assert_eq!(g.invariant, "vault:custody");
         assert!(g.is_violation());
     }
@@ -1199,10 +1199,10 @@ mod trajectory_map_tests {
     #[test]
     fn frontier_contains_only_unblocked_unresolved_waypoints() {
         let mut a = empty_arc();
-        a.waypoints.push(mk_waypoint("t1", vec![]));         // frontier
-        a.waypoints.push(mk_waypoint("t2", vec!["t1"]));      // fog
+        a.waypoints.push(mk_waypoint("t1", vec![])); // frontier
+        a.waypoints.push(mk_waypoint("t2", vec!["t1"])); // fog
         let mut t3 = mk_waypoint("t3", vec![]);
-        t3.resolution = Some(mk_resolution());            // resolved
+        t3.resolution = Some(mk_resolution()); // resolved
         a.waypoints.push(t3);
 
         let frontier: Vec<&str> = a.frontier().iter().map(|t| t.id.as_str()).collect();
@@ -1212,8 +1212,8 @@ mod trajectory_map_tests {
     #[test]
     fn fog_contains_only_blocked_unresolved_waypoints() {
         let mut a = empty_arc();
-        a.waypoints.push(mk_waypoint("t1", vec![]));         // frontier
-        a.waypoints.push(mk_waypoint("t2", vec!["t1"]));      // fog
+        a.waypoints.push(mk_waypoint("t1", vec![])); // frontier
+        a.waypoints.push(mk_waypoint("t2", vec!["t1"])); // fog
         a.waypoints.push(mk_waypoint("t3", vec!["t1", "t2"])); // fog
 
         let fog: Vec<&str> = a.fog().iter().map(|t| t.id.as_str()).collect();
@@ -1239,7 +1239,7 @@ mod trajectory_map_tests {
             id: "d1".to_string(),
             description: "candidate".to_string(),
             proposed_at: Utc::now(),
-            accepted: false,       // proposed but not accepted
+            accepted: false, // proposed but not accepted
             superseded_by: None,
         });
         assert!(a.current_destination().is_none());
@@ -1515,10 +1515,7 @@ mod trajectory_map_tests {
     fn settle_without_destination_terminates() {
         let mut a = empty_arc();
         let r = a
-            .settle_without_destination(
-                "exploration converged, no build".to_string(),
-                t0(),
-            )
+            .settle_without_destination("exploration converged, no build".to_string(), t0())
             .unwrap();
         assert_eq!(r.event, "arc:map:settled_without_destination");
         assert!(r.detail.contains("rationale=exploration converged"));
@@ -1578,7 +1575,8 @@ mod trajectory_map_tests {
         let mut a = empty_arc();
         a.directive = Some("figure out how Layer 2 should behave".to_string());
 
-        let receipts = [a.open_waypoint(mk_waypoint("t1", vec![])).unwrap(),
+        let receipts = [
+            a.open_waypoint(mk_waypoint("t1", vec![])).unwrap(),
             a.open_waypoint(mk_waypoint("t2", vec!["t1"])).unwrap(),
             a.resolve_waypoint("t1", "found precedent".to_string(), t0())
                 .unwrap(),
@@ -1587,7 +1585,8 @@ mod trajectory_map_tests {
             a.propose_destination(mk_dest("d1", "the Layer 2 spec"))
                 .unwrap(),
             a.accept_destination("d1").unwrap(),
-            a.settle_with_destination("d1", t0()).unwrap()];
+            a.settle_with_destination("d1", t0()).unwrap(),
+        ];
 
         let events: Vec<&str> = receipts.iter().map(|r| r.event.as_str()).collect();
         assert_eq!(
@@ -1646,8 +1645,14 @@ impl ChainSnapshot {
             zp_core::AuditAction::ToolInvoked { tool_name, .. } => {
                 format!("tool:{}", tool_name)
             }
-            zp_core::AuditAction::ToolCompleted { tool_name, success, .. } => {
-                format!("tool_done:{}:{}", tool_name, if *success { "ok" } else { "fail" })
+            zp_core::AuditAction::ToolCompleted {
+                tool_name, success, ..
+            } => {
+                format!(
+                    "tool_done:{}:{}",
+                    tool_name,
+                    if *success { "ok" } else { "fail" }
+                )
             }
             zp_core::AuditAction::PolicyInteraction { decision_type, .. } => {
                 format!("policy:{}", decision_type)
@@ -1666,7 +1671,10 @@ impl ChainSnapshot {
             timestamp: entry.timestamp,
             action_summary,
             actor,
-            signed: entry.receipt.as_ref().is_some_and(|r| r.signature.is_some()),
+            signed: entry
+                .receipt
+                .as_ref()
+                .is_some_and(|r| r.signature.is_some()),
         }
     }
 }
@@ -1751,7 +1759,11 @@ impl GroundFinding {
                 None => (tail.to_string(), String::new()),
             },
             None => (
-                if holds { "ok".to_string() } else { "unknown".to_string() },
+                if holds {
+                    "ok".to_string()
+                } else {
+                    "unknown".to_string()
+                },
                 payload.to_string(),
             ),
         };

@@ -19,10 +19,7 @@ use crate::{EntropyBaseline, Finding, HeuristicName, Severity};
 /// The doc's threshold: flag when observed mean is 2σ below baseline.
 const SIGMA_MULTIPLIER: f64 = 2.0;
 
-pub fn token_entropy_anomaly(
-    log_probs: &[f64],
-    baseline: &EntropyBaseline,
-) -> Option<Finding> {
+pub fn token_entropy_anomaly(log_probs: &[f64], baseline: &EntropyBaseline) -> Option<Finding> {
     if log_probs.is_empty() {
         return None;
     }

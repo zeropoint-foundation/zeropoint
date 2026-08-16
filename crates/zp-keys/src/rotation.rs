@@ -27,8 +27,8 @@ use std::collections::HashMap;
 use tracing::info;
 
 use crate::certificate::KeyRole;
-use zp_core::receipt_extensions as ext;
 use crate::error::KeyError;
+use zp_core::receipt_extensions as ext;
 
 // ============================================================================
 // Rotation certificate
@@ -138,7 +138,14 @@ impl RotationCertificate {
         prev_rotation_hash: Option<String>,
         reason: Option<String>,
     ) -> Result<(Self, zp_receipt::Receipt, zp_receipt::Receipt), KeyError> {
-        let cert = Self::issue(old_signing_key, new_public_key, role, sequence, prev_rotation_hash, reason)?;
+        let cert = Self::issue(
+            old_signing_key,
+            new_public_key,
+            role,
+            sequence,
+            prev_rotation_hash,
+            reason,
+        )?;
 
         // Both receipts previously set no extensions at all, so
         // `zp_audit::reconstitute` — which reads `zp.certificate.public_key`,

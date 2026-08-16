@@ -24,8 +24,8 @@ use tempfile::tempdir;
 use uuid::Uuid;
 #[cfg(test)]
 use zp_audit::{
-    AuditResponse, AuditStore, CompactAuditEntry, UnsealedEntry, response_tip_consistent,
-    verify_response,
+    response_tip_consistent, verify_response, AuditResponse, AuditStore, CompactAuditEntry,
+    UnsealedEntry,
 };
 #[cfg(test)]
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
@@ -129,7 +129,10 @@ fn claim2_empty_entries_nonempty_tip_detected() {
     );
 
     let att = verify_response("adversarial-peer", &response);
-    assert!(!att.chain_valid, "zero-entry response with claimed tip must fail");
+    assert!(
+        !att.chain_valid,
+        "zero-entry response with claimed tip must fail"
+    );
 }
 
 /// Empty entries with an empty tip is the legitimate "no chain yet" shape.

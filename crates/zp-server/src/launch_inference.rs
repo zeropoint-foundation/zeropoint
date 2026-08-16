@@ -224,9 +224,7 @@ pub fn package_json_is_runnable(tool_path: &Path) -> bool {
     if v.get("bin").is_some() || v.get("main").is_some() {
         return true;
     }
-    v.get("scripts")
-        .and_then(|s| s.get("start"))
-        .is_some()
+    v.get("scripts").and_then(|s| s.get("start")).is_some()
 }
 
 #[cfg(test)]

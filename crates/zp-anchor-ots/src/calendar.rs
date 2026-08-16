@@ -209,7 +209,10 @@ mod tests {
         assert_eq!(CALENDARS.len(), 3);
         for c in CALENDARS {
             assert!(c.starts_with("https://"), "{c} is not https");
-            assert!(!c.ends_with('/'), "{c} has a trailing slash; submit() trims but the list should be clean");
+            assert!(
+                !c.ends_with('/'),
+                "{c} has a trailing slash; submit() trims but the list should be clean"
+            );
         }
         // Two opentimestamps.org, one eternitywall — plurality of operator is
         // the property, not plurality of hostname.
@@ -217,7 +220,10 @@ mod tests {
             .iter()
             .filter(|c| c.contains("eternitywall"))
             .count();
-        assert_eq!(ew, 1, "expected exactly one non-opentimestamps.org calendar");
+        assert_eq!(
+            ew, 1,
+            "expected exactly one non-opentimestamps.org calendar"
+        );
     }
 
     #[test]

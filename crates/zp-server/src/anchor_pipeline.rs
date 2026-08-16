@@ -109,10 +109,7 @@ impl AnchorPipeline {
     /// Returns true if the receipt body carries a trigger-eligible
     /// `receipt_type`. RevocationClaim / PolicyTierViolation count.
     pub fn is_receipt_type_trigger(receipt_type: &str) -> bool {
-        matches!(
-            receipt_type,
-            "revocation_claim" | "policy_tier_violation"
-        )
+        matches!(receipt_type, "revocation_claim" | "policy_tier_violation")
     }
 
     /// Inspect a sealed entry; return `Some(AnchorTrigger)` if it should fire.
@@ -153,7 +150,10 @@ impl AnchorPipeline {
 
         let after = state.last_epoch_sequence;
         let pairs = {
-            let store = self.audit_store.lock().map_err(|_| SealError::AuditMutexPoisoned)?;
+            let store = self
+                .audit_store
+                .lock()
+                .map_err(|_| SealError::AuditMutexPoisoned)?;
             store.export_hashes_after(after).map_err(SealError::Audit)?
         };
 
@@ -175,10 +175,7 @@ impl AnchorPipeline {
             .unwrap_or_else(|| "genesis".to_string());
 
         let commitment = AnchorCommitment {
-            chain_head_hash: hashes
-                .last()
-                .cloned()
-                .unwrap_or_default(),
+            chain_head_hash: hashes.last().cloned().unwrap_or_default(),
             chain_sequence: last_sequence as u64,
             prev_anchor_hash: state.last_epoch_root.clone(),
             // Operator signature is the responsibility of the anchor backend
@@ -231,7 +228,10 @@ impl AnchorPipeline {
         });
 
         if let Err(e) = self.append_anchor_receipt(epoch_number, &detail.to_string()) {
-            error!("failed to record epoch:anchored:{} on chain: {e}", epoch_number);
+            error!(
+                "failed to record epoch:anchored:{} on chain: {e}",
+                epoch_number
+            );
             return Err(e);
         }
 
@@ -397,7 +397,9 @@ mod tests {
         assert!(!AnchorPipeline::is_system_event_trigger(
             "memory:observed:bar"
         ));
-        assert!(!AnchorPipeline::is_system_event_trigger("tool:cmd:executed"));
+        assert!(!AnchorPipeline::is_system_event_trigger(
+            "tool:cmd:executed"
+        ));
         // P4: lease renewal is high-frequency by design — must NOT trigger
         // an anchor every 2h, otherwise the chain stops being event-driven.
         assert!(!AnchorPipeline::is_system_event_trigger(

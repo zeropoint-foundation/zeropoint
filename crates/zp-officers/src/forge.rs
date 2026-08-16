@@ -231,8 +231,7 @@ impl Forge {
                     ToolLifecycleKind::Launched | ToolLifecycleKind::Started => {
                         *launch_success.entry(ev.tool_name).or_insert(0) += 1;
                     }
-                    ToolLifecycleKind::LaunchFailed
-                    | ToolLifecycleKind::PreflightFailed => {
+                    ToolLifecycleKind::LaunchFailed | ToolLifecycleKind::PreflightFailed => {
                         *launch_failure.entry(ev.tool_name).or_insert(0) += 1;
                     }
                     _ => {}
@@ -294,9 +293,7 @@ impl Forge {
                 classify_tool_lifecycle(entry).filter(|ev| ev.kind.is_activity_event())
             {
                 known_tools.insert(ev.tool_name.clone());
-                let ts = last_activity
-                    .entry(ev.tool_name)
-                    .or_insert(entry.timestamp);
+                let ts = last_activity.entry(ev.tool_name).or_insert(entry.timestamp);
                 if entry.timestamp > *ts {
                     *ts = entry.timestamp;
                 }
@@ -376,7 +373,11 @@ impl Forge {
                 process_name,
                 pid,
                 user,
-                port_list.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", "),
+                port_list
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ),
             detail: json!({
                 "pid": pid,
@@ -404,10 +405,7 @@ impl Forge {
     /// - `port_mismatch` → `SetPortBinding` (correct the registry)
     /// - `unregistered_listener` → `SetPortBinding` (register the process)
     /// - `launch_failure_rate` → `RestartTool` (clean restart)
-    pub fn propose_from_findings(
-        &self,
-        findings: &[Finding],
-    ) -> Vec<crate::proposal::Proposal> {
+    pub fn propose_from_findings(&self, findings: &[Finding]) -> Vec<crate::proposal::Proposal> {
         use crate::proposal::{Proposal, ProposedMutation};
 
         let mut proposals = Vec::new();
@@ -452,11 +450,7 @@ impl Forge {
                     }
                 }
                 "unregistered_listener" => {
-                    let tool = match f
-                        .detail
-                        .get("process_name")
-                        .and_then(|v| v.as_str())
-                    {
+                    let tool = match f.detail.get("process_name").and_then(|v| v.as_str()) {
                         Some(t) => t.to_string(),
                         None => continue,
                     };
@@ -540,8 +534,10 @@ impl Forge {
         // ── Crash loops → RestartTool ─────────────────────────────────
         // If a tool has been crash-looping, propose a governed restart
         // (clean stop + relaunch through `zp configure exec`).
-        let mut launches_per_tool: std::collections::HashMap<String, Vec<chrono::DateTime<chrono::Utc>>> =
-            std::collections::HashMap::new();
+        let mut launches_per_tool: std::collections::HashMap<
+            String,
+            Vec<chrono::DateTime<chrono::Utc>>,
+        > = std::collections::HashMap::new();
 
         for entry in &entries {
             if let Some(ev) = classify_tool_lifecycle(entry) {
@@ -574,7 +570,9 @@ impl Forge {
                         severity: Severity::Warning,
                         summary: format!(
                             "Tool '{}' launched {} times in {} min",
-                            tool, timestamps.len(), window.num_minutes()
+                            tool,
+                            timestamps.len(),
+                            window.num_minutes()
                         ),
                         detail: json!({
                             "tool": tool,
@@ -603,8 +601,10 @@ impl Forge {
 
         // ── Tool down → RestartTool ───────────────────────────────────
         // If a tool has been down for >30 min, propose restart.
-        let mut last_states: std::collections::HashMap<String, (&str, chrono::DateTime<chrono::Utc>)> =
-            std::collections::HashMap::new();
+        let mut last_states: std::collections::HashMap<
+            String,
+            (&str, chrono::DateTime<chrono::Utc>),
+        > = std::collections::HashMap::new();
 
         for entry in &entries {
             if let Some(ev) = classify_tool_lifecycle(entry) {
@@ -629,7 +629,9 @@ impl Forge {
                     severity: Severity::Error,
                     summary: format!(
                         "Tool '{}' has been {} for {} min",
-                        tool, state, (now - *since).num_minutes()
+                        tool,
+                        state,
+                        (now - *since).num_minutes()
                     ),
                     detail: json!({
                         "tool": tool,
@@ -643,11 +645,7 @@ impl Forge {
                     finding,
                     ProposedMutation::RestartTool {
                         tool: tool.clone(),
-                        rationale: format!(
-                            "{} for {} min",
-                            state,
-                            (now - *since).num_minutes()
-                        ),
+                        rationale: format!("{} for {} min", state, (now - *since).num_minutes()),
                     },
                     self.name(),
                 ));
@@ -676,11 +674,7 @@ impl Officer for Forge {
         ]
     }
 
-    fn sweep(
-        &self,
-        chain: &ChainReader<'_>,
-        _vault_keys: &VaultKeyLister,
-    ) -> Vec<Finding> {
+    fn sweep(&self, chain: &ChainReader<'_>, _vault_keys: &VaultKeyLister) -> Vec<Finding> {
         debug!("Forge sweep starting");
 
         let mut findings = Vec::new();
@@ -690,10 +684,7 @@ impl Officer for Forge {
         findings.extend(self.check_launch_patterns(chain));
         findings.extend(self.check_operational_silence(chain));
 
-        debug!(
-            findings = findings.len(),
-            "Forge sweep complete"
-        );
+        debug!(findings = findings.len(), "Forge sweep complete");
 
         findings
     }
@@ -748,7 +739,10 @@ mod tests {
             cross_domain_depth: 0,
         };
 
-        assert_eq!(f.event_key(), "officer:forge:operations:crash_loop_detected");
+        assert_eq!(
+            f.event_key(),
+            "officer:forge:operations:crash_loop_detected"
+        );
     }
 
     #[test]

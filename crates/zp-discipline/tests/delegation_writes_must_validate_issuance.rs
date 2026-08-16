@@ -140,7 +140,8 @@ fn call_sites() -> Vec<(&'static str, usize, String)> {
             let line_start = src[..idx].rfind('\n').map(|i| i + 1).unwrap_or(0);
             let line_end = src[idx..].find('\n').map(|e| idx + e).unwrap_or(src.len());
             let line = &src[line_start..line_end];
-            if line.contains("fn emit_delegation_receipt") || line.trim_start().starts_with("use ") {
+            if line.contains("fn emit_delegation_receipt") || line.trim_start().starts_with("use ")
+            {
                 continue;
             }
 
@@ -293,7 +294,10 @@ fn the_scan_helpers_behave() {
         "offset must land on the header text, not the newline before it; got {:?}",
         &src[start..(start + 24).min(src.len())]
     );
-    assert_eq!(fn_name(src[start..].lines().next().unwrap_or("").trim()), "target");
+    assert_eq!(
+        fn_name(src[start..].lines().next().unwrap_or("").trim()),
+        "target"
+    );
     assert!(!is_test_fn(src, start), "plain fn must not read as a test");
 
     let tsrc = "#[tokio::test]\nasync fn t() {\n    emit_delegation_receipt(&s);\n}\n";
