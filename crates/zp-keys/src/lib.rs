@@ -20,11 +20,11 @@
 
 pub mod audit_signer;
 pub mod biometric;
-pub mod foundation_edge_signer;
-pub mod gate_signer;
 pub mod blast_radius;
 pub mod certificate;
 pub mod error;
+pub mod foundation_edge_signer;
+pub mod gate_signer;
 pub mod genesis_v2;
 pub mod hierarchy;
 pub mod keyring;
@@ -37,6 +37,51 @@ pub mod sovereignty;
 pub mod test_helpers;
 pub mod vault_key;
 
+// ── Blast radius (Phase 3 R6-1) ──
+pub use blast_radius::{BlastRadius, BlastRadiusTracker, CompromiseResponse, DelegationEdge};
+
+// ── Sovereignty system (new) ──
+pub use sovereignty::{
+    detect_all_providers, load_sovereign_root, provider_for, provider_for_genesis_record,
+    BiometricEvidence, EnrollmentResult, ProviderCapabilities, ProviderCapability,
+    SovereigntyCategory, SovereigntyMode, SovereigntyProvider,
+};
+
+// ── Hardware wallet infrastructure (quorum-ready) ──
+pub use sovereignty::hardware::{
+    rewrap_secret, DerivationSalt, EnrollmentMetadata, QuorumThreshold,
+};
+
+// ── Backward-compatible re-exports ──
+// These delegate to sovereignty::detection, which wraps the new provider system.
+pub use sovereignty::detection::{detect_biometric, BiometricCapability, BiometricType, Platform};
+
+pub use audit_signer::derive_audit_signer_seed;
+pub use certificate::{Certificate, CertificateChain, KeyRole};
+pub use error::KeyError;
+pub use foundation_edge_signer::{
+    derive_foundation_edge_signer_seed, FOUNDATION_EDGE_SIGNER_CONTEXT,
+};
+pub use gate_signer::{derive_gate_signer_seed, GATE_SIGNER_CONTEXT};
+pub use hierarchy::{AgentKey, GenesisKey, OperatorKey};
+pub use keyring::{
+    delete_keychain_entry, find_orphan_keychain_entries, harden_key_home, Keyring, OrphanEntry,
+};
+pub use recovery::{decode_mnemonic, encode_mnemonic, verify_recovery};
+pub use revocation::{
+    verify_chain_with_revocation, RevocationCertificate, RevocationReason, RevocationStatus,
+    RevocationStore,
+};
+pub use rotation::{RotationCertificate, RotationChain};
+pub use secret_file::write_atomic as write_secret_file;
+pub use vault_key::{derive_vault_key, resolve_vault_key, ResolvedVaultKey, VaultKeySource};
+
+// ───────────────────────────────────────────────────────────────────────
+// Test-only. Kept last in the file: clippy's `items_after_test_module`
+// exists because anything declared below a test module reads, to someone
+// scanning the file, as test scaffolding rather than public surface — and
+// this crate's entire public API was sitting down there.
+// ───────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 pub(crate) mod test_sync {
     //! Shared lock to serialize tests that touch process-global state —
@@ -146,42 +191,3 @@ pub(crate) mod test_sync {
         }
     }
 }
-
-// ── Blast radius (Phase 3 R6-1) ──
-pub use blast_radius::{BlastRadius, BlastRadiusTracker, CompromiseResponse, DelegationEdge};
-
-// ── Sovereignty system (new) ──
-pub use sovereignty::{
-    detect_all_providers, load_sovereign_root, provider_for, provider_for_genesis_record,
-    BiometricEvidence, EnrollmentResult, ProviderCapabilities, ProviderCapability,
-    SovereigntyCategory, SovereigntyMode, SovereigntyProvider,
-};
-
-// ── Hardware wallet infrastructure (quorum-ready) ──
-pub use sovereignty::hardware::{
-    rewrap_secret, DerivationSalt, EnrollmentMetadata, QuorumThreshold,
-};
-
-// ── Backward-compatible re-exports ──
-// These delegate to sovereignty::detection, which wraps the new provider system.
-pub use sovereignty::detection::{detect_biometric, BiometricCapability, BiometricType, Platform};
-
-pub use certificate::{Certificate, CertificateChain, KeyRole};
-pub use error::KeyError;
-pub use hierarchy::{AgentKey, GenesisKey, OperatorKey};
-pub use keyring::{
-    delete_keychain_entry, find_orphan_keychain_entries, harden_key_home, Keyring, OrphanEntry,
-};
-pub use recovery::{decode_mnemonic, encode_mnemonic, verify_recovery};
-pub use revocation::{
-    verify_chain_with_revocation, RevocationCertificate, RevocationReason, RevocationStatus,
-    RevocationStore,
-};
-pub use rotation::{RotationCertificate, RotationChain};
-pub use audit_signer::derive_audit_signer_seed;
-pub use foundation_edge_signer::{
-    derive_foundation_edge_signer_seed, FOUNDATION_EDGE_SIGNER_CONTEXT,
-};
-pub use gate_signer::{derive_gate_signer_seed, GATE_SIGNER_CONTEXT};
-pub use secret_file::write_atomic as write_secret_file;
-pub use vault_key::{derive_vault_key, resolve_vault_key, ResolvedVaultKey, VaultKeySource};

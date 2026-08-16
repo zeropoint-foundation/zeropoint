@@ -211,11 +211,7 @@ impl ClassifierDecision {
 /// ordering — this trait is the seam that lets policy evolve without
 /// touching the call site.
 pub trait InferenceClassifier: Send + Sync {
-    fn choose(
-        &self,
-        envelope: &InferenceEnvelope,
-        query_hint: &QueryHint,
-    ) -> ClassifierDecision;
+    fn choose(&self, envelope: &InferenceEnvelope, query_hint: &QueryHint) -> ClassifierDecision;
 }
 
 /// Default classifier. Deterministic; picks the first `Primary` model,
@@ -266,11 +262,7 @@ impl Default for DefaultClassifier {
 }
 
 impl InferenceClassifier for DefaultClassifier {
-    fn choose(
-        &self,
-        envelope: &InferenceEnvelope,
-        query_hint: &QueryHint,
-    ) -> ClassifierDecision {
+    fn choose(&self, envelope: &InferenceEnvelope, query_hint: &QueryHint) -> ClassifierDecision {
         let envelope_size = envelope.authorized_models.len();
         let routable_count = envelope.routable_count();
 
@@ -289,10 +281,7 @@ impl InferenceClassifier for DefaultClassifier {
                 SelectionReason::SoleAuthorized,
             )
         } else if let Some(primary) = routable.iter().find(|m| m.role == ModelRole::Primary) {
-            (
-                Some(primary.model_id.clone()),
-                SelectionReason::Primary,
-            )
+            (Some(primary.model_id.clone()), SelectionReason::Primary)
         } else {
             // No primary; pick first fallback.
             (
@@ -319,31 +308,6 @@ impl InferenceClassifier for DefaultClassifier {
 // Workload-class inference — heuristic hint for the classifier
 // ---------------------------------------------------------------------------
 
-/// Attempt to classify the workload class of a prompt for
-/// [`QueryHint::workload_class`]. Values match MODEL-DOSSIER-2026-07's
-/// per-workload tracking: `chat | math | code | reasoning | tool_dispatch |
-/// other`.
-///
-/// **Conservative on purpose.** Returns `Some(class)` only when the text
-/// exhibits a fairly distinctive signature. Ambiguous text returns `None`
-/// — better to leave the field unset than mislabel it, since dossier-
-/// consulting policies will treat `None` as "no per-workload signal
-/// available" rather than as `"chat"`.
-///
-/// The heuristic runs on the concatenated content of all messages in the
-/// prompt. Case-insensitive substring matching keeps cost O(N) where N is
-/// prompt length. No allocations beyond a single lowercased buffer.
-///
-/// Precedence when multiple classes match: `tool_dispatch` > `code` >
-/// `reasoning` > `math` > `None` (chat fallback). This matches the
-/// substrate's dispatch importance:
-/// - A JSON tool-envelope response is the most prompt-shape-constrained
-///   emission and should be classified first even if the prompt also
-///   mentions math.
-/// - Reasoning verbs ("prove that", "reason it out") are stronger signals
-///   than the mathematical objects being reasoned about — "Prove that the
-///   sum of two evens is even" is asking for reasoning even though it
-///   mentions "sum of".
 /// Sub-classify a code-classified prompt by scope. Called only from
 /// `infer_workload_class` after generic code markers have matched.
 ///
@@ -397,12 +361,20 @@ fn classify_code_scope(original: &str, lower: &str) -> String {
     // via simple regex-free scan. Two or more distinct extensions-
     // bearing tokens → multi-file scope.
     let exts = [
-        ".rs", ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rb",
-        ".md", ".toml", ".yaml", ".yml", ".json", ".html", ".css",
-        ".c", ".cpp", ".h", ".hpp", ".sh",
+        ".rs", ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rb", ".md", ".toml", ".yaml",
+        ".yml", ".json", ".html", ".css", ".c", ".cpp", ".h", ".hpp", ".sh",
     ];
     let mut distinct_paths: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for token in original.split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == ',' || c == ';' || c == '\'' || c == '"' || c == '`') {
+    for token in original.split(|c: char| {
+        c.is_whitespace()
+            || c == '('
+            || c == ')'
+            || c == ','
+            || c == ';'
+            || c == '\''
+            || c == '"'
+            || c == '`'
+    }) {
         if token.len() < 3 {
             continue;
         }
@@ -441,6 +413,32 @@ fn classify_code_scope(original: &str, lower: &str) -> String {
     "code".to_string()
 }
 
+/// Attempt to classify the workload class of a prompt for
+/// [`QueryHint::workload_class`]. Values match MODEL-DOSSIER-2026-07's
+/// per-workload tracking: `chat | math | code | reasoning | tool_dispatch |
+/// other`.
+///
+/// **Conservative on purpose.** Returns `Some(class)` only when the text
+/// exhibits a fairly distinctive signature. Ambiguous text returns `None`
+/// — better to leave the field unset than mislabel it, since dossier-
+/// consulting policies will treat `None` as "no per-workload signal
+/// available" rather than as `"chat"`.
+///
+/// The heuristic runs on the concatenated content of all messages in the
+/// prompt. Case-insensitive substring matching keeps cost O(N) where N is
+/// prompt length. No allocations beyond a single lowercased buffer.
+///
+/// Precedence when multiple classes match: `tool_dispatch` > `code` >
+/// `reasoning` > `math` > `None` (chat fallback). This matches the
+/// substrate's dispatch importance:
+///
+/// - A JSON tool-envelope response is the most prompt-shape-constrained
+///   emission and should be classified first even if the prompt also
+///   mentions math.
+/// - Reasoning verbs ("prove that", "reason it out") are stronger signals
+///   than the mathematical objects being reasoned about — "Prove that the
+///   sum of two evens is even" is asking for reasoning even though it
+///   mentions "sum of".
 pub fn infer_workload_class(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
 
@@ -474,8 +472,17 @@ pub fn infer_workload_class(text: &str) -> Option<String> {
         "print(",
     ];
     let code_langs = [
-        " rust", " python", " javascript", " typescript", " golang",
-        " haskell", " c++", "sql query", "regex", "bash", "shell",
+        " rust",
+        " python",
+        " javascript",
+        " typescript",
+        " golang",
+        " haskell",
+        " c++",
+        "sql query",
+        "regex",
+        "bash",
+        "shell",
     ];
     if code_markers.iter().any(|m| lower.contains(m))
         || code_langs.iter().any(|m| lower.contains(m))
@@ -575,7 +582,10 @@ mod tests {
         let env = InferenceEnvelope::single("qwen3:8b");
         let decision = DefaultClassifier::new().choose(&env, &QueryHint::default());
         assert_eq!(decision.chosen_model.as_deref(), Some("qwen3:8b"));
-        assert!(matches!(decision.selection_reason, SelectionReason::SoleAuthorized));
+        assert!(matches!(
+            decision.selection_reason,
+            SelectionReason::SoleAuthorized
+        ));
         assert_eq!(decision.envelope_size, 1);
         assert_eq!(decision.routable_count, 1);
     }
@@ -592,7 +602,10 @@ mod tests {
         };
         let decision = DefaultClassifier::new().choose(&env, &QueryHint::default());
         assert_eq!(decision.chosen_model.as_deref(), Some("primary-model"));
-        assert!(matches!(decision.selection_reason, SelectionReason::Primary));
+        assert!(matches!(
+            decision.selection_reason,
+            SelectionReason::Primary
+        ));
         assert_eq!(decision.envelope_size, 3);
         assert_eq!(decision.routable_count, 2);
     }
@@ -745,9 +758,7 @@ mod tests {
     #[test]
     fn workload_class_detects_tool_dispatch_from_json_scaffold() {
         assert_eq!(
-            infer_workload_class(
-                r#"Reply only with JSON: {"intent":"respond","content":"ok"}"#
-            ),
+            infer_workload_class(r#"Reply only with JSON: {"intent":"respond","content":"ok"}"#),
             Some("tool_dispatch".to_string())
         );
     }
@@ -810,9 +821,7 @@ mod tests {
     #[test]
     fn code_scope_repo_wide_from_keyword_alone() {
         assert_eq!(
-            infer_workload_class(
-                "How is this typescript pattern used throughout the codebase?"
-            ),
+            infer_workload_class("How is this typescript pattern used throughout the codebase?"),
             Some("code:repo_wide".to_string())
         );
     }
@@ -820,9 +829,7 @@ mod tests {
     #[test]
     fn code_scope_multi_file_from_explicit_language() {
         assert_eq!(
-            infer_workload_class(
-                "Update the rust imports across files where this trait is used."
-            ),
+            infer_workload_class("Update the rust imports across files where this trait is used."),
             Some("code:multi_file".to_string())
         );
     }
@@ -845,9 +852,7 @@ mod tests {
         // Only one file mentioned → not multi_file. Falls to local_transform
         // because "refactor" is present.
         assert_eq!(
-            infer_workload_class(
-                "Refactor `src/foo.rs` — this rust function should use async."
-            ),
+            infer_workload_class("Refactor `src/foo.rs` — this rust function should use async."),
             Some("code:local_transform".to_string())
         );
     }

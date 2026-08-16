@@ -822,7 +822,10 @@ mod tests {
     fn test_manifest_hash_no_baseline_message() {
         let err = ManifestHashError::NoBaseline("example-tool".to_string());
         let msg = err.to_string();
-        assert!(msg.contains("example-tool"), "error must name the tool: {msg}");
+        assert!(
+            msg.contains("example-tool"),
+            "error must name the tool: {msg}"
+        );
         assert!(
             msg.contains("zp configure tool"),
             "error must direct user to configure: {msg}"
@@ -963,7 +966,7 @@ mod tests {
 
         // The receipt must carry the tool name and manifest hash
         let found = entries.iter().any(|e| {
-            e.receipt.as_ref().map_or(false, |r| {
+            e.receipt.as_ref().is_some_and(|r| {
                 r.extensions
                     .as_ref()
                     .and_then(|ext| ext.get("zp.launch.tool_name"))
@@ -978,14 +981,12 @@ mod tests {
 
         // The vault_resolved names must be present (not values — names only)
         let vault_names_found = entries.iter().any(|e| {
-            e.receipt.as_ref().map_or(false, |r| {
+            e.receipt.as_ref().is_some_and(|r| {
                 r.extensions
                     .as_ref()
                     .and_then(|ext| ext.get("zp.launch.env.vault_resolved"))
                     .and_then(|v| v.as_array())
-                    .map_or(false, |arr| {
-                        arr.iter().any(|s| s.as_str() == Some("OPENAI_API_KEY"))
-                    })
+                    .is_some_and(|arr| arr.iter().any(|s| s.as_str() == Some("OPENAI_API_KEY")))
             })
         });
         assert!(

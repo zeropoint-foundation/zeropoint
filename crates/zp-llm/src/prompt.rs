@@ -154,8 +154,10 @@ mod tests {
     /// had just unlocked.
     #[test]
     fn operator_name_reaches_the_system_prompt() {
-        let mut identity = OperatorIdentity::default();
-        identity.name = "kenrom".to_string();
+        let identity = OperatorIdentity {
+            name: "kenrom".to_string(),
+            ..Default::default()
+        };
 
         let request = PromptBuilder::build(&identity, &[], &[], "who am I?");
 
@@ -171,8 +173,10 @@ mod tests {
     /// is worse than asserting nothing.
     #[test]
     fn empty_operator_name_is_omitted() {
-        let mut identity = OperatorIdentity::default();
-        identity.name = "   ".to_string();
+        let identity = OperatorIdentity {
+            name: "   ".to_string(),
+            ..Default::default()
+        };
 
         let request = PromptBuilder::build(&identity, &[], &[], "hello");
 

@@ -47,7 +47,7 @@ struct Harness {
 fn harness() -> Harness {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path().to_path_buf();
-    let store = AuditStore::open_unsigned(&dir.join("audit.db")).expect("open audit store");
+    let store = AuditStore::open_unsigned(dir.join("audit.db")).expect("open audit store");
     Harness {
         _tmp: tmp,
         dir,

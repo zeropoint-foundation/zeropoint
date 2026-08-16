@@ -203,9 +203,7 @@ impl ChainVerifier {
 
             if !ed25519_blocks.is_empty() {
                 report.signatures_present += 1;
-                let sig_valid = ed25519_blocks
-                    .iter()
-                    .any(|b| self.verify_block(entry, b));
+                let sig_valid = ed25519_blocks.iter().any(|b| self.verify_block(entry, b));
                 ev.signature_valid = Some(sig_valid);
                 if sig_valid {
                     report.signatures_valid += 1;
@@ -234,8 +232,7 @@ impl ChainVerifier {
 
         // Decode the block's base64 signature. Any malformed encoding fails
         // closed — a block is either a valid signature or it isn't.
-        let sig_bytes = match base64::engine::general_purpose::STANDARD
-            .decode(&block.signature_b64)
+        let sig_bytes = match base64::engine::general_purpose::STANDARD.decode(&block.signature_b64)
         {
             Ok(b) if b.len() == 64 => b,
             _ => return false,
@@ -519,7 +516,7 @@ mod tests {
         let verifier = ChainVerifier::new();
 
         // With correct anchor — valid
-        let report = verifier.verify(&[entry.clone()], Some(&anchor_hash));
+        let report = verifier.verify(std::slice::from_ref(&entry), Some(&anchor_hash));
         assert!(report.chain_valid);
         assert_eq!(report.chain_links_valid, 1);
 

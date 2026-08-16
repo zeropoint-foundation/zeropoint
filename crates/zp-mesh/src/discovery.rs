@@ -45,7 +45,7 @@
 //! └──────────────────────────────────────────────────┘
 //! ```
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -215,8 +215,7 @@ pub struct DiscoveryManager {
     /// evicted on every check (and also during `prune_expired`),
     /// keeping the cache footprint bounded by the announce rate inside
     /// the window.
-    recent_nonces:
-        RwLock<HashMap<([u8; 16], DiscoverySource), VecDeque<(String, chrono::DateTime<Utc>)>>>,
+    recent_nonces: crate::transport::NonceCache<([u8; 16], DiscoverySource)>,
     /// Our cached announce payload (rebuilt on each announce cycle).
     cached_announce: RwLock<Option<Vec<u8>>>,
     /// Peer TTL — entries older than this are pruned.
@@ -1000,10 +999,7 @@ mod tests {
 
     /// Helper: build an announce payload with a custom envelope so
     /// tests can stamp a specific timestamp and nonce.
-    fn build_with_envelope(
-        identity: &MeshIdentity,
-        envelope: &SignedAnnounce,
-    ) -> Vec<u8> {
+    fn build_with_envelope(identity: &MeshIdentity, envelope: &SignedAnnounce) -> Vec<u8> {
         DiscoveryManager::build_announce_payload_with_envelope(identity, envelope).unwrap()
     }
 

@@ -1,8 +1,8 @@
 //! Per-tool governance posture — which facets are currently true.
 //!
 //! Posture is derived purely from chain evidence + port registry state.
-//! Not a state machine — no required sequence. A tool can be Registered
-//! + Governed but not Provisioned (vault entries missing). Facets gain/drop
+//! Not a state machine — no required sequence. A tool can be Registered and
+//! Governed but not Provisioned (vault entries missing). Facets gain and drop
 //! as evidence appears or degrades.
 //!
 //! See `docs/design/TOOL-GOVERNANCE-LIFECYCLE-2026-07.md` §4.
@@ -13,8 +13,8 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::chain_reads::{
-    delegation_events, officer_attestations, officer_operations_with_tool,
-    tool_lifecycle_events, DelegationKind, ToolLifecycleKind,
+    delegation_events, officer_attestations, officer_operations_with_tool, tool_lifecycle_events,
+    DelegationKind, ToolLifecycleKind,
 };
 use crate::officer::ChainReader;
 
@@ -157,7 +157,10 @@ pub fn compute_postures(
         let evidence = chain_evidence.get(tool);
 
         // Unregistered: sensor discovered, no chain presence.
-        if unregistered.contains(tool) && evidence.is_none() && !registry.registered_tools.contains_key(tool) {
+        if unregistered.contains(tool)
+            && evidence.is_none()
+            && !registry.registered_tools.contains_key(tool)
+        {
             facets.insert(GovernanceFacet::Unregistered);
         }
 
@@ -178,7 +181,8 @@ pub fn compute_postures(
             .registered_tools
             .get(tool)
             .is_some_and(|r| r.has_launch_command);
-        if evidence.is_some_and(|e| e.has_launched) && has_launch_command
+        if evidence.is_some_and(|e| e.has_launched)
+            && has_launch_command
             && evidence.is_some_and(|e| e.has_delegation)
         {
             facets.insert(GovernanceFacet::Governed);
@@ -249,11 +253,12 @@ fn scan_chain_evidence(chain: &ChainReader<'_>) -> HashMap<String, ToolChainEvid
             evidence.entry(ev.tool_name).or_default().has_port_assigned = true;
         }
     }
-    if let Ok(events) =
-        tool_lifecycle_events(chain, ToolLifecycleKind::PreflightPassed, 200)
-    {
+    if let Ok(events) = tool_lifecycle_events(chain, ToolLifecycleKind::PreflightPassed, 200) {
         for ev in events {
-            evidence.entry(ev.tool_name).or_default().has_preflight_passed = true;
+            evidence
+                .entry(ev.tool_name)
+                .or_default()
+                .has_preflight_passed = true;
         }
     }
 
@@ -296,7 +301,10 @@ fn scan_chain_evidence(chain: &ChainReader<'_>) -> HashMap<String, ToolChainEvid
     // if officers recently flagged it, not if they flagged it months ago.
     if let Ok(ops) = officer_operations_with_tool(chain, 2000) {
         for op in ops {
-            evidence.entry(op.tool_name).or_default().has_officer_warnings = true;
+            evidence
+                .entry(op.tool_name)
+                .or_default()
+                .has_officer_warnings = true;
         }
     }
 
@@ -309,8 +317,8 @@ mod tests {
 
     #[test]
     fn empty_inputs_produce_no_postures() {
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
         let registry = ToolRegistrySnapshot::default();
         let unregistered = UnregisteredTools::new();
@@ -321,8 +329,8 @@ mod tests {
 
     #[test]
     fn unregistered_tool_from_sensor() {
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
         let registry = ToolRegistrySnapshot::default();
         let mut unregistered = UnregisteredTools::new();
@@ -337,8 +345,8 @@ mod tests {
 
     #[test]
     fn registered_tool_from_port_registry() {
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
         let mut registry = ToolRegistrySnapshot::default();
         registry.registered_tools.insert(
@@ -385,8 +393,8 @@ mod tests {
     fn governed_without_attestation_is_not_hardened() {
         // Governed tool with no officer attestations should NOT be hardened.
         // Silence is not approval — signing is gravity.
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
 
         let mut registry = ToolRegistrySnapshot::default();
@@ -414,9 +422,11 @@ mod tests {
         // Direct test of the facet logic: a ToolChainEvidence with
         // has_launched + has_delegation but empty attestations should
         // produce Governed but NOT Hardened.
-        let mut evidence = ToolChainEvidence::default();
-        evidence.has_launched = true;
-        evidence.has_delegation = true;
+        let mut evidence = ToolChainEvidence {
+            has_launched: true,
+            has_delegation: true,
+            ..Default::default()
+        };
         assert!(evidence.officer_attestations.is_empty());
 
         // With attestation added, Hardened should be reachable.

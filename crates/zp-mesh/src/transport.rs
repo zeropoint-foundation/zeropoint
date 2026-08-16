@@ -125,6 +125,18 @@ impl SignedAnnounce {
 /// while keeping the cache footprint bounded.
 pub const REPLAY_WINDOW: chrono::Duration = chrono::Duration::minutes(5);
 
+/// Recently-seen announce nonces, keyed by whatever scope the caller replays
+/// against — a bare destination hash in the runtime, `(hash, source)` in
+/// discovery, where scoping per-source keeps legitimate multi-backend delivery
+/// from reading as replay.
+///
+/// Each queue holds `(nonce_hex, announced_at)` oldest-first, so eviction is a
+/// walk from the front. Named because the same four-deep generic appears in
+/// four signatures across three modules, where writing it inline hides which
+/// of them are talking about the same cache.
+pub type NonceCache<K> =
+    RwLock<HashMap<K, std::collections::VecDeque<(String, chrono::DateTime<Utc>)>>>;
+
 /// Replay-protection check shared by the DiscoveryManager poll path
 /// and the MeshRuntime direct-announce path (Seam 8 — singular
 /// carrier).
@@ -154,9 +166,7 @@ pub const REPLAY_WINDOW: chrono::Duration = chrono::Duration::minutes(5);
 /// reuse. The cache is mutated only on accept; failures leave it
 /// unchanged.
 pub async fn check_and_record_announce_freshness<K>(
-    cache: &tokio::sync::RwLock<
-        std::collections::HashMap<K, std::collections::VecDeque<(String, chrono::DateTime<Utc>)>>,
-    >,
+    cache: &NonceCache<K>,
     key: K,
     envelope: &SignedAnnounce,
 ) -> crate::error::MeshResult<()>

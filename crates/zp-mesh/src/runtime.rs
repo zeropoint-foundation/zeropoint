@@ -145,7 +145,15 @@ impl MeshRuntime {
 
         let task_stats = stats.clone();
         let task = tokio::spawn(async move {
-            run_event_loop(node, config, shutdown_rx, inbound_tx, task_stats, task_nonces).await;
+            run_event_loop(
+                node,
+                config,
+                shutdown_rx,
+                inbound_tx,
+                task_stats,
+                task_nonces,
+            )
+            .await;
         });
 
         info!("Mesh runtime started");
@@ -213,14 +221,7 @@ async fn run_event_loop(
     mut shutdown_rx: watch::Receiver<bool>,
     inbound_tx: mpsc::Sender<InboundEnvelope>,
     stats: Arc<tokio::sync::RwLock<RuntimeStats>>,
-    recent_nonces: Arc<
-        tokio::sync::RwLock<
-            std::collections::HashMap<
-                [u8; 16],
-                std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>,
-            >,
-        >,
-    >,
+    recent_nonces: Arc<crate::transport::NonceCache<[u8; 16]>>,
 ) {
     info!("Mesh runtime event loop running");
 
@@ -355,14 +356,7 @@ async fn handle_announce_packet(
     node: &Arc<MeshNode>,
     packet: &crate::packet::Packet,
     stats: &Arc<tokio::sync::RwLock<RuntimeStats>>,
-    recent_nonces: &Arc<
-        tokio::sync::RwLock<
-            std::collections::HashMap<
-                [u8; 16],
-                std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>,
-            >,
-        >,
-    >,
+    recent_nonces: &Arc<crate::transport::NonceCache<[u8; 16]>>,
 ) {
     let payload = &packet.data;
 
@@ -440,12 +434,9 @@ async fn handle_announce_packet(
     // dimension) — the runtime processes direct-mesh announces from
     // a single delivery layer, unlike DiscoveryManager which polls
     // multiple backends and scopes per-(peer, source).
-    if let Err(e) = crate::transport::check_and_record_announce_freshness(
-        recent_nonces,
-        dest_hash,
-        &envelope,
-    )
-    .await
+    if let Err(e) =
+        crate::transport::check_and_record_announce_freshness(recent_nonces, dest_hash, &envelope)
+            .await
     {
         debug!(
             peer_address = %hex::encode(&combined_key_bytes[..32]),

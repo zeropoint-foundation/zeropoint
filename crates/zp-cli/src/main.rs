@@ -683,7 +683,6 @@ enum Commands {
     /// Pricing freshness — fetch live pricing data or manually attest pricing.
     #[command(subcommand)]
     Pricing(PricingCmd),
-
 }
 
 #[derive(Subcommand)]
@@ -1764,7 +1763,7 @@ async fn main() -> anyhow::Result<()> {
     // Resolution order:  ZP_HOME env var  →  ~/ZeroPoint/data  →  clap default.
     // We only promote when the resolved directory exists, so dev environments that
     // haven't initialized ~/ZeroPoint/ yet keep falling back to the relative path.
-    if args.data_dir == std::path::PathBuf::from("./data/zeropoint") {
+    if args.data_dir == std::path::Path::new("./data/zeropoint") {
         if let Ok(zp_home) = zp_core::paths::home() {
             let zp_data = zp_home.join("data");
             if zp_data.exists() {
@@ -1841,9 +1840,7 @@ async fn main() -> anyhow::Result<()> {
                     || msg.contains("PIN entry");
 
                 if cancelled {
-                    eprintln!(
-                        "\x1b[33m✗\x1b[0m  Sovereignty ceremony cancelled on device."
-                    );
+                    eprintln!("\x1b[33m✗\x1b[0m  Sovereignty ceremony cancelled on device.");
                     eprintln!("  Nothing is wrong and nothing was changed — run the same");
                     eprintln!("  command again and re-enter when the device asks.");
                 } else {
@@ -1881,7 +1878,10 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(unix)]
         if !foreground {
             let log_path = spawn_serve_daemon(port, bind, *no_open);
-            println!("\x1b[32m▶\x1b[0m  zp serve started  (logs: {})", log_path.display());
+            println!(
+                "\x1b[32m▶\x1b[0m  zp serve started  (logs: {})",
+                log_path.display()
+            );
             return Ok(());
         }
 
@@ -2002,10 +2002,7 @@ async fn main() -> anyhow::Result<()> {
                                 .args(["-KILL", &pid.to_string()])
                                 .status();
                         }
-                        println!(
-                            "\x1b[33m↻\x1b[0m  Stopped {} (pid {})",
-                            tool_name, pid
-                        );
+                        println!("\x1b[33m↻\x1b[0m  Stopped {} (pid {})", tool_name, pid);
                         registry.release(
                             tool_name,
                             zp_server::tool_ports::ReleaseReason::OperatorKill,
@@ -2063,9 +2060,7 @@ async fn main() -> anyhow::Result<()> {
         }
         #[cfg(not(feature = "embedded-server"))]
         if name.is_some() {
-            eprintln!(
-                "\x1b[31m✗\x1b[0m  zp restart --name requires the embedded-server feature"
-            );
+            eprintln!("\x1b[31m✗\x1b[0m  zp restart --name requires the embedded-server feature");
             std::process::exit(1);
         }
 
@@ -2098,9 +2093,7 @@ async fn main() -> anyhow::Result<()> {
         }
         #[cfg(not(feature = "embedded-server"))]
         if *all {
-            eprintln!(
-                "\x1b[31m✗\x1b[0m  zp restart --all requires the embedded-server feature"
-            );
+            eprintln!("\x1b[31m✗\x1b[0m  zp restart --all requires the embedded-server feature");
             std::process::exit(1);
         }
 
@@ -2124,7 +2117,10 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(0);
         }
         bindings.sort_by(|a, b| a.tool.cmp(&b.tool));
-        println!("{:<20} {:<10} {:<10} {:<10} {:<10}", "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY");
+        println!(
+            "{:<20} {:<10} {:<10} {:<10} {:<10}",
+            "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY"
+        );
         println!("{}", "─".repeat(62));
         for b in bindings {
             println!(
@@ -2146,9 +2142,7 @@ async fn main() -> anyhow::Result<()> {
     }
     #[cfg(not(feature = "embedded-server"))]
     if matches!(&args.command, Some(Commands::Port(_))) {
-        eprintln!(
-            "\x1b[31m✗\x1b[0m  zp port requires the embedded-server feature"
-        );
+        eprintln!("\x1b[31m✗\x1b[0m  zp port requires the embedded-server feature");
         std::process::exit(1);
     }
 
@@ -2168,7 +2162,10 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(0);
                 }
                 bindings.sort_by(|a, b| a.tool.cmp(&b.tool));
-                println!("{:<20} {:<10} {:<10} {:<10} {:<10}", "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY");
+                println!(
+                    "{:<20} {:<10} {:<10} {:<10} {:<10}",
+                    "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY"
+                );
                 println!("{}", "─".repeat(62));
                 for b in bindings {
                     println!(
@@ -2201,10 +2198,10 @@ async fn main() -> anyhow::Result<()> {
                     }
                 };
 
-                let pid_alive = binding.pid.map_or(false, |p| {
-                    zp_server::tool_ports::is_pid_alive(p)
-                });
-                let working_dir = binding.launch_command.as_ref()
+                let pid_alive = binding.pid.is_some_and(zp_server::tool_ports::is_pid_alive);
+                let working_dir = binding
+                    .launch_command
+                    .as_ref()
                     .and_then(|lc| lc.working_dir.as_deref());
                 let env_zp_exists = working_dir
                     .map(|d| std::path::Path::new(d).join(".env.zp").exists())
@@ -2218,7 +2215,12 @@ async fn main() -> anyhow::Result<()> {
                     }
                     println!("  • Deallocate port :{}", binding.port);
                     if env_zp_exists {
-                        println!("  • Delete {}", std::path::Path::new(working_dir.unwrap()).join(".env.zp").display());
+                        println!(
+                            "  • Delete {}",
+                            std::path::Path::new(working_dir.unwrap())
+                                .join(".env.zp")
+                                .display()
+                        );
                     }
                     print!("\nProceed? [y/N] ");
                     use std::io::Write;
@@ -2241,11 +2243,7 @@ async fn main() -> anyhow::Result<()> {
                     &format!("/api/v1/tools/{}/remove", name_lower),
                 );
                 let server_result = std::process::Command::new("curl")
-                    .args([
-                        "-s", "-X", "POST",
-                        "-w", "\n%{http_code}",
-                        &server_url,
-                    ])
+                    .args(["-s", "-X", "POST", "-w", "\n%{http_code}", &server_url])
                     .output();
 
                 let used_server = match server_result {
@@ -2259,11 +2257,17 @@ async fn main() -> anyhow::Result<()> {
                                 // Server handled the full removal.
                                 if let Ok(resp) = serde_json::from_str::<serde_json::Value>(&body) {
                                     let mut parts: Vec<String> = Vec::new();
-                                    if let Some(pid) = resp.get("pid_killed").and_then(|v| v.as_u64()) {
+                                    if let Some(pid) =
+                                        resp.get("pid_killed").and_then(|v| v.as_u64())
+                                    {
                                         parts.push(format!("killed pid {}", pid));
                                     }
                                     parts.push(format!("deallocated :{}", binding.port));
-                                    if resp.get("env_zp_deleted").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                    if resp
+                                        .get("env_zp_deleted")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false)
+                                    {
                                         parts.push("deleted .env.zp".to_string());
                                     }
                                     println!(
@@ -2272,7 +2276,10 @@ async fn main() -> anyhow::Result<()> {
                                         parts.join(", ")
                                     );
                                 } else {
-                                    println!("\x1b[32m✓\x1b[0m  Removed {} via server.", binding.tool);
+                                    println!(
+                                        "\x1b[32m✓\x1b[0m  Removed {} via server.",
+                                        binding.tool
+                                    );
                                 }
                                 true
                             } else {
@@ -2319,9 +2326,14 @@ async fn main() -> anyhow::Result<()> {
 
                     // Delete .env.zp
                     if env_zp_exists {
-                        let env_zp_path = std::path::Path::new(working_dir.unwrap()).join(".env.zp");
+                        let env_zp_path =
+                            std::path::Path::new(working_dir.unwrap()).join(".env.zp");
                         if let Err(e) = std::fs::remove_file(&env_zp_path) {
-                            eprintln!("  Warning: could not delete {}: {}", env_zp_path.display(), e);
+                            eprintln!(
+                                "  Warning: could not delete {}: {}",
+                                env_zp_path.display(),
+                                e
+                            );
                         } else {
                             summary_parts.push("deleted .env.zp".to_string());
                         }
@@ -2340,9 +2352,7 @@ async fn main() -> anyhow::Result<()> {
     }
     #[cfg(not(feature = "embedded-server"))]
     if matches!(&args.command, Some(Commands::Tool(_))) {
-        eprintln!(
-            "\x1b[31m✗\x1b[0m  zp tool requires the embedded-server feature"
-        );
+        eprintln!("\x1b[31m✗\x1b[0m  zp tool requires the embedded-server feature");
         std::process::exit(1);
     }
 
@@ -2583,7 +2593,10 @@ async fn main() -> anyhow::Result<()> {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(mut vault) => {
                         let val = value.clone().unwrap_or_else(|| {
-                            eprint!("Enter value for {}/{} (input hidden by terminal): ", tool, var);
+                            eprint!(
+                                "Enter value for {}/{} (input hidden by terminal): ",
+                                tool, var
+                            );
                             // Use rpassword-style stdin read so key bytes don't echo.
                             // Fall back to plain readline if rpassword isn't available.
                             let mut input = String::new();
@@ -2747,7 +2760,9 @@ async fn main() -> anyhow::Result<()> {
                                             Ok(kr) => {
                                                 // genesis_secret is an OnceLock cache hit —
                                                 // resolve_vault_key() already loaded it above.
-                                                let genesis_secret = crate::commands::load_genesis_secret_composed().ok();
+                                                let genesis_secret =
+                                                    crate::commands::load_genesis_secret_composed()
+                                                        .ok();
                                                 let receipt_fields = run::LaunchReceiptFields {
                                                     tool_name: name,
                                                     manifest_hash:
@@ -2827,32 +2842,53 @@ async fn main() -> anyhow::Result<()> {
                                                 match child.spawn() {
                                                     Ok(spawned) => {
                                                         let child_pid = spawned.id();
-                                                        eprintln!("spawned {} (pid {})", name, child_pid);
+                                                        eprintln!(
+                                                            "spawned {} (pid {})",
+                                                            name, child_pid
+                                                        );
                                                         // Wire 1: record PID + launch command in port registry.
                                                         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                                                         let data_dir = cfg.data_dir.value.clone();
                                                         let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
-                                                        if let Err(_) = registry.update_pid(name, child_pid) {
+                                                        if registry
+                                                            .update_pid(name, child_pid)
+                                                            .is_err()
+                                                        {
                                                             // No binding yet — auto-allocate from the resolved
                                                             // env_map. Scan for PORT-like vars; the vault values
                                                             // already carry the operator's intended port numbers,
                                                             // so pass them as preferred hints.
                                                             use zp_server::tool_ports::PreferenceSource;
-                                                            let mut port_vars: Vec<(String, Option<u16>)> = env_map
+                                                            let mut port_vars: Vec<(
+                                                                String,
+                                                                Option<u16>,
+                                                            )> = env_map
                                                                 .iter()
-                                                                .filter(|(k, _)| *k == "PORT" || k.ends_with("_PORT"))
+                                                                .filter(|(k, _)| {
+                                                                    *k == "PORT"
+                                                                        || k.ends_with("_PORT")
+                                                                })
                                                                 .map(|(k, v)| {
-                                                                    let preferred = std::str::from_utf8(v)
-                                                                        .ok()
-                                                                        .and_then(|s| s.trim().parse::<u16>().ok());
+                                                                    let preferred =
+                                                                        std::str::from_utf8(v)
+                                                                            .ok()
+                                                                            .and_then(|s| {
+                                                                                s.trim()
+                                                                                    .parse::<u16>()
+                                                                                    .ok()
+                                                                            });
                                                                     (k.clone(), preferred)
                                                                 })
                                                                 .collect();
                                                             // Sort deterministically; prefer HTTP_PORT, then PORT.
                                                             port_vars.sort_by_key(|(k, _)| {
-                                                                if k == "HTTP_PORT" { 0u8 }
-                                                                else if k == "PORT" { 1 }
-                                                                else { 2 }
+                                                                if k == "HTTP_PORT" {
+                                                                    0u8
+                                                                } else if k == "PORT" {
+                                                                    1
+                                                                } else {
+                                                                    2
+                                                                }
                                                             });
                                                             let primary_var = port_vars
                                                                 .first()
@@ -2891,13 +2927,14 @@ async fn main() -> anyhow::Result<()> {
                                                         // Capture working dir (CWD at spawn time) for
                                                         // version provenance and restart replay.
                                                         let cwd = std::env::current_dir().ok();
-                                                        let cwd_str = cwd.as_deref()
+                                                        let cwd_str = cwd
+                                                            .as_deref()
                                                             .and_then(|p| p.to_str())
                                                             .map(|s| s.to_string());
                                                         let _ = registry.store_launch_command(
                                                             name,
                                                             &command[0],
-                                                            &command[1..].to_vec(),
+                                                            &command[1..],
                                                             cwd_str.as_deref(),
                                                         );
                                                         // Wire 1b: auto-canonicalize.
@@ -2909,33 +2946,37 @@ async fn main() -> anyhow::Result<()> {
                                                         // Best-effort: failures never block launch.
                                                         {
                                                             let db_path = data_dir.join("audit.db");
-                                                            let auto_canon: anyhow::Result<()> = (|| {
-                                                                use std::sync::{Arc, Mutex};
-                                                                let keyring = crate::commands::open_keyring()
+                                                            let auto_canon: anyhow::Result<()> =
+                                                                (|| {
+                                                                    use std::sync::{Arc, Mutex};
+                                                                    let keyring = crate::commands::open_keyring()
                                                                     .context("open keyring")?;
-                                                                let genesis_secret = crate::commands::load_genesis_secret_composed()
+                                                                    let genesis_secret = crate::commands::load_genesis_secret_composed()
                                                                     .context("genesis secret")?;
-                                                                let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
-                                                                let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-                                                                let store = Arc::new(Mutex::new(
+                                                                    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+                                                                    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+                                                                    let store = Arc::new(Mutex::new(
                                                                     zp_audit::AuditStore::open_signed(&db_path, audit_signer)
                                                                         .context("open audit store")?,
                                                                 ));
-                                                                // Idempotent: returns None if already canonicalized.
-                                                                let bead_zeros = zp_server::tool_chain::query_bead_zeros(&store);
-                                                                if bead_zeros.contains_key(&format!("tool:{}", name)) {
-                                                                    return Ok(()); // already on chain
-                                                                }
-                                                                let operator_secret: [u8; 32] = crate::commands::load_operator_composed(&keyring)
+                                                                    // Idempotent: returns None if already canonicalized.
+                                                                    let bead_zeros = zp_server::tool_chain::query_bead_zeros(&store);
+                                                                    if bead_zeros.contains_key(
+                                                                        &format!("tool:{}", name),
+                                                                    ) {
+                                                                        return Ok(());
+                                                                        // already on chain
+                                                                    }
+                                                                    let operator_secret: [u8; 32] = crate::commands::load_operator_composed(&keyring)
                                                                     .context("operator key")?
                                                                     .secret_key();
-                                                                let signing_key = ed25519_dalek::SigningKey::from_bytes(&operator_secret);
-                                                                let initial_state = serde_json::json!({
-                                                                    "tool": name,
-                                                                    "path": cwd_str,
-                                                                    "canonicalized_at": chrono::Utc::now().to_rfc3339(),
-                                                                });
-                                                                zp_server::tool_chain::emit_signed_canonicalization_receipt(
+                                                                    let signing_key = ed25519_dalek::SigningKey::from_bytes(&operator_secret);
+                                                                    let initial_state = serde_json::json!({
+                                                                        "tool": name,
+                                                                        "path": cwd_str,
+                                                                        "canonicalized_at": chrono::Utc::now().to_rfc3339(),
+                                                                    });
+                                                                    zp_server::tool_chain::emit_signed_canonicalization_receipt(
                                                                     &store,
                                                                     "tool",
                                                                     name,
@@ -2944,9 +2985,10 @@ async fn main() -> anyhow::Result<()> {
                                                                     "zp-configure-exec",
                                                                     Some(&signing_key),
                                                                 );
-                                                                eprintln!("  canon    tool:{} (bead-zero emitted)", name);
-                                                                Ok(())
-                                                            })();
+                                                                    eprintln!("  canon    tool:{} (bead-zero emitted)", name);
+                                                                    Ok(())
+                                                                })(
+                                                                );
                                                             if let Err(e) = auto_canon {
                                                                 eprintln!("  \u{26a0}  auto-canonicalize skipped: {}", e);
                                                             }
@@ -2959,33 +3001,45 @@ async fn main() -> anyhow::Result<()> {
                                                                 capture_tool_version,
                                                                 resolve_binary_path,
                                                             };
-                                                            let bin_path = resolve_binary_path(&command[0]);
+                                                            let bin_path =
+                                                                resolve_binary_path(&command[0]);
                                                             let version = capture_tool_version(
                                                                 cwd.as_deref(),
                                                                 bin_path.as_deref(),
                                                             );
                                                             // Print captured provenance for operator visibility.
-                                                            if let Some(ref commit) = version.source_commit {
-                                                                let dirty = version.source_dirty.unwrap_or(false);
+                                                            if let Some(ref commit) =
+                                                                version.source_commit
+                                                            {
+                                                                let dirty = version
+                                                                    .source_dirty
+                                                                    .unwrap_or(false);
                                                                 eprintln!(
                                                                     "  version  {} @ {}{}",
                                                                     name,
                                                                     &commit[..commit.len().min(12)],
-                                                                    if dirty { " (dirty)" } else { "" }
+                                                                    if dirty {
+                                                                        " (dirty)"
+                                                                    } else {
+                                                                        ""
+                                                                    }
                                                                 );
                                                             }
-                                                            if let Some(ref hash) = version.binary_hash {
+                                                            if let Some(ref hash) =
+                                                                version.binary_hash
+                                                            {
                                                                 eprintln!(
                                                                     "  binary   {}…",
                                                                     &hash[..hash.len().min(16)]
                                                                 );
                                                             }
-                                                            let _ = registry.store_tool_version(name, version.clone());
+                                                            let _ = registry.store_tool_version(
+                                                                name,
+                                                                version.clone(),
+                                                            );
                                                             // Emit chain receipt: tool:launched:<name>
                                                             emit::emit_tool_launch_receipt(
-                                                                name,
-                                                                &version,
-                                                                &data_dir,
+                                                                name, &version, &data_dir,
                                                             );
                                                         }
                                                         // Wire 2: post-launch port reconciliation.
@@ -3019,7 +3073,8 @@ async fn main() -> anyhow::Result<()> {
                                                                     .unwrap_or(child_pid);
                                                             // (d) update registry with real PID
                                                             if actual_pid != child_pid {
-                                                                let _ = registry.update_pid(name, actual_pid);
+                                                                let _ = registry
+                                                                    .update_pid(name, actual_pid);
                                                                 eprintln!(
                                                                     "  pid      {} launcher={} actual={}",
                                                                     name, child_pid, actual_pid
@@ -3385,11 +3440,8 @@ async fn main() -> anyhow::Result<()> {
         }
         // ── Foundation-relayed receipts on the LOCAL chain ─────────────────
         if *foundation_receipts {
-            let exit = verify_foundation_receipts_local(
-                audit_db.as_deref(),
-                operator.as_deref(),
-                *json,
-            );
+            let exit =
+                verify_foundation_receipts_local(audit_db.as_deref(), operator.as_deref(), *json);
             std::process::exit(exit);
         }
         // Resolve the target server address from topology config.
@@ -3561,7 +3613,9 @@ async fn main() -> anyhow::Result<()> {
 
         // Fallback: direct DB access (server not running).
         // args.data_dir is already resolved from ZP_HOME / ~/ZeroPoint/data at startup.
-        let db_path = audit_db.clone().unwrap_or_else(|| args.data_dir.join("audit.db"));
+        let db_path = audit_db
+            .clone()
+            .unwrap_or_else(|| args.data_dir.join("audit.db"));
         let store = match zp_audit::AuditStore::open_readonly(&db_path) {
             Ok(s) => s,
             Err(e) => {
@@ -3944,8 +3998,13 @@ async fn main() -> anyhow::Result<()> {
         json,
     }) = &args.command
     {
-        let exit_code =
-            run_canonicalize(name, path.as_deref(), audit_db.as_deref(), &args.data_dir, *json);
+        let exit_code = run_canonicalize(
+            name,
+            path.as_deref(),
+            audit_db.as_deref(),
+            &args.data_dir,
+            *json,
+        );
         std::process::exit(exit_code);
     }
 
@@ -4136,7 +4195,7 @@ async fn main() -> anyhow::Result<()> {
     // Samples lsof system-wide, attributes via PortRegistry, prints table.
     if let Some(Commands::Ps { json, tools }) = &args.command {
         use zp_server::tool_ports::{
-            ProcessAttribution, lsof_all_listen, PostureSnapshot, PortRegistry,
+            lsof_all_listen, PortRegistry, PostureSnapshot, ProcessAttribution,
         };
 
         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
@@ -4149,21 +4208,20 @@ async fn main() -> anyhow::Result<()> {
         if *json {
             let to_obj = |ap: &zp_server::tool_ports::AttributedProcess| {
                 let (kind, detail) = match &ap.attribution {
-                    ProcessAttribution::SubstrateManaged { tool_name, allocated_receipt_id } => (
+                    ProcessAttribution::SubstrateManaged {
+                        tool_name,
+                        allocated_receipt_id,
+                    } => (
                         "substrate_managed",
                         serde_json::json!({
                             "tool_name": tool_name,
                             "allocated_receipt_id": allocated_receipt_id
                         }),
                     ),
-                    ProcessAttribution::KnownSystem { category } => (
-                        "known_system",
-                        serde_json::json!({ "category": category }),
-                    ),
-                    ProcessAttribution::Unknown => (
-                        "unknown",
-                        serde_json::json!({}),
-                    ),
+                    ProcessAttribution::KnownSystem { category } => {
+                        ("known_system", serde_json::json!({ "category": category }))
+                    }
+                    ProcessAttribution::Unknown => ("unknown", serde_json::json!({})),
                 };
                 serde_json::json!({
                     "pid": ap.process.pid,
@@ -4190,15 +4248,21 @@ async fn main() -> anyhow::Result<()> {
             if !snapshot.substrate_managed.is_empty() {
                 println!("\x1b[32m● Substrate-managed\x1b[0m");
                 for ap in &snapshot.substrate_managed {
-                    if let ProcessAttribution::SubstrateManaged { tool_name, .. } = &ap.attribution {
+                    if let ProcessAttribution::SubstrateManaged { tool_name, .. } = &ap.attribution
+                    {
                         // Fetch version info from registry binding.
-                        let version_str = registry.get_assigned(tool_name)
+                        let version_str = registry
+                            .get_assigned(tool_name)
                             .and_then(|b| b.last_version)
                             .map(|v| {
                                 let mut parts = Vec::new();
                                 if let Some(ref c) = v.source_commit {
                                     let short = &c[..c.len().min(8)];
-                                    let dirty = if v.source_dirty.unwrap_or(false) { "*" } else { "" };
+                                    let dirty = if v.source_dirty.unwrap_or(false) {
+                                        "*"
+                                    } else {
+                                        ""
+                                    };
                                     parts.push(format!("commit:{}{}", short, dirty));
                                 }
                                 if let Some(ref h) = v.binary_hash {
@@ -4219,7 +4283,11 @@ async fn main() -> anyhow::Result<()> {
                         } else {
                             println!(
                                 "  {:5}  {:20}  :{:<6}  → {}  \x1b[2m[{}]\x1b[0m",
-                                ap.process.pid, ap.process.name, ap.process.port, tool_name, version_str
+                                ap.process.pid,
+                                ap.process.name,
+                                ap.process.port,
+                                tool_name,
+                                version_str
                             );
                         }
                     }
@@ -4275,9 +4343,8 @@ async fn main() -> anyhow::Result<()> {
 
                 for binding in &bindings {
                     // ── Collect all ports this tool should have bound ──────
-                    let mut port_checks: Vec<(String, u16)> = vec![
-                        (binding.port_var.clone(), binding.port),
-                    ];
+                    let mut port_checks: Vec<(String, u16)> =
+                        vec![(binding.port_var.clone(), binding.port)];
                     for (var, &port) in &binding.extra_ports {
                         port_checks.push((var.clone(), port));
                     }
@@ -4315,7 +4382,8 @@ async fn main() -> anyhow::Result<()> {
                         let (status, ct) = match authed {
                             Ok(r) => {
                                 let s = r.status().as_u16();
-                                let c = r.headers()
+                                let c = r
+                                    .headers()
                                     .get("content-type")
                                     .and_then(|v| v.to_str().ok())
                                     .map(|s| s.split(';').next().unwrap_or(s).trim().to_string());
@@ -4388,29 +4456,31 @@ async fn main() -> anyhow::Result<()> {
                     println!("  {} \x1b[1m{}\x1b[0m", status_icon, binding.tool);
 
                     // Ports line
-                    let ports_str: Vec<String> = port_status.iter().map(|(var, port, pid)| {
-                        match pid {
+                    let ports_str: Vec<String> = port_status
+                        .iter()
+                        .map(|(var, port, pid)| match pid {
                             Some(p) => format!("  :{} {} pid={}", port, var, p),
                             None if var == "proxy_target" => format!("  :{} proxy_target", port),
                             None => format!("  :{} {} \x1b[31m✗ not listening\x1b[0m", port, var),
-                        }
-                    }).collect();
+                        })
+                        .collect();
                     println!("    Ports:{}", ports_str.join("  "));
 
                     // Probe line
                     let probe_str = match (authed_status, &authed_ct) {
                         (Some(200), Some(ct)) => format!(
-                            ":{} GET / → \x1b[32m200 {}\x1b[0m \x1b[32m✓\x1b[0m", proxy_target, ct
+                            ":{} GET / → \x1b[32m200 {}\x1b[0m \x1b[32m✓\x1b[0m",
+                            proxy_target, ct
                         ),
-                        (Some(s), _) => format!(
-                            ":{} GET / → \x1b[31m{}\x1b[0m", proxy_target, s
-                        ),
-                        (None, _) => format!(
-                            ":{} GET / → \x1b[31mno response\x1b[0m", proxy_target
-                        ),
+                        (Some(s), _) => format!(":{} GET / → \x1b[31m{}\x1b[0m", proxy_target, s),
+                        (None, _) => {
+                            format!(":{} GET / → \x1b[31mno response\x1b[0m", proxy_target)
+                        }
                     };
                     let unauthed_str = match unauthed_status {
-                        Some(200) => " \x1b[33m(unauthed also 200 — no auth gate)\x1b[0m".to_string(),
+                        Some(200) => {
+                            " \x1b[33m(unauthed also 200 — no auth gate)\x1b[0m".to_string()
+                        }
                         Some(s) => format!(" (unauthed→{})", s),
                         None => String::new(),
                     };
@@ -4449,7 +4519,9 @@ async fn main() -> anyhow::Result<()> {
             }
         };
 
-        let working_dir_str = binding.launch_command.as_ref()
+        let working_dir_str = binding
+            .launch_command
+            .as_ref()
             .and_then(|lc| lc.working_dir.clone());
         let working_dir = working_dir_str.as_deref().map(std::path::Path::new);
 
@@ -4461,19 +4533,23 @@ async fn main() -> anyhow::Result<()> {
 
         if let Some(ref commit) = version.source_commit {
             let dirty = version.source_dirty.unwrap_or(false);
-            println!("  commit   {}{}",
+            println!(
+                "  commit   {}{}",
                 &commit[..commit.len().min(12)],
-                if dirty { " (dirty — uncommitted changes present)" } else { "" }
+                if dirty {
+                    " (dirty — uncommitted changes present)"
+                } else {
+                    ""
+                }
             );
         } else {
             println!("  commit   (not a git working directory)");
         }
         if let Some(ref hash) = version.binary_hash {
-            println!("  binary   {}…  ({})",
+            println!(
+                "  binary   {}…  ({})",
                 &hash[..hash.len().min(16)],
-                bin_path.as_deref()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or("?")
+                bin_path.as_deref().and_then(|p| p.to_str()).unwrap_or("?")
             );
         }
 
@@ -4485,12 +4561,14 @@ async fn main() -> anyhow::Result<()> {
             let new_hash = version.binary_hash.as_deref().unwrap_or("?");
 
             if prev_hash != new_hash {
-                println!("  \x1b[33m⚑ binary changed\x1b[0m  {} → {}",
+                println!(
+                    "  \x1b[33m⚑ binary changed\x1b[0m  {} → {}",
                     &prev_hash[..prev_hash.len().min(8)],
                     &new_hash[..new_hash.len().min(8)]
                 );
             } else if prev_commit != new_commit {
-                println!("  \x1b[33m⚑ commit changed\x1b[0m  {} → {}",
+                println!(
+                    "  \x1b[33m⚑ commit changed\x1b[0m  {} → {}",
                     &prev_commit[..prev_commit.len().min(8)],
                     &new_commit[..new_commit.len().min(8)]
                 );
@@ -4549,7 +4627,12 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         };
-        println!("  relaunching  {} via `{} {}`", name, lc.command, lc.args.join(" "));
+        println!(
+            "  relaunching  {} via `{} {}`",
+            name,
+            lc.command,
+            lc.args.join(" ")
+        );
         let mut relaunch = std::process::Command::new("zp");
         relaunch.args(["configure", "exec", "--name", name, "--"]);
         relaunch.arg(&lc.command);
@@ -4563,7 +4646,10 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(0);
             }
             Ok(s) => {
-                eprintln!("  \x1b[31m✗\x1b[0m  relaunch exited {}", s.code().unwrap_or(-1));
+                eprintln!(
+                    "  \x1b[31m✗\x1b[0m  relaunch exited {}",
+                    s.code().unwrap_or(-1)
+                );
                 std::process::exit(1);
             }
             Err(e) => {
@@ -4863,16 +4949,13 @@ async fn main() -> anyhow::Result<()> {
 
                         if let Ok(item) = serde_json::from_str::<serde_json::Value>(&data) {
                             let elapsed = t0.elapsed().as_millis();
-                            let phase = item.get("event_type")
+                            let phase = item
+                                .get("event_type")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("?");
-                            let summary = item.get("summary")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            eprintln!(
-                                "\x1b[2m[{:>6}ms] {:<30} {}\x1b[0m",
-                                elapsed, phase, summary
-                            );
+                            let summary =
+                                item.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+                            eprintln!("\x1b[2m[{:>6}ms] {:<30} {}\x1b[0m", elapsed, phase, summary);
                         }
                     }
                 }
@@ -4904,10 +4987,16 @@ async fn main() -> anyhow::Result<()> {
                     if let Some(text) = body.get("response").and_then(|v| v.as_str()) {
                         println!("{}", text);
                     } else {
-                        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_default());
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&body).unwrap_or_default()
+                        );
                     }
                 } else {
-                    let err = body.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error");
+                    let err = body
+                        .get("error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown error");
                     eprintln!("regent: {}", err);
                     std::process::exit(1);
                 }
@@ -4957,16 +5046,22 @@ async fn main() -> anyhow::Result<()> {
             .ok()
             .and_then(|p| std::fs::canonicalize(p).ok())
             .and_then(|p| {
-                p.parent()                         // target/debug/
-                    .and_then(|p| p.parent())      // target/
-                    .and_then(|p| p.parent())      // repo root
+                p.parent() // target/debug/
+                    .and_then(|p| p.parent()) // target/
+                    .and_then(|p| p.parent()) // repo root
                     .map(|p| p.to_path_buf())
             });
         let head_hash = repo_dir
             .as_deref()
             .and_then(|dir| {
                 std::process::Command::new("git")
-                    .args(["-C", dir.to_str().unwrap_or("."), "rev-parse", "--short", "HEAD"])
+                    .args([
+                        "-C",
+                        dir.to_str().unwrap_or("."),
+                        "rev-parse",
+                        "--short",
+                        "HEAD",
+                    ])
                     .output()
                     .ok()
                     .and_then(|o| {
@@ -5714,10 +5809,7 @@ async fn main() -> anyhow::Result<()> {
                 checks.push(Check {
                     label: "Compute surface".into(),
                     status: "warn",
-                    detail: format!(
-                        "{unknown_count} unknown listener(s): {}",
-                        names.join(", ")
-                    ),
+                    detail: format!("{unknown_count} unknown listener(s): {}", names.join(", ")),
                     fix: "Run `zp ps` to review. Investigate with `lsof -p <pid>`.".into(),
                 });
             }
@@ -5747,9 +5839,9 @@ async fn main() -> anyhow::Result<()> {
                             continue; // No hash to compare against.
                         }
                         // Resolve current binary and re-hash.
-                        let bin_cmd = binding.launch_command.as_ref()
-                            .map(|lc| lc.command.clone());
-                        let current_hash = bin_cmd.as_deref()
+                        let bin_cmd = binding.launch_command.as_ref().map(|lc| lc.command.clone());
+                        let current_hash = bin_cmd
+                            .as_deref()
                             .and_then(resolve_binary_path)
                             .and_then(|p| std::fs::read(&p).ok())
                             .map(|b| blake3::hash(&b).to_hex().to_string());
@@ -5775,7 +5867,8 @@ async fn main() -> anyhow::Result<()> {
                         drifted.len(),
                         drifted.join(", ")
                     ),
-                    fix: "Run `zp update --name <tool>` to record the new version and relaunch.".into(),
+                    fix: "Run `zp update --name <tool>` to record the new version and relaunch."
+                        .into(),
                 });
             } else if !no_version.is_empty() {
                 checks.push(Check {
@@ -5805,8 +5898,8 @@ async fn main() -> anyhow::Result<()> {
         // Per-tool facet computation from chain evidence + port registry.
         {
             use zp_officers::governance_posture::{
-                compute_postures, GovernanceFacet, RegisteredToolInfo,
-                ToolRegistrySnapshot, UnregisteredTools,
+                compute_postures, GovernanceFacet, RegisteredToolInfo, ToolRegistrySnapshot,
+                UnregisteredTools,
             };
 
             let registry = zp_server::tool_ports::PortRegistry::new(data);
@@ -5835,9 +5928,7 @@ async fn main() -> anyhow::Result<()> {
                 None
             };
             let fallback = zp_audit::AuditStore::open_readonly(":memory:").unwrap();
-            let chain = zp_officers::officer::ChainReader::new(
-                store.as_ref().unwrap_or(&fallback),
-            );
+            let chain = zp_officers::officer::ChainReader::new(store.as_ref().unwrap_or(&fallback));
             let postures = compute_postures(&chain, &snapshot, &unregistered);
 
             if postures.is_empty() {
@@ -5849,17 +5940,22 @@ async fn main() -> anyhow::Result<()> {
                 });
             } else {
                 for p in &postures {
-                    let status = if p.has(GovernanceFacet::Hardened) || p.has(GovernanceFacet::Governed) {
-                        "pass"
-                    } else if p.has(GovernanceFacet::Registered) || p.has(GovernanceFacet::Unregistered) {
-                        "warn"
-                    } else {
-                        "info"
-                    };
+                    let status =
+                        if p.has(GovernanceFacet::Hardened) || p.has(GovernanceFacet::Governed) {
+                            "pass"
+                        } else if p.has(GovernanceFacet::Registered)
+                            || p.has(GovernanceFacet::Unregistered)
+                        {
+                            "warn"
+                        } else {
+                            "info"
+                        };
 
                     let fix = if p.has(GovernanceFacet::Unregistered) {
                         "Run: zp configure <tool> to register".into()
-                    } else if p.has(GovernanceFacet::Registered) && !p.has(GovernanceFacet::Governed) {
+                    } else if p.has(GovernanceFacet::Registered)
+                        && !p.has(GovernanceFacet::Governed)
+                    {
                         "Launch via: zp configure exec <tool>".into()
                     } else {
                         String::new()
@@ -5937,11 +6033,8 @@ async fn main() -> anyhow::Result<()> {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(17770);
-            let url = zp_net::peer_url_with_path(
-                "127.0.0.1",
-                port,
-                "/api/v1/security/policy-version",
-            );
+            let url =
+                zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/security/policy-version");
             let client = reqwest::Client::new();
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
@@ -5984,9 +6077,9 @@ async fn main() -> anyhow::Result<()> {
             PolicyCmd::Status => policy_commands::status(),
             PolicyCmd::Verify => policy_commands::verify(),
             PolicyCmd::Remove { identifier } => policy_commands::remove(identifier),
-            PolicyCmd::Version => unreachable!(),   // handled above
-            PolicyCmd::Set(_) => unreachable!(),    // handled above (async path)
-            PolicyCmd::Show(_) => unreachable!(),   // handled above (async path)
+            PolicyCmd::Version => unreachable!(), // handled above
+            PolicyCmd::Set(_) => unreachable!(),  // handled above (async path)
+            PolicyCmd::Show(_) => unreachable!(), // handled above (async path)
         };
         #[cfg(not(feature = "policy-wasm"))]
         let exit_code = {
@@ -6096,8 +6189,7 @@ async fn main() -> anyhow::Result<()> {
     // directory first (CROSS-USER-01) — this was previously an unnamed side
     // effect of `open_keyring()`, whose value went unused after the
     // composed-loader refactor.
-    crate::commands::harden_zp_home()
-        .context("Failed to prepare the ZeroPoint home directory")?;
+    crate::commands::harden_zp_home().context("Failed to prepare the ZeroPoint home directory")?;
     // Derive the audit signer from the Genesis secret
     let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
@@ -6203,9 +6295,12 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Audit(AuditCmd::Compact { retain })) => {
             commands::audit_compact(&pipeline, retain).await?
         }
-        Some(Commands::Chain(ChainCmd::Story { limit, domain, summary, json })) => {
-            commands::chain_story(&pipeline, limit, domain.as_deref(), summary, json).await?
-        }
+        Some(Commands::Chain(ChainCmd::Story {
+            limit,
+            domain,
+            summary,
+            json,
+        })) => commands::chain_story(&pipeline, limit, domain.as_deref(), summary, json).await?,
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Restart { .. }) => unreachable!(), // handled above
@@ -6227,7 +6322,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Revoke { .. }) => unreachable!(), // handled above
         Some(Commands::Grants { .. }) => unreachable!(), // handled above
         Some(Commands::Cfg(_)) => unreachable!(),       // handled above
-        Some(Commands::Regent { .. }) => unreachable!(),  // handled above
+        Some(Commands::Regent { .. }) => unreachable!(), // handled above
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
         Some(Commands::Ps { .. }) => unreachable!(),    // handled above
         #[cfg(feature = "embedded-server")]
@@ -6237,7 +6332,7 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "embedded-server")]
         Some(Commands::Canonicalize { .. }) => unreachable!(), // handled above
         Some(Commands::Adapt { .. }) => unreachable!(), // handled above
-        Some(Commands::Pricing(_)) => unreachable!(),  // handled above
+        Some(Commands::Pricing(_)) => unreachable!(),   // handled above
         Some(Commands::Scan { .. }) => unreachable!(),  // handled above
         Some(Commands::Operator(_)) => unreachable!(),  // handled above
         Some(Commands::Emit { .. }) => unreachable!(),  // handled above
@@ -6457,12 +6552,20 @@ fn run_canonicalize(
     // Capture git commit from the tool's working directory (best-effort).
     let source_commit: Option<String> = path.and_then(|dir| {
         std::process::Command::new("git")
-            .args(["-C", dir.to_str().unwrap_or("."), "rev-parse", "--short", "HEAD"])
+            .args([
+                "-C",
+                dir.to_str().unwrap_or("."),
+                "rev-parse",
+                "--short",
+                "HEAD",
+            ])
             .output()
             .ok()
             .and_then(|o| {
                 if o.status.success() {
-                    String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                    String::from_utf8(o.stdout)
+                        .ok()
+                        .map(|s| s.trim().to_string())
                 } else {
                     None
                 }
@@ -6535,7 +6638,11 @@ fn run_canonicalize(
             })
         );
     } else if let Some(hash) = result {
-        println!("✓ canonicalized  tool:{}  ({})", name, &hash[..hash.len().min(16)]);
+        println!(
+            "✓ canonicalized  tool:{}  ({})",
+            name,
+            &hash[..hash.len().min(16)]
+        );
     } else {
         println!("✓ already canonicalized  tool:{}", name);
     }
@@ -6875,7 +6982,10 @@ fn verify_foundation_receipts_local(
                 .collect::<Vec<_>>(),
             "entries": relayed.iter().map(|e| relayed_entry_json(e)).collect::<Vec<_>>(),
         });
-        println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
         return if anomalies.is_empty() { 0 } else { 1 };
     }
 
@@ -6915,9 +7025,9 @@ fn verify_foundation_receipts_local(
         eprintln!("  \x1b[1mEntries:\x1b[0m");
         for entry in &relayed {
             let claim = match &entry.action {
-                zp_core::AuditAction::SystemEvent { event } => {
-                    event.strip_prefix("foundation_relay:").unwrap_or(event.as_str())
-                }
+                zp_core::AuditAction::SystemEvent { event } => event
+                    .strip_prefix("foundation_relay:")
+                    .unwrap_or(event.as_str()),
                 _ => "(unknown)",
             };
             let operator_str = match &entry.actor {
@@ -6960,9 +7070,7 @@ fn verify_foundation_receipts_local(
     eprintln!();
     if anomalies.is_empty() {
         if relayed.is_empty() {
-            eprintln!(
-                "  \x1b[2m(No foundation-relayed receipts on this chain yet.)\x1b[0m"
-            );
+            eprintln!("  \x1b[2m(No foundation-relayed receipts on this chain yet.)\x1b[0m");
         } else {
             eprintln!("  \x1b[32m✓\x1b[0m  All foundation-relayed receipts verify cleanly.");
         }
@@ -6978,9 +7086,9 @@ fn verify_foundation_receipts_local(
 
 fn relayed_entry_json(entry: &zp_core::AuditEntry) -> serde_json::Value {
     let claim = match &entry.action {
-        zp_core::AuditAction::SystemEvent { event } => {
-            event.strip_prefix("foundation_relay:").unwrap_or(event.as_str())
-        }
+        zp_core::AuditAction::SystemEvent { event } => event
+            .strip_prefix("foundation_relay:")
+            .unwrap_or(event.as_str()),
         _ => "",
     };
     let operator = match &entry.actor {
@@ -7005,7 +7113,7 @@ fn relayed_entry_json(entry: &zp_core::AuditEntry) -> serde_json::Value {
 /// Returns the process exit code: 0 = pass, 1 = verification failure, 2 = error.
 async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) -> i32 {
     use zp_verify::foundation::{
-        FoundationChainResponse, FoundationPubkeyResponse, verify_foundation_chain as verify_chain,
+        verify_foundation_chain as verify_chain, FoundationChainResponse, FoundationPubkeyResponse,
     };
 
     let base_url = url_override
@@ -7027,9 +7135,7 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
             // 2026-08-05, sending operators after a verb that has never existed.
             // Per *the chain configures the cockpit*: output must not name
             // affordances absent from the verb set.
-            eprintln!(
-                "\x1b[31m✗\x1b[0m  No session token at ~/ZeroPoint/session.json"
-            );
+            eprintln!("\x1b[31m✗\x1b[0m  No session token at ~/ZeroPoint/session.json");
             eprintln!("    The server mints this file at startup — start it with `zp serve`.");
             eprintln!("    If it is already running, the token has aged out past");
             eprintln!("    ZP_SESSION_MAX_AGE_SECONDS (default 8h); `zp restart` re-mints it.");
@@ -7137,9 +7243,7 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
-        println!(
-            "\x1b[1mzp verify --foundation — Foundation Chain Attestation\x1b[0m"
-        );
+        println!("\x1b[1mzp verify --foundation — Foundation Chain Attestation\x1b[0m");
         println!("  chain_id : {}", chain_id);
         println!("  url      : {}", base_url);
         println!();
@@ -7162,27 +7266,29 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
                     zp_verify::FindingSeverity::Warning => "\x1b[33mWARN \x1b[0m",
                     zp_verify::FindingSeverity::Info => "\x1b[36mINFO \x1b[0m",
                 };
-                println!("  [{}] [{}] {} — {}", label, f.rule, f.entry_id, f.description);
+                println!(
+                    "  [{}] [{}] {} — {}",
+                    label, f.rule, f.entry_id, f.description
+                );
             }
         }
         println!();
     }
 
-    if report.passed { 0 } else { 1 }
+    if report.passed {
+        0
+    } else {
+        1
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Default audit DB path: ~/ZeroPoint/data/audit.db
-/// Used as smart fallback when the server is down and no --data-dir given.
-///
-/// Seam 19: thin delegate to the canonical resolver `zp_core::paths::audit_db_path`.
+// The default-audit-DB-path helper that used to live here (a thin Seam 19
+// delegate to `zp_core::paths::audit_db_path`) is gone; only its doc comment
+// survived, silently documenting whatever came next. Plain `//` so it cannot
+// do that again.
 
-/// Read the ZP session token from `~/ZeroPoint/session.json`.
-///
-/// Delegates to `read_zp_session_token_from` with the canonical path so the
-/// path-resolution logic can be tested independently without touching the real
-/// `~/ZeroPoint` directory.
 /// Trigger a manual officer sweep via the running substrate's HTTP API.
 ///
 /// Hits `GET /api/v1/officer/sweep?officer=<name>` with session-token auth.
@@ -7200,8 +7306,9 @@ async fn run_officer_sweep(name: Option<&str>, json_out: bool) -> anyhow::Result
     let port = cfg.port.value;
 
     // Read session token
-    let token = read_zp_session_token()
-        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
 
     // Officer names are known-safe (alphanumeric, no URL-special chars).
     // Reject anything else to avoid injection into the query string.
@@ -7329,8 +7436,9 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let port = cfg.port.value;
 
-    let token = read_zp_session_token()
-        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
 
     let url = zp_net::peer_url_with_path(
         "127.0.0.1",
@@ -7362,9 +7470,8 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-        anyhow::anyhow!("Failed to parse response JSON: {} (body: {})", e, body)
-    })?;
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response JSON: {} (body: {})", e, body))?;
 
     if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
         eprintln!("\x1b[31m✗\x1b[0m  {}", err);
@@ -7381,12 +7488,12 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
     let latency = v["latency_ms"].as_u64().unwrap_or(0);
 
     let (icon, color) = match probe_status {
-        "credential_valid" => ("✓", "\x1b[32m"),         // green
-        "credential_rejected" => ("✗", "\x1b[31m"),      // red
-        "credential_not_found" => ("?", "\x1b[33m"),     // yellow
-        "rate_limited" => ("~", "\x1b[33m"),             // yellow
-        "provider_error" => ("!", "\x1b[33m"),           // yellow
-        "network_error" => ("~", "\x1b[33m"),            // yellow
+        "credential_valid" => ("✓", "\x1b[32m"),     // green
+        "credential_rejected" => ("✗", "\x1b[31m"),  // red
+        "credential_not_found" => ("?", "\x1b[33m"), // yellow
+        "rate_limited" => ("~", "\x1b[33m"),         // yellow
+        "provider_error" => ("!", "\x1b[33m"),       // yellow
+        "network_error" => ("~", "\x1b[33m"),        // yellow
         _ => ("?", "\x1b[0m"),
     };
 
@@ -7395,10 +7502,7 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
     println!("\x1b[2m───────────\x1b[0m");
     println!();
     println!("  Provider:      {}", provider_display);
-    println!(
-        "  Probe status:  {}{} {}\x1b[0m",
-        color, icon, probe_status
-    );
+    println!("  Probe status:  {}{} {}\x1b[0m", color, icon, probe_status);
     if http_status > 0 {
         println!("  HTTP status:   {}", http_status);
     }
@@ -7438,8 +7542,9 @@ async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let port = cfg.port.value;
 
-    let token = read_zp_session_token()
-        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
 
     let url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/substrate/validate");
 
@@ -7496,7 +7601,10 @@ async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
     println!("\x1b[1mSubstrate Validation\x1b[0m");
     println!("\x1b[2m────────────────────\x1b[0m");
     println!();
-    println!("  Posture:        {}{} {}\x1b[0m", posture_color, posture_icon, posture);
+    println!(
+        "  Posture:        {}{} {}\x1b[0m",
+        posture_color, posture_icon, posture
+    );
     println!("  Validation ID:  {}", validation_id);
     println!("  Timestamp:      {}", validated_at);
     if let Some(short) = evidence_hash.get(..evidence_hash.len().min(16)) {
@@ -7517,7 +7625,10 @@ async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
                 "critical" | "failed" | "inactive" | "missing" => ("✗", "\x1b[31m"),
                 _ => ("?", "\x1b[0m"),
             };
-            println!("    {}{} {}\x1b[0m  {} — {}", color, icon, check_status, name, check_status);
+            println!(
+                "    {}{} {}\x1b[0m  {} — {}",
+                color, icon, check_status, name, check_status
+            );
         }
         println!();
     }
@@ -7577,10 +7688,9 @@ async fn run_correction_issue(
         let ct = correction_type.ok_or_else(|| {
             anyhow::anyhow!("--type is required (or use --json for full payload)")
         })?;
-        let dom = domain
-            .ok_or_else(|| anyhow::anyhow!("--domain is required (or use --json)"))?;
-        let ass = assertion
-            .ok_or_else(|| anyhow::anyhow!("--assertion is required (or use --json)"))?;
+        let dom = domain.ok_or_else(|| anyhow::anyhow!("--domain is required (or use --json)"))?;
+        let ass =
+            assertion.ok_or_else(|| anyhow::anyhow!("--assertion is required (or use --json)"))?;
 
         let mut content = serde_json::json!({ "assertion": ass });
         if let Some(n) = negation {
@@ -7675,8 +7785,7 @@ async fn run_precedent_list(json_out: bool) -> anyhow::Result<()> {
     let token = read_zp_session_token().map_err(|e| {
         anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
     })?;
-    let url =
-        zp_net::peer_url_with_path("127.0.0.1", cfg.port.value, "/api/v1/regent/precedents");
+    let url = zp_net::peer_url_with_path("127.0.0.1", cfg.port.value, "/api/v1/regent/precedents");
 
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))
@@ -7821,7 +7930,10 @@ async fn run_approval_list(json_out: bool) -> anyhow::Result<()> {
 
     let count = v["pending_count"].as_u64().unwrap_or(0);
     println!();
-    println!("\x1b[1mApproval requests awaiting an answer: {}\x1b[0m", count);
+    println!(
+        "\x1b[1mApproval requests awaiting an answer: {}\x1b[0m",
+        count
+    );
     println!("\x1b[2m──────────────────────────────────────\x1b[0m");
     if count == 0 {
         println!("\x1b[2mNothing pending.\x1b[0m");
@@ -7857,7 +7969,9 @@ async fn run_approval_list(json_out: bool) -> anyhow::Result<()> {
             println!();
         }
     }
-    println!("\x1b[2mzp approval grant <hash>   |   zp approval deny <hash> --reason \"...\"\x1b[0m");
+    println!(
+        "\x1b[2mzp approval grant <hash>   |   zp approval deny <hash> --reason \"...\"\x1b[0m"
+    );
     println!();
     Ok(())
 }
@@ -8041,15 +8155,11 @@ async fn run_session_token_command(cmd: &Commands) -> anyhow::Result<()> {
             json,
         }) => run_correction_revoke(correction_id, *json).await,
 
-        Commands::Substrate(SubstrateCmd::Validate { json }) => {
-            run_substrate_validate(*json).await
-        }
+        Commands::Substrate(SubstrateCmd::Validate { json }) => run_substrate_validate(*json).await,
         Commands::Officer(OfficerCmd::Sweep { name, json }) => {
             run_officer_sweep(name.as_deref(), *json).await
         }
-        Commands::Vault(VaultCmd::Test { provider, json }) => {
-            run_vault_test(provider, *json).await
-        }
+        Commands::Vault(VaultCmd::Test { provider, json }) => run_vault_test(provider, *json).await,
         Commands::Vault(VaultCmd::List { json }) => run_vault_list(*json).await,
         Commands::Vault(VaultCmd::Put { key, json }) => run_vault_put(key, *json).await,
         Commands::Vault(VaultCmd::Reveal { key, json }) => run_vault_reveal(key, *json).await,
@@ -8120,9 +8230,10 @@ async fn run_vault_list(json_out: bool) -> anyhow::Result<()> {
     if vault_report_error(&v) {
         std::process::exit(1);
     }
-    let keys: Vec<&str> = v["keys"].as_array().map(|a| {
-        a.iter().filter_map(|k| k.as_str()).collect()
-    }).unwrap_or_default();
+    let keys: Vec<&str> = v["keys"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|k| k.as_str()).collect())
+        .unwrap_or_default();
     let exists = v["exists"].as_bool().unwrap_or(false);
     let path = v["vault_path"].as_str().unwrap_or("?");
 
@@ -8337,6 +8448,11 @@ async fn run_correction_revoke(correction_id: &str, json_out: bool) -> anyhow::R
     Ok(())
 }
 
+/// Read the ZP session token from `~/ZeroPoint/session.json`.
+///
+/// Delegates to `read_zp_session_token_from` with the canonical path so the
+/// path-resolution logic can be tested independently without touching the real
+/// `~/ZeroPoint` directory.
 fn read_zp_session_token() -> Result<String, Box<dyn std::error::Error>> {
     let path = zp_core::paths::session_path()?;
     read_zp_session_token_from(&path)
@@ -8464,7 +8580,10 @@ fn run_anchor(
     // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
     // provider, not the keyring.
     if let Err(e) = crate::commands::harden_zp_home() {
-        eprintln!("error: failed to prepare the ZeroPoint home directory: {}", e);
+        eprintln!(
+            "error: failed to prepare the ZeroPoint home directory: {}",
+            e
+        );
         return 2;
     }
     // Derive the audit signer from the Genesis secret
@@ -8751,14 +8870,13 @@ fn parse_capabilities(spec: &str) -> Vec<zp_core::GrantedCapability> {
 
                 if end > 0 {
                     let json_str = &rest[..end];
-                    let parameters = serde_json::from_str(json_str)
-                        .unwrap_or_else(|_| {
-                            eprintln!(
-                                "warning: invalid JSON in capability '{}': {}, using Null",
-                                name, json_str
-                            );
-                            serde_json::Value::Null
-                        });
+                    let parameters = serde_json::from_str(json_str).unwrap_or_else(|_| {
+                        eprintln!(
+                            "warning: invalid JSON in capability '{}': {}, using Null",
+                            name, json_str
+                        );
+                        serde_json::Value::Null
+                    });
                     caps.push(zp_core::GrantedCapability::Custom { name, parameters });
                     remaining = &rest[end..];
                 } else {
@@ -9001,7 +9119,10 @@ fn run_delegate(
     // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
     // provider, not the keyring.
     if let Err(e) = crate::commands::harden_zp_home() {
-        eprintln!("error: failed to prepare the ZeroPoint home directory: {}", e);
+        eprintln!(
+            "error: failed to prepare the ZeroPoint home directory: {}",
+            e
+        );
         return 2;
     }
     // Derive the audit signer from the Genesis secret
@@ -9026,7 +9147,8 @@ fn run_delegate(
     let store = Arc::new(Mutex::new(store));
 
     #[cfg(feature = "embedded-server")]
-    let entry_hash = zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None);
+    let entry_hash =
+        zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None);
     #[cfg(not(feature = "embedded-server"))]
     let entry_hash: Option<String> = {
         eprintln!("error: zp delegate requires the 'embedded-server' feature");
@@ -9151,7 +9273,9 @@ fn run_delegate_renew(
     data_dir: &std::path::Path,
     json: bool,
 ) -> i32 {
-    let db_path = audit_db.clone().unwrap_or_else(|| data_dir.join("audit.db"));
+    let db_path = audit_db
+        .clone()
+        .unwrap_or_else(|| data_dir.join("audit.db"));
 
     // Open the store read-only to look up the prior grant. We'll re-open
     // it (signed) inside run_delegate for the write.
@@ -9319,7 +9443,10 @@ fn run_revoke(
     // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
     // provider, not the keyring.
     if let Err(e) = crate::commands::harden_zp_home() {
-        eprintln!("error: failed to prepare the ZeroPoint home directory: {}", e);
+        eprintln!(
+            "error: failed to prepare the ZeroPoint home directory: {}",
+            e
+        );
         return 2;
     }
     // Derive the audit signer from the Genesis secret
@@ -9962,7 +10089,11 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
     use zp_receipt::{ClaimMetadata, ReceiptBuilder, ReceiptType, Signer, Status};
 
     let (host_ids, audit_db, json, method) = match cmd {
-        PricingCmd::Refresh { hosts, audit_db, json } => {
+        PricingCmd::Refresh {
+            hosts,
+            audit_db,
+            json,
+        } => {
             let ids = if hosts.is_empty() {
                 vec!["abacus".to_string()]
             } else {
@@ -9970,7 +10101,11 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
             };
             (ids, audit_db, *json, "fetch")
         }
-        PricingCmd::Attest { hosts, audit_db, json } => (hosts.clone(), audit_db, *json, "manual"),
+        PricingCmd::Attest {
+            hosts,
+            audit_db,
+            json,
+        } => (hosts.clone(), audit_db, *json, "manual"),
     };
 
     let db_path = audit_db
@@ -10081,16 +10216,24 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
 ///
 /// Merges with any existing override file: entries with matching IDs are
 /// replaced; new entries are appended. Unknown existing entries are preserved.
-fn persist_pricing_overrides(host_ids: &[String], updated_profiles: &[zp_engine::providers::ProviderProfile]) {
+fn persist_pricing_overrides(
+    host_ids: &[String],
+    updated_profiles: &[zp_engine::providers::ProviderProfile],
+) {
     use zp_engine::providers::ProviderProfile;
 
-    let Ok(zp_home) = zp_core::paths::home() else { return };
+    let Ok(zp_home) = zp_core::paths::home() else {
+        return;
+    };
     let override_path = zp_home.join("config").join("providers.toml");
 
     // Load existing override file, or start with an empty list
     let mut existing: Vec<ProviderProfile> = if override_path.exists() {
         #[derive(serde::Deserialize, Default)]
-        struct Catalog { #[serde(default)] providers: Vec<ProviderProfile> }
+        struct Catalog {
+            #[serde(default)]
+            providers: Vec<ProviderProfile>,
+        }
         std::fs::read_to_string(&override_path)
             .ok()
             .and_then(|s| toml::from_str::<Catalog>(&s).ok())
@@ -10110,8 +10253,12 @@ fn persist_pricing_overrides(host_ids: &[String], updated_profiles: &[zp_engine:
     }
 
     #[derive(serde::Serialize)]
-    struct Catalog { providers: Vec<ProviderProfile> }
-    if let Ok(content) = toml::to_string_pretty(&Catalog { providers: existing }) {
+    struct Catalog {
+        providers: Vec<ProviderProfile>,
+    }
+    if let Ok(content) = toml::to_string_pretty(&Catalog {
+        providers: existing,
+    }) {
         std::fs::create_dir_all(override_path.parent().unwrap_or(std::path::Path::new("."))).ok();
         std::fs::write(&override_path, content).ok();
     }
@@ -10120,172 +10267,6 @@ fn persist_pricing_overrides(host_ids: &[String], updated_profiles: &[zp_engine:
 // ============================================================================
 // Tests
 // ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::read_zp_session_token_from;
-
-    /// Verify that `resolve_tool_env` returns the expected env vars for `zp configure exec`.
-    ///
-    /// Sets up a vault with:
-    ///   - a provider credential: openai/api_key = "sk-test-12345"
-    ///   - a tool ref:           tools/test-tool/OPENAI_API_KEY → openai/api_key
-    ///
-    /// Then resolves the tool env and asserts OPENAI_API_KEY = "sk-test-12345".
-    /// This is the same resolution path the Exec dispatch handler calls.
-    #[test]
-    fn test_configure_exec_env_resolution() {
-        let master_key = [0x5a_u8; 32];
-        let mut vault = zp_trust::vault::CredentialVault::new(&master_key);
-
-        // Store the provider credential at the canonical providers/ path.
-        vault
-            .store("providers/openai/api_key", b"sk-test-12345")
-            .unwrap();
-
-        // Store a ref from the tool's env var to the provider credential.
-        // store_tool_ref(tool, var, provider, field) writes
-        //   tools/test-tool/OPENAI_API_KEY → providers/openai/api_key
-        vault
-            .store_tool_ref("test-tool", "OPENAI_API_KEY", "openai", "api_key")
-            .unwrap();
-
-        // Resolve — same call the Exec handler makes.
-        let env_map = vault.resolve_tool_env("test-tool").unwrap();
-
-        assert!(
-            !env_map.is_empty(),
-            "env map should not be empty for test-tool"
-        );
-
-        let raw = env_map
-            .get("OPENAI_API_KEY")
-            .expect("OPENAI_API_KEY must be present in resolved env");
-        assert_eq!(
-            std::str::from_utf8(raw).unwrap(),
-            "sk-test-12345",
-            "resolved value must match the vault credential"
-        );
-
-        // Confirm the resolved map can be converted to String for injection.
-        let as_str = std::str::from_utf8(raw).unwrap();
-        assert_eq!(as_str.len(), 13, "key should be 13 chars");
-
-        // Confirm unknown tool returns an empty map (not an error).
-        let empty = vault.resolve_tool_env("no-such-tool").unwrap();
-        assert!(empty.is_empty(), "unknown tool should yield empty map");
-    }
-
-    /// read_zp_session_token_from returns the token from a well-formed session file.
-    #[test]
-    fn test_read_zp_session_token_from_valid() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let path = dir.path().join("session.json");
-        let token = "abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890";
-        std::fs::write(
-            &path,
-            format!(
-                r#"{{"token":"{}","created_at":1747234800,"key_fp":"deadbeef01020304","version":1}}"#,
-                token
-            ),
-        )
-        .unwrap();
-        assert_eq!(read_zp_session_token_from(&path).unwrap(), token);
-    }
-
-    /// read_zp_session_token_from returns Err when the file does not exist.
-    #[test]
-    fn test_read_zp_session_token_from_absent() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let path = dir.path().join("no_such_session.json");
-        assert!(
-            read_zp_session_token_from(&path).is_err(),
-            "absent file must return Err"
-        );
-    }
-
-    /// read_zp_session_token_from returns Err when the token field is missing.
-    #[test]
-    fn test_read_zp_session_token_from_missing_field() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let path = dir.path().join("session.json");
-        std::fs::write(&path, r#"{"created_at":1747234800,"version":1}"#).unwrap();
-        assert!(
-            read_zp_session_token_from(&path).is_err(),
-            "missing token field must return Err"
-        );
-    }
-
-    /// read_zp_session_token_from returns Err on malformed JSON.
-    #[test]
-    fn test_read_zp_session_token_from_malformed() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let path = dir.path().join("session.json");
-        std::fs::write(&path, b"not json at all").unwrap();
-        assert!(
-            read_zp_session_token_from(&path).is_err(),
-            "malformed JSON must return Err"
-        );
-    }
-
-    #[test]
-    fn parse_capabilities_plain_names() {
-        let caps = super::parse_capabilities("tool:exec,tool:read");
-        assert_eq!(caps.len(), 2);
-        match &caps[0] {
-            zp_core::GrantedCapability::Custom { name, parameters } => {
-                assert_eq!(name, "tool:exec");
-                assert!(parameters.is_null());
-            }
-            _ => panic!("expected Custom"),
-        }
-    }
-
-    #[test]
-    fn parse_capabilities_with_json_params() {
-        let caps = super::parse_capabilities(
-            r#"governance:propose{"mutations":["restart_tool","set_port"]}"#,
-        );
-        assert_eq!(caps.len(), 1);
-        match &caps[0] {
-            zp_core::GrantedCapability::Custom { name, parameters } => {
-                assert_eq!(name, "governance:propose");
-                let mutations = parameters.get("mutations").unwrap().as_array().unwrap();
-                assert_eq!(mutations.len(), 2);
-                assert_eq!(mutations[0].as_str().unwrap(), "restart_tool");
-            }
-            _ => panic!("expected Custom"),
-        }
-    }
-
-    #[test]
-    fn parse_capabilities_mixed() {
-        let caps = super::parse_capabilities(
-            r#"governance:propose{"mutations":["*"]},tool:exec"#,
-        );
-        assert_eq!(caps.len(), 2);
-        match &caps[0] {
-            zp_core::GrantedCapability::Custom { name, parameters } => {
-                assert_eq!(name, "governance:propose");
-                assert!(!parameters.is_null());
-            }
-            _ => panic!("expected Custom"),
-        }
-        match &caps[1] {
-            zp_core::GrantedCapability::Custom { name, parameters } => {
-                assert_eq!(name, "tool:exec");
-                assert!(parameters.is_null());
-            }
-            _ => panic!("expected Custom"),
-        }
-    }
-
-    #[test]
-    fn parse_capabilities_empty() {
-        let caps = super::parse_capabilities("");
-        assert!(caps.is_empty());
-    }
-}
 
 // ============================================================================
 // zp policy set inference / zp policy show inference
@@ -10358,8 +10339,8 @@ async fn run_policy_set_inference(
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-    let mut store = AuditStore::open_signed(&db_path, audit_signer)
-        .context("Failed to open audit store")?;
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
     let entry = UnsealedEntry::new(
         ActorId::System("zp-policy".to_string()),
         AuditAction::SystemEvent {
@@ -10530,7 +10511,9 @@ async fn run_model_register(
     use zp_audit::chain::UnsealedEntry;
     use zp_audit::AuditStore;
     use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
-    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, SchemaFormat, Signer, Status};
+    use zp_receipt::{
+        ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, SchemaFormat, Signer, Status,
+    };
 
     let schema_format = match schema_format_str.to_lowercase().as_str() {
         "gemini" => SchemaFormat::Gemini,
@@ -10569,8 +10552,8 @@ async fn run_model_register(
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-    let mut store = AuditStore::open_signed(&db_path, audit_signer)
-        .context("Failed to open audit store")?;
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
     let entry = UnsealedEntry::new(
         ActorId::System("zp-model".to_string()),
         AuditAction::SystemEvent {
@@ -10632,37 +10615,61 @@ async fn run_model_list(
     }
 
     let store = AuditStore::open_readonly(&db_path).context("Failed to open audit store")?;
-    let entries = store.export_chain(100_000).context("Failed to read chain")?;
+    let entries = store
+        .export_chain(100_000)
+        .context("Failed to read chain")?;
 
     // Collect the latest model:registered receipt per model_id
     let mut models: HashMap<String, serde_json::Value> = HashMap::new();
 
     for entry in &entries {
-        let Some(receipt) = entry.receipt.as_ref() else { continue };
-        let Some(meta) = receipt.claim_metadata.as_ref() else { continue };
+        let Some(receipt) = entry.receipt.as_ref() else {
+            continue;
+        };
+        let Some(meta) = receipt.claim_metadata.as_ref() else {
+            continue;
+        };
 
         match (receipt.receipt_type, meta) {
-            (ReceiptType::ModelRegistered, ClaimMetadata::ModelRegistered {
-                model_id, provider, provider_url, context_window,
-                supports_tools, schema_format, input_cost_per_m_usd,
-                output_cost_per_m_usd, max_output_tokens,
-            }) => {
-                models.insert(model_id.clone(), serde_json::json!({
-                    "model_id": model_id,
-                    "provider": provider,
-                    "provider_url": provider_url,
-                    "context_window": context_window,
-                    "supports_tools": supports_tools,
-                    "schema_format": schema_format,
-                    "input_cost_per_m_usd": input_cost_per_m_usd,
-                    "output_cost_per_m_usd": output_cost_per_m_usd,
-                    "max_output_tokens": max_output_tokens,
-                    "receipt_id": receipt.id,
-                }));
+            (
+                ReceiptType::ModelRegistered,
+                ClaimMetadata::ModelRegistered {
+                    model_id,
+                    provider,
+                    provider_url,
+                    context_window,
+                    supports_tools,
+                    schema_format,
+                    input_cost_per_m_usd,
+                    output_cost_per_m_usd,
+                    max_output_tokens,
+                },
+            ) => {
+                models.insert(
+                    model_id.clone(),
+                    serde_json::json!({
+                        "model_id": model_id,
+                        "provider": provider,
+                        "provider_url": provider_url,
+                        "context_window": context_window,
+                        "supports_tools": supports_tools,
+                        "schema_format": schema_format,
+                        "input_cost_per_m_usd": input_cost_per_m_usd,
+                        "output_cost_per_m_usd": output_cost_per_m_usd,
+                        "max_output_tokens": max_output_tokens,
+                        "receipt_id": receipt.id,
+                    }),
+                );
             }
-            (ReceiptType::ModelCapabilityUpdated, ClaimMetadata::ModelCapabilityUpdated {
-                model_id, field_updated, new_value, ..
-            }) => {
+            (
+                ReceiptType::ModelCapabilityUpdated,
+                ClaimMetadata::ModelCapabilityUpdated {
+                    model_id,
+                    field_updated,
+                    new_value,
+                    ..
+                },
+            ) => {
                 if let Some(entry) = models.get_mut(model_id) {
                     // Patch the registered entry in-place so `list` always shows current state
                     if let Some(obj) = entry.as_object_mut() {
@@ -10683,15 +10690,30 @@ async fn run_model_list(
         println!("\x1b[1mRegistered models ({}):\x1b[0m\n", models.len());
         let mut sorted: Vec<_> = models.values().collect();
         sorted.sort_by(|a, b| {
-            a["model_id"].as_str().unwrap_or("").cmp(b["model_id"].as_str().unwrap_or(""))
+            a["model_id"]
+                .as_str()
+                .unwrap_or("")
+                .cmp(b["model_id"].as_str().unwrap_or(""))
         });
         for m in sorted {
             println!("  \x1b[1m{}\x1b[0m", m["model_id"].as_str().unwrap_or("?"));
-            println!("    Provider:  {} · {}", m["provider"].as_str().unwrap_or("?"), m["provider_url"].as_str().unwrap_or("?"));
-            println!("    Context:   {} tokens  max_out: {}", m["context_window"], m["max_output_tokens"]);
-            println!("    Tools:     {}  schema: {}", m["supports_tools"], m["schema_format"]);
-            println!("    Pricing:   ${}/M in · ${}/M out",
-                m["input_cost_per_m_usd"], m["output_cost_per_m_usd"]);
+            println!(
+                "    Provider:  {} · {}",
+                m["provider"].as_str().unwrap_or("?"),
+                m["provider_url"].as_str().unwrap_or("?")
+            );
+            println!(
+                "    Context:   {} tokens  max_out: {}",
+                m["context_window"], m["max_output_tokens"]
+            );
+            println!(
+                "    Tools:     {}  schema: {}",
+                m["supports_tools"], m["schema_format"]
+            );
+            println!(
+                "    Pricing:   ${}/M in · ${}/M out",
+                m["input_cost_per_m_usd"], m["output_cost_per_m_usd"]
+            );
             println!();
         }
     }
@@ -10743,8 +10765,8 @@ async fn run_model_update(
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
     let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-    let mut store = AuditStore::open_signed(&db_path, audit_signer)
-        .context("Failed to open audit store")?;
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
     let entry = UnsealedEntry::new(
         ActorId::System("zp-model".to_string()),
         AuditAction::SystemEvent {
@@ -10777,4 +10799,168 @@ async fn run_model_update(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_zp_session_token_from;
+
+    /// Verify that `resolve_tool_env` returns the expected env vars for `zp configure exec`.
+    ///
+    /// Sets up a vault with:
+    ///   - a provider credential: openai/api_key = "sk-test-12345"
+    ///   - a tool ref:           tools/test-tool/OPENAI_API_KEY → openai/api_key
+    ///
+    /// Then resolves the tool env and asserts OPENAI_API_KEY = "sk-test-12345".
+    /// This is the same resolution path the Exec dispatch handler calls.
+    #[test]
+    fn test_configure_exec_env_resolution() {
+        let master_key = [0x5a_u8; 32];
+        let mut vault = zp_trust::vault::CredentialVault::new(&master_key);
+
+        // Store the provider credential at the canonical providers/ path.
+        vault
+            .store("providers/openai/api_key", b"sk-test-12345")
+            .unwrap();
+
+        // Store a ref from the tool's env var to the provider credential.
+        // store_tool_ref(tool, var, provider, field) writes
+        //   tools/test-tool/OPENAI_API_KEY → providers/openai/api_key
+        vault
+            .store_tool_ref("test-tool", "OPENAI_API_KEY", "openai", "api_key")
+            .unwrap();
+
+        // Resolve — same call the Exec handler makes.
+        let env_map = vault.resolve_tool_env("test-tool").unwrap();
+
+        assert!(
+            !env_map.is_empty(),
+            "env map should not be empty for test-tool"
+        );
+
+        let raw = env_map
+            .get("OPENAI_API_KEY")
+            .expect("OPENAI_API_KEY must be present in resolved env");
+        assert_eq!(
+            std::str::from_utf8(raw).unwrap(),
+            "sk-test-12345",
+            "resolved value must match the vault credential"
+        );
+
+        // Confirm the resolved map can be converted to String for injection.
+        let as_str = std::str::from_utf8(raw).unwrap();
+        assert_eq!(as_str.len(), 13, "key should be 13 chars");
+
+        // Confirm unknown tool returns an empty map (not an error).
+        let empty = vault.resolve_tool_env("no-such-tool").unwrap();
+        assert!(empty.is_empty(), "unknown tool should yield empty map");
+    }
+
+    /// read_zp_session_token_from returns the token from a well-formed session file.
+    #[test]
+    fn test_read_zp_session_token_from_valid() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("session.json");
+        let token = "abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890";
+        std::fs::write(
+            &path,
+            format!(
+                r#"{{"token":"{}","created_at":1747234800,"key_fp":"deadbeef01020304","version":1}}"#,
+                token
+            ),
+        )
+        .unwrap();
+        assert_eq!(read_zp_session_token_from(&path).unwrap(), token);
+    }
+
+    /// read_zp_session_token_from returns Err when the file does not exist.
+    #[test]
+    fn test_read_zp_session_token_from_absent() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("no_such_session.json");
+        assert!(
+            read_zp_session_token_from(&path).is_err(),
+            "absent file must return Err"
+        );
+    }
+
+    /// read_zp_session_token_from returns Err when the token field is missing.
+    #[test]
+    fn test_read_zp_session_token_from_missing_field() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("session.json");
+        std::fs::write(&path, r#"{"created_at":1747234800,"version":1}"#).unwrap();
+        assert!(
+            read_zp_session_token_from(&path).is_err(),
+            "missing token field must return Err"
+        );
+    }
+
+    /// read_zp_session_token_from returns Err on malformed JSON.
+    #[test]
+    fn test_read_zp_session_token_from_malformed() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("session.json");
+        std::fs::write(&path, b"not json at all").unwrap();
+        assert!(
+            read_zp_session_token_from(&path).is_err(),
+            "malformed JSON must return Err"
+        );
+    }
+
+    #[test]
+    fn parse_capabilities_plain_names() {
+        let caps = super::parse_capabilities("tool:exec,tool:read");
+        assert_eq!(caps.len(), 2);
+        match &caps[0] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "tool:exec");
+                assert!(parameters.is_null());
+            }
+            _ => panic!("expected Custom"),
+        }
+    }
+
+    #[test]
+    fn parse_capabilities_with_json_params() {
+        let caps = super::parse_capabilities(
+            r#"governance:propose{"mutations":["restart_tool","set_port"]}"#,
+        );
+        assert_eq!(caps.len(), 1);
+        match &caps[0] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "governance:propose");
+                let mutations = parameters.get("mutations").unwrap().as_array().unwrap();
+                assert_eq!(mutations.len(), 2);
+                assert_eq!(mutations[0].as_str().unwrap(), "restart_tool");
+            }
+            _ => panic!("expected Custom"),
+        }
+    }
+
+    #[test]
+    fn parse_capabilities_mixed() {
+        let caps = super::parse_capabilities(r#"governance:propose{"mutations":["*"]},tool:exec"#);
+        assert_eq!(caps.len(), 2);
+        match &caps[0] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "governance:propose");
+                assert!(!parameters.is_null());
+            }
+            _ => panic!("expected Custom"),
+        }
+        match &caps[1] {
+            zp_core::GrantedCapability::Custom { name, parameters } => {
+                assert_eq!(name, "tool:exec");
+                assert!(parameters.is_null());
+            }
+            _ => panic!("expected Custom"),
+        }
+    }
+
+    #[test]
+    fn parse_capabilities_empty() {
+        let caps = super::parse_capabilities("");
+        assert!(caps.is_empty());
+    }
 }

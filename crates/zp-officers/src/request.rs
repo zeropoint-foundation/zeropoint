@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::finding::{Finding, Severity};
-use crate::proposal::{ProposedMutation, Proposal};
+use crate::proposal::{Proposal, ProposedMutation};
 
 /// What the governance request is about.
 ///
@@ -24,9 +24,7 @@ use crate::proposal::{ProposedMutation, Proposal};
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Subject {
     /// A tool already registered in the governance system.
-    KnownTool {
-        tool_name: String,
-    },
+    KnownTool { tool_name: String },
     /// An unregistered process discovered by sensors.
     UnknownProcess {
         pid: u32,
@@ -42,7 +40,9 @@ impl Subject {
     pub fn display_label(&self) -> String {
         match self {
             Self::KnownTool { tool_name } => tool_name.clone(),
-            Self::UnknownProcess { process_name, pid, .. } => {
+            Self::UnknownProcess {
+                process_name, pid, ..
+            } => {
                 format!("{process_name} (pid {pid})")
             }
         }
@@ -138,35 +138,37 @@ impl GovernanceRequest {
     }
 }
 
+/// One subject's accumulating request, before it becomes a `GovernanceRequest`.
+///
+/// In order: the subject itself, the concerns merged onto it, the deduplicated
+/// mutations proposed for it, the ids of the findings backing it, and the
+/// running maximum severity. Named because the tuple appears in a nested
+/// generic position where writing it inline obscures what is being grouped.
+type RequestGroup = (
+    Subject,
+    Vec<Concern>,
+    Vec<ProposedMutation>,
+    Vec<String>,
+    Severity,
+);
+
 /// Consolidate findings and proposals into governance requests.
 ///
 /// Groups by subject (tool name or PID), merges concerns, deduplicates
 /// recommended actions, takes max severity. Returns one `GovernanceRequest`
 /// per unique subject.
-pub fn consolidate(
-    findings: &[Finding],
-    proposals: &[Proposal],
-) -> Vec<GovernanceRequest> {
+pub fn consolidate(findings: &[Finding], proposals: &[Proposal]) -> Vec<GovernanceRequest> {
     use std::collections::BTreeMap;
 
-    // Group key → (subject, concerns, actions, finding_refs, max_severity)
-    let mut groups: BTreeMap<
-        String,
-        (
-            Subject,
-            Vec<Concern>,
-            Vec<ProposedMutation>,
-            Vec<String>,
-            Severity,
-        ),
-    > = BTreeMap::new();
+    // Group key → the accumulating request for that subject.
+    let mut groups: BTreeMap<String, RequestGroup> = BTreeMap::new();
 
     // Process findings.
     for f in findings {
         let (key, subject) = subject_from_finding(f);
-        let entry = groups.entry(key).or_insert_with(|| {
-            (subject, Vec::new(), Vec::new(), Vec::new(), Severity::Ok)
-        });
+        let entry = groups
+            .entry(key)
+            .or_insert_with(|| (subject, Vec::new(), Vec::new(), Vec::new(), Severity::Ok));
 
         entry.1.push(Concern {
             officer: f.officer.to_string(),
@@ -186,9 +188,9 @@ pub fn consolidate(
         let subject = Subject::KnownTool {
             tool_name: p.mutation.tool_name().to_string(),
         };
-        let entry = groups.entry(key).or_insert_with(|| {
-            (subject, Vec::new(), Vec::new(), Vec::new(), Severity::Ok)
-        });
+        let entry = groups
+            .entry(key)
+            .or_insert_with(|| (subject, Vec::new(), Vec::new(), Vec::new(), Severity::Ok));
 
         // Add the finding as a concern if not already present.
         let finding_key = p.finding.event_key();
@@ -336,7 +338,10 @@ mod tests {
 
     #[test]
     fn consolidate_merges_same_tool() {
-        let findings = vec![forge_finding("example-tool"), sentinel_finding("example-tool")];
+        let findings = vec![
+            forge_finding("example-tool"),
+            sentinel_finding("example-tool"),
+        ];
         let requests = consolidate(&findings, &[]);
 
         assert_eq!(requests.len(), 1);
@@ -434,7 +439,10 @@ mod tests {
 
     #[test]
     fn display_summary_format() {
-        let findings = vec![forge_finding("example-tool"), sentinel_finding("example-tool")];
+        let findings = vec![
+            forge_finding("example-tool"),
+            sentinel_finding("example-tool"),
+        ];
         let requests = consolidate(&findings, &[]);
         let summary = requests[0].display_summary();
 
@@ -447,7 +455,10 @@ mod tests {
 
     #[test]
     fn concerns_sorted_by_severity() {
-        let findings = vec![forge_finding("example-tool"), sentinel_finding("example-tool")];
+        let findings = vec![
+            forge_finding("example-tool"),
+            sentinel_finding("example-tool"),
+        ];
         let requests = consolidate(&findings, &[]);
         let req = &requests[0];
 

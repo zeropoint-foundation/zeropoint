@@ -19,8 +19,7 @@ use serde_json;
 
 use crate::awareness::{BackgroundTask, SystemMonitor};
 use crate::context::{
-    BackgroundTaskKind, CockpitSource, DelegationSummary, OperatorInput,
-    ToolResult, WorkArc,
+    BackgroundTaskKind, CockpitSource, DelegationSummary, OperatorInput, ToolResult, WorkArc,
 };
 use crate::error::RegentError;
 use crate::evaluation;
@@ -42,10 +41,7 @@ pub enum IntentOutcome {
         output: serde_json::Value,
     },
     /// Gate denied the tool call.
-    ToolDenied {
-        tool: String,
-        reason: String,
-    },
+    ToolDenied { tool: String, reason: String },
     /// The capability exists and is delegated, but this specific call has
     /// no operator signature.
     ///
@@ -54,10 +50,7 @@ pub enum IntentOutcome {
     /// thing that would permit it. That difference is the whole basis for
     /// escalating to a proposal, and deriving it by matching words in a
     /// denial string would make a control-flow decision out of prose.
-    ToolRefusedUnsigned {
-        tool: String,
-        reason: String,
-    },
+    ToolRefusedUnsigned { tool: String, reason: String },
     /// Response was delivered to a cockpit surface.
     Delivered,
     /// Observation recorded (no visible effect).
@@ -202,6 +195,13 @@ const IDLE_THRESHOLD_SECS: u64 = 300; // 5 minutes
 /// `delegations` — the tools granted to the Regent at startup. Passed into
 /// every cognitive cycle so the Regent's prompt includes the tool section.
 /// Eventually this will be read from the chain; for now it's static.
+// Eleven parameters, against clippy's threshold of seven. Bundling them into
+// a config struct is the obvious refactor and is deliberately not done here:
+// this is the Regent's construction seam, every argument is a distinct
+// collaborator the loop owns for its lifetime, and folding them into one type
+// would move the wiring decision out of the call site that makes it. Recorded
+// as a shape worth revisiting, not as noise to be silenced.
+#[allow(clippy::too_many_arguments)]
 pub fn start_loop(
     regent: Arc<Mutex<Regent>>,
     executor: Arc<dyn IntentExecutor>,
@@ -216,10 +216,7 @@ pub fn start_loop(
     // H3 (token-entropy anomaly) baselines per model variant. Built by
     // the caller from the dossier corpus so start_loop stays free of
     // TOML-schema knowledge. Empty map → H3 stays silent.
-    entropy_baselines: std::collections::HashMap<
-        String,
-        zp_emission_coherence::EntropyBaseline,
-    >,
+    entropy_baselines: std::collections::HashMap<String, zp_emission_coherence::EntropyBaseline>,
 ) -> RegentHandle {
     let (tx, mut rx) = mpsc::channel::<RegentMessage>(64);
 
@@ -237,8 +234,10 @@ pub fn start_loop(
     // are chain-anchored via SystemEvent receipts; response classification
     // does NOT yet gate delivery or trigger retries. The R1/R2 wiring lands
     // after the substrate has accumulated evidence of false-positive rates.
-    let mut analyzer_config = zp_emission_coherence::AnalyzerConfig::default();
-    analyzer_config.entropy_baselines = entropy_baselines;
+    let analyzer_config = zp_emission_coherence::AnalyzerConfig {
+        entropy_baselines,
+        ..Default::default()
+    };
     info!(
         h3_baselines = analyzer_config.entropy_baselines.len(),
         "emission-coherence analyzer starting"
@@ -251,7 +250,9 @@ pub fn start_loop(
     tokio::spawn(async move {
         let mut latest_findings: Vec<Finding> = Vec::new();
         let interval = if interval_secs > 0 {
-            Some(tokio::time::interval(std::time::Duration::from_secs(interval_secs)))
+            Some(tokio::time::interval(std::time::Duration::from_secs(
+                interval_secs,
+            )))
         } else {
             None
         };
@@ -301,9 +302,7 @@ pub fn start_loop(
                     // `latest_findings` and reach the next scheduled cycle,
                     // where `reason` applies `ATTENTION_FLOOR`. Continuing
                     // here drops the cycle, not the finding.
-                    let has_interrupting = latest_findings
-                        .iter()
-                        .any(|f| f.severity.interrupts());
+                    let has_interrupting = latest_findings.iter().any(|f| f.severity.interrupts());
                     if !has_interrupting {
                         continue;
                     }
@@ -311,7 +310,11 @@ pub fn start_loop(
                     // Fall through to run_cycle below.
                 }
 
-                RegentMessage::OperatorInput { content, source, reply_tx } => {
+                RegentMessage::OperatorInput {
+                    content,
+                    source,
+                    reply_tx,
+                } => {
                     // Enact whatever the operator has granted since the last
                     // tick, before reasoning about anything new. A signature
                     // that has been sitting unhonoured is the oldest
@@ -382,7 +385,8 @@ pub fn start_loop(
                             arc.clone(),
                             cycle_prior.take(),
                             &emission_analyzer,
-                        ).await;
+                        )
+                        .await;
 
                         match outcome {
                             CycleOutcome::Done(response) => {
@@ -392,15 +396,21 @@ pub fn start_loop(
                                         tools = a.tool_history.len(),
                                         "work arc completed"
                                     );
-                                    emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                        .with_detail(format!(
+                                    emit(
+                                        &cognitive_event_tx,
+                                        CognitiveEvent::new(Phase::ArcEnd, 0).with_detail(format!(
                                             "cycles={} tools={}",
-                                            a.cycles_completed, a.tool_history.len()
-                                        )));
+                                            a.cycles_completed,
+                                            a.tool_history.len()
+                                        )),
+                                    );
                                 }
                                 break response;
                             }
-                            CycleOutcome::Continue { progress, tool_results } => {
+                            CycleOutcome::Continue {
+                                progress,
+                                tool_results,
+                            } => {
                                 let is_new_arc = arc.is_none();
                                 let current = arc.get_or_insert_with(|| WorkArc {
                                     progress: String::new(),
@@ -417,15 +427,21 @@ pub fn start_loop(
                                 let no_advance = !is_new_arc
                                     && current.progress == progress
                                     && current.tool_history.len() == tool_results.len();
-                                current.stall_count =
-                                    if no_advance { current.stall_count + 1 } else { 0 };
+                                current.stall_count = if no_advance {
+                                    current.stall_count + 1
+                                } else {
+                                    0
+                                };
                                 current.progress = progress.clone();
                                 current.cycles_completed += 1;
                                 current.tool_history = tool_results;
 
                                 if is_new_arc {
-                                    emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcStart, 0)
-                                        .with_detail(progress.clone()));
+                                    emit(
+                                        &cognitive_event_tx,
+                                        CognitiveEvent::new(Phase::ArcStart, 0)
+                                            .with_detail(progress.clone()),
+                                    );
                                 }
 
                                 info!(
@@ -435,11 +451,15 @@ pub fn start_loop(
                                     "work arc continuing"
                                 );
 
-                                emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcProgress, 0)
-                                    .with_detail(format!(
-                                        "{}/{}: {}",
-                                        current.cycles_completed, MAX_ARC_CYCLES, progress
-                                    )));
+                                emit(
+                                    &cognitive_event_tx,
+                                    CognitiveEvent::new(Phase::ArcProgress, 0).with_detail(
+                                        format!(
+                                            "{}/{}: {}",
+                                            current.cycles_completed, MAX_ARC_CYCLES, progress
+                                        ),
+                                    ),
+                                );
 
                                 // Stall check, ahead of the budget check —
                                 // an arc that is going nowhere should say so
@@ -453,11 +473,13 @@ pub fn start_loop(
                                         progress = progress.as_str(),
                                         "work arc stalled — same plan, no tool dispatched"
                                     );
-                                    emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                        .with_detail(format!(
+                                    emit(
+                                        &cognitive_event_tx,
+                                        CognitiveEvent::new(Phase::ArcEnd, 0).with_detail(format!(
                                             "stalled after {} cycles: {}",
                                             current.cycles_completed, progress
-                                        )));
+                                        )),
+                                    );
                                     emit_arc_stalled_receipt(
                                         &audit_store,
                                         &progress,
@@ -535,8 +557,7 @@ pub fn start_loop(
                     // for the same reason — the mirror's contract is "this is
                     // what you said", and putting anything else in that slot
                     // makes it a suggestion instead of a memory.
-                    last_prior_response = if !substrate_authored
-                        && !response.starts_with("error:")
+                    last_prior_response = if !substrate_authored && !response.starts_with("error:")
                     {
                         let model = {
                             let rg = regent.lock().await;
@@ -563,7 +584,8 @@ pub fn start_loop(
                             &audit_store,
                             &operator_name,
                             &genesis_prefix,
-                        ).await;
+                        )
+                        .await;
                     }
 
                     continue;
@@ -587,20 +609,27 @@ pub fn start_loop(
                     arc.clone(),
                     None, // No mirror for autonomous cycles — no operator question to reflect on.
                     &emission_analyzer,
-                ).await;
+                )
+                .await;
 
                 match outcome {
                     CycleOutcome::Done(_) => {
                         if let Some(ref a) = arc {
-                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                .with_detail(format!(
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcEnd, 0).with_detail(format!(
                                     "cycles={} tools={}",
-                                    a.cycles_completed, a.tool_history.len()
-                                )));
+                                    a.cycles_completed,
+                                    a.tool_history.len()
+                                )),
+                            );
                         }
                         break;
                     }
-                    CycleOutcome::Continue { progress, tool_results } => {
+                    CycleOutcome::Continue {
+                        progress,
+                        tool_results,
+                    } => {
                         let is_new_arc = arc.is_none();
                         let current = arc.get_or_insert_with(|| WorkArc {
                             progress: String::new(),
@@ -617,21 +646,29 @@ pub fn start_loop(
                         let no_advance = !is_new_arc
                             && current.progress == progress
                             && current.tool_history.len() == tool_results.len();
-                        current.stall_count =
-                            if no_advance { current.stall_count + 1 } else { 0 };
+                        current.stall_count = if no_advance {
+                            current.stall_count + 1
+                        } else {
+                            0
+                        };
                         current.progress = progress.clone();
                         current.cycles_completed += 1;
                         current.tool_history = tool_results;
 
                         if is_new_arc {
-                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcStart, 0)
-                                .with_detail(progress.clone()));
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcStart, 0)
+                                    .with_detail(progress.clone()),
+                            );
                         }
-                        emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcProgress, 0)
-                            .with_detail(format!(
+                        emit(
+                            &cognitive_event_tx,
+                            CognitiveEvent::new(Phase::ArcProgress, 0).with_detail(format!(
                                 "{}/{}: {}",
                                 current.cycles_completed, MAX_ARC_CYCLES, progress
-                            )));
+                            )),
+                        );
 
                         if current.stall_count >= ARC_STALL_LIMIT {
                             warn!(
@@ -639,8 +676,10 @@ pub fn start_loop(
                                 progress = progress.as_str(),
                                 "critical finding arc stalled — same plan, no tool dispatched"
                             );
-                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                .with_detail("stalled"));
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcEnd, 0).with_detail("stalled"),
+                            );
                             emit_arc_stalled_receipt(
                                 &audit_store,
                                 &progress,
@@ -651,8 +690,11 @@ pub fn start_loop(
 
                         if current.cycles_completed >= MAX_ARC_CYCLES {
                             warn!("critical finding arc hit budget");
-                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                .with_detail("budget_exhausted"));
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcEnd, 0)
+                                    .with_detail("budget_exhausted"),
+                            );
                             break;
                         }
                     }
@@ -742,12 +784,14 @@ async fn maybe_start_background_work(
                     action: zp_core::AuditAction::SystemEvent {
                         event: format!(
                             "regent:model_evaluated:{} passed={}/{} latency={}ms",
-                            report.model, report.passed, report.total_tests,
+                            report.model,
+                            report.passed,
+                            report.total_tests,
                             report.total_latency_ms
                         ),
                     },
                     conversation_id: zp_core::ConversationId(
-                        uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap()
+                        uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
                     ),
                     policy_decision: zp_core::PolicyDecision::Allow {
                         conditions: Vec::new(),
@@ -770,7 +814,8 @@ async fn maybe_start_background_work(
             prefix,
             cancel_clone,
             emit_receipt,
-        ).await;
+        )
+        .await;
 
         if result.cancelled {
             info!(
@@ -815,6 +860,8 @@ fn emit(tx: &Option<EventTx>, event: CognitiveEvent) {
     }
 }
 
+// Same eleven collaborators as `start_loop`, borrowed for one cycle.
+#[allow(clippy::too_many_arguments)]
 async fn run_cycle(
     regent: &Arc<Mutex<Regent>>,
     executor: &Arc<dyn IntentExecutor>,
@@ -847,8 +894,14 @@ async fn run_cycle(
         .unwrap_or_default();
 
     let cycle_t0 = std::time::Instant::now();
-    emit(event_tx, CognitiveEvent::new(Phase::CycleStart, 0)
-        .with_detail(format!("findings={} arc={}", findings.len(), work_arc.is_some())));
+    emit(
+        event_tx,
+        CognitiveEvent::new(Phase::CycleStart, 0).with_detail(format!(
+            "findings={} arc={}",
+            findings.len(),
+            work_arc.is_some()
+        )),
+    );
 
     // Cognitive act accounting (v0, per COGNITIVE-ACT-ACCOUNTING-2026-07.md
     // §6 / BRIEF-cognitive-act-v0-m0-2026-07.md §2). The act receipt cites
@@ -866,7 +919,12 @@ async fn run_cycle(
         // which this loop does not call — it drives perceive/reason directly.
         // Without this the chain records every autonomous cycle as "cycle 0".
         let cycle_no = regent_guard.begin_cycle(findings);
-        debug!(cycle = cycle_no, turn, wake = regent_guard.wake().as_str(), "regent cycle starting");
+        debug!(
+            cycle = cycle_no,
+            turn,
+            wake = regent_guard.wake().as_str(),
+            "regent cycle starting"
+        );
 
         // ── Perceive ─────────────────────────────────────────────
         let perceive_t0 = std::time::Instant::now();
@@ -875,8 +933,11 @@ async fn run_cycle(
                 Ok(s) => s,
                 Err(e) => {
                     warn!("regent cycle: audit store lock poisoned: {}", e);
-                    emit(event_tx, CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
-                        .with_detail("audit store lock poisoned"));
+                    emit(
+                        event_tx,
+                        CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
+                            .with_detail("audit store lock poisoned"),
+                    );
                     return CycleOutcome::Done(format!("error: audit store lock poisoned: {}", e));
                 }
             };
@@ -891,7 +952,11 @@ async fn run_cycle(
                 work_arc.clone(),
                 // Mirror: only show prior response on first turn of the cycle.
                 // Subsequent turns (tool dispatch → narration) don't need it.
-                if turn == 0 { prior_response.clone() } else { None },
+                if turn == 0 {
+                    prior_response.clone()
+                } else {
+                    None
+                },
                 // Unlike the mirror above, this is passed on *every* turn.
                 // It is the one thing a narration turn cannot do without.
                 cycle_directive.clone(),
@@ -899,22 +964,27 @@ async fn run_cycle(
                 Ok(ctx) => ctx,
                 Err(e) => {
                     warn!("regent perceive failed: {}", e);
-                    emit(event_tx, CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
-                        .with_detail(format!("perceive: {}", e)));
+                    emit(
+                        event_tx,
+                        CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
+                            .with_detail(format!("perceive: {}", e)),
+                    );
                     return CycleOutcome::Done(format!("error: perceive failed: {}", e));
                 }
             }
         };
         let perceive_ms = perceive_t0.elapsed().as_millis() as u64;
-        emit(event_tx, CognitiveEvent::new(Phase::Perceive, perceive_ms)
-            .with_detail(format!(
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::Perceive, perceive_ms).with_detail(format!(
                 "chain={} findings={} delegations={} corrections={} prior_tools={}",
                 context.recent_chain.len(),
                 context.officer_findings.len(),
                 context.active_delegations.len(),
                 context.standing_corrections.len(),
                 context.tool_results.len(),
-            )));
+            )),
+        );
         info!(perceive_ms, turn, "regent perceive completed");
 
         // ── Composition receipt ──────────────────────────────────
@@ -929,15 +999,24 @@ async fn run_cycle(
 
         // ── Reason (inference) ───────────────────────────────────
         let reason_t0 = std::time::Instant::now();
-        emit(event_tx, CognitiveEvent::new(Phase::InferenceStart, 0)
-            .with_detail(format!("model={} turn={}", regent_guard.model_label(), turn)));
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::InferenceStart, 0).with_detail(format!(
+                "model={} turn={}",
+                regent_guard.model_label(),
+                turn
+            )),
+        );
 
         let intent = match regent_guard.reason(&context).await {
             Ok(i) => i,
             Err(e) => {
                 warn!("regent reason failed: {}", e);
-                emit(event_tx, CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
-                    .with_detail(format!("reason: {}", e)));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
+                        .with_detail(format!("reason: {}", e)),
+                );
                 // A cycle where reasoning failed is precisely the kind of
                 // act the accounting layer exists to make visible — the
                 // exit a bottom-of-function emit would silently drop.
@@ -953,11 +1032,22 @@ async fn run_cycle(
             }
         };
         let reason_ms = reason_t0.elapsed().as_millis() as u64;
-        emit(event_tx, CognitiveEvent::new(Phase::InferenceEnd, reason_ms)
-            .with_detail(format!("intent={}", intent.receipt_event())));
-        emit(event_tx, CognitiveEvent::new(Phase::IntentParsed, 0)
-            .with_detail(intent.receipt_event().to_string()));
-        info!(reason_ms, turn, intent = intent.receipt_event(), "regent reason completed");
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::InferenceEnd, reason_ms)
+                .with_detail(format!("intent={}", intent.receipt_event())),
+        );
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::IntentParsed, 0)
+                .with_detail(intent.receipt_event().to_string()),
+        );
+        info!(
+            reason_ms,
+            turn,
+            intent = intent.receipt_event(),
+            "regent reason completed"
+        );
 
         // ── Fallback diagnostics ─────────────────────────────────
         // If cloud inference failed and the backend fell back to local
@@ -976,13 +1066,11 @@ async fn run_cycle(
                 action: zp_core::AuditAction::SystemEvent {
                     event: format!(
                         "regent:inference:fallback provider={} error={} fallback_model={}",
-                        fb.cloud_provider,
-                        fb.cloud_error,
-                        fb.fallback_model,
+                        fb.cloud_provider, fb.cloud_error, fb.fallback_model,
                     ),
                 },
                 conversation_id: zp_core::ConversationId(
-                    uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap()
+                    uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
                 ),
                 policy_decision: zp_core::PolicyDecision::Allow {
                     conditions: Vec::new(),
@@ -1066,14 +1154,15 @@ async fn run_cycle(
         // even when the operator said "navigate to X". Extract the URL
         // from the operator's input and inject it.
         let intent = if let Intent::Execute { tool, params } = &intent {
-            if tool == "browser_use"
-                && params.as_object().is_some_and(|m| m.is_empty())
-            {
+            if tool == "browser_use" && params.as_object().is_some_and(|m| m.is_empty()) {
                 if let Some(ref input) = context.pending_input {
                     const ENRICH_DOMAINS: &[(&str, &str)] = &[
                         ("zeropoint.global", "https://zeropoint.global"),
                         ("zeropointfoundation.org", "https://zeropointfoundation.org"),
-                        ("github.com/zeropoint-foundation", "https://github.com/zeropoint-foundation"),
+                        (
+                            "github.com/zeropoint-foundation",
+                            "https://github.com/zeropoint-foundation",
+                        ),
                     ];
                     let lower = input.content.to_lowercase();
                     let mut found = None;
@@ -1103,8 +1192,11 @@ async fn run_cycle(
 
         match &intent {
             Intent::Execute { tool, .. } => {
-                emit(event_tx, CognitiveEvent::new(Phase::ToolDispatch, 0)
-                    .with_detail(format!("{}  turn={}", tool, turn)));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::ToolDispatch, 0)
+                        .with_detail(format!("{}  turn={}", tool, turn)),
+                );
                 let tool_t0 = std::time::Instant::now();
 
                 let mut refused_call: Option<crate::intent::Enactment> = None;
@@ -1135,8 +1227,11 @@ async fn run_cycle(
                 };
                 let tool_ms = tool_t0.elapsed().as_millis() as u64;
 
-                emit(event_tx, CognitiveEvent::new(Phase::ToolComplete, tool_ms)
-                    .with_detail(format!("response_len={}", response.len())));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::ToolComplete, tool_ms)
+                        .with_detail(format!("response_len={}", response.len())),
+                );
 
                 // Feed result back for the next turn — the Regent will
                 // see it and can compose a narration or act again.
@@ -1149,8 +1244,7 @@ async fn run_cycle(
 
                 info!(
                     turn,
-                    tool_ms,
-                    "tool completed — continuing cycle for narration"
+                    tool_ms, "tool completed — continuing cycle for narration"
                 );
                 continue;
             }
@@ -1159,8 +1253,11 @@ async fn run_cycle(
                 // The Regent wants another cycle. Return Continue with
                 // accumulated tool results so the arc loop re-enters.
                 let total_ms = cycle_t0.elapsed().as_millis() as u64;
-                emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-                    .with_detail(format!("continue: {}", progress)));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::CycleEnd, total_ms)
+                        .with_detail(format!("continue: {}", progress)),
+                );
                 info!(
                     turns = turn + 1,
                     total_ms,
@@ -1205,7 +1302,9 @@ async fn run_cycle(
                         // approve or reject.
                         let header = match kind {
                             crate::intent::ProposalKind::Action => "PROPOSAL (needs your approval)",
-                            crate::intent::ProposalKind::Mechanism => "PROPOSAL (capability request)",
+                            crate::intent::ProposalKind::Mechanism => {
+                                "PROPOSAL (capability request)"
+                            }
                         };
                         let mut out = format!("{header}\n{proposed_action}");
                         if let Some(f) = finding {
@@ -1264,8 +1363,11 @@ async fn run_cycle(
                 }
                 let total_ms = cycle_t0.elapsed().as_millis() as u64;
 
-                emit(event_tx, CognitiveEvent::new(Phase::ResponseDelivered, 0)
-                    .with_detail(format!("len={}", response.len())));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::ResponseDelivered, 0)
+                        .with_detail(format!("len={}", response.len())),
+                );
 
                 // ── Cognitive Self-Observer (P2.2) ──────────────────────
                 // Post-emission verification of Regent's response against
@@ -1294,24 +1396,20 @@ async fn run_cycle(
                     // response delivery is unaffected (log-and-continue
                     // for all classes). R1 retry / R2 escalate wiring
                     // lands after false-positive rates are measured.
-                    run_emission_coherence(
-                        audit_store,
-                        emission_analyzer,
-                        &response,
-                    );
+                    run_emission_coherence(audit_store, emission_analyzer, &response);
                 }
 
-                emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-                    .with_detail(format!(
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::CycleEnd, total_ms).with_detail(format!(
                         "turns={} perceive={}ms inference={}ms",
-                        turn + 1, perceive_ms, reason_ms
-                    )));
-
-                info!(
-                    turns = turn + 1,
-                    total_ms,
-                    "regent cycle complete"
+                        turn + 1,
+                        perceive_ms,
+                        reason_ms
+                    )),
                 );
+
+                info!(turns = turn + 1, total_ms, "regent cycle complete");
                 emit_cognitive_act_receipt(
                     audit_store,
                     last_composition_hash.as_deref(),
@@ -1329,8 +1427,13 @@ async fn run_cycle(
     // otherwise the model kept executing tools without ever narrating.
     let total_ms = cycle_t0.elapsed().as_millis() as u64;
     let fallback = if let Some(last) = tool_results.last() {
-        emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-            .with_detail(format!("max_turns_reached tools_executed={}", tool_results.len())));
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::CycleEnd, total_ms).with_detail(format!(
+                "max_turns_reached tools_executed={}",
+                tool_results.len()
+            )),
+        );
         info!(
             turns = MAX_TOOL_TURNS,
             tools = tool_results.len(),
@@ -1339,12 +1442,13 @@ async fn run_cycle(
         );
         last.output.clone()
     } else {
-        emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-            .with_detail("max_tool_turns_reached"));
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::CycleEnd, total_ms).with_detail("max_tool_turns_reached"),
+        );
         warn!(
             turns = MAX_TOOL_TURNS,
-            total_ms,
-            "regent hit max tool turns, forcing stop"
+            total_ms, "regent hit max tool turns, forcing stop"
         );
         "error: max tool turns reached".to_string()
     };
@@ -1661,11 +1765,7 @@ async fn drain_enactable_approvals(
         crate::approvals::ApprovalIndex::build(&entries)
             .enactable()
             .iter()
-            .filter_map(|r| {
-                r.enactment
-                    .clone()
-                    .map(|e| (r.request_hash.clone(), e))
-            })
+            .filter_map(|r| r.enactment.clone().map(|e| (r.request_hash.clone(), e)))
             .collect()
     };
 
@@ -1958,7 +2058,10 @@ fn run_emission_coherence(
     let mut store_guard = match audit_store.lock() {
         Ok(s) => s,
         Err(e) => {
-            warn!("emission-coherence receipt: audit store lock poisoned: {}", e);
+            warn!(
+                "emission-coherence receipt: audit store lock poisoned: {}",
+                e
+            );
             return;
         }
     };

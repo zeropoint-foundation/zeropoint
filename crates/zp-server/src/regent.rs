@@ -13,8 +13,10 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use zp_audit::{AuditStore, UnsealedEntry};
-use zp_core::{ActorId, AuditAction, CapabilityGrant, ConversationId, GrantedCapability, PolicyDecision};
 use zp_core::policy::ActionType;
+use zp_core::{
+    ActorId, AuditAction, CapabilityGrant, ConversationId, GrantedCapability, PolicyDecision,
+};
 use zp_policy::GovernanceGate;
 
 use zp_regent::config::RegentConfig;
@@ -85,8 +87,16 @@ const APPROVAL_REQUIRED_TOOLS: &[&str] = &["browser_use"];
 /// the server told it rather than against a copy it keeps. A tool absent from
 /// this table is not validated: unknown contract, not empty contract.
 const TOOL_PARAMS: &[(&str, &[&str], &[&str])] = &[
-    ("browser_use", &["action"], &["url", "expression", "selector"]),
-    ("self_configure", &[], &["endpoint", "model", "api_key", "routing_model", "force"]),
+    (
+        "browser_use",
+        &["action"],
+        &["url", "expression", "selector"],
+    ),
+    (
+        "self_configure",
+        &[],
+        &["endpoint", "model", "api_key", "routing_model", "force"],
+    ),
     ("chain_query", &[], &["limit", "filter", "since"]),
     ("chain_compact", &[], &["retain"]),
     ("memory_list", &[], &["stage"]),
@@ -155,7 +165,10 @@ fn emit_inference_observer_receipt(store: &Arc<std::sync::Mutex<AuditStore>>, ra
     let mut guard = match store.lock() {
         Ok(s) => s,
         Err(e) => {
-            warn!("inference observer receipt: audit store lock poisoned: {}", e);
+            warn!(
+                "inference observer receipt: audit store lock poisoned: {}",
+                e
+            );
             return;
         }
     };
@@ -283,6 +296,10 @@ pub struct ServerIntentExecutor {
 }
 
 impl ServerIntentExecutor {
+    // Twelve collaborators, held for the Regent's lifetime. See the note on
+    // `zp_regent::loop_runner::start_loop` — same construction seam, same
+    // reason it is not folded into a config struct here.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         audit_store: Arc<std::sync::Mutex<AuditStore>>,
         gate: Arc<GovernanceGate>,
@@ -432,9 +449,7 @@ impl ServerIntentExecutor {
 
         let entry = UnsealedEntry {
             actor: regent_actor(),
-            action: AuditAction::SystemEvent {
-                event: event_str,
-            },
+            action: AuditAction::SystemEvent { event: event_str },
             conversation_id: regent_conv_id(),
             policy_decision: PolicyDecision::Allow {
                 conditions: Vec::new(),
@@ -475,7 +490,10 @@ impl ServerIntentExecutor {
         let mut store = match self.audit_store.lock() {
             Ok(s) => s,
             Err(e) => {
-                warn!("regent remediation receipt: audit store lock poisoned: {}", e);
+                warn!(
+                    "regent remediation receipt: audit store lock poisoned: {}",
+                    e
+                );
                 return;
             }
         };
@@ -503,9 +521,7 @@ impl ServerIntentExecutor {
         } else {
             info!(
                 tool,
-                finding_type,
-                entries_affected,
-                "regent: remediation receipt emitted"
+                finding_type, entries_affected, "regent: remediation receipt emitted"
             );
         }
     }
@@ -555,12 +571,9 @@ impl ServerIntentExecutor {
 
             // Run battery for each candidate.
             for (candidate_model, tier) in &candidates {
-                let result = zp_regent::shadow_validation::run_battery(
-                    &inference,
-                    candidate_model,
-                    *tier,
-                )
-                .await;
+                let result =
+                    zp_regent::shadow_validation::run_battery(&inference, candidate_model, *tier)
+                        .await;
 
                 // Emit per-check receipts.
                 for check in &result.checks {
@@ -582,10 +595,7 @@ impl ServerIntentExecutor {
                         "shadow battery: candidate PASSED"
                     );
                 } else {
-                    regent_guard.reject_shadow_candidate(
-                        candidate_model,
-                        result.summary.clone(),
-                    );
+                    regent_guard.reject_shadow_candidate(candidate_model, result.summary.clone());
                     let event = format!(
                         "regent:config:inference:shadow_rejected | candidate={} reason={}",
                         candidate_model, result.summary,
@@ -643,13 +653,8 @@ impl ServerIntentExecutor {
     ) -> Result<serde_json::Value, RegentError> {
         match tool {
             "chain_query" => {
-                let limit = params
-                    .get("limit")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(20) as usize;
-                let filter = params
-                    .get("filter")
-                    .and_then(|v| v.as_str());
+                let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+                let filter = params.get("filter").and_then(|v| v.as_str());
                 let store = self
                     .audit_store
                     .lock()
@@ -740,12 +745,7 @@ impl ServerIntentExecutor {
 
                 // Emit structured remediation receipt — the chain's memory of
                 // this autonomous action. Future cycles query these for precedent.
-                self.emit_remediation_receipt(
-                    "batch_sign",
-                    "unsigned_entries",
-                    signed,
-                    "signed",
-                );
+                self.emit_remediation_receipt("batch_sign", "unsigned_entries", signed, "signed");
 
                 Ok(serde_json::json!({
                     "signed": signed,
@@ -778,7 +778,10 @@ impl ServerIntentExecutor {
                     .compact_chain(retain)
                     .map_err(|e| RegentError::Execution(format!("chain_compact failed: {}", e)))?;
                 drop(store);
-                info!(archived, retain, "regent: chain_compact maintenance completed");
+                info!(
+                    archived,
+                    retain, "regent: chain_compact maintenance completed"
+                );
 
                 self.emit_remediation_receipt(
                     "chain_compact",
@@ -937,10 +940,7 @@ impl ServerIntentExecutor {
                 // {"intent":"execute","tool":"browser_use"} with no params
                 // even when the operator said "navigate to X". Default to
                 // goto_url when a URL is present, page_info otherwise.
-                let raw_action = params
-                    .get("action")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let raw_action = params.get("action").and_then(|v| v.as_str()).unwrap_or("");
                 let raw_url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
 
                 // If model didn't provide action but we have a URL, infer goto_url.
@@ -960,17 +960,16 @@ impl ServerIntentExecutor {
                 };
 
                 // Domain gate: if action involves a URL, validate it.
-                if !url.is_empty()
-                    && !domain_allowed(&url, ALLOWED_DOMAINS) {
-                        return Ok(serde_json::json!({
-                            "error": "domain_blocked",
-                            "message": format!("URL '{}' is not in allowed_domains", url),
-                            "allowed": ALLOWED_DOMAINS
-                                .iter()
-                                .map(|(d, p)| format!("{}{}", d, p))
-                                .collect::<Vec<_>>(),
-                        }));
-                    }
+                if !url.is_empty() && !domain_allowed(&url, ALLOWED_DOMAINS) {
+                    return Ok(serde_json::json!({
+                        "error": "domain_blocked",
+                        "message": format!("URL '{}' is not in allowed_domains", url),
+                        "allowed": ALLOWED_DOMAINS
+                            .iter()
+                            .map(|(d, p)| format!("{}{}", d, p))
+                            .collect::<Vec<_>>(),
+                    }));
+                }
 
                 // Build the Python snippet for browser-harness.
                 // Always start with ensure_real_tab() to avoid hung-tab
@@ -1112,17 +1111,16 @@ impl ServerIntentExecutor {
                             }))
                         }
                     }
-                    Err(e) => {
-                        Err(RegentError::Execution(format!("browser-harness spawn failed: {}", e)))
-                    }
+                    Err(e) => Err(RegentError::Execution(format!(
+                        "browser-harness spawn failed: {}",
+                        e
+                    ))),
                 }
             }
 
             "memory_list" => {
                 // Query the memory promotion engine — stage filter, stats, review-due.
-                let stage_filter = params
-                    .get("stage")
-                    .and_then(|v| v.as_str());
+                let stage_filter = params.get("stage").and_then(|v| v.as_str());
 
                 let engine = self
                     .promotion_engine
@@ -1139,7 +1137,8 @@ impl ServerIntentExecutor {
                 };
 
                 let now = chrono::Utc::now();
-                let mut by_stage: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+                let mut by_stage: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
                 let mut expired = 0usize;
                 let mut review_due = 0usize;
                 for m in &all {
@@ -1221,7 +1220,9 @@ impl ServerIntentExecutor {
                             .get("review_id")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                RegentError::Execution("review_id required for approve/deny".to_string())
+                                RegentError::Execution(
+                                    "review_id required for approve/deny".to_string(),
+                                )
                             })?;
                         let reason = params
                             .get("reason")
@@ -1270,11 +1271,13 @@ impl ServerIntentExecutor {
                         let outcome = queue.process_decision(review_id, decision);
 
                         // If approved, execute the promotion from the returned request.
-                        if let zp_memory::ReviewOutcome::Approved { ref promotion_request } = outcome {
-                            let mut engine = self
-                                .promotion_engine
-                                .lock()
-                                .map_err(|e| RegentError::ChainRead(format!("promotion engine lock: {}", e)))?;
+                        if let zp_memory::ReviewOutcome::Approved {
+                            ref promotion_request,
+                        } = outcome
+                        {
+                            let mut engine = self.promotion_engine.lock().map_err(|e| {
+                                RegentError::ChainRead(format!("promotion engine lock: {}", e))
+                            })?;
                             let promote_result = engine.promote(promotion_request);
                             drop(engine);
 
@@ -1316,13 +1319,29 @@ impl ServerIntentExecutor {
             "self_configure" => {
                 // Self-modification tool: the Regent changes her own inference config.
                 // API keys go to vault — never in cognitive context or chain receipts.
-                let new_endpoint = params.get("endpoint").and_then(|v| v.as_str()).map(String::from);
+                let new_endpoint = params
+                    .get("endpoint")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
                 let new_api_key = params.get("api_key").and_then(|v| v.as_str());
-                let new_reasoning = params.get("model").and_then(|v| v.as_str()).map(String::from);
-                let new_routing = params.get("routing_model").and_then(|v| v.as_str()).map(String::from);
-                let force = params.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+                let new_reasoning = params
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                let new_routing = params
+                    .get("routing_model")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                let force = params
+                    .get("force")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-                if new_endpoint.is_none() && new_api_key.is_none() && new_reasoning.is_none() && new_routing.is_none() {
+                if new_endpoint.is_none()
+                    && new_api_key.is_none()
+                    && new_reasoning.is_none()
+                    && new_routing.is_none()
+                {
                     // No changes — return current config.
                     let regent_guard = self.regent.lock().await;
                     let cfg = regent_guard.config();
@@ -1338,21 +1357,30 @@ impl ServerIntentExecutor {
                                 zp_regent::PinStatus::Active => serde_json::json!({
                                     "state": "active",
                                 }),
-                                zp_regent::PinStatus::Evaluating { candidates, active_model } => {
-                                    let candidate_list: Vec<serde_json::Value> = candidates.iter().map(|c| {
-                                        serde_json::json!({
-                                            "model": c.model,
-                                            "state": format!("{:?}", c.state),
+                                zp_regent::PinStatus::Evaluating {
+                                    candidates,
+                                    active_model,
+                                } => {
+                                    let candidate_list: Vec<serde_json::Value> = candidates
+                                        .iter()
+                                        .map(|c| {
+                                            serde_json::json!({
+                                                "model": c.model,
+                                                "state": format!("{:?}", c.state),
+                                            })
                                         })
-                                    }).collect();
+                                        .collect();
                                     serde_json::json!({
                                         "state": "evaluating",
                                         "candidates": candidate_list,
                                         "serving": active_model,
                                         "note": "shadow validation in progress — groomed model stays active",
                                     })
-                                },
-                                zp_regent::PinStatus::Rejected { candidate_model, reason } => serde_json::json!({
+                                }
+                                zp_regent::PinStatus::Rejected {
+                                    candidate_model,
+                                    reason,
+                                } => serde_json::json!({
                                     "state": "rejected",
                                     "candidate": candidate_model,
                                     "reason": reason,
@@ -1398,29 +1426,35 @@ impl ServerIntentExecutor {
                                     raw_key.as_bytes(),
                                     zp_trust::vault::VaultTier::System,
                                 ) {
-                                    return Err(RegentError::Execution(
-                                        format!("failed to store API key in vault: {}", e)
-                                    ));
+                                    return Err(RegentError::Execution(format!(
+                                        "failed to store API key in vault: {}",
+                                        e
+                                    )));
                                 }
                                 if let Err(e) = vault.save(&self.vault_path) {
-                                    return Err(RegentError::Execution(
-                                        format!("failed to persist vault: {}", e)
-                                    ));
+                                    return Err(RegentError::Execution(format!(
+                                        "failed to persist vault: {}",
+                                        e
+                                    )));
                                 }
                                 new_key_source = Some(zp_regent::config::ApiKeySource::Vault(
-                                    vault_store_path.to_string()
+                                    vault_store_path.to_string(),
                                 ));
-                                info!("self_configure: API key stored in vault at {}", vault_store_path);
+                                info!(
+                                    "self_configure: API key stored in vault at {}",
+                                    vault_store_path
+                                );
                             }
                             Err(e) => {
-                                return Err(RegentError::Execution(
-                                    format!("failed to open vault for API key storage: {}", e)
-                                ));
+                                return Err(RegentError::Execution(format!(
+                                    "failed to open vault for API key storage: {}",
+                                    e
+                                )));
                             }
                         }
                     } else {
                         return Err(RegentError::Execution(
-                            "vault key not available — cannot store API key securely".to_string()
+                            "vault key not available — cannot store API key securely".to_string(),
                         ));
                     }
                 }
@@ -1447,11 +1481,15 @@ impl ServerIntentExecutor {
                 // If key was stored in vault, resolve it into the inference backend.
                 if let Some(zp_regent::config::ApiKeySource::Vault(ref path)) = new_key_source {
                     if let Some(vmk) = self.vault_master_key() {
-                        if let Ok(vault) = zp_trust::CredentialVault::load_or_create(&vmk, &self.vault_path) {
+                        if let Ok(vault) =
+                            zp_trust::CredentialVault::load_or_create(&vmk, &self.vault_path)
+                        {
                             if let Ok(key_bytes) = vault.retrieve(path) {
                                 if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
                                     let mut regent_guard = self.regent.lock().await;
-                                    regent_guard.inference_mut().set_resolved_key(key_str.to_string());
+                                    regent_guard
+                                        .inference_mut()
+                                        .set_resolved_key(key_str.to_string());
                                 }
                             }
                         }
@@ -1475,10 +1513,20 @@ impl ServerIntentExecutor {
                     receipt_event,
                     Some(&format!(
                         "reasoning={} routing={} api_key_source={} via={}",
-                        result["changes"]["reasoning_model"]["to"].as_str().unwrap_or("?"),
-                        result["changes"]["routing_model"]["to"].as_str().unwrap_or("?"),
+                        result["changes"]["reasoning_model"]["to"]
+                            .as_str()
+                            .unwrap_or("?"),
+                        result["changes"]["routing_model"]["to"]
+                            .as_str()
+                            .unwrap_or("?"),
                         key_source_label,
-                        if force { "force_cut" } else if result["status"].as_str() == Some("evaluating") { "shadow_evaluation" } else { "direct" },
+                        if force {
+                            "force_cut"
+                        } else if result["status"].as_str() == Some("evaluating") {
+                            "shadow_evaluation"
+                        } else {
+                            "direct"
+                        },
                     )),
                 );
 
@@ -1503,9 +1551,7 @@ impl ServerIntentExecutor {
                 // narration judgment per SUBSTRATE-SELF-CONSTRUCTION discipline.
                 // Regent authorized to invoke per standing correction
                 // `regent.authority.substrate_validation`.
-                let report = crate::substrate_validate::run_substrate_validation(
-                    &self.audit_store,
-                );
+                let report = crate::substrate_validate::run_substrate_validation(&self.audit_store);
                 Ok(report)
             }
 
@@ -1531,9 +1577,7 @@ impl ServerIntentExecutor {
             //     tool" fallback.
             "web_search" => Err(crate::regent_tools::not_yet_implemented("web_search")),
             "web_fetch" => Err(crate::regent_tools::not_yet_implemented("web_fetch")),
-            "image_generate" => {
-                Err(crate::regent_tools::not_yet_implemented("image_generate"))
-            }
+            "image_generate" => Err(crate::regent_tools::not_yet_implemented("image_generate")),
             "chart_generate" => self.dispatch_chart_generate(params).await,
             "report_assemble" => self.dispatch_report_assemble(params).await,
             "save_to_artifacts" => self.dispatch_save_to_artifacts(params).await,
@@ -1673,10 +1717,7 @@ impl ServerIntentExecutor {
             })?
             .join("artifacts");
         std::fs::create_dir_all(&dir).map_err(|e| {
-            RegentError::Execution(format!(
-                "save_to_artifacts: mkdir {:?} failed: {}",
-                dir, e
-            ))
+            RegentError::Execution(format!("save_to_artifacts: mkdir {:?} failed: {}", dir, e))
         })?;
 
         // Filename is content-addressed. Extension comes from `name`
@@ -1762,9 +1803,7 @@ fn parse_chart_spec(
         .get("labels")
         .and_then(|v| v.as_array())
         .ok_or_else(|| {
-            RegentError::Execution(
-                "chart_generate: missing required 'labels' array".to_string(),
-            )
+            RegentError::Execution("chart_generate: missing required 'labels' array".to_string())
         })?
         .iter()
         .map(|v| v.as_str().unwrap_or("").to_string())
@@ -1785,10 +1824,7 @@ fn parse_chart_spec(
             .get("name")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                RegentError::Execution(format!(
-                    "chart_generate: series[{}] missing 'name'",
-                    i
-                ))
+                RegentError::Execution(format!("chart_generate: series[{}] missing 'name'", i))
             })?
             .to_string();
         let values = entry
@@ -1820,9 +1856,7 @@ fn parse_chart_spec(
 /// `content_base64` wins with a diagnostic — a Regent that provides
 /// both is likely confused about which to send, and picking the more
 /// general form (bytes) is the safer default.
-fn parse_save_to_artifacts(
-    params: &serde_json::Value,
-) -> Result<(String, Vec<u8>), RegentError> {
+fn parse_save_to_artifacts(params: &serde_json::Value) -> Result<(String, Vec<u8>), RegentError> {
     let name = params
         .get("name")
         .and_then(|v| v.as_str())
@@ -1936,9 +1970,16 @@ fn parse_report_fragments(
 impl IntentExecutor for ServerIntentExecutor {
     async fn execute(&self, intent: &Intent) -> Result<IntentOutcome, RegentError> {
         match intent {
-            Intent::Respond { content, target_surface } => {
+            Intent::Respond {
+                content,
+                target_surface,
+            } => {
                 let surface = target_surface.as_deref().unwrap_or("default");
-                debug!(surface, content_len = content.len(), "regent: delivering response");
+                debug!(
+                    surface,
+                    content_len = content.len(),
+                    "regent: delivering response"
+                );
                 self.emit_receipt(
                     "regent:intent:respond",
                     Some(&format!("surface={}, len={}", surface, content.len())),
@@ -1960,7 +2001,11 @@ impl IntentExecutor for ServerIntentExecutor {
                 Ok(IntentOutcome::Delivered)
             }
 
-            Intent::Delegate { task, capability, constraints: _ } => {
+            Intent::Delegate {
+                task,
+                capability,
+                constraints: _,
+            } => {
                 debug!(
                     task = task.as_str(),
                     capability = capability.as_str(),
@@ -1978,16 +2023,11 @@ impl IntentExecutor for ServerIntentExecutor {
                 debug!(tool = tool.as_str(), "regent: execute intent");
 
                 // 1. Emit intent receipt
-                self.emit_receipt(
-                    "regent:intent:execute",
-                    Some(&format!("tool={}", tool)),
-                );
+                self.emit_receipt("regent:intent:execute", Some(&format!("tool={}", tool)));
 
                 // 2. Evaluate gate
                 let context = zp_core::policy::PolicyContext {
-                    action: ActionType::ToolCall {
-                        name: tool.clone(),
-                    },
+                    action: ActionType::ToolCall { name: tool.clone() },
                     trust_tier: zp_core::policy::TrustTier::Tier2,
                     channel: zp_core::Channel::Api,
                     conversation_id: regent_conv_id(),
@@ -2017,7 +2057,11 @@ impl IntentExecutor for ServerIntentExecutor {
                         PolicyDecision::Block { reason, .. } => reason.clone(),
                         _ => "policy denied".to_string(),
                     };
-                    debug!(tool = tool.as_str(), reason = reason.as_str(), "regent: gate denied tool");
+                    debug!(
+                        tool = tool.as_str(),
+                        reason = reason.as_str(),
+                        "regent: gate denied tool"
+                    );
                     return Ok(IntentOutcome::ToolDenied {
                         tool: tool.clone(),
                         reason,
@@ -2040,7 +2084,10 @@ impl IntentExecutor for ServerIntentExecutor {
                          Propose it with request_approval, naming the tool and its \
                          parameters, and it will run once signed."
                     );
-                    warn!(tool = tool.as_str(), "regent: unsigned dispatch of an approval-required tool refused");
+                    warn!(
+                        tool = tool.as_str(),
+                        "regent: unsigned dispatch of an approval-required tool refused"
+                    );
                     self.emit_receipt(
                         "regent:tool:refused:unsigned",
                         Some(&format!("tool={}", tool)),
@@ -2078,7 +2125,10 @@ impl IntentExecutor for ServerIntentExecutor {
                 // remember an operator's preferred name on 2026-07-31, it
                 // said it had; nothing was stored, and nothing could be.
                 if content.trim().is_empty() {
-                    warn!(key = key.as_str(), "regent: remember with empty content — nothing to record");
+                    warn!(
+                        key = key.as_str(),
+                        "regent: remember with empty content — nothing to record"
+                    );
                     return Ok(IntentOutcome::Observed);
                 }
 
@@ -2280,11 +2330,14 @@ impl IntentExecutor for ServerIntentExecutor {
                 Ok(IntentOutcome::Observed)
             }
 
-            Intent::Escalate { reason, prompt: _, estimated_tokens } => {
+            Intent::Escalate {
+                reason,
+                prompt: _,
+                estimated_tokens,
+            } => {
                 info!(
                     reason = reason.as_str(),
-                    estimated_tokens,
-                    "regent: cloud escalation intent"
+                    estimated_tokens, "regent: cloud escalation intent"
                 );
                 self.emit_receipt(
                     "regent:intent:escalate",
@@ -2298,7 +2351,9 @@ impl IntentExecutor for ServerIntentExecutor {
                 // Continue is handled by the loop runner's arc logic —
                 // it never reaches the executor. If it does, treat as
                 // a no-op observation to avoid panics.
-                debug!("regent: Continue intent reached executor (unexpected); treating as observed");
+                debug!(
+                    "regent: Continue intent reached executor (unexpected); treating as observed"
+                );
                 Ok(IntentOutcome::Observed)
             }
         }
@@ -2343,6 +2398,10 @@ impl Default for ServerRegentConfig {
 }
 
 /// Spawn the Regent cognitive loop if enabled. Returns the handle.
+// Eight: `ServerRegentConfig` already absorbs the configuration; what remains
+// are the live handles the spawned task needs, which a config struct cannot
+// hold.
+#[allow(clippy::too_many_arguments)]
 pub async fn spawn_regent(
     config: ServerRegentConfig,
     audit_store: Arc<std::sync::Mutex<AuditStore>>,
@@ -2416,12 +2475,18 @@ pub async fn spawn_regent(
                         warn!("failed to persist vault after API key migration: {} — using in-memory fallback", e);
                         zp_regent::config::ApiKeySource::RawLegacy(raw_key)
                     } else {
-                        info!("migrated regent API key from config.toml to vault at {}", vault_store_path);
+                        info!(
+                            "migrated regent API key from config.toml to vault at {}",
+                            vault_store_path
+                        );
                         zp_regent::config::ApiKeySource::Vault(vault_store_path.to_string())
                     }
                 }
                 Err(e) => {
-                    warn!("failed to open vault for API key migration: {} — using in-memory fallback", e);
+                    warn!(
+                        "failed to open vault for API key migration: {} — using in-memory fallback",
+                        e
+                    );
                     zp_regent::config::ApiKeySource::RawLegacy(raw_key)
                 }
             }
@@ -2438,7 +2503,10 @@ pub async fn spawn_regent(
             match zp_trust::CredentialVault::load_or_create(&vmk, &vault_path) {
                 Ok(vault) => match vault.retrieve(vault_store_path) {
                     Ok(_) => {
-                        info!("found existing regent API key in vault at {} — using vault source", vault_store_path);
+                        info!(
+                            "found existing regent API key in vault at {} — using vault source",
+                            vault_store_path
+                        );
                         zp_regent::config::ApiKeySource::Vault(vault_store_path.to_string())
                     }
                     Err(_) => {
@@ -2593,7 +2661,9 @@ pub async fn spawn_regent(
         .and_then(|p| p.parent())
         .map(|root| root.join("models"))
         .unwrap_or_else(|| data_path.join("models"));
-    let dossier_corpus = Arc::new(zp_regent::routing::DossierCorpus::load_from_dir(&models_dir));
+    let dossier_corpus = Arc::new(zp_regent::routing::DossierCorpus::load_from_dir(
+        &models_dir,
+    ));
 
     // Extract H3 entropy baselines from the corpus for the emission
     // analyzer. Dossiers without a calibrated `[entropy_baseline]` are
@@ -2642,7 +2712,8 @@ pub async fn spawn_regent(
                             } else if event.starts_with("regent:config:inference:shadow_start") {
                                 // Shadow was in progress when ZP shut down.
                                 // Re-enter evaluating state — battery will re-run.
-                                let candidate = reasoning.as_deref()
+                                let candidate = reasoning
+                                    .as_deref()
                                     .filter(|m| *m != "auto" && *m != "?")
                                     .unwrap_or("unknown")
                                     .to_string();
@@ -2650,7 +2721,8 @@ pub async fn spawn_regent(
                                 regent.set_shadow_evaluating(
                                     candidate.clone(),
                                     active,
-                                    routing.as_ref()
+                                    routing
+                                        .as_ref()
                                         .filter(|m| *m != "auto" && *m != "?")
                                         .cloned(),
                                 );
@@ -2661,9 +2733,8 @@ pub async fn spawn_regent(
                             } else if event.starts_with("regent:config:inference:shadow_rejected") {
                                 // Shadow was rejected. Set rejected state so the
                                 // Regent can surface findings on first interaction.
-                                let candidate = reasoning.as_deref()
-                                    .unwrap_or("unknown")
-                                    .to_string();
+                                let candidate =
+                                    reasoning.as_deref().unwrap_or("unknown").to_string();
                                 regent.set_shadow_rejected(
                                     candidate.clone(),
                                     "shadow validation failed (see prior receipts)".to_string(),
@@ -2722,38 +2793,38 @@ pub async fn spawn_regent(
         if let Ok(store) = audit_store.lock() {
             if let Ok(entries) = store.recent_entries(500) {
                 found = entries.iter().rev().find_map(|entry| {
-                let zp_core::AuditAction::SystemEvent { ref event } = entry.action else {
-                    return None;
-                };
-                if !event.starts_with("regent:awareness:session_profile") {
-                    return None;
-                }
-                let mut cycles = 0u64;
-                let mut samples = 0usize;
-                let mut mem_delta = 0f64;
-                let mut mem_rising = false;
-                let mut models = 0i64;
-                let mut tasks = 0i64;
-                for part in event.split_whitespace() {
-                    if let Some(v) = part.strip_prefix("cycles=") {
-                        cycles = v.parse().unwrap_or(0);
-                    } else if let Some(v) = part.strip_prefix("samples=") {
-                        samples = v.parse().unwrap_or(0);
-                    } else if let Some(v) = part.strip_prefix("mem_delta=") {
-                        mem_delta = v.parse().unwrap_or(0.0);
-                    } else if let Some(v) = part.strip_prefix("mem_rising=") {
-                        mem_rising = v == "true";
-                    } else if let Some(v) = part.strip_prefix("models=") {
-                        models = v.parse().unwrap_or(0);
-                    } else if let Some(v) = part.strip_prefix("tasks=") {
-                        tasks = v.parse().unwrap_or(0);
+                    let zp_core::AuditAction::SystemEvent { ref event } = entry.action else {
+                        return None;
+                    };
+                    if !event.starts_with("regent:awareness:session_profile") {
+                        return None;
                     }
-                }
-                // A profile with no samples parsed is a malformed receipt,
-                // not a short session — do not seed from it.
-                if samples == 0 {
-                    return None;
-                }
+                    let mut cycles = 0u64;
+                    let mut samples = 0usize;
+                    let mut mem_delta = 0f64;
+                    let mut mem_rising = false;
+                    let mut models = 0i64;
+                    let mut tasks = 0i64;
+                    for part in event.split_whitespace() {
+                        if let Some(v) = part.strip_prefix("cycles=") {
+                            cycles = v.parse().unwrap_or(0);
+                        } else if let Some(v) = part.strip_prefix("samples=") {
+                            samples = v.parse().unwrap_or(0);
+                        } else if let Some(v) = part.strip_prefix("mem_delta=") {
+                            mem_delta = v.parse().unwrap_or(0.0);
+                        } else if let Some(v) = part.strip_prefix("mem_rising=") {
+                            mem_rising = v == "true";
+                        } else if let Some(v) = part.strip_prefix("models=") {
+                            models = v.parse().unwrap_or(0);
+                        } else if let Some(v) = part.strip_prefix("tasks=") {
+                            tasks = v.parse().unwrap_or(0);
+                        }
+                    }
+                    // A profile with no samples parsed is a malformed receipt,
+                    // not a short session — do not seed from it.
+                    if samples == 0 {
+                        return None;
+                    }
                     Some(zp_regent::context::SessionProfile {
                         cycles,
                         samples,
@@ -2798,8 +2869,8 @@ pub async fn spawn_regent(
     {
         let tools: Vec<String> = REGENT_TOOLS.iter().map(|t| t.name.to_string()).collect();
         let grant = CapabilityGrant::new(
-            "genesis".to_string(),                   // grantor: substrate itself
-            "regent".to_string(),                     // grantee: regent actor
+            "genesis".to_string(), // grantor: substrate itself
+            "regent".to_string(),  // grantee: regent actor
             GrantedCapability::ToolCall {
                 tools: tools.clone(),
             },

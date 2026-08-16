@@ -19,9 +19,8 @@ const PROMPT_PROPOSE: &str = include_str!("../prompts/propose.md");
 
 use crate::config::RegentConfig;
 use crate::context::{
-    ChainSnapshot, CognitiveContext, CockpitSource, DelegationSummary,
-    FindingSummary, MemoryFragment, OperatorInput, SovereignIdentity,
-    SystemAwareness,
+    ChainSnapshot, CockpitSource, CognitiveContext, DelegationSummary, FindingSummary,
+    MemoryFragment, OperatorInput, SovereignIdentity, SystemAwareness,
 };
 use crate::corrections::CorrectionIndex;
 use crate::error::RegentError;
@@ -128,7 +127,9 @@ fn build_standing_corrections_section(context: &CognitiveContext) -> String {
         }
         out.push('\n');
     }
-    out.push_str("These corrections are load-bearing; violating them contradicts operator authority.");
+    out.push_str(
+        "These corrections are load-bearing; violating them contradicts operator authority.",
+    );
     out
 }
 
@@ -150,8 +151,11 @@ fn build_standing_corrections_section(context: &CognitiveContext) -> String {
 /// Returns an empty string when everything holds, so the template placeholder
 /// disappears cleanly — same convention as the corrections section.
 fn build_substrate_ground_section(context: &CognitiveContext) -> String {
-    let violations: Vec<_> =
-        context.substrate_ground.iter().filter(|g| g.is_violation()).collect();
+    let violations: Vec<_> = context
+        .substrate_ground
+        .iter()
+        .filter(|g| g.is_violation())
+        .collect();
 
     // Logged before the early return, unconditionally.
     //
@@ -173,9 +177,8 @@ fn build_substrate_ground_section(context: &CognitiveContext) -> String {
         return String::new();
     }
 
-    let mut out = String::from(
-        "SUBSTRATE INTEGRITY — the following premises DO NOT currently hold:\n",
-    );
+    let mut out =
+        String::from("SUBSTRATE INTEGRITY — the following premises DO NOT currently hold:\n");
     for g in violations {
         // Age matters: bedrock evaluates at boot, so a violation may predate
         // anything in this cycle. "The vault is missing" and "the vault was
@@ -433,7 +436,10 @@ impl Regent {
     pub fn promote_shadow_candidate(&mut self, model: &str) -> Option<String> {
         let pin = self.operator_pin.as_mut()?;
         match &pin.status {
-            PinStatus::Evaluating { candidates, active_model } => {
+            PinStatus::Evaluating {
+                candidates,
+                active_model,
+            } => {
                 if !candidates.iter().any(|c| c.model == model) {
                     return None;
                 }
@@ -459,20 +465,30 @@ impl Regent {
                 // Mark the specific candidate as failed.
                 for c in candidates.iter_mut() {
                     if c.model == model {
-                        c.state = ShadowCandidateState::Failed { reason: reason.clone() };
+                        c.state = ShadowCandidateState::Failed {
+                            reason: reason.clone(),
+                        };
                     }
                 }
                 // If all candidates have resolved (passed or failed), check if
                 // any passed. If none passed, transition to Rejected.
                 let all_resolved = candidates.iter().all(|c| {
-                    matches!(c.state, ShadowCandidateState::Passed | ShadowCandidateState::Failed { .. })
+                    matches!(
+                        c.state,
+                        ShadowCandidateState::Passed | ShadowCandidateState::Failed { .. }
+                    )
                 });
                 if all_resolved {
-                    let any_passed = candidates.iter().any(|c| matches!(c.state, ShadowCandidateState::Passed));
+                    let any_passed = candidates
+                        .iter()
+                        .any(|c| matches!(c.state, ShadowCandidateState::Passed));
                     if !any_passed {
-                        let summary = candidates.iter()
+                        let summary = candidates
+                            .iter()
                             .filter_map(|c| match &c.state {
-                                ShadowCandidateState::Failed { reason } => Some(format!("{}: {}", c.model, reason)),
+                                ShadowCandidateState::Failed { reason } => {
+                                    Some(format!("{}: {}", c.model, reason))
+                                }
                                 _ => None,
                             })
                             .collect::<Vec<_>>()
@@ -506,9 +522,10 @@ impl Regent {
     /// Get the list of candidates currently under shadow evaluation.
     pub fn shadow_candidates(&self) -> Vec<&ShadowCandidate> {
         match &self.operator_pin {
-            Some(OperatorModelPin { status: PinStatus::Evaluating { candidates, .. }, .. }) => {
-                candidates.iter().collect()
-            }
+            Some(OperatorModelPin {
+                status: PinStatus::Evaluating { candidates, .. },
+                ..
+            }) => candidates.iter().collect(),
             _ => vec![],
         }
     }
@@ -517,7 +534,10 @@ impl Regent {
     pub fn is_shadow_evaluating(&self) -> bool {
         matches!(
             &self.operator_pin,
-            Some(OperatorModelPin { status: PinStatus::Evaluating { .. }, .. })
+            Some(OperatorModelPin {
+                status: PinStatus::Evaluating { .. },
+                ..
+            })
         )
     }
 
@@ -591,22 +611,19 @@ impl Regent {
             // During shadow evaluation, serve the active (groomed) model.
             // The candidate is being validated; the operator isn't degraded.
             let effective_model = match &pin.status {
-                PinStatus::Evaluating { active_model, .. } => {
-                    Some(active_model.as_str())
-                }
+                PinStatus::Evaluating { active_model, .. } => Some(active_model.as_str()),
                 PinStatus::Rejected { .. } => {
                     // Rejected — fall through to router scoring.
                     // The pin records findings but doesn't direct inference.
                     None
                 }
-                PinStatus::Active => {
-                    match category {
-                        crate::routing::IntentCategory::Routing => {
-                            pin.routing_model.as_deref().or(pin.reasoning_model.as_deref())
-                        }
-                        _ => pin.reasoning_model.as_deref(),
-                    }
-                }
+                PinStatus::Active => match category {
+                    crate::routing::IntentCategory::Routing => pin
+                        .routing_model
+                        .as_deref()
+                        .or(pin.reasoning_model.as_deref()),
+                    _ => pin.reasoning_model.as_deref(),
+                },
             };
             if let Some(model) = effective_model {
                 // Derive tier from backend protocol, not model name.
@@ -622,8 +639,13 @@ impl Regent {
                 };
                 let rationale = match &pin.status {
                     PinStatus::Evaluating { candidates, .. } => {
-                        let names: Vec<&str> = candidates.iter().map(|c| c.model.as_str()).collect();
-                        format!("operator pin (evaluating [{}]): serving {}", names.join(", "), model)
+                        let names: Vec<&str> =
+                            candidates.iter().map(|c| c.model.as_str()).collect();
+                        format!(
+                            "operator pin (evaluating [{}]): serving {}",
+                            names.join(", "),
+                            model
+                        )
                     }
                     _ => format!("operator pin: {}", model),
                 };
@@ -648,7 +670,11 @@ impl Regent {
 
     /// Dispatch an inference request to the right backend based on tier.
     /// Local → Ollama directly. Cloud → cloud endpoint (with fallback).
-    async fn infer(&self, request: &InferenceRequest, tier: &crate::routing::InferenceTier) -> Result<String, RegentError> {
+    async fn infer(
+        &self,
+        request: &InferenceRequest,
+        tier: &crate::routing::InferenceTier,
+    ) -> Result<String, RegentError> {
         match tier {
             crate::routing::InferenceTier::Local => self.inference.chat_local(request).await,
             crate::routing::InferenceTier::Cloud { .. } => self.inference.chat(request).await,
@@ -660,7 +686,10 @@ impl Regent {
         if self.config.routing_model == self.config.reasoning_model {
             self.config.routing_model.clone()
         } else {
-            format!("{}/{}", self.config.routing_model, self.config.reasoning_model)
+            format!(
+                "{}/{}",
+                self.config.routing_model, self.config.reasoning_model
+            )
         }
     }
 
@@ -739,7 +768,10 @@ impl Regent {
         // one applies would make the chain misleading about why she woke.
         self.wake = if novel {
             Wake::Novelty
-        } else if self.cycle_count.is_multiple_of(Self::DELIBERATE_EVERY_N_CYCLES) {
+        } else if self
+            .cycle_count
+            .is_multiple_of(Self::DELIBERATE_EVERY_N_CYCLES)
+        {
             Wake::Scheduled
         } else {
             Wake::Quiet
@@ -765,7 +797,17 @@ impl Regent {
         debug!(cycle = self.cycle_count, "regent cycle starting");
 
         // ── Phase 1: Perceive ──────────────────────────────────────────
-        let context = self.perceive(chain, findings, operator_input, delegations, system_awareness, Vec::new(), None, None, None)?;
+        let context = self.perceive(
+            chain,
+            findings,
+            operator_input,
+            delegations,
+            system_awareness,
+            Vec::new(),
+            None,
+            None,
+            None,
+        )?;
 
         // ── Phase 2: Reason ────────────────────────────────────────────
         let intent = self.reason(&context).await?;
@@ -789,6 +831,9 @@ impl Regent {
     /// Public within the crate so `run_cycle` can call perceive separately
     /// from reason — the sync/async split prevents holding a std::sync::Mutex
     /// guard across an await point.
+    // Ten parameters: perception's inputs are the substrate's observable
+    // surfaces, and each is separately optional at the call site.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn perceive(
         &mut self,
         chain: &ChainReader<'_>,
@@ -869,10 +914,7 @@ impl Regent {
         // exactly the clearing behaviour an alarm needs to be worth having.
         let substrate_ground: Vec<crate::context::GroundFinding> = {
             let entries = chain
-                .search_by_keyword(
-                    crate::context::GROUND_EVENT_PREFIX,
-                    GROUND_SEARCH_LIMIT,
-                )
+                .search_by_keyword(crate::context::GROUND_EVENT_PREFIX, GROUND_SEARCH_LIMIT)
                 .unwrap_or_default();
 
             let mut latest: std::collections::BTreeMap<String, crate::context::GroundFinding> =
@@ -923,17 +965,22 @@ impl Regent {
         let composition_summary = Some(crate::context::CompositionSummary {
             matrix_version: COGNITIVE_INPUT_MATRIX_VERSION.to_string(),
             standing_correction_count: standing_corrections.len(),
-            standing_corrections_hash:
-                crate::context::CompositionSummary::hash_corrections(&standing_corrections),
+            standing_corrections_hash: crate::context::CompositionSummary::hash_corrections(
+                &standing_corrections,
+            ),
             standing_correction_authorship,
             substrate_ground_count: substrate_ground.len(),
-            substrate_ground_violations:
-                substrate_ground.iter().filter(|g| g.is_violation()).count(),
-            substrate_ground_hash:
-                crate::context::CompositionSummary::hash_ground(&substrate_ground),
+            substrate_ground_violations: substrate_ground
+                .iter()
+                .filter(|g| g.is_violation())
+                .count(),
+            substrate_ground_hash: crate::context::CompositionSummary::hash_ground(
+                &substrate_ground,
+            ),
             officer_finding_count: officer_findings.len(),
-            officer_findings_hash:
-                crate::context::CompositionSummary::hash_findings(&officer_findings),
+            officer_findings_hash: crate::context::CompositionSummary::hash_findings(
+                &officer_findings,
+            ),
             officer_finding_authorship,
             recent_chain_count: recent_chain.len(),
             active_delegation_count: delegations.len(),
@@ -1155,7 +1202,10 @@ impl Regent {
                 "{standing_corrections_section}",
                 &build_standing_corrections_section(context),
             )
-            .replace("{available_actions}", &Self::build_available_actions(context))
+            .replace(
+                "{available_actions}",
+                &Self::build_available_actions(context),
+            )
             .replace(
                 "{proposal_kind}",
                 match kind {
@@ -1238,10 +1288,7 @@ impl Regent {
                 return None;
             };
 
-            let params = e
-                .get("params")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null);
+            let params = e.get("params").cloned().unwrap_or(serde_json::Value::Null);
 
             // Holding the tool is not enough. A proposal may only ask for a
             // signature on a call the tool can actually perform — otherwise
@@ -1552,8 +1599,7 @@ impl Regent {
             let seed = format!(
                 "call {} with parameters {} — attempted in service of: {}",
                 call.tool,
-                serde_json::to_string(&call.params)
-                    .unwrap_or_else(|_| "{}".to_string()),
+                serde_json::to_string(&call.params).unwrap_or_else(|_| "{}".to_string()),
                 context
                     .cycle_directive
                     .as_deref()
@@ -1605,9 +1651,10 @@ impl Regent {
             proposal_emitted: false,
         };
 
-        let directs_operator_to_sign = crate::cognitive_observer::verify_claims(&composed, &enacted)
-            .iter()
-            .any(|c| c.kind == crate::cognitive_observer::ClaimKind::PendingArtifact);
+        let directs_operator_to_sign =
+            crate::cognitive_observer::verify_claims(&composed, &enacted)
+                .iter()
+                .any(|c| c.kind == crate::cognitive_observer::ClaimKind::PendingArtifact);
 
         if !directs_operator_to_sign {
             return Intent::Respond {
@@ -1943,25 +1990,25 @@ impl Regent {
         caps.join(", ")
     }
 
-/// Is this chain entry the Regent's own reasoning rather than evidence?
-///
-/// Deliberately narrow. Only the receipts a cycle writes *about itself* are
-/// filtered — the composition it reasoned from, the intent it chose, the act
-/// it recorded, and the observer's verdict on it. Everything else the Regent
-/// emits, including `regent:tool:completed:*` and gate decisions, is a fact
-/// about the substrate and stays.
-///
-/// The distinction that matters is not "did the Regent write it" but "is it
-/// evidence, or is it an echo".
-fn is_own_bookkeeping(action_summary: &str) -> bool {
-    const SELF_REFERENTIAL: &[&str] = &[
-        "cognitive:input:composed",
-        "cognitive:act:recorded",
-        "cognitive:observer:verified",
-        "regent:intent:",
-    ];
-    SELF_REFERENTIAL.iter().any(|p| action_summary.contains(p))
-}
+    /// Is this chain entry the Regent's own reasoning rather than evidence?
+    ///
+    /// Deliberately narrow. Only the receipts a cycle writes *about itself* are
+    /// filtered — the composition it reasoned from, the intent it chose, the act
+    /// it recorded, and the observer's verdict on it. Everything else the Regent
+    /// emits, including `regent:tool:completed:*` and gate decisions, is a fact
+    /// about the substrate and stays.
+    ///
+    /// The distinction that matters is not "did the Regent write it" but "is it
+    /// evidence, or is it an echo".
+    fn is_own_bookkeeping(action_summary: &str) -> bool {
+        const SELF_REFERENTIAL: &[&str] = &[
+            "cognitive:input:composed",
+            "cognitive:act:recorded",
+            "cognitive:observer:verified",
+            "regent:intent:",
+        ];
+        SELF_REFERENTIAL.iter().any(|p| action_summary.contains(p))
+    }
 
     /// Build the user prompt from cognitive context.
     fn build_user_prompt(&self, context: &CognitiveContext) -> String {
@@ -2071,7 +2118,9 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
                     Some(q) => format!("THE OPERATOR ASKED: {q}\n"),
                     None => String::new(),
                 },
-                arc.cycles_completed + 1, arc.max_cycles, arc.progress,
+                arc.cycles_completed + 1,
+                arc.max_cycles,
+                arc.progress,
                 // One informed turn before the hard stop.
                 //
                 // The stall detector ends an arc that repeats itself, which
@@ -2252,10 +2301,18 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
                 if t.memory_usage_delta.abs() >= 0.05 {
                     notes.push(format!(
                         "memory usage {} {:.0} points over {} cycles{}",
-                        if t.memory_usage_delta > 0.0 { "up" } else { "down" },
+                        if t.memory_usage_delta > 0.0 {
+                            "up"
+                        } else {
+                            "down"
+                        },
                         t.memory_usage_delta.abs() * 100.0,
                         t.samples,
-                        if t.memory_monotonic_rising { ", rising every cycle" } else { "" },
+                        if t.memory_monotonic_rising {
+                            ", rising every cycle"
+                        } else {
+                            ""
+                        },
                     ));
                 }
                 if t.loaded_model_delta != 0 {
@@ -2334,10 +2391,7 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
     }
 
     /// Retrieve memories relevant to the current context.
-    fn retrieve_relevant_memories(
-        &mut self,
-        input: &Option<OperatorInput>,
-    ) -> Vec<MemoryFragment> {
+    fn retrieve_relevant_memories(&mut self, input: &Option<OperatorInput>) -> Vec<MemoryFragment> {
         let mut fragments = Vec::new();
 
         // If there's operator input, search for keyword matches.
@@ -2371,7 +2425,11 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
         }
 
         // Deduplicate and limit.
-        fragments.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap_or(std::cmp::Ordering::Equal));
+        fragments.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         fragments.truncate(10);
         fragments
     }
@@ -2501,8 +2559,7 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
         }
 
         // Set operator pin if models were explicitly changed (not auto).
-        if reasoning_model.is_some() && !auto_reasoning
-            || routing_model.is_some() && !auto_routing
+        if reasoning_model.is_some() && !auto_reasoning || routing_model.is_some() && !auto_routing
         {
             if force {
                 // Force-cut: pin immediately active, config updated above.
@@ -2528,7 +2585,8 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
             } else {
                 // Shadow-first: enter evaluating state. The groomed model
                 // stays active; the candidate will be validated before cut-over.
-                let candidate = reasoning_model.as_ref()
+                let candidate = reasoning_model
+                    .as_ref()
                     .filter(|_| !auto_reasoning)
                     .cloned()
                     .unwrap_or_else(|| self.config.reasoning_model.clone());
@@ -2541,9 +2599,7 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
 
                 self.operator_pin = Some(OperatorModelPin {
                     reasoning_model: Some(candidate.clone()),
-                    routing_model: routing_model.as_ref()
-                        .filter(|_| !auto_routing)
-                        .cloned(),
+                    routing_model: routing_model.as_ref().filter(|_| !auto_routing).cloned(),
                     pinned_at: chrono::Utc::now(),
                     status: PinStatus::Evaluating {
                         candidates: vec![ShadowCandidate {
@@ -2561,10 +2617,8 @@ fn is_own_bookkeeping(action_summary: &str) -> bool {
         }
 
         // Reconfigure the inference backend (endpoint change).
-        self.inference.reconfigure(
-            self.config.inference_endpoint.clone(),
-            None,
-        );
+        self.inference
+            .reconfigure(self.config.inference_endpoint.clone(), None);
 
         // If key source changed, update the backend.
         if let Some(source) = api_key_source {
@@ -2694,7 +2748,8 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
                 warn!("model returned raw cognitive context instead of intent — suppressing");
                 return Ok(Intent::Respond {
                     content: "I received your message but couldn't formulate a proper response. \
-                              Could you rephrase?".to_string(),
+                              Could you rephrase?"
+                        .to_string(),
                     target_surface: None,
                 });
             }
@@ -2722,12 +2777,9 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
 
     match intent_type {
         "execute" => {
-            let raw_tool = value
-                .get("tool")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    RegentError::IntentParse("execute intent missing 'tool' field".to_string())
-                })?;
+            let raw_tool = value.get("tool").and_then(|v| v.as_str()).ok_or_else(|| {
+                RegentError::IntentParse("execute intent missing 'tool' field".to_string())
+            })?;
 
             // Sanitize tool name. qwen3:1.7b sometimes embeds params inside
             // the tool string with escaped quotes, producing values like:
@@ -2796,7 +2848,10 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
             // The router fills `kind` and `proposed_action`. Everything
             // else is written by the compose tier — see `compose_proposal`.
             let kind = crate::intent::ProposalKind::parse(
-                value.get("kind").and_then(|v| v.as_str()).unwrap_or("action"),
+                value
+                    .get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("action"),
             );
             Ok(Intent::RequestApproval {
                 kind,
@@ -3023,11 +3078,13 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
 pub fn strip_markdown_fences(s: &str) -> &str {
     let trimmed = s.trim();
 
-    // Check for ```json or ``` prefix.
-    let without_prefix = if trimmed.starts_with("```json") {
-        &trimmed[7..]
-    } else if trimmed.starts_with("```") {
-        &trimmed[3..]
+    // Check for ```json or ``` prefix. strip_prefix rather than a byte
+    // slice: `&trimmed[7..]` panics if byte 7 is not a char boundary, which
+    // a model emitting a non-ASCII fence would produce.
+    let without_prefix = if let Some(rest) = trimmed.strip_prefix("```json") {
+        rest
+    } else if let Some(rest) = trimmed.strip_prefix("```") {
+        rest
     } else {
         return trimmed;
     };
@@ -3106,10 +3163,7 @@ mod tests {
 
     #[test]
     fn strip_fences_plain() {
-        assert_eq!(
-            strip_markdown_fences("```\n{\"a\": 1}\n```"),
-            "{\"a\": 1}"
-        );
+        assert_eq!(strip_markdown_fences("```\n{\"a\": 1}\n```"), "{\"a\": 1}");
     }
 
     #[test]

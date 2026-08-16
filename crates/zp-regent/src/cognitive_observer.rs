@@ -397,26 +397,92 @@ fn extract_proper_noun_tokens(text: &str) -> Vec<String> {
     // action escalate..."), (c) common verbs used to start sentences.
     let stopwords: std::collections::HashSet<&str> = [
         // Modals / auxiliaries at sentence start
-        "Do", "Not", "May", "Should", "Must", "Will", "Would", "Could",
-        "Can", "Cannot", "Might", "Shall", "Have", "Has", "Had",
+        "Do",
+        "Not",
+        "May",
+        "Should",
+        "Must",
+        "Will",
+        "Would",
+        "Could",
+        "Can",
+        "Cannot",
+        "Might",
+        "Shall",
+        "Have",
+        "Has",
+        "Had",
         // Pronouns and determiners
-        "The", "This", "That", "These", "Those", "It", "Its", "Their",
-        "Any", "All", "Some", "Every", "Each", "No", "None",
+        "The",
+        "This",
+        "That",
+        "These",
+        "Those",
+        "It",
+        "Its",
+        "Their",
+        "Any",
+        "All",
+        "Some",
+        "Every",
+        "Each",
+        "No",
+        "None",
         // Conjunctions / connectors
-        "If", "When", "But", "And", "Or", "So", "For", "To", "Because",
-        "Since", "While", "Although", "However", "Therefore", "Thus",
-        "Also", "Yet", "Still", "Then",
+        "If",
+        "When",
+        "But",
+        "And",
+        "Or",
+        "So",
+        "For",
+        "To",
+        "Because",
+        "Since",
+        "While",
+        "Although",
+        "However",
+        "Therefore",
+        "Thus",
+        "Also",
+        "Yet",
+        "Still",
+        "Then",
         // Substrate-specific proper nouns that appear at sentence starts
         // in corrections' negation fields — extracting them would produce
         // false positives against Regent's normal narration about her role
         // and the substrate she governs.
-        "Vault", "Regent", "Operator", "Substrate", "Chain",
+        "Vault",
+        "Regent",
+        "Operator",
+        "Substrate",
+        "Chain",
         // Common sentence-starter nouns in prose negations
-        "Findings", "Findings.", "Actions", "Reports", "Errors", "Warnings",
-        "Results", "Outputs", "Events", "Signals", "Patterns", "Content",
+        "Findings",
+        "Findings.",
+        "Actions",
+        "Reports",
+        "Errors",
+        "Warnings",
+        "Results",
+        "Outputs",
+        "Events",
+        "Signals",
+        "Patterns",
+        "Content",
         // Common sentence-starter verbs (imperative style)
-        "Verify", "Ensure", "Confirm", "Check", "Consider", "Note",
-        "Observe", "Watch", "Track", "Assume", "Recall", "Remember",
+        "Verify",
+        "Ensure",
+        "Confirm",
+        "Check",
+        "Consider",
+        "Note",
+        "Observe",
+        "Watch",
+        "Track",
+        "Assume",
+        "Recall",
+        "Remember",
     ]
     .iter()
     .copied()
@@ -432,8 +498,7 @@ fn extract_proper_noun_tokens(text: &str) -> Vec<String> {
         // Internal punctuation (hyphens in "current-substrate", dots in "5.2")
         // is preserved because trim_end_matches only touches the tail.
         let w = words[i].trim_end_matches(|c: char| c.is_ascii_punctuation());
-        let is_cap =
-            w.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && w.len() >= 3;
+        let is_cap = w.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && w.len() >= 3;
         let has_version = w.contains(|c: char| c.is_ascii_digit());
         let has_hyphen = w.contains('-');
 
@@ -442,12 +507,8 @@ fn extract_proper_noun_tokens(text: &str) -> Vec<String> {
         if is_cap && !stopwords.contains(w) {
             let mut token = w.to_string();
             if i + 1 < words.len() {
-                let next = words[i + 1]
-                    .trim_end_matches(|c: char| c.is_ascii_punctuation());
-                let next_is_version = next
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_digit())
+                let next = words[i + 1].trim_end_matches(|c: char| c.is_ascii_punctuation());
+                let next_is_version = next.chars().next().is_some_and(|c| c.is_ascii_digit())
                     && next.chars().all(|c| c.is_ascii_digit() || c == '.');
                 if next_is_version {
                     token.push(' ');
@@ -565,8 +626,7 @@ pub const EVENT_PREFIX_VERIFIED: &str = "cognitive:observer:verified";
 /// Format: `cognitive:correction:violated {json}` — same encoding pattern as
 /// standing correction receipts, so the search-by-keyword infrastructure works.
 pub fn violation_event_string(v: &Violation) -> String {
-    let payload = serde_json::to_string(v)
-        .expect("Violation JSON serialization cannot fail");
+    let payload = serde_json::to_string(v).expect("Violation JSON serialization cannot fail");
     format!("{} {}", EVENT_PREFIX_VIOLATED, payload)
 }
 
@@ -687,24 +747,60 @@ pub struct UnbackedClaim {
 
 /// First-person assertions of a completed substrate act.
 const ENACTMENT_MARKERS: &[&str] = &[
-    "i have drafted", "i've drafted", "i drafted",
-    "i have saved", "i've saved", "i saved",
-    "i have stored", "i've stored", "i stored",
-    "i have created", "i've created", "i created",
-    "i have updated", "i've updated", "i updated",
-    "i have recorded", "i've recorded", "i recorded",
-    "i have registered", "i've registered", "i registered",
-    "i have signed", "i've signed", "i signed",
-    "i have configured", "i've configured", "i configured",
-    "i have scheduled", "i've scheduled", "i scheduled",
-    "i have queued", "i've queued", "i queued",
-    "i have pinned", "i've pinned", "i pinned",
-    "i have granted", "i've granted", "i granted",
-    "i have revoked", "i've revoked", "i revoked",
-    "i have emitted", "i've emitted", "i emitted",
-    "i have dispatched", "i've dispatched", "i dispatched",
-    "i have executed", "i've executed", "i executed",
-    "i have invoked", "i've invoked", "i invoked",
+    "i have drafted",
+    "i've drafted",
+    "i drafted",
+    "i have saved",
+    "i've saved",
+    "i saved",
+    "i have stored",
+    "i've stored",
+    "i stored",
+    "i have created",
+    "i've created",
+    "i created",
+    "i have updated",
+    "i've updated",
+    "i updated",
+    "i have recorded",
+    "i've recorded",
+    "i recorded",
+    "i have registered",
+    "i've registered",
+    "i registered",
+    "i have signed",
+    "i've signed",
+    "i signed",
+    "i have configured",
+    "i've configured",
+    "i configured",
+    "i have scheduled",
+    "i've scheduled",
+    "i scheduled",
+    "i have queued",
+    "i've queued",
+    "i queued",
+    "i have pinned",
+    "i've pinned",
+    "i pinned",
+    "i have granted",
+    "i've granted",
+    "i granted",
+    "i have revoked",
+    "i've revoked",
+    "i revoked",
+    "i have emitted",
+    "i've emitted",
+    "i emitted",
+    "i have dispatched",
+    "i've dispatched",
+    "i dispatched",
+    "i have executed",
+    "i've executed",
+    "i executed",
+    "i have invoked",
+    "i've invoked",
+    "i invoked",
 ];
 
 /// Assertions that an artifact awaits an operator ceremony.
@@ -800,8 +896,7 @@ fn excerpt_around(original: &str, lowered: &str, needle: &str) -> Option<String>
 /// Same `prefix {json}` encoding as violation receipts, so search-by-keyword
 /// finds it without new infrastructure.
 pub fn unbacked_claim_event_string(c: &UnbackedClaim) -> String {
-    let payload =
-        serde_json::to_string(c).expect("UnbackedClaim JSON serialization cannot fail");
+    let payload = serde_json::to_string(c).expect("UnbackedClaim JSON serialization cannot fail");
     format!("{} {}", EVENT_PREFIX_UNBACKED, payload)
 }
 
@@ -987,7 +1082,7 @@ mod tests {
                          constitutional-trajectory monitoring — best-effort detection \
                          of misaligned trajectories relative to declared operator \
                          constitutional invariants).";
-        let report = verify_against_corrections(compliant, &[c.clone()]);
+        let report = verify_against_corrections(compliant, std::slice::from_ref(&c));
         assert!(
             report.is_clean(),
             "describing Aegis correctly must not be a violation, got: {:?}",

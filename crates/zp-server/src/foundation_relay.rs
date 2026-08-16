@@ -117,12 +117,7 @@ impl PubkeyRegistry {
     /// is currently active (`rotated_to == null`), and the Ed25519
     /// signature checks out against the body. Otherwise `Err` with a
     /// short reason suitable for an HTTP 401.
-    pub fn verify(
-        &self,
-        pubkey_id: &str,
-        signature_b64: &str,
-        body: &[u8],
-    ) -> Result<(), String> {
+    pub fn verify(&self, pubkey_id: &str, signature_b64: &str, body: &[u8]) -> Result<(), String> {
         self.reload_if_changed();
 
         let snap = self.snapshot.read().map_err(|_| "registry poisoned")?;
@@ -295,16 +290,18 @@ impl ReceiptIntent {
 const HEADER_PUBKEY_ID: &str = "x-foundation-worker-pubkey-id";
 const HEADER_SIGNATURE: &str = "x-foundation-worker-signature";
 
-fn extract_envelope_headers(headers: &HeaderMap) -> Result<(String, String), Response> {
+/// The `Err` is boxed because an axum `Response` is 128 bytes and every
+/// `Ok` return would otherwise carry that width. Callers unbox with `*`.
+fn extract_envelope_headers(headers: &HeaderMap) -> Result<(String, String), Box<Response>> {
     let pubkey_id = headers
         .get(HEADER_PUBKEY_ID)
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| auth_error("missing X-Foundation-Worker-Pubkey-Id"))?
+        .ok_or_else(|| Box::new(auth_error("missing X-Foundation-Worker-Pubkey-Id")))?
         .to_string();
     let signature = headers
         .get(HEADER_SIGNATURE)
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| auth_error("missing X-Foundation-Worker-Signature"))?
+        .ok_or_else(|| Box::new(auth_error("missing X-Foundation-Worker-Signature")))?
         .to_string();
     Ok((pubkey_id, signature))
 }
@@ -343,7 +340,7 @@ pub async fn post_handler(
     // Verify envelope auth against the raw body bytes (before any parsing).
     let (pubkey_id, signature) = match extract_envelope_headers(&headers) {
         Ok(pair) => pair,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     if let Err(reason) = registry.verify(&pubkey_id, &signature, &body) {
@@ -463,7 +460,10 @@ pub async fn post_handler(
     // populated `sealed.receipt`'s signatures vec as part of appending.
     let signed_receipt = sealed.receipt.unwrap_or(receipt);
 
-    (StatusCode::OK, Json(serde_json::to_value(&signed_receipt).unwrap_or(Value::Null)))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(&signed_receipt).unwrap_or(Value::Null)),
+    )
         .into_response()
 }
 
@@ -547,7 +547,7 @@ pub async fn get_handler(
 
     let (pubkey_id, signature) = match extract_envelope_headers(&headers) {
         Ok(pair) => pair,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     // GET requests typically have an empty body; the signature still
@@ -658,7 +658,15 @@ pub async fn get_handler(
     };
 
     let count = receipts.len();
-    (StatusCode::OK, Json(GetResponse { receipts, count, next_cursor })).into_response()
+    (
+        StatusCode::OK,
+        Json(GetResponse {
+            receipts,
+            count,
+            next_cursor,
+        }),
+    )
+        .into_response()
 }
 
 // ── Intent dedup cache ────────────────────────────────────────────────────────
@@ -968,7 +976,11 @@ mod tests {
             let page: Vec<(i64, _)> = rows.into_iter().take(page_size).collect();
 
             let last_rid = page.last().map(|(r, _)| *r);
-            let next_cursor = if has_more { last_rid.map(encode_cursor) } else { None };
+            let next_cursor = if has_more {
+                last_rid.map(encode_cursor)
+            } else {
+                None
+            };
             cursors.push(next_cursor.clone());
 
             if let Some(rid) = last_rid {
@@ -984,7 +996,11 @@ mod tests {
 
         // 10 entries / 3 per page → pages: [3, 3, 3, 1].
         // Pages 0–2 should carry a cursor; page 3 should not.
-        assert_eq!(cursors.len(), 4, "expected 4 pages for 10 entries at page_size=3");
+        assert_eq!(
+            cursors.len(),
+            4,
+            "expected 4 pages for 10 entries at page_size=3"
+        );
         assert!(cursors[0].is_some());
         assert!(cursors[1].is_some());
         assert!(cursors[2].is_some());

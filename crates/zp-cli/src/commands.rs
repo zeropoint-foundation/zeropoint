@@ -194,14 +194,8 @@ pub async fn audit_log(_pipeline: &Pipeline, limit: usize, category: Option<&str
         return Ok(());
     }
 
-    let total = store
-        .entry_count()
-        .unwrap_or(entries.len());
-    eprintln!(
-        "  Showing last {} of {} entries",
-        entries.len(),
-        total
-    );
+    let total = store.entry_count().unwrap_or(entries.len());
+    eprintln!("  Showing last {} of {} entries", entries.len(), total);
     eprintln!();
 
     for entry in &entries {
@@ -420,7 +414,8 @@ pub async fn audit_compact(_pipeline: &Pipeline, retain: usize) -> Result<()> {
     let mut store = AuditStore::open_maintenance(&db_path)
         .map_err(|e| anyhow::anyhow!("Failed to open audit store: {}", e))?;
 
-    let before = store.entry_count()
+    let before = store
+        .entry_count()
         .map_err(|e| anyhow::anyhow!("Failed to count entries: {}", e))?;
 
     eprintln!();
@@ -436,16 +431,20 @@ pub async fn audit_compact(_pipeline: &Pipeline, retain: usize) -> Result<()> {
         return Ok(());
     }
 
-    let archived = store.compact_chain(retain)
+    let archived = store
+        .compact_chain(retain)
         .map_err(|e| anyhow::anyhow!("Compaction failed: {}", e))?;
 
-    let after = store.entry_count()
+    let after = store
+        .entry_count()
         .map_err(|e| anyhow::anyhow!("Failed to count entries: {}", e))?;
 
     eprintln!("  Archived: {} entries", archived);
     eprintln!("  After:    {} entries", after);
     eprintln!();
-    eprintln!("  \x1b[32mCompaction complete.\x1b[0m Run `zp audit verify` to confirm chain integrity.");
+    eprintln!(
+        "  \x1b[32mCompaction complete.\x1b[0m Run `zp audit verify` to confirm chain integrity."
+    );
     eprintln!();
 
     Ok(())
@@ -679,7 +678,7 @@ fn rotate_operator(
     eprintln!("  \x1b[2m─────────────────────\x1b[0m");
 
     // Load genesis key (need the signing key for co-signature + vault key derivation) — sovereignty-composed.
-    let genesis = match load_genesis_composed(&keyring) {
+    let genesis = match load_genesis_composed(keyring) {
         Ok(g) => g,
         Err(e) => {
             eprintln!("  Failed to load genesis key: {}", e);
@@ -690,7 +689,7 @@ fn rotate_operator(
     };
 
     // Load current operator key — sovereignty-composed.
-    let old_operator = match load_operator_composed(&keyring) {
+    let old_operator = match load_operator_composed(keyring) {
         Ok(op) => op,
         Err(e) => {
             eprintln!("  Failed to load operator key: {}", e);
@@ -854,7 +853,7 @@ fn rotate_agent(keyring: &Keyring, name: &str, reason: Option<&str>) -> i32 {
     );
 
     // Load operator (needed to sign new agent cert + co-sign rotation) — sovereignty-composed.
-    let operator = match load_operator_composed(&keyring) {
+    let operator = match load_operator_composed(keyring) {
         Ok(op) => op,
         Err(e) => {
             eprintln!("  Failed to load operator key: {}", e);
@@ -1014,7 +1013,9 @@ pub fn keys_derive_foundation_edge() -> i32 {
 
     // Update the on-host pubkey registry so the operator's zp-server can
     // verify envelopes signed by this key.
-    let registry_path = resolve_zp_home().join("config").join("foundation-edge-keys.json");
+    let registry_path = resolve_zp_home()
+        .join("config")
+        .join("foundation-edge-keys.json");
     if let Err(e) = upsert_foundation_edge_pubkey(&registry_path, &pubkey_id, &pubkey_hex) {
         eprintln!("  \x1b[31m✗\x1b[0m Failed to update pubkey registry: {}", e);
         eprintln!("  Registry path: {}", registry_path.display());
@@ -1083,8 +1084,8 @@ fn upsert_foundation_edge_pubkey(
 
     // Load existing or initialize fresh.
     let mut registry: Value = if registry_path.exists() {
-        let bytes = std::fs::read(registry_path)
-            .map_err(|e| format!("read {:?}: {}", registry_path, e))?;
+        let bytes =
+            std::fs::read(registry_path).map_err(|e| format!("read {:?}: {}", registry_path, e))?;
         serde_json::from_slice(&bytes).map_err(|e| format!("parse: {}", e))?
     } else {
         json!({ "keys": [] })
@@ -1104,7 +1105,10 @@ fn upsert_foundation_edge_pubkey(
     });
 
     // Upsert by id.
-    if let Some(existing) = keys.iter_mut().find(|k| k.get("id").and_then(|v| v.as_str()) == Some(id)) {
+    if let Some(existing) = keys
+        .iter_mut()
+        .find(|k| k.get("id").and_then(|v| v.as_str()) == Some(id))
+    {
         *existing = new_entry;
     } else {
         keys.push(new_entry);
