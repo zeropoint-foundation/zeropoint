@@ -223,3 +223,20 @@ second is far more likely.
 - arXiv bibliographies as a traversal surface (not a source, a method)  #
   2026-08-15, produced four of the run's items; following one preprint's
   reference list outperformed every seed-term search
+- fidoalliance.org (Agentic AI focus area + working groups)  # 2026-08-16, the
+  Agentic Authentication TWG and Payments TWG, with Google AP2 and Mastercard
+  Verifiable Intent as founding contributions — a whole standards body absent
+  from five prior entries, found by blind-spot grep rather than by search
+- anthropic.com/news + support.claude.com  # 2026-08-16, the SynthID-Text-derived
+  text watermark and C2PA file credentials, applied worldwide; the two pages
+  carry different details and both were needed. Distinct from
+  anthropic.com/research, already listed for the Frontier Red Team work
+- ox.security/research-news  # 2026-08-16, the MCP STDIO command-injection full
+  disclosure — closed a structural claim three prior sweeps had left unverified,
+  and its "Rejected Disclosures" list was the load-bearing part
+- IETF datatracker  # 2026-08-16, THIRD load-bearing item (the eleven-draft
+  agent-authorization field, and DAAP's hash-chain/cascade-revocation schemas).
+  **Past the promotion bar — move into the defaults.**
+- stdaily.com / secrss.com (Chinese-language standards coverage)  # 2026-08-16,
+  carry the GB/Z 185-2026 series announcement in the original; no new item this
+  run, recorded as reachable primaries for future Chinese-language legs

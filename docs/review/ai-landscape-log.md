@@ -1559,3 +1559,343 @@ sources in the sources file:
 **Promotion status carried forward:** `IETF datatracker` remains a promotion
 candidate for the default list on two load-bearing items (08-13, 08-14); it
 produced nothing new today because the run deliberately ranged elsewhere.
+
+---
+
+## 2026-08-16
+
+**Swept:** Open-web seed-term searches (agent identity, delegation, provenance,
+verifiable credentials, open weights, agent payments). Widening classes ranged
+over: **2 (standards venues)** — IETF datatracker agent-authorization drafts and
+the FIDO Alliance; **6 (security disclosure)** — the OX Security MCP STDIO
+advisory, fetched and read in full to close a claim this log had flagged as
+unverified; **1 (non-English primary text)** — Chinese-language queries on
+智能体 standards and CAC instruments, which returned only material already
+logged; **7 (non-EU/China regulatory)** — Korea's AI Basic Act enforcement
+decree, unresolved; **4/5 (non-frontier vendors, release artifacts)** — Muse
+Glimmer, Qwen3.8-Max, MiniMax H3, all previously logged. Also ran a **blind-spot
+audit** — grepped the whole log for terms it has never used — which produced two
+of the four load-bearing items below and is the method note of the day.
+**YouTube leg: attempted and blocked** (see its own section). 0 transcripts read.
+
+### Load-bearing — may change a ZP direction
+
+- **Anthropic has shipped model-level provenance marking, and its design
+  deliberately refuses operator attribution.** Per the vendor: supported Claude
+  models weave an imperceptible watermark into generated text, and supported
+  generated files (.png, .jpg, .svg) carry a cryptographically signed C2PA
+  content credential. The technique is a version of Google DeepMind's
+  **SynthID-Text** (*Nature*, 2024) — the watermark changes only the *source of
+  randomness* used to pick among near-equivalent next tokens, adds no tokens,
+  and costs nothing extra to serve. Marking is applied **worldwide**, not scoped
+  to the EU, because Anthropic states it does not yet have a durable way to
+  scope by region. Coverage spans Claude Platform (API), Claude, Claude Code,
+  Claude Cowork and Claude Tag, and via AWS, Google Cloud and Microsoft Foundry
+  (watermarks; signed provenance metadata "may not be supported on every
+  platform"). Models launched before 2 August 2026 are in a transition period
+  and are being backfilled. Driver is the EU AI Act Article 50(2) Code of
+  Practice on Transparency of AI-Generated Content, signed July 2026 by
+  Anthropic and ~190 signatories.
+  - Source: [anthropic.com/news/claude-text-watermark](https://www.anthropic.com/news/claude-text-watermark)
+    (14 Aug 2026) and
+    [support.claude.com — How Claude marks AI-generated content](https://support.claude.com/en/articles/16266773-how-claude-marks-ai-generated-content)
+    (**shipped** for models launched on/after 2 Aug 2026; **announced** for
+    older models and for the detection API). Both read in full.
+  - Bearing: two separate pressures on the media-provenance direction. First,
+    the vendor states plainly that the mark "carries no identifying information
+    and can't be traced to a specific person, organization, or chat" — the
+    industry provenance layer is being built to attest *which model* touched
+    content and to structurally refuse to attest *which operator*. That is the
+    opposite answer to the one a per-operator sovereign root gives, and the
+    reason given is privacy, which is not a weak reason. Any framing that treats
+    operator-attributable provenance as the obvious next step is arguing against
+    a deliberate design choice, not an oversight. Second, and sharper: verifying
+    a text watermark requires the issuer's key, which is not published — "we
+    will soon be offering a watermark detection API." Provenance whose
+    verification path runs through the issuer's server is a different object
+    from provenance anyone can check locally, and the C2PA file credentials
+    (openly verifiable by any C2PA-aware tool) and the text watermark (verifiable
+    only by Anthropic) sit on opposite sides of that line inside one product.
+    Worth deciding which of the two the substrate's provenance work is actually
+    a peer to. Implication stated; stops here.
+  - Confidence: high — both primary pages read in full, no aggregator involved.
+
+- **The FIDO Alliance has had an agentic-AI standards program since April and
+  this log had never mentioned it once.** Two working groups: the **Agentic
+  Authentication Technical Working Group** and the **Payments Technical Working
+  Group**. Three declared focus areas, quoted from the vendor page: *Verifiable
+  User Instructions* ("authorize AI agents through phishing-resistant
+  mechanisms, so agents perform only approved actions … without exposing
+  credentials"), *Agentic Authentication* ("let agents sign in on their behalf
+  safely and in a controlled way that does not require agents to hold raw user
+  credentials, and provides transparency, auditability and revocation"), and
+  *Trusted Delegation for Commerce*. The Payments TWG's specifications "will draw
+  from initial contributions from Google (**AP2**) and Mastercard (**Verifiable
+  Intent**)". FIDO says its certification programs will apply, so that "trust is
+  provable and demonstrable, not assumed."
+  - Source: [fidoalliance.org/fido-alliance-agentic-ai](https://fidoalliance.org/fido-alliance-agentic-ai/)
+    (published 28 Apr 2026, modified 30 Apr 2026) — **announced**; two working
+    groups formed, no specification published. Page read in full. Working-group
+    chair composition circulating in search summaries was **not** verified at
+    source and is not repeated here.
+  - Bearing: this is the first lineage this log has found whose trust root is
+    plausibly *the person's own hardware*. FIDO's entire existing stack —
+    passkeys, WebAuthn, authenticator attestation, certified authenticators — is
+    built on key material held in a device or token the user physically
+    possesses, and the agentic work is explicitly framed as extending
+    FIDO2/WebAuthn rather than replacing it. If that carries through, the
+    resulting agent-delegation model roots in a user-held authenticator, which
+    is a materially different position from the organisational, vendor, state
+    and on-chain roots this log has been cataloguing. Two cautions against
+    reading it too fast. (i) Nothing is specified yet — the page announces
+    working groups, and the root question is settled by a specification, not by
+    a focus area. (ii) FIDO's model is relying-party-scoped by construction:
+    the user holds the key, but credentials are minted per service, which is not
+    the same shape as one sovereign root from which everything derives. The
+    honest statement is that the root question is *open* in this lineage, not
+    that it has been answered ZP's way — and per rule 6 that is exactly the
+    claim to be slowest about.
+  - Confidence: high that the program exists and says what is quoted. Low on
+    where it lands, four months into a working group with nothing published.
+
+- **The IETF agent-authorization field is roughly three times larger than this
+  log recorded, and several drafts root delegation explicitly in the human
+  principal.** Prior entries tracked the three AIP drafts and
+  `draft-reece-wimse-cross-org-delegation`. One search surfaced at least eleven
+  more live individual drafts, including: `draft-liu-agent-operation-authorization-02`
+  (an Agent Operation Authorization Token that "cryptographically verifies user
+  intent, prevents unauthorized or hallucinated actions," with the request phase
+  deliberately converting operations to a JWT *without* including the user's
+  original natural-language input); `draft-mishra-oauth-agent-grants` (DAAP,
+  below); `draft-chen-agent-decoupled-authorization-model-00` (just-in-time
+  intent-based permissions "rather than a long-lived identity or role");
+  `draft-messous-eat-ai-01` (an Entity Attestation Token profile for AI agents in
+  the RATS architecture, with claims attesting model-parameter integrity,
+  training-data provenance and inference-time data-access constraints);
+  `draft-klrc-aiagent-auth-03`; `draft-fane-opena2a-aap-01`;
+  `draft-aap-oauth-profile-01`; `draft-oauth-ai-agents-on-behalf-of-user-01/02`;
+  `draft-patwhite-aauth-00`; `draft-diaconu-agents-authz-info-sharing-00`;
+  `draft-oauth-transaction-tokens-for-agents-04`.
+  - Source: [datatracker.ietf.org](https://datatracker.ietf.org/) — abstracts for
+    `draft-liu-agent-operation-authorization` and `draft-messous-eat-ai` read at
+    source; the remainder are **search-level** and their contents are not
+    asserted. Status: all **individual Internet-Drafts**, none adopted, several
+    expiring in August 2026. **Version note per rule 2:** search returned
+    `draft-messous-eat-ai-00`; datatracker shows **-01** as current. Do not cite
+    -00.
+  - Bearing: the running claim in this log's *noted for pattern* section — four
+    roots, none of them the person, "a property of the whole field" — does not
+    survive contact with the standards track. `draft-liu` roots authorization in
+    verified human intent by construction. AP2, now a FIDO contribution, is built
+    on human-signed mandates. The disconfirming cases were reachable by one
+    search and had simply never been looked for. The correct downgrade: the
+    *deployed and state-backed* lineages place the root away from the person;
+    the *standards-track drafts* increasingly do not; and the field is
+    pre-convergence on this axis rather than aligned against the human root. ZP's
+    position is less lonely than the last three entries implied. Also worth
+    noting that `draft-messous-eat-ai` is the first item in this log to attest
+    *model and training-data* integrity rather than agent identity — a different
+    layer of the same stack, and the closest external analogue yet to
+    measured-boot-style attestation applied to cognition.
+  - Confidence: high on the drafts existing and on the two abstracts read at
+    source. Medium on the characterisation of the field, which rests on nine
+    unread abstracts.
+
+- **DAAP specifies almost exactly ZP's primitive set, and puts the root in an
+  authorization server.** `draft-mishra-oauth-agent-grants` (S. Kumar, Grantex;
+  -00 published 27 Feb 2026, Informational, expires 31 Aug 2026; datatracker
+  shows **-01** current) defines: cryptographic agent identity via DIDs; a
+  human-consent grant flow modelled on OAuth 2.0; signed JWT grant tokens;
+  online-verified revocation; **a hash-chained append-only audit trail**;
+  **multi-agent delegation with cascade revocation** where each child grant is a
+  subset of the parent's permissions and "the entire delegation tree [is]
+  revocable by the original principal"; a policy engine (OPA, Cedar); budget
+  controls for spending limits; and a credential vault. It states the goal as
+  "a cryptographically linked record of agent activity that is verifiable
+  without trust in the audit log operator."
+  - Source: [draft-mishra-oauth-agent-grants](https://datatracker.ietf.org/doc/draft-mishra-oauth-agent-grants/),
+    -00 full text read at
+    [ietf.org archive](https://www.ietf.org/archive/id/draft-mishra-oauth-agent-grants-00.html)
+    (**announced** — individual draft, no working-group adoption).
+  - Bearing: filed under rule 6 deliberately, because this is the strongest
+    apparent convergence-in-our-favour this log has produced and it does not
+    survive reading the schemas. The agent DID method in the specification's own
+    examples is `did:grantex:ag_…` — the author's company. The principal appears
+    as `"principalId": "user_a…"`, an opaque server-side account identifier, not
+    a key. Revocation is `DELETE /v1/grants/:id` against an Authorization
+    Server, and verification is `POST /v1/tokens/verify` against the same
+    server. So the hash chain is real, the attenuation is real, the cascade
+    revocation is real — and the entity that issues, verifies, revokes and
+    operates the audit log is one SaaS authorization server, which is also the
+    entity the chain is supposed to make you not have to trust. That is a fifth
+    root, and it is the one closest to ZP in mechanism and furthest in
+    architecture. The useful implication is that the primitive set is no longer
+    differentiating; root placement and the absence of a required online
+    verifier are. Stated and stopped.
+  - Confidence: high — schemas and endpoint definitions read verbatim in the
+    -00 text. Medium that -01 has not changed them; -01 was not read.
+
+- **The MCP command-injection claim this log flagged as unverified is verified,
+  and the ecosystem's root maintainers have declined to treat it as a bug.**
+  OX Security's full-disclosure advisory documents four vulnerability families
+  arising from one root cause: MCP STDIO configurations that pass user-supplied
+  `command` and `args` straight to `StdioServerParameters` and execute them as a
+  subprocess. Named CVEs include CVE-2026-30615 (Windsurf — prompt injection in
+  attacker-controlled HTML silently rewrites the local MCP config and registers
+  a malicious STDIO server, *no further user interaction*), CVE-2026-30623
+  (LiteLLM), CVE-2026-30624 (Agent Zero), CVE-2026-30616 (Jaaz), CVE-2026-30617
+  (Langchain-Chatchat), CVE-2026-30618 (Fay), CVE-2026-30625 (Upsonic),
+  CVE-2026-33224 (Bisheng), CVE-2026-40933 (Flowise), CVE-2026-54449 (LangBot),
+  CVE-2026-26015 (DocsGPT), CVE-2025-65720 (GPT Researcher), plus unassigned
+  findings in LangFlow and LettaAI. Family #2 documents allowlist bypass —
+  vendors restricted `command` to `npm`/`npx`, and the researchers injected
+  through the *arguments* (`npx -c <command>`). Family #4 documents STDIO paths
+  reachable by MITM-editing `transport_type` in a request even when the web UI
+  offers no STDIO option at all.
+  - Source: [ox.security — MCP Supply Chain Advisory](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem/)
+    (15 Apr 2026, **shipped** disclosure; researcher advisory, primary for its
+    own findings). Read in full. **Four months old** — logged now because the
+    2026-08-15 entry recorded the structural claim as unverified and this
+    settles it. Separately: CVE-2026-0755 and CVE-2026-33032, also carried as
+    unverified, do **not** appear in this advisory and remain unverified.
+  - Bearing: the load-bearing part is not the CVE list, it is the advisory's
+    "Rejected Disclosures" section. Anthropic (Model Context Protocol), Claude
+    Code, Cursor, Gemini-CLI, GitHub Copilot, LangChain
+    (`langchain-mcp-adapters`), FastMCP, browser-use, AWS
+    (`run-model-context-protocol-servers-with-aws-lambda`) and NVIDIA
+    (NeMo-Agent-Toolkit) all declined, on three stated grounds: the system is
+    designed to let the user execute code directly; the code is a transport
+    layer and integrators are liable for their own security; or execution is
+    sandboxed. Read plainly, the transport layer that the entire agent ecosystem
+    sits on treats arbitrary local command execution as by-design and assigns
+    liability downstream. That is the exact posture a quarantine/admission
+    discipline exists to be an answer to, and it is worth knowing that the
+    upstream position is not "we haven't got to it" but "this is correct
+    behaviour." It also sets the honest bar for any capability-declaration
+    scheme: the thing being declared is, upstream, an unbounded exec primitive.
+    Implication only.
+  - Confidence: high on the advisory's contents. Medium on how representative
+    the rejected-disclosure rationales are — they are OX's characterisation of
+    vendor responses, not vendor statements read directly.
+
+### Adjacent — logged, no action
+
+- **The EU Article 50 marking obligation has a second deadline this log had not
+  recorded: 2 December 2026** for generative AI systems already on the market,
+  against the 2 August 2026 date for new ones. Commission Article 50 guidelines
+  were adopted 20 July 2026; penalties up to €15M or 3% of worldwide turnover.
+  Search-level; the guidelines text was not fetched. —
+  https://digital-strategy.ec.europa.eu/en/news/commission-starts-enforcing-ai-act-rules-and-new-transparency-requirements-2-august
+
+- **Google's AP2 has moved out of Google and into FIDO's standards process** as a
+  founding contribution to the Payments TWG, alongside Mastercard's Verifiable
+  Intent. AP2 is described as payment-method-agnostic, moving no money itself,
+  producing "cryptographically signed mandates as proof" that a human authorised
+  a specific purchase, settleable on any rail. Latest release reported as v0.2.0
+  (April 2026). The x402 Foundation had an operational launch under the Linux
+  Foundation on 14 July 2026. The FIDO contribution is verified at the FIDO page;
+  the AP2 version and x402 Foundation date are **search-level**. — first AP2
+  mention in this log.
+
+- **Korea's AI Basic Act enforcement dates are contradictory across English
+  summaries and unresolved.** One source says the Act and its Enforcement Decree
+  took effect 22 January 2026; another says the Act "came into full force
+  alongside its enforcement decree" on 21 July 2026; MSIT is reported to be
+  running a grace period of at least a year during which fines are generally
+  deferred; high-performance AI is reported as ≥10²⁶ FLOPs cumulative training
+  compute. **This is rule 5 territory and the Korean primary was not read.**
+  Recorded as an open thread with no detail asserted, not as an item.
+
+- **Chinese leg returned nothing new.** Queries on 智能体 standards, CAC
+  instruments and August dates surfaced only material already in this log: the
+  GB/Z 185-2026 《人工智能 智能体互联》 series (8 guidance documents, 智能体身份码
+  issuance, ~2,000 issued), the 《智能体规范应用与创新发展实施意见》 of 8 May 2026
+  with its 专家解读 and 答记者问 pages, and the 《智能体应用安全基本要求》 mandatory
+  standard project. Two new primaries worth keeping for future runs:
+  stdaily.com and secrss.com both carry the GB/Z series announcement in the
+  original. No 14–16 August activity found.
+
+- **Open-weights releases surfaced this run were all already logged** — Muse
+  Glimmer (Meta, 30B, Apache 2.0, distilled, single-consumer-GPU, agentic),
+  Qwen3.8-Max, MiniMax H3 and its territory exclusion. Noted only to record that
+  the release-artifact class was checked and produced nothing new.
+
+### Noted for pattern
+
+- **The "four roots and none of them is the person" claim is now partially
+  falsified, and it took one search to falsify it.** The 2026-08-15 entry
+  elevated that observation from a within-lineage divergence to "a property of
+  the whole field." Today: FIDO's agentic work extends a stack whose keys live
+  in the user's hardware; `draft-liu-agent-operation-authorization` roots
+  authorization in cryptographically verified human intent; AP2 is built on
+  human-signed mandates. The generalisation was made from four data points
+  gathered by four searches that were each looking for something else, and it
+  was wrong in the direction that flattered the thesis. Rule 6 says be most
+  sceptical of convergence in our own favour — the symmetric hazard, which this
+  log just demonstrated, is being insufficiently sceptical of *divergence* in
+  our favour, because a field that has not converged makes ZP's position look
+  like a live option rather than a bet. Both directions need the disconfirming
+  search run before the sentence is written.
+- **The blind-spot audit works and should be standard.** The previous entry
+  proposed asking what the log has *never mentioned* rather than only what is
+  new. This run did it — grep the log for a list of terms that ought to appear
+  and see which return zero — and it returned FIDO (0), WebAuthn (0), RATS (0),
+  DAAP (0), SynthID (0), AP2 (0), ClawHub (0), TEE / enclave / confidential
+  computing (0 each), Illinois (0, despite an entry citing SB315), "Model
+  Context Protocol" spelled out (0). Two of the four load-bearing items today
+  came directly from that grep. Cost: one command. It found more than the
+  24-hour recency searches did, for the third consecutive run.
+- **Recency continues to underperform.** Every load-bearing item today is
+  between two days and four months old. The 08-14 and 08-15 entries each noted
+  the same thing. Three consecutive observations is enough to stop calling it an
+  anomaly: for this lens, the binding constraint is coverage and depth, not
+  freshness. A sweep that only looks at the last 24 hours is looking at the
+  wrong axis.
+- **Attestation of the model, not just the agent, has appeared.**
+  `draft-messous-eat-ai` attests model-parameter integrity, training-data
+  provenance and inference-time data-access constraints under the RATS
+  architecture. Every prior item in this log attested *who the agent is* or
+  *what it may do*; this attests *what it is made of*. If that class grows it is
+  a distinct axis and probably deserves its own tracking.
+
+### YouTube leg
+
+**Attempted and blocked — 0 channels read, 0 transcripts pulled.** The RSS
+endpoint `https://www.youtube.com/feeds/videos.xml?channel_id=<ID>` was refused
+by the fetch tool for all four default channels with "URL not in provenance
+set" — the tool would only fetch URLs that had already appeared in a prior
+search or fetch result, and the query-string RSS URL never satisfied that check
+even after it appeared verbatim in a fetched page. Workarounds tried and their
+results: fetching `youtube.com/channel/<ID>` and `@handle/videos` returned
+channel metadata (title, ID, description, keywords) but **no video listings**;
+`WebSearch` scoped to youtube.com returned only older videos with no reliable
+publication dates. No video published in the last 24–48 hours could be
+identified for any of the four channels, and none was assessed or transcribed.
+
+This is a tooling regression against the sources file's core assumption — that
+per-channel RSS "needs no auth, no session and no browser" — and it is the
+failure mode that file explicitly warns about, arriving from an unexpected
+direction: not a layout change or an expired session, but a fetch-provenance
+restriction. It failed loudly rather than quietly, which is the good case, but
+the leg is non-functional until the RSS URLs can be reached. Worth a decision on
+whether to seed the four RSS URLs into a place the fetcher will accept, or to
+move the leg to a mechanism that does not depend on this tool.
+
+### Source promotion
+
+New sources producing load-bearing items this run, appended to Candidate sources:
+
+- **`fidoalliance.org`** — an entire standards body with two chartered agentic
+  working groups, absent from five prior entries. Found by blind-spot grep, not
+  by search.
+- **`anthropic.com/news` and `support.claude.com`** — the watermark and C2PA
+  marking design, read at both the announcement and the help-centre article,
+  which carry different details. Distinct from `anthropic.com/research`, already
+  a candidate for the Frontier Red Team work.
+- **`ox.security/research-news`** — closed an open verification thread that three
+  prior search-level passes had left hanging.
+
+**Promotion recommended:** `IETF datatracker` has now produced load-bearing items
+on 2026-08-13, 2026-08-14 and 2026-08-16 — three runs. It is past the sources
+file's two-item promotion bar by a clear margin and should move into the
+defaults.
