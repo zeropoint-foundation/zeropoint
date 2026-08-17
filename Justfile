@@ -48,12 +48,20 @@ lint:
 # longer builds is invisible. Two of those accumulated undetected while the
 # workspace built green — zp-configure's ToolManifest fixture and
 # zp-hardening-tests' ServerConfig fixture, both struct-grew-fixture-didn't.
+# The last line stamps the marker .githooks/pre-commit reads for its staleness
+# warning. It runs only if every check above it passed, so the marker means what
+# the hook claims it means. Before 2026-08-17 nothing wrote that file at all:
+# the hook's "no recorded successful run" fired unconditionally on every commit,
+# and its two real detectors — toolchain change and the 7-day backstop — sat in
+# an else branch that could never be entered. This comment lives outside the
+# recipe because just echoes in-recipe comment lines to the terminal.
 check:
     cargo check --workspace --all-targets
     cargo test -p zp-discipline --no-fail-fast
     cargo clippy --workspace --all-targets -- -D warnings
     cargo fmt --all --check
     python3 tools/corpus-lint/corpus_lint.py .
+    @printf '%s\n%s\n' "$(rustc --version 2>/dev/null || echo unknown)" "$(date -u '+%Y-%m-%d %H:%M UTC')" > "$(git rev-parse --git-dir)/zp-last-check"
     @echo ""
     @echo "✓  check passed — pins, build (all targets), clippy, fmt, corpus-lint"
     @echo "   Not covered: the workspace test suite, and the six-way"
