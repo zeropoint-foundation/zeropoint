@@ -185,3 +185,10 @@ models/**/.DS_Store
 docs/_to_delete/
 docs/_to_delete/
 _to_delete/
+
+# Landing manifests are working state; the message text lands in git
+# history and a second copy in the tree would be one more hand-maintained
+# list for one fact. The dated one-off landers they replace are kept on
+# disk as a record but not tracked.
+scripts/landings/*/
+scripts/land-2026-*.sh
