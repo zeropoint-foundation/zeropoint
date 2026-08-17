@@ -1899,3 +1899,331 @@ New sources producing load-bearing items this run, appended to Candidate sources
 on 2026-08-13, 2026-08-14 and 2026-08-16 — three runs. It is past the sources
 file's two-item promotion bar by a clear margin and should move into the
 defaults.
+
+---
+
+## 2026-08-17
+
+**Swept:** search themes — agent identity/delegation standards, IETF agent
+authorization field, post-quantum signature migration, TEE/confidential-computing
+attestation for inference, model-substitution auditing, sigstore/model signing,
+agent-framework CVEs, open-weights licence changes, agent liability and
+insurance. Widening classes ranged over beyond the defaults: **2** (standards —
+IETF datatracker), **3** (preprints — arXiv cs.CR/cs.AI, and a whole insurance
+cluster), **4/5** (vendor + release/licence signals), **6** (security
+disclosure), **8** (off-beat — insurance and underwriting, which produced a
+load-bearing item). Class **1** (non-English primary) was run in Chinese and
+returned nothing new; EU/Korea not re-run this cycle. Blind-spot grep run again
+as a first-class method — 30+ terms checked against the whole log, returning
+zero for `sigstore`, `in-toto`, `SLSA`, `transparency log`, `certificate
+transparency`, `SPIFFE`, `macaroon`, `post-quantum`/`PQC`/`ML-DSA`, `zkML`,
+`verifiable inference`, `confidential computing`/`SEV-SNP`/`TDX`, `did:web`,
+`actuarial`, `export control`, `on-device`. Three of today's four load-bearing
+items came out of that grep rather than out of recency search. YouTube leg: 4
+channels attempted, RSS still blocked, **1 channel reached by a workaround**
+(see below), 0 transcripts pulled.
+
+### Load-bearing — may change a ZP direction
+
+- **An IETF draft now specifies, in detail, a user-signed delegation receipt
+  anchored to an append-only log before the agent runtime gets control.**
+  `draft-nelson-agent-delegation-receipts-10`, the Delegation Receipt Protocol
+  (DRP). Read the draft text directly. Its core: every agent action *MUST* be
+  preceded by a Delegation Receipt — a canonical-JSON Authorization Object
+  signed by the User, whose ID is the SHA-256 of that body — committing
+  authorized scope, operational boundaries, validity window, and a hash of the
+  operator's stated instructions. The receipt *MUST* be anchored to a
+  tamper-evident append-only log before execution; implementations *SHOULD* use
+  a decentralized transparency log on the Certificate Transparency model, which
+  returns an inclusion proof establishing authoritative issuance time. "The
+  User's private key is the sole signing authority for Delegation Receipts."
+  Three claimed-novel primitives: **Model State Attestation** (receipt bound to
+  a cryptographic measurement of model state at authorization time; operator
+  substitution changes the measurement and blocks execution, with an explicit
+  `ProviderUpdate` vs `MaliciousSubstitution` classification); **Scope Discovery
+  Protocol** (agent first runs sandboxed with no real resource access, records
+  every resource it attempts, producing a draft ScopeSchema grounded in observed
+  behaviour rather than operator assertion, which the user reviews in plain
+  language and signs only what they approve); and **Session State / Adaptive
+  Authorization** (a trust score that decays on anomaly and recovers slowly,
+  plus a monotone non-decreasing `cumulativeAnomalyMass` and a strictly
+  decreasing `tauSession` capacity gate that is never recovered and *MUST NOT*
+  be carried across session boundaries — once exhausted the session is
+  permanently closed; plus a hard 25-hour wall-clock session cap). Also
+  specifies parent-child sub-receipts, a verification chain for sub-receipts,
+  cascade revocation, and a revocation log.
+  - Source: [datatracker — draft-nelson-agent-delegation-receipts-10](https://datatracker.ietf.org/doc/draft-nelson-agent-delegation-receipts/)
+    (**shipped as a document**, 13 June 2026, expires 15 December 2026). Status
+    read off the datatracker fields and stated plainly: author Ryan Nelson
+    (ryan@authproof.dev), **RFC stream: (None)**, **stream state: (No stream
+    defined)**, **IESG state: I-D Exists**, intended status Informational. This
+    is an individual submission by a commercial vendor, not a working-group or
+    standards-track document — anyone may post an I-D. Against that: it is at
+    revision **-10**, which is sustained work, and it ships a reference SDK
+    (`github.com/Commonguy25/authproof-sdk`, MIT) plus a hosted service
+    (`cloud.authproof.dev`). Neither the SDK nor the service was inspected.
+  - Bearing: this is the closest external artifact to ZP's own shape that this
+    log has recorded — operator-signs-before-the-system-acts, anchored to an
+    append-only log, with cascade revocation and sub-receipt chains. Rule 6
+    applies hardest exactly here, so the useful part is the **divergences**, not
+    the agreement. Three, stated as questions: (1) DRP's log is explicitly a
+    *decentralized public transparency log on the CT model*, whose inclusion
+    proof is the authoritative timestamp — a shared external witness. What does
+    a substrate whose third principle is "there is no center" owe, or not owe, to
+    an external inclusion proof, and is timestamp authority a thing worth
+    importing? (2) DRP scopes itself narrowly to *user-to-operator* trust and
+    says so, explicitly deferring service-to-agent trust to WIMSE, AIP and RFC
+    8693 and calling the layers complementary — a modesty about layer boundaries
+    worth reading against how ZP draws its own. (3) Scope Discovery — deriving
+    the authorizable scope by *observing the agent in a no-access sandbox* and
+    presenting the observed set for signature — is an answer to a question ZP's
+    delegation ceremonies also face (how does the operator know what to sign
+    for?) and it is not obviously the answer ZP has. Implication only; nothing
+    here says anything about what ZP does today.
+  - Confidence: high on the draft's contents and status — both read at the
+    primary. Low on whether it goes anywhere: individual I-Ds with a vendor
+    behind them are common and most expire.
+
+- **Model substitution is now a measured, published attack class, and the
+  literature's two proposed answers are cryptographic receipts and hardware
+  attestation — with "routing dilution" through gateways as the specific
+  variant.** `IRIS` (arXiv 2607.20860, ~July 2026) audits an endpoint using
+  only returned text — it asks for random numbers or strings, fingerprints the
+  backend, and claims to be first to combine, in one text-only audit, detection
+  of *whole-stream* substitution, detection of *fractional* dilution,
+  attribution of which backend actually served, estimation of the routing
+  fraction, and a self-sizing query budget frozen by a cheap pilot before any
+  suspect query is issued. It sits in a run of related work: `2504.04715` ("Are
+  You Getting What You Pay For?"), which concludes that software-only detection
+  is **fundamentally unreliable** and proposes TEEs as the robust answer;
+  `2506.06975` (rank-based uniformity test); `2605.29524` (KBF, evaluated on 16
+  production API endpoints across eight model families and three price tiers);
+  `2606.16100` (fingerprint spoofing in inference services). In parallel, the
+  hardware side has matured: composite CPU+GPU attestation (Intel TDX / AMD
+  SEV-SNP / AWS Nitro plus NVIDIA H100/H200 confidential computing) producing
+  signed measurement reports, with `OpenPcc` (arXiv 2606.11145) an open-source
+  end-to-end prototype on TDX + H100 serving Llama-3 8B under vLLM.
+  - Source: [arXiv 2607.20860 — IRIS](https://arxiv.org/html/2607.20860v1)
+    (**shipped** preprint; page fetched and confirmed to exist, but the fetched
+    body exceeded what could be parsed here — the abstract quoted above came
+    from search-result summary text, not from reading the paper). Supporting:
+    [arXiv 2504.04715](https://arxiv.org/abs/2504.04715),
+    [arXiv 2606.11145 — OpenPcc](https://arxiv.org/html/2606.11145v1).
+  - Bearing: pressures the *inference sourcing* axis, specifically the cloud
+    mandate. A mandate that names a model is a statement about what the operator
+    authorized; whether that model actually served the request is a separate
+    fact, and this literature says it is (a) routinely violated in the wild
+    enough to be worth four papers, (b) violable *fractionally*, which defeats
+    spot-checking, and (c) not reliably detectable from software alone. The
+    question it puts to ZP: what does a signed CloudMandate commit to, and does
+    the substrate have — or want — any way to close the loop on what was
+    actually served? Note the convergence with DRP's Model State Attestation
+    above: two independent lineages this month arriving at "bind the
+    authorization to a measurement of the model." Gateways are named
+    specifically, which is the deployment shape a router-fronted backend has.
+    Implication only; no claim here about ZP's current behaviour.
+  - Confidence: high that this is a real and active research area with multiple
+    independent groups. Medium on IRIS's specific claims — the abstract was read
+    via search summary rather than from the paper body, and the "first to
+    combine" claim is the authors' own.
+
+- **An insurance market for autonomous-agent risk is forming, and it is
+  converging on bounded permissions plus comparable execution traces as the
+  precondition for pricing.** CFC, a real underwriter, published on 5 August
+  2026 that autonomous AI creates exposures that "don't fit neatly into
+  traditional cyber or technology exposures," names third-party harm outside the
+  intended use case, error propagation, and blurred product-vs-professional
+  liability as the specific gaps, and says it will be providing *affirmative* AI
+  coverage — having already added explicit AI cover to its media policy on 29
+  July 2026. The academic side arrived in a cluster in June 2026:
+  `2606.16465` proposes **trace-economic underwriting**, quantifying risk "at
+  the customer-task-trace episode level" and stating the precondition directly —
+  "This requires a defined role with bounded permissions and comparable traces"
+  — then mapping tool-use traces to customer exposure and claimable loss for
+  pricing, control and transfer. Alongside it: `2606.05449` (Insurance of
+  Agentic AI), `2605.25632` (an "authority frontier" framework for runtime
+  actuarial control), `2606.16326` (gaming-resistant, strategy-proof insurance
+  contracts for agents), and a commercial site, underwriting-agents.com,
+  pitching an "AI insurance stack."
+  - Source: [CFC — What does autonomous AI change for insurance?](https://www.cfc.com/en-us/knowledge/resources/articles/2026/08/what-does-autonomous-ai-change-for-insurance/)
+    (5 Aug 2026, **announced** — affirmative cover described as forthcoming;
+    read in full at source). [arXiv 2606.16465](https://arxiv.org/html/2606.16465v1)
+    (**shipped** preprint; abstract via search-result summary). The widely
+    repeated claims that insurers are adding explicit AI *exclusions* at renewal
+    and that some underwriters decline AI-output cover because they cannot
+    reconstruct how the AI reached its answer are **search-level and were not
+    verified at a primary** — they come from secondary commentary, not from a
+    policy wording or a carrier statement.
+  - Bearing: this is a demand-side pressure the lens has not tracked at all
+    (`actuarial` returned zero across the whole log). Insurers cannot price what
+    they cannot reconstruct, and the literature's stated precondition — bounded
+    permissions, comparable traces — describes an artifact class rather than any
+    particular product. Two questions follow. First, whoever's trace format the
+    underwriters standardize on becomes a de facto interop requirement for
+    anything that wants to be insurable, and that is a race being run right now
+    by people who are not thinking about sovereignty. Second, and cutting the
+    other way: an insurable trace must be *legible to the insurer*, which is a
+    disclosure surface pointed at exactly the material a sovereign substrate is
+    built to keep local. "Coordination, not oversight" and the blindness
+    discipline both have something to say about an underwriter as a reader.
+    Worth noting this is convergence-in-our-favour and should be read with rule 6
+    in force: the finding is that a market is forming which needs an artifact of
+    this shape, **not** that the market is converging on ZP's answer. Implication
+    only.
+  - Confidence: high that the market is forming — a named underwriter's own
+    article plus four independent June preprints plus a commercial venture.
+    Medium on the shape it settles into; every one of these is early and none is
+    a standard.
+
+- **The post-quantum signature deadline is a live constraint on any
+  signature-dense architecture, and this log had never mentioned it.** Zero
+  prior hits for `post-quantum`, `PQC`, `ML-DSA`, `Dilithium`. The reported
+  numbers: NSA's CNSA 2.0 mandates ML-DSA-87 for all new US National Security
+  System acquisitions from **1 January 2027**, with all NSS software and
+  firmware to be signed under FIPS 204 (ML-DSA) or FIPS 205 (SLH-DSA); NIST
+  moves remaining FIPS 140-2 certificates to Historical on **21 September
+  2026**. The number that matters structurally: an **ML-DSA-65 signature is
+  3,309 bytes against Ed25519's 64** — roughly 50x. Current passkey
+  implementations on P-256 or Ed25519 are described as not post-quantum safe.
+  - Source: **search-level only — no primary was fetched.** The figures above
+    come from secondary migration guides
+    ([Security Boulevard](https://securityboulevard.com/2026/03/post-quantum-cryptography-for-authentication-the-enterprise-migration-guide-2026/),
+    [decryptiondigest](https://www.decryptiondigest.com/blog/post-quantum-cryptography-migration-guide))
+    and are **commentary**, not read from NIST or NSA text. The only piece
+    independently solid is the FIPS 203/204/205 finalisation of 13 August 2024,
+    which is well established. Flagged deliberately: this item is exactly the
+    shape — clean numbers, confident deadlines, three summaries agreeing — that
+    rule 5 was written about, and it has not had the treatment rule 5 demands.
+  - Bearing: two directions, both questions. (1) A substrate whose fourth
+    principle is "every bit counts" and whose truth is an append-only chain of
+    signed receipts has a storage and bandwidth exposure to a 50x signature
+    inflation that is not a code change but an architectural one; algorithm
+    agility in the receipt schema is either already there or is a migration.
+    (2) Hardware Genesis rests on specific tokens — YubiKey 5, Nitrokey 3,
+    Trezor — and **whether any of those support ML-DSA today was not checked and
+    is not asserted here**. If the sovereign root's hardware cannot produce a
+    PQC signature, the trust chain's reach and its crypto agility are coupled in
+    a way worth knowing about before a deadline rather than after. Implication
+    only; no claim about ZP's current schema or its providers.
+  - Confidence: low-to-medium. High that PQC migration deadlines exist and are
+    close; **low on every specific date and parameter above**, none of which was
+    read at a primary. Logged now because the blind spot is the finding; the
+    numbers need a primary pass before anyone leans on them.
+
+### Adjacent — logged, no action
+
+- **Sigstore is becoming the default trust layer for model weights, and this log
+  had zero prior mentions of it** (`sigstore` 0, `in-toto` 0, `SLSA` 0,
+  `transparency log` 0). OpenSSF Model Signing (OMS) is a PKI-agnostic
+  spec built on the Sigstore bundle format, supporting bare keys, PKI chains, or
+  keyless identity-based signing; signing events land in the Sigstore
+  transparency log so "a rogue insider cannot release new models as if they are
+  signed by the company." Reported adopters include NVIDIA's NGC catalog and
+  Google's Kaggle; Rekor was rebuilt as tile-based Rekor v2 in October 2025.
+  This is the same transparency-log-as-witness pattern DRP reaches for, arriving
+  from the supply-chain side rather than the delegation side. Search-level; spec
+  at [ossf/model-signing-spec](https://github.com/ossf/model-signing-spec) not
+  read. Connects to the NVIDIA signed-skill-artifact item from 2026-08-14.
+
+- **The agent-framework RCE run continued into July with two Cursor CVEs.**
+  CVE-2026-50548 (sandbox write-allowlist widened by an optional parameter on
+  `run_terminal_cmd`, letting injected instructions overwrite the sandbox helper
+  itself) and CVE-2026-50549 (symlink resolution that, on check failure, falls
+  back to trusting the shortcut's claimed in-project path). Same root shape as
+  the STDIO family logged 2026-08-16: unsafe defaults turning prompt injection
+  into host RCE. —
+  https://thehackernews.com/2026/07/critical-cursor-flaws-could-let-prompt.html
+
+- **Open-weights and licence signals, mostly already logged.** New this run:
+  Arcee moved the Trinity family from Apache 2.0 to the Linux Foundation's
+  **OpenMDW 1.1, applied retroactively** — a retroactive licence migration is a
+  strategic move with no press release, the class the sources file flags.
+  DeepSeek-V4-Flash-0731 published MIT open weights the same day it went
+  production-candidate, with a re-post-training pass aimed at agentic use.
+  Qwen3.8-Max, Muse Glimmer and MiniMax H3 all already in the log. Search-level;
+  no model card or licence file was read at source this run.
+
+- **Chinese leg returned nothing new, with one discrepancy worth recording.**
+  Queries on 智能体 identity/authentication standards and August dates surfaced
+  only the GB/Z 185-2026 《人工智能 智能体互联》 series already logged — total
+  architecture, 身份码, 身份管理, 智能体描述, 发现, 交互, 工具调用; led by 中国电子
+  技术标准化研究院 with 30+ 产学研用 units including 华为 and 清华大学; framed as
+  giving each agent a 数字身份证 with 统一身份认证 and 全程追溯. The discrepancy:
+  stdaily (2026-06-09) and secrss say **8** documents, news.cn and 经济参考报
+  (2026-06-26) say **7**. This log recorded 8. Unresolved, and small, but it is
+  the kind of detail rule 5 exists for. No 15–17 August activity found.
+
+- **Nate B Jones, 16 Aug: "Nvidia's $500B AI Financing Plan: Bubble or
+  Buildout?"** — argues the $500B is "memoranda, not money": a network of
+  proposed financing platforms, customer contracts and debt against ~$110B of
+  real customer revenue, with the railroad analogy for capital arriving before
+  revenue and a nine-year A100 contract as evidence that GPU-life assumptions
+  are moving. **Commentary**, read from the episode description only, not from
+  a transcript. Off the lens's centre — compute-market economics rather than
+  trust infrastructure — but the GPU-depreciation-life point is the sort of
+  thing that moves local-vs-cloud inference economics if it holds. —
+  https://natesnewsletter.substack.com/p/nvidia-ai-infrastructure-financing
+
+### Noted for pattern
+
+- **The YouTube leg is still broken, but a workaround exists and was proven on
+  one channel.** `youtube.com/feeds/videos.xml?channel_id=<ID>` was refused
+  again for all four defaults with "URL not in provenance set" — including on a
+  retry *after* the exact RSS URL appeared verbatim in a successful fetch of the
+  channel page, which settles that seeding it that way does not work. The
+  channel pages themselves fetch fine but return metadata only, no video list,
+  same as 2026-08-16. **What did work:** Nate B Jones publishes the same content
+  as a podcast, and `feeds.acast.com/public/shows/ai-news-strategy-daily-with-nate-b-jones`
+  fetched cleanly — full item list with titles, `pubDate`, durations, links and
+  complete show-note descriptions, which is everything the leg needs short of a
+  transcript. That URL entered the provenance set via a plain WebSearch for the
+  channel. So the pattern is: search for the channel, take whatever non-YouTube
+  syndication turns up, fetch that. Whether the other three have an equivalent
+  is unknown — House of El appears on someone else's podcast rather than
+  syndicating its own, and Moonshots was not checked. Worth a decision from Ken
+  on whether to record per-channel alternate feed URLs in the sources file, which
+  would make this leg robust against the YouTube path staying shut.
+- **Fourth consecutive run in which the blind-spot grep beat recency search.**
+  Three of four load-bearing items today (PQC, insurance, and the sigstore
+  adjacent) came from asking what the log has *never said* rather than what is
+  new. The DRP draft is two months old, the insurance preprints are from June,
+  the model-substitution literature spans April 2025 to July 2026, and the PQC
+  deadlines have been fixed for two years. The 08-14, 08-15 and 08-16 entries
+  each recorded that recency underperforms; that is now four. This is no longer
+  an observation about particular runs — for this lens, the binding constraint
+  is coverage, and the 24–48h window in the task description is arguably the
+  wrong instrument. Worth Ken's call on whether to change it.
+- **"Bind the authorization to a measurement of the model" showed up twice
+  today, from unrelated directions.** DRP's Model State Attestation (a
+  cryptographic receipt refusing to execute if the model measurement changed)
+  and the TEE/attestation line (hardware signing what actually loaded). The
+  2026-08-16 entry flagged model attestation as a possible new axis after seeing
+  it once in `draft-messous-eat-ai`. Three independent instances now, in two
+  distinct mechanism families. It is an axis.
+- **The insurance finding suggests a class of question the lens has been
+  missing: who else needs to read a trace, and what do they need it to look
+  like?** Every prior entry in this log has tracked producers of trust
+  artifacts — standards bodies, vendors, regulators. Underwriters are
+  *consumers*, and consumers with money set formats faster than committees do.
+  Adjacent unexplored consumers on the same logic: auditors, litigators
+  (discovery), procurement, and compliance attestation. Recorded as a framing to
+  try, not a finding.
+
+### Source promotion
+
+New sources producing load-bearing items this run, appended to Candidate
+sources:
+
+- **`cfc.com` (underwriter knowledge/resources)** and the **June 2026 arXiv
+  agent-insurance cluster** — the whole insurance axis, which no prior entry
+  touched.
+- **arXiv model-substitution auditing line** (2504.04715 → 2506.06975 →
+  2605.29524 → 2607.20860) — traversed as a lineage, which again outperformed
+  seed-term search.
+- **`feeds.acast.com`** — recorded as a *mechanism* for the YouTube leg rather
+  than a source in its own right.
+
+**`IETF datatracker` has now produced a load-bearing item on four consecutive
+runs** (08-13, 08-14, 08-16, 08-17). It was already past the promotion bar and
+flagged for it yesterday; noting again that it has not yet been moved into the
+default list.

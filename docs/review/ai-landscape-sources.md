@@ -240,3 +240,24 @@ second is far more likely.
 - stdaily.com / secrss.com (Chinese-language standards coverage)  # 2026-08-16,
   carry the GB/Z 185-2026 series announcement in the original; no new item this
   run, recorded as reachable primaries for future Chinese-language legs
+- cfc.com (underwriter knowledge/resources) + June 2026 arXiv agent-insurance
+  cluster (2606.16465 trace-economic underwriting, 2606.05449, 2605.25632,
+  2606.16326)  # 2026-08-17, an insurance market forming around "bounded
+  permissions and comparable traces" as the precondition for pricing agent risk
+  — a demand-side consumer class the lens had never tracked (`actuarial` = 0
+  across the whole log)
+- IETF datatracker  # 2026-08-17, FOURTH load-bearing item
+  (draft-nelson-agent-delegation-receipts-10, DRP: user-signed Authorization
+  Object anchored to an append-only CT-model log before execution, plus model
+  state attestation and cascade revocation). **Still not moved into the
+  defaults despite being flagged on 08-16.**
+- arXiv model-substitution auditing lineage (2504.04715 → 2506.06975 →
+  2605.29524 → 2607.20860 IRIS)  # 2026-08-17, routing dilution through
+  gateways and the software-only-detection-is-unreliable result; traversed as a
+  citation lineage, which again beat seed-term search
+- feeds.acast.com  # 2026-08-17, **a mechanism, not a source** — the YouTube RSS
+  endpoint is still blocked by fetch provenance, but Nate B Jones's podcast
+  syndication fetched cleanly with full titles, pubDates and show notes. Pattern:
+  WebSearch the channel, take whatever non-YouTube syndication appears, fetch
+  that. Worth recording per-channel alternate feeds here if the YouTube path
+  stays shut.
