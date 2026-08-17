@@ -6928,12 +6928,27 @@ async fn tool_launch_handler(
                     .await;
             }
 
-            // Re-issue delegation grant on every cockpit launch. This makes
-            // cockpit launch the renewal ceremony — expiry can never surface
-            // as an operator concern for tools that call register-agent at
-            // startup. CapabilityGrant::new defaults to expires_at: None
-            // (no hard expiry), so the standing grant is perennial; the
-            // chain entry is the durable record that the ceremony occurred.
+            // Re-issue delegation grant on every cockpit launch. Launch
+            // remains the renewal ceremony — a tool relaunched inside the
+            // lease window never sees an expiry — but the grant now carries
+            // one.
+            //
+            // Until 2026-08-16 this took CapabilityGrant::new's default of
+            // `expires_at: None` with no lease policy, on the argument that a
+            // chain entry is better evidence than a TTL clock nobody watches.
+            // That argument stands; what it cost did not. `is_past_grace()`
+            // falls through to `is_expired()` when no lease policy is
+            // attached, and `is_expired()` is false for a `None` expiry — so
+            // the grant was permanently alive and the gate's `delegation_expired`
+            // branch was unreachable. See docs/design/PERENNIAL-GRANT-2026-08.md;
+            // operator ruling 2026-08-16 took option B.
+            //
+            // The subject key is bound so the lease-renewal endpoint can
+            // authenticate a renewal from the agent itself. Tools do not
+            // heartbeat today (that path is delegate-nodes-only, gated on
+            // ~/ZeroPoint/lease.toml), so in practice relaunch is the renewal
+            // — but binding the key means the other path exists rather than
+            // being unreachable by construction.
             if let Some(ref agent_key) = agent_key_for_regrant {
                 let grantor = state.0.identity.destination_hash.clone();
                 let mut grant = CapabilityGrant::new(
@@ -6943,7 +6958,12 @@ async fn tool_launch_handler(
                         tools: vec!["*".to_string()],
                     },
                     format!("rcpt-{}", uuid::Uuid::now_v7()),
-                );
+                )
+                .with_lease_policy(zp_core::LeasePolicy::standard_8h())
+                .with_renewal_authorities(vec![zp_core::AuthorityRef::genesis("lease_renewal")])
+                .with_revocable_by(vec![zp_core::AuthorityRef::genesis("revocation_authority")])
+                .with_subject_public_key(agent_key.clone())
+                .as_standing(state.0.identity.destination_hash.clone());
                 grant.sign(&state.0.identity.signing_key);
                 tool_chain::emit_delegation_receipt(
                     &state.0.audit_store,
@@ -7021,8 +7041,14 @@ struct RegisterAgentRequest {
 ///
 /// Called by tools at startup. Stores `agent_key` on the `ToolBinding` so
 /// subsequent cockpit launches can re-grant without waiting for the tool to
-/// re-register. The grant uses `ToolCall { tools: ["*"] }` with no expiry,
-/// making the chain entry the durable record rather than a TTL clock.
+/// re-register.
+///
+/// The grant carries `ToolCall { tools: ["*"] }` under an 8h lease with a
+/// 30m grace period. It previously carried no expiry at all; see
+/// `docs/design/PERENNIAL-GRANT-2026-08.md` for why that made the gate's
+/// `delegation_expired` branch unreachable, and the 2026-08-16 ruling that
+/// changed it. The scope is still maximal — narrowing it is a separate
+/// question the memo lists as option D and does not settle.
 async fn register_agent_handler(
     State(state): State<AppState>,
     axum::extract::Path(name): axum::extract::Path<String>,
@@ -7032,7 +7058,7 @@ async fn register_agent_handler(
     // re-grant on every cockpit launch without the tool needing to re-register.
     state.0.port_registry.set_agent_key(&name, &body.agent_key);
 
-    // Issue a fresh CapabilityGrant — no expiry, full tool-call scope.
+    // Issue a fresh CapabilityGrant — 8h lease, full tool-call scope.
     let grantor = state.0.identity.destination_hash.clone();
     let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
     let mut grant = CapabilityGrant::new(
@@ -7042,7 +7068,12 @@ async fn register_agent_handler(
             tools: vec!["*".to_string()],
         },
         receipt_id,
-    );
+    )
+    .with_lease_policy(zp_core::LeasePolicy::standard_8h())
+    .with_renewal_authorities(vec![zp_core::AuthorityRef::genesis("lease_renewal")])
+    .with_revocable_by(vec![zp_core::AuthorityRef::genesis("revocation_authority")])
+    .with_subject_public_key(body.agent_key.clone())
+    .as_standing(state.0.identity.destination_hash.clone());
     grant.sign(&state.0.identity.signing_key);
 
     let entry_hash = tool_chain::emit_delegation_receipt(

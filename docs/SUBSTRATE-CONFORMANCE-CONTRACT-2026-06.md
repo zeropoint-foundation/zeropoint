@@ -196,6 +196,17 @@ have to author. Scored against the tree on 2026-08-15:
   non-expiring is what a caller receives by omission rather than by
   decision. The defect is in the default, which is the most load-bearing
   place it could be: every grant that nobody thought about is unbounded.
+  **Amended 2026-08-17.** The constructor default is unchanged and this
+  verdict stands as written. What changed is the instance:
+  `PERENNIAL-GRANT-2026-08` traced the default to the two production
+  sites in `zp-server` that took it — wildcard `ToolCall` grants,
+  perennial by construction and defended as such in their own doc
+  comments — and both now attach `LeasePolicy::standard_8h()` by
+  operator ruling. So the primitive is satisfied where it was being
+  violated, and still absent where it would be enforced: the boundary
+  remedy at `validate_issuance` is unimplemented, and a caller who omits
+  an expiry today still receives an unbounded grant. Read this bullet as
+  scoring the default, not the call sites.
 - **Default-deny** — absent an authorizing rule, refuse. **Treat this as
   the open one, and note that it is open rather than failed.** The
   substrate has two layers with opposite defaults. The capability layer

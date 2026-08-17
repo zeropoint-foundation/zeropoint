@@ -553,10 +553,24 @@ enum Commands {
     },
 
     /// P4 (#197) — Revoke a standing delegation grant.
+    ///
+    /// Exactly one of `--grant-id` or `--grantee` is required.
+    ///
+    /// `--grantee` exists because revocation is per-grant-id and cockpit
+    /// launch mints a fresh grant every time: an agent in service for a
+    /// while holds many live grants, and revoking one leaves the rest
+    /// authorised. `--cascade` does not help — it walks the delegation
+    /// subtree (children of a grant), not sibling grants of the same
+    /// grantee. See docs/design/PERENNIAL-GRANT-2026-08.md §4.
     Revoke {
-        /// Target grant id (`grant-...`).
+        /// Target grant id (`grant-...`). Mutually exclusive with `--grantee`.
+        #[arg(long, conflicts_with = "grantee", required_unless_present = "grantee")]
+        grant_id: Option<String>,
+
+        /// Revoke every live grant held by this grantee. Mutually exclusive
+        /// with `--grant-id`.
         #[arg(long)]
-        grant_id: String,
+        grantee: Option<String>,
 
         /// Cascade policy: `grant-only`, `subtree-halt`, `subtree-reroot`.
         #[arg(long, default_value = "subtree-halt")]
@@ -3952,14 +3966,31 @@ async fn main() -> anyhow::Result<()> {
     }
     if let Some(Commands::Revoke {
         grant_id,
+        grantee,
         cascade,
         reason,
         audit_db,
         json,
     }) = &args.command
     {
+        let target = match (grant_id.as_deref(), grantee.as_deref()) {
+            (Some(id), None) => RevokeTarget::Grant(id.to_string()),
+            (None, Some(g)) => RevokeTarget::Grantee(g.to_string()),
+            // clap's conflicts_with / required_unless_present make both of
+            // these unreachable via the CLI; keep them as refusals rather
+            // than unreachable!() so a future programmatic caller cannot
+            // reach a panic.
+            (Some(_), Some(_)) => {
+                eprintln!("error: --grant-id and --grantee are mutually exclusive");
+                std::process::exit(2);
+            }
+            (None, None) => {
+                eprintln!("error: one of --grant-id or --grantee is required");
+                std::process::exit(2);
+            }
+        };
         let exit_code = run_revoke(
-            grant_id,
+            target,
             cascade,
             reason,
             audit_db.clone(),
@@ -9414,8 +9445,19 @@ fn run_delegate_renew(
     )
 }
 
+/// What `zp revoke` was pointed at.
+///
+/// `Grantee` is not sugar for "look up one id". An agent accumulates a live
+/// grant per cockpit launch, so revoking it means revoking all of them; a
+/// partial sweep leaves the agent authorised, which is the failure this
+/// variant exists to make unreachable.
+enum RevokeTarget {
+    Grant(String),
+    Grantee(String),
+}
+
 fn run_revoke(
-    grant_id: &str,
+    target: RevokeTarget,
     cascade: &str,
     reason: &str,
     audit_db: Option<PathBuf>,
@@ -9479,63 +9521,129 @@ fn run_revoke(
             return 2;
         }
     };
-    let target_subject = match find_subject_for_grant(&chain, grant_id) {
-        Some(s) => s,
-        None => {
-            eprintln!(
-                "error: grant {} not found on chain — cannot revoke",
-                grant_id
-            );
-            return 2;
+    // Resolve the target to (grant_id, subject) pairs. One for --grant-id;
+    // every live grant for --grantee.
+    let targets: Vec<(String, String)> = match &target {
+        RevokeTarget::Grant(grant_id) => match find_subject_for_grant(&chain, grant_id) {
+            Some(s) => vec![(grant_id.clone(), s)],
+            None => {
+                eprintln!(
+                    "error: grant {} not found on chain — cannot revoke",
+                    grant_id
+                );
+                return 2;
+            }
+        },
+        RevokeTarget::Grantee(grantee) => {
+            // Already-revoked grants are skipped rather than re-revoked: the
+            // chain records revocation as permanent, and a second claim
+            // against the same id would be a second irreversible act with no
+            // effect. Skipping keeps the sweep idempotent.
+            let live: Vec<(String, String)> = reconstruct_grants(&chain)
+                .into_iter()
+                .filter(|s| !s.revoked && s.grant.grantee == *grantee)
+                .map(|s| (s.grant.id.clone(), s.grant.grantee.clone()))
+                .collect();
+            if live.is_empty() {
+                eprintln!(
+                    "error: no live grants for grantee {} — nothing to revoke",
+                    grantee
+                );
+                return 2;
+            }
+            live
         }
     };
 
-    let claim = zp_core::RevocationClaim::new(
-        grant_id,
-        "genesis".to_string(),
-        zp_core::AuthorityRef::genesis("revocation_authority"),
-        cascade_policy,
-        revocation_reason,
-    );
+    // Revoke every resolved grant. A failure part-way through leaves earlier
+    // revocations standing — they are chain entries and cannot be rolled
+    // back — so the count of what succeeded is reported, not just the failure.
+    let mut revoked: Vec<(String, String, String)> = Vec::new();
+    for (grant_id, target_subject) in &targets {
+        let claim = zp_core::RevocationClaim::new(
+            grant_id,
+            "genesis".to_string(),
+            zp_core::AuthorityRef::genesis("revocation_authority"),
+            cascade_policy,
+            revocation_reason.clone(),
+        );
 
-    #[cfg(feature = "embedded-server")]
-    let entry_hash =
-        zp_server::tool_chain::emit_revocation_receipt(&store, &target_subject, &claim);
-    #[cfg(not(feature = "embedded-server"))]
-    let entry_hash: Option<String> = {
-        eprintln!("error: zp revoke requires the 'embedded-server' feature");
-        return 2;
-    };
-
-    let entry_hash = match entry_hash {
-        Some(h) => h,
-        None => {
-            eprintln!("error: failed to append revocation receipt");
+        #[cfg(feature = "embedded-server")]
+        let entry_hash =
+            zp_server::tool_chain::emit_revocation_receipt(&store, target_subject, &claim);
+        #[cfg(not(feature = "embedded-server"))]
+        let entry_hash: Option<String> = {
+            eprintln!("error: zp revoke requires the 'embedded-server' feature");
             return 2;
+        };
+
+        match entry_hash {
+            Some(h) => revoked.push((claim.revocation_id.clone(), grant_id.clone(), h)),
+            None => {
+                eprintln!(
+                    "error: failed to append revocation receipt for {} ({} of {} succeeded)",
+                    grant_id,
+                    revoked.len(),
+                    targets.len()
+                );
+                return 2;
+            }
         }
-    };
+    }
+
+    let target_subject = targets[0].1.clone();
+    let (claim_id, grant_id, entry_hash) = revoked[0].clone();
+    let claim_cascade = format!("{:?}", cascade_policy);
+    let claim_reason = format!("{:?}", revocation_reason);
 
     if json {
+        // `revocations` is always present, including for the single-grant
+        // case, so a consumer never has to branch on which flag was used.
+        // The flat fields describe the first revocation and are kept for
+        // compatibility with callers written against the one-grant shape.
         println!(
             "{}",
             serde_json::json!({
-                "revocation_id": claim.revocation_id,
+                "revocation_id": claim_id,
                 "target_grant_id": grant_id,
                 "subject": target_subject,
-                "cascade": format!("{:?}", claim.cascade),
-                "reason": format!("{:?}", claim.reason),
+                "cascade": claim_cascade,
+                "reason": claim_reason,
                 "entry_hash": entry_hash,
+                "revoked_count": revoked.len(),
+                "revocations": revoked
+                    .iter()
+                    .map(|(rid, gid, hash)| serde_json::json!({
+                        "revocation_id": rid,
+                        "target_grant_id": gid,
+                        "entry_hash": hash,
+                    }))
+                    .collect::<Vec<_>>(),
             })
         );
-    } else {
+    } else if revoked.len() == 1 {
         println!("\x1b[1mzp revoke — grant revoked\x1b[0m");
-        println!("revocation_id:      {}", claim.revocation_id);
+        println!("revocation_id:      {}", claim_id);
         println!("target_grant_id:    {}", grant_id);
         println!("subject:            {}", target_subject);
-        println!("cascade:            {:?}", claim.cascade);
-        println!("reason:             {:?}", claim.reason);
+        println!("cascade:            {}", claim_cascade);
+        println!("reason:             {}", claim_reason);
         println!("entry_hash:         {}", short_hash(&entry_hash));
         println!("\x1b[32m✓\x1b[0m revoked");
+    } else {
+        println!("\x1b[1mzp revoke — {} grants revoked\x1b[0m", revoked.len());
+        println!("subject:            {}", target_subject);
+        println!("cascade:            {}", claim_cascade);
+        println!("reason:             {}", claim_reason);
+        println!();
+        for (rid, gid, hash) in &revoked {
+            println!("  {}  {}  {}", gid, short_hash(hash), rid);
+        }
+        println!();
+        println!(
+            "\x1b[32m✓\x1b[0m {} grants revoked — the grantee holds none",
+            revoked.len()
+        );
     }
     0
 }
