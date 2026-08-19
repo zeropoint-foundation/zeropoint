@@ -272,6 +272,21 @@ pub fn start_loop(
                     msg = rx.recv() => msg,
                     _ = interval.tick() => {
                         // Autonomous wake — check system state, maybe do maintenance.
+                        //
+                        // This is unsolicited initiative: nothing asked for it.
+                        // Note the shape below — an autonomous wake is
+                        // constructed as `OperatorInput` with empty content,
+                        // so the type system does not distinguish "the
+                        // operator asked" from "I woke myself"; only
+                        // `CockpitSource::Autonomous` carries the difference.
+                        // The warrant receipt records the distinction on chain
+                        // where it cannot be lost in a refactor.
+                        emit_initiative_warrant_receipt(
+                            &audit_store,
+                            "timer",
+                            "none",
+                            false,
+                        );
                         Some(RegentMessage::OperatorInput {
                             content: String::new(),
                             source: CockpitSource::Autonomous,
@@ -297,6 +312,17 @@ pub fn start_loop(
                 }
 
                 RegentMessage::OfficerFindings(findings) => {
+                    // Unsolicited initiative with a resolvable warrant: the
+                    // severity floors are declared thresholds, so a
+                    // finding-driven wake traces to something the operator
+                    // set. Contrast the timer arm above, which traces to
+                    // nothing.
+                    emit_initiative_warrant_receipt(
+                        &audit_store,
+                        "finding",
+                        &format!("severity_floor/count={}", findings.len()),
+                        true,
+                    );
                     latest_findings = findings;
                     // `INTERRUPT_FLOOR` — findings below it are retained in
                     // `latest_findings` and reach the next scheduled cycle,
@@ -1092,6 +1118,12 @@ async fn run_cycle(
         // decision is SoleAuthorized. Chain-anchoring even the trivial
         // case builds the empirical foundation for evidence-based
         // routing when multi-model envelopes ship via operator ceremony.
+        // Which model actually served this cycle. Captured here because
+        // `regent_guard` is dropped below (see the comment at the drop) and
+        // the emission-coherence hook that needs it runs after that point.
+        // Peeked, not drained — see `InferenceBackend::last_served_model`.
+        let served_this_cycle = regent_guard.inference().last_served_model();
+
         if let Some(decision) = regent_guard.inference().take_classifier_decision() {
             // `prefix + space + JSON`, matching every other emitter on the
             // chain (`cognitive:correction:standing {…}`, `…:violated {…}`).
@@ -1396,7 +1428,12 @@ async fn run_cycle(
                     // response delivery is unaffected (log-and-continue
                     // for all classes). R1 retry / R2 escalate wiring
                     // lands after false-positive rates are measured.
-                    run_emission_coherence(audit_store, emission_analyzer, &response);
+                    run_emission_coherence(
+                        audit_store,
+                        emission_analyzer,
+                        &response,
+                        served_this_cycle.as_ref(),
+                    );
                 }
 
                 emit(
@@ -1487,6 +1524,61 @@ async fn run_cycle(
 /// chain so the next startup can compare against it. Structural only —
 /// counts and deltas — per the same no-content discipline the
 /// composition receipt follows.
+
+/// Emit `cognitive:initiative:warranted` when the Regent wakes without being
+/// asked.
+///
+/// Per `CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08` §"The initiative rule":
+/// the Regent does not initiate deepening of the operator relationship, and
+/// every unsolicited surfacing carries a warrant traceable to an
+/// operator-declared reason — an expiring delegation, a committed deadline,
+/// a substrate fault, an upgrade proposal, a declared crisis trigger.
+/// Relational maintenance is not a warrant.
+///
+/// The initiative point is the **wake**, not the send. This loop has three
+/// wake sources (see `start`'s docs) and two of them are unsolicited. The
+/// timer arm is the one with no operator-declared reason behind it at all:
+/// it fires because a duration elapsed. That is emitted honestly as
+/// `warrant=none resolvable=false` rather than suppressed.
+///
+/// Detectability before enforcement, per KEEL §III.19. An unresolvable
+/// warrant is not yet refused — it is made countable, so the ratio of
+/// warranted to unwarranted initiative is a chain query rather than an
+/// opinion. Refusal is a later decision that needs this evidence first.
+fn emit_initiative_warrant_receipt(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    source: &str,
+    warrant: &str,
+    resolvable: bool,
+) {
+    let event = format!(
+        "cognitive:initiative:warranted source={} warrant={} resolvable={}",
+        source, warrant, resolvable,
+    );
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-initiative".to_string(),
+        receipt: None,
+    };
+
+    match audit_store.lock() {
+        Ok(mut store) => {
+            if let Err(e) = store.append(entry) {
+                warn!("initiative warrant receipt emission failed: {}", e);
+            }
+        }
+        Err(e) => warn!("initiative warrant: audit store lock poisoned: {}", e),
+    }
+}
+
 fn emit_session_profile_receipt(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     profile: &crate::context::SessionProfile,
@@ -2013,22 +2105,37 @@ fn run_cognitive_observer(
 /// - `token_ids: &[]` — H1's token-level n-gram check silently skips
 ///   (word-level check still runs against the response text).
 /// - `log_probs: None` — H3 silently skips regardless of baseline
-///   availability. Enable when the inference backend surfaces per-token
-///   log-probability.
+///   availability. **This is a protocol blocker, not an oversight.** The
+///   Regent's local path speaks Ollama's native `/api/chat`, which returns
+///   no per-token log-probabilities at all; surfacing them means the hot
+///   path speaks OpenAI-compat locally, which is a decision about the
+///   canonical inference layer rather than a field to fill in. See
+///   `MODEL-ADMISSION-PIPELINE-2026-08.md` §10.4.
+///
+/// Model identity **is** now threaded (2026-08-18), per
+/// INFERENCE-ROUTING-DISCIPLINE-2026-07 §Layer 1. This changes no behaviour
+/// on its own — H3 still skips on absent log-probs — and was landed
+/// separately for exactly that reason: it is owed by Layer 1 independently
+/// of H3, and folding it into a protocol migration would have hidden a
+/// correctness fix inside an architecture change.
 fn run_emission_coherence(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     analyzer: &Arc<std::sync::Mutex<zp_emission_coherence::EmissionAnalyzer>>,
     response: &str,
+    served: Option<&crate::inference::ServedModel>,
 ) {
-    // Model identifier is not threaded through this slot today — the
-    // response has already been produced by the inference backend and the
-    // downstream H3 lookup keys on model name. Use "unknown" as a
-    // placeholder; H3 silently skips when no baseline matches the key.
-    // Wire actual model identity through once the inference-served-model
-    // identity per INFERENCE-ROUTING-DISCIPLINE Layer 1 lands here.
+    // Before 2026-08-18 this was the literal string "unknown", which no
+    // dossier carries — so the H3 baseline lookup could not match even with
+    // a calibrated baseline present. That was a gate nobody had counted.
+    //
+    // `effective()` falls back to the requested model when the backend
+    // reports none; `None` here means no call completed this cycle, which is
+    // distinct from a call that declined to name its model.
+    let model = served.map(|s| s.effective()).unwrap_or("unknown");
+
     let em_response = zp_emission_coherence::Response {
         cycle_id: "regent",
-        model: "unknown",
+        model,
         token_ids: &[],
         text: response,
         log_probs: None,

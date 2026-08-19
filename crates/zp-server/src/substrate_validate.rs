@@ -93,6 +93,14 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "cognitive:claim:unbacked",
     // Cognitive act accounting (v0) — per COGNITIVE-ACT-ACCOUNTING-2026-07.md §6
     "cognitive:act:recorded",
+    // Initiative warrants — CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08
+    // §"The initiative rule". Emitted by zp-regent's loop when the Regent
+    // wakes without being asked: `source=timer` (no operator-declared
+    // reason, resolvable=false) or `source=finding` (severity floors are
+    // declared, resolvable=true). KNOWN rather than RESERVED because the
+    // emitter landed with the vocabulary — this family was never reserved,
+    // so it is a new registration, NOT the graduation ceremony.
+    "cognitive:initiative:warranted",
     // Tie-off watch (Stage 1t) — per IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md
     // §"reopen_watch — the two tiers". Declared here ahead of the runtime
     // so a documented receipt does not surface as receipt-drift; the
@@ -379,10 +387,6 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     "action:arrested_by_breaker",
     // Action allowed to finish under arrest.
     "action:completed_during_arrest",
-    // Cognitive-cycle arrests. Bare prefix matches sub-forms
-    // like _after_inference, _mid_tool_dispatch, _urgent, and the
-    // wildcard :* — all declared in the doc.
-    "regent:cycle:arrested",
     // WASM module cooperative-then-forced termination.
     "wasm:arrested:",
     // In-flight HTTP request aborted by breaker.
@@ -464,6 +468,261 @@ const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
     // SOVEREIGN-KINSHIP-PRIMITIVES, HOUSEHOLD-COMPOSITION,
     // COMMUNITY-COORDINATION-ON-ZEROPOINT.
     "regent:rally:",
+    // ---- Added 2026-08-16 from connection-map run at eccc2a6 ----
+    // Nine documents whose declared receipt vocabulary has no emitter in
+    // crates/. Prefixes are deliberately narrow: every one below was tested
+    // against KNOWN_RECEIPT_PREFIXES, this array, and the 102 receipt names
+    // actually emitted from crates/, and none shadows a live family.
+
+    // Operator death and legacy — OPERATOR-DEATH-AND-LEGACY-2026-07.
+    // Executor ceremony, legacy access scopes, memorial preferences. No
+    // succession or beneficiary machinery exists; lands with the legacy
+    // ceremony work.
+    "legacy:",
+    "sovereign:death_declared",
+    // Hardware observer findings — HARDWARE-OBSERVER-2026-07, KEEL §II.13 P6.
+    // Companion to the `observation:hardware:` reservation above, which
+    // covers TPM attestation; these are the coprocessor's fault, thermal,
+    // rail, clock and radio findings. Lands with physical MCU hardware.
+    "hw:",
+    // Kinship coordination scopes — SOVEREIGN-KINSHIP-PRIMITIVES-2026-07,
+    // constrained by KEEL §III.23. Scope names are the design, not an
+    // implementation detail, so they are fixed before any code can widen
+    // them. Lands with cross-sovereign coordination.
+    "kinship:scope:",
+    // Dependent guardianship scopes — DEPENDENT-SOVEREIGNTY-2026-07.
+    // Lands with dependent-sovereign support.
+    "guardian:scope:",
+    // Household composition scopes — HOUSEHOLD-COMPOSITION-2026-07.
+    // Composes with kinship scopes. Lands with multi-sovereign dwellings.
+    "household:scope:",
+    // Embodiment state — EMBODIMENT-STATE-PROTOCOL-2026-07. No avatar,
+    // renderer or signature-action pipeline exists. `cycle:emitted` and
+    // `policy:committed` are that document's unqualified spellings of the
+    // `embodiment:`-prefixed forms; the duplication is a corpus defect to
+    // fix in the doc, reserved here so it does not read as two gaps.
+    "embodiment:",
+    "cycle:emitted",
+    "policy:committed",
+    // Face-tracking observation sources — same doc. `observation:` is live
+    // in zp-observation, but that crate implements chain-reflection claims,
+    // not an operator sensing tier; narrow prefixes keep the reservation
+    // clear of the built family.
+    "observation:operator:face:",
+    "observation:source:",
+    // Regent naming ceremony — REGENT-NAMING-CEREMONY-2026-07. Identity
+    // commitment as chain-anchored operator ceremony, plus renaming and
+    // retraction. `regent:` is heavily built, so only the naming-specific
+    // segments are reserved.
+    "regent:naming:",
+    "regent:named",
+    "regent:renamed:",
+    "regent:name_retracted:",
+    "identity:pre_named",
+    // Build and runtime lifecycle — BUILD-PROCESS-DESIGN-2026-07. The
+    // build/restart lifecycle runs through zp-dev.sh out-of-chain, which
+    // that document names as its own open gap. Each entry is a single
+    // receipt, not a family: `chain:`, `vault:`, `inference:`, `observer:`
+    // and `officer:` are live namespaces and are NOT reserved.
+    "build:",
+    "guard_state:",
+    "hygiene:",
+    "port_registry:",
+    "restart:preshutdown",
+    "officer:shutdown:",
+    "vault:healthy",
+    "chain:database_healthy",
+    "inference:healthy",
+    "inference:unhealthy",
+    "observer:healthy",
+    "boot:startup",
+    // Community coordination — COMMUNITY-COORDINATION-ON-ZEROPOINT-2026-07.
+    // The mesh and reputation substrate it composes with is built; this
+    // coordination layer is not. `foundation_relay:` is live and untouched.
+    "community:",
+    "foundation:proposal:",
+    "foundation:documentation:",
+    "foundation:security:",
+    // ---- Batch 2, 2026-08-16 — namespaces with no string literal anywhere
+    // in crates/**/*.rs. Broader check than the emit-site regex: matches any
+    // receipt-shaped literal, so it also catches match-arm returns the
+    // emit scanner misses. All six are Tier-2 declared. ----
+
+    // Lens primitive — LENS-DISCIPLINE-2026-07 (lens as a first-class
+    // scoped-attention discipline with a chain-anchored receipt lifecycle)
+    // and OFFICER-LENS-DECLARATIONS-2026-07. Lenses are currently an
+    // authoring convention only: documents declare them, nothing emits
+    // them. Largest single reserved family — 51 documented receipts across
+    // six documents. Lands when the lens lifecycle is implemented.
+    "lens:",
+    // Host-body observation tier — OBSERVATION-PLANE-2026-07, with
+    // CIRCUIT-BREAKER-2026-07 and COGNITIVE-SELF-OBSERVER-2026-07.
+    // Process, filesystem, network, app and credential-surface sensing.
+    // Note zp-observation exists but implements chain-reflection and
+    // cognitive self-observation claims — a different subsystem from this
+    // one, as OBSERVATION-PLANE itself states. Supersedes the narrower
+    // `observe:hardware:` entry from batch 1.
+    "observe:",
+    // Quarantine plane — QUARANTINE-PLANE-2026-07 and
+    // EXTENSION-SURFACE-2026-07. Default-deny admission for external
+    // composed artifacts. Lands with the admission ceremony.
+    "quarantine:",
+    // Discipline pins and composition matrix — declared in
+    // SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07, with entries from
+    // SUBSTRATE-READINESS-CONTRACT and VAULT-KEY-SOVEREIGNTY-COMPOSITION.
+    // Pins are enforced by tooling under tools/discipline-pins today; the
+    // chain-anchored receipt half is not built.
+    "discipline:",
+    // Knowledge commons — DISTRIBUTED-KNOWLEDGE-COMMONS-2026-07.
+    // Cost, delegation, friction and security surfaces for shared corpora.
+    "commons:",
+    // Peer greeting and trust-anchor lifecycle — PEER-TRUST-ANCHOR-2026-07,
+    // PEER-DISCOVERY-AS-OUTREACH-2026-07, DISCOVERY-AND-BOOTSTRAP-2026-07.
+    // zp-mesh and zp-gossip are built and emit `foundation_relay:`; this is
+    // the outreach and trust-anchor vocabulary layered above them, unbuilt.
+    "peer:",
+    // Two-node co-sovereign ceremony — TWO-NODE-GENESIS-COORDINATION-2026-07.
+    // Narrow prefix: `ceremony:` is left open for other ceremony families.
+    "ceremony:cosovereign:",
+    // NOT RESERVED — `onboard:` (6 edges, SAGE-WIZARD-SCRIPT-2026-05).
+    //
+    // Status is THREE-WAY here, and the tool has vocabulary for only two of
+    // the three. These receipts are:
+    //   implemented  — the onboarding wizard exists, in the foundation
+    //                  worker (zeropointfoundation.org/onboard/) rather
+    //                  than in crates/, and
+    //                  scripts/verify-onboarding-receipts.sh checks for
+    //                  onboard:start / onboard:complete;
+    //   invisible    — connection_map scans crates/**/*.rs only, so it
+    //                  cannot see a non-Rust implementation and reports
+    //                  them as aspirational;
+    //   NOT DEPLOYED — as of 2026-08-16 the Foundation workspace is set
+    //                  aside by operator decision. It is to be re-established
+    //                  on Cloudflare and Hetzner once the substrate reaches
+    //                  deployable maturity. Until then nothing is serving
+    //                  these receipts, and the verify script has no live
+    //                  target.
+    //
+    // Do NOT read this entry as a claim that anything is running.
+    // Reserving them would be
+    // wrong in the other direction — it would record built work as deferred
+    // roadmap. They are left as defects deliberately: an unclassified edge
+    // is the honest state for code that exists but is not deployed and is
+    // not visible to the scanner.
+    //
+    // Three things would each resolve this independently: extending the
+    // scanner past crates/, the foundation-side receipt signing that
+    // verify-onboarding-receipts.sh names as open work, or redeployment of
+    // the workspace. Only the third is currently gated on anything.
+    // ---- Batch 3, 2026-08-16 — second-level segments inside LIVE
+    // namespaces. Each namespace below has emitting code, so the namespace
+    // itself must NOT be reserved; these are the specific sub-families with
+    // no string literal anywhere in crates/**/*.rs (scan excludes this file).
+    // This is the per-receipt granularity the SPLIT documents required. ----
+
+    // Regent orchestration layers — REGENT-ORCHESTRATION-ARCHITECTURE-2026-07
+    // (Phase 0 shipped; workflow/exec/artifact/route are the Layer 3-7
+    // extensions that document names as future evolution) and
+    // regent-gossip-and-evolution-2026-07. `regent:emission:` and
+    // `regent:precedent:` have code and are deliberately absent here.
+    // NOTE: `regent:commitment_fulfilled:` is a distinct string from the
+    // existing `regent:commitment:` reservation — the vocabulary
+    // inconsistency is a corpus defect worth fixing in the source docs.
+    "regent:artifact:",
+    "regent:build:",
+    "regent:claim_verifier:",
+    "regent:cognitive:",
+    "regent:commitment_fulfilled:",
+    "regent:confabulation_gap:",
+    // `regent:cycle:` subsumes the former `regent:cycle:arrested` entry
+    // (removed 2026-08-16 as redundant): the bare prefix already matches
+    // arrested and its sub-forms _after_inference, _mid_tool_dispatch,
+    // _urgent, and the wildcard :* — all declared in the doc.
+    "regent:cycle:",
+    "regent:directive:",
+    "regent:evolution:",
+    "regent:exec:",
+    "regent:gossip:",
+    "regent:mandate:",
+    "regent:plan:",
+    "regent:route:",
+    "regent:standing_correction:",
+    "regent:workflow:",
+    // Substrate ceremonies — SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07,
+    // SUBSTRATE-HARDENING-CEREMONY-2026-07, SUBSTRATE-READINESS-CONTRACT-2026-07.
+    // zp-server/src/bedrock.rs implements the first slice of the boot
+    // ceremony and emits the registered `invariant:` family; these are the
+    // remaining ceremony receipts. `substrate:characterization:` has code.
+    "substrate:boot_ceremony:",
+    "substrate:degraded:",
+    "substrate:hardening:",
+    "substrate:invariant:",
+    "substrate:model:",
+    "substrate:readiness:",
+    // Chain export and access accounting — PORTABLE-CHAIN-EXPORT-CEREMONY-2026-07
+    // and TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07. The `chain:canary:`
+    // family is already registered and is not touched.
+    "chain:portable:",
+    "chain:read:",
+    "chain:write:",
+    // Capability classes — TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07,
+    // ECONOMIC-DLT-COMPOSITION-2026-07, SUBSTRATE-READINESS-CONTRACT-2026-07.
+    "capability:composition:",
+    "capability:dlt:",
+    "capability:media:",
+    "capability:sense:",
+    "capability:unavailable:",
+    // Host-surface observation findings — OBSERVATION-PLANE-2026-07 and
+    // CHAIN-WATCHER-AND-COMMITMENTS-2026-07. `observation:inference:` and
+    // `observation:hardware:` have code / an existing reservation.
+    // NOTE: `observation:process:` and `observation:processes:` are two
+    // spellings of one family in the corpus — a doc defect, reserved both
+    // so it does not present as two independent gaps.
+    "observation:filesystem:",
+    "observation:network:",
+    "observation:process:",
+    "observation:processes:",
+    "observation:sentinel:",
+    // Sentinel action surfaces — SENTINEL-V1-MVP-2026-07 and
+    // EXECUTION-AUTHORITY-MODEL-2026-07. Sentinel's passive observation
+    // findings ship as `officer:sen:*`; these are the action-surface verbs.
+    "sentinel:accounting:",
+    "sentinel:escalation:",
+    "sentinel:flow:",
+    "sentinel:placement:",
+    // Reserved-authority refusals and operator declarations —
+    // NON-DELEGABLE-AUTHORITY-2026-08 §5 (refusal) and §7 (declaration,
+    // withdrawal). Enumerated as exact names rather than reserved as a bare
+    // `authority:reserved:` prefix, on purpose: §5 states that no
+    // `authority:reserved:granted` receipt type exists, and that the absence
+    // of that receipt type in the schema is itself the statement. A bare
+    // prefix would silently reserve `granted` too and erase the statement.
+    // (No double quotes in this comment on purpose: both parsers here skip
+    // `//` lines, but `tools/connection-map/silent_families.py` records that
+    // a naive quote-extractor once read a phrase out of a doc comment as a
+    // receipt family, and this block is read back by tooling.)
+    //
+    // Not surfaced by the 2026-08-16 connection-map run at `eccc2a6` because
+    // that run enumerates documents in CANONICAL-CORPUS-INDEX and
+    // NON-DELEGABLE-AUTHORITY is deliberately outside it. Added by hand
+    // 2026-08-18 per `docs/handoffs/reserved-authority-consolidation-2026-08.md`
+    // §4 — every artifact derived from that run inherits the same blind spot.
+    //
+    // RESERVED and not KNOWN because only the enforcement half is built: the
+    // refusal path is live in zp-core (`reserved_class`,
+    // `RESERVED_CAPABILITY_NAMES`, refusal at `validate_issuance` and
+    // `delegate`) with an end-to-end test at
+    // crates/zp-cli/tests/delegate_refuses_reserved_capability.rs, while the
+    // receipt emission (§13.4) and all of Part II are unbuilt.
+    "authority:reserved:refused",
+    "authority:reserved:declared",
+    "authority:reserved:withdrawn",
+    // NOT RESERVED — 11 wildcard segments (`officer:*`, `capability:*`,
+    // `observation:*`, `genesis:*`, `classifier:*`, `foundation:*` and
+    // others). These are doc-side notation meaning "any member", not
+    // receipt names. A reservation containing `*` would match nothing.
+    // They are corpus-authoring defects: the documents should either name
+    // the members or mark the line as illustrative.
 ];
 
 /// Run the canonical substrate validation.

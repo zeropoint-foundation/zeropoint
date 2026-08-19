@@ -298,6 +298,13 @@ pub struct OllamaResponse {
     pub done: bool,
     pub total_duration: Option<u64>,
     pub eval_count: Option<u64>,
+    /// The model the backend reports having served. Ollama returns this on
+    /// every `/api/chat` response; the struct simply did not read it until
+    /// 2026-08-18. `#[serde(default)]` because a backend that omits it is a
+    /// backend that cannot answer the question, which is different from one
+    /// that answered "the same model you asked for".
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -306,6 +313,45 @@ pub struct OllamaChatMessage {
     pub content: String,
     #[serde(default)]
     pub thinking: Option<String>,
+}
+
+/// What a completed inference call reports about which model served it.
+///
+/// INFERENCE-ROUTING-DISCIPLINE-2026-07 §Layer 1 opens with "the served
+/// model is chain-anchored, always" and names the distinction this type
+/// carries: the requested model is what the caller asked for, the served
+/// model is what answered, and silent divergence between them is the thing
+/// the discipline exists to make structurally impossible.
+#[derive(Debug, Clone)]
+pub struct ServedModel {
+    /// What the caller asked for.
+    pub requested: String,
+    /// What the backend said it served. `None` means the response carried
+    /// no model field — the protocol could not answer. It does **not** mean
+    /// the served model matched the request.
+    pub served: Option<String>,
+}
+
+impl ServedModel {
+    /// Best available identity for keying a dossier or baseline lookup.
+    ///
+    /// Falls back to the requested name when the backend reports none. A
+    /// caller that needs to know which of the two it got must ask
+    /// [`ServedModel::reported`] rather than infer it from this.
+    pub fn effective(&self) -> &str {
+        self.served.as_deref().unwrap_or(&self.requested)
+    }
+
+    /// Whether the backend actually reported a served model.
+    pub fn reported(&self) -> bool {
+        self.served.is_some()
+    }
+
+    /// Whether the backend served something other than what was requested.
+    /// False when nothing was reported — absence is not agreement.
+    pub fn diverged(&self) -> bool {
+        matches!(&self.served, Some(s) if s != &self.requested)
+    }
 }
 
 // ─── OpenAI response types ─────────────────────────────────────────
@@ -410,6 +456,12 @@ pub struct InferenceBackend {
     /// because `chat()` takes `&self`.
     last_classifier_decision:
         std::sync::Mutex<Option<crate::inference_classifier::ClassifierDecision>>,
+    /// Which model served the most recently completed call. Same interior-
+    /// mutability reason as the two side channels above — `chat()` takes
+    /// `&self`. Unlike those, this one is **peeked, not drained**: it answers
+    /// "what produced the response I am holding", and a drain would make the
+    /// second reader of one response see nothing.
+    last_served_model: std::sync::Mutex<Option<ServedModel>>,
     /// Gate-request signer for calls to the substrate's own proxy (W5 3b).
     ///
     /// `None` pre-Genesis, where there is no sovereign root to sign with —
@@ -470,6 +522,7 @@ impl InferenceBackend {
             last_fallback: std::sync::Mutex::new(None),
             classifier: std::sync::Arc::new(crate::inference_classifier::DefaultClassifier::new()),
             last_classifier_decision: std::sync::Mutex::new(None),
+            last_served_model: std::sync::Mutex::new(None),
             gate_signer,
         }
     }
@@ -526,6 +579,36 @@ impl InferenceBackend {
         &self,
     ) -> Option<crate::inference_classifier::ClassifierDecision> {
         self.last_classifier_decision.lock().ok()?.take()
+    }
+
+    /// Which model served the most recently completed call, if any call has
+    /// completed. Peeks rather than drains — see the field's doc comment.
+    pub fn last_served_model(&self) -> Option<ServedModel> {
+        self.last_served_model.lock().ok()?.clone()
+    }
+
+    /// Record which model served a call, at the point its response is parsed.
+    ///
+    /// Called from each protocol's parse site rather than from `chat()`,
+    /// because only the protocol layer has seen the response body and the
+    /// two protocols report the served model in different places — Ollama at
+    /// the response root, OpenAI at `model`.
+    fn record_served_model(&self, requested: &str, served: Option<String>) {
+        if let Some(ref s) = served {
+            if s != requested {
+                warn!(
+                    requested = %requested,
+                    served = %s,
+                    "served model diverges from requested — INFERENCE-ROUTING-DISCIPLINE Layer 1"
+                );
+            }
+        }
+        if let Ok(mut guard) = self.last_served_model.lock() {
+            *guard = Some(ServedModel {
+                requested: requested.to_string(),
+                served,
+            });
+        }
     }
 
     /// Record a classifier decision for the given request. Called at the
@@ -905,6 +988,8 @@ impl InferenceBackend {
         let inference_resp: OllamaResponse = serde_json::from_str(&raw_body)
             .map_err(|e| RegentError::Inference(format!("parse error: {}", e)))?;
 
+        self.record_served_model(&request.model, inference_resp.model.clone());
+
         let content = inference_resp
             .message
             .map(|m| {
@@ -1045,6 +1130,8 @@ impl InferenceBackend {
                 crate::text::preview(&raw_body, 200)
             ))
         })?;
+
+        self.record_served_model(&request.model, openai_resp.model.clone());
 
         let content = openai_resp
             .choices
