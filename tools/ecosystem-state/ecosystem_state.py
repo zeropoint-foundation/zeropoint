@@ -273,6 +273,116 @@ def coverage(node_ids, dirs, by_name):
             "crates_missing": missing, "crates_unmeasured": unmeasured}
 
 
+
+# ── The producer-consumer rule, made mechanical ──────────────────────────
+# MODEL-ADMISSION-PIPELINE-2026-08 §10.6: "before building a producer, name
+# its consumer and confirm the consumer can represent what the producer
+# emits." The rule was prose, so violations of it were only ever found by
+# reading. This finds them.
+#
+# `consumed_by` counts Cargo edges and cannot see direction. zp-ontology has
+# one dependent, so it scores live -- and that dependent is the cartographer,
+# which is its *writer*. Five of its six read methods have never been called
+# by anything. A store whose only reader is its own producer is the shape of
+# a broken loop, and it was rendering the same green as a working one.
+#
+# Attribution is by declared dependency and by distinctive method name: a
+# method whose name is also declared in another crate is discarded as
+# evidence rather than guessed at, because `.get_object(` alone says nothing
+# about which store it was called on. That costs recall and buys the right to
+# state the result flatly.
+#
+# Result maps to `partial`, not a sixth colour: the existing vocabulary
+# already defines partial as "built, incompletely wired -- works in one
+# direction only", which is exactly this.
+
+_WRITE_PREFIXES = ("insert_", "update_", "set_", "link_", "append_", "store_",
+                   "write_", "put_", "remove_", "delete_", "record_", "save_")
+_READ_PREFIXES = ("get_", "list_", "count_", "load_", "fetch_", "find_", "query_",
+                  "read_", "most_", "relationships_", "receipts_", "last_",
+                  "object_count", "all_", "iter_")
+_GENERIC = {"new", "open", "default", "from_path", "open_memory", "clone",
+            "len", "is_empty"}
+
+
+def _rs_sources():
+    """crate -> [(path, text)], read once."""
+    out = {}
+    for cd in sorted((ROOT / "crates").iterdir()):
+        src = cd / "src"
+        if not src.is_dir():
+            continue
+        out[cd.name] = [(f, f.read_text(errors="ignore")) for f in sorted(src.rglob("*.rs"))]
+    return out
+
+
+def store_direction(by_name):
+    """For each crate exporting a *Store, who writes it and who reads it."""
+    sources = _rs_sources()
+
+    declared = {}
+    for crate, files in sources.items():
+        for _, txt in files:
+            for m in re.finditer(r"\n\s*pub fn (\w+)", txt):
+                declared.setdefault(m.group(1), set()).add(crate)
+
+    dependents = {c: set() for c in sources}
+    for crate in sources:
+        t = ROOT / "crates" / crate / "Cargo.toml"
+        if not t.exists():
+            continue
+        body = t.read_text()
+        for other in sources:
+            if other != crate and re.search(rf"^{re.escape(other)}\s*=", body, re.M):
+                dependents.setdefault(other, set()).add(crate)
+
+    out = {}
+    for crate, files in sources.items():
+        writes, reads = set(), set()
+        for f, txt in files:
+            if f.stem != "store" and not re.search(r"pub struct \w*Store\b", txt):
+                continue
+            for m in re.finditer(r"\n    pub fn (\w+)", txt):
+                n = m.group(1)
+                if n in _GENERIC or declared.get(n) != {crate}:
+                    continue           # ambiguous name: not usable as evidence
+                if n.startswith(_WRITE_PREFIXES):
+                    writes.add(n)
+                elif n.startswith(_READ_PREFIXES):
+                    reads.add(n)
+        if not (writes and reads):
+            continue
+
+        def hits(names, text):
+            return len(re.findall(r"\.(" + "|".join(sorted(map(re.escape, names)))
+                                  + r")\s*\(", text))
+
+        w_by, r_by = {}, {}
+        for dep in dependents.get(crate, ()):
+            wt = sum(hits(writes, txt) for _, txt in sources.get(dep, ()))
+            rt = sum(hits(reads, txt) for _, txt in sources.get(dep, ()))
+            if wt:
+                w_by[dep] = wt
+            if rt:
+                r_by[dep] = rt
+        out[crate] = {"writers": w_by, "readers": r_by,
+                      "n_write_methods": len(writes), "n_read_methods": len(reads)}
+    return out
+
+
+def producer_only_states(direction):
+    out = {}
+    for crate, d in direction.items():
+        readers, writers = set(d["readers"]), set(d["writers"])
+        if readers and readers <= writers:
+            who = ", ".join(sorted(readers))
+            out[crate] = ("partial",
+                          f"store is written and read only by {who}, which is its own "
+                          f"producer \u2014 nothing consumes it that does not also write it; "
+                          f"{d['n_read_methods']} read methods exist for no outside caller",
+                          f"crates/{crate}/src/store.rs; call-site scan over declared dependents")
+    return out
+
 def main():
     # declared half: whatever ecosystem.js names, kept for its curated labels
     gnodes, gedges = parse_graph()
@@ -317,6 +427,8 @@ def main():
     states.update(crate_states())          # measured beats hand-authored
     states.update(derived_crate_states(by_name, declared_ids))
     states.update(sstates)
+    direction = store_direction(by_name)
+    states.update(producer_only_states(direction))   # direction beats edge-count
 
     ids = [n["id"] for n in gnodes]
     nodes = {}

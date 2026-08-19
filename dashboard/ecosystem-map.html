@@ -117,14 +117,14 @@
 </div></div>
 <script>
 const G = {
-  "generated_from_commit": "f39af75",
+  "generated_from_commit": "029a1aa",
   "width": 1680,
   "height": 1180,
   "counts": {
-    "live": 45,
+    "live": 44,
     "unknown": 28,
     "absent": 1,
-    "partial": 4,
+    "partial": 5,
     "unwired": 11
   },
   "origins": {
@@ -1187,9 +1187,9 @@ const G = {
       "x": 733.4,
       "y": 335.6,
       "deg": 2,
-      "state": "live",
-      "why": "3,121 lines, 1 dependent crate(s), primary role receipt-authoring",
-      "cite": "docs/lenses/source-manifest.json consumed_by"
+      "state": "partial",
+      "why": "store is written and read only by zp-server, which is its own producer \u2014 nothing consumes it that does not also write it; 8 read methods exist for no outside caller",
+      "cite": "crates/zp-ontology/src/store.rs; call-site scan over declared dependents"
     },
     {
       "id": "zp-pipeline",
