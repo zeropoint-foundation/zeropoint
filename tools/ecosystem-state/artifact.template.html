@@ -75,11 +75,14 @@
 <div class="top">
   <div>
     <h1>ZeroPoint — Ecosystem Map</h1>
-    <p class="sub">__NNODES__ nodes · __NEDGES__ edges · state from first-party evidence only · <span id="cmt" class="mono"></span></p>
+    <p class="sub">__NNODES__ nodes · __NEDGES__ edges · <strong id="cov">__COVERAGE__</strong> workspace crates drawn · <span id="cmt" class="mono"></span></p>
     <p class="lede">Type is the fill. <strong>Build state is the ring.</strong> A node with no ring is not
       healthy and not broken — it is a node nobody has produced evidence for, and it renders that way on
-      purpose. Drag any node to pull the graph apart; it re-settles around where you put it. Hover for the
-      state, the reason, and the file the reason was read from.</p>
+      purpose. <strong>A dashed outline means the node was hand-declared</strong> rather than found in the
+      workspace; solid means it was derived. That distinction exists because an earlier version of this map
+      drew only the nodes someone had remembered to type, and the credential vault — 420 lines, a CLI verb,
+      call sites in five crates — was simply not on it. Drag to pull the graph apart; hover for the state,
+      the reason, and the file the reason was read from.</p>
   </div>
   <div class="tools">
     <button class="tg" id="reheat">Re-settle</button>
@@ -98,6 +101,7 @@
 <div class="legend">
   <div class="lg"><b>type</b><span id="lg-type" style="display:contents"></span></div>
   <div class="lg"><b>build state</b><span id="lg-state" style="display:contents"></span></div>
+  <div class="lg"><b>provenance</b><span id="lg-origin" style="display:contents"></span></div>
 </div>
 
 <div class="card">
@@ -135,7 +139,9 @@ svg.appendChild(gRoot); gRoot.appendChild(gEdges); gRoot.appendChild(gELab); gRo
 E.forEach(e=>{
   const a=byId[e.source], b=byId[e.target]; if(!a||!b) return;
   e.a=a; e.b=b;
-  e.line=el('line',{stroke:'var(--edge)','stroke-width':1});
+  const derived = e.kind==='derived';
+  e.w = derived?0.6:1.15; e.o = derived?0.45:1;
+  e.line=el('line',{stroke:'var(--edge)','stroke-width':e.w,'stroke-opacity':e.o});
   gEdges.appendChild(e.line);
   e.text=el('text',{class:'e-lab'}); e.text.textContent=e.label.toLowerCase().replace(/_/g,' ');
   gELab.appendChild(e.text);
@@ -148,7 +154,8 @@ N.forEach(n=>{
   n.ring = n.state!=='unknown' ? el('circle',{r:R(n)+4,fill:'none',stroke:`var(${SC[n.state]})`,
       'stroke-width':1.5,'stroke-opacity':.92,...(n.state==='absent'?{'stroke-dasharray':'2,2'}:{})}) : null;
   if(n.ring) g.appendChild(n.ring);
-  n.dot=el('circle',{r:R(n),fill:c,'fill-opacity':.14,stroke:c,'stroke-width':1.2});
+  n.dot=el('circle',{r:R(n),fill:c,'fill-opacity':.14,stroke:c,'stroke-width':1.2,
+    ...(n.origin==='declared'?{'stroke-dasharray':'3,2'}:{})});
   g.appendChild(n.dot);
   n.pinDot=el('circle',{class:'pin-dot',r:1.7,fill:'var(--text-muted)'});
   g.appendChild(n.pinDot);
@@ -310,16 +317,16 @@ function hover(n,on){
       const inc = e.source===n.id||e.target===n.id;
       e.text.style.opacity = inc?0.95:(showEdgeLabels?0.16:0);
       e.line.setAttribute('stroke', inc?`var(${TC[n.type]||'--t-concept'})`:'var(--edge)');
-      e.line.setAttribute('stroke-opacity', inc?0.85:0.25);
-      e.line.setAttribute('stroke-width', inc?1.6:1);
+      e.line.setAttribute('stroke-opacity', inc?0.9:e.o*0.3);
+      e.line.setAttribute('stroke-width', inc?1.7:e.w);
     });
   } else {
     N.forEach(m=>m.g.classList.remove('fade','hi'));
     E.forEach(e=>{ if(!e.a) return;
       e.text.style.opacity = showEdgeLabels?0.55:0;
       e.line.setAttribute('stroke','var(--edge)');
-      e.line.setAttribute('stroke-opacity',1);
-      e.line.setAttribute('stroke-width',1);
+      e.line.setAttribute('stroke-opacity',e.o);
+      e.line.setAttribute('stroke-width',e.w);
     });
   }
 }
@@ -329,7 +336,10 @@ N.forEach(n=>{
     const s=n.state==='unknown'
       ? `<div class="d" style="margin-top:5px;color:var(--text-muted)">state unknown — no first-party evidence read</div>`
       : `<div class="d" style="margin-top:5px"><span style="color:var(${SC[n.state]})">●</span> <strong>${n.state}</strong> — ${n.why||''}</div>${n.cite?`<div class="c">${n.cite}</div>`:''}`;
-    tip.innerHTML=`<div class="t">${n.type}</div><div class="n">${n.label}</div><div class="d">${n.desc}</div>${s}<div class="c">${n.deg} connection${n.deg!==1?'s':''}</div>`;
+    const prov = n.origin==='derived'
+      ? 'derived from the workspace'
+      : 'declared — a concept, person or external system the workspace cannot confirm';
+    tip.innerHTML=`<div class="t">${n.type}</div><div class="n">${n.label}</div><div class="d">${n.desc}</div>${s}<div class="c">${n.deg} connection${n.deg!==1?'s':''} · ${prov}</div>`;
     tip.style.opacity=1; tip.style.left=Math.min(ev.clientX+14,innerWidth-342)+'px'; tip.style.top=(ev.clientY+15)+'px';
   });
   n.g.addEventListener('mouseleave',()=>{ tip.style.opacity=0; hover(n,false); });
@@ -356,7 +366,7 @@ function apply(){
   N.forEach(n=>n.g.classList.toggle('dim',!active.has(n.type)));
   E.forEach(e=>{ if(!e.a) return;
     const ok=active.has(e.a.type)&&active.has(e.b.type);
-    e.line.style.opacity=ok?1:.05;
+    e.line.style.opacity=ok?1:.04;
     e.text.style.opacity=ok?(showEdgeLabels?.55:0):0;
   });
 }
@@ -368,6 +378,9 @@ document.getElementById('lg-state').innerHTML=['live','partial','unwired','absen
     const b=k==='unknown'?'1px dashed var(--text-muted)':`1.5px ${k==='absent'?'dashed':'solid'} var(${SC[k]})`;
     return `<span style="display:inline-flex;align-items:center;gap:5px"><i class="ring" style="border:${b}"></i>${k} <span style="color:var(--text-muted)">${G.counts[k]}</span></span>`;
   }).join('');
+document.getElementById('lg-origin').innerHTML=[
+  ['derived','solid','measured from the workspace'],['declared','dashed','asserted; the workspace cannot confirm it']
+].map(([k,d])=>`<span style="display:inline-flex;align-items:center;gap:5px" title="${d}"><i class="sw" style="border-radius:50%;background:none;border:1.4px ${k==='declared'?'dashed':'solid'} var(--text-muted)"></i>${k} <span style="color:var(--text-muted)">${(G.origins||{})[k]||0}</span></span>`).join('');
 document.getElementById('tbl').innerHTML=N.filter(n=>n.state!=='unknown')
   .sort((a,b)=>['unwired','absent','partial','live'].indexOf(a.state)-['unwired','absent','partial','live'].indexOf(b.state)||a.label.localeCompare(b.label))
   .map(n=>`<tr><td><strong>${n.label}</strong></td><td style="color:var(--text-muted)">${n.type}</td>
@@ -376,7 +389,11 @@ document.getElementById('tbl').innerHTML=N.filter(n=>n.state!=='unknown')
 document.getElementById('cmt').textContent=G.generated_from_commit||'';
 document.getElementById('ft').innerHTML=
   `Generated by <code>tools/ecosystem-state/ecosystem_state.py</code> from <code>crates/zp-server/assets/ecosystem.js</code> (nodes and edges), `+
-  `<code>docs/lenses/source-manifest.json</code> (crate dependents) and a cited evidence table. `+
+  `<code>docs/lenses/source-manifest.json</code> (every workspace crate, its dependency edges and its dependents) `+
+  `and a cited evidence table. The node set is derived, not curated: the generator diffs its nodes against `+
+  `<code>crates/</code> every run and exits non-zero if any crate is missing, so silence and coverage cannot `+
+  `look alike. Subsystems that live inside a crate rather than as one — the credential vault — are found by `+
+  `probing for their defining type and their edges are counted call sites, not assertions. `+
   `Positions are seeded by a spring embedder at generation time, then refined in the browser by an inlined `+
   `velocity-Verlet simulation whose collision force separates measured <em>label boxes</em> rather than circles — `+
   `no d3, no network. The seed makes the starting picture identical for a given commit. `+

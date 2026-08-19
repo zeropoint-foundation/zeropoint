@@ -139,10 +139,186 @@ def head():
         return None
 
 
+
+# ── Derivation: the node set, not just the state ─────────────────────────
+# The first cut of this generator read its node set from ecosystem.js's
+# hand-authored DATA.nodes array and attached derived state to whatever it
+# found there. That made the *rings* evidence-backed and left the *topology*
+# asserted, and the two rendered identically -- so a subsystem nobody had
+# thought to type simply did not exist on the map. The credential vault is
+# how that surfaced: 420 lines in zp-trust, a top-level CLI verb, call sites
+# in eight crates, and no node. Eight of the workspace's crates were drawn;
+# thirty-eight were not.
+#
+# So the node set is derived now. Crates come from the workspace manifest.
+# Named subsystems that live inside a crate rather than as one -- the vault
+# is the first -- are found by probing for their type, not by asserting them.
+# Whatever remains hand-authored is marked `declared` and says so in its own
+# tooltip, because the failure was never that declared nodes existed. It was
+# that they were indistinguishable from measured ones.
+
+SUBSYSTEM_PROBES = {
+    # id -> (label, type, home crate, defining symbol, one-line description)
+    "vault": ("Credential Vault", "core", "zp-trust", "CredentialVault",
+              "Tiered encrypted credential store \u2014 providers / tools / system / "
+              "ephemeral, ChaCha20-Poly1305 per-tier derived keys, reference chasing"),
+}
+
+
+def _manifest():
+    p = ROOT / "docs/lenses/source-manifest.json"
+    data = json.loads(p.read_text())
+    return {c["name"]: c for c in data["crates"]}
+
+
+def _crate_dirs():
+    d = ROOT / "crates"
+    return {x.name for x in d.iterdir() if x.is_dir() and (x / "Cargo.toml").exists()}
+
+
+def derive_crate_nodes(declared_ids):
+    """One node per workspace crate, plus the dependency edges between them.
+
+    Crates already drawn under a different id (zp-core, mle-star, ...) keep
+    their declared node; this only adds what was missing, so the curated
+    labels and descriptions survive.
+    """
+    by_name = _manifest()
+    dirs = _crate_dirs()
+    # crate name -> existing node id. Built by matching declared ids against
+    # crate names rather than read from a table, because CRATE_NODES was a
+    # hand-written map and had the same omission problem one level down: it
+    # listed eight crates and forgot zp-server, the largest one on the map.
+    id_of = {v: k for k, v in CRATE_NODES.items()}
+    id_of.update({d: d for d in declared_ids if d in by_name})
+    nodes, edges = [], []
+
+    for name in sorted(dirs | set(by_name)):
+        if name in id_of:                                # already on the map
+            continue
+        c = by_name.get(name)
+        if c is None:
+            # In crates/ but absent from the manifest. Drawn, and drawn as a
+            # gap in the manifest rather than quietly dropped -- the same
+            # mistake one layer down.
+            nodes.append({"id": name, "label": name, "type": "crate",
+                          "desc": "crate directory exists; source-manifest.json does not "
+                                  "list it, so nothing here is measured",
+                          "origin": "derived"})
+            continue
+        n = len(c.get("consumed_by") or [])
+        nodes.append({
+            "id": name, "label": name, "type": "crate",
+            "desc": f"{c.get('loc', 0):,} lines across {c.get('files', 0)} files "
+                    f"\u2014 role {c.get('primary_role', '?')}, {n} dependent crate(s)",
+            "origin": "derived"})
+        id_of[name] = name
+
+    for name, c in by_name.items():
+        src = id_of.get(name, name)
+        for dep in c.get("deps") or []:
+            if dep in by_name:
+                edges.append({"source": src, "target": id_of.get(dep, dep),
+                              "label": "DEPENDS_ON", "kind": "derived"})
+    return nodes, edges, by_name, dirs
+
+
+def probe_subsystems(by_name):
+    """Find named subsystems that are modules, not crates, by grepping for
+    the type that defines them. The vault's edges are counted, not asserted:
+    a crate is wired to it exactly when its sources name the type."""
+    nodes, edges, states = [], [], {}
+    for nid, (label, typ, home, symbol, desc) in SUBSYSTEM_PROBES.items():
+        users = {}
+        for crate_dir in sorted((ROOT / "crates").iterdir()):
+            src = crate_dir / "src"
+            if not src.is_dir():
+                continue
+            hits = 0
+            for f in src.rglob("*.rs"):
+                try:
+                    hits += f.read_text(errors="ignore").count(symbol)
+                except OSError:
+                    pass
+            if hits:
+                users[crate_dir.name] = hits
+        total = sum(v for k, v in users.items() if k != home)
+        outside = {k: v for k, v in users.items() if k != home}
+        nodes.append({"id": nid, "label": label, "type": typ, "desc": desc,
+                      "origin": "derived"})
+        edges.append({"source": nid, "target": home, "label": "DEFINED_IN",
+                      "kind": "derived"})
+        for k in sorted(outside):
+            edges.append({"source": k, "target": nid, "label": "USES", "kind": "derived"})
+        if outside:
+            top = ", ".join(f"{k} ({v})" for k, v in
+                            sorted(outside.items(), key=lambda kv: -kv[1])[:4])
+            states[nid] = ("live",
+                           f"{total} references to {symbol} across {len(outside)} crates "
+                           f"outside {home} \u2014 {top}",
+                           f"crates/{home}/src/vault.rs; grep {symbol} crates/*/src")
+        else:
+            states[nid] = ("unwired",
+                           f"{symbol} is defined in {home} and named nowhere else",
+                           f"grep {symbol} crates/*/src")
+    return nodes, edges, states
+
+
+def coverage(node_ids, dirs, by_name):
+    """Silence and coverage must not look identical. This is the difference."""
+    drawn = set(node_ids) | {CRATE_NODES[i] for i in node_ids if i in CRATE_NODES}
+    missing = sorted(d for d in dirs if d not in drawn)
+    unmeasured = sorted(d for d in dirs if d not in by_name)
+    return {"crates_total": len(dirs), "crates_drawn": len(dirs) - len(missing),
+            "crates_missing": missing, "crates_unmeasured": unmeasured}
+
+
 def main():
+    # declared half: whatever ecosystem.js names, kept for its curated labels
+    gnodes, gedges = parse_graph()
+    for n in gnodes:
+        n.setdefault("origin", "declared")
+    for e in gedges:
+        e.setdefault("kind", "declared")
+    declared_ids = {n["id"] for n in gnodes}
+
+    # derived half: every crate, every workspace dep edge, every probed subsystem
+    cnodes, cedges, by_name, dirs = derive_crate_nodes(declared_ids)
+    snodes, sedges, sstates = probe_subsystems(by_name)
+
+    # A declared node that IS a workspace crate was corroborated by derivation,
+    # so it counts as derived. Marking zp-core "hand-declared, not found by
+    # derivation" would be false: it was found, it simply already had a node.
+    # What stays `declared` is the set derivation cannot speak to at all --
+    # concepts, people, hardware, external services. That is the honest line:
+    # not "who typed it" but "can the workspace confirm or deny it".
+    crate_names = set(by_name)
+    for n in gnodes:
+        if n["id"] in CRATE_NODES or n["id"] in crate_names:
+            n["origin"] = "derived"
+
+    gnodes += [n for n in cnodes + snodes if n["id"] not in declared_ids]
+    all_ids = {n["id"] for n in gnodes}
+    gedges += [e for e in cedges + sedges
+               if e["source"] in all_ids and e["target"] in all_ids
+               and e["source"] != e["target"]]
+
+    # dedupe: a declared edge and a derived edge for the same pair are one edge,
+    # and the declared label wins because it says what the relationship means
+    seen, deduped = set(), []
+    for e in gedges:
+        k = (e["source"], e["target"])
+        if k in seen or (k[1], k[0]) in seen:
+            continue
+        seen.add(k); deduped.append(e)
+    gedges = deduped
+
     states = dict(EVIDENCE)
     states.update(crate_states())          # measured beats hand-authored
-    ids = ecosystem_node_ids()
+    states.update(derived_crate_states(by_name, declared_ids))
+    states.update(sstates)
+
+    ids = [n["id"] for n in gnodes]
     nodes = {}
     for nid in ids:
         if nid in states:
@@ -155,10 +331,17 @@ def main():
     counts = {}
     for v in nodes.values():
         counts[v["state"]] = counts.get(v["state"], 0) + 1
+    origins = {}
+    for n in gnodes:
+        origins[n["origin"]] = origins.get(n["origin"], 0) + 1
+
+    cov = coverage(ids, dirs, by_name)
     payload = {
         "generated_from_commit": head(),
         "node_total": len(ids),
         "counts": counts,
+        "origins": origins,
+        "coverage": cov,
         "nodes": nodes,
     }
     OUT.write_text(
@@ -167,11 +350,85 @@ def main():
         "window.ZP_ECOSYSTEM_STATE = "
         + json.dumps(payload, indent=2) + ";\n")
     print(f"wrote {OUT.relative_to(ROOT)} — {len(ids)} nodes")
-    gnodes, gedges = parse_graph()
-    write_artifact(gnodes, gedges, nodes, counts)
+    write_artifact(gnodes, gedges, nodes, counts, origins, cov)
     for k in ("live", "partial", "unwired", "absent", "unknown"):
         if k in counts:
             print(f"  {k:<9}{counts[k]:>4}")
+
+    # ── the guard ────────────────────────────────────────────────────────
+    # Coverage is printed every run, passing or not, because a number that
+    # only appears on failure trains you to read its absence as success.
+    print(f"\ncrate coverage: {cov['crates_drawn']}/{cov['crates_total']} "
+          f"({100*cov['crates_drawn']//max(cov['crates_total'],1)}%)")
+    rc = 0
+
+    # An unmeasured crate is the live failure mode. Derivation will still draw
+    # it -- that is the point of deriving -- but it draws a node with nothing
+    # behind it, because source-manifest.json has not been regenerated since
+    # the crate appeared. The map would show full coverage over stale data,
+    # which is the exact confusion this whole exercise exists to remove.
+    if cov["crates_unmeasured"]:
+        print(f"  UNMEASURED: {', '.join(cov['crates_unmeasured'])}")
+        print("  in crates/ but absent from docs/lenses/source-manifest.json; "
+              "these draw as nodes with no measurements behind them.")
+        print("  regenerate: python3 docs/lenses/regenerate_source_manifest.py")
+        rc = 1
+
+    # This one is a postcondition, not a discovery: derivation adds a node for
+    # every crate directory, so it should be impossible to trip. It is checked
+    # anyway because "impossible" is a claim about code that keeps changing,
+    # and an unfireable assertion costs one comparison to keep honest.
+    if cov["crates_missing"]:
+        print(f"  MISSING from the graph: {', '.join(cov['crates_missing'])}")
+        print("  derivation dropped a crate it was supposed to add \u2014 this is a bug "
+              "in derive_crate_nodes, not a gap in the map")
+        rc = 1
+
+    if rc:
+        print("  refusing to call this a map of the workspace")
+    return rc
+
+
+def derived_crate_states(by_name, declared_ids):
+    """Same rule as crate_states, applied to the crates nobody had named.
+
+    With one correction the first pass got wrong. `consumed_by == 0` reads as
+    "nothing imports this", which is only a defect for a *library*. A crate
+    with no src/lib.rs exports nothing to import: zp-cli is a binary, zp-bench
+    is a bench harness, and calling either unwired is a false positive dressed
+    as a critical. The library test is derivable, so it is derived rather than
+    hand-excepted -- an exception list would need maintaining and would rot.
+    """
+    out = {}
+    for name, c in by_name.items():
+        if name in declared_ids or name in CRATE_NODES.values():
+            continue                       # already stated by EVIDENCE or crate_states
+        d = ROOT / "crates" / name
+        is_lib = (d / "src/lib.rs").exists()
+        n = len(c.get("consumed_by") or [])
+        loc = c.get("loc", 0)
+
+        if not is_lib:
+            kind = "binary" if (d / "src/main.rs").exists() else "bench or test harness"
+            out[name] = ("unknown",
+                         f"{loc:,} lines, no src/lib.rs \u2014 this is a {kind}, so "
+                         f"'nothing imports it' is expected rather than a defect, and no "
+                         f"first-party evidence was read that it runs",
+                         f"crates/{name}/Cargo.toml; no crates/{name}/src/lib.rs")
+        elif n == 0:
+            tests = (d / "tests").is_dir()
+            tail = ("; its own tests/ directory is the only thing exercising it"
+                    if tests else "; it has no tests/ directory either")
+            out[name] = ("unwired",
+                         f"library crate, {loc:,} lines, and no crate in the workspace "
+                         f"imports it{tail}",
+                         "docs/lenses/source-manifest.json consumed_by")
+        else:
+            out[name] = ("live",
+                         f"{loc:,} lines, {n} dependent crate(s), "
+                         f"primary role {c.get('primary_role', '?')}",
+                         "docs/lenses/source-manifest.json consumed_by")
+    return out
 
 
 
@@ -190,8 +447,8 @@ def main():
 # picture); the browser then separates *measured label boxes*, which is the
 # part that could never have been precomputed.
 
-W_CANVAS = 1320
-H_CANVAS = 1010
+W_CANVAS = 1680
+H_CANVAS = 1180
 
 def parse_graph():
     js = (ROOT / "crates/zp-server/assets/ecosystem.js").read_text()
@@ -253,7 +510,7 @@ def layout(nodes, edges, w=W_CANVAS, h=H_CANVAS, iters=900, seed=7):
     return pos, deg
 
 
-def write_artifact(nodes, edges, states, counts):
+def write_artifact(nodes, edges, states, counts, origins, cov):
     pos, deg = layout(nodes, edges)
     for n in nodes:
         st = states.get(n["id"], {"state": "unknown", "why": None, "cite": None})
@@ -263,19 +520,22 @@ def write_artifact(nodes, edges, states, counts):
         n["state"] = st["state"]
         n["why"] = st.get("why")
         n["cite"] = st.get("cite")
+        n.setdefault("origin", "declared")
     out = ROOT / "dashboard/data/ecosystem-graph.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({
         "generated_from_commit": head(),
         "width": W_CANVAS, "height": H_CANVAS,
         "counts": counts,
+        "origins": origins,
+        "coverage": cov,
         "nodes": nodes, "edges": edges,
     }, indent=2) + "\n")
     print(f"wrote {out.relative_to(ROOT)} — {len(nodes)} nodes, {len(edges)} edges")
-    write_html(nodes, edges, counts, out)
+    write_html(nodes, edges, counts, out, cov)
 
 
-def write_html(nodes, edges, counts, data_path):
+def write_html(nodes, edges, counts, data_path, cov):
     """Render the standalone artifact from the template.
 
     The page is generated rather than hand-maintained on purpose: the graph
@@ -289,6 +549,7 @@ def write_html(nodes, edges, counts, data_path):
             .replace("__NNODES__", str(len(nodes)))
             .replace("__NEDGES__", str(len(edges)))
             .replace("__NUNKNOWN__", str(counts.get("unknown", 0)))
+            .replace("__COVERAGE__", f"{cov['crates_drawn']}/{cov['crates_total']}")
             .replace("__W__", str(W_CANVAS))
             .replace("__H__", str(H_CANVAS)))
     assert "__GRAPH_JSON__" not in html and "__W__" not in html
