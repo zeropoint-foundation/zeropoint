@@ -1,0 +1,995 @@
+{
+  "generated_from_commit": "e8b26a4",
+  "width": 1180,
+  "height": 940,
+  "counts": {
+    "live": 19,
+    "unknown": 26,
+    "absent": 1,
+    "partial": 4,
+    "unwired": 2
+  },
+  "nodes": [
+    {
+      "id": "zeropoint",
+      "label": "ZeroPoint",
+      "type": "core",
+      "desc": "Cryptographic governance primitives for autonomous agent systems",
+      "x": 717.9,
+      "y": 345.7,
+      "deg": 4,
+      "state": "live",
+      "why": "the substrate as a whole; boot path verified",
+      "cite": "crates/zp-server/src/lib.rs"
+    },
+    {
+      "id": "zp-server",
+      "label": "ZP Server",
+      "type": "core",
+      "desc": "Governance API on localhost:17770 \\u2014 routes: tools, codebase, analysis, system",
+      "x": 718.7,
+      "y": 432.3,
+      "deg": 16,
+      "state": "live",
+      "why": "serves /ecosystem itself; the page you are reading is the proof",
+      "cite": "crates/zp-server/src/lib.rs:1625"
+    },
+    {
+      "id": "receipt-chain",
+      "label": "Receipt Chain",
+      "type": "core",
+      "desc": "Tamper-evident hash-linked audit chain \\u2014 single source of truth",
+      "x": 466.9,
+      "y": 472.8,
+      "deg": 12,
+      "state": "live",
+      "why": "append path exercised; chain integrity runtimes always on",
+      "cite": "crates/zp-server/src/lib.rs:2157-2171"
+    },
+    {
+      "id": "audit-store",
+      "label": "Audit Store",
+      "type": "core",
+      "desc": "SQLite-backed chain storage. All state is derived, never stored directly",
+      "x": 514.5,
+      "y": 562.0,
+      "deg": 3,
+      "state": "live",
+      "why": "AuditStore::open_signed with a Genesis-derived audit signer",
+      "cite": "crates/zp-server/src/lib.rs:733-736"
+    },
+    {
+      "id": "mle-star",
+      "label": "MLE STAR",
+      "type": "engine",
+      "desc": "Expertise pre-learning \\u2014 builds statistical profiles from receipt chain observations",
+      "x": 279.0,
+      "y": 523.3,
+      "deg": 4,
+      "state": "live",
+      "why": "mle-star-engine, 2895 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "monte-carlo",
+      "label": "Monte Carlo",
+      "type": "engine",
+      "desc": "Probabilistic risk simulation \\u2014 VaR, CVaR, confidence intervals",
+      "x": 289.9,
+      "y": 565.0,
+      "deg": 2,
+      "state": "live",
+      "why": "monte-carlo-engine, 3495 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "analysis-bridge",
+      "label": "Analysis Bridge",
+      "type": "engine",
+      "desc": "Receipt \\u2192 Observation converter. Ingests chain events into MLE STAR",
+      "x": 370.7,
+      "y": 538.9,
+      "deg": 5,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "codebase-api",
+      "label": "Codebase API",
+      "type": "service",
+      "desc": "/api/v1/codebase/* \\u2014 governed project access with receipt auditing",
+      "x": 606.5,
+      "y": 480.4,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "analysis-api",
+      "label": "Analysis API",
+      "type": "service",
+      "desc": "/api/v1/analysis/* \\u2014 progressive disclosure: index \\u2192 expertise \\u2192 simulate",
+      "x": 569.3,
+      "y": 595.6,
+      "deg": 3,
+      "state": "absent",
+      "why": "the page fetches /api/v1/analysis/index and that route does not exist anywhere in the server; 'Analysis API unreachable' is permanently true",
+      "cite": "grep '/api/v1/analysis/index' crates/zp-server/src/lib.rs -> 0 hits"
+    },
+    {
+      "id": "tools-api",
+      "label": "Tools API",
+      "type": "service",
+      "desc": "/api/v1/tools/* \\u2014 launch, stop, configure, preflight",
+      "x": 509.4,
+      "y": 318.0,
+      "deg": 8,
+      "state": "live",
+      "why": "governed tool registry and launch path",
+      "cite": "crates/zp-server/src/tool_ports.rs:97-109"
+    },
+    {
+      "id": "port-allocator",
+      "label": "Port Allocator",
+      "type": "service",
+      "desc": "Collision-free port assignment. Writes .env.zp per tool",
+      "x": 546.2,
+      "y": 276.4,
+      "deg": 3,
+      "state": "live",
+      "why": "port registry assigns and persists; hot-loop fix landed 2026-07",
+      "cite": "crates/zp-server/src/tool_ports.rs"
+    },
+    {
+      "id": "tool-proxy",
+      "label": "Tool Proxy",
+      "type": "service",
+      "desc": "Reverse proxy \\u2014 governed traffic to tools through ZP",
+      "x": 565.0,
+      "y": 310.2,
+      "deg": 2,
+      "state": "live",
+      "why": "subdomain proxy routes tool pages",
+      "cite": "crates/zp-server/src/lib.rs:1586-1587"
+    },
+    {
+      "id": "sentinel",
+      "label": "ZP Sentinel",
+      "type": "service",
+      "desc": "Network Sentinel on ASUS Merlin \\u2014 DNS filtering, device monitoring, mesh peer",
+      "x": 592.4,
+      "y": 274.3,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "agent-tool",
+      "label": "Agent Tool",
+      "type": "tool",
+      "desc": "Example governed agent tool \\u2014 external LLM backend, allocated port",
+      "x": 415.1,
+      "y": 291.0,
+      "deg": 6,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "zp-hedera",
+      "label": "zp-hedera",
+      "type": "tool",
+      "desc": "Hedera Hashgraph integration \\u2014 native Rust, genesis-bound",
+      "x": 449.1,
+      "y": 283.3,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "ember",
+      "label": "Ember",
+      "type": "tool",
+      "desc": "Local-first generative learning \\u2014 sovereign OpenMAIC fork by Mark Qvist",
+      "x": 656.2,
+      "y": 276.7,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "pentagi",
+      "label": "PentAGI",
+      "type": "tool",
+      "desc": "Pentesting agent \\u2014 Docker, port 8443, multi-provider",
+      "x": 382.3,
+      "y": 299.0,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "zp-core",
+      "label": "zp-core",
+      "type": "crate",
+      "desc": "AuditEntry, ActorId, PolicyDecision \\u2014 foundation types",
+      "x": 901.6,
+      "y": 497.2,
+      "deg": 2,
+      "state": "live",
+      "why": "zp-core, 9285 lines, 25 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-audit",
+      "label": "zp-audit",
+      "type": "crate",
+      "desc": "ChainBuilder, AuditStore, chain verification",
+      "x": 904.1,
+      "y": 463.1,
+      "deg": 2,
+      "state": "live",
+      "why": "zp-audit, 6822 lines, 10 dependent crate(s), primary role verifying",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-keys",
+      "label": "zp-keys",
+      "type": "crate",
+      "desc": "Sovereignty providers, Genesis ceremony, biometric/HW wallet",
+      "x": 772.8,
+      "y": 602.2,
+      "deg": 2,
+      "state": "live",
+      "why": "zp-keys, 12504 lines, 6 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-trust",
+      "label": "zp-trust",
+      "type": "crate",
+      "desc": "Trust scoring and attestation framework",
+      "x": 902.4,
+      "y": 430.3,
+      "deg": 1,
+      "state": "live",
+      "why": "zp-trust, 2377 lines, 7 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-receipt",
+      "label": "zp-receipt",
+      "type": "crate",
+      "desc": "Receipt types and Grade A/B/C generation",
+      "x": 887.4,
+      "y": 369.3,
+      "deg": 1,
+      "state": "live",
+      "why": "zp-receipt, 7731 lines, 17 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-policy",
+      "label": "zp-policy",
+      "type": "crate",
+      "desc": "WASM policy engine \\u2014 governance gate for all actions",
+      "x": 819.7,
+      "y": 567.2,
+      "deg": 3,
+      "state": "live",
+      "why": "zp-policy, 4614 lines, 6 dependent crate(s), primary role gating",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-engine",
+      "label": "zp-engine",
+      "type": "crate",
+      "desc": "Core governance engine orchestrating policy evaluation",
+      "x": 829.7,
+      "y": 505.0,
+      "deg": 2,
+      "state": "live",
+      "why": "zp-engine, 6200 lines, 4 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "sovereignty",
+      "label": "Sovereignty",
+      "type": "concept",
+      "desc": "Genesis secret storage \\u2014 provider controls HOW stored, WHO unlocks",
+      "x": 696.9,
+      "y": 660.7,
+      "deg": 6,
+      "state": "partial",
+      "why": "load_sovereign_root is a process-scoped OnceLock warmed once at boot; no runtime authority decision re-invokes a provider",
+      "cite": "crates/zp-keys/src/sovereignty/mod.rs:636-653"
+    },
+    {
+      "id": "touchid",
+      "label": "Touch ID",
+      "type": "hardware",
+      "desc": "v0.1 application-layer via bioutil. v0.2 = Secure Enclave",
+      "x": 859.5,
+      "y": 620.7,
+      "deg": 2,
+      "state": "partial",
+      "why": "provider exists and is exercised once at boot, never per action",
+      "cite": "crates/zp-keys/src/sovereignty/touchid.rs:575-616"
+    },
+    {
+      "id": "trezor",
+      "label": "Trezor",
+      "type": "hardware",
+      "desc": "CipherKeyValue wrapping key derivation",
+      "x": 805.8,
+      "y": 644.7,
+      "deg": 1,
+      "state": "partial",
+      "why": "same OnceLock posture as touchid",
+      "cite": "crates/zp-keys/src/sovereignty/mod.rs:649-653"
+    },
+    {
+      "id": "genesis",
+      "label": "Genesis Ceremony",
+      "type": "concept",
+      "desc": "32-byte Ed25519 seed generation. BIP-39 mnemonic backup",
+      "x": 499.9,
+      "y": 662.2,
+      "deg": 4,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "quorum",
+      "label": "Quorum Sovereignty",
+      "type": "concept",
+      "desc": "M-of-N multi-device signing \\u2014 Shamir + threshold sigs (future)",
+      "x": 571.8,
+      "y": 665.0,
+      "deg": 1,
+      "state": "unwired",
+      "why": "split_secret and reconstruct_secret have no callers outside their own module; quorum Genesis is built and tested but not reachable",
+      "cite": "docs/design/NON-DELEGABLE-AUTHORITY-2026-08.md \u00a711.1"
+    },
+    {
+      "id": "ken",
+      "label": "Ken Romero",
+      "type": "person",
+      "desc": "Founder, ThinkStream Labs. Portable trust for the Agentic Age",
+      "x": 896.4,
+      "y": 398.3,
+      "deg": 3,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "apollo3",
+      "label": "APOLLO-3",
+      "type": "hardware",
+      "desc": "Mac Mini @ 192.168.1.170 \\u2014 available for ZP Core server",
+      "x": 855.5,
+      "y": 314.3,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "artemis",
+      "label": "ARTEMIS",
+      "type": "hardware",
+      "desc": "M4 MacBook Pro \\u2014 travel system + clean install testing",
+      "x": 894.8,
+      "y": 536.6,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "zp-playground",
+      "label": "zp-playground",
+      "type": "external",
+      "desc": "Hetzner CX23, Helsinki \\u2014 remote ZP server",
+      "x": 873.6,
+      "y": 340.5,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "anthropic",
+      "label": "Anthropic",
+      "type": "external",
+      "desc": "External LLM provider for a governed tool",
+      "x": 283.5,
+      "y": 381.6,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "cloudflare",
+      "label": "Cloudflare",
+      "type": "external",
+      "desc": "Workers hosting zeropoint.global + thinkstreamlabs.ai",
+      "x": 797.4,
+      "y": 296.7,
+      "deg": 1,
+      "state": "unwired",
+      "why": "zp-cloudflare has zero dependents in any Cargo.toml",
+      "cite": "source-manifest consumed_by == 0"
+    },
+    {
+      "id": "ed25519",
+      "label": "Ed25519",
+      "type": "concept",
+      "desc": "Signature scheme \\u2014 all receipts cryptographically signed",
+      "x": 381.5,
+      "y": 593.3,
+      "deg": 2,
+      "state": "live",
+      "why": "KEEL II.1 signing primitive, in use on the audit and gate signers",
+      "cite": "crates/zp-keys/src/audit_signer.rs:52"
+    },
+    {
+      "id": "blake3",
+      "label": "BLAKE3",
+      "type": "concept",
+      "desc": "Hash function \\u2014 chain linking, content addressing",
+      "x": 334.6,
+      "y": 464.6,
+      "deg": 2,
+      "state": "live",
+      "why": "KEEL II.1 content hash, in use for chain linkage and module hashing",
+      "cite": "crates/zp-policy/src/wasm_runtime.rs:90"
+    },
+    {
+      "id": "progressive-disclosure",
+      "label": "Progressive Disclosure",
+      "type": "concept",
+      "desc": "Three-tier: index \\u2192 details \\u2192 deep resources",
+      "x": 651.9,
+      "y": 664.1,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "process-lifecycle",
+      "label": "Process Lifecycle",
+      "type": "concept",
+      "desc": "PID tracking, stop-before-start, process group isolation",
+      "x": 689.1,
+      "y": 280.8,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "sqlite",
+      "label": "SQLite",
+      "type": "datastore",
+      "desc": "Audit chain persistence \\u2014 append-only, single-writer, WAL mode",
+      "x": 453.8,
+      "y": 656.8,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "postgres-ic",
+      "label": "PostgreSQL (IC)",
+      "type": "datastore",
+      "desc": "A governed tool\\u2019s operational database \\u2014 conversation state, tool configs",
+      "x": 302.2,
+      "y": 335.4,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "genesis-json",
+      "label": "genesis.json",
+      "type": "datastore",
+      "desc": "Genesis record \\u2014 operator identity, sovereignty provider, ceremony timestamp",
+      "x": 386.4,
+      "y": 647.1,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "env-zp",
+      "label": ".env.zp",
+      "type": "datastore",
+      "desc": "Per-tool sidecar \\u2014 ZP-assigned port, auth token, env var overrides",
+      "x": 623.2,
+      "y": 274.8,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "enrollment-files",
+      "label": "Enrollment Files",
+      "type": "datastore",
+      "desc": "{mode}_enrollment.json + {mode}_genesis.encrypted \\u2014 per-provider sovereignty data",
+      "x": 614.2,
+      "y": 665.7,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "docker",
+      "label": "Docker",
+      "type": "runtime",
+      "desc": "Container runtime for governed tools and their datastores",
+      "x": 339.0,
+      "y": 310.6,
+      "deg": 3,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "wasm-runtime",
+      "label": "WASM Runtime",
+      "type": "runtime",
+      "desc": "Policy engine execution sandbox \\u2014 deterministic, isolated governance evaluation",
+      "x": 765.8,
+      "y": 655.7,
+      "deg": 1,
+      "state": "partial",
+      "why": "WasmRuntime::load_module computes a content hash and instantiates without comparing it; verify_integrity re-reads metadata, not bytes",
+      "cite": "crates/zp-policy/src/wasm_runtime.rs:88-127"
+    },
+    {
+      "id": "piper-tts",
+      "label": "Piper TTS",
+      "type": "runtime",
+      "desc": "Voice synthesis \\u2014 Kusal + Amy models, localhost:8473",
+      "x": 750.1,
+      "y": 287.2,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "hedera",
+      "label": "Hedera Hashgraph",
+      "type": "external",
+      "desc": "DLT target for zp-hedera \\u2014 receipt anchoring, public verifiability",
+      "x": 319.8,
+      "y": 395.5,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "bip39",
+      "label": "BIP-39",
+      "type": "concept",
+      "desc": "Mnemonic word list standard \\u2014 24-word recovery phrase for Genesis secret",
+      "x": 386.4,
+      "y": 647.1,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "receipt-flow",
+      "label": "Receipt Flow",
+      "type": "concept",
+      "desc": "Action \\u2192 Receipt \\u2192 Chain \\u2192 Store \\u2192 Bridge \\u2192 Observation \\u2192 Profile",
+      "x": 376.8,
+      "y": 371.6,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "governance-gate",
+      "label": "Governance Gate",
+      "type": "concept",
+      "desc": "Every action passes through policy evaluation before execution",
+      "x": 698.1,
+      "y": 555.3,
+      "deg": 3,
+      "state": "live",
+      "why": "every spawn routes through GovernanceGate::evaluate and the decision is chain-sealed before the side effect",
+      "cite": "crates/zp-host/src/system.rs:79-155"
+    },
+    {
+      "id": "exec-ws",
+      "label": "Exec WebSocket",
+      "type": "service",
+      "desc": "/ws/exec \\u2014 governed command execution with streamed output and receipt audit",
+      "x": 477.7,
+      "y": 410.1,
+      "deg": 3,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "ken",
+      "target": "zeropoint",
+      "label": "FOUNDED"
+    },
+    {
+      "source": "zeropoint",
+      "target": "receipt-chain",
+      "label": "BUILT_ON"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "audit-store",
+      "label": "PERSISTED_IN"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "ed25519",
+      "label": "SIGNED_WITH"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "blake3",
+      "label": "LINKED_WITH"
+    },
+    {
+      "source": "zp-server",
+      "target": "tools-api",
+      "label": "EXPOSES"
+    },
+    {
+      "source": "zp-server",
+      "target": "codebase-api",
+      "label": "EXPOSES"
+    },
+    {
+      "source": "zp-server",
+      "target": "analysis-api",
+      "label": "EXPOSES"
+    },
+    {
+      "source": "zp-server",
+      "target": "tool-proxy",
+      "label": "INCLUDES"
+    },
+    {
+      "source": "zp-server",
+      "target": "port-allocator",
+      "label": "INCLUDES"
+    },
+    {
+      "source": "zp-server",
+      "target": "audit-store",
+      "label": "OWNS"
+    },
+    {
+      "source": "analysis-bridge",
+      "target": "receipt-chain",
+      "label": "INGESTS"
+    },
+    {
+      "source": "analysis-bridge",
+      "target": "mle-star",
+      "label": "FEEDS"
+    },
+    {
+      "source": "mle-star",
+      "target": "monte-carlo",
+      "label": "INFORMS"
+    },
+    {
+      "source": "analysis-api",
+      "target": "analysis-bridge",
+      "label": "TRIGGERS"
+    },
+    {
+      "source": "analysis-api",
+      "target": "progressive-disclosure",
+      "label": "IMPLEMENTS"
+    },
+    {
+      "source": "tools-api",
+      "target": "agent-tool",
+      "label": "GOVERNS"
+    },
+    {
+      "source": "tools-api",
+      "target": "zp-hedera",
+      "label": "GOVERNS"
+    },
+    {
+      "source": "tools-api",
+      "target": "ember",
+      "label": "GOVERNS"
+    },
+    {
+      "source": "tools-api",
+      "target": "pentagi",
+      "label": "GOVERNS"
+    },
+    {
+      "source": "agent-tool",
+      "target": "anthropic",
+      "label": "USES_LLM"
+    },
+    {
+      "source": "tools-api",
+      "target": "receipt-chain",
+      "label": "EMITS_TO"
+    },
+    {
+      "source": "tools-api",
+      "target": "process-lifecycle",
+      "label": "IMPLEMENTS"
+    },
+    {
+      "source": "tool-proxy",
+      "target": "agent-tool",
+      "label": "PROXIES"
+    },
+    {
+      "source": "port-allocator",
+      "target": "agent-tool",
+      "label": "ASSIGNS_PORT"
+    },
+    {
+      "source": "codebase-api",
+      "target": "receipt-chain",
+      "label": "AUDITS_VIA"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-core",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-audit",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-keys",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-policy",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-trust",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-engine",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-receipt",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-audit",
+      "target": "zp-core",
+      "label": "DEPENDS"
+    },
+    {
+      "source": "zp-keys",
+      "target": "sovereignty",
+      "label": "PROVIDES"
+    },
+    {
+      "source": "sovereignty",
+      "target": "touchid",
+      "label": "PROVIDER"
+    },
+    {
+      "source": "sovereignty",
+      "target": "trezor",
+      "label": "PROVIDER"
+    },
+    {
+      "source": "sovereignty",
+      "target": "genesis",
+      "label": "CEREMONY"
+    },
+    {
+      "source": "genesis",
+      "target": "ed25519",
+      "label": "GENERATES"
+    },
+    {
+      "source": "quorum",
+      "target": "sovereignty",
+      "label": "EVOLVES"
+    },
+    {
+      "source": "ken",
+      "target": "artemis",
+      "label": "OPERATES"
+    },
+    {
+      "source": "ken",
+      "target": "apollo3",
+      "label": "OPERATES"
+    },
+    {
+      "source": "zp-playground",
+      "target": "zp-server",
+      "label": "RUNS"
+    },
+    {
+      "source": "sentinel",
+      "target": "zeropoint",
+      "label": "PART_OF"
+    },
+    {
+      "source": "cloudflare",
+      "target": "zeropoint",
+      "label": "HOSTS"
+    },
+    {
+      "source": "artemis",
+      "target": "touchid",
+      "label": "HAS"
+    },
+    {
+      "source": "audit-store",
+      "target": "sqlite",
+      "label": "BACKED_BY"
+    },
+    {
+      "source": "agent-tool",
+      "target": "postgres-ic",
+      "label": "STORES_IN"
+    },
+    {
+      "source": "port-allocator",
+      "target": "env-zp",
+      "label": "WRITES"
+    },
+    {
+      "source": "genesis",
+      "target": "genesis-json",
+      "label": "PERSISTS_TO"
+    },
+    {
+      "source": "sovereignty",
+      "target": "enrollment-files",
+      "label": "PERSISTS_TO"
+    },
+    {
+      "source": "genesis",
+      "target": "bip39",
+      "label": "ENCODES_VIA"
+    },
+    {
+      "source": "agent-tool",
+      "target": "docker",
+      "label": "RUNS_ON"
+    },
+    {
+      "source": "ember",
+      "target": "piper-tts",
+      "label": "USES_TTS"
+    },
+    {
+      "source": "pentagi",
+      "target": "docker",
+      "label": "RUNS_ON"
+    },
+    {
+      "source": "postgres-ic",
+      "target": "docker",
+      "label": "RUNS_ON"
+    },
+    {
+      "source": "zp-policy",
+      "target": "wasm-runtime",
+      "label": "EXECUTES_IN"
+    },
+    {
+      "source": "zp-server",
+      "target": "piper-tts",
+      "label": "INTEGRATES"
+    },
+    {
+      "source": "zp-hedera",
+      "target": "hedera",
+      "label": "ANCHORS_TO"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "hedera",
+      "label": "VERIFIABLE_ON"
+    },
+    {
+      "source": "tools-api",
+      "target": "receipt-flow",
+      "label": "INITIATES"
+    },
+    {
+      "source": "receipt-flow",
+      "target": "receipt-chain",
+      "label": "PRODUCES"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "analysis-bridge",
+      "label": "FLOWS_TO"
+    },
+    {
+      "source": "analysis-bridge",
+      "target": "mle-star",
+      "label": "TRANSFORMS_FOR"
+    },
+    {
+      "source": "mle-star",
+      "target": "monte-carlo",
+      "label": "PARAMETERIZES"
+    },
+    {
+      "source": "zp-engine",
+      "target": "governance-gate",
+      "label": "ENFORCES"
+    },
+    {
+      "source": "governance-gate",
+      "target": "zp-policy",
+      "label": "EVALUATES_VIA"
+    },
+    {
+      "source": "governance-gate",
+      "target": "receipt-chain",
+      "label": "RECORDS_IN"
+    },
+    {
+      "source": "zp-server",
+      "target": "exec-ws",
+      "label": "EXPOSES"
+    },
+    {
+      "source": "exec-ws",
+      "target": "receipt-chain",
+      "label": "AUDITS_VIA"
+    },
+    {
+      "source": "exec-ws",
+      "target": "blake3",
+      "label": "HASHES_WITH"
+    }
+  ]
+}
