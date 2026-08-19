@@ -922,6 +922,21 @@ def main():
     total = len(EDGES)
     classified = by_status["live"] + by_status["tied_off"]
 
+    tieoff_provenance = {"declared_tieoff": 0, "pin_exception": 0,
+                         "reserved_prefix": 0, "other": 0}
+    for e in EDGES:
+        if e.get("status") != "tied_off":
+            continue
+        if e.get("detector") == "connection-map RESERVED_RECEIPT_PREFIXES":
+            tieoff_provenance["reserved_prefix"] += 1
+        elif e.get("kind") == "pin_exception":
+            tieoff_provenance["pin_exception"] += 1
+        elif (e.get("note") or "").startswith("["):
+            # tieoffs.toml stamps its disposition as a leading [tag].
+            tieoff_provenance["declared_tieoff"] += 1
+        else:
+            tieoff_provenance["other"] += 1
+
     try:
         commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root,
                                 capture_output=True, text=True).stdout.strip()
@@ -949,6 +964,18 @@ def main():
             "live_only": round(by_status["live"] / total, 4) if total else 0.0,
             "tied_off_share": round(by_status["tied_off"] / total, 4) if total else 0.0,
         },
+        # Where the tie-offs come from, because they are not one mechanism.
+        # tieoffs.toml's own header states the distinction it is built on:
+        # "This file is NOT an allowlist. An allowlist says 'ignore this.' A
+        # tie-off says 'this absence is deliberate, here is why, and here is
+        # what would reopen it.'" Only entries in that file carry a
+        # disposition, a declared date and (for deferred/open) a reopen
+        # condition. Reserved receipt prefixes carry a source comment, which
+        # is prose a reader can find and a tool cannot check. Pin exceptions
+        # carry a reason at the site. All three suppress a defect and all
+        # three count identically toward maturity; printing the split is what
+        # keeps "433 tied off" from reading as 433 deliberations.
+        "tieoff_provenance": tieoff_provenance,
         "by_kind": {f"{k}/{s}": n for (k, s), n in sorted(by_kind.items())},
         "dropped": DROPPED,
         "connections": EDGES,
@@ -969,6 +996,14 @@ def main():
           f"{(by_status['live'] / total * 100 if total else 0):.1f}%"
           f"   <- coverage; the line above includes "
           f"{by_status['tied_off']} tie-offs")
+    tp = tieoff_provenance
+    print(f"\n  tie-offs by provenance — only the first carries a disposition,")
+    print(f"  a declared date and a reopen condition:")
+    print(f"    tieoffs.toml (full Stage-1t discipline)   {tp['declared_tieoff']:>5}")
+    print(f"    pin exception (reason at the site)        {tp['pin_exception']:>5}")
+    print(f"    reserved prefix (reason in a comment)     {tp['reserved_prefix']:>5}")
+    if tp["other"]:
+        print(f"    unclassified                              {tp['other']:>5}")
     print()
     for (k, s), n in sorted(by_kind.items()):
         print(f"  {k:<20} {s:<9} {n:>5}")

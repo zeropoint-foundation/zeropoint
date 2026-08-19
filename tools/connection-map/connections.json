@@ -1,5 +1,5 @@
 {
-  "generated_from_commit": "c756728",
+  "generated_from_commit": "9f0e160",
   "governed_docs": 176,
   "totals": {
     "connections": 1298,
@@ -9,6 +9,12 @@
     "maturity": 0.7835,
     "live_only": 0.4499,
     "tied_off_share": 0.3336
+  },
+  "tieoff_provenance": {
+    "declared_tieoff": 1,
+    "pin_exception": 60,
+    "reserved_prefix": 372,
+    "other": 0
   },
   "by_kind": {
     "chain_to_registry/live": 85,
@@ -11695,7 +11701,7 @@
       "target": "c756728",
       "status": "defect",
       "detector": null,
-      "note": "444 relevant files changed since it was written (165 commits), declared source c756728 dated 2026-08-17",
+      "note": "3 relevant files changed since it was written (1 commits), declared source c756728 dated 2026-08-17",
       "site": "docs/lenses/manifest.json"
     },
     {
@@ -11704,7 +11710,7 @@
       "target": "c756728",
       "status": "defect",
       "detector": null,
-      "note": "429 relevant files changed since it was written (154 commits), declared source c756728 dated 2026-08-17",
+      "note": "3 relevant files changed since it was written (1 commits), declared source c756728 dated 2026-08-17",
       "site": "docs/lenses/source-manifest.json"
     },
     {
@@ -11713,7 +11719,7 @@
       "target": "c756728",
       "status": "defect",
       "detector": null,
-      "note": "3 relevant files changed since it was written (3 commits), declared source c756728 dated 2026-08-17",
+      "note": "3 relevant files changed since it was written (1 commits), declared source c756728 dated 2026-08-17",
       "site": "tools/connection-map/connections.json"
     }
   ]
