@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ZeroPoint — Ecosystem Map</title>
 <style>
-  .viz-root{ color-scheme:light;
+  :root, .viz-root{ color-scheme:light;
     --surface-1:#fcfcfb; --surface-2:#f2f2f0; --surface-3:#e8e8e4;
     --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#77766f; --rule:#dcdcd6;
     --st-good:#0ca30c; --st-warn:#fab219; --st-crit:#d03b3b; --edge:#c9c9c2;
@@ -12,11 +12,12 @@
     --t-external:#eab308; --t-hardware:#f97316; --t-person:#ec4899; --t-service:#22d3ee;
     --t-tool:#22c55e; --t-datastore:#94a3b8; --t-runtime:#a78bfa;
     --halo:#fcfcfb; }
-  @media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])) .viz-root{ color-scheme:dark;
+  @media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])),
+    :root:where(:not([data-theme="light"])) .viz-root{ color-scheme:dark;
     --surface-1:#111114; --surface-2:#18181c; --surface-3:#242429;
     --text-primary:#f4f4f5; --text-secondary:#a1a1aa; --text-muted:#71717a; --rule:#2a2a30; --edge:#2f2f36;
     --halo:#18181c; } }
-  :root[data-theme="dark"] .viz-root{ color-scheme:dark;
+  :root[data-theme="dark"], :root[data-theme="dark"] .viz-root{ color-scheme:dark;
     --surface-1:#111114; --surface-2:#18181c; --surface-3:#242429;
     --text-primary:#f4f4f5; --text-secondary:#a1a1aa; --text-muted:#71717a; --rule:#2a2a30; --edge:#2f2f36;
     --halo:#18181c; }
@@ -108,10 +109,11 @@
 </div>
 
 <footer id="ft"></footer>
-</div></div><div class="tip" id="tip"></div>
+<div class="tip" id="tip"></div>
+</div></div>
 <script>
 const G = {
-  "generated_from_commit": "646db30",
+  "generated_from_commit": "cb2dcc3",
   "width": 1320,
   "height": 1010,
   "counts": {
