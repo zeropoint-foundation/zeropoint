@@ -184,6 +184,11 @@ EMIT_FORMAT_RE = re.compile(
 )
 
 
+EMIT_CONTEXT_RE = re.compile(
+    r'emit_receipt(?:_to_store)?\s*\(|\bemit\s*\(|SystemEvent\s*\{'
+    r'|AuditAction::|append\s*\(')
+
+
 def collect_emitted_receipts(root):
     """Scan crates/**/*.rs for receipt-emission sites.
 
@@ -208,8 +213,23 @@ def collect_emitted_receipts(root):
             txt = path.read_text(errors="replace")
         except OSError:
             continue
-        for pat in (EMIT_LITERAL_RE, EMIT_SYSTEMEVENT_RE, EMIT_FORMAT_RE):
+        for pat in (EMIT_LITERAL_RE, EMIT_SYSTEMEVENT_RE):
             for m in pat.finditer(txt):
+                emitted.add(m.group(1))
+        # EMIT_FORMAT_RE matches any `format!("a:b:{}", ...)`, and that
+        # shape also describes capability strings: zp-cli builds a role's
+        # capability list with `format!("mail:read:{}", mb)`
+        # (commands.rs:1405). Counting those made three illustrative
+        # personal names in SAGE-WIZARD-SCRIPT read as "code emits this
+        # receipt", which advertised a mechanical registry fix that did
+        # not exist -- inspected and reported empty in
+        # DYNAMICS-DISCIPLINE-2026-08 §"Corollary, same day". Adding them
+        # would have registered a capability vocabulary as a receipt
+        # vocabulary. Require an emit call in the preceding window, so the
+        # forward direction agrees with collect_emitted_sites about what
+        # an emission is.
+        for m in EMIT_FORMAT_RE.finditer(txt):
+            if EMIT_CONTEXT_RE.search(txt, max(0, m.start() - 160), m.start()):
                 emitted.add(m.group(1))
     return emitted
 
@@ -688,6 +708,24 @@ def collect_derived_artifacts(root):
             # anything lands after it -- caught on this detector's first
             # run against its own output. Staleness follows from inputs
             # changing, not from time passing.
+            # An artifact that records wall-clock time and no source
+            # commit cannot have its freshness checked against repo state
+            # at all -- the git-log proxy below answers a different
+            # question ("has anything landed since you last committed
+            # this file"), and answers it misleadingly: a manifest
+            # regenerated thirty seconds ago still reports 165 commits of
+            # drift because the regenerator never stamps what it read.
+            # This branch was written for exactly that case and sat below
+            # an unconditional `continue`, so it had never executed.
+            if stamp and not declared:
+                edge("derived_artifact", rel, f"{stamp}={data[stamp]}", "defect",
+                     detector="connection-map derived_artifact",
+                     note=("records wall-clock time, not a source commit -- "
+                           "freshness cannot be checked against repo state. "
+                           "Fix in the regenerator: stamp the commit it read."),
+                     site=rel)
+                continue
+
             last = subprocess.run(
                 ["git", "log", "-1", "--format=%H", "--", rel],
                 cwd=root, capture_output=True, text=True).stdout.strip()
@@ -723,12 +761,6 @@ def collect_derived_artifacts(root):
                            f"written ({behind} commits){age}"),
                      site=rel)
             continue
-
-            if stamp:
-                edge("derived_artifact", rel, f"{stamp}={data[stamp]}", "defect",
-                     note=("records wall-clock time, not a source commit -- "
-                           "freshness cannot be checked against repo state"),
-                     site=rel)
 
 
 # ── declared tie-offs ───────────────────────────────────────────────────
@@ -905,6 +937,17 @@ def main():
             "tied_off": by_status["tied_off"],
             "defect": by_status["defect"],
             "maturity": round(classified / total, 4) if total else 0.0,
+            # Reported beside maturity, always. Maturity counts a tie-off
+            # -- an honest acknowledgement that something is known-unbuilt
+            # -- as classified, so it rises when the corpus writes down
+            # what it has not built. Between 2026-07-26 and 2026-08-18
+            # tie-offs grew 10.6x and live connections 2.05x, and roughly
+            # 30 of the 44.8 headline points were tie-off growth. One
+            # number is a coverage claim and the other is a documentation
+            # claim; printing only the first is what made them
+            # indistinguishable.
+            "live_only": round(by_status["live"] / total, 4) if total else 0.0,
+            "tied_off_share": round(by_status["tied_off"] / total, 4) if total else 0.0,
         },
         "by_kind": {f"{k}/{s}": n for (k, s), n in sorted(by_kind.items())},
         "dropped": DROPPED,
@@ -920,7 +963,12 @@ def main():
     print(f"  tied off {by_status['tied_off']:>5}")
     print(f"  defect   {by_status['defect']:>5}")
     print(f"  maturity {classified}/{total} = "
-          f"{(classified / total * 100 if total else 0):.1f}%")
+          f"{(classified / total * 100 if total else 0):.1f}%"
+          f"   (live+tied)")
+    print(f"  live only {by_status['live']}/{total} = "
+          f"{(by_status['live'] / total * 100 if total else 0):.1f}%"
+          f"   <- coverage; the line above includes "
+          f"{by_status['tied_off']} tie-offs")
     print()
     for (k, s), n in sorted(by_kind.items()):
         print(f"  {k:<20} {s:<9} {n:>5}")

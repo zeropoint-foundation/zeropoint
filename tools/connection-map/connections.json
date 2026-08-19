@@ -1,27 +1,29 @@
 {
-  "generated_from_commit": "1db3c74",
-  "governed_docs": 171,
+  "generated_from_commit": "c756728",
+  "governed_docs": 176,
   "totals": {
-    "connections": 1287,
-    "live": 581,
+    "connections": 1298,
+    "live": 584,
     "tied_off": 433,
-    "defect": 273,
-    "maturity": 0.7879
+    "defect": 281,
+    "maturity": 0.7835,
+    "live_only": 0.4499,
+    "tied_off_share": 0.3336
   },
   "by_kind": {
     "chain_to_registry/live": 85,
     "code_to_artifact/defect": 129,
     "code_to_artifact/live": 35,
     "code_to_corpus/live": 6,
-    "corpus_to_chain/defect": 141,
-    "corpus_to_chain/live": 172,
+    "corpus_to_chain/defect": 149,
+    "corpus_to_chain/live": 173,
     "corpus_to_chain/tied_off": 372,
-    "corpus_to_code/live": 83,
+    "corpus_to_code/live": 84,
     "corpus_to_keel/live": 39,
     "crate_dep/live": 134,
     "derived_artifact/defect": 3,
     "derived_artifact/tied_off": 1,
-    "pin/live": 27,
+    "pin/live": 28,
     "pin_exception/tied_off": 60
   },
   "dropped": [
@@ -1329,6 +1331,15 @@
     },
     {
       "kind": "corpus_to_code",
+      "source": "docs/DELIBERATION-LOG-2026-08.md",
+      "target": "crates/zp-server/src/substrate_validate.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/DELIBERATION-LOG-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_code",
       "source": "docs/DISCIPLINE-PINS.md",
       "target": "crates/zp-keys/src/keyring.rs",
       "status": "live",
@@ -2445,6 +2456,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/HOST-ATTRIBUTION-CLOSURE-2026-08.md",
+      "target": "allowed:unknown",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/HOST-ATTRIBUTION-CLOSURE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
       "target": "arc:map:abandoned",
       "status": "tied_off",
@@ -3174,6 +3194,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08.md",
+      "target": "cognitive:initiative:warranted",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/KEEL-2026-07.md",
       "target": "cognitive:input:composed",
       "status": "live",
@@ -3189,6 +3218,15 @@
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08.md",
+      "target": "cognitive:precedent",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3828,6 +3866,51 @@
       "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
       "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
       "site": "docs/design/EMBODIMENT-STATE-PROTOCOL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md",
+      "target": "extension:eviction:complete",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md",
+      "target": "extension:eviction:confluent",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md",
+      "target": "extension:eviction:divergent",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md",
+      "target": "extension:eviction:planned",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md",
+      "target": "extension:inverse:invoked",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/EXTENSION-EVICTION-CEREMONY-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5553,8 +5636,8 @@
       "source": "docs/SAGE-WIZARD-SCRIPT-2026-05.md",
       "target": "mail:read:katie",
       "status": "defect",
-      "detector": "connection-map collect_emitted_receipts",
-      "note": "registry gap: code emits this receipt but KNOWN_RECEIPT_PREFIXES does not declare it \u2014 fix by adding to the registry",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/SAGE-WIZARD-SCRIPT-2026-05.md"
     },
     {
@@ -5562,8 +5645,8 @@
       "source": "docs/SAGE-WIZARD-SCRIPT-2026-05.md",
       "target": "mail:read:ken",
       "status": "defect",
-      "detector": "connection-map collect_emitted_receipts",
-      "note": "registry gap: code emits this receipt but KNOWN_RECEIPT_PREFIXES does not declare it \u2014 fix by adding to the registry",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/SAGE-WIZARD-SCRIPT-2026-05.md"
     },
     {
@@ -5571,8 +5654,8 @@
       "source": "docs/SAGE-WIZARD-SCRIPT-2026-05.md",
       "target": "mail:read:louise",
       "status": "defect",
-      "detector": "connection-map collect_emitted_receipts",
-      "note": "registry gap: code emits this receipt but KNOWN_RECEIPT_PREFIXES does not declare it \u2014 fix by adding to the registry",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/SAGE-WIZARD-SCRIPT-2026-05.md"
     },
     {
@@ -5583,6 +5666,15 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/MEDIA-PROVENANCE-INTEROP-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08.md",
+      "target": "memory:consolidation",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6306,12 +6398,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/SAGE-WIZARD-SCRIPT-2026-05.md",
+      "source": "docs/DELIBERATION-LOG-2026-08.md",
       "target": "onboard:complete",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/SAGE-WIZARD-SCRIPT-2026-05.md"
+      "site": "docs/DELIBERATION-LOG-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6351,12 +6443,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/SAGE-WIZARD-SCRIPT-2026-05.md",
+      "source": "docs/DELIBERATION-LOG-2026-08.md",
       "target": "onboard:start",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/SAGE-WIZARD-SCRIPT-2026-05.md"
+      "site": "docs/DELIBERATION-LOG-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6678,8 +6770,8 @@
       "source": "docs/ZEROPOINT-DESIGN-DISCIPLINES.md",
       "target": "policy:*",
       "status": "defect",
-      "detector": "connection-map collect_emitted_receipts",
-      "note": "registry gap: code emits this receipt but KNOWN_RECEIPT_PREFIXES does not declare it \u2014 fix by adding to the registry",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/ZEROPOINT-DESIGN-DISCIPLINES.md"
     },
     {
@@ -7629,12 +7721,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md",
+      "source": "docs/design/DYNAMICS-DISCIPLINE-2026-08.md",
       "target": "regent:precedent:*",
       "status": "defect",
       "detector": "connection-map collect_emitted_receipts",
       "note": "registry gap: code emits this receipt but KNOWN_RECEIPT_PREFIXES does not declare it \u2014 fix by adding to the registry",
-      "site": "docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md"
+      "site": "docs/design/DYNAMICS-DISCIPLINE-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -8142,12 +8234,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/MODEL-DOSSIER-2026-07.md",
+      "source": "docs/design/MODEL-ADMISSION-PIPELINE-2026-08.md",
       "target": "substrate:characterization:validated",
       "status": "defect",
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
-      "site": "docs/design/MODEL-DOSSIER-2026-07.md"
+      "site": "docs/design/MODEL-ADMISSION-PIPELINE-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -8718,21 +8810,21 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/loop_runner.rs:2089",
+      "source": "crates/zp-regent/src/loop_runner.rs:2196",
       "target": "emission_coherence:finding",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/loop_runner.rs:2089"
+      "site": "crates/zp-regent/src/loop_runner.rs:2196"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/loop_runner.rs:2127",
+      "source": "crates/zp-regent/src/loop_runner.rs:2234",
       "target": "emission_coherence:summary",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/loop_runner.rs:2127"
+      "site": "crates/zp-regent/src/loop_runner.rs:2234"
     },
     {
       "kind": "chain_to_registry",
@@ -11490,6 +11582,15 @@
     },
     {
       "kind": "pin",
+      "source": "read_state_files_must_have_a_writer",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/read_state_files_must_have_a_writer.rs"
+    },
+    {
+      "kind": "pin",
       "source": "severity_thresholds_have_one_source",
       "target": "workspace",
       "status": "live",
@@ -11591,28 +11692,28 @@
     {
       "kind": "derived_artifact",
       "source": "docs/lenses/manifest.json",
-      "target": "4cb9e4436932",
+      "target": "c756728",
       "status": "defect",
       "detector": null,
-      "note": "442 relevant files changed since it was written (160 commits)",
+      "note": "444 relevant files changed since it was written (165 commits), declared source c756728 dated 2026-08-17",
       "site": "docs/lenses/manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "docs/lenses/source-manifest.json",
-      "target": "8a6c25ea2b31",
+      "target": "c756728",
       "status": "defect",
       "detector": null,
-      "note": "427 relevant files changed since it was written (149 commits)",
+      "note": "429 relevant files changed since it was written (154 commits), declared source c756728 dated 2026-08-17",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "eccc2a6",
+      "target": "c756728",
       "status": "defect",
       "detector": null,
-      "note": "281 relevant files changed since it was written (39 commits), declared source eccc2a6 dated 2026-08-16",
+      "note": "3 relevant files changed since it was written (3 commits), declared source c756728 dated 2026-08-17",
       "site": "tools/connection-map/connections.json"
     }
   ]

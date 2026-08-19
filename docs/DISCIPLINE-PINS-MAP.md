@@ -2,7 +2,7 @@
 
 **Document type:** Derived registry — generated, not authored. **Status:** current as of the commit below.
 
-**Generated** by `tools/discipline-pins/discipline_pins.py` from commit `cb83158`. Derived, not authored — regenerate rather than edit.
+**Generated** by `tools/discipline-pins/discipline_pins.py` from commit `c756728`. Derived, not authored — regenerate rather than edit.
 
 28 pin files · 31 assertions · 56 forbidden patterns · 4,607 lines
 
