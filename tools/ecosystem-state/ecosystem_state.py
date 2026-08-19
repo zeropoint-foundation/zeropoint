@@ -178,10 +178,20 @@ def main():
 # ── Standalone artifact export ───────────────────────────────────────────
 # The server asset above is include_str!'d into zp-server and needs a
 # running substrate to look at. This second output is the same graph as a
-# self-contained artifact: nodes, edges, state, and a *precomputed* layout,
-# so the page needs no d3, no server, and no network. Layout is a seeded
-# spring embedder run here rather than in the browser, which also makes the
-# picture deterministic -- the same commit always draws the same graph.
+# self-contained artifact: nodes, edges, state, and a *seed* layout, so the
+# page needs no d3, no server and no network.
+#
+# The seed matters and the word is deliberate. The layout below is not the
+# final picture: the artifact runs its own velocity-Verlet simulation in the
+# browser, because label readability is the binding constraint and label
+# widths cannot be known here -- they depend on the font the reader's machine
+# actually resolves. Python places the nodes so the browser starts from a
+# settled topology rather than a random cloud (same commit, same starting
+# picture); the browser then separates *measured label boxes*, which is the
+# part that could never have been precomputed.
+
+W_CANVAS = 1320
+H_CANVAS = 1010
 
 def parse_graph():
     js = (ROOT / "crates/zp-server/assets/ecosystem.js").read_text()
@@ -198,7 +208,7 @@ def parse_graph():
     return nodes, edges
 
 
-def layout(nodes, edges, w=1180, h=940, iters=900, seed=7):
+def layout(nodes, edges, w=W_CANVAS, h=H_CANVAS, iters=900, seed=7):
     import math, random
     rnd = random.Random(seed)
     pos = {n["id"]: [rnd.uniform(0.15, 0.85) * w, rnd.uniform(0.15, 0.85) * h]
@@ -257,11 +267,34 @@ def write_artifact(nodes, edges, states, counts):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({
         "generated_from_commit": head(),
-        "width": 1180, "height": 940,
+        "width": W_CANVAS, "height": H_CANVAS,
         "counts": counts,
         "nodes": nodes, "edges": edges,
     }, indent=2) + "\n")
     print(f"wrote {out.relative_to(ROOT)} — {len(nodes)} nodes, {len(edges)} edges")
+    write_html(nodes, edges, counts, out)
+
+
+def write_html(nodes, edges, counts, data_path):
+    """Render the standalone artifact from the template.
+
+    The page is generated rather than hand-maintained on purpose: the graph
+    JSON is inlined into it, and a hand-edited page drifts from the JSON the
+    moment either is touched. One source, two artifacts.
+    """
+    tmpl = (ROOT / "tools/ecosystem-state/artifact.template.html").read_text()
+    graph = json.loads(data_path.read_text())
+    html = (tmpl
+            .replace("__GRAPH_JSON__", json.dumps(graph, indent=2))
+            .replace("__NNODES__", str(len(nodes)))
+            .replace("__NEDGES__", str(len(edges)))
+            .replace("__NUNKNOWN__", str(counts.get("unknown", 0)))
+            .replace("__W__", str(W_CANVAS))
+            .replace("__H__", str(H_CANVAS)))
+    assert "__GRAPH_JSON__" not in html and "__W__" not in html
+    dest = ROOT / "dashboard/ecosystem-map.html"
+    dest.write_text(html)
+    print(f"wrote {dest.relative_to(ROOT)} — {len(html):,} bytes")
 
 
 if __name__ == "__main__":
