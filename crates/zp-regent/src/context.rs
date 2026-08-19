@@ -151,8 +151,68 @@ pub struct CognitiveContext {
     /// `cognitive:input:composed` chain receipt per COGNITIVE-INPUT-PLANE spec.
     /// None only if the composition summary couldn't be computed (should not
     /// happen in normal operation).
+
+    /// The trajectory the Cartographer currently believes this work belongs to.
+    ///
+    /// Named for its source, not its meaning, because `WorkArc` already
+    /// carries a *trajectory map* — waypoints, destination hypotheses,
+    /// settlement — and the two are unrelated. That one is the Regent's own
+    /// plan for the task in front of her, held for the length of an arc. This
+    /// one is the substrate's inference about which long-running thread of
+    /// work the receipts belong to, held across cycles and written by
+    /// something else entirely. A field called `active_trajectory` sitting
+    /// beside `work_arc` would read as the same concept and is the kind of
+    /// collision that survives review and costs an afternoon later.
+    ///
+    /// This is the Regent's first read of the ontology, and the reason it
+    /// exists is narrower than it looks. The ontology store had six public
+    /// read methods and, across the whole workspace, one external caller:
+    /// the Cartographer, reading its own last write to decide whether to
+    /// extend a trajectory or open a new one. A store whose only reader is
+    /// its own producer is not a memory, it is a log nobody opens — L4 in
+    /// `docs/handoffs/substrate-sequencing-2026-08.md`.
+    ///
+    /// `None` covers three different situations on purpose, and the renderer
+    /// says nothing at all in every one of them: no store attached, the
+    /// Cartographer disabled, or a fresh substrate with no trajectories yet.
+    /// A prompt that announced "no active trajectory" would be inviting a
+    /// small model to reason about its own instrumentation.
+    ///
+    /// Deliberately absent from `CompositionSummary` for now. Adding a class
+    /// hash there changes what `cognitive:input:composed` anchors and moves
+    /// the matrix version, and there is nothing yet to anchor: with the
+    /// Cartographer off this field is empty on every cycle. The receipt half
+    /// lands once the producer is on and the field carries something.
+    #[serde(default)]
+    pub ontology_trajectory: Option<TrajectorySummary>,
     #[serde(default)]
     pub composition_summary: Option<CompositionSummary>,
+}
+
+
+/// A trajectory, reduced to what a reasoning turn can act on.
+///
+/// The stored `Trajectory` carries boundary-detection state — per-prefix
+/// receipt counts, seen conversation ids, confidence scores — that exists to
+/// serve the Cartographer's own clustering decisions. None of it belongs in a
+/// prompt: it is instrumentation about how the trajectory was inferred, not
+/// information about the work. This carries the title, how long the thread has
+/// been alive, and how much evidence sits under it. Nothing else crosses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrajectorySummary {
+    /// Human-readable title the Cartographer assigned to the thread.
+    pub title: String,
+    /// `active`, `dormant`, `completed` or `abandoned`.
+    pub status: String,
+    /// When the trajectory was opened.
+    pub created_at: DateTime<Utc>,
+    /// When a receipt was last assigned to it.
+    pub last_active: DateTime<Utc>,
+    /// Seconds since `last_active`, computed at composition time against the
+    /// same clock read every other recency claim in this context uses.
+    pub idle_secs: i64,
+    /// How many chain receipts the Cartographer has attributed to it.
+    pub receipt_count: usize,
 }
 
 /// Composition provenance for a single cognitive-cycle context assembly.
@@ -549,6 +609,10 @@ pub enum WaypointKind {
 /// A waypoint in a trajectory map. Scoped sub-arc of work with typed
 /// dispatch, explicit blocking relationships, and (once resolved)
 /// an outcome that may open new waypoints.
+///
+/// Note: "trajectory" here is the Regent's own plan within one work arc, and
+/// is unrelated to `CognitiveContext::ontology_trajectory`, which is the
+/// Cartographer's cross-cycle clustering of receipts. Same word, two owners.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Waypoint {
     /// Stable id within the parent WorkArc. Used by other waypoints'

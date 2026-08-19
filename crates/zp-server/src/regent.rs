@@ -2679,6 +2679,40 @@ pub async fn spawn_regent(
 
     regent.set_dossier_corpus(dossier_corpus);
 
+    // ── Attach the ontology read handle ──────────────────────────────────
+    //
+    // The consumer half of S2. Attached unconditionally, and deliberately not
+    // gated on `cartographer_enabled`: the ordering the producer-consumer rule
+    // asks for is consumer first, exercised, *then* producer. Gating this on
+    // the producer would invert that and mean the read path first runs on the
+    // same day the write path does, with no cycle in between that proves the
+    // Regent composes correctly against an empty store.
+    //
+    // With the Cartographer off, ontology.db has no trajectory rows, the read
+    // returns None every cycle, and the composed prompt is byte-identical to
+    // one composed with no handle at all. Opening the store creates the file
+    // and its schema, which is the same thing the Cartographer's own open
+    // does, so this does not commit the substrate to anything it was not
+    // already going to do the moment the producer is enabled.
+    //
+    // A failure to open is a warning, not a startup failure. The Regent
+    // reasons without the ontology today and must keep being able to.
+    let ontology_path = std::path::PathBuf::from(data_path).join("ontology.db");
+    match zp_ontology::store::OntologyStore::open(&ontology_path) {
+        Ok(store) => {
+            regent.attach_ontology(Arc::new(store));
+            info!(
+                path = %ontology_path.display(),
+                "Regent attached ontology read handle (consumer for L4)"
+            );
+        }
+        Err(e) => warn!(
+            path = %ontology_path.display(),
+            error = %e,
+            "Regent could not open the ontology store; composing without it"
+        ),
+    }
+
     // Reconstitute operator pin from chain — chain supersedes config.toml.
     // Scan recent entries for the most recent regent:config:inference* receipt.
     // Handles three receipt types:

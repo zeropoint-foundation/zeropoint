@@ -1,6 +1,6 @@
 {
-  "generated_from_commit": "c756728",
-  "generated_at": 1787149158,
+  "generated_from_commit": "ffac87f",
+  "generated_at": 1787177859,
   "crates": [
     {
       "name": "course-examples",
@@ -2475,6 +2475,7 @@
       "info_flow_signal": 0,
       "primary_role": "receipt-authoring",
       "consumed_by": [
+        "zp-regent",
         "zp-server"
       ],
       "type_defs": [
@@ -2902,13 +2903,14 @@
     {
       "name": "zp-regent",
       "files": 23,
-      "loc": 18825,
+      "loc": 19132,
       "deps": [
         "zp-audit",
         "zp-config",
         "zp-core",
         "zp-emission-coherence",
         "zp-officers",
+        "zp-ontology",
         "zp-receipt"
       ],
       "sign_count": 5,
@@ -3076,6 +3078,7 @@
         "ThinkMechanismResult",
         "ToolResult",
         "TopicTouch",
+        "TrajectorySummary",
         "UnbackedClaim",
         "Violation",
         "ViolationSeverity",
@@ -3086,11 +3089,11 @@
         "WaypointResolution",
         "WorkArc"
       ],
-      "type_defs_count": 142,
+      "type_defs_count": 143,
       "types_produced": {
         "RegentError": 27,
         "InferenceBackend": 18,
-        "CognitiveContext": 12,
+        "CognitiveContext": 14,
         "Intent": 9,
         "ActiveStandingCorrection": 8,
         "MapReceipt": 8,
@@ -3118,6 +3121,7 @@
         "TestCase": 3,
         "CollapseDimension": 3,
         "ClassifierDecision": 3,
+        "Regent": 3,
         "RouteDecision": 3,
         "ObserverReport": 2,
         "StandingCorrection": 2,
@@ -3133,10 +3137,10 @@
         "InferenceEnvelope": 2,
         "QueryHint": 2,
         "CockpitSource": 2,
-        "Regent": 2,
         "PriorResponse": 2,
         "CompositionSummary": 2,
         "Precedent": 2,
+        "TrajectorySummary": 2,
         "Suitability": 2,
         "ModelDossier": 2,
         "EvaluationTier": 2,
@@ -3190,12 +3194,13 @@
         "Severity": 1,
         "SweepResult": 1,
         "ProviderProfile": 1,
+        "OntologyStore": 1,
         "ToolResult": 1,
         "EntropyBaseline": 1
       },
-      "type_flow_signal": 313,
-      "types_produced_total": 270,
-      "types_consumed_total": 43
+      "type_flow_signal": 319,
+      "types_produced_total": 275,
+      "types_consumed_total": 44
     },
     {
       "name": "zp-sensors",
@@ -3255,7 +3260,7 @@
     {
       "name": "zp-server",
       "files": 52,
-      "loc": 44193,
+      "loc": 44239,
       "deps": [
         "mle-star-engine",
         "monte-carlo-engine",
@@ -3901,15 +3906,15 @@
   ],
   "counts": {
     "total_crates": 46,
-    "total_deps_edges": 130,
+    "total_deps_edges": 131,
     "total_sign_sites": 853,
     "total_gate_crossings": 89,
     "total_chain_emits": 72,
     "total_verifications": 410,
     "total_receipt_slugs": 223,
-    "total_type_flow_signal": 3422,
-    "total_type_defs": 1315,
-    "total_type_flow_edges": 106
+    "total_type_flow_signal": 3428,
+    "total_type_defs": 1316,
+    "total_type_flow_edges": 107
   },
   "type_flow_edges": [
     {
@@ -4842,6 +4847,14 @@
       "weight": 1,
       "types": {
         "Decision": 1
+      }
+    },
+    {
+      "from": "zp-ontology",
+      "to": "zp-regent",
+      "weight": 1,
+      "types": {
+        "OntologyStore": 1
       }
     },
     {

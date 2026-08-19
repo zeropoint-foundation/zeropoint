@@ -133,6 +133,47 @@ fn build_standing_corrections_section(context: &CognitiveContext) -> String {
     out
 }
 
+
+/// Render the active trajectory — what thread of work this cycle is inside.
+///
+/// Returns an empty string when there is no trajectory, and the caller pushes
+/// nothing. The alternative, a line reading "no active trajectory", tells a
+/// small model that its own bookkeeping is a topic; the observed failure mode
+/// in this file's history is a model answering about its instrumentation
+/// instead of about the operator's question. Silence is the correct rendering
+/// of nothing.
+///
+/// Placed low in the prompt, below the operator request and below officer
+/// findings. This is orientation, not instruction: it says what the work has
+/// been about, and it must never outrank what the operator just asked. The
+/// idle time is stated because a trajectory last touched four days ago is a
+/// different claim from one touched four minutes ago, and the title alone
+/// cannot carry that difference.
+fn build_trajectory_section(context: &CognitiveContext) -> String {
+    let Some(t) = context.ontology_trajectory.as_ref() else {
+        return String::new();
+    };
+    let idle = if t.idle_secs < 90 {
+        "just now".to_string()
+    } else if t.idle_secs < 5400 {
+        format!("{} minutes ago", t.idle_secs / 60)
+    } else if t.idle_secs < 172_800 {
+        format!("{} hours ago", t.idle_secs / 3600)
+    } else {
+        format!("{} days ago", t.idle_secs / 86_400)
+    };
+    format!(
+        "CURRENT WORK THREAD (from the substrate's own record, not memory):\n  • {} — {}, \
+last activity {}, {} receipt{} attributed.\n  This is context for orientation. If the operator's \
+request is about something else, answer the request.",
+        t.title,
+        t.status,
+        idle,
+        t.receipt_count,
+        if t.receipt_count == 1 { "" } else { "s" },
+    )
+}
+
 /// Render bedrock invariants — whether the substrate she is standing on holds.
 ///
 /// Placed above standing corrections in the composed prompt, which is the only
@@ -285,6 +326,22 @@ pub struct Regent {
     /// self_configure with model="auto". When set, the router respects this
     /// over dossier scoring. When None, the router scores freely.
     operator_pin: Option<OperatorModelPin>,
+
+    /// Read handle on the ontology the Cartographer writes.
+    ///
+    /// `None` until `attach_ontology` is called, and `None` is a working
+    /// state, not a degraded one: with the Cartographer disabled there is
+    /// nothing to read, and perceive() composes exactly as it did before.
+    /// That is the point of attaching it separately from construction — the
+    /// consumer is provably in place and exercised before the producer is
+    /// switched on, per the ordering in MODEL-ADMISSION-PIPELINE-2026-08
+    /// §10.6 and `docs/handoffs/substrate-sequencing-2026-08.md` §S2.
+    ///
+    /// Read-only by construction: nothing in zp-regent calls a mutating
+    /// method on it, and nothing should. The Cartographer owns the write
+    /// side. Two writers to one store is how a hash-linked chain and its
+    /// derived view drift apart without either one being wrong.
+    ontology: Option<std::sync::Arc<zp_ontology::store::OntologyStore>>,
 }
 
 /// An operator's explicit model selection — distinct from config defaults.
@@ -410,12 +467,30 @@ impl Regent {
             wake: Wake::Quiet,
             dossier_corpus: None,
             operator_pin,
+            ontology: None,
         }
     }
 
     /// Attach the model dossier corpus for inference routing.
     pub fn set_dossier_corpus(&mut self, corpus: std::sync::Arc<crate::routing::DossierCorpus>) {
         self.dossier_corpus = Some(corpus);
+    }
+
+    /// Attach a read handle on the ontology store.
+    ///
+    /// Safe to call whether or not the Cartographer is enabled: an empty
+    /// store yields `None` from every read and the composed prompt is
+    /// byte-identical to one composed without a store at all.
+    pub fn attach_ontology(&mut self, store: std::sync::Arc<zp_ontology::store::OntologyStore>) {
+        self.ontology = Some(store);
+    }
+
+    /// Whether an ontology handle is attached. Exists so the caller can
+    /// report the wiring without reaching into the field, and so a test can
+    /// assert the consumer is present independently of there being anything
+    /// to consume.
+    pub fn has_ontology(&self) -> bool {
+        self.ontology.is_some()
     }
 
     /// Clear the operator pin — router scores freely from dossier corpus.
@@ -992,6 +1067,38 @@ impl Regent {
             self_authorship_ratio,
         });
 
+        // ── Ontology read ───────────────────────────────────────────────
+        //
+        // The one read the Regent makes of the Cartographer's output. It uses
+        // the same `now` as every other recency claim in this composition, so
+        // "idle 40 minutes" and a finding's age refer to the same instant.
+        //
+        // A read failure is swallowed to `None` on purpose, and this is the
+        // only place in perceive() that does so. Every other input here is
+        // load-bearing: a chain read that fails must fail the cycle, because
+        // reasoning over a chain you could not read is reasoning over nothing.
+        // The trajectory is the opposite — it is context about context. A
+        // locked or absent ontology.db should cost the Regent one optional
+        // line of a prompt, not the cycle. The failure is logged rather than
+        // silent, because "no trajectory" and "could not read the trajectory"
+        // are different facts and only one of them is normal.
+        let ontology_trajectory = self.ontology.as_ref().and_then(|store| {
+            match store.most_recently_active_trajectory() {
+                Ok(t) => t.map(|t| crate::context::TrajectorySummary {
+                    title: t.title,
+                    status: t.status.as_str().to_string(),
+                    created_at: t.created_at,
+                    last_active: t.last_active,
+                    idle_secs: (now - t.last_active).num_seconds().max(0),
+                    receipt_count: t.receipt_refs.len(),
+                }),
+                Err(e) => {
+                    warn!("perceive: ontology read failed, composing without it: {e}");
+                    None
+                }
+            }
+        });
+
         Ok(CognitiveContext {
             assembled_at: now,
             sovereign: self.sovereign.clone(),
@@ -1008,6 +1115,7 @@ impl Regent {
             work_arc,
             prior_response,
             cycle_directive,
+            ontology_trajectory,
             composition_summary,
         })
     }
@@ -2366,6 +2474,15 @@ impl Regent {
             parts.push(format!("Relevant memories:\n{}", mems.join("\n")));
         }
 
+        // Current work thread. Below memories and above the autonomous
+        // remediation prompt: it is the weakest input in this function, and
+        // it is deliberately the last thing that can be read as orientation
+        // before anything that can be read as instruction.
+        let trajectory_section = build_trajectory_section(context);
+        if !trajectory_section.is_empty() {
+            parts.push(trajectory_section);
+        }
+
         // Autonomous remediation prompt: when there are urgent findings
         // but no operator input, explicitly frame this as a remediation
         // cycle so the model knows to act rather than just describe.
@@ -3103,6 +3220,132 @@ pub fn strip_markdown_fences(s: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── S2: the ontology consumer ────────────────────────────────────────
+    //
+    // These test the *read path*, not the Cartographer. The exit condition
+    // for S2 is that the Regent demonstrably consumes what the producer
+    // emits, and the ordering the producer-consumer rule asks for means that
+    // has to be provable while the producer is still switched off. So the
+    // fixtures write trajectories directly into an ontology store, which is
+    // the one place in this codebase that is allowed to do so outside the
+    // Cartographer, and it is allowed because a test that used the
+    // Cartographer would be testing the producer.
+
+    /// A Regent with nothing attached — no dossiers, no ontology, no pin.
+    /// Enough to exercise prompt composition, which is all these tests do.
+    /// The tempdir is leaked into the returned value's lifetime by keeping it
+    /// alive in the caller; MemoryStore only needs the path to exist.
+    fn test_regent() -> Regent {
+        let dir = std::env::temp_dir().join(format!(
+            "zp-regent-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        Regent::new(RegentConfig::default(), &dir, None, None)
+    }
+
+    fn traj(title: &str, idle_secs: i64, receipts: usize) -> crate::context::TrajectorySummary {
+        let now = chrono::Utc::now();
+        crate::context::TrajectorySummary {
+            title: title.to_string(),
+            status: "active".to_string(),
+            created_at: now - chrono::Duration::seconds(idle_secs + 600),
+            last_active: now - chrono::Duration::seconds(idle_secs),
+            idle_secs,
+            receipt_count: receipts,
+        }
+    }
+
+    fn ctx_with(t: Option<crate::context::TrajectorySummary>) -> CognitiveContext {
+        CognitiveContext {
+            assembled_at: chrono::Utc::now(),
+            sovereign: None,
+            recent_chain: Vec::new(),
+            officer_findings: Vec::new(),
+            posture_summary: None,
+            pending_input: None,
+            memory_fragments: Vec::new(),
+            standing_corrections: Vec::new(),
+            substrate_ground: Vec::new(),
+            active_delegations: Vec::new(),
+            system_awareness: None,
+            tool_results: Vec::new(),
+            work_arc: None,
+            prior_response: None,
+            cycle_directive: None,
+            ontology_trajectory: t,
+            composition_summary: None,
+        }
+    }
+
+    #[test]
+    fn no_trajectory_renders_nothing_at_all() {
+        // Not "no active trajectory" — nothing. A prompt that narrates the
+        // absence of its own instrumentation invites the model to reason
+        // about the instrumentation. Asserting emptiness rather than
+        // asserting some phrase is the point of the test.
+        assert_eq!(build_trajectory_section(&ctx_with(None)), "");
+    }
+
+    #[test]
+    fn a_trajectory_renders_its_title_and_its_age() {
+        let s = build_trajectory_section(&ctx_with(Some(traj("chain compaction", 7200, 12))));
+        assert!(s.contains("chain compaction"), "title must survive: {s}");
+        assert!(s.contains("2 hours ago"), "idle time must be stated: {s}");
+        assert!(s.contains("12 receipts"), "evidence count must be stated: {s}");
+        // Orientation, not instruction. The operator's request outranks it and
+        // the text has to say so, because position alone has not been enough
+        // in this file's history.
+        assert!(s.contains("answer the request"), "must yield to the operator: {s}");
+    }
+
+    #[test]
+    fn one_receipt_is_not_pluralised() {
+        let s = build_trajectory_section(&ctx_with(Some(traj("t", 0, 1))));
+        assert!(s.contains("1 receipt attributed"), "{s}");
+    }
+
+    #[test]
+    fn idle_time_reads_as_a_human_would_say_it() {
+        for (secs, want) in [(0i64, "just now"), (89, "just now"), (600, "10 minutes ago"),
+                             (7200, "2 hours ago"), (259_200, "3 days ago")] {
+            let s = build_trajectory_section(&ctx_with(Some(traj("t", secs, 1))));
+            assert!(s.contains(want), "idle {secs}s should read {want:?}, got: {s}");
+        }
+    }
+
+    #[test]
+    fn the_prompt_carries_the_trajectory_and_never_above_the_operator() {
+        // The regression this guards is ordering, not presence. Officer
+        // findings above operator input caused observed confabulation (see
+        // build_user_prompt); a work-thread banner above it would do the same
+        // thing for the same reason.
+        let mut ctx = ctx_with(Some(traj("receipt chain audit", 300, 4)));
+        ctx.pending_input = Some(crate::context::OperatorInput {
+            content: "what is the start of the chain".to_string(),
+            source: CockpitSource::Cli,
+            received_at: chrono::Utc::now(),
+        });
+        let regent = test_regent();
+        let prompt = regent.build_user_prompt(&ctx);
+        let thread = prompt.find("CURRENT WORK THREAD").expect("thread section present");
+        let request = prompt.find("OPERATOR REQUEST").expect("operator request present");
+        assert!(request < thread, "operator request must precede the work thread");
+    }
+
+    #[test]
+    fn an_unattached_ontology_is_a_working_state() {
+        // `None` is not degraded. A Regent with no ontology handle must
+        // compose exactly what it composed before the field existed.
+        let regent = test_regent();
+        assert!(!regent.has_ontology());
+        let with = regent.build_user_prompt(&ctx_with(None));
+        assert!(!with.contains("CURRENT WORK THREAD"));
+    }
 
     #[test]
     fn parse_execute_intent() {
