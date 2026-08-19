@@ -35,7 +35,55 @@ line, and the operator running this may have no way to see the log.
     python3 tools/ontology-check/catchup_reconcile.py --watch    # until done
     python3 tools/ontology-check/catchup_reconcile.py --json
 """
-import argparse, json, os, pathlib, sqlite3, sys, time
+import argparse, json, os, pathlib, re, sqlite3, sys, time
+
+
+
+def resolve_data_dir(explicit=None):
+    """Find the data directory the way the binary does, and say which one won.
+
+    The first version of this script defaulted to ~/.zeropoint, which is not
+    where anything lives. That failure mode is nasty: a wrong path reports
+    "no ontology database" indefinitely, which is indistinguishable from the
+    Cartographer never having started, so the operator concludes the flag did
+    not take and restarts a server that was working fine.
+
+    Precedence mirrors zp-config (schema.rs zp_home + resolve.rs):
+
+        ZP_DATA_DIR                       explicit override
+        <zp_home>/data                    where zp_home is ZP_HOME, else
+                                          ~/ZeroPoint
+        data_dir from <zp_home>/config.toml, if set there
+
+    Returns (path, how_it_was_chosen) so the caller can print it. Printing it
+    is the point: a wrong guess must be visible in the output rather than
+    silently producing an empty answer.
+    """
+    if explicit:
+        return pathlib.Path(explicit).expanduser(), "--data-dir"
+
+    if os.environ.get("ZP_DATA_DIR"):
+        return pathlib.Path(os.environ["ZP_DATA_DIR"]).expanduser(), "ZP_DATA_DIR"
+
+    zp_home = pathlib.Path(os.environ.get("ZP_HOME") or
+                           pathlib.Path.home() / "ZeroPoint").expanduser()
+
+    cfg = zp_home / "config.toml"
+    if cfg.exists():
+        # Deliberately a regex rather than a TOML parse: this script must run
+        # on a stock python3 with no third-party imports, and 3.10 has no
+        # tomllib. A data_dir set some exotic way falls through to the default
+        # below, which is reported, so the failure is legible.
+        try:
+            m = re.search(r'^\s*data[_.]?dir\s*=\s*["\']([^"\']+)["\']',
+                          cfg.read_text(), re.M | re.I)
+            if m:
+                return pathlib.Path(m.group(1)).expanduser(), str(cfg)
+        except OSError:
+            pass
+
+    return (zp_home / "data",
+            "ZP_HOME/data" if os.environ.get("ZP_HOME") else "default ~/ZeroPoint/data")
 
 
 def ro(path):
@@ -299,11 +347,12 @@ def report(r, known=None):
 
 
 def main():
-    home = pathlib.Path(os.path.expanduser("~"))
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data-dir", default=str(home / ".zeropoint"),
-                    help="directory holding ontology.db and audit.db")
+    ap.add_argument("--data-dir", default=None,
+                    help="directory holding ontology.db and audit.db "
+                         "(default: resolved like the binary — ZP_DATA_DIR, "
+                         "then ZP_HOME/data, then ~/ZeroPoint/data)")
     ap.add_argument("--ontology", default=None)
     ap.add_argument("--audit", default=None)
     ap.add_argument("--json", action="store_true")
@@ -313,9 +362,14 @@ def main():
                     help="seconds between samples in --watch mode (default 5)")
     args = ap.parse_args()
 
-    d = pathlib.Path(args.data_dir)
-    onto = args.ontology or d / "ontology.db"
-    audit = args.audit or d / "audit.db"
+    d, how = resolve_data_dir(args.data_dir)
+    onto = pathlib.Path(args.ontology) if args.ontology else d / "ontology.db"
+    audit = pathlib.Path(args.audit) if args.audit else d / "audit.db"
+    if not args.json:
+        print(f"data dir: {d}  [{how}]")
+        if not d.exists():
+            print(f"  that directory does not exist. Override with --data-dir, "
+                  f"or set ZP_DATA_DIR to match the server.")
 
     if args.watch:
         # The ontology file does not exist until the Cartographer opens it, so
@@ -337,7 +391,11 @@ def main():
     r = reconcile(onto, audit)
     if args.json:
         st, why = ("ERROR", r["error"]) if "error" in r else phase(r)
-        print(json.dumps({**r, "status": st, "status_detail": why}, indent=2))
+        # data_dir and how are in the JSON because scripts need the resolved
+        # path too -- the runbook's rebuild step reads it from here rather
+        # than hardcoding a directory that turned out to be wrong once already.
+        print(json.dumps({**r, "status": st, "status_detail": why,
+                          "data_dir": str(d), "data_dir_source": how}, indent=2))
         return 2 if "error" in r else (1 if r.get("silently_skipped") else 0)
     if "error" in r:
         print(r["error"])

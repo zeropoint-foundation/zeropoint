@@ -85,6 +85,14 @@ cd ~/projects/zeropoint
 python3 tools/ontology-check/catchup_reconcile.py --watch
 ```
 
+**Check the first line it prints.** It reports the data directory it resolved
+and how, mirroring `zp-config` — `ZP_DATA_DIR`, else `ZP_HOME/data`, else
+`~/ZeroPoint/data`, with `data_dir` from `<zp_home>/config.toml` if set there.
+A wrong path reports "no ontology database" indefinitely, which is
+indistinguishable from the flag never having taken, and sends you restarting a
+server that was working. Override with `--data-dir` if it disagrees with the
+server.
+
 Start it whenever — before the server if you like. It waits up to two minutes
 for `ontology.db` to appear, since the Cartographer creates the file on first
 open.
@@ -146,7 +154,9 @@ grep -c "per-entry failure" /tmp/zp-serve.log      # against the reported count
 
 # rebuild: the database is disposable, the chain is the source of truth
 lsof -ti :17770 | xargs kill
-rm ~/.zeropoint/ontology.db*
+ZP_DATA=$(python3 tools/ontology-check/catchup_reconcile.py --json \
+          | python3 -c 'import json,sys;print(json.load(sys.stdin).get("data_dir",""))')
+rm "$ZP_DATA"/ontology.db*
 # then step 3 again
 ```
 
@@ -170,9 +180,11 @@ has no Cartographer. Fix the cause, then step 3 again.
 
 ```sh
 lsof -ti :17770 | xargs kill
-rm ~/.zeropoint/ontology.db*      # optional; harmless to keep
-zp serve                          # no env var: Cartographer does not spawn
+zp serve          # no env var: the Cartographer does not spawn
 ```
+
+Deleting `ontology.db` is optional and harmless either way — it is rebuildable
+from the chain, and an orphaned one is simply never read.
 
 Nothing in S2 step 1 depends on the Cartographer running. The Regent's
 ontology handle opens an empty store, every read returns `None`, and the
