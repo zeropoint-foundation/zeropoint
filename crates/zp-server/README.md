@@ -106,7 +106,7 @@ Configuration is loaded from environment variables with sensible defaults:
 | `ZP_OPERATOR_PROMPT` | (default prompt) | Custom base prompt for the operator |
 | `ZP_TRUST_TIER` | `tier0` | Trust tier: `tier0`, `tier1`, or `tier2` |
 | `ZP_DATA_DIR` | `./data/zeropoint` | Directory for persistent data |
-| `RUST_LOG` | `info` | Tracing subscriber log level |
+| `RUST_LOG` | **unset — effectively `error`** | Tracing subscriber filter. The binary uses `EnvFilter::from_default_env()` with no fallback (`zp-cli/src/main.rs:1797`), so with `RUST_LOG` unset every `info!` is discarded — including `Cartographer catchup complete`. Set `RUST_LOG=info` to see startup and lifecycle lines. |
 
 ## Server Startup
 
