@@ -227,12 +227,17 @@ def watch(ontology, audit, interval, quiet_samples=3):
     batch of 500 is processed without touching the cursor, and calling that a
     stall would cry wolf on every run.
     """
-    prev, stalled, started, seen_max = None, 0, None, 0
+    prev, stalled, started, seen_max, base = None, 0, None, 0, None
     while True:
         r = reconcile(ontology, audit)
         if "error" in r:
             print(r["error"])
             return 2
+        if base is None:
+            # First successful reading is the baseline. Everything reported at
+            # the end is measured against it, so a gap inherited from an
+            # earlier run is never charged to this one.
+            base = dict(r)
         st, why = phase(r, prev)
         hwm = r["hwm_claims_processed"] or 0
         total = r["chain_entries"]
@@ -258,7 +263,7 @@ def watch(ontology, audit, interval, quiet_samples=3):
 
         if st == "COMPLETE":
             print()
-            return report(r, known=(st, why))
+            return report(r, known=(st, why), base=base)
         stalled = stalled + 1 if st == "STALLED" else 0
         if stalled >= quiet_samples:
             print(f"\ncursor unchanged across {quiet_samples} samples "
@@ -266,12 +271,12 @@ def watch(ontology, audit, interval, quiet_samples=3):
             print("Check the server is running and look for "
                   "'Cartographer catchup failed' or 'task exiting'.")
             print()
-            return report(r, known=("STALLED", why)) or 3
+            return report(r, known=("STALLED", why), base=base) or 3
         prev, seen_max = hwm, max(seen_max, hwm)
         time.sleep(interval)
 
 
-def report(r, known=None):
+def report(r, known=None, base=None):
     """Print the reconciliation. Returns the exit code.
 
     `known` carries a status the caller established across samples, which a
@@ -317,16 +322,46 @@ def report(r, known=None):
     # From here the checks only ever raise the exit code. `rc = 1` would
     # silently downgrade the stall reported above, which is the more urgent
     # of the two conditions.
-    if r["silently_skipped"]:
-        print(f"  SILENTLY SKIPPED: {r['silently_skipped']:,} entries.")
-        print("  The high-water mark advanced past entries that were never linked to any")
-        print("  object. These are the catchup's swallowed failures. They will never be")
-        print("  revisited: the HWM says they are done. Rebuilding the ontology from the")
-        print("  chain is the recovery — the database is disposable by design")
+    # The gap is CUMULATIVE. It is the difference between the cursor and the
+    # links across every run the database has ever seen, and attributing it to
+    # the run that just finished is wrong and alarming. The first version did
+    # exactly that: it reported a two-week-old failure as though tonight's
+    # catchup had lost 215,593 entries, when tonight's had lost none.
+    #
+    # `base` is a reading taken before the run. With it the two numbers can be
+    # separated, and separating them is the difference between "your last
+    # action destroyed something" and "something was already broken".
+    if base:
+        did = (r["hwm_claims_processed"] or 0) - (base.get("hwm_claims_processed") or 0)
+        got = (r["entries_linked"] or 0) - (base.get("entries_linked") or 0)
+        lost = did - got
+        print(f"  This run: {did:,} entries processed, {got:,} linked"
+              + (f", {lost:,} LOST" if lost else " — none lost"))
+        prior = (base.get("hwm_claims_processed") or 0) - (base.get("entries_linked") or 0)
+        if prior:
+            print(f"  Pre-existing: {prior:,} entries were already unlinked before this run "
+                  f"(cursor at {base.get('hwm_claims_processed', 0):,}, "
+                  f"last touched {base.get('last_processed_at') or 'unknown'}).")
+        rc = max(rc, 1 if lost else 0)
+        if prior and not lost:
+            print()
+            print("  The damage is historical, not from this run. A rebuild recovers it: the")
+            print("  ontology is derived and the chain is the source of truth. This run's")
+            print("  clean rate is the evidence that a rebuild would now succeed.")
+            rc = max(rc, 1)
+    elif r["silently_skipped"]:
+        print(f"  UNLINKED: {r['silently_skipped']:,} entries, cumulative across every run.")
+        print("  The cursor has advanced past that many entries that are not linked to any")
+        print("  object. They will not be revisited — the high-water mark says they are")
+        print("  done. Rebuilding is the recovery; the database is derived and disposable")
         print("  (schema-v1.sql, KEEL §II.13 P5).")
+        print()
+        print("  This figure is CUMULATIVE and cannot be attributed to the most recent run")
+        print("  from one reading. Use --watch, which takes a baseline first and reports")
+        print("  what this run alone processed, linked and lost.")
         rc = max(rc, 1)
     else:
-        print("  No skipped entries: every entry the HWM claims is linked to an object.")
+        print("  No unlinked entries: every entry the cursor claims is linked to an object.")
 
     if r["view_disagrees_with_itself"]:
         d = r["view_disagrees_with_itself"]
@@ -358,6 +393,10 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--watch", action="store_true",
                     help="poll until the cursor reaches the end of the chain, or stops moving")
+    ap.add_argument("--snapshot", metavar="FILE", nargs="?", const="",
+                    help="write the current reading to FILE, or compare against it if it "
+                         "exists. Lets a one-shot before/after attribute the gap to a run "
+                         "without holding a --watch open.")
     ap.add_argument("--interval", type=float, default=5.0,
                     help="seconds between samples in --watch mode (default 5)")
     args = ap.parse_args()
@@ -389,6 +428,26 @@ def main():
         return watch(onto, audit, args.interval)
 
     r = reconcile(onto, audit)
+
+    base = None
+    if args.snapshot is not None:
+        snap = pathlib.Path(args.snapshot or (d / ".catchup-baseline.json"))
+        if snap.exists():
+            try:
+                base = json.loads(snap.read_text())
+                if not args.json:
+                    print(f"baseline: {snap} "
+                          f"(cursor {base.get('hwm_claims_processed', 0):,})")
+            except (OSError, ValueError) as e:
+                print(f"could not read baseline {snap}: {e}", file=sys.stderr)
+        elif "error" not in r:
+            try:
+                snap.write_text(json.dumps(r, indent=2))
+                print(f"baseline written to {snap} — re-run with --snapshot after the "
+                      f"catchup to attribute the result to this run.")
+            except OSError as e:
+                print(f"could not write baseline {snap}: {e}", file=sys.stderr)
+
     if args.json:
         st, why = ("ERROR", r["error"]) if "error" in r else phase(r)
         # data_dir and how are in the JSON because scripts need the resolved
@@ -400,7 +459,7 @@ def main():
     if "error" in r:
         print(r["error"])
         return 2
-    return report(r)
+    return report(r, base=base)
 
 
 if __name__ == "__main__":

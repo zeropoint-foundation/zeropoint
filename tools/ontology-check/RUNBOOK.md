@@ -165,9 +165,18 @@ chain's max rowid. No log needed.
 | exit | meaning | what to do |
 |------|---------|------------|
 | 0 | clean — every entry the cursor claims is linked to an object | go to step 5 |
-| 1 | entries silently skipped, or the view disagrees with itself | step 6 |
+| 1 | entries unlinked, or the view disagrees with itself | step 6 |
 | 2 | no ontology database yet | the flag did not take; check step 3 |
 | 3 | cursor stopped moving with entries remaining | step 7 |
+
+**The unlinked count is cumulative, not a verdict on this run.** It is the
+difference between the cursor and the links across every run the database has
+ever had. A store that was damaged weeks ago reports the same number after a
+flawless catchup as before it. `--watch` takes a baseline on its first sample
+and reports what *this* run processed, linked and lost, separately from what
+was already broken — which is the difference between "your last action
+destroyed something" and "something was already broken". For a one-shot
+before/after, `--snapshot` persists the same baseline to a file.
 
 ## 5 — Confirm the Regent can see it
 
