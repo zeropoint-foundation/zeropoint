@@ -103,6 +103,24 @@ impl AppendNotifier for CartographerNotifier {
     }
 }
 
+/// The one place the ontology database path is computed.
+///
+/// It exists because the Cartographer and the Regent each derived it
+/// independently and derived it differently. The Cartographer used
+/// `config.data_dir`; the Regent used the argument `spawn_regent` calls
+/// `data_dir`, which `lib.rs` populates with `config.home_dir`. On this
+/// machine that is `~/ZeroPoint` against `~/ZeroPoint/data`, so the producer
+/// wrote one file and the consumer opened another, empty one — and neither
+/// logged anything wrong, because opening a fresh ontology store is a normal
+/// thing to succeed at.
+///
+/// P8: one canonical path per substrate concern. Two call sites deriving the
+/// same path from different fields is that principle being violated in the
+/// most literal sense available.
+pub fn ontology_db_path(data_dir: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(data_dir).join("ontology.db")
+}
+
 // ── Task ───────────────────────────────────────────────────────────────────
 
 /// Spawn the Cartographer background task.

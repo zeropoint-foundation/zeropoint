@@ -2408,6 +2408,13 @@ pub async fn spawn_regent(
     gate: Arc<GovernanceGate>,
     event_tx: tokio::sync::broadcast::Sender<crate::events::EventStreamItem>,
     data_dir: &str,
+    // Resolved path to the ontology the Cartographer writes. Passed in rather
+    // than derived here: the parameter above is called `data_dir` and lib.rs
+    // populates it with `config.home_dir`, which is a different directory.
+    // Deriving the path from it produced an empty database beside the real
+    // one and a consumer that read nothing, with no error on either side.
+    // Both now call `cartographer::ontology_db_path` on the same field.
+    ontology_db_path: std::path::PathBuf,
     promotion_engine: Arc<std::sync::Mutex<zp_memory::PromotionEngine>>,
     review_queue: Option<Arc<std::sync::Mutex<zp_memory::ReviewQueue>>>,
     vault_key: Arc<std::sync::OnceLock<Option<zp_keys::ResolvedVaultKey>>>,
@@ -2697,17 +2704,17 @@ pub async fn spawn_regent(
     //
     // A failure to open is a warning, not a startup failure. The Regent
     // reasons without the ontology today and must keep being able to.
-    let ontology_path = std::path::PathBuf::from(data_path).join("ontology.db");
-    match zp_ontology::store::OntologyStore::open(&ontology_path) {
+    match zp_ontology::store::OntologyStore::open(&ontology_db_path) {
         Ok(store) => {
             regent.attach_ontology(Arc::new(store));
             info!(
-                path = %ontology_path.display(),
+                path = %ontology_db_path.display(),
+                exists = ontology_db_path.exists(),
                 "Regent attached ontology read handle (consumer for L4)"
             );
         }
         Err(e) => warn!(
-            path = %ontology_path.display(),
+            path = %ontology_db_path.display(),
             error = %e,
             "Regent could not open the ontology store; composing without it"
         ),

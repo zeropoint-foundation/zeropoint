@@ -2136,7 +2136,7 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     if config.cartographer_enabled {
         let cart_config = cartographer::CartographerConfig {
             enabled: true,
-            ontology_db_path: std::path::PathBuf::from(&config.data_dir).join("ontology.db"),
+            ontology_db_path: cartographer::ontology_db_path(&config.data_dir),
             boundary_config: zp_ontology::BoundaryConfig::default(),
             channel_capacity: 1000,
             catchup_batch_size: 500,
@@ -2199,6 +2199,7 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         state.0.gate.clone(),
         state.0.event_tx.clone(),
         config.home_dir.to_str().unwrap_or(""),
+        cartographer::ontology_db_path(&config.data_dir),
         state.0.promotion_engine.clone(),
         state.0.review_queue.clone(),
         regent_vault_key,
