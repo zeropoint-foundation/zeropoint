@@ -18,14 +18,22 @@ it and running again, not by repair.
 false at boot. There is no runtime toggle — that is the "P3.2 follow-up" the
 comment refers to.
 
-**Set `RUST_LOG=info` or you will see nothing.** The binary calls
-`EnvFilter::from_default_env()` with no fallback (`crates/zp-cli/src/main.rs:1797`).
-With `RUST_LOG` unset the effective level is `error`, so every `info!` line is
-discarded — including `Cartographer catchup complete`. Verified against
-tracing-subscriber 0.3.22 with the same init code.
+**`zp serve` daemonizes, and its log is not where you put it.** The command
+forks and returns your prompt; `spawn_serve_daemon` redirects the child's
+stdio to `<ZP_HOME>/logs/zp-serve.log` (`crates/zp-cli/src/main.rs:1713`).
+Anything you `tee` on the launching command captures only the handful of lines
+printed before the fork — sovereignty unlock, and the `zp serve started` line.
+Everything after, including every Cartographer line, goes to the daemon's log.
 
-You do not *need* the log: step 4 reads the Cartographer's own cursor out of
-the database. The log is corroboration, and useful if something goes wrong.
+`RUST_LOG` is handled for you *on that path only*: the daemon spawner sets it
+to `info` when unset (`main.rs:1736`). Every other path builds the subscriber
+from `EnvFilter::from_default_env()` with no fallback (`main.rs:1797`), where
+unset means `error`. Setting `RUST_LOG=info` explicitly costs nothing and
+removes the distinction.
+
+You do not *need* the log at all: step 4 reads the Cartographer's own cursor
+out of the database. The log is corroboration, and useful when something goes
+wrong.
 
 ---
 
@@ -41,11 +49,31 @@ not the server. Restart explicitly in step 3 instead.
 
 ## 2 — Stop the running server
 
+Find any running server first. `just status` only probes :17770, and a server
+on another port will not show up there — nor will it stop, and you will end up
+with two.
+
 ```sh
-just status                      # what is on :17770 right now
-lsof -ti :17770 | xargs kill     # what `zp restart --self` does internally
-sleep 1 && just status           # expect: no server
+pgrep -fl "zp serve"
+lsof -nP -iTCP -sTCP:LISTEN | grep -i zp
 ```
+
+If either prints something, stop it. If both are empty there is nothing
+running and you can go straight to step 3.
+
+```sh
+pkill -f "zp serve"
+sleep 1
+pgrep -fl "zp serve"
+```
+
+The last line should print nothing.
+
+**Do not paste trailing `#` comments into this shell.** zsh on macOS has
+`interactive_comments` off by default, so `#` is not a comment — it is passed
+to the command as an argument. `just status # expect: no server` fails with
+*"Justfile does not contain recipe `#`"*. Every command block in this runbook
+is comment-free for that reason.
 
 ## 3 — Start it with the Cartographer on, in the foreground
 
@@ -54,14 +82,43 @@ Ctrl-C; `zp serve` blocks on `run_server(...).await`.
 
 ```sh
 cd ~/projects/zeropoint
-RUST_LOG=info ZP_CARTOGRAPHER_ENABLED=1 zp serve 2>&1 | tee /tmp/zp-serve.log
+RUST_LOG=info ZP_CARTOGRAPHER_ENABLED=1 zp serve
 ```
 
-`tee` because stderr is where tracing writes, and ANSI colour is disabled
-automatically when stderr is not a terminal (`with_ansi(is_terminal(&stderr))`)
-— so the file stays greppable. A previous attempt at this produced a 239k-line
-log that returned nothing to grep because escapes rendered invisibly on paste;
-that is what the comment above the subscriber init is about.
+It returns immediately — that is the fork, not a failure. Watch the daemon's
+own log instead:
+
+```sh
+tail -f ~/ZeroPoint/logs/zp-serve.log
+```
+
+The environment survives the fork: `spawn_serve_daemon` uses
+`Command::new(current_exe)`, which inherits the parent's environment, so
+`ZP_CARTOGRAPHER_ENABLED=1` reaches the daemon.
+
+**Sovereignty first.** Before any of this the binary unlocks Genesis through
+whatever provider the machine is configured for, and on a Trezor that means a
+physical confirmation:
+
+```
+INFO trezor: Requesting CipherKeyValue from Trezor — confirm on device
+INFO trezor: Waiting for user confirmation on Trezor...
+INFO trezor: Genesis secret decrypted via Trezor CipherKeyValue
+```
+
+If it fails with *"Trezor support requires the hw-trezor feature flag"*, the
+binary was built without it — `just build` is a plain `cargo build --release`
+and `zp-cli`'s defaults do not include `hw-trezor`. Rebuild:
+
+```sh
+cargo build --release -p zp-cli --features hw-trezor
+```
+
+`-p` is required because the root is a virtual workspace. `--features` adds to
+the defaults rather than replacing them, so `biometric-keychain` stays on;
+do not substitute `--features full`, which omits it from its own list and
+adds `policy-wasm`. No reinstall needed — `/usr/local/bin/zp` is a symlink to
+the rebuilt file.
 
 Expect within the first seconds:
 
@@ -115,15 +172,18 @@ chain's max rowid. No log needed.
 ## 5 — Confirm the Regent can see it
 
 ```sh
-python3 tools/ontology-check/catchup_reconcile.py     # trajectories > 0
-python3 tools/ecosystem-state/ecosystem_state.py      # zp-ontology stays live
+python3 tools/ontology-check/catchup_reconcile.py
+python3 tools/ecosystem-state/ecosystem_state.py
 ```
+
+Expect `trajectories` above zero from the first, and `zp-ontology` still
+reported live by the second.
 
 Then drive one cognitive cycle — put a question to the Regent through
 whichever cockpit surface you normally use. In the server log:
 
 ```sh
-grep -i "trajectory\|ontology" /tmp/zp-serve.log
+grep -i "trajectory\|ontology" ~/ZeroPoint/logs/zp-serve.log
 ```
 
 **The S2 exit is two things, and the second is the one that is easy to skip:**
@@ -149,11 +209,11 @@ Those entries will never be revisited — the cursor says they are done. Find
 what failed, then rebuild:
 
 ```sh
-grep "per-entry failure" /tmp/zp-serve.log | head -40
-grep -c "per-entry failure" /tmp/zp-serve.log      # against the reported count
+grep "per-entry failure" ~/ZeroPoint/logs/zp-serve.log | head -40
+grep -c "per-entry failure" ~/ZeroPoint/logs/zp-serve.log
 
 # rebuild: the database is disposable, the chain is the source of truth
-lsof -ti :17770 | xargs kill
+pkill -f "zp serve"
 ZP_DATA=$(python3 tools/ontology-check/catchup_reconcile.py --json \
           | python3 -c 'import json,sys;print(json.load(sys.stdin).get("data_dir",""))')
 rm "$ZP_DATA"/ontology.db*
@@ -169,7 +229,7 @@ Remaining entries are **unprocessed, not skipped**: the cursor never claimed
 them, so a restart resumes from where it stopped rather than losing them.
 
 ```sh
-grep -E "catchup failed|task exiting|failed to open" /tmp/zp-serve.log
+grep -E "catchup failed|task exiting|failed to open" ~/ZeroPoint/logs/zp-serve.log
 ```
 
 `Cartographer failed to open ontology store` or `catchup failed` both exit the
@@ -179,9 +239,11 @@ has no Cartographer. Fix the cause, then step 3 again.
 ## Backing out
 
 ```sh
-lsof -ti :17770 | xargs kill
-zp serve          # no env var: the Cartographer does not spawn
+pkill -f "zp serve"
+zp serve
 ```
+
+Without the env var the Cartographer does not spawn.
 
 Deleting `ontology.db` is optional and harmless either way — it is rebuildable
 from the chain, and an orphaned one is simply never read.
