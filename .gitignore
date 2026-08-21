@@ -192,3 +192,6 @@ _to_delete/
 # disk as a record but not tracked.
 scripts/landings/*/
 scripts/land-2026-*.sh
+
+# scratch — probe/reading outputs
+reading-*.json
