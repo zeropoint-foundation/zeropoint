@@ -71,6 +71,14 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 | `~/ZeroPoint/data/audit.db` | Audit chain (SQLite) |
 | `~/ZeroPoint/keys/` | Signing keys |
 
+## Doc directory conventions
+- `docs/design/` — canonical Tier 2 design docs (elaborations of KEEL, formal design proposals).
+- `docs/handoffs/` (plural) — session-to-session design briefs. **Canonical.** The singular `docs/handoff/` is deprecated; do not create or write to it.
+- `docs/research/` — surveys and one-time external-tradition gathers. Default home for surveys unless the survey *is itself* the new design proposal, in which case it lives with related design briefs in `docs/design/` or `docs/handoffs/`.
+- `docs/review/` — ongoing observation artifacts (the daily AI landscape sweep log and its sources file live here). Distinct from `research/`: research is one-time, review is periodic.
+- `docs/lenses/` — formal lens declarations per `LENS-DISCIPLINE-2026-07.md`.
+- `docs/_to_delete/` — device-bash on the Cowork bridge cannot `rm`; items to be purged are `mv`'d here and Ken deletes the folder from the machine later.
+
 ## Preferences
 - Git doesn't work from Cowork sandbox — Ken runs git locally from ~/projects/zeropoint
 - zeropoint.global files are gitignored — must use `git add -f zeropoint.global/`
