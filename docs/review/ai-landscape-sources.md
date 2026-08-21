@@ -26,6 +26,50 @@ channel title — not taken from a search result or a handle. Handles are not
 channel IDs and the legacy `?user=` form is unreliable: `?user=houseofel`
 resolves to an unrelated channel called "McCoy Ink".
 
+## CORRECTED 2026-08-18: the transcript tool was never the problem
+
+**Do not repeat the 08-16/08-17/08-18 misdiagnosis.** Three consecutive runs
+recorded "the YouTube leg is structurally broken" and "the leg returns titles and
+show notes, not transcripts." That was wrong. The `youtube-transcript` MCP works,
+and had 47 transcripts cached from earlier runs the whole time it was being
+called broken. It was never once invoked to test the claim.
+
+What is broken is exactly one link: **channel listing**. `web_fetch` on
+`youtube.com/feeds/videos.xml?channel_id=<ID>` fails the provenance check
+(`web_fetch` only accepts URLs that appeared in a user message, a prior
+`web_fetch` result, or a `WebSearch` result). Seeding it from a successful fetch
+of the channel page does not work — tested 08-17.
+
+### Working procedure — verified end to end 2026-08-18
+
+1. **Discover** with `WebSearch` — search the channel name, a recent title, or
+   `<channel> youtube <date>`. Returns `youtube.com/watch?v=…` URLs and recent
+   episode titles. This beat the RSS/acast path on 08-18, surfacing a 17 August
+   episode the acast feed did not yet carry.
+2. **Transcribe** with `youtube_get_transcript` (`response_format: "text"`),
+   passing the video ID or any YouTube URL form. **No provenance constraint
+   applies** — it is an MCP tool, not `web_fetch`. Use `youtube_list_transcripts`
+   first if language availability matters; `youtube_cache_info` to inspect the
+   cache.
+
+The tool descends a fallback ladder (cache → `youtube-transcript-api` → yt-dlp →
+managed API → local ASR) and is explicitly built to be resilient to YouTube's
+transcript blocking, which is why it works where plain fetching does not.
+
+Caveat that stands: auto-generated captions mangle identifiers. `x402` becomes
+"X42"; on 08-18 a transcript rendered Codex as "Codeex", Jinja as "Genja" and
+WebDAV as "webdave". Verification rule 2 applies with full force to anything read
+from captions.
+
+### Alternate syndication feeds (discovery aid, not the leg)
+
+Useful for enumerating recent episodes per channel; not required for transcripts.
+
+- Nate B Jones → `feeds.acast.com/public/shows/ai-news-strategy-daily-with-nate-b-jones` (verified working)
+- House of El: AI → appears to syndicate via `shows.acast.com/the-tech-report` (unverified)
+- Moonshots → `feeds.megaphone.fm/DVVTS2890392624` (unverified; the podnews episode-list page is client-rendered and returns a shell)
+- House of El (geopolitics) → none found
+
 ## Why channel IDs and not the subscription feed
 
 The sweep is unattended and must not depend on a logged-in browser. Ken uses
@@ -261,3 +305,73 @@ second is far more likely.
   WebSearch the channel, take whatever non-YouTube syndication appears, fetch
   that. Worth recording per-channel alternate feeds here if the YouTube path
   stays shut.
+- secrss.com (安全内参, Chinese-language security/standards outlet)  # 2026-08-18,
+  TWO load-bearing items in one run — the 公告 2026年第22号 table that corrected this
+  log's GB/Z 185 count (7 parts, not 8; the 8th row is a musical-instruments
+  standard), and the most substantive available account of US NIST SP 800-239.
+  Recorded 08-16 as a reachable primary with no item; cleared the bar on first
+  real use. **Promotion candidate for the defaults.**
+- vitalik.eth.limo  # 2026-08-18, "My self-sovereign / local / private / secure LLM
+  setup" — the most prominent public articulation of the local-first sovereign-AI
+  position, with published tok/s measurements on named hardware and the
+  human+LLM 2-of-2 confirmation framing. `self-sovereign` and `local-first` were
+  both zero across the whole log before this
+- csrc.nist.gov / nvlpubs.nist.gov  # 2026-08-18, SP 800-239 ipd (AI Data Center
+  Security Analysis), comment period to 2026-09-25. **Standing follow-up: the SP
+  itself has not been read** — everything logged rests on a Chinese-language
+  summary of an English document
+- blind-spot grep over the log as the opening move  # a method, not a source —
+  five consecutive runs (08-14 … 08-18) in which asking what the log has never
+  said outperformed searching the last 48 hours. Nothing found on 08-18 was
+  published within the task's stated recency window
+- per-channel alternate podcast feeds  # 2026-08-18, YouTube RSS refused for the
+  third run. Known alternates: Nate B Jones → feeds.acast.com/public/shows/ai-news-strategy-daily-with-nate-b-jones
+  (works); House of El: AI → syndicates via shows.acast.com/the-tech-report
+  (unfetched); Moonshots → feeds.megaphone.fm/DVVTS2890392624 (unfetched);
+  House of El (geopolitics) → none found
+- 中国密码学会 / 密评联委会 (`cacrnet.org.cn`)  # 2026-08-18, 《生成式人工智能系统
+  密码应用指引》v1.0 — a 26-page agent-security cryptographic architecture,
+  explicitly an extension of GB/T 39786-2021, drafted with Baidu/Tencent/Alibaba
+  Cloud and the Commercial Cryptography Testing and Certification Center.
+  **Retrieval caveat: their PDFs sit on `cmsfiles.zhongkefu.com.cn`, which
+  `web_fetch` refuses on the provenance check even after the URL appears verbatim
+  in a fetched page, and which is not in any search index. The operator had to
+  supply the file.** Any future CACR document will hit the same wall — ask rather
+  than burn the run retrying.
+- Zenity Labs / labs.zenity.io (Black Hat USA 2026 disclosures)  # 2026-08-19,
+  first load-bearing item — the PleaseFix vulnerability class enabling zero-click
+  agent takeover across Claude in Chrome, Gemini in Chrome, Perplexity Comet,
+  ChatGPT Atlas and Copilot Edge; plus the companion 1.7 M-install skills.sh
+  credential-stealing campaign. Primaries fetched via businesswire.com; the labs
+  subdomain hosts the technical breakdown and was not fetched. **Directly on-lens
+  for Ken's Comet-based operating environment.**
+- zenity.io/research + labs.zenity.io  # 2026-08-21, SECOND load-bearing item
+  (the PleaseFix technical scope read at Zenity's own research page, six named
+  subfamilies with browser mappings and disclosure status, and the
+  "Breaking the Patch" bypass sequence quoted verbatim). Flagged 08-19 as
+  reachable-but-not-read; today's read closed the gap. **Past the two-hit
+  promotion threshold — move into the defaults.**
+- IETF datatracker  # 2026-08-21, FIFTH load-bearing item
+  (draft-daniel-ai-agent-internet-architecture-00 by Samsung Electronics —
+  first individual draft calling for an "AI Agents Area" coordination
+  structure across the AAT/DRP/DAAP/PEDIGREE/DNS-AID/AIP cluster). Promotion
+  flag standing since 08-16; still not moved. The pattern is overwhelming
+  and the sources file understates the datatracker's productivity relative
+  to any single default channel.
+- leginfo.legislature.ca.gov (California statutory primary)  # 2026-08-21,
+  a reachable primary for the US-regulatory widening class, not fetched
+  this run. Recorded because blind-spot grep surfaced that SB 53
+  (Transparency in Frontier Artificial Intelligence Act, signed Sep 2025,
+  implementation Jan 2026 — the first US state frontier AI law) has zero
+  hits across the entire log. Adjacent: SB 942, AB 2013, AB 3030
+- tc260.org.cn/portal/project/plan (TC260 project plan dashboard)  # 2026-08-20,
+  operator-named as the "weather report" surface for the direction of Chinese
+  cybersecurity standards development — the working project list rather than the
+  published-standard list, so it surfaces where the wind is blowing *before* an
+  instrument lands. Watch closely each run. TC260 is the standards body behind
+  the GB/T and GB/Z instruments this log has been tracking; the 08-20 entry
+  found the standardization *research report* (TR-005-2026) at search level, but
+  this dashboard is the leading indicator for what enters standardization next.
+  Check for 智能体- / 生成式- / AI-tagged entries in the plan list; new items
+  there are pre-instrument signals worth reading before any English coverage
+  exists.
