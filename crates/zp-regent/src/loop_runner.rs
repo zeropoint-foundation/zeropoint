@@ -1506,25 +1506,6 @@ async fn run_cycle(
 
 // ── Composition receipt emission (P2.1) ──────────────────────────────────────
 
-/// Emit a `cognitive:input:composed` chain receipt for a cycle's perception.
-///
-/// Structural provenance only — matrix version, per-class source hashes, counts.
-/// The chain now has verifiable evidence of what Regent was given to reason with
-/// at time T, without the chain-bloat cost of storing every prompt.
-///
-/// Per COGNITIVE-INPUT-PLANE-2026-07.md Step 6.
-///
-/// Returns the appended entry's chain hash on success (`None` on failure) so
-/// callers — namely the cognitive-act receipt (below) — can cite the
-/// composition they reasoned from, per
-/// COGNITIVE-ACT-ACCOUNTING-2026-07.md §6.
-/// Emit `regent:awareness:session_profile` at shutdown.
-///
-/// Phase 6's long window: each session's medium-window summary lands on
-/// chain so the next startup can compare against it. Structural only —
-/// counts and deltas — per the same no-content discipline the
-/// composition receipt follows.
-
 /// Emit `cognitive:initiative:warranted` when the Regent wakes without being
 /// asked.
 ///
@@ -1579,6 +1560,12 @@ fn emit_initiative_warrant_receipt(
     }
 }
 
+/// Emit `regent:awareness:session_profile` at shutdown.
+///
+/// Phase 6's long window: each session's medium-window summary lands on
+/// chain so the next startup can compare against it. Structural only —
+/// counts and deltas — per the same no-content discipline the
+/// composition receipt follows.
 fn emit_session_profile_receipt(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     profile: &crate::context::SessionProfile,
@@ -1623,6 +1610,18 @@ fn emit_session_profile_receipt(
     }
 }
 
+/// Emit a `cognitive:input:composed` chain receipt for a cycle's perception.
+///
+/// Structural provenance only — matrix version, per-class source hashes, counts.
+/// The chain now has verifiable evidence of what Regent was given to reason with
+/// at time T, without the chain-bloat cost of storing every prompt.
+///
+/// Per COGNITIVE-INPUT-PLANE-2026-07.md Step 6.
+///
+/// Returns the appended entry's chain hash on success (`None` on failure) so
+/// callers — namely the cognitive-act receipt (below) — can cite the
+/// composition they reasoned from, per
+/// COGNITIVE-ACT-ACCOUNTING-2026-07.md §6.
 fn emit_composition_receipt(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     summary: &crate::context::CompositionSummary,
