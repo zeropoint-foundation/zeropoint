@@ -195,3 +195,4 @@ scripts/land-2026-*.sh
 
 # scratch — probe/reading outputs
 reading-*.json
+.zp_rm_test*
